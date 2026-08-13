@@ -12,6 +12,7 @@ export const ERROR_CODES = [
 
   // Drivers
   'DRIVER_UNKNOWN',
+  'DRIVER_DUPLICATE',
   'DRIVER_UNAVAILABLE',
   'DRIVER_INIT_FAILED',
 

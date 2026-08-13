@@ -1,0 +1,67 @@
+name: RFC — change to a contract or the block vocabulary
+description: Required before adding a block, a field type, a permission or an entry to the theme context.
+labels: [rfc]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The four contracts in `docs/04-contrats.md` are versioned public APIs. The block
+        vocabulary is deliberately small: **every block added is debt imposed on every
+        theme author, forever.** That is what this template exists to slow down.
+
+        Read `docs/rfc/README.md` before filling this in.
+
+  - type: dropdown
+    id: contract
+    attributes:
+      label: Contract affected
+      options:
+        - A — content schema
+        - B — block vocabulary
+        - C — agent tools and permissions
+        - D — theme contract
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: The real use case, with a concrete example. Not "it would be nice to have".
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What is possible today without this change
+      description: >
+        Compose from existing blocks, existing field types, an existing tool. If nothing
+        works, say precisely why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The exact shape — schema, signature, or manifest entry.
+      render: typescript
+    validations:
+      required: true
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: Cost imposed on the ecosystem
+      description: >
+        Which theme, plugin or agent authors have to do work because of this? Is it a
+        minor or a major version? Does existing content need a migration?
+    validations:
+      required: true
+
+  - type: input
+    id: fallback
+    attributes:
+      label: Fallback (block RFCs only)
+      description: Which standard-vocabulary block a theme falls back to. Mandatory for any non-core block.

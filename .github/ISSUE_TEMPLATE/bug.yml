@@ -1,0 +1,51 @@
+name: Bug report
+description: Something behaves differently from what the docs or the contracts say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cogenta is pre-alpha. Please check the roadmap in `docs/06-lots.md` first —
+        the feature may simply not be built yet.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: The smallest set of steps that shows the problem.
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `cogenta doctor` if it runs, otherwise fill this in by hand.
+      value: |
+        - Cogenta version:
+        - Node version:
+        - OS and architecture:
+        - Database (Postgres / MySQL / MariaDB / SQLite) and version:
+        - Selected drivers (cache, queue, storage):
+        - Deployment profile (Solo / Managed / Shared / Fleet):
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Structured logs or stack trace. **Redact anything secret before pasting.**
+      render: shell

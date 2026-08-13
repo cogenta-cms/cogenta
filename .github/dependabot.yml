@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      # One PR for the toolchain instead of ten. Runtime dependencies stay
+      # individual: rule R9 means each one gets read, not rubber-stamped.
+      dev-tooling:
+        patterns:
+          - '@biomejs/*'
+          - '@changesets/*'
+          - '@commitlint/*'
+          - '@playwright/*'
+          - 'turbo'
+          - 'typescript'
+          - 'vitest'
+          - 'lefthook'
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'chore(ci)'

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "globalDependencies": ["tsconfig.base.json", "biome.json"],
+  "globalEnv": ["NODE_ENV", "CI"],
+  "globalPassThroughEnv": [
+    "COGENTA_TEST_POSTGRES_URL",
+    "COGENTA_TEST_MYSQL_URL",
+    "COGENTA_TEST_MARIADB_URL",
+    "COGENTA_TEST_REDIS_URL",
+    "COGENTA_TEST_S3_ENDPOINT",
+    "COGENTA_TEST_S3_ACCESS_KEY",
+    "COGENTA_TEST_S3_SECRET_KEY"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "package.json", "tsconfig.json"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "test/**", "package.json", "tsconfig.json"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "test/**", "package.json", "vitest.config.ts"],
+      "outputs": ["coverage/**"]
+    },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false
+    }
+  }
+}

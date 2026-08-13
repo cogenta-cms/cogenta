@@ -1,0 +1,89 @@
+# Ephemeral services for integration tests. Never a runtime dependency of Cogenta
+# itself (rule R1) — every one of these has a degraded driver that needs nothing.
+#
+#   pnpm services:up     start and wait for health
+#   pnpm services:down   stop and drop volumes
+#
+# All data lives in tmpfs: nothing survives a restart, on purpose.
+
+name: cogenta-test
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: cogenta
+      POSTGRES_PASSWORD: cogenta
+      POSTGRES_DB: cogenta_test
+    ports:
+      - '55432:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cogenta -d cogenta_test']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: cogenta
+      MYSQL_DATABASE: cogenta_test
+      MYSQL_USER: cogenta
+      MYSQL_PASSWORD: cogenta
+    ports:
+      - '53306:3306'
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-ucogenta', '-pcogenta']
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  # Kept separate from MySQL: MariaDB has RETURNING and a native VECTOR type,
+  # MySQL Community has neither. The difference must stay under test.
+  mariadb:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: cogenta
+      MARIADB_DATABASE: cogenta_test
+      MARIADB_USER: cogenta
+      MARIADB_PASSWORD: cogenta
+    ports:
+      - '53307:3306'
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '56379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    command: ['server', '/data']
+    environment:
+      MINIO_ROOT_USER: cogenta
+      MINIO_ROOT_PASSWORD: cogenta-secret
+    ports:
+      - '59000:9000'
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 3s
+      timeout: 3s
+      retries: 30

@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+
+jobs:
+  quality:
+    name: Lint, format and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  unit:
+    name: Unit — ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Rule R10: ARM and macOS are first-class, not an afterthought. Windows is
+        # covered because `npm create cogenta` must work there (L9 exit criteria).
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+
+  integration:
+    name: Integration — Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Same compose file as local development: one source of truth for the
+      # ephemeral Postgres, MySQL, MariaDB, Redis and MinIO.
+      - run: pnpm services:up
+
+      - run: pnpm test:integration
+        env:
+          COGENTA_TEST_POSTGRES_URL: postgres://cogenta:cogenta@127.0.0.1:55432/cogenta_test
+          COGENTA_TEST_MYSQL_URL: mysql://cogenta:cogenta@127.0.0.1:53306/cogenta_test
+          COGENTA_TEST_MARIADB_URL: mysql://cogenta:cogenta@127.0.0.1:53307/cogenta_test
+          COGENTA_TEST_REDIS_URL: redis://127.0.0.1:56379
+          COGENTA_TEST_S3_ENDPOINT: http://127.0.0.1:59000
+          COGENTA_TEST_S3_ACCESS_KEY: cogenta
+          COGENTA_TEST_S3_SECRET_KEY: cogenta-secret
+
+      - if: always()
+        run: pnpm services:down
+
+  degraded:
+    name: Degraded drivers — no Redis, no Docker, no S3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # Rule R1: the default install has no external dependency. This job is the
+      # proof — it starts nothing and must still pass end to end.
+      - run: pnpm test
+      - run: pnpm test:integration
+        env:
+          COGENTA_TEST_POSTGRES_URL: ''
+          COGENTA_TEST_MYSQL_URL: ''
+          COGENTA_TEST_MARIADB_URL: ''
+          COGENTA_TEST_REDIS_URL: ''
+
+  changeset:
+    name: Changeset present
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check for a changeset
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -qE '^packages/[^/]+/src/'; then
+            if ! git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -qE '^\.changeset/.*\.md$'; then
+              echo "::error::Published package source changed without a changeset. Run \`pnpm changeset\`."
+              exit 1
+            fi
+          fi

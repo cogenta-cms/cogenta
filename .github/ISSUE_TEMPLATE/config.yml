@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/cogenta-cms/cogenta/security/advisories/new
+    about: Report privately. Never open a public issue for a vulnerability — see SECURITY.md.
+  - name: Design question or critique
+    url: https://github.com/cogenta-cms/cogenta/discussions
+    about: The design is public and pre-alpha. Critiques of the architecture are very welcome.

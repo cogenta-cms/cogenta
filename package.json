@@ -1,0 +1,45 @@
+{
+  "name": "cogenta",
+  "private": true,
+  "type": "module",
+  "license": "MPL-2.0",
+  "description": "An agentic CMS for Node.js.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cogenta-cms/cogenta.git"
+  },
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=22.11.0",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "playwright test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "services:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "services:down": "docker compose -f docker-compose.test.yml down -v",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only",
+    "release": "turbo run build && changeset publish",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
+    "@changesets/changelog-github": "^1.0.0",
+    "@changesets/cli": "^3.0.0",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.20.0",
+    "lefthook": "^2.1.10",
+    "turbo": "^2.10.9",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

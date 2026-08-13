@@ -22,6 +22,14 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json
 
+# Claude Code: shared config is committed, per-developer overrides are not.
+.claude/settings.local.json
+
+# Test artefacts
+playwright-report/
+test-results/
+.playwright/
+
 *.sqlite
 *.sqlite3
 *.db

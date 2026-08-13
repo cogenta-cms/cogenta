@@ -1,0 +1,9 @@
+packages:
+  - 'packages/*'
+  - 'examples/*'
+
+# Native dependencies are opt-in only (rule R10): each one must ship a WASM fallback
+# or a build-time precomputation before it may run its install scripts.
+onlyBuiltDependencies:
+  - esbuild
+  - lefthook

@@ -1,0 +1,13 @@
+# Every file has an owner. Governance documents and security-sensitive surfaces
+# require an explicit review, no exception.
+
+*                       @cogenta-cms/maintainers
+
+/docs/03-decisions.md   @cogenta-cms/maintainers
+/docs/04-contrats.md    @cogenta-cms/maintainers
+/docs/05-securite.md    @cogenta-cms/maintainers
+/LICENSE                @cogenta-cms/maintainers
+/SECURITY.md            @cogenta-cms/maintainers
+/AGENTS.md              @cogenta-cms/maintainers
+/CLAUDE.md              @cogenta-cms/maintainers
+/.github/               @cogenta-cms/maintainers

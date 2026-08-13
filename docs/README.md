@@ -18,7 +18,10 @@ sans avoir besoin du reste en contexte.
 | `04-contrats.md` | Avant de coder tout ce qui touche au contenu, aux thèmes ou aux agents. |
 | `05-securite.md` | Avant de coder l'auth, les plugins, les agents ou l'exécution de code tiers. |
 | `06-lots.md` | Pour savoir quoi construire, dans quel ordre. |
-| `AGENTS.md` | À la racine du dépôt. Lu à chaque session de développement assistée. |
+| `lots/L0-socle.md` … `lots/L9-ecosysteme.md` | La spec détaillée du lot qu'on attaque. |
+| `rfc/README.md` | Avant de proposer un changement de contrat ou de vocabulaire. |
+| `AGENTS.md` | À la racine du dépôt. Les règles de développement, lues à chaque session. |
+| `CLAUDE.md` | À la racine du dépôt. Point d'entrée des sessions assistées par IA. |
 
 ## Règle de gouvernance documentaire
 
@@ -39,12 +42,16 @@ migration.
 | PRD | Validé |
 | Architecture | Validé |
 | Décisions | 12 décisions actées |
-| Contrats | Première rédaction, à figer avant L1 |
+| Contrats | Première rédaction. **Aucun n'est figé** : A et B avant L1, D avant L3, C avant L4 |
 | Sécurité | Première rédaction |
-| Lots | Découpage validé, specs détaillées à écrire lot par lot |
+| Lots | Découpage validé, les dix specs détaillées sont écrites (`lots/`) |
+| Code | Socle du dépôt en place (monorepo, CI, outillage). L0 non commencé. |
 
 ## Prochaine étape
 
-Rédiger les dix specs de lot détaillées (`lots/L0.md` à `lots/L9.md`), chacune avec
-périmètre, dépendances, interfaces produites, critères d'acceptation et tests.
-À faire juste avant d'attaquer chaque lot, pas tous d'avance.
+**L0 — Socle** (`lots/L0-socle.md`), tâche par tâche. La commande `/lot L0` charge le
+contexte complet avant de coder.
+
+Les specs de lot sont écrites d'avance mais restent révisables : celle d'un lot lointain
+sera relue et amendée juste avant son démarrage, à la lumière de ce que les lots
+précédents auront appris.

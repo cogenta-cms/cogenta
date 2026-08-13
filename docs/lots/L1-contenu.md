@@ -61,9 +61,12 @@ bloc par bloc, jamais sur une sérialisation brute — sinon il est illisible.
 
 ### i18n
 
-Un champ `localized: true` stocke une valeur par locale. Un contenu possède une locale
-et un éventuel `translationOf` pointant vers l'original. Le fallback est configurable
-par locale et par champ.
+**Une entrée par langue** (ADR-0014). Chaque entrée porte sa `locale` et, si ce n'est
+pas la langue source, un `translationOf` qui pointe l'entrée d'origine. `localized: true`
+n'est pas une directive de stockage : c'est une métadonnée d'admin qui déclare qu'un
+champ se traduit, donc que l'éditeur peut proposer la recopie depuis la source.
+
+Le fallback est configurable par locale.
 
 Le rendu d'une locale manquante suit trois stratégies, au choix du site : afficher
 l'original, masquer le contenu, ou renvoyer 404. Le choix est explicite, jamais implicite.

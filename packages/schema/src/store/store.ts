@@ -1,0 +1,1035 @@
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  type SqlExecutor,
+  type SqlFragment,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
+import { newId as uuidv7 } from '../id.js'
+import type { CollectionDefinition, ContentStatus, Provenance } from '../types.js'
+import { isColumnless } from './columns.js'
+import { type Cursor, decodeCursor, encodeCursor } from './cursor.js'
+import { type ContentDiff, diffContent } from './diff.js'
+import { joinFragments, valueList } from './fragments.js'
+import { blocksTable, columnFor, entriesTable, relationTable, versionsTable } from './naming.js'
+import { relationsOf } from './tables.js'
+import type {
+  BlockZones,
+  ContentBlock,
+  ContentEntry,
+  ContentValues,
+  CreateInput,
+  EntryState,
+  ListOptions,
+  LocaleResolution,
+  Page,
+  ResolveLocaleOptions,
+  SortOrder,
+  UpdateInput,
+  VersionSummary,
+} from './types.js'
+import { decodeFieldValue, normaliseBlocks, normaliseValues } from './values.js'
+
+/**
+ * The persistence layer of a collection.
+ *
+ * Three ideas hold it together, and everything else follows from them:
+ *
+ * 1. **The entry table holds the live state** — what the public renderer reads.
+ *    A draft of an already-published entry is a row in the versions table, not a
+ *    mutation of the live row. That is what makes "the public role can never
+ *    reach a draft" a property of the storage rather than of a filter someone
+ *    has to remember to write.
+ * 2. **Blocks are rows, keyed by `(entry, version, zone, key)`** (contract A).
+ *    The live blocks are those at the entry's own version, so publishing a draft
+ *    is a version number moving, not a block rewrite.
+ * 3. **One row per locale** (ADR-0014), so `status`, `version` and publication
+ *    are per language by construction, not by convention.
+ */
+
+export interface ContentStoreOptions {
+  readonly db: DatabaseHandle
+  readonly collection: CollectionDefinition
+  /** The locale an entry gets when the caller does not say. */
+  readonly defaultLocale?: string
+  /** Injectable so tests can pin time; nothing else should pass it. */
+  readonly now?: () => Date
+  readonly newId?: () => string
+}
+
+export interface ContentStore<TValues extends ContentValues = ContentValues> {
+  create(input: CreateInput<TValues>): Promise<ContentEntry<TValues>>
+  read(id: string, options?: { readonly state?: EntryState }): Promise<ContentEntry<TValues> | null>
+  update(id: string, input: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
+  delete(id: string): Promise<boolean>
+  list(options?: ListOptions): Promise<Page<ContentEntry<TValues>>>
+  publish(
+    id: string,
+    input?: { readonly publishedBy?: string | null },
+  ): Promise<ContentEntry<TValues>>
+  unpublish(
+    id: string,
+    input?: { readonly status?: 'draft' | 'archived' },
+  ): Promise<ContentEntry<TValues>>
+  history(id: string): Promise<readonly VersionSummary[]>
+  readVersion(id: string, version: number): Promise<ContentEntry<TValues> | null>
+  restore(id: string, version: number, input?: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
+  diff(id: string, from: number, to: number): Promise<ContentDiff>
+  translations(id: string): Promise<readonly ContentEntry<TValues>[]>
+  resolveLocale(
+    id: string,
+    locale: string,
+    options: ResolveLocaleOptions,
+  ): Promise<LocaleResolution<TValues>>
+}
+
+type Row = Record<string, unknown>
+
+interface VersionRow extends Row {
+  entry_id: string
+  version: number
+  status: string
+  data: string
+  created_at: string
+  created_by: string | null
+}
+
+interface Snapshot {
+  readonly values: Record<string, unknown>
+  readonly blocks: BlockZones
+}
+
+const DEFAULT_PAGE_SIZE = 25
+const MAX_PAGE_SIZE = 200
+const DEFAULT_SORT: SortOrder = { field: 'id', direction: 'desc' }
+/** Enough history to answer "what changed last week" without unbounded growth. */
+const DEFAULT_KEEP = 20
+
+const SORT_COLUMNS = { id: 'id', createdAt: 'created_at', updatedAt: 'updated_at' } as const
+
+function notFound(collection: string, id: string): CogentaError {
+  return new CogentaError({
+    code: 'CONTENT_NOT_FOUND',
+    message: `No entry "${id}" in the "${collection}" collection.`,
+    hint: 'Check the identifier, and remember that an entry is per locale: a translation has its own id.',
+    details: { collection, id },
+  })
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : String(value)
+}
+
+function nullableText(value: unknown): string | null {
+  return value === null || value === undefined ? null : text(value)
+}
+
+export function createContentStore<TValues extends ContentValues = ContentValues>(
+  options: ContentStoreOptions,
+): ContentStore<TValues> {
+  const { db, collection } = options
+  const dialect = db.dialect
+  const now = options.now ?? ((): Date => new Date())
+  const newId = options.newId ?? uuidv7
+  const defaultLocale = options.defaultLocale ?? 'en'
+
+  const entries = identifier(entriesTable(collection.name), dialect)
+  const versions = identifier(versionsTable(collection.name), dialect)
+  const blocks = identifier(blocksTable(collection.name), dialect)
+
+  const relations = relationsOf(collection).filter((relation) => relation.many)
+  const columnFields = Object.entries(collection.fields).filter(([, field]) => !isColumnless(field))
+  const zoneNames = Object.entries(collection.fields)
+    .filter(([, field]) => field.kind === 'blocks')
+    .map(([name]) => name)
+
+  const keep = Math.max(
+    2,
+    collection.versioning?.history === true ? (collection.versioning.keep ?? DEFAULT_KEEP) : 2,
+  )
+  const draftsEnabled = collection.versioning?.drafts === true
+
+  const stamp = (): string => now().toISOString()
+
+  // ---------------------------------------------------------------- reading
+
+  async function loadRow(tx: SqlExecutor, id: string): Promise<Row | null> {
+    const found = await tx.query<Row>(
+      sql`select * from ${entries} where ${identifier('id', dialect)} = ${id}`,
+    )
+    return found.rows[0] ?? null
+  }
+
+  function valuesFromRow(row: Row): Record<string, unknown> {
+    const values: Record<string, unknown> = {}
+    for (const [name, field] of columnFields) {
+      values[name] = decodeFieldValue(field, row[columnFor(name)])
+    }
+    return values
+  }
+
+  async function loadRelations(
+    tx: SqlExecutor,
+    entryIds: readonly string[],
+  ): Promise<Map<string, Record<string, string[]>>> {
+    const byEntry = new Map<string, Record<string, string[]>>()
+    for (const id of entryIds) byEntry.set(id, {})
+    if (entryIds.length === 0 || relations.length === 0) return byEntry
+
+    for (const relation of relations) {
+      const table = identifier(relationTable(collection.name, relation.field), dialect)
+      const found = await tx.query<{ entry_id: string; target_id: string }>(
+        sql`select ${identifier('entry_id', dialect)}, ${identifier('target_id', dialect)}
+            from ${table}
+            where ${identifier('entry_id', dialect)} in (${valueList([...entryIds])})
+            order by ${identifier('position', dialect)} asc`,
+      )
+
+      for (const row of found.rows) {
+        const bucket = byEntry.get(text(row.entry_id))
+        if (bucket === undefined) continue
+        const targets = bucket[relation.field] ?? []
+        targets.push(text(row.target_id))
+        bucket[relation.field] = targets
+      }
+    }
+
+    for (const bucket of byEntry.values()) {
+      for (const relation of relations) bucket[relation.field] ??= []
+    }
+    return byEntry
+  }
+
+  async function loadBlocks(
+    tx: SqlExecutor,
+    pairs: readonly (readonly [string, number])[],
+  ): Promise<Map<string, BlockZones>> {
+    const byEntry = new Map<string, BlockZones>()
+    for (const [id] of pairs) byEntry.set(id, emptyZones())
+    if (pairs.length === 0 || zoneNames.length === 0) return byEntry
+
+    // One statement for the whole page: a block zone per entry would be the N+1
+    // the L1 spec warns about, and a list of ten entries is the common case.
+    const predicate = joinFragments(
+      pairs.map(
+        ([id, version]) =>
+          sql`(${identifier('entry_id', dialect)} = ${id} and ${identifier('version', dialect)} = ${version})`,
+      ),
+      ' or ',
+    )
+
+    const found = await tx.query<{
+      entry_id: string
+      zone: string
+      block_key: string
+      block_type: string
+      data: string
+    }>(
+      sql`select ${identifier('entry_id', dialect)}, ${identifier('zone', dialect)},
+                 ${identifier('block_key', dialect)}, ${identifier('block_type', dialect)},
+                 ${identifier('data', dialect)}
+          from ${blocks}
+          where ${predicate}
+          order by ${identifier('zone', dialect)} asc, ${identifier('position', dialect)} asc`,
+    )
+
+    const collected = new Map<string, Record<string, ContentBlock[]>>()
+    for (const row of found.rows) {
+      const entryId = text(row.entry_id)
+      const zones = collected.get(entryId) ?? {}
+      collected.set(entryId, zones)
+
+      const zone = text(row.zone)
+      const list = zones[zone] ?? []
+      list.push({
+        key: text(row.block_key),
+        type: text(row.block_type),
+        data: parseObject(row.data),
+      })
+      zones[zone] = list
+    }
+
+    for (const [id, zones] of collected) byEntry.set(id, { ...emptyZones(), ...zones })
+    return byEntry
+  }
+
+  function emptyZones(): Record<string, readonly ContentBlock[]> {
+    return Object.fromEntries(zoneNames.map((zone) => [zone, []]))
+  }
+
+  /** Only the four keys contract A declares; anything else is dropped, not trusted. */
+  function parseProvenanceDetail(raw: unknown): ContentEntry['provenanceDetail'] {
+    if (raw === null || raw === undefined) return null
+    const parsed = parseObject(raw)
+    const detail: { agent?: string; model?: string; at?: string; prompt?: string } = {}
+
+    for (const key of ['agent', 'model', 'at', 'prompt'] as const) {
+      const value = parsed[key]
+      if (typeof value === 'string') detail[key] = value
+    }
+
+    return Object.keys(detail).length === 0 ? null : detail
+  }
+
+  function parseObject(raw: unknown): Record<string, unknown> {
+    if (typeof raw !== 'string') return {}
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      return typeof parsed === 'object' && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
+  }
+
+  function publishedAtOf(values: Record<string, unknown>, status: string): string | null {
+    // Contract A declares `publishedAt` as an ordinary field of the collection
+    // (see its own example), so the engine maintains it when it is there rather
+    // than shadowing it with a system column of the same name.
+    const declared = collection.fields['publishedAt']
+    if (declared === undefined) return null
+    const value = values['publishedAt']
+    if (typeof value !== 'string') return null
+    return status === 'published' || value !== '' ? value : null
+  }
+
+  function toEntry(
+    row: Row,
+    values: Record<string, unknown>,
+    zones: BlockZones,
+    state: EntryState,
+    overrides: { readonly version?: number; readonly status?: string } = {},
+  ): ContentEntry<TValues> {
+    const status = (overrides.status ?? text(row['status'])) as ContentStatus
+    return {
+      id: text(row['id']),
+      createdAt: text(row['created_at']),
+      updatedAt: text(row['updated_at']),
+      createdBy: nullableText(row['created_by']),
+      updatedBy: nullableText(row['updated_by']),
+      status,
+      locale: text(row['locale']),
+      translationOf: nullableText(row['translation_of']),
+      version: Number(overrides.version ?? row['version']),
+      provenance: text(row['provenance']) as Provenance,
+      provenanceDetail: parseProvenanceDetail(row['provenance_detail']),
+      publishedAt: publishedAtOf(values, status),
+      state,
+      values: values as TValues,
+      blocks: zones,
+    }
+  }
+
+  /**
+   * The live state of a whole page, in a fixed number of queries.
+   *
+   * One query per row for its blocks and its relations is the N+1 the L1 spec
+   * names; a page of twenty entries would be sixty round trips. Batching here
+   * means every caller gets it, including the ones written later.
+   */
+  async function liveEntries(
+    tx: SqlExecutor,
+    rows: readonly Row[],
+  ): Promise<ContentEntry<TValues>[]> {
+    if (rows.length === 0) return []
+
+    const ids = rows.map((row) => text(row['id']))
+    const related = await loadRelations(tx, ids)
+    const zones = await loadBlocks(
+      tx,
+      rows.map((row) => [text(row['id']), Number(row['version'])] as const),
+    )
+
+    return rows.map((row) => {
+      const id = text(row['id'])
+      const values = { ...valuesFromRow(row), ...(related.get(id) ?? {}) }
+      return toEntry(row, values, zones.get(id) ?? emptyZones(), 'published')
+    })
+  }
+
+  async function liveEntry(tx: SqlExecutor, row: Row): Promise<ContentEntry<TValues>> {
+    const [entry] = await liveEntries(tx, [row])
+    if (entry === undefined) throw notFound(collection.name, text(row['id']))
+    return entry
+  }
+
+  async function latestVersionRow(tx: SqlExecutor, id: string): Promise<VersionRow | null> {
+    const found = await tx.query<VersionRow>(
+      sql`select * from ${versions}
+          where ${identifier('entry_id', dialect)} = ${id}
+          order by ${identifier('version', dialect)} desc
+          limit ${sqlLimit(1)}`,
+    )
+    return found.rows[0] ?? null
+  }
+
+  async function versionRow(
+    tx: SqlExecutor,
+    id: string,
+    version: number,
+  ): Promise<VersionRow | null> {
+    const found = await tx.query<VersionRow>(
+      sql`select * from ${versions}
+          where ${identifier('entry_id', dialect)} = ${id}
+            and ${identifier('version', dialect)} = ${version}`,
+    )
+    return found.rows[0] ?? null
+  }
+
+  async function snapshotOf(tx: SqlExecutor, id: string, row: VersionRow): Promise<Snapshot> {
+    const zones = await loadBlocks(tx, [[id, Number(row.version)]])
+    return {
+      values: parseObject(row.data),
+      blocks: zones.get(id) ?? emptyZones(),
+    }
+  }
+
+  /**
+   * The working state: the newest version when it is ahead of the live row,
+   * the live row otherwise.
+   */
+  async function workingEntry(tx: SqlExecutor, row: Row): Promise<ContentEntry<TValues>> {
+    const id = text(row['id'])
+    const latest = await latestVersionRow(tx, id)
+
+    if (latest === null || Number(latest.version) <= Number(row['version'])) {
+      const live = await liveEntry(tx, row)
+      return { ...live, state: 'working' }
+    }
+
+    const snapshot = await snapshotOf(tx, id, latest)
+    return toEntry(row, snapshot.values, snapshot.blocks, 'working', {
+      version: Number(latest.version),
+      status: text(latest.status),
+    })
+  }
+
+  // ---------------------------------------------------------------- writing
+
+  async function writeBlocks(
+    tx: SqlExecutor,
+    entryId: string,
+    version: number,
+    zones: Record<string, readonly ContentBlock[]>,
+  ): Promise<void> {
+    await tx.query(
+      sql`delete from ${blocks}
+          where ${identifier('entry_id', dialect)} = ${entryId}
+            and ${identifier('version', dialect)} = ${version}`,
+    )
+
+    for (const [zone, list] of Object.entries(zones)) {
+      for (const [position, block] of list.entries()) {
+        await tx.query(
+          sql`insert into ${blocks} (${identifier('id', dialect)}, ${identifier('entry_id', dialect)},
+                ${identifier('version', dialect)}, ${identifier('zone', dialect)},
+                ${identifier('position', dialect)}, ${identifier('block_key', dialect)},
+                ${identifier('block_type', dialect)}, ${identifier('data', dialect)})
+              values (${newId()}, ${entryId}, ${version}, ${zone}, ${position},
+                      ${block.key}, ${block.type}, ${JSON.stringify(block.data)})`,
+        )
+      }
+    }
+  }
+
+  async function writeRelations(
+    tx: SqlExecutor,
+    entryId: string,
+    values: Record<string, unknown>,
+  ): Promise<void> {
+    for (const relation of relations) {
+      const table = identifier(relationTable(collection.name, relation.field), dialect)
+      const targets = values[relation.field]
+      if (!Array.isArray(targets)) continue
+
+      await tx.query(
+        sql`delete from ${table} where ${identifier('entry_id', dialect)} = ${entryId}`,
+      )
+      for (const [position, target] of targets.entries()) {
+        await tx.query(
+          sql`insert into ${table} (${identifier('entry_id', dialect)},
+                ${identifier('target_id', dialect)}, ${identifier('position', dialect)})
+              values (${entryId}, ${text(target)}, ${position})`,
+        )
+      }
+    }
+  }
+
+  async function writeVersion(
+    tx: SqlExecutor,
+    entryId: string,
+    version: number,
+    status: string,
+    values: Record<string, unknown>,
+    author: string | null,
+  ): Promise<void> {
+    await tx.query(
+      sql`delete from ${versions}
+          where ${identifier('entry_id', dialect)} = ${entryId}
+            and ${identifier('version', dialect)} = ${version}`,
+    )
+    await tx.query(
+      sql`insert into ${versions} (${identifier('id', dialect)}, ${identifier('entry_id', dialect)},
+            ${identifier('version', dialect)}, ${identifier('status', dialect)},
+            ${identifier('data', dialect)}, ${identifier('created_at', dialect)},
+            ${identifier('created_by', dialect)})
+          values (${newId()}, ${entryId}, ${version}, ${status},
+                  ${JSON.stringify(values)}, ${stamp()}, ${author})`,
+    )
+  }
+
+  /** Keeps the newest `keep` versions, and never the live one. */
+  async function prune(tx: SqlExecutor, entryId: string, liveVersion: number): Promise<void> {
+    const found = await tx.query<{ version: number }>(
+      sql`select ${identifier('version', dialect)} from ${versions}
+          where ${identifier('entry_id', dialect)} = ${entryId}
+          order by ${identifier('version', dialect)} desc`,
+    )
+
+    const doomed = found.rows
+      .map((row) => Number(row.version))
+      .slice(keep)
+      .filter((version) => version !== liveVersion)
+
+    if (doomed.length === 0) return
+
+    const list = valueList(doomed)
+    await tx.query(
+      sql`delete from ${versions}
+          where ${identifier('entry_id', dialect)} = ${entryId}
+            and ${identifier('version', dialect)} in (${list})`,
+    )
+    await tx.query(
+      sql`delete from ${blocks}
+          where ${identifier('entry_id', dialect)} = ${entryId}
+            and ${identifier('version', dialect)} in (${list})`,
+    )
+  }
+
+  async function writeLiveColumns(
+    tx: SqlExecutor,
+    id: string,
+    columns: Record<string, unknown>,
+    system: Record<string, unknown>,
+  ): Promise<void> {
+    const assignments: SqlFragment[] = []
+
+    for (const [name, value] of Object.entries(system)) {
+      assignments.push(sql`${identifier(name, dialect)} = ${value}`)
+    }
+    for (const [name, value] of Object.entries(columns)) {
+      assignments.push(sql`${identifier(columnFor(name), dialect)} = ${value}`)
+    }
+
+    await tx.query(
+      sql`update ${entries} set ${joinFragments(assignments, ', ')}
+          where ${identifier('id', dialect)} = ${id}`,
+    )
+  }
+
+  // ------------------------------------------------------------ pagination
+
+  function sortOrder(options: ListOptions): SortOrder {
+    return options.sort ?? DEFAULT_SORT
+  }
+
+  function keysetPredicate(cursor: Cursor): SqlFragment {
+    const column = identifier(SORT_COLUMNS[cursor.field], dialect)
+    const id = identifier('id', dialect)
+    const comparison = cursor.direction === 'asc' ? '>' : '<'
+
+    // Strictly after the last row handed out, in the same order. A row inserted
+    // concurrently is either before that point — and was already returned — or
+    // after it, and comes on a later page. Nothing shifts, which an offset
+    // cannot promise.
+    if (cursor.field === 'id') {
+      return sql`${id} ${rawOperator(comparison)} ${cursor.id}`
+    }
+    return sql`(${column} ${rawOperator(comparison)} ${cursor.value}
+                or (${column} = ${cursor.value} and ${id} ${rawOperator(comparison)} ${cursor.id}))`
+  }
+
+  function rawOperator(comparison: '<' | '>'): SqlFragment {
+    // The operator comes from a closed set in this file, never from a caller.
+    return comparison === '<' ? sql`<` : sql`>`
+  }
+
+  function orderClause(order: SortOrder): SqlFragment {
+    const direction = order.direction === 'asc' ? sql`asc` : sql`desc`
+    const column = identifier(SORT_COLUMNS[order.field], dialect)
+    // The id is always the tie-breaker: two rows created in the same
+    // millisecond must still have one stable order, or a cursor could skip one.
+    return sql`${column} ${direction}, ${identifier('id', dialect)} ${direction}`
+  }
+
+  function cursorFor(entry: ContentEntry<TValues>, order: SortOrder): string {
+    const value =
+      order.field === 'id'
+        ? entry.id
+        : order.field === 'createdAt'
+          ? entry.createdAt
+          : entry.updatedAt
+    return encodeCursor({ field: order.field, direction: order.direction, value, id: entry.id })
+  }
+
+  // ------------------------------------------------------------------- API
+
+  return {
+    create: async (input) =>
+      db.transaction(
+        async (tx) => {
+          const id = input.id ?? newId()
+          const status = input.status ?? 'draft'
+          const at = stamp()
+          const author = input.createdBy ?? null
+
+          const normalised = normaliseValues(collection, input.values ?? {}, {
+            partial: false,
+            enforceRequired: status === 'published',
+          })
+          const zones = normaliseBlocks(collection, input.blocks ?? {}, newId)
+          const values = { ...normalised.values }
+
+          if (status === 'published' && collection.fields['publishedAt'] !== undefined) {
+            values['publishedAt'] ??= at
+            normalised.columns['publishedAt'] ??= at
+          }
+
+          const columns = [
+            'id',
+            'created_at',
+            'updated_at',
+            'created_by',
+            'updated_by',
+            'status',
+            'locale',
+            'translation_of',
+            'version',
+            'provenance',
+            'provenance_detail',
+          ]
+          const bound: unknown[] = [
+            id,
+            at,
+            at,
+            author,
+            author,
+            status,
+            input.locale ?? defaultLocale,
+            input.translationOf ?? null,
+            1,
+            input.provenance ?? ('human' satisfies Provenance),
+            input.provenanceDetail === undefined || input.provenanceDetail === null
+              ? null
+              : JSON.stringify(input.provenanceDetail),
+          ]
+
+          for (const [name, value] of Object.entries(normalised.columns)) {
+            columns.push(columnFor(name))
+            bound.push(value)
+          }
+
+          await tx.query(
+            sql`insert into ${entries} (${joinFragments(
+              columns.map((column) => identifier(column, dialect)),
+              ', ',
+            )}) values (${valueList(bound)})`,
+          )
+
+          await writeRelations(tx, id, normalised.relations)
+          await writeBlocks(tx, id, 1, zones)
+          await writeVersion(tx, id, 1, status, { ...values, ...normalised.relations }, author)
+
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+          return liveEntry(tx, row)
+        },
+        { immediate: true },
+      ),
+
+    read: async (id, readOptions) => {
+      const state = readOptions?.state ?? 'published'
+      const row = await loadRow(db, id)
+      if (row === null) return null
+
+      // The safe default: a caller that says nothing gets the published state,
+      // never a draft. The public role has no way to ask for one.
+      if (state === 'published') {
+        return text(row['status']) === 'published' ? liveEntry(db, row) : null
+      }
+      return workingEntry(db, row)
+    },
+
+    update: async (id, input) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+
+          const working = await workingEntry(tx, row)
+          const next = working.version + 1
+          const author = input.updatedBy ?? nullableText(row['updated_by'])
+
+          const merged = { ...working.values, ...(input.values ?? {}) }
+          const normalised = normaliseValues(collection, merged, {
+            partial: false,
+            enforceRequired: false,
+          })
+          const zones = normaliseBlocks(
+            collection,
+            { ...working.blocks, ...(input.blocks ?? {}) },
+            newId,
+          )
+          const snapshot = { ...normalised.values, ...normalised.relations }
+
+          await writeBlocks(tx, id, next, zones)
+          await writeVersion(tx, id, next, 'draft', snapshot, author)
+
+          // With drafts on, editing a published entry must not touch what the
+          // public sees: the change lands as a version and waits for publish().
+          const overlayOnly = draftsEnabled && text(row['status']) === 'published'
+
+          if (!overlayOnly) {
+            const system: Record<string, unknown> = {
+              updated_at: stamp(),
+              updated_by: author,
+              version: next,
+            }
+            if (input.provenance !== undefined) system['provenance'] = input.provenance
+            if (input.provenanceDetail !== undefined) {
+              system['provenance_detail'] =
+                input.provenanceDetail === null ? null : JSON.stringify(input.provenanceDetail)
+            }
+
+            await writeLiveColumns(tx, id, normalised.columns, system)
+            await writeRelations(tx, id, normalised.relations)
+          }
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          await prune(tx, id, Number(after['version']))
+
+          return workingEntry(tx, after)
+        },
+        { immediate: true },
+      ),
+
+    delete: async (id) => {
+      const removed = await db.query(
+        sql`delete from ${entries} where ${identifier('id', dialect)} = ${id}`,
+      )
+      return removed.rowsAffected > 0
+    },
+
+    list: async (listOptions = {}) => {
+      const order = sortOrder(listOptions)
+      const state = listOptions.state ?? 'published'
+      const size = Math.min(Math.max(listOptions.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
+
+      const predicates: SqlFragment[] = []
+
+      if (listOptions.status !== undefined) {
+        predicates.push(sql`${identifier('status', dialect)} = ${listOptions.status}`)
+      } else if (state === 'published') {
+        predicates.push(sql`${identifier('status', dialect)} = ${'published'}`)
+      }
+
+      if (listOptions.locale !== undefined) {
+        predicates.push(sql`${identifier('locale', dialect)} = ${listOptions.locale}`)
+      }
+
+      if (listOptions.translationOf !== undefined) {
+        predicates.push(
+          listOptions.translationOf === null
+            ? sql`${identifier('translation_of', dialect)} is null`
+            : sql`${identifier('translation_of', dialect)} = ${listOptions.translationOf}`,
+        )
+      }
+
+      for (const [field, value] of Object.entries(listOptions.where ?? {})) {
+        const definition = collection.fields[field]
+        if (definition === undefined || isColumnless(definition)) {
+          throw new CogentaError({
+            code: 'CONTENT_INVALID',
+            message: `Cannot filter "${collection.name}" on "${field}".`,
+            hint: 'Filters apply to declared fields that have a column: not to block zones or to-many relations.',
+            details: { collection: collection.name, field },
+          })
+        }
+        predicates.push(
+          value === null
+            ? sql`${identifier(columnFor(field), dialect)} is null`
+            : sql`${identifier(columnFor(field), dialect)} = ${value}`,
+        )
+      }
+
+      if (listOptions.cursor !== undefined) {
+        predicates.push(keysetPredicate(decodeCursor(listOptions.cursor, order)))
+      }
+
+      const where =
+        predicates.length === 0 ? sql`` : sql` where ${joinFragments(predicates, ' and ')}`
+
+      // One more row than asked for: its existence is the answer to "is there a
+      // next page", without a second count query that would race the inserts.
+      const found = await db.query<Row>(
+        sql`select * from ${entries}${where} order by ${orderClause(order)} limit ${sqlLimit(size + 1)}`,
+      )
+
+      const rows = found.rows.slice(0, size)
+      let items: ContentEntry<TValues>[]
+
+      if (state === 'published') {
+        items = await liveEntries(db, rows)
+      } else {
+        // The working state of an entry is its newest version row, which cannot
+        // be reached in the same pass; the admin list pays for what it asks.
+        items = []
+        for (const row of rows) items.push(await workingEntry(db, row))
+      }
+
+      const last = items.at(-1)
+      const hasMore = found.rows.length > size
+
+      return {
+        items,
+        hasMore,
+        nextCursor: hasMore && last !== undefined ? cursorFor(last, order) : null,
+      }
+    },
+
+    publish: async (id, publishOptions) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+
+          const working = await workingEntry(tx, row)
+          const at = stamp()
+          const author = publishOptions?.publishedBy ?? nullableText(row['updated_by'])
+
+          const values: Record<string, unknown> = { ...working.values }
+          if (collection.fields['publishedAt'] !== undefined && values['publishedAt'] == null) {
+            values['publishedAt'] = at
+          }
+
+          // Publication is the moment `required` starts to mean something: a
+          // half-written draft can be saved, but it cannot go out.
+          const normalised = normaliseValues(collection, values, {
+            partial: false,
+            enforceRequired: true,
+          })
+
+          await writeLiveColumns(tx, id, normalised.columns, {
+            status: 'published' satisfies ContentStatus,
+            version: working.version,
+            updated_at: at,
+            updated_by: author,
+          })
+          await writeRelations(tx, id, normalised.relations)
+          // The version row is updated rather than rewritten: its `created_at`
+          // is when the draft was written, and publication must not erase it.
+          await tx.query(
+            sql`update ${versions}
+                set ${identifier('status', dialect)} = ${'published'},
+                    ${identifier('data', dialect)} = ${JSON.stringify({
+                      ...normalised.values,
+                      ...normalised.relations,
+                    })}
+                where ${identifier('entry_id', dialect)} = ${id}
+                  and ${identifier('version', dialect)} = ${working.version}`,
+          )
+          await prune(tx, id, working.version)
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          return liveEntry(tx, after)
+        },
+        { immediate: true },
+      ),
+
+    unpublish: async (id, unpublishOptions) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+
+          const status = unpublishOptions?.status ?? 'draft'
+          await writeLiveColumns(tx, id, {}, { status, updated_at: stamp() })
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          return { ...(await liveEntry(tx, after)), state: 'working' as const }
+        },
+        { immediate: true },
+      ),
+
+    history: async (id) => {
+      const row = await loadRow(db, id)
+      if (row === null) throw notFound(collection.name, id)
+
+      const found = await db.query<VersionRow>(
+        sql`select * from ${versions}
+            where ${identifier('entry_id', dialect)} = ${id}
+            order by ${identifier('version', dialect)} desc`,
+      )
+
+      const live = Number(row['version'])
+      return found.rows.map((version) => ({
+        version: Number(version.version),
+        status: text(version.status) as ContentStatus,
+        createdAt: text(version.created_at),
+        createdBy: nullableText(version.created_by),
+        live: Number(version.version) === live,
+      }))
+    },
+
+    readVersion: async (id, version) => {
+      const row = await loadRow(db, id)
+      if (row === null) return null
+
+      const found = await versionRow(db, id, version)
+      if (found === null) return null
+
+      const snapshot = await snapshotOf(db, id, found)
+      return toEntry(row, snapshot.values, snapshot.blocks, 'working', {
+        version,
+        status: text(found.status),
+      })
+    },
+
+    restore: async (id, version, restoreOptions) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+
+          const found = await versionRow(tx, id, version)
+          if (found === null) {
+            throw new CogentaError({
+              code: 'CONTENT_NOT_FOUND',
+              message: `Version ${version} of "${id}" is no longer kept.`,
+              hint: `This collection keeps ${keep} versions. Older ones are pruned on write.`,
+              details: { collection: collection.name, id, version, keep },
+            })
+          }
+
+          const snapshot = await snapshotOf(tx, id, found)
+          const working = await workingEntry(tx, row)
+          const next = working.version + 1
+          const author = restoreOptions?.updatedBy ?? nullableText(row['updated_by'])
+
+          // Restoring is itself an edit: it creates a new version rather than
+          // rewinding the counter, so the history stays append-only and the
+          // restore can itself be undone (rule R6).
+          const normalised = normaliseValues(collection, snapshot.values, {
+            partial: false,
+            enforceRequired: false,
+          })
+          const zones = normaliseBlocks(collection, snapshot.blocks, newId)
+
+          await writeBlocks(tx, id, next, zones)
+          await writeVersion(
+            tx,
+            id,
+            next,
+            'draft',
+            { ...normalised.values, ...normalised.relations },
+            author,
+          )
+
+          if (!(draftsEnabled && text(row['status']) === 'published')) {
+            await writeLiveColumns(tx, id, normalised.columns, {
+              updated_at: stamp(),
+              updated_by: author,
+              version: next,
+            })
+            await writeRelations(tx, id, normalised.relations)
+          }
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          await prune(tx, id, Number(after['version']))
+          return workingEntry(tx, after)
+        },
+        { immediate: true },
+      ),
+
+    diff: async (id, from, to) => {
+      const row = await loadRow(db, id)
+      if (row === null) throw notFound(collection.name, id)
+
+      const load = async (version: number): Promise<Snapshot> => {
+        const found = await versionRow(db, id, version)
+        if (found === null) {
+          throw new CogentaError({
+            code: 'CONTENT_NOT_FOUND',
+            message: `Version ${version} of "${id}" is no longer kept.`,
+            hint: `This collection keeps ${keep} versions. Compare one that history() still lists.`,
+            details: { collection: collection.name, id, version },
+          })
+        }
+        return snapshotOf(db, id, found)
+      }
+
+      return diffContent(await load(from), await load(to))
+    },
+
+    translations: async (id) => {
+      const row = await loadRow(db, id)
+      if (row === null) return []
+
+      const sourceId = nullableText(row['translation_of']) ?? text(row['id'])
+      const found = await db.query<Row>(
+        sql`select * from ${entries}
+            where ${identifier('id', dialect)} = ${sourceId}
+               or ${identifier('translation_of', dialect)} = ${sourceId}
+            order by ${identifier('locale', dialect)} asc`,
+      )
+
+      return liveEntries(db, found.rows)
+    },
+
+    resolveLocale: async (id, locale, resolveOptions) => {
+      const state = resolveOptions.state ?? 'published'
+      const row = await loadRow(db, id)
+      if (row === null) return { outcome: 'notFound' }
+
+      const sourceId = nullableText(row['translation_of']) ?? text(row['id'])
+      const found = await db.query<Row>(
+        sql`select * from ${entries}
+            where ${identifier('id', dialect)} = ${sourceId}
+               or ${identifier('translation_of', dialect)} = ${sourceId}`,
+      )
+
+      // Publication is per language (ADR-0014): a French entry can be live while
+      // its English translation is still a draft, and the renderer must treat
+      // the draft as if it did not exist.
+      const visible = found.rows.filter(
+        (member) => state === 'working' || text(member['status']) === 'published',
+      )
+
+      const match = visible.find((member) => text(member['locale']) === locale)
+      if (match !== undefined) {
+        const entry =
+          state === 'published' ? await liveEntry(db, match) : await workingEntry(db, match)
+        return { outcome: 'found', entry, fellBack: false }
+      }
+
+      if (resolveOptions.fallback === 'hide') return { outcome: 'hidden' }
+      if (resolveOptions.fallback === 'notFound') return { outcome: 'notFound' }
+
+      const original = visible.find((member) => text(member['id']) === sourceId)
+      // 'original' cannot invent a source that is itself unpublished; there is
+      // nothing to show, so the honest answer is the same as a missing page.
+      if (original === undefined) return { outcome: 'notFound' }
+
+      const entry =
+        state === 'published' ? await liveEntry(db, original) : await workingEntry(db, original)
+      return { outcome: 'found', entry, fellBack: true }
+    },
+  }
+}

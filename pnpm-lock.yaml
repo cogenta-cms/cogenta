@@ -78,6 +78,25 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@22.20.1)(vite@8.2.1(@types/node@22.20.1)(jiti@2.6.1)(yaml@2.9.0))
 
+  packages/blocks:
+    dependencies:
+      '@cogenta/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cogenta/schema':
+        specifier: workspace:*
+        version: link:../schema
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@22.20.1)(vite@8.2.1(@types/node@22.20.1)(jiti@2.6.1)(yaml@2.9.0))
+
   packages/cli:
     dependencies:
       '@cogenta/core':
@@ -121,6 +140,22 @@ importers:
       postgres:
         specifier: 'catalog:'
         version: 3.4.9
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@22.20.1)(vite@8.2.1(@types/node@22.20.1)(jiti@2.6.1)(yaml@2.9.0))
+
+  packages/schema:
+    dependencies:
+      '@cogenta/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

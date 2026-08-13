@@ -6,6 +6,8 @@
  * live — the ones GraphQL shares rather than reimplements.
  */
 
+export type { AuthRouter, AuthRouterOptions } from './auth-router.js'
+export { createAuthRouter, resolveActor } from './auth-router.js'
 export { parseCreateBody, parseRestoreBody, parseUpdateBody } from './body.js'
 export type {
   ContentPage,

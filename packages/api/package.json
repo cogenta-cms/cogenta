@@ -33,6 +33,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
+    "@cogenta/auth": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/blocks": "workspace:*",

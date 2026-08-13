@@ -19,7 +19,16 @@ process.on('warning', (warning) => {
   if (!isSqliteNotice) process.stderr.write(`${warning.stack ?? warning.message}\n`)
 })
 
+// Only `serve` reads this; every other command finishes on its own and
+// nothing ever calls `abort()`. Ctrl-C or a process manager's SIGTERM should
+// close the listening socket and the database cleanly rather than dropping
+// whatever request was in flight.
+const shutdown = new AbortController()
+process.once('SIGINT', () => shutdown.abort())
+process.once('SIGTERM', () => shutdown.abort())
+
 process.exitCode = await run({
   argv: process.argv.slice(2),
   isTty: process.stdout.isTTY === true,
+  signal: shutdown.signal,
 })

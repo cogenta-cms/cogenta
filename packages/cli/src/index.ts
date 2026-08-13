@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
 import { runMigrate } from './commands/migrate.js'
+import { runServe } from './commands/serve.js'
 import { runUsers } from './commands/users.js'
 import { createOutput, shouldUseColour, type Writer } from './output.js'
 
@@ -10,6 +11,8 @@ export type { DoctorCheck, DoctorOptions, DoctorReport } from './commands/doctor
 export { formatDoctorReport, runDoctor } from './commands/doctor.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
+export type { ServeOptions } from './commands/serve.js'
+export { loadCollections, runServe } from './commands/serve.js'
 export type { UsersOptions, UsersSubcommand } from './commands/users.js'
 export { runUsers } from './commands/users.js'
 export type { Output, Writer } from './output.js'
@@ -26,6 +29,7 @@ Commands
   migrate up       Apply the pending migrations
   migrate down     Revert applied migrations
   users create     Create a user — the first admin account is made this way
+  serve            Run the content and auth API over HTTP
   help             Show this message
   version          Print the version
 
@@ -44,6 +48,10 @@ User options
   --email <email>         The new user's email
   --roles <role,role>     Comma-separated role names
   --admin                 Shorthand for --roles admin
+
+Serve options
+  --port <n>              Port to listen on (default 4000)
+  --host <host>           Host to bind to (default 127.0.0.1)
 `
 
 export interface RunOptions {
@@ -53,6 +61,10 @@ export interface RunOptions {
   readonly env?: Record<string, string | undefined>
   readonly isTty?: boolean
   readonly version?: string
+  /** Stops `serve` when aborted. Ignored by every other command. */
+  readonly signal?: AbortSignal
+  /** `serve` only: reports the bound address once listening (tests need the OS-assigned port). */
+  readonly onListening?: (address: { port: number; host: string }) => void
 }
 
 /**
@@ -86,6 +98,8 @@ export async function run(options: RunOptions): Promise<number> {
         email: { type: 'string' },
         roles: { type: 'string' },
         admin: { type: 'boolean' },
+        port: { type: 'string' },
+        host: { type: 'string' },
       },
     })
   } catch (error) {
@@ -151,6 +165,29 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.roles === 'string' ? { roles: parsed.values.roles } : {}),
       ...(parsed.values.admin === true ? { admin: true } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'serve') {
+    let port: number | undefined
+    if (typeof parsed.values.port === 'string') {
+      port = Number(parsed.values.port)
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        stderr(`--port must be a whole number between 0 and 65535, not "${parsed.values.port}".\n`)
+        return 2
+      }
+    }
+
+    return runServe({
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(port === undefined ? {} : { port }),
+      ...(typeof parsed.values.host === 'string' ? { host: parsed.values.host } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.onListening === undefined ? {} : { onListening: options.onListening }),
     })
   }
 

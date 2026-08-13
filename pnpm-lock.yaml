@@ -165,6 +165,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@cogenta/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@cogenta/blocks':
         specifier: workspace:*
         version: link:../blocks
@@ -228,12 +231,21 @@ importers:
 
   packages/cli:
     dependencies:
+      '@cogenta/api':
+        specifier: workspace:*
+        version: link:../api
       '@cogenta/auth':
         specifier: workspace:*
         version: link:../auth
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
+      '@cogenta/schema':
+        specifier: workspace:*
+        version: link:../schema
+      graphql:
+        specifier: 'catalog:'
+        version: 17.0.2
     devDependencies:
       typescript:
         specifier: 'catalog:'

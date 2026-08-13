@@ -1,9 +1,9 @@
+import { createHmac } from 'node:crypto'
 import { isCogentaError } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import { createCredentialStore } from '../src/credentials.js'
 import { createAuthService } from '../src/login.js'
-import { verifyTotp } from '../src/totp.js'
 import { createUserStore } from '../src/users.js'
 import { testDb } from './helpers/db.js'
 
@@ -133,15 +133,40 @@ describe('totpLogin', () => {
     return { ...bundle, user }
   }
 
+  const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+  /**
+   * A fresh, independent RFC 6238 implementation — computing the expected code
+   * directly rather than depending on src/totp.ts's internals (this file only
+   * imports its public login surface) or brute-forcing all 1e6 candidates,
+   * which timed out under a loaded machine running the whole workspace's
+   * tests at once.
+   */
   function codeFor(secret: string, now: number): string {
-    // Brute-force the 6-digit code for a fixed instant — the same trick used to
-    // avoid depending on totp.ts internals in totp.test.ts, kept local here so
-    // this file does not need to know the secret's RFC vector by heart.
-    for (let n = 0; n <= 999_999; n += 1) {
-      const candidate = String(n).padStart(6, '0')
-      if (verifyTotp(candidate, secret, { now, windowSteps: 0 })) return candidate
+    const normalised = secret.toUpperCase().replace(/=+$/u, '')
+    let bits = 0
+    let value = 0
+    const bytes: number[] = []
+    for (const char of normalised) {
+      value = (value << 5) | BASE32_ALPHABET.indexOf(char)
+      bits += 5
+      if (bits >= 8) {
+        bytes.push((value >>> (bits - 8)) & 0xff)
+        bits -= 8
+      }
     }
-    throw new Error('no candidate matched — should be unreachable in a test')
+    const key = Buffer.from(bytes)
+
+    const counter = Buffer.alloc(8)
+    counter.writeBigUInt64BE(BigInt(Math.floor(now / 30)))
+    const digest = createHmac('sha1', key).update(counter).digest()
+    const offset = (digest.at(-1) ?? 0) & 0x0f
+    const truncated =
+      ((digest[offset] ?? 0) & 0x7f) * 2 ** 24 +
+      ((digest[offset + 1] ?? 0) & 0xff) * 2 ** 16 +
+      ((digest[offset + 2] ?? 0) & 0xff) * 2 ** 8 +
+      ((digest[offset + 3] ?? 0) & 0xff)
+    return String(truncated % 1_000_000).padStart(6, '0')
   }
 
   it('completes a login when given the correct code and a valid ticket', async () => {

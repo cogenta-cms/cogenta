@@ -32,15 +32,11 @@
       "Bash(gh issue list:*)",
       "Bash(docker compose:*)",
       "Bash(docker ps:*)",
-      "Read(//D/projet_tmp/cogenta/**)"
-    ],
-    "ask": [
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
-      "Bash(pnpm publish:*)",
-      "Bash(npm publish:*)",
-      "Bash(pnpm release:*)"
+      "Read(//D/projet_tmp/cogenta/**)"
     ],
+    "ask": ["Bash(pnpm publish:*)", "Bash(npm publish:*)", "Bash(pnpm release:*)"],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",

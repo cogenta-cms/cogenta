@@ -23,9 +23,9 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L3 — Rendu** (`docs/lots/L3-rendu.md`) — le lot qui met le blog en ligne |
-| Lots terminés | L0 (socle) et L1 (contenu). 1056 tests. |
-| Paquets publiés | `@cogenta/core`, `@cogenta/cli` (`doctor`, `migrate`) |
+| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâche 1 (coquille SPA) à faire ; le socle auth (tâches 2-3, backend) est fait |
+| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1685 tests unitaires, tous verts. |
+| Paquets publiés | `@cogenta/core`, `@cogenta/schema`, `@cogenta/blocks`, `@cogenta/api`, `@cogenta/render`, `@cogenta/seo`, `@cogenta/theme-canonical`, `@cogenta/auth`, `@cogenta/cli` (`doctor`, `migrate`, `users create`) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
 | Contrats figés | **A, B et D figés** (2026-08-13). C avant L4 |
 | Statut public | pre-alpha |

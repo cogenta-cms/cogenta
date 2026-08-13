@@ -44,6 +44,11 @@ const TEST_FILE = /(^|[/\\])(test|tests|__tests__)[/\\]|\.(test|spec)\.[cm]?[jt]
 const ALLOWED_PATHS =
   /^(\.env\.example|docker-compose\.test\.yml|scripts[/\\]check-staged-secrets\.mjs)$/
 
+// A file that must contain credential-shaped strings — a redactor, a detector,
+// or their tests — declares it at the top and says why. Deliberate, reviewable,
+// and visible in a diff, unlike a growing allowlist of paths in this script.
+const OPT_OUT = 'cogenta:allow-fake-credentials'
+
 let staged
 try {
   staged = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'], {
@@ -72,11 +77,13 @@ for (const file of staged) {
   if (content.length > 2_000_000) continue
 
   const isTest = TEST_FILE.test(file)
+  const optedOut = content.slice(0, 2000).includes(OPT_OUT)
 
   content.split('\n').forEach((line, index) => {
     if (/cogenta:cogenta|COGENTA_TEST_/.test(line)) return // documented test fixtures
     for (const { name, pattern, shape } of PATTERNS) {
       if (isTest && !shape) continue
+      if (optedOut && shape) continue
       if (pattern.test(line)) {
         findings.push(`  ${file}:${index + 1} — ${name}`)
         return

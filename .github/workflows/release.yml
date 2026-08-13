@@ -40,7 +40,14 @@ jobs:
         with:
           version: pnpm version-packages
           publish: pnpm release
-          commit: 'chore(repo): version packages'
+          # The trailer is required by the commit-msg hook, which runs for this
+          # automated commit too. Carrying the bot's own identity keeps "every
+          # commit is signed off" true, rather than disabling the check for the
+          # one commit nobody looks at.
+          commit: |
+            chore(repo): version packages
+
+            Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           title: 'chore(repo): version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

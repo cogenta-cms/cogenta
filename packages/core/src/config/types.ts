@@ -42,6 +42,8 @@ export interface CogentaConfigInput {
     readonly region?: string
     readonly endpoint?: string
     readonly path?: string
+    /** Prefix for public media URLs. */
+    readonly baseUrl?: string
   }
   readonly llm?: {
     readonly provider?: string
@@ -89,6 +91,7 @@ export interface CogentaConfig {
     readonly region: string | undefined
     readonly endpoint: string | undefined
     readonly path: string
+    readonly baseUrl: string
     readonly accessKeyId: string | undefined
     readonly secretAccessKey: string | undefined
   }

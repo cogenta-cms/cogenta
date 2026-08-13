@@ -22,7 +22,9 @@ function fileNameFor(key: string): string {
   return createHash('sha256').update(key).digest('hex')
 }
 
-const RENAME_RETRY_DELAYS_MS = [5, 10, 25, 50, 100]
+// Exponential, with jitter so contending writers do not retry in lockstep and
+// collide again. Worst case is about a second, and only under heavy contention.
+const RENAME_RETRY_DELAYS_MS = [5, 10, 20, 40, 80, 160, 320, 640]
 const RETRYABLE_RENAME_ERRORS = new Set(['EPERM', 'EACCES', 'EBUSY'])
 
 /**
@@ -43,7 +45,8 @@ async function replaceAtomically(temporary: string, target: string): Promise<voi
       const lastAttempt = attempt === RENAME_RETRY_DELAYS_MS.length - 1
       if (!RETRYABLE_RENAME_ERRORS.has(code) || lastAttempt) throw error
 
-      await new Promise((resolve) => setTimeout(resolve, delay))
+      const jittered = delay * (0.5 + Math.random())
+      await new Promise((resolve) => setTimeout(resolve, jittered))
     }
   }
 }

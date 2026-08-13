@@ -110,6 +110,7 @@ export function resolveConfig(input: unknown, env: Environment = process.env): C
       region: config.storage.region,
       endpoint: config.storage.endpoint,
       path: config.storage.path,
+      baseUrl: config.storage.baseUrl,
       accessKeyId: secrets.storageAccessKeyId,
       secretAccessKey: secrets.storageSecretAccessKey,
     }),

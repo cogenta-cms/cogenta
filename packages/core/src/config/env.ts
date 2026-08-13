@@ -98,6 +98,7 @@ export function applyEnv(
     assign(storage, 'region', read(env, 'COGENTA_STORAGE_REGION'))
     assign(storage, 'endpoint', read(env, 'COGENTA_STORAGE_ENDPOINT'))
     assign(storage, 'path', read(env, 'COGENTA_STORAGE_PATH'))
+    assign(storage, 'baseUrl', read(env, 'COGENTA_STORAGE_BASE_URL'))
     output['storage'] = storage
   }
 

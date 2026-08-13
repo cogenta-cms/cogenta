@@ -46,6 +46,7 @@ const storageSchema = z.strictObject({
   region: nonEmpty.optional(),
   endpoint: nonEmpty.optional(),
   path: nonEmpty.default('./.cogenta/media'),
+  baseUrl: nonEmpty.default('/media'),
 })
 
 const llmSchema = z.strictObject({

@@ -147,6 +147,7 @@ export function resolveConfig(
       accessKeyId: secrets.storageAccessKeyId,
       secretAccessKey: secrets.storageSecretAccessKey,
     }),
+    auth: Object.freeze({ signingKey: secrets.authSigningKey }),
     llm:
       config.llm === undefined
         ? undefined

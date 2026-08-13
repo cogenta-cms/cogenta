@@ -165,6 +165,24 @@ describe('resolveConfig — secrets come from the environment only', () => {
       ),
     ).toThrowError(/storage\.secretAccessKey/)
   })
+
+  it('leaves auth.signingKey undefined when COGENTA_AUTH_SIGNING_KEY is not set', () => {
+    expect(resolveConfig(minimal, noEnv).auth.signingKey).toBeUndefined()
+  })
+
+  it('takes the auth signing key from the environment', () => {
+    const config = resolveConfig(minimal, { COGENTA_AUTH_SIGNING_KEY: 'a-real-signing-key' })
+    expect(config.auth.signingKey).toBe('a-real-signing-key')
+  })
+
+  it('has no `auth` section to write a signing key into in the file at all', () => {
+    // Unlike llm.apiKey or storage.secretAccessKey, there is nothing named
+    // `auth` in the input schema — a signing key in the file is rejected as an
+    // unrecognised key, not as a recognised-but-forbidden secret field.
+    expect(() =>
+      resolveConfig({ ...minimal, auth: { signingKey: 'sk-in-file' } }, noEnv),
+    ).toThrowError(/auth/)
+  })
 })
 
 describe('resolveConfig — invalid configuration fails at startup', () => {

@@ -98,6 +98,15 @@ export interface CogentaConfig {
     readonly accessKeyId: string | undefined
     readonly secretAccessKey: string | undefined
   }
+  /**
+   * Never settable in the config file — there is no `auth` input section, on
+   * purpose (rule R7). `signingKey` is `undefined` until `COGENTA_AUTH_SIGNING_KEY`
+   * is set; whoever wires @cogenta/auth to a real server refuses to start
+   * without it rather than falling back to a guessable default.
+   */
+  readonly auth: {
+    readonly signingKey: string | undefined
+  }
   /** Absent when no provider is configured. The CMS works without AI (rule R2). */
   readonly llm:
     | {

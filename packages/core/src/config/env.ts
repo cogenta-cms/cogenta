@@ -132,6 +132,8 @@ export interface EnvironmentSecrets {
   readonly llmApiKey: string | undefined
   readonly storageAccessKeyId: string | undefined
   readonly storageSecretAccessKey: string | undefined
+  /** Signs @cogenta/auth's MFA tickets. Never in the config file — there is no `auth` section to put it in, on purpose. */
+  readonly authSigningKey: string | undefined
 }
 
 export function readSecrets(env: Environment): EnvironmentSecrets {
@@ -139,6 +141,7 @@ export function readSecrets(env: Environment): EnvironmentSecrets {
     llmApiKey: read(env, 'COGENTA_LLM_API_KEY'),
     storageAccessKeyId: read(env, 'COGENTA_STORAGE_ACCESS_KEY_ID'),
     storageSecretAccessKey: read(env, 'COGENTA_STORAGE_SECRET_ACCESS_KEY'),
+    authSigningKey: read(env, 'COGENTA_AUTH_SIGNING_KEY'),
   }
 }
 

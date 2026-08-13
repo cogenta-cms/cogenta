@@ -367,3 +367,51 @@ mesurable ; à l'échelle d'une flotte, la migration de contenu l'est tous les j
 **Écarté** — L'entier auto-incrémenté, pour les collisions entre environnements et la
 divergence de dialecte. L'UUIDv4, pour la fragmentation d'index. ULID, équivalent
 techniquement à la v7 mais moins standard, donc moins bien outillé.
+
+---
+
+## ADR-0016 — Un thème lit le contenu par HTTP, avec un jeton restreint
+
+**Statut** : Acté
+
+**Contexte** — Le contrat D disait que le `RenderContext` n'expose ni la base, ni les
+secrets, ni `fs`, sans dire comment un thème obtient du contenu. Or le bloc
+`collectionList` du contrat B est une liste dynamique : il lui faut une requête. Sans
+réponse, chaque auteur de thème en aurait inventé une, et la première aurait été un
+import direct de la couche de données.
+
+**Décision** — Le `RenderContext` expose un `content`, **client HTTP vers l'API de
+contenu, porteur d'un jeton restreint en lecture**. C'est la seule porte d'accès aux
+données qu'un thème possède.
+
+Le jeton porte les droits du rôle `public`. En prévisualisation, il porte un
+`PreviewGrant` limité à une entrée. Un thème ne peut donc pas atteindre un brouillon,
+même en le demandant.
+
+L'isolation est **vérifiée à l'installation**, pas seulement documentée : une analyse
+statique des sources refuse un thème qui importe `node:fs`, `node:child_process`,
+`node:net`, `node:vm`, un paquet du noyau ou un driver de base. Refusé, pas averti.
+
+**Justification** — Cela découle d'ADR-0004 plutôt que de s'y ajouter : les deux plans
+étant séparés, le processus de rendu ne possède déjà ni secrets ni connexion. Passer par
+HTTP ne fait qu'énoncer ce qui est déjà vrai, et le rend vérifiable.
+
+Le bénéfice est qu'un thème tiers devient sûr par construction. Le projet vend la
+sécurité comme propriété de l'architecture : un thème doit être *incapable* de lire la
+base, pas simplement prié de ne pas le faire — la même exigence qu'ADR-0011 pose aux
+plugins.
+
+**Conséquences** — Le rendu paie un aller-retour HTTP là où un accès direct aurait lu en
+mémoire. C'est ce que le cache de rendu par tags compense, et c'est pourquoi il est dans
+L3 et non plus tard. En statique, ces requêtes ont lieu au build et disparaissent
+entièrement de la production.
+
+**Renoncement assumé** — Un thème ne peut pas faire de jointure arbitraire ni de requête
+optimisée à la main. Le vocabulaire de filtres du contrat de l'API est ce qu'il a. Un
+thème qui a besoin de plus a besoin d'un plugin, ce qui est exactement la frontière
+qu'on veut.
+
+**Écarté** — Un accès direct à la couche de données, même en lecture seule : il rend
+l'isolation déclarative, donc fausse dès le premier thème tiers. Une API de données
+injectée en mémoire : plus rapide, mais elle place le thème dans le même processus que
+les secrets et supprime la sandbox obtenue gratuitement par ADR-0004.

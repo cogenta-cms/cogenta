@@ -41,12 +41,12 @@ migration.
 | Vision | Validé |
 | PRD | Validé |
 | Architecture | Validé |
-| Décisions | 15 décisions actées |
-| Contrats | **A (`schema@1.0`) et B (`blocks@1.0`) figés** le 2026-08-13. D avant L3, C avant L4 |
+| Décisions | 16 décisions actées |
+| Contrats | **A, B et D figés** le 2026-08-13. C avant L4 |
 | Sécurité | Première rédaction |
 | Lots | Découpage validé, les dix specs détaillées sont écrites (`lots/`) |
-| Code | **L0 terminé.** `@cogenta/core` (config, erreurs, logger, registre de drivers, base sur les trois dialectes + Drizzle, cache, queue, stockage, migrations) et `@cogenta/cli` (`doctor`, `migrate`). 389 tests. |
+| Code | **L0 et L1 terminés.** `@cogenta/core`, `@cogenta/schema`, `@cogenta/blocks`, `@cogenta/api`, `@cogenta/cli`. 1056 tests. |
 
 ## Prochaine étape
 
-**L1 — Contenu** (`lots/L1-contenu.md`). Les contrats A et B qu'il consomme sont figés.
+**L3 — Rendu** (`lots/L3-rendu.md`). Le contrat D qu'il consomme est figé.

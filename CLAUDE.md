@@ -23,11 +23,11 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L1 — Contenu** (`docs/lots/L1-contenu.md`) |
-| L0 — Socle | **terminé** — 12 tâches, 389 tests, vérifié contre de vraies bases |
+| Lot en cours | **L3 — Rendu** (`docs/lots/L3-rendu.md`) — le lot qui met le blog en ligne |
+| Lots terminés | L0 (socle) et L1 (contenu). 1056 tests. |
 | Paquets publiés | `@cogenta/core`, `@cogenta/cli` (`doctor`, `migrate`) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
-| Contrats figés | **A et B figés** (2026-08-13). D avant L3, C avant L4 |
+| Contrats figés | **A, B et D figés** (2026-08-13). C avant L4 |
 | Statut public | pre-alpha |
 
 Tenir ce tableau à jour à chaque changement de lot.

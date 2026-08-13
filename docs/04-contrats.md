@@ -341,6 +341,9 @@ defineAgent({
 
 ## Contrat D — Thème
 
+> **Figé en `theme@1.0` le 2026-08-13.** Ajouter une entrée à `ctx` est mineur ; en
+> modifier une est majeur.
+
 ### Structure minimale
 
 ```
@@ -376,6 +379,19 @@ defineTheme({
 Un thème qui ne déclare pas `implements` pour un bloc du vocabulaire **échoue à
 l'installation**. C'est la garantie qu'un changement de thème n'efface pas de contenu.
 
+### Isolation, vérifiée à l'installation
+
+Le code de thème s'exécute sans secrets et sans connexion à la base (R5, ADR-0004). Ce
+n'est pas une convention : c'est vérifié.
+
+**Imports refusés à l'installation** : `node:fs`, `node:child_process`, `node:net`,
+`node:http`, `node:https`, `node:dgram`, `node:worker_threads`, `node:vm`,
+`node:process`, ainsi que `@cogenta/core`, `@cogenta/schema` et tout paquet de driver de
+base. Un thème qui en importe un est **refusé**, pas averti.
+
+La vérification est statique, sur les sources du thème, et elle échoue en nommant le
+fichier, la ligne et l'import.
+
 ### Interface d'un composant de bloc
 
 ```astro
@@ -386,27 +402,101 @@ const { block, ctx } = Astro.props as { block: HeroBlock, ctx: RenderContext }
 ---
 ```
 
-`ctx` expose : `site`, `locale`, `url`, `t()` pour les traductions, `image()` pour les
-variantes, `link()` pour les URL. **Il n'expose ni la base, ni les secrets, ni `fs`.**
+### `RenderContext`
 
-### Tokens de skin
+```ts
+interface RenderContext {
+  readonly site: {
+    readonly name: string
+    readonly url: string
+    readonly locales: readonly string[]
+    readonly defaultLocale: string
+  }
+  /** The locale being rendered. */
+  readonly locale: string
+  /** The URL being rendered, already resolved. */
+  readonly url: URL
 
-```json
-{
-  "color":   { "bg": "…", "fg": "…", "accent": "…", "muted": "…", "border": "…" },
-  "font":    { "sans": "…", "serif": "…", "mono": "…", "scale": 1.25 },
-  "space":   { "unit": "0.25rem", "density": "comfortable" },
-  "radius":  { "sm": "…", "md": "…", "lg": "…" },
-  "motion":  { "duration": "…", "easing": "…", "reduced": true },
-  "shadow":  { "sm": "…", "md": "…" }
+  /** Translation. An unknown key returns the key, never an empty string. */
+  t(key: string, values?: Readonly<Record<string, string | number>>): string
+
+  /** Image variants. Returns what a responsive `<img>` needs, nothing more. */
+  image(media: MediaReference, options?: ImageOptions): ImageSource
+
+  /** URL of an entry, of a path, or of an external target. Locale-aware. */
+  link(target: { collection: string; id: string } | { path: string } | string): string
+
+  /** Read-only content access. The only door to data a theme has. */
+  readonly content: ContentClient
+}
+
+interface ImageOptions {
+  readonly width?: number
+  readonly height?: number
+  readonly format?: 'avif' | 'webp' | 'jpeg' | 'png'
+  readonly fit?: 'cover' | 'contain'
+}
+
+interface ImageSource {
+  readonly src: string
+  readonly srcset: string
+  readonly width: number
+  readonly height: number
+  /** Alt text and focal point come from the media entity, never invented here. */
+  readonly alt: string
+  readonly focal: { readonly x: number; readonly y: number } | null
+}
+
+interface ContentClient {
+  entry(collection: string, id: string): Promise<ContentEntry | null>
+  byPath(path: string): Promise<ContentEntry | null>
+  list(request: QueryRequest): Promise<Page<ContentEntry>>
 }
 ```
 
-Rendus en variables CSS. **Changement de skin = réécriture de ce fichier, sans build.**
+`ctx` expose **cela et rien d'autre**. Ni la base, ni les secrets, ni `fs`.
 
-Contraintes vérifiées automatiquement à l'enregistrement d'un skin : contraste AA sur
-toutes les paires texte/fond, échelle typographique monotone, tous les tokens
-renseignés. C'est ce qui rend la génération par IA sûre par construction.
+**`content` est un client HTTP vers l'API de contenu, porteur d'un jeton restreint en
+lecture** (ADR-0016). C'est ce qui rend `collectionList` possible sans donner au thème
+autre chose qu'un droit de lecture — la sandbox tombe de l'architecture des deux plans
+plutôt que d'être ajoutée par-dessus.
+
+Un thème ne voit jamais un brouillon : le jeton porte les droits du rôle `public`,
+sauf en prévisualisation où il porte un `PreviewGrant` limité à une entrée.
+
+### Tokens de skin
+
+L'ensemble est **fermé et complet** : un skin qui omet un token est refusé. C'est la
+condition pour que la génération par IA soit sûre par construction (L9).
+
+```json
+{
+  "color":  { "bg": "…", "fg": "…", "accent": "…", "accentFg": "…",
+              "muted": "…", "mutedFg": "…", "border": "…" },
+  "font":   { "sans": "…", "serif": "…", "mono": "…", "scale": 1.25, "baseSize": "1rem" },
+  "space":  { "unit": "0.25rem", "density": "compact | comfortable | spacious" },
+  "radius": { "sm": "…", "md": "…", "lg": "…" },
+  "motion": { "duration": "…", "easing": "…", "reduced": true },
+  "shadow": { "sm": "…", "md": "…" }
+}
+```
+
+Rendus en variables CSS `--cogenta-<groupe>-<nom>` dans une feuille unique.
+**Changement de skin = réécriture de ce fichier, sans build.**
+
+Contraintes vérifiées à l'enregistrement, en refus dur :
+
+- **contraste AA** (4,5:1 pour le texte, 3:1 pour le texte large) sur toutes les paires
+  déclarées : `fg`/`bg`, `accentFg`/`accent`, `mutedFg`/`muted`
+- **échelle typographique monotone croissante**
+- **aucun token manquant**, l'ensemble étant fermé
+- `motion.reduced` présent, et respecté sous `prefers-reduced-motion`
+
+### Besoins runtime
+
+Un thème déclare `runtime: 'static' | 'server' | 'edge'`. Une cible de build qui ne peut
+pas satisfaire le besoin d'un thème, d'un bloc ou d'un plugin **échoue** en nommant
+l'élément, la raison et les options. Jamais de dégradation silencieuse.
 
 ### Versionnement
 

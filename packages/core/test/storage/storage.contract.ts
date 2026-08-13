@@ -163,7 +163,8 @@ export function runStorageContract(
         await storage.delete('media/meta.txt')
         await storage.put('media/meta.txt', Buffer.from('x'))
 
-        expect((await storage.head('media/meta.txt'))?.contentType).toBeUndefined()
+        // Back to the default for an unknown type, not the type it used to have.
+        expect((await storage.head('media/meta.txt'))?.contentType).toBe('application/octet-stream')
       })
     })
 

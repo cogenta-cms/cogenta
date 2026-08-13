@@ -28,6 +28,9 @@ export interface LocalStorageOptions extends StorageDriverOptions {
   readonly signingKey?: string
 }
 
+/** What HTTP calls an unknown type, and what S3 stores by default. */
+const DEFAULT_CONTENT_TYPE = 'application/octet-stream'
+
 interface SidecarMetadata {
   readonly contentType?: string
   readonly cacheControl?: string
@@ -122,7 +125,11 @@ export function createLocalStorage(options: LocalStorageOptions): StorageDriver 
         return {
           key,
           size: stats.size,
-          contentType: metadata.contentType,
+          // The HTTP default for an unknown type, and what S3 returns for an
+          // object stored without one. Returning undefined here instead would
+          // make the two drivers disagree for every upload with no declared
+          // type — which is most of them.
+          contentType: metadata.contentType ?? DEFAULT_CONTENT_TYPE,
           cacheControl: metadata.cacheControl,
         }
       } catch (error) {

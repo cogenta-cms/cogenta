@@ -6,6 +6,9 @@ packages:
 # it uses — an undeclared import is a lint error — but the range lives here only.
 # pnpm resolves `catalog:` to the real range when publishing.
 catalog:
+  '@aws-sdk/client-s3': ^3.1109.0
+  '@aws-sdk/lib-storage': ^3.1109.0
+  '@aws-sdk/s3-request-presigner': ^3.1109.0
   '@redis/client': ^6.2.1
   mysql2: ^3.23.3
   postgres: ^3.4.9

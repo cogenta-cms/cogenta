@@ -13,6 +13,7 @@ export default {
         'api',
         'blocks',
         'admin',
+        'auth',
         'render',
         'theme-canonical',
         'agents',

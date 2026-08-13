@@ -1,0 +1,70 @@
+/**
+ * Identity, sessions and credentials.
+ *
+ * Contract A deliberately stops at "roles are an open set of names declared in
+ * a collection's permissions" and says who attaches a role to a user is L2's
+ * concern (ADR-0014's neighbour decision, recorded in `docs/lots/L2-admin.md`).
+ * This package is that concern: it is what turns a role name into an actual
+ * signed-in person.
+ */
+
+export const CREDENTIAL_KINDS = ['password', 'totp', 'webauthn'] as const
+export type CredentialKind = (typeof CREDENTIAL_KINDS)[number]
+
+export interface User {
+  readonly id: string
+  readonly email: string
+  /** An open set of names, exactly as contract A's collection permissions expect. */
+  readonly roles: readonly string[]
+  readonly status: 'active' | 'disabled'
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface CreateUserInput {
+  readonly email: string
+  readonly roles: readonly string[]
+}
+
+export interface Session {
+  readonly id: string
+  readonly userId: string
+  readonly createdAt: string
+  readonly expiresAt: string
+  readonly lastSeenAt: string
+  /** Free text, shown in "your sessions" so a person can recognise a device. */
+  readonly label: string | undefined
+}
+
+/**
+ * A session as returned once, at creation. `token` is the bearer credential; it
+ * is never stored — only its hash is (the same reasoning as a password, applied
+ * to the thing that stands in for one after login).
+ */
+export interface IssuedSession extends Session {
+  readonly token: string
+}
+
+export interface AuditEntry {
+  readonly id: string
+  readonly at: string
+  readonly actorId: string | null
+  /** The roles the actor held at the time, not what they hold now. */
+  readonly actorRoles: readonly string[]
+  readonly action: string
+  readonly collection: string | null
+  readonly entryId: string | null
+  readonly diff: Readonly<Record<string, unknown>> | null
+  /** Chains to the previous entry's hash. The first entry chains to null. */
+  readonly hash: string
+  readonly previousHash: string | null
+}
+
+export interface RecordAuditInput {
+  readonly actorId: string | null
+  readonly actorRoles: readonly string[]
+  readonly action: string
+  readonly collection?: string | undefined
+  readonly entryId?: string | undefined
+  readonly diff?: Readonly<Record<string, unknown>> | undefined
+}

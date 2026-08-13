@@ -54,6 +54,7 @@ export {
 } from './rich-text.js'
 export * from './routing/index.js'
 export * from './scheduling/index.js'
+export * from './search/index.js'
 export * from './store/index.js'
 export type { SystemFieldDescriptor, SystemFieldName } from './system-fields.js'
 export {

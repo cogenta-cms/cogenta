@@ -12,6 +12,7 @@ catalog:
   '@redis/client': ^6.2.1
   bullmq: ^6.1.0
   drizzle-orm: ^0.45.2
+  graphql: ^17.0.2
   mysql2: ^3.23.3
   postgres: ^3.4.9
   typescript: ^7.0.2

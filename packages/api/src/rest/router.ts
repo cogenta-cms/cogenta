@@ -1,0 +1,205 @@
+import { CogentaError } from '@cogenta/core'
+import type { AccessContext } from '../types.js'
+import { ANONYMOUS } from '../types.js'
+import { parseCreateBody, parseRestoreBody, parseUpdateBody } from './body.js'
+import type { ContentService } from './content-service.js'
+import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import { parseListQuery, parsePositiveInteger, parseReadQuery } from './query.js'
+
+/**
+ * The REST transport.
+ *
+ * A request in, a response out — no framework, no port, no `process.exit`. The
+ * router owns paths, methods and status codes and nothing else: every decision
+ * that REST and GraphQL must agree on already happened in `ContentService`.
+ *
+ *   GET    /{collection}                   list
+ *   POST   /{collection}                   create
+ *   GET    /{collection}/{id}              read
+ *   PATCH  /{collection}/{id}              update
+ *   DELETE /{collection}/{id}              delete
+ *   POST   /{collection}/{id}/publish      publish
+ *   GET    /{collection}/{id}/history      version list
+ *   GET    /{collection}/{id}/diff         diff of two versions
+ *   POST   /{collection}/{id}/restore      restore a version
+ */
+
+export interface RestRouterOptions {
+  readonly service: ContentService
+  /**
+   * Mount point. `/api/content` by default rather than `/api`, so that a
+   * collection can be named `graphql` without shadowing the other transport.
+   */
+  readonly basePath?: string
+}
+
+export interface RestRouter {
+  handle(request: RestRequest, context?: AccessContext): Promise<RestResponse>
+}
+
+const DEFAULT_BASE_PATH = '/api/content'
+
+export function createRestRouter(options: RestRouterOptions): RestRouter {
+  const service = options.service
+  const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
+
+  return {
+    handle: async (request, context = { actor: ANONYMOUS }) => {
+      try {
+        return await route(request, context)
+      } catch (error) {
+        return errorResponse(error)
+      }
+    },
+  }
+
+  async function route(request: RestRequest, context: AccessContext): Promise<RestResponse> {
+    const segments = segmentsOf(request.path, basePath)
+    if (segments === null || segments.length === 0 || segments.length > 3) throw noRoute()
+
+    const method = request.method.toUpperCase()
+    const [name, id, action] = segments
+
+    // Fails before anything else so that an unknown collection is a 404 rather
+    // than a permission decision about a collection that does not exist.
+    if (name === undefined) throw noRoute()
+    service.collection(name)
+
+    if (id === undefined) {
+      if (method === 'GET') {
+        const query = parseListQuery(request.query, service.collection(name), service.limits)
+        const page = await service.list(context, name, query)
+        return jsonResponse(200, {
+          data: page.items,
+          page: { hasMore: page.hasMore, nextCursor: page.nextCursor },
+        })
+      }
+      if (method === 'POST') {
+        const read = parseReadQuery(request.query, service.limits)
+        const input = parseCreateBody(request.body, context.actor)
+        const entry = await service.create(context, name, input, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(201, { data: entry })
+      }
+      return methodNotAllowed(['GET', 'POST'])
+    }
+
+    if (action === undefined) {
+      const read = parseReadQuery(request.query, service.limits)
+
+      if (method === 'GET') {
+        const entry = await service.read(context, name, id, {
+          state: read.requestedState,
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+      if (method === 'PATCH' || method === 'PUT') {
+        const input = parseUpdateBody(request.body, context.actor)
+        const entry = await service.update(context, name, id, input, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+      if (method === 'DELETE') {
+        await service.remove(context, name, id)
+        return jsonResponse(204, null)
+      }
+      return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
+    }
+
+    return subroute(request, context, method, name, id, action)
+  }
+
+  async function subroute(
+    request: RestRequest,
+    context: AccessContext,
+    method: string,
+    name: string,
+    id: string,
+    action: string,
+  ): Promise<RestResponse> {
+    const read = parseReadQuery(request.query, service.limits)
+
+    switch (action) {
+      case 'publish': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const entry = await service.publish(
+          context,
+          name,
+          id,
+          { publishedBy: context.actor.id },
+          { state: 'published', depth: read.depth },
+        )
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'history': {
+        if (method !== 'GET') return methodNotAllowed(['GET'])
+        return jsonResponse(200, { data: await service.history(context, name, id) })
+      }
+
+      case 'diff': {
+        if (method !== 'GET') return methodNotAllowed(['GET'])
+        const from = parsePositiveInteger(request.query, 'from')
+        const to = parsePositiveInteger(request.query, 'to')
+        return jsonResponse(200, { data: await service.diff(context, name, id, from, to) })
+      }
+
+      case 'restore': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const version = parseRestoreBody(request.body)
+        const entry = await service.restore(context, name, id, version, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      default:
+        throw noRoute()
+    }
+  }
+}
+
+function methodNotAllowed(allowed: readonly string[]): RestResponse {
+  return {
+    status: 405,
+    body: {
+      error: {
+        code: 'QUERY_INVALID',
+        message: 'This method is not allowed on this route.',
+        hint: `Use ${allowed.join(', ')}.`,
+      },
+    },
+    headers: { 'content-type': 'application/json; charset=utf-8', allow: allowed.join(', ') },
+  }
+}
+
+function noRoute(): CogentaError {
+  return new CogentaError({
+    code: 'CONTENT_NOT_FOUND',
+    message: 'No route matches this path.',
+    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|history|diff|restore}.',
+  })
+}
+
+function normalise(path: string): string {
+  const trimmed = path.replace(/\/+$/u, '')
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+}
+
+/** Path segments below the mount point, or null when the path is elsewhere. */
+function segmentsOf(path: string, basePath: string): string[] | null {
+  const clean = normalise(path.split('?')[0] ?? path)
+  if (clean !== basePath && !clean.startsWith(`${basePath}/`)) return null
+
+  return clean
+    .slice(basePath.length)
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map((segment) => decodeURIComponent(segment))
+}

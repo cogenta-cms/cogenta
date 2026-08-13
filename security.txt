@@ -1,0 +1,3 @@
+Contact: https://github.com/cogenta-cms/cogenta/security/advisories/new
+Policy: https://github.com/cogenta-cms/cogenta/blob/main/SECURITY.md
+Preferred-Languages: en, fr

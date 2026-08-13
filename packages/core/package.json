@@ -37,6 +37,15 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@redis/client": "catalog:"
+  },
+  "peerDependencies": {
+    "@redis/client": "^6.2.1"
+  },
+  "peerDependenciesMeta": {
+    "@redis/client": {
+      "optional": true
+    }
   }
 }

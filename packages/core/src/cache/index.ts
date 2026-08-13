@@ -2,11 +2,14 @@ import { createDriverRegistry, type DriverRegistry } from '../drivers/index.js'
 import type { Logger } from '../logger/index.js'
 import { fileCacheDriver } from './file.js'
 import { memoryCacheDriver } from './memory.js'
+import { redisCacheDriver } from './redis.js'
 import type { CacheConfig, CacheDriver, CacheDriverOptions } from './types.js'
 
 export type { FileCacheOptions } from './file.js'
 export { createFileCache, fileCacheDriver } from './file.js'
 export { createMemoryCache, memoryCacheDriver } from './memory.js'
+export type { RedisCacheOptions } from './redis.js'
+export { createRedisCache, loadRedisModule, redisCacheDriver } from './redis.js'
 export type { CacheConfig, CacheDriver, CacheDriverOptions, CacheSetOptions } from './types.js'
 
 export interface CacheRegistryOptions extends CacheDriverOptions {
@@ -28,6 +31,7 @@ export function createCacheRegistry(
     ...(logger === undefined ? {} : { logger }),
   })
 
+  registry.register(redisCacheDriver(driverOptions))
   registry.register(fileCacheDriver(driverOptions))
   registry.register(memoryCacheDriver(driverOptions))
 

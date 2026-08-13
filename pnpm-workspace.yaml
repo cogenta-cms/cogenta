@@ -6,6 +6,7 @@ packages:
 # it uses — an undeclared import is a lint error — but the range lives here only.
 # pnpm resolves `catalog:` to the real range when publishing.
 catalog:
+  '@redis/client': ^6.2.1
   typescript: ^7.0.2
   vitest: ^4.1.10
   zod: ^4.4.3

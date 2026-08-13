@@ -158,6 +158,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@cogenta/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

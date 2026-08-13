@@ -3,12 +3,15 @@ import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
 import { runMigrate } from './commands/migrate.js'
+import { runUsers } from './commands/users.js'
 import { createOutput, shouldUseColour, type Writer } from './output.js'
 
 export type { DoctorCheck, DoctorOptions, DoctorReport } from './commands/doctor.js'
 export { formatDoctorReport, runDoctor } from './commands/doctor.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
+export type { UsersOptions, UsersSubcommand } from './commands/users.js'
+export { runUsers } from './commands/users.js'
 export type { Output, Writer } from './output.js'
 export { createOutput, shouldUseColour } from './output.js'
 
@@ -22,6 +25,7 @@ Commands
   migrate status   List every migration and whether it ran here
   migrate up       Apply the pending migrations
   migrate down     Revert applied migrations
+  users create     Create a user — the first admin account is made this way
   help             Show this message
   version          Print the version
 
@@ -35,6 +39,11 @@ Migration options
   --steps <n>             How many migrations "migrate down" reverts (default 1)
   --confirm-destructive   The impact of every destructive migration has been read
   --backup-verified       A backup was taken and verified to restore
+
+User options
+  --email <email>         The new user's email
+  --roles <role,role>     Comma-separated role names
+  --admin                 Shorthand for --roles admin
 `
 
 export interface RunOptions {
@@ -74,6 +83,9 @@ export async function run(options: RunOptions): Promise<number> {
         steps: { type: 'string' },
         'confirm-destructive': { type: 'boolean' },
         'backup-verified': { type: 'boolean' },
+        email: { type: 'string' },
+        roles: { type: 'string' },
+        admin: { type: 'boolean' },
       },
     })
   } catch (error) {
@@ -124,6 +136,20 @@ export async function run(options: RunOptions): Promise<number> {
       ...(steps === undefined ? {} : { steps }),
       ...(parsed.values['confirm-destructive'] === true ? { confirmDestructive: true } : {}),
       ...(parsed.values['backup-verified'] === true ? { backupVerified: true } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'users') {
+    return runUsers({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.email === 'string' ? { email: parsed.values.email } : {}),
+      ...(typeof parsed.values.roles === 'string' ? { roles: parsed.values.roles } : {}),
+      ...(parsed.values.admin === true ? { admin: true } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

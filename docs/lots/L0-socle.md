@@ -62,20 +62,35 @@ cogenta/
 ```ts
 // cogenta.config.ts, à la racine d'un projet utilisateur
 export default defineConfig({
-  site: { name: string, url: string, locales: string[], defaultLocale: string },
-  database: { driver: 'postgres'|'mysql'|'sqlite', url: string },
-  cache?:   { driver: 'redis'|'file'|'memory', url?: string },
-  queue?:   { driver: 'redis'|'database', url?: string },
-  storage?: { driver: 's3'|'local', bucket?, region?, endpoint?, path? },
-  llm?:     { provider, model, apiKey, baseUrl? },
-  embeddings?: { provider: 'local'|'openai'|…, model, dimensions },
+  site: { name: string, url: string, locales?: string[], defaultLocale?: string },
+  database: { driver?: 'postgres'|'mysql'|'sqlite', url: string },
+  cache?:   { driver?: 'auto'|'redis'|'file'|'memory', url?, path? },
+  queue?:   { driver?: 'auto'|'redis'|'database', url? },
+  storage?: { driver?: 'auto'|'s3'|'local', bucket?, region?, endpoint?, path? },
+  llm?:     { provider, model, baseUrl? },
+  embeddings?: { provider?: 'local'|'openai', model?, dimensions? },
 })
 ```
 
 Résolution : valeurs par défaut → fichier de config → variables d'environnement.
-Les secrets viennent **uniquement** de l'environnement, jamais du fichier.
-Validation Zod à l'entrée : une config invalide échoue au démarrage, avec un message
-qui nomme le champ et la valeur attendue.
+
+**Aucun secret dans le fichier.** `llm.apiKey`, `storage.accessKeyId` et
+`storage.secretAccessKey` sont **refusés** dans `cogenta.config.ts` et ne viennent que de
+`COGENTA_LLM_API_KEY`, `COGENTA_STORAGE_ACCESS_KEY_ID` et
+`COGENTA_STORAGE_SECRET_ACCESS_KEY`. Le fichier de config est versionné dans git : ce
+qu'on y écrit est public pour quiconque a accès au dépôt.
+
+`driver: 'auto'` — valeur par défaut de `cache`, `queue` et `storage` — signifie
+« aucun driver nommé » : le registre choisit le premier disponible par ordre de tier. Un
+driver **nommé** est honoré et son échec est fatal, jamais un repli silencieux.
+
+Le driver de base est déduit du schéma de l'URL quand il n'est pas nommé
+(`postgres://`, `postgresql://` → postgres ; `mysql://`, `mariadb://` → mysql ;
+`file:`, `sqlite://`, chemin nu → sqlite).
+
+Validation Zod à l'entrée, en objets **stricts** : une clé inconnue est une erreur, pas
+un réglage ignoré en silence. Une config invalide échoue au démarrage, avec un message
+qui nomme **tous** les champs fautifs d'un coup et la valeur attendue.
 
 ### Driver
 

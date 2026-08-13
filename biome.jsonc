@@ -42,7 +42,10 @@
       },
       "correctness": {
         "noUndeclaredDependencies": "error",
-        "useImportExtensions": "error"
+        // Off on purpose: the project is ESM + NodeNext, where a relative import
+        // must carry the *emitted* `.js` extension. This rule asks for `.ts`,
+        // which tsc rejects. tsc already enforces the extension itself.
+        "useImportExtensions": "off"
       }
     }
   },

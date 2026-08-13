@@ -7,22 +7,39 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import process from 'node:process'
 
-/** @type {Array<{ name: string, pattern: RegExp }>} */
+// `shape: true` means the pattern matches the documented shape of a real
+// credential (a provider prefix, a key block). Those run everywhere.
+// `shape: false` is the generic "a field called secret holds a long string"
+// heuristic. It is right often enough to keep, and wrong on every test that
+// exercises secret handling — so it is skipped in test files, where the
+// shape-based patterns still apply.
+/** @type {Array<{ name: string, pattern: RegExp, shape: boolean }>} */
 const PATTERNS = [
-  { name: 'Anthropic API key', pattern: /sk-ant-[a-zA-Z0-9_-]{20,}/ },
-  { name: 'OpenAI API key', pattern: /\bsk-(proj-)?[a-zA-Z0-9]{32,}/ },
-  { name: 'AWS access key id', pattern: /\b(AKIA|ASIA)[0-9A-Z]{16}\b/ },
-  { name: 'GitHub token', pattern: /\bgh[pousr]_[A-Za-z0-9]{30,}/ },
-  { name: 'Private key block', pattern: /-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/ },
-  { name: 'JWT', pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\./ },
-  { name: 'Slack token', pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}/ },
+  { name: 'Anthropic API key', pattern: /sk-ant-[a-zA-Z0-9_-]{20,}/, shape: true },
+  { name: 'OpenAI API key', pattern: /\bsk-(proj-)?[a-zA-Z0-9]{32,}/, shape: true },
+  { name: 'AWS access key id', pattern: /\b(AKIA|ASIA)[0-9A-Z]{16}\b/, shape: true },
+  { name: 'GitHub token', pattern: /\bgh[pousr]_[A-Za-z0-9]{30,}/, shape: true },
+  {
+    name: 'Private key block',
+    pattern: /-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/,
+    shape: true,
+  },
+  { name: 'JWT', pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\./, shape: true },
+  { name: 'Slack token', pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}/, shape: true },
   {
     name: 'Hardcoded credential',
     pattern:
       /\b(password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"\s]{8,}['"]/i,
+    shape: false,
   },
-  { name: 'Connection string with password', pattern: /\b[a-z+]+:\/\/[^:@\s/]+:[^@\s/]{6,}@/ },
+  {
+    name: 'Connection string with password',
+    pattern: /\b[a-z+]+:\/\/[^:@\s/]+:[^@\s/]{6,}@/,
+    shape: false,
+  },
 ]
+
+const TEST_FILE = /(^|[/\\])(test|tests|__tests__)[/\\]|\.(test|spec)\.[cm]?[jt]sx?$/
 
 const ALLOWED_PATHS =
   /^(\.env\.example|docker-compose\.test\.yml|scripts[/\\]check-staged-secrets\.mjs)$/
@@ -54,9 +71,12 @@ for (const file of staged) {
   }
   if (content.length > 2_000_000) continue
 
+  const isTest = TEST_FILE.test(file)
+
   content.split('\n').forEach((line, index) => {
     if (/cogenta:cogenta|COGENTA_TEST_/.test(line)) return // documented test fixtures
-    for (const { name, pattern } of PATTERNS) {
+    for (const { name, pattern, shape } of PATTERNS) {
+      if (isTest && !shape) continue
       if (pattern.test(line)) {
         findings.push(`  ${file}:${index + 1} — ${name}`)
         return

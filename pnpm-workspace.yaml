@@ -2,6 +2,14 @@ packages:
   - 'packages/*'
   - 'examples/*'
 
+# One version per tool for the whole workspace. Each package still declares what
+# it uses — an undeclared import is a lint error — but the range lives here only.
+# pnpm resolves `catalog:` to the real range when publishing.
+catalog:
+  typescript: ^7.0.2
+  vitest: ^4.1.10
+  zod: ^4.4.3
+
 # Native dependencies are opt-in only (rule R10): each one must ship a WASM fallback
 # or a build-time precomputation before it may run its install scripts.
 onlyBuiltDependencies:

@@ -1,0 +1,11 @@
+---
+import type { StatsBlock } from '@cogenta/blocks'
+import { renderStats } from '../render/blocks/stats.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/** See `Hero.astro` for why the markup lives in `src/render/`. */
+const { block, ctx } = Astro.props as { block: StatsBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderStats(block, ctx))} />

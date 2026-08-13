@@ -1,0 +1,12 @@
+{
+  "name": "hostile",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "better-sqlite3": "^12.0.0"
+  },
+  "imports": {
+    "#storage": "node:fs"
+  }
+}

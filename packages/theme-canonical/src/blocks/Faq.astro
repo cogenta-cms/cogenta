@@ -1,0 +1,16 @@
+---
+import type { FaqBlock } from '@cogenta/blocks'
+import { renderFaq } from '../render/blocks/faq.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/**
+ * See `Hero.astro` for why the markup lives in `src/render/`.
+ *
+ * The accordion is `<details>`/`<summary>`: expanding, keyboard operation, the
+ * announced state and in-page search all come from the browser, at zero bytes.
+ */
+const { block, ctx } = Astro.props as { block: FaqBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderFaq(block, ctx))} />

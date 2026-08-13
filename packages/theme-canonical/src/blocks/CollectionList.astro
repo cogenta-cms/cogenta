@@ -1,0 +1,20 @@
+---
+import type { CollectionListBlock } from '@cogenta/blocks'
+import { query, renderCollectionList } from '../render/blocks/collection-list.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/**
+ * See `Hero.astro` for why the markup lives in `src/render/`.
+ *
+ * The only block of the twelve that reads data at render time — contract B
+ * marks it `runtime: 'server'`. The read goes through `ctx.content`, the
+ * read-only HTTP client the theme is handed (ADR-0016); the theme has no
+ * database connection and no secrets, and this is its single door to data.
+ */
+const { block, ctx } = Astro.props as { block: CollectionListBlock; ctx: RenderContext }
+
+const page = await ctx.content.list(query(block))
+---
+
+<Fragment set:html={serialize(renderCollectionList(block, ctx, page.items))} />

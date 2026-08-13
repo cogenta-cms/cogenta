@@ -1,8 +1,9 @@
 /**
- * The REST transport, and the service both transports share.
+ * The REST transport.
  *
- * `content-service.ts` is the half GraphQL must reuse rather than reimplement;
- * everything else here is HTTP shape.
+ * Everything here is HTTP shape and REST's composition of `src/content/`, which
+ * is where the permission, draft, filter, cursor and serialisation decisions
+ * live — the ones GraphQL shares rather than reimplements.
  */
 
 export { parseCreateBody, parseRestoreBody, parseUpdateBody } from './body.js'
@@ -13,7 +14,7 @@ export type {
   ReadOptions,
 } from './content-service.js'
 export { createContentService } from './content-service.js'
-export { FILTER_PREFIX, matchesFilter, parseFilter } from './filter.js'
+export { FILTER_PREFIX, parseFilter } from './filter.js'
 export type { RestErrorBody, RestRequest, RestResponse } from './http.js'
 export { errorResponse, jsonResponse, queryError, statusFor } from './http.js'
 export type { ListQuery, QueryLimits, ReadQuery } from './query.js'
@@ -25,5 +26,3 @@ export {
 } from './query.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
-export type { ExpansionOptions, ExpansionSource, SerialisedEntry } from './serialise.js'
-export { serialiseEntry } from './serialise.js'

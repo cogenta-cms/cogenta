@@ -13,8 +13,15 @@ import type {
   SortField,
   SortOrder,
 } from '@cogenta/schema'
-import { deepEqual, encodeCursor, isSystemFieldName } from '@cogenta/schema'
-import { hasRoleDraftAccess, previewCovers } from '../access/index.js'
+import { isSystemFieldName } from '@cogenta/schema'
+import {
+  cursorFor,
+  entryState,
+  grantedEntryId,
+  matchesFilter,
+  roleState,
+  scanPages,
+} from '../content/index.js'
 import type {
   AccessContext,
   FieldCondition,
@@ -25,12 +32,19 @@ import type {
 import { queryInvalid } from './errors.js'
 
 /**
- * The read and write path both transports share.
+ * GraphQL's composition of the shared content layer.
  *
  * The L1 spec is blunt: "REST and GraphQL expose the same thing and share the
  * same permission and serialisation layer. There are not two implementations."
- * GraphQL is therefore a *transport*: it parses a document, calls the functions
- * below, and shapes the answer. It decides nothing about who may read what.
+ * The draft guard, the preview scope, the filter and the keyset walk therefore
+ * come from `src/content/`; this file is a transport. It decides nothing about
+ * who may read what.
+ *
+ * What is GraphQL's own is that it stays **lazy**. It returns `ContentEntry`
+ * rows, not a serialised document with its relations already expanded, because a
+ * GraphQL document says which fields it wants and a relation is resolved only if
+ * it was asked for — through the dataloader, so twenty parents cost one read.
+ * Eager expansion here would make field selection and batching meaningless.
  *
  * Two invariants live here, and nowhere else:
  *
@@ -42,11 +56,6 @@ import { queryInvalid } from './errors.js'
  * 2. **A user filter is never pushed into `ListOptions.status`.** That option
  *    replaces the published-only predicate; letting `filter: { status: { eq:
  *    "draft" } }` reach it would undo invariant 1 in one line.
- *
- * NOTE (to merge, not to keep): this file is the temporary home of the shared
- * service. Task 13 (REST) is being written in parallel and needs exactly the
- * same functions. When both land, this moves to `src/content/` untouched and
- * both transports import it from there — the interface is already the seam.
  */
 
 export interface ContentGateway {
@@ -134,46 +143,33 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
   /**
    * Which face of the content this actor is entitled to, everywhere.
    *
-   * Asked in one place so that "the public role never reaches a draft" is a
-   * property of the code path rather than a condition every resolver has to
-   * remember. The grant is deliberately **left out** of the question: a preview
-   * token is a key to one entry, and `canReadUnpublished` is only told which
-   * collection is being read, so answering it with a grant in hand would turn a
-   * key to entry A into a key to every draft of the collection.
+   * The read permission is asserted here rather than inside the shared guard
+   * because "you may not read this collection at all" is GraphQL's own error to
+   * raise; `roleState` then answers the draft half of the question, from the
+   * roles alone. Every read path funnels through it, so "the public role never
+   * reaches a draft" is a property of one function rather than a condition every
+   * resolver has to remember.
    */
   function stateFor(collection: CollectionDefinition, context: AccessContext): EntryState {
     permissions.assert('read', collection, context)
-    return hasRoleDraftAccess(permissions, collection, context) ? 'working' : 'published'
+    return roleState(permissions, collection, context)
   }
 
   /**
    * The same question for one entry, where a grant does count — for that entry
    * and no other.
    *
-   * `previewCovers` is the access layer's own check: collection, exact id, and
-   * the clock. Every path that returns entries goes through here, the batched
-   * relation loader included; a loader that skipped it is precisely how a
-   * one-entry grant becomes a collection-wide leak.
+   * Every path that returns entries goes through here, the batched relation
+   * loader included; a loader that skipped it is precisely how a one-entry grant
+   * becomes a collection-wide leak.
    */
   function stateForEntry(
     collection: CollectionDefinition,
     id: string,
     context: AccessContext,
   ): EntryState {
-    if (stateFor(collection, context) === 'working') return 'working'
-    if (!previewCovers(context, collection, id)) return 'published'
-    return permissions.canReadUnpublished(collection, context).allowed ? 'working' : 'published'
-  }
-
-  /** The single entry a grant unlocks in this collection, if there is one. */
-  function grantedIdIn(
-    collection: CollectionDefinition,
-    context: AccessContext,
-  ): string | undefined {
-    const grant = context.preview
-    if (grant === undefined) return undefined
-    if (!previewCovers(context, collection, grant.entryId)) return undefined
-    return permissions.canReadUnpublished(collection, context).allowed ? grant.entryId : undefined
+    permissions.assert('read', collection, context)
+    return entryState(permissions, collection, context, id)
   }
 
   async function list(request: QueryRequest, context: AccessContext): Promise<Page<ContentEntry>> {
@@ -186,36 +182,26 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
     const filter = request.filter
     const pushed = pushdown(collection, filter)
 
-    const accepted: ContentEntry[] = []
-    let cursor = request.after
-    let scans = 0
+    const scan = await scanPages<ContentEntry>({
+      limit,
+      accept: (entry) => filter === undefined || matchesFilter(filter, entry),
+      startCursor: request.after,
+      maxFetches: MAX_SCANS,
+      fetch: (cursor) => {
+        const listOptions: ListOptions = {
+          state,
+          sort,
+          limit: scanSize,
+          ...(request.locale === undefined ? {} : { locale: request.locale }),
+          ...(cursor === undefined ? {} : { cursor }),
+          ...(Object.keys(pushed).length === 0 ? {} : { where: pushed }),
+        }
+        return store.list(listOptions)
+      },
+    })
 
-    // One more than asked for: whether that extra entry exists is the exact
-    // answer to `hasNextPage`, and it costs no second query.
-    while (accepted.length <= limit && scans < MAX_SCANS) {
-      scans += 1
-      const listOptions: ListOptions = {
-        state,
-        sort,
-        limit: scanSize,
-        ...(request.locale === undefined ? {} : { locale: request.locale }),
-        ...(cursor === undefined ? {} : { cursor }),
-        ...(Object.keys(pushed).length === 0 ? {} : { where: pushed }),
-      }
-
-      const page = await store.list(listOptions)
-      for (const entry of page.items) {
-        if (filter === undefined || matches(entry, filter)) accepted.push(entry)
-        if (accepted.length > limit) break
-      }
-
-      if (!page.hasMore || page.nextCursor === null) break
-      if (accepted.length > limit) break
-      cursor = page.nextCursor
-    }
-
-    const overflowed = accepted.length > limit
-    const paged = accepted.slice(0, limit)
+    const overflowed = scan.overflowed
+    const paged = scan.items
     let items: readonly ContentEntry[] = paged
 
     /*
@@ -232,10 +218,10 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
      * keyset ordering would either break the cursor or hide a published entry.
      */
     if (state === 'published') {
-      const grantedId = grantedIdIn(collection, context)
+      const grantedId = grantedEntryId(permissions, collection, context)
       if (grantedId !== undefined) {
         const previewed = await store.read(grantedId, { state: 'working' })
-        if (previewed !== null && (filter === undefined || matches(previewed, filter))) {
+        if (previewed !== null && (filter === undefined || matchesFilter(filter, previewed))) {
           const at = items.findIndex((entry) => entry.id === grantedId)
           if (at >= 0) items = items.map((entry, index) => (index === at ? previewed : entry))
           // Prepended without dropping anything: the page may hold one entry
@@ -256,7 +242,7 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
       // The cursor of the last entry actually handed out, not of the last row
       // scanned: the rows a filter rejected must not be skipped for a reader
       // whose next page uses a different filter.
-      nextCursor: overflowed && last !== undefined ? cursorOf(last, sort) : null,
+      nextCursor: overflowed && last !== undefined ? cursorFor(last, sort) : null,
     }
   }
 
@@ -364,19 +350,19 @@ function sortOf(collection: CollectionDefinition, requested: QueryRequest['sort'
   return { field, direction: first.direction }
 }
 
-function cursorOf(entry: ContentEntry, sort: SortOrder): string {
-  const value =
-    sort.field === 'id' ? entry.id : sort.field === 'createdAt' ? entry.createdAt : entry.updatedAt
-  return encodeCursor({ field: sort.field, direction: sort.direction, value, id: entry.id })
-}
-
 /**
  * The part of a filter the database can answer.
  *
  * Only top-level equality on a declared, column-backed field: that is the whole
- * of `ListOptions.where`. Everything else is evaluated in memory below. An `or`
- * pushes nothing down — a disjunction is not a conjunction of predicates, and
- * pushing one branch would silently drop rows.
+ * of `ListOptions.where`. Everything else is answered in memory by the shared
+ * `matchesFilter`, which is why the pushdown may narrow the scan but must never
+ * be the only thing consulted. An `or` pushes nothing down — a disjunction is
+ * not a conjunction of predicates, and pushing one branch would silently drop
+ * rows.
+ *
+ * It stays here rather than in `src/content/`: it is a *store* optimisation, and
+ * REST has no second implementation of it to unify with. A shared helper with
+ * one caller is an abstraction for a hypothetical case.
  */
 function pushdown(
   collection: CollectionDefinition,
@@ -409,75 +395,4 @@ function pushdown(
 
 function isFieldCondition(filter: Filter): filter is FieldCondition {
   return 'field' in filter
-}
-
-/** Evaluates the whole filter, including what the database could not answer. */
-export function matches(entry: ContentEntry, filter: Filter): boolean {
-  if ('and' in filter) return filter.and.every((child) => matches(entry, child))
-  if ('or' in filter) return filter.or.some((child) => matches(entry, child))
-  return test(fieldValue(entry, filter.field), filter)
-}
-
-function fieldValue(entry: ContentEntry, field: string): unknown {
-  if (isSystemFieldName(field)) {
-    const system = entry as unknown as Readonly<Record<string, unknown>>
-    return system[field]
-  }
-  const values: ContentValues = entry.values
-  const declared = values[field]
-  return declared === undefined ? entry.blocks[field] : declared
-}
-
-function test(actual: unknown, condition: FieldCondition): boolean {
-  const expected = condition.value
-
-  switch (condition.operator) {
-    case 'eq':
-      return deepEqual(actual, expected)
-    case 'ne':
-      return !deepEqual(actual, expected)
-    case 'lt':
-      return compare(actual, expected) < 0
-    case 'lte':
-      return compare(actual, expected) <= 0
-    case 'gt':
-      return compare(actual, expected) > 0
-    case 'gte':
-      return compare(actual, expected) >= 0
-    case 'in':
-      return Array.isArray(expected) && expected.some((candidate) => contains(actual, candidate))
-    case 'contains':
-      return contains(actual, expected)
-    case 'exists':
-      return (actual !== null && actual !== undefined) === (expected === true)
-    default:
-      // Unreachable: the operator comes from the generated enum, not from text.
-      return false
-  }
-}
-
-/** Absent values never order: a null is not "less than" everything. */
-function compare(actual: unknown, expected: unknown): number {
-  if (actual === null || actual === undefined) return Number.NaN
-  if (typeof actual === 'number' && typeof expected === 'number') return actual - expected
-  if (typeof actual === 'boolean' && typeof expected === 'boolean') {
-    return Number(actual) - Number(expected)
-  }
-  const left = String(actual)
-  const right = String(expected)
-  return left < right ? -1 : left > right ? 1 : 0
-}
-
-/**
- * `contains` on a list is membership, on a string it is a substring.
- *
- * Case-insensitive, because the alternative is a search box that finds nothing
- * when the visitor types a capital letter.
- */
-function contains(actual: unknown, expected: unknown): boolean {
-  if (Array.isArray(actual)) return actual.some((item) => deepEqual(item, expected))
-  if (typeof actual === 'string' && typeof expected === 'string') {
-    return actual.toLowerCase().includes(expected.toLowerCase())
-  }
-  return deepEqual(actual, expected)
 }

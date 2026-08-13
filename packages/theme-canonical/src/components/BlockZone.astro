@@ -1,0 +1,62 @@
+---
+import type { VocabularyBlock } from '@cogenta/blocks'
+import CollectionList from '../blocks/CollectionList.astro'
+import Cta from '../blocks/Cta.astro'
+import Embed from '../blocks/Embed.astro'
+import Faq from '../blocks/Faq.astro'
+import FeatureGrid from '../blocks/FeatureGrid.astro'
+import Gallery from '../blocks/Gallery.astro'
+import Hero from '../blocks/Hero.astro'
+import Logos from '../blocks/Logos.astro'
+import MediaFigure from '../blocks/MediaFigure.astro'
+import Prose from '../blocks/Prose.astro'
+import Quote from '../blocks/Quote.astro'
+import Stats from '../blocks/Stats.astro'
+import { pageHasOwnHeading } from '../render/render-block.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/**
+ * Dispatches a block zone to the twelve components.
+ *
+ * The dispatch happens here rather than inside `renderBlock` because
+ * `collectionList` has to await its data, and an async renderer would make the
+ * number of round trips depend on the markup. Everything else about the mapping
+ * — which block renders what — stays in `src/render/`.
+ */
+interface Props {
+  ctx: RenderContext
+  blocks: readonly VocabularyBlock[]
+  /** Used as the `h1` when no `hero` on the page carries one. */
+  title: string
+}
+
+const { ctx, blocks, title } = Astro.props as Props
+
+const COMPONENTS = {
+  hero: Hero,
+  prose: Prose,
+  mediaFigure: MediaFigure,
+  featureGrid: FeatureGrid,
+  cta: Cta,
+  gallery: Gallery,
+  quote: Quote,
+  faq: Faq,
+  stats: Stats,
+  logos: Logos,
+  collectionList: CollectionList,
+  embed: Embed,
+} as const
+---
+
+<main class="cg-main" id="cg-main">
+  {/* Exactly one h1 per page: the hero renders it, or this does. */}
+  {!pageHasOwnHeading(blocks) && <h1 class="cg-page__title">{title}</h1>}
+  {
+    blocks.map((block) => {
+      const Component = COMPONENTS[block._type]
+      // An unknown block is dropped, not guessed at: picking a fallback is the
+      // render layer's job (contract B's `fallback`), not the theme's.
+      return Component === undefined ? null : <Component block={block} ctx={ctx} />
+    })
+  }
+</main>

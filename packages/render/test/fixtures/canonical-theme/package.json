@@ -1,0 +1,12 @@
+{
+  "name": "canonical",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@cogenta/blocks": "workspace:*"
+  },
+  "imports": {
+    "#components": "./src/components/index.js"
+  }
+}

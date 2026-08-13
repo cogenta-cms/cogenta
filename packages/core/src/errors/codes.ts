@@ -44,6 +44,24 @@ export const ERROR_CODES = [
   'BLOCK_DEFINITION_INVALID',
   'BLOCK_MIGRATION_FAILED',
 
+  // Rendering — skins. A skin is refused, never repaired: contract D freezes the
+  // token set precisely so that a generated skin either passes or is rejected.
+  'SKIN_TOKEN_MISSING',
+  'SKIN_TOKEN_UNKNOWN',
+  'SKIN_TOKEN_INVALID',
+  'SKIN_CONTRAST_INSUFFICIENT',
+  'SKIN_SCALE_NOT_MONOTONIC',
+  'SKIN_MOTION_NOT_REDUCED',
+
+  // Themes
+  'THEME_NOT_FOUND',
+  'THEME_INVALID',
+  'THEME_BLOCK_MISSING',
+  'THEME_IMPORT_FORBIDDEN',
+
+  // Rendering — the content API a theme reads through (ADR-0016)
+  'CONTENT_API_FAILED',
+
   // Access
   'FORBIDDEN',
   'UNAUTHENTICATED',

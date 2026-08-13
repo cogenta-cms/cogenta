@@ -1,0 +1,11 @@
+---
+import type { ProseBlock } from '@cogenta/blocks'
+import { renderProse } from '../render/blocks/prose.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/** See `Hero.astro` for why the markup lives in `src/render/`. */
+const { block, ctx } = Astro.props as { block: ProseBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderProse(block, ctx))} />

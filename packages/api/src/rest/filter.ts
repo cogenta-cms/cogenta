@@ -1,9 +1,14 @@
-import type { CollectionDefinition, ContentEntry, FieldDefinition } from '@cogenta/schema'
+import type { CollectionDefinition, FieldDefinition } from '@cogenta/schema'
 import type { FieldCondition, Filter, FilterOperator } from '../types.js'
 import { queryError } from './http.js'
 
 /**
  * The query-string form of the frozen filter vocabulary.
+ *
+ * Parsing only. Evaluating a `Filter` is `src/content/filter.ts`, because both
+ * transports must answer the same filter the same way; what is REST's alone is
+ * the *syntax* below, since GraphQL takes a `Filter` from a typed input object
+ * and never sees a query string.
  *
  * The spec forbids a home-grown query language in the public API, so nothing
  * here invents syntax: the parameter name *is* the expression, and it maps
@@ -167,90 +172,4 @@ function coerce(
 
   if (kind === 'boolean') return parseBoolean(key, raw)
   return raw
-}
-
-// --------------------------------------------------------------- evaluation
-
-/**
- * Evaluates a filter against an entry that has *already* been narrowed by the
- * permission layer. Filtering never widens what a caller can see: it only
- * removes rows from a set that was legitimate to begin with.
- */
-export function matchesFilter(filter: Filter, entry: ContentEntry): boolean {
-  if ('and' in filter) return filter.and.every((child) => matchesFilter(child, entry))
-  if ('or' in filter) return filter.or.some((child) => matchesFilter(child, entry))
-  return matchesCondition(filter, entry)
-}
-
-function matchesCondition(condition: FieldCondition, entry: ContentEntry): boolean {
-  const actual = fieldValueOf(entry, condition.field)
-
-  switch (condition.operator) {
-    case 'exists':
-      return (actual !== null && actual !== undefined) === (condition.value === true)
-    case 'eq':
-      return equals(actual, condition.value)
-    case 'ne':
-      return !equals(actual, condition.value)
-    case 'in':
-      return Array.isArray(condition.value) && condition.value.some((one) => equals(actual, one))
-    case 'contains':
-      return contains(actual, condition.value)
-    default:
-      return ordered(condition.operator, actual, condition.value)
-  }
-}
-
-function fieldValueOf(entry: ContentEntry, field: string): unknown {
-  // Declared fields win: contract A lets a collection declare `publishedAt`
-  // itself, and the entry carries both. The declared one is what the caller
-  // sees in the payload, so it is what a filter must compare against.
-  if (field in entry.values) return entry.values[field]
-  if (field in SYSTEM_FIELDS) return (entry as unknown as Record<string, unknown>)[field]
-  return undefined
-}
-
-function equals(actual: unknown, expected: unknown): boolean {
-  if (actual === null || actual === undefined) return expected === null
-  if (Array.isArray(actual)) return false
-  return actual === expected
-}
-
-function contains(actual: unknown, expected: unknown): boolean {
-  // Two meanings, one operator, because they are the same question asked of the
-  // two shapes a value can have: a to-many relation holds ids, a text field
-  // holds a string.
-  if (Array.isArray(actual)) return actual.some((item) => item === expected)
-  if (typeof actual === 'string' && typeof expected === 'string') return actual.includes(expected)
-  return false
-}
-
-function ordered(
-  operator: 'lt' | 'lte' | 'gt' | 'gte',
-  actual: unknown,
-  expected: unknown,
-): boolean {
-  const comparison = compare(actual, expected)
-  if (comparison === undefined) return false
-
-  switch (operator) {
-    case 'lt':
-      return comparison < 0
-    case 'lte':
-      return comparison <= 0
-    case 'gt':
-      return comparison > 0
-    default:
-      return comparison >= 0
-  }
-}
-
-function compare(actual: unknown, expected: unknown): number | undefined {
-  if (typeof actual === 'number' && typeof expected === 'number') return actual - expected
-  if (typeof actual === 'string' && typeof expected === 'string') {
-    // Timestamps are stored ISO-8601 in UTC precisely so that a byte comparison
-    // is a chronological one; nothing here needs to know a field is a date.
-    return actual < expected ? -1 : actual > expected ? 1 : 0
-  }
-  return undefined
 }

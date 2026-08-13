@@ -28,17 +28,17 @@ const RENAME_RETRY_DELAYS_MS = [5, 10, 20, 40, 80, 160, 320, 640]
 const RETRYABLE_RENAME_ERRORS = new Set(['EPERM', 'EACCES', 'EBUSY'])
 
 /**
- * Replaces `target` atomically, retrying the transient failures Windows returns.
+ * Retries the transient failures Windows returns for a filesystem operation.
  *
- * On Windows a rename onto a file another handle has open fails with EPERM or
- * EBUSY rather than waiting, so two concurrent writes to the same cache key
- * collide. On POSIX this loop never runs a second time. `npm create cogenta`
- * has to work on Windows, so this cannot be left to POSIX assumptions.
+ * Windows refuses an operation while another handle is still open on the target
+ * — a rename onto a file being read, or the removal of a directory that was
+ * just enumerated. Both surface as EPERM, EACCES or EBUSY, and both clear on
+ * their own within milliseconds. On POSIX the loop never runs a second time.
  */
-async function replaceAtomically(temporary: string, target: string): Promise<void> {
+async function withWindowsRetry(operation: () => Promise<void>): Promise<void> {
   for (const [attempt, delay] of RENAME_RETRY_DELAYS_MS.entries()) {
     try {
-      await rename(temporary, target)
+      await operation()
       return
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code ?? ''
@@ -50,6 +50,9 @@ async function replaceAtomically(temporary: string, target: string): Promise<voi
     }
   }
 }
+
+const replaceAtomically = (temporary: string, target: string): Promise<void> =>
+  withWindowsRetry(() => rename(temporary, target))
 
 export interface FileCacheOptions extends CacheDriverOptions {
   readonly path: string
@@ -166,7 +169,7 @@ export function createFileCache(options: FileCacheOptions): CacheDriver {
         }
 
         for (const name of names) await removeEntry(name)
-        await rm(tagDir, { recursive: true, force: true })
+        await withWindowsRetry(() => rm(tagDir, { recursive: true, force: true }))
       }
     },
 

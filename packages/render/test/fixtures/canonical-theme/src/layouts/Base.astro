@@ -1,0 +1,15 @@
+---
+import type { RenderContext } from '@cogenta/render'
+
+const { ctx } = Astro.props as { ctx: RenderContext }
+---
+
+<html lang={ctx.locale}>
+  <head>
+    <title>{ctx.site.name}</title>
+    <link rel="canonical" href={ctx.url.href} />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

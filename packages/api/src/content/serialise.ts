@@ -2,12 +2,21 @@ import type { CollectionDefinition, ContentEntry, ContentStore, EntryState } fro
 import { relationsOf } from '@cogenta/schema'
 
 /**
- * The wire shape of an entry.
+ * The wire shape of an entry, and the deep expansion built on top of it.
  *
  * System fields stay at the top level and declared fields stay under `values`,
  * so a collection can declare a field called `status` or `version` without
  * colliding with the engine's own — and so a client can tell the two apart
  * without knowing the schema.
+ *
+ * Only REST calls `serialiseEntry` today, and that is on purpose rather than an
+ * oversight: REST answers with a whole document, so it expands relations to
+ * depth in one pass. GraphQL resolves a relation field only when the document
+ * asks for it, through the dataloader — expanding eagerly there would defeat
+ * both field selection and the batching the spec asks for. The two therefore
+ * compose the *same* per-entry primitives differently, which is the seam this
+ * package is built around. What sits in this file is the transport-neutral half:
+ * the projection of an entry onto the wire, and a bounded walk over relations.
  */
 export interface SerialisedEntry {
   readonly id: string
@@ -31,8 +40,8 @@ export interface SerialisedEntry {
 /**
  * What expansion needs from the outside: how to find a collection, how to read
  * it, and whether this actor may. It is an interface rather than the service
- * itself so GraphQL can supply a batching implementation later without this
- * file changing.
+ * itself so a transport can supply a batching implementation without this file
+ * changing.
  */
 export interface ExpansionSource {
   collection(name: string): CollectionDefinition | undefined
@@ -63,10 +72,23 @@ export async function serialiseEntry(
   options: ExpansionOptions,
 ): Promise<SerialisedEntry> {
   const values = await expand(entry, collection, source, options, new Set([key(collection, entry)]))
+  return { ...projectionOf(entry, collection.name), values }
+}
 
+/**
+ * The system half of the wire shape, in one place.
+ *
+ * A root entry and an expanded related entry are the same document; writing the
+ * field list twice is how one of them quietly loses `provenance` after a schema
+ * change.
+ */
+function projectionOf(
+  entry: ContentEntry,
+  collectionName: string,
+): Omit<SerialisedEntry, 'values'> {
   return {
     id: entry.id,
-    collection: collection.name,
+    collection: collectionName,
     locale: entry.locale,
     status: entry.status,
     state: entry.state,
@@ -79,7 +101,6 @@ export async function serialiseEntry(
     publishedAt: entry.publishedAt,
     provenance: entry.provenance,
     provenanceDetail: entry.provenanceDetail,
-    values,
     blocks: entry.blocks,
   }
 }
@@ -164,22 +185,5 @@ async function one(
   inner.add(`${target.name}:${found.id}`)
   const values = await expand(found, target, source, options, inner)
 
-  return {
-    id: found.id,
-    collection: target.name,
-    locale: found.locale,
-    status: found.status,
-    state: found.state,
-    version: found.version,
-    createdAt: found.createdAt,
-    updatedAt: found.updatedAt,
-    createdBy: found.createdBy,
-    updatedBy: found.updatedBy,
-    translationOf: found.translationOf,
-    publishedAt: found.publishedAt,
-    provenance: found.provenance,
-    provenanceDetail: found.provenanceDetail,
-    values,
-    blocks: found.blocks,
-  } satisfies SerialisedEntry
+  return { ...projectionOf(found, target.name), values } satisfies SerialisedEntry
 }

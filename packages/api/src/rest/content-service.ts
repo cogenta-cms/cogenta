@@ -6,28 +6,34 @@ import type {
   ContentStore,
   CreateInput,
   EntryState,
-  SortOrder,
   UpdateInput,
   VersionSummary,
 } from '@cogenta/schema'
-import { encodeCursor } from '@cogenta/schema'
-import { hasRoleDraftAccess, previewCovers } from '../access/index.js'
+import {
+  assertUnpublishedReadable,
+  cursorFor,
+  draftGateFor,
+  type ExpansionSource,
+  entryVisible,
+  matchesFilter,
+  type SerialisedEntry,
+  scanPages,
+  serialiseEntry,
+} from '../content/index.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
-import { matchesFilter } from './filter.js'
 import { DEFAULT_LIMITS, type ListQuery, type QueryLimits } from './query.js'
-import { type ExpansionSource, type SerialisedEntry, serialiseEntry } from './serialise.js'
 
 /**
- * The shared content service.
+ * REST's composition of the shared content layer.
  *
- * The L1 spec is blunt about this: "REST and GraphQL expose the same thing and
- * share the same permission and serialisation layer. There are not two
- * implementations." Everything a transport could get wrong lives here — the
- * permission check, the draft rule, the cursor, the filter, the depth bound —
- * so a transport is left with parsing and status codes.
+ * Every decision REST and GraphQL must agree on — who may read, which face of
+ * the content, which entries a preview grant covers, how a filter answers, where
+ * a cursor points — comes from `src/content/`. What is REST's own is the *shape*
+ * of the answer: one response carries the entry with its relations already
+ * expanded to depth, because a REST client cannot ask for a second hop. GraphQL
+ * composes the very same primitives lazily, per field, through its dataloader.
  *
- * It sits under `rest/` only because REST is being written first. Nothing in it
- * mentions HTTP, and the note in the task report says where it should move.
+ * Nothing in this file mentions HTTP; the router owns paths and status codes.
  */
 
 export interface ContentServiceOptions {
@@ -141,11 +147,13 @@ export function createContentService(options: ContentServiceOptions): ContentSer
   }
 
   /**
-   * The single place the draft rule is enforced.
+   * The state this request is entitled to, for a transport that lets the caller
+   * *ask* for one.
    *
-   * Every read path funnels through here, so "the `public` role never reaches a
-   * draft, on any route, whatever the query says" is one function rather than a
-   * condition each route has to remember.
+   * `state=working` is a request for unpublished rows, so the draft guard from
+   * `src/content/` answers it — the same guard GraphQL derives its state from,
+   * which is what makes "the `public` role never reaches a draft, on any route,
+   * whatever the query says" one rule rather than two habits.
    */
   function stateFor(
     target: CollectionDefinition,
@@ -153,35 +161,18 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     requested: EntryState,
   ): EntryState {
     if (requested === 'published') return 'published'
-
-    const decision = permissions.canReadUnpublished(target, context)
-    if (decision.allowed) return 'working'
-
-    throw new CogentaError({
-      code: 'FORBIDDEN',
-      message: 'Unpublished content is not available to you.',
-      hint: 'Sign in with a role that may read drafts, or use a valid preview token.',
-    })
+    assertUnpublishedReadable(permissions, target, context)
+    return 'working'
   }
 
-  /**
-   * The per-entry draft gate. Applied to every entry a read path is about to
-   * return, never only at the front door.
-   *
-   * A published read needs no gate: the store cannot return an unpublished row
-   * for one. A working read from an actor whose only claim is a preview grant
-   * yields *that entry and nothing else* — not "every entry that happens to be
-   * published", because the working face of a published entry is its pending
-   * draft, and a token for entry A must not show it for entry B.
-   */
+  /** The per-entry gate, applied to every row a read path is about to return. */
   function draftGate(
     target: CollectionDefinition,
     context: AccessContext,
     state: EntryState,
   ): (entry: ContentEntry) => boolean {
-    if (state === 'published') return () => true
-    if (hasRoleDraftAccess(permissions, target, context)) return () => true
-    return (entry) => previewCovers(context, target, entry.id)
+    const gate = draftGateFor(permissions, target, context, state)
+    return (entry) => gate(entry.id)
   }
 
   /**
@@ -194,8 +185,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     context: AccessContext,
     id: string,
   ): void {
-    if (hasRoleDraftAccess(permissions, target, context)) return
-    if (previewCovers(context, target, id)) return
+    if (entryVisible(permissions, target, context, 'working', id)) return
     throw notFound()
   }
 
@@ -219,12 +209,6 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       depth: Math.min(Math.max(options_.depth, 0), limits.maxDepth),
       state: options_.state,
     })
-  }
-
-  function sortValue(entry: ContentEntry, field: SortOrder['field']): string {
-    if (field === 'createdAt') return entry.createdAt
-    if (field === 'updatedAt') return entry.updatedAt
-    return entry.id
   }
 
   return {
@@ -251,70 +235,37 @@ export function createContentService(options: ContentServiceOptions): ContentSer
         gate(entry) && (query.filter === undefined || matchesFilter(query.filter, entry))
 
       const entries = store(target)
-      const accepted: ContentEntry[] = []
-      let scanned = 0
-      let cursor = query.cursor
-      let lastScanned: ContentEntry | undefined
-      let exhausted = false
-      let budgetSpent = false
+      const scan = await scanPages<ContentEntry>({
+        limit: query.limit,
+        accept,
+        startCursor: query.cursor,
+        maxRows: SCAN_BUDGET,
+        fetch: (cursor) =>
+          entries.list({
+            state,
+            limit: SCAN_BATCH,
+            sort: query.sort,
+            ...(query.locale === undefined ? {} : { locale: query.locale }),
+            ...(query.requestedStatus === undefined ? {} : { status: query.requestedStatus }),
+            ...(cursor === undefined ? {} : { cursor }),
+          }),
+      })
 
-      // Filters richer than equality are evaluated above the store, so a page is
-      // built by walking the keyset until enough rows pass. One row beyond the
-      // asked-for page is collected on purpose: its existence is the honest
-      // answer to "is there more", and it never comes from a count query that
-      // would race the concurrent inserts the cursor exists to survive.
-      while (accepted.length <= query.limit) {
-        const page = await entries.list({
-          state,
-          limit: SCAN_BATCH,
-          sort: query.sort,
-          ...(query.locale === undefined ? {} : { locale: query.locale }),
-          ...(query.requestedStatus === undefined ? {} : { status: query.requestedStatus }),
-          ...(cursor === undefined ? {} : { cursor }),
-        })
-
-        for (const entry of page.items) {
-          scanned += 1
-          lastScanned = entry
-          if (accept(entry)) {
-            accepted.push(entry)
-            if (accepted.length > query.limit) break
-          }
-        }
-
-        if (accepted.length > query.limit) break
-        if (!page.hasMore || page.nextCursor === null) {
-          exhausted = true
-          break
-        }
-        if (scanned >= SCAN_BUDGET) {
-          budgetSpent = true
-          break
-        }
-        cursor = page.nextCursor
-      }
-
-      const overflowed = accepted.length > query.limit
-      const items = accepted.slice(0, query.limit)
-      const hasMore = overflowed || (!exhausted && budgetSpent)
+      // REST's own policy on the walk's outcome. A scan that ran out of budget
+      // before it filled the page has *not* proved there is nothing left, so it
+      // reports more and hands back a cursor: the alternative is telling a
+      // caller a selective filter matched nothing when it merely matched late.
+      const hasMore = scan.overflowed || (!scan.exhausted && scan.budgetSpent)
 
       // The cursor is a position in the ordering, so it is taken from the last
       // row actually handed out — or, when the scan budget ran out before the
       // page filled, from the last row looked at, so the next request resumes
       // exactly where this one stopped instead of re-reading from the start.
-      const anchor = overflowed ? items.at(-1) : lastScanned
-      const nextCursor =
-        hasMore && anchor !== undefined
-          ? encodeCursor({
-              field: query.sort.field,
-              direction: query.sort.direction,
-              value: sortValue(anchor, query.sort.field),
-              id: anchor.id,
-            })
-          : null
+      const anchor = scan.overflowed ? scan.items.at(-1) : scan.lastScanned
+      const nextCursor = hasMore && anchor !== undefined ? cursorFor(anchor, query.sort) : null
 
       const serialised: SerialisedEntry[] = []
-      for (const entry of items) {
+      for (const entry of scan.items) {
         serialised.push(await serialise(context, target, entry, { state, depth: query.depth }))
       }
 

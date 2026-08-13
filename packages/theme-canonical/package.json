@@ -1,0 +1,57 @@
+{
+  "name": "@cogenta/theme-canonical",
+  "version": "0.0.0",
+  "description": "The reference Cogenta theme: the twelve vocabulary blocks, rendered accessibly, with zero client JavaScript.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./theme.config": {
+      "types": "./dist/theme.config.d.ts",
+      "default": "./dist/theme.config.js"
+    },
+    "./tokens.json": "./tokens.json",
+    "./blocks/*.astro": "./src/blocks/*.astro",
+    "./layouts/*.astro": "./src/layouts/*.astro",
+    "./components/*.astro": "./src/components/*.astro",
+    "./styles/theme.css": "./src/styles/theme.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "tokens.json"
+  ],
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cogenta-cms/cogenta.git",
+    "directory": "packages/theme-canonical"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
+  },
+  "dependencies": {
+    "@cogenta/blocks": "workspace:*"
+  },
+  "peerDependencies": {
+    "astro": "catalog:"
+  },
+  "devDependencies": {
+    "astro": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

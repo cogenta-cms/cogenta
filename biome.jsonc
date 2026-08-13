@@ -6,7 +6,11 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/.turbo", "!**/coverage"]
+    // Test fixtures are excluded on purpose: some of them are *hostile by
+    // design* — CommonJS, forbidden imports, unresolvable specifiers — because
+    // that is what the theme installation check exists to refuse. Linting them
+    // would report the very things the tests assert are present.
+    "includes": ["**", "!**/dist", "!**/.turbo", "!**/coverage", "!**/test/fixtures"]
   },
   "formatter": {
     "enabled": true,
@@ -50,6 +54,17 @@
     }
   },
   "overrides": [
+    {
+      // Biome parses Astro frontmatter but not the template, so it reports every
+      // prop the template uses as an unused variable. Silencing the rule beats
+      // teaching contributors to ignore 60 warnings.
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": { "noUnusedVariables": "off", "noUnusedImports": "off" }
+        }
+      }
+    },
     {
       "includes": ["**/*.config.ts", "**/*.config.js", "**/vitest.workspace.ts"],
       "linter": { "rules": { "style": { "noDefaultExport": "off" } } }

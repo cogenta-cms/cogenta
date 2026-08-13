@@ -1,0 +1,17 @@
+---
+import type { GalleryBlock } from '@cogenta/blocks'
+import { renderGallery } from '../render/blocks/gallery.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/**
+ * See `Hero.astro` for why the markup lives in `src/render/`.
+ *
+ * This is the one block the brief allows to ask for client JavaScript, in
+ * carousel mode. It does not: the carousel is a scroll-snapping list. No
+ * `client:*` directive appears anywhere in this theme.
+ */
+const { block, ctx } = Astro.props as { block: GalleryBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderGallery(block, ctx))} />

@@ -1,0 +1,11 @@
+---
+import type { FeatureGridBlock } from '@cogenta/blocks'
+import { renderFeatureGrid } from '../render/blocks/feature-grid.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/** See `Hero.astro` for why the markup lives in `src/render/`. */
+const { block, ctx } = Astro.props as { block: FeatureGridBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderFeatureGrid(block, ctx))} />

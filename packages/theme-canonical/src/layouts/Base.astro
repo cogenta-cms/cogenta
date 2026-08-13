@@ -1,0 +1,63 @@
+---
+import type { RenderContext } from '../theme-contract.js'
+import '../styles/theme.css'
+
+interface Props {
+  ctx: RenderContext
+  /** The document title. The page's `h1` is rendered by the content, not here. */
+  title: string
+  description?: string
+}
+
+const { ctx, title, description } = Astro.props as Props
+
+// The skin is a *served file*, not an import: changing skin rewrites it and the
+// next request picks it up, with no rebuild (L3, "Skins et changement à chaud").
+// Inlining the tokens here would turn every skin change into a build.
+const SKIN_HREF = '/_cogenta/skin.css'
+---
+
+<!doctype html>
+<!--
+  `lang` is the rendered locale, which assistive technology needs to pick the
+  right voice (WCAG 3.1.1). `dir="auto"` because contract D's `ctx` carries no
+  writing direction: inferring it from the first strong character is honest,
+  while hard-coding `ltr` would be wrong for half the locales a site may add.
+-->
+<html lang={ctx.locale} dir="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={ctx.url.href} />
+    <link rel="stylesheet" href={SKIN_HREF} />
+  </head>
+  <body>
+    <!--
+      First focusable element on the page, visible as soon as it takes focus.
+      Its target is the `id` `renderPage` puts on `<main>`.
+    -->
+    <a class="cg-skip-link" href="#cg-main">{ctx.t('a11y.skipToContent')}</a>
+
+    <header class="cg-site-header">
+      <div class="cg-site-header__inner">
+        <a class="cg-site-header__home" href={ctx.link({ path: '/' })}>{ctx.site.name}</a>
+        <slot name="navigation" />
+      </div>
+    </header>
+
+    <slot />
+
+    <footer class="cg-site-footer">
+      <div class="cg-site-footer__inner">
+        <slot name="footer" />
+      </div>
+    </footer>
+
+    <!--
+      No script tag. Nothing on this page hydrates: the FAQ uses <details>, the
+      carousel uses scroll snapping, and the embeds load nothing before consent.
+    -->
+  </body>
+</html>

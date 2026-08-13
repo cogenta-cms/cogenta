@@ -22,7 +22,7 @@ export type {
 export { executeGraphQL } from './execute.js'
 export { registerFilterInput, toFilter } from './filters.js'
 export type { ContentGateway, ContentGatewayOptions, MutationInput } from './gateway.js'
-export { createContentGateway, matches } from './gateway.js'
+export { createContentGateway } from './gateway.js'
 export { entryFieldName, interfaceNameOf, listFieldName, mutationName } from './naming.js'
 export type { ContentSchemaOptions, EntryNode } from './schema.js'
 export { buildContentSchema, DEFAULT_MAX_DEPTH, renderSdl } from './schema.js'

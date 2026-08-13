@@ -1,0 +1,18 @@
+---
+import type { EmbedBlock } from '@cogenta/blocks'
+import { renderEmbed } from '../render/blocks/embed.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/**
+ * See `Hero.astro` for why the markup lives in `src/render/`.
+ *
+ * When `consentRequired` is true nothing third-party is requested: no iframe,
+ * no script, no preconnect, no poster image. A thumbnail fetched from the
+ * provider has already handed over the visitor's IP address, which is exactly
+ * the transfer the consent flag exists to gate.
+ */
+const { block, ctx } = Astro.props as { block: EmbedBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderEmbed(block, ctx))} />

@@ -1,0 +1,606 @@
+/*
+ * The canonical theme's stylesheet.
+ *
+ * Not one colour, font, radius, duration or shadow is written literally here:
+ * every value comes from a `--cogenta-<group>-<name>` custom property produced
+ * from the skin's tokens. That is what makes changing skin a rewrite of one
+ * generated file with no build (L3, "Skins et changement à chaud"). A single
+ * hard-coded hex in this file would be a colour no skin can change.
+ *
+ * The derived `--cg-*` properties below are *composed* from tokens — a spacing
+ * step is a multiple of `space.unit`, a type step is a power of `font.scale` —
+ * so they follow the skin instead of freezing a second scale beside it.
+ */
+
+:where(:root) {
+  --cg-density: 1;
+
+  --cg-s1: calc(var(--cogenta-space-unit) * 1 * var(--cg-density));
+  --cg-s2: calc(var(--cogenta-space-unit) * 2 * var(--cg-density));
+  --cg-s3: calc(var(--cogenta-space-unit) * 3 * var(--cg-density));
+  --cg-s4: calc(var(--cogenta-space-unit) * 4 * var(--cg-density));
+  --cg-s6: calc(var(--cogenta-space-unit) * 6 * var(--cg-density));
+  --cg-s8: calc(var(--cogenta-space-unit) * 8 * var(--cg-density));
+  --cg-s12: calc(var(--cogenta-space-unit) * 12 * var(--cg-density));
+  --cg-s16: calc(var(--cogenta-space-unit) * 16 * var(--cg-density));
+
+  /* A monotone increasing scale, by construction: each step multiplies the one
+     below it by `font.scale`, which the skin validator already checks is > 1. */
+  --cg-text-sm: calc(var(--cogenta-font-baseSize) / var(--cogenta-font-scale));
+  --cg-text-base: var(--cogenta-font-baseSize);
+  --cg-text-md: calc(var(--cogenta-font-baseSize) * var(--cogenta-font-scale));
+  --cg-text-lg: calc(var(--cg-text-md) * var(--cogenta-font-scale));
+  --cg-text-xl: calc(var(--cg-text-lg) * var(--cogenta-font-scale));
+  --cg-text-2xl: calc(var(--cg-text-xl) * var(--cogenta-font-scale));
+
+  --cg-measure: 68ch;
+  --cg-page: 76rem;
+}
+
+/* `space.density` is a token the render layer stamps as an attribute, because
+   CSS cannot branch on the *value* of a custom property portably yet. The
+   default above stands until it does. */
+:where([data-density="compact"]) {
+  --cg-density: 0.75;
+}
+
+:where([data-density="spacious"]) {
+  --cg-density: 1.35;
+}
+
+/* --------------------------------------------------------------------------
+   Document
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cogenta-color-bg);
+  color: var(--cogenta-color-fg);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-base);
+  /* Unitless, so it scales with each element's own font size instead of being
+     inherited as a fixed pixel height — the classic cause of clipped text at
+     200% zoom (WCAG 1.4.4). */
+  line-height: 1.6;
+  text-underline-offset: 0.15em;
+}
+
+img,
+video,
+iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+img {
+  display: block;
+  object-fit: cover;
+}
+
+/* --------------------------------------------------------------------------
+   Focus, targets, motion — the three that decide whether AA holds
+   -------------------------------------------------------------------------- */
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  /* Two solid pixels against the page, offset so it never sits on the glyphs.
+     `outline`, not `box-shadow`: it survives forced-colors mode. */
+  outline: 2px solid var(--cogenta-color-accent);
+  outline-offset: 2px;
+  border-radius: var(--cogenta-radius-sm);
+}
+
+/* WCAG 2.2 asks 24×24 minimum (2.5.8); 44×44 is the comfortable target and
+   costs nothing here. Applied to the theme's own controls only — an inline link
+   inside a paragraph is exempt, and padding it would break the text flow. */
+:where(.cg-action, .cg-faq__question, .cg-logo__link) {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The `motion.reduced` token says the skin's motion may be removed. Nothing
+     in this theme conveys meaning through movement, so removing all of it is
+     safe — including the smooth scroll of the carousel, which is the one people
+     forget and which triggers vestibular symptoms. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.cg-skip-link {
+  position: absolute;
+  inset-inline-start: var(--cg-s2);
+  inset-block-start: calc(var(--cg-s2) * -8);
+  z-index: 10;
+  padding: var(--cg-s2) var(--cg-s4);
+  background: var(--cogenta-color-accent);
+  color: var(--cogenta-color-accentFg);
+  border-radius: var(--cogenta-radius-md);
+  /* Moved, never hidden: `display:none` would take it out of the tab order,
+     which is the whole point of a skip link (WCAG 2.4.1). */
+  transition: inset-block-start var(--cogenta-motion-duration) var(--cogenta-motion-easing);
+}
+
+.cg-skip-link:focus-visible {
+  inset-block-start: var(--cg-s2);
+}
+
+/* --------------------------------------------------------------------------
+   Layout
+   -------------------------------------------------------------------------- */
+
+.cg-main {
+  display: flow-root;
+}
+
+.cg-block {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-s12);
+  padding-inline: var(--cg-s4);
+}
+
+.cg-page__title {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-s12) var(--cg-s6);
+  padding-inline: var(--cg-s4);
+  font-size: var(--cg-text-2xl);
+  line-height: 1.15;
+}
+
+.cg-site-header,
+.cg-site-footer {
+  padding: var(--cg-s6) var(--cg-s4);
+  color: var(--cogenta-color-mutedFg);
+  background: var(--cogenta-color-muted);
+}
+
+.cg-site-header__inner,
+.cg-site-footer__inner {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Actions
+   -------------------------------------------------------------------------- */
+
+.cg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: var(--cg-s6) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cg-s2) var(--cg-s6);
+  border: 1px solid var(--cogenta-color-accent);
+  border-radius: var(--cogenta-radius-md);
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity var(--cogenta-motion-duration) var(--cogenta-motion-easing);
+}
+
+.cg-action[data-emphasis="primary"] {
+  background: var(--cogenta-color-accent);
+  color: var(--cogenta-color-accentFg);
+}
+
+.cg-action[data-emphasis="secondary"] {
+  background: transparent;
+  color: var(--cogenta-color-accent);
+}
+
+.cg-action:hover {
+  opacity: 0.9;
+}
+
+/* --------------------------------------------------------------------------
+   Blocks
+   -------------------------------------------------------------------------- */
+
+.cg-hero {
+  display: grid;
+  gap: var(--cg-s8);
+  align-items: center;
+}
+
+@media (min-width: 60rem) {
+  .cg-hero {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cg-hero__eyebrow {
+  margin: 0 0 var(--cg-s2);
+  color: var(--cogenta-color-mutedFg);
+  font-size: var(--cg-text-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cg-hero__title {
+  margin: 0;
+  font-size: var(--cg-text-2xl);
+  line-height: 1.1;
+}
+
+.cg-hero__subtitle {
+  margin: var(--cg-s4) 0 0;
+  max-inline-size: var(--cg-measure);
+  font-size: var(--cg-text-md);
+  color: var(--cogenta-color-mutedFg);
+}
+
+.cg-hero__media img {
+  inline-size: 100%;
+  border-radius: var(--cogenta-radius-lg);
+  box-shadow: var(--cogenta-shadow-md);
+}
+
+.cg-prose {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-prose h2 {
+  margin-block: var(--cg-s12) var(--cg-s3);
+  font-size: var(--cg-text-xl);
+  line-height: 1.2;
+}
+
+.cg-prose h3 {
+  margin-block: var(--cg-s8) var(--cg-s2);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-prose h4 {
+  margin-block: var(--cg-s6) var(--cg-s2);
+  font-size: var(--cg-text-md);
+}
+
+.cg-prose p,
+.cg-prose ul,
+.cg-prose ol {
+  margin-block: var(--cg-s4);
+}
+
+.cg-prose blockquote {
+  margin-inline: 0;
+  padding-inline-start: var(--cg-s4);
+  border-inline-start: 3px solid var(--cogenta-color-accent);
+  color: var(--cogenta-color-mutedFg);
+  font-family: var(--cogenta-font-serif);
+}
+
+.cg-prose code {
+  font-family: var(--cogenta-font-mono);
+  font-size: var(--cg-text-sm);
+  background: var(--cogenta-color-muted);
+  border-radius: var(--cogenta-radius-sm);
+  padding: 0.1em 0.3em;
+}
+
+.cg-prose__figure {
+  margin-inline: 0;
+}
+
+.cg-figure {
+  margin-inline: auto;
+}
+
+.cg-figure[data-align="start"],
+.cg-figure[data-align="end"] {
+  max-inline-size: calc(var(--cg-measure) / 2);
+}
+
+.cg-figure[data-align="start"] {
+  float: inline-start;
+  margin-inline-end: var(--cg-s6);
+}
+
+.cg-figure[data-align="end"] {
+  float: inline-end;
+  margin-inline-start: var(--cg-s6);
+}
+
+.cg-figure[data-align="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-figure__media {
+  inline-size: 100%;
+  aspect-ratio: var(--cg-ratio, auto);
+  border-radius: var(--cogenta-radius-md);
+}
+
+.cg-figure__caption {
+  margin-block-start: var(--cg-s2);
+  color: var(--cogenta-color-mutedFg);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-figure__credit::before {
+  content: " — ";
+}
+
+.cg-features__items,
+.cg-logos__items,
+.cg-gallery__items,
+.cg-collection__items,
+.cg-faq__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-features__items {
+  display: grid;
+  gap: var(--cg-s8);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.cg-feature__title {
+  margin: var(--cg-s2) 0;
+  font-size: var(--cg-text-md);
+}
+
+.cg-feature__text {
+  margin: 0;
+  color: var(--cogenta-color-mutedFg);
+}
+
+.cg-cta {
+  padding-block: var(--cg-s12);
+  background: var(--cogenta-color-muted);
+  border-radius: var(--cogenta-radius-lg);
+  text-align: center;
+}
+
+.cg-cta__title {
+  margin: 0;
+  font-size: var(--cg-text-xl);
+}
+
+.cg-cta__text {
+  margin: var(--cg-s3) auto 0;
+  max-inline-size: var(--cg-measure);
+  color: var(--cogenta-color-mutedFg);
+}
+
+.cg-cta .cg-actions {
+  justify-content: center;
+}
+
+.cg-gallery__items {
+  display: grid;
+  gap: var(--cg-s3);
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+.cg-gallery[data-layout="masonry"] .cg-gallery__items {
+  display: block;
+  columns: 3 14rem;
+  column-gap: var(--cg-s3);
+}
+
+.cg-gallery[data-layout="masonry"] .cg-gallery__item {
+  break-inside: avoid;
+  margin-block-end: var(--cg-s3);
+}
+
+/* The whole carousel: a scroll-snapping row. No script, no auto-advance, and
+   the container is focusable so it can be scrolled from the keyboard. */
+.cg-gallery__viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-inline: contain;
+}
+
+.cg-gallery[data-layout="carousel"] .cg-gallery__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(16rem, 40%);
+}
+
+.cg-gallery[data-layout="carousel"] .cg-gallery__item {
+  scroll-snap-align: start;
+}
+
+.cg-gallery__item img,
+.cg-collection img {
+  inline-size: 100%;
+  border-radius: var(--cogenta-radius-md);
+}
+
+.cg-quote {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-quote__text {
+  margin: 0;
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-lg);
+  line-height: 1.35;
+}
+
+.cg-quote__attribution {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s4);
+  color: var(--cogenta-color-mutedFg);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-quote__avatar {
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: 50%;
+}
+
+.cg-quote__author {
+  font-weight: 600;
+  color: var(--cogenta-color-fg);
+}
+
+.cg-faq__items {
+  border-block-start: 1px solid var(--cogenta-color-border);
+}
+
+.cg-faq__item {
+  border-block-end: 1px solid var(--cogenta-color-border);
+}
+
+.cg-faq__question {
+  display: flex;
+  align-items: center;
+  padding-block: var(--cg-s3);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cg-faq__answer {
+  padding-block-end: var(--cg-s3);
+  color: var(--cogenta-color-mutedFg);
+}
+
+.cg-stats__items {
+  display: grid;
+  gap: var(--cg-s8);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0;
+}
+
+/* Reading order is label then figure; the skin shows the figure first. The
+   markup is what a screen reader follows, so the two must not be conflated. */
+.cg-stat {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--cg-s1);
+}
+
+.cg-stat__value {
+  margin: 0;
+  font-size: var(--cg-text-2xl);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-stat__unit {
+  font-size: var(--cg-text-md);
+  color: var(--cogenta-color-mutedFg);
+}
+
+.cg-stat__label {
+  color: var(--cogenta-color-mutedFg);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-logos__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s8);
+}
+
+.cg-logo__image {
+  block-size: 2.5rem;
+  inline-size: auto;
+  object-fit: contain;
+}
+
+.cg-logo__link {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cg-collection__items {
+  display: grid;
+  gap: var(--cg-s8);
+}
+
+.cg-collection[data-layout="grid"] .cg-collection__items {
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+}
+
+.cg-collection[data-layout="carousel"] .cg-collection__items {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(18rem, 45%);
+}
+
+.cg-collection__viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-inline: contain;
+}
+
+.cg-entry__title {
+  margin: 0 0 var(--cg-s1);
+  font-size: var(--cg-text-md);
+}
+
+.cg-entry__date,
+.cg-entry__excerpt {
+  color: var(--cogenta-color-mutedFg);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-embed {
+  aspect-ratio: var(--cg-ratio, 16 / 9);
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-embed__frame {
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+  border-radius: var(--cogenta-radius-md);
+}
+
+/* The consent placeholder is a real card, not a grey box: it says what would be
+   loaded and offers a way out to the source. It requests nothing third-party. */
+.cg-embed__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s3);
+  block-size: 100%;
+  padding: var(--cg-s6);
+  background: var(--cogenta-color-muted);
+  color: var(--cogenta-color-mutedFg);
+  border: 1px dashed var(--cogenta-color-border);
+  border-radius: var(--cogenta-radius-md);
+  text-align: center;
+}
+
+.cg-embed__notice {
+  margin: 0;
+}
+
+.cg-embed__link {
+  color: var(--cogenta-color-accent);
+}

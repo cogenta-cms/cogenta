@@ -1,0 +1,26 @@
+---
+import type { HeroBlock } from '@cogenta/blocks'
+import type { RenderContext } from '@cogenta/render'
+import Panel from '../components/Panel.astro'
+
+// import fs from 'node:fs' — commented out, and therefore not a finding.
+const { block, ctx } = Astro.props as { block: HeroBlock; ctx: RenderContext }
+const image = block.media === undefined ? null : ctx.image(block.media, { width: 1280 })
+---
+
+<section class="hero process">
+  <p class="eyebrow">{ctx.t('hero.eyebrow')}</p>
+  <h1>{block.title}</h1>
+  <!-- Prose with apostrophes: don't, isn't, the theme's own words, "http" and
+       "net" as ordinary text. None of this is a module specifier. -->
+  <p>Here's the subtitle, and it isn't a string literal.</p>
+  {image !== null && <img src={image.src} srcset={image.srcset} alt={image.alt} width={image.width} height={image.height} />}
+  {block.actions?.map((action) => <a href={ctx.link(action.target)}>{action.label}</a>)}
+  <Panel label={ctx.t('process')} />
+</section>
+
+<script>
+  // Client-side, and still scanned: a browser bundle is a bundle.
+  const panel = document.querySelector('.hero')
+  if (panel !== null) panel.dataset.ready = 'true'
+</script>

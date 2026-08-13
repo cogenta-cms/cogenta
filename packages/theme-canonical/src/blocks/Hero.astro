@@ -1,0 +1,25 @@
+---
+import type { HeroBlock } from '@cogenta/blocks'
+import { renderHero } from '../render/blocks/hero.js'
+import { serialize } from '../render/html.js'
+import type { RenderContext } from '../theme-contract.js'
+
+/**
+ * Contract D, "Interface d'un composant de bloc": `{ block, ctx }`, nothing else.
+ *
+ * The markup itself lives in `src/render/blocks/*.ts`. Two reasons, and they
+ * apply to all twelve of these files:
+ *
+ * - it is testable without an Astro toolchain, so the twelve blocks have real
+ *   snapshot tests and the heading outline and `alt` rules are asserted on the
+ *   output rather than on a reading of the source;
+ * - that module has no way to emit raw HTML at all, so a string arriving in a
+ *   block field cannot become markup — which is rule R3 enforced by
+ *   construction rather than by review.
+ *
+ * These components stay one call long so the two can never drift.
+ */
+const { block, ctx } = Astro.props as { block: HeroBlock; ctx: RenderContext }
+---
+
+<Fragment set:html={serialize(renderHero(block, ctx))} />

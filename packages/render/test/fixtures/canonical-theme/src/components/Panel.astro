@@ -1,0 +1,6 @@
+---
+const { label } = Astro.props as { label: string }
+const extra = await import('./labels.js')
+---
+
+<div class="panel">{label}{extra.suffix}</div>

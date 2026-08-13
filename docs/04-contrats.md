@@ -341,8 +341,12 @@ defineAgent({
 
 ## Contrat D — Thème
 
-> **Figé en `theme@1.0` le 2026-08-13.** Ajouter une entrée à `ctx` est mineur ; en
+> **Figé en `theme@1.1` le 2026-08-13.** Ajouter une entrée à `ctx` est mineur ; en
 > modifier une est majeur.
+>
+> `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` — deux manques trouvés en
+> écrivant le thème canonique, qui rendaient toute vidéo irrécupérable et laissaient le
+> type d'une entrée à l'interprétation de chaque thème.
 
 ### Structure minimale
 
@@ -438,13 +442,44 @@ interface ImageOptions {
 }
 
 interface ImageSource {
+  /**
+   * What this media actually is.
+   *
+   * `hero.media` and `mediaFigure.media` accept an image **or** a video
+   * (contract B), and a theme that cannot tell them apart renders every video
+   * as a broken `<img>`. Added in theme@1.1: a theme that ignores it still
+   * compiles, which is why this is a minor version and not a break.
+   */
+  readonly kind: 'image' | 'video'
   readonly src: string
+  /** Empty for a video: there is no responsive source set to offer. */
   readonly srcset: string
   readonly width: number
   readonly height: number
   /** Alt text and focal point come from the media entity, never invented here. */
   readonly alt: string
   readonly focal: { readonly x: number; readonly y: number } | null
+  /** Video only: the still shown before playback. */
+  readonly poster?: string
+}
+
+/**
+ * What a theme receives for one entry.
+ *
+ * The system fields of contract A, plus the collection's own fields under
+ * `values` and its block zones under `blocks`. A theme never sees a draft:
+ * see the token scope above.
+ */
+interface ContentEntry {
+  readonly id: string
+  readonly locale: string
+  readonly status: 'published'
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly publishedAt: string | null
+  readonly provenance: 'human' | 'assisted' | 'generated'
+  readonly values: Readonly<Record<string, unknown>>
+  readonly blocks: Readonly<Record<string, readonly PlacedBlock[]>>
 }
 
 interface ContentClient {

@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import type { Driver, HealthReport } from '../drivers/index.js'
 import { CogentaError } from '../errors/index.js'
 import { compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
@@ -41,6 +42,39 @@ export async function loadSqliteModule(): Promise<SqliteModuleLike | null> {
     return (await import('node:sqlite')) as unknown as SqliteModuleLike
   } catch {
     return null
+  }
+}
+
+/**
+ * One transaction at a time per database file, per process.
+ *
+ * `node:sqlite` is synchronous. Two connections to the same file inside one
+ * process deadlock without this: the second `BEGIN IMMEDIATE` blocks the thread
+ * holding it, and the first transaction can never reach its `COMMIT` because its
+ * continuation needs an event loop that is no longer turning. SQLite's
+ * `busy_timeout` cannot help — it just decides how long the deadlock lasts
+ * before it becomes an error.
+ *
+ * Serialising costs no parallelism that existed: a synchronous driver on one
+ * thread was never going to run two transactions at once. It turns a deadlock
+ * into an orderly queue. Across *processes*, SQLite's own locking applies as
+ * usual.
+ */
+const fileLocks = new Map<string, Promise<unknown>>()
+
+async function withFileLock<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const previous = fileLocks.get(key) ?? Promise.resolve()
+  const current = previous.then(run, run)
+
+  fileLocks.set(
+    key,
+    current.catch(() => undefined),
+  )
+
+  try {
+    return await current
+  } finally {
+    if (fileLocks.get(key) === current) fileLocks.delete(key)
   }
 }
 
@@ -100,6 +134,8 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
 
   const database = new module.DatabaseSync(file)
   const executor = executorFor(database)
+  // Two :memory: handles are two separate databases, so they never contend.
+  const lockKey = file === ':memory:' ? `memory:${randomUUID()}` : resolve(file)
 
   // WAL lets a writer and readers work at the same time. Without it concurrent
   // writes serialise on a global lock and time out under any real load — the
@@ -112,44 +148,63 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
 
   return {
     dialect: 'sqlite',
-    query: executor.query,
+
+    // Every statement takes the file lock, not only transactions. A plain
+    // UPDATE from a second connection, while a first holds BEGIN IMMEDIATE,
+    // deadlocks the process just as surely: it blocks the only thread, so the
+    // transaction it is waiting on can never commit. A statement issued from
+    // inside our own transaction already holds the lock and must not re-take it.
+    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> =>
+      depth > 0
+        ? executor.query<TRow>(fragment)
+        : withFileLock(lockKey, () => executor.query<TRow>(fragment)),
 
     transaction: async <T>(
       run: (tx: SqlExecutor) => Promise<T>,
       transactionOptions?: TransactionOptions,
     ): Promise<T> => {
-      // SQLite has no nested transactions; savepoints stand in for them so a
-      // caller can compose two functions that each want a transaction.
-      const nested = depth > 0
-      const savepoint = `cogenta_sp_${depth}`
-
-      if (nested) {
-        database.exec(`SAVEPOINT ${savepoint}`)
-      } else {
-        database.exec(transactionOptions?.immediate === true ? 'BEGIN IMMEDIATE' : 'BEGIN')
-      }
-      depth += 1
-
-      try {
-        const result = await run(executor)
-        database.exec(nested ? `RELEASE ${savepoint}` : 'COMMIT')
-        return result
-      } catch (error) {
-        if (nested) {
-          database.exec(`ROLLBACK TO ${savepoint}`)
-          database.exec(`RELEASE ${savepoint}`)
-        } else {
-          database.exec('ROLLBACK')
-        }
-        throw error
-      } finally {
-        depth -= 1
-      }
+      // A nested call is already inside the lock; taking it again would wait on
+      // itself forever.
+      if (depth > 0) return runTransaction(run, transactionOptions)
+      return withFileLock(lockKey, () => runTransaction(run, transactionOptions))
     },
 
     close: async () => {
       database.close()
     },
+  }
+
+  async function runTransaction<T>(
+    run: (tx: SqlExecutor) => Promise<T>,
+    transactionOptions?: TransactionOptions,
+  ): Promise<T> {
+    // SQLite has no nested transactions; savepoints stand in for them so a
+    // caller can compose two functions that each want a transaction.
+    const nested = depth > 0
+    const savepoint = `cogenta_sp_${depth}`
+
+    if (nested) {
+      database.exec(`SAVEPOINT ${savepoint}`)
+    } else {
+      database.exec(transactionOptions?.immediate === true ? 'BEGIN IMMEDIATE' : 'BEGIN')
+    }
+    depth += 1
+
+    try {
+      const result = await run(executor)
+      database.exec(nested ? `RELEASE ${savepoint}` : 'COMMIT')
+      return result
+    } catch (error) {
+      if (nested) {
+        database.exec(`ROLLBACK TO ${savepoint}`)
+        database.exec(`RELEASE ${savepoint}`)
+      } else {
+        database.exec('ROLLBACK')
+      }
+      throw error
+    } finally {
+      depth -= 1
+    }
   }
 }
 

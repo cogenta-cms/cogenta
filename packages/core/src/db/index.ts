@@ -6,7 +6,16 @@ import { sqliteDatabaseDriver } from './sqlite.js'
 import type { DatabaseConfig, DatabaseDriverOptions, DatabaseHandle } from './types.js'
 
 export type { CompiledQuery, SqlFragment } from './dialect.js'
-export { compile, encodeValue, identifier, sql, unsafeRaw } from './dialect.js'
+export {
+  compile,
+  encodeValue,
+  identifier,
+  isWrite,
+  limit,
+  returnsRows,
+  sql,
+  unsafeRaw,
+} from './dialect.js'
 export type { MysqlHandleOptions } from './mysql.js'
 export { createMysqlHandle, loadMysqlModule, mysqlDatabaseDriver } from './mysql.js'
 export type { PostgresHandleOptions } from './postgres.js'

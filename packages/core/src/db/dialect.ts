@@ -166,3 +166,23 @@ export function isWrite(text: string): boolean {
 
 const READ_STATEMENT = /^[\s(]*(?:select|with|pragma|explain|show|values|describe)\b/i
 const RETURNING_CLAUSE = /\breturning\b/i
+
+/**
+ * Renders a `LIMIT` count as a literal rather than a bound parameter.
+ *
+ * MySQL prepared statements reject a placeholder there — `LIMIT ?` fails with
+ * "Incorrect arguments to mysqld_stmt_execute". Rather than encode that as one
+ * more dialect difference for callers to remember, the count is inlined
+ * everywhere. It is validated as a non-negative integer first, so inlining it
+ * cannot inject: this is the only place a number reaches the SQL text directly.
+ */
+export function limit(count: number): SqlFragment {
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new CogentaError({
+      code: 'DB_DIALECT_UNSUPPORTED',
+      message: `A LIMIT must be a non-negative whole number, received ${String(count)}.`,
+      hint: 'Pass a plain integer, such as the batch size of a worker.',
+    })
+  }
+  return unsafeRaw(String(count))
+}

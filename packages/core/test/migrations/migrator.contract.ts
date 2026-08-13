@@ -80,8 +80,8 @@ export function runMigratorContract(
 
     afterEach(async () => {
       await cleanup()
-      await harness.dispose?.()
       await db.close()
+      await harness.dispose?.()
     })
 
     describe('applying', () => {

@@ -48,8 +48,10 @@ export function runDatabaseContract(
 
     afterEach(async () => {
       await db.query(sql`drop table if exists ${identifier('contract_items', db.dialect)}`)
-      await harness.dispose?.()
+      // Close before dispose: a harness that removes files cannot do it while
+      // the connection is still open.
       await db.close()
+      await harness.dispose?.()
     })
 
     describe('queries', () => {

@@ -1,52 +1,101 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type DatabaseHandle, identifier, sql } from '../../src/db/index.js'
-import { createLogger } from '../../src/logger/index.js'
-import { createDatabaseQueue, type QueueDriver } from '../../src/queue/index.js'
-import type { TestClock } from '../cache/cache.contract.js'
-import { createTestClock } from '../cache/cache.contract.js'
+import type { JobId, QueueDriver } from '../../src/queue/index.js'
 
-const silent = createLogger({ level: 'silent' })
+/**
+ * Time, as the driver under test experiences it.
+ *
+ * The database queue takes its clock from us, so the suite can jump. bullmq
+ * schedules inside Redis against wall-clock time it owns, so the same suite has
+ * to actually wait. Making that the harness's business is what keeps a single
+ * contract file instead of two that drift apart.
+ */
+export interface QueueContractClock {
+  now(): number
+  advance(ms: number): Promise<void>
+}
+
+export function createFakeClock(start = 1_700_000_000_000): QueueContractClock {
+  let current = start
+  return {
+    now: () => current,
+    advance: (ms) => {
+      current += ms
+      return Promise.resolve()
+    },
+  }
+}
+
+/** For a driver whose scheduling lives in a server's clock rather than ours. */
+export const realTimeClock: QueueContractClock = {
+  now: () => Date.now(),
+  advance: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+}
+
+/**
+ * Durations the suite reasons with. A driver that really sleeps needs small
+ * ones; a driver with a clock we own can afford minutes for free.
+ */
+export interface QueueContractTiming {
+  /** How far ahead a job that must not run yet is scheduled. */
+  readonly scheduleMs: number
+  /** A wait that outlasts the driver's retry backoff. */
+  readonly retryDelayMs: number
+  /** A wait that outlasts an abandoned job's lease, recovery included. */
+  readonly leaseRecoveryMs: number
+}
+
+export interface QueueContractDriverOptions {
+  readonly batchSize?: number
+}
 
 export interface QueueContractHarness {
-  readonly db: DatabaseHandle
-  /** Another connection to the **same** database, for the concurrency tests. */
-  connect(): Promise<DatabaseHandle>
+  readonly clock: QueueContractClock
+  readonly timing: QueueContractTiming
+  /**
+   * A driver instance on the same backing store. Called more than once: the
+   * concurrency test needs real workers racing, not one object shared around.
+   */
+  createDriver(options?: QueueContractDriverOptions): Promise<QueueDriver>
+  /**
+   * Leaves the job in the state a worker that claimed it and was killed leaves
+   * behind: held, with nobody left to report an outcome. Each driver holds jobs
+   * its own way, so only the harness can stage it.
+   */
+  abandon(job: { readonly id: JobId; readonly name: string }): Promise<void>
   dispose?(): Promise<void>
 }
 
 /**
- * The single contract suite for `QueueDriver`.
+ * The single contract suite for `QueueDriver`. Every implementation runs **this**
+ * file — never a copy adapted to what that driver happens to do.
  *
  * The test that matters most is the last one. L0's acceptance criterion says two
  * concurrent workers must never process the same job, and it is not provable
- * with a mock: it needs real connections racing on a real database.
+ * with a mock: it needs real workers racing on a real backing store.
  */
 export function runQueueContract(name: string, create: () => Promise<QueueContractHarness>): void {
   describe(`QueueDriver contract — ${name}`, () => {
     let harness: QueueContractHarness
-    let db: DatabaseHandle
-    let clock: TestClock
+    let clock: QueueContractClock
+    let timing: QueueContractTiming
     let queue: QueueDriver
-    const opened: DatabaseHandle[] = []
+    const opened: QueueDriver[] = []
 
-    const makeQueue = (handle: DatabaseHandle = db): QueueDriver =>
-      createDatabaseQueue({ db: handle, logger: silent, now: clock.now })
+    const newDriver = async (options?: QueueContractDriverOptions): Promise<QueueDriver> => {
+      const driver = await harness.createDriver(options)
+      opened.push(driver)
+      return driver
+    }
 
     beforeEach(async () => {
-      clock = createTestClock()
       harness = await create()
-      db = harness.db
-      await db.query(sql`drop table if exists ${identifier('cogenta_jobs', db.dialect)}`)
-      queue = makeQueue()
+      clock = harness.clock
+      timing = harness.timing
+      queue = await newDriver()
     })
 
     afterEach(async () => {
-      await queue.close()
-      for (const handle of opened.splice(0)) await handle.close()
-      await db.query(sql`drop table if exists ${identifier('cogenta_jobs', db.dialect)}`)
-      // Close before dispose: Windows refuses to delete a file that is still
-      // open, so removing the directory first fails with EBUSY.
-      await db.close()
+      for (const driver of opened.splice(0)) await driver.close()
       await harness.dispose?.()
     })
 
@@ -122,16 +171,16 @@ export function runQueueContract(name: string, create: () => Promise<QueueContra
     describe('scheduling', () => {
       it('does not run a job before its time', async () => {
         queue.process('later', async () => undefined)
-        await queue.enqueue({ name: 'later', runAt: clock.now() + 60_000 })
+        await queue.enqueue({ name: 'later', runAt: clock.now() + timing.scheduleMs })
 
         expect(await queue.tick()).toBe(0)
       })
 
       it('runs it once its time has come', async () => {
         queue.process('later', async () => undefined)
-        await queue.enqueue({ name: 'later', runAt: clock.now() + 60_000 })
+        await queue.enqueue({ name: 'later', runAt: clock.now() + timing.scheduleMs })
 
-        clock.advance(61)
+        await clock.advance(timing.scheduleMs * 2)
 
         expect(await queue.tick()).toBe(1)
       })
@@ -162,7 +211,7 @@ export function runQueueContract(name: string, create: () => Promise<QueueContra
         await queue.tick()
         expect((await queue.status(id))?.status).toBe('pending')
 
-        clock.advance(120)
+        await clock.advance(timing.retryDelayMs)
         await queue.tick()
 
         expect(attempts).toBe(2)
@@ -188,7 +237,7 @@ export function runQueueContract(name: string, create: () => Promise<QueueContra
 
         for (let i = 0; i < 4; i += 1) {
           await queue.tick()
-          clock.advance(300)
+          await clock.advance(timing.retryDelayMs)
         }
 
         const state = await queue.status(id)
@@ -242,60 +291,35 @@ export function runQueueContract(name: string, create: () => Promise<QueueContra
         // The first worker claims the job and is killed before finishing, so it
         // never reports success or failure. Without lease expiry that job is
         // stuck as running forever.
-        const abandoned = createDatabaseQueue({
-          db,
-          logger: silent,
-          now: clock.now,
-          leaseMs: 60_000,
-        })
-        abandoned.process('stuck', async () => {
-          throw Object.assign(new Error('killed'), { silent: true })
-        })
-
         const id = await queue.enqueue({ name: 'stuck', maxAttempts: 5 })
-
-        // Claim it, then simulate the process disappearing mid-job by never
-        // writing an outcome: mark it running by hand.
-        await db.query(sql`
-          update ${identifier('cogenta_jobs', db.dialect)}
-          set status = ${'running'}, locked_by = ${'dead'}, locked_until = ${clock.now() + 60_000}
-          where id = ${id}`)
+        await harness.abandon({ id, name: 'stuck' })
 
         let recovered = 0
-        const survivor = makeQueue()
+        const survivor = await newDriver()
         survivor.process('stuck', async () => {
           recovered += 1
         })
 
         expect(await survivor.tick()).toBe(0) // lease still held
 
-        clock.advance(61)
+        await clock.advance(timing.leaseRecoveryMs)
+
         expect(await survivor.tick()).toBe(1)
         expect(recovered).toBe(1)
-        await abandoned.close()
-        await survivor.close()
       })
     })
 
     describe('concurrency — the L0 acceptance criterion', () => {
       it('never lets two workers process the same job', async () => {
-        // Real connections, real database, no mock. This is the one property the
-        // degraded queue driver cannot be shipped without.
+        // Real workers, real backing store, no mock. This is the one property no
+        // queue driver can be shipped without.
         const workerCount = 4
         const jobCount = 24
         const handled: string[] = []
 
         const workers: QueueDriver[] = []
         for (let i = 0; i < workerCount; i += 1) {
-          const handle = await harness.connect()
-          opened.push(handle)
-
-          const worker = createDatabaseQueue({
-            db: handle,
-            logger: silent,
-            now: clock.now,
-            batchSize: 5,
-          })
+          const worker = await newDriver({ batchSize: 5 })
           worker.process('shared', async (job) => {
             handled.push(job.id)
           })
@@ -314,8 +338,6 @@ export function runQueueContract(name: string, create: () => Promise<QueueContra
 
         expect(handled).toHaveLength(jobCount)
         expect(new Set(handled).size).toBe(jobCount)
-
-        for (const worker of workers) await worker.close()
       })
     })
   })

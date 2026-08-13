@@ -1,5 +1,7 @@
+import process from 'node:process'
 import { describe, it } from 'vitest'
 import { createMysqlHandle, createPostgresHandle } from '../../src/db/index.js'
+import { databaseQueueHarness } from '../queue/database-harness.js'
 import { runQueueContract } from '../queue/queue.contract.js'
 
 const postgresUrl = process.env['COGENTA_TEST_POSTGRES_URL']
@@ -14,10 +16,12 @@ if (postgresUrl === undefined || postgresUrl === '') {
     it('skipped: COGENTA_TEST_POSTGRES_URL is not set — run `pnpm services:up`', () => undefined)
   })
 } else {
-  runQueueContract('postgres', async () => ({
-    db: await createPostgresHandle({ url: postgresUrl, poolSize: 2 }),
-    connect: () => createPostgresHandle({ url: postgresUrl, poolSize: 2 }),
-  }))
+  runQueueContract(
+    'postgres',
+    databaseQueueHarness(() =>
+      Promise.resolve({ open: () => createPostgresHandle({ url: postgresUrl, poolSize: 2 }) }),
+    ),
+  )
 }
 
 if (mysqlUrl === undefined || mysqlUrl === '') {
@@ -25,10 +29,12 @@ if (mysqlUrl === undefined || mysqlUrl === '') {
     it('skipped: COGENTA_TEST_MYSQL_URL is not set — run `pnpm services:up`', () => undefined)
   })
 } else {
-  runQueueContract('mysql', async () => ({
-    db: await createMysqlHandle({ url: mysqlUrl, poolSize: 2 }),
-    connect: () => createMysqlHandle({ url: mysqlUrl, poolSize: 2 }),
-  }))
+  runQueueContract(
+    'mysql',
+    databaseQueueHarness(() =>
+      Promise.resolve({ open: () => createMysqlHandle({ url: mysqlUrl, poolSize: 2 }) }),
+    ),
+  )
 }
 
 if (mariadbUrl === undefined || mariadbUrl === '') {
@@ -36,8 +42,10 @@ if (mariadbUrl === undefined || mariadbUrl === '') {
     it('skipped: COGENTA_TEST_MARIADB_URL is not set — run `pnpm services:up`', () => undefined)
   })
 } else {
-  runQueueContract('mariadb', async () => ({
-    db: await createMysqlHandle({ url: mariadbUrl, poolSize: 2 }),
-    connect: () => createMysqlHandle({ url: mariadbUrl, poolSize: 2 }),
-  }))
+  runQueueContract(
+    'mariadb',
+    databaseQueueHarness(() =>
+      Promise.resolve({ open: () => createMysqlHandle({ url: mariadbUrl, poolSize: 2 }) }),
+    ),
+  )
 }

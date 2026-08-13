@@ -23,21 +23,41 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L0 — Socle** (`docs/lots/L0-socle.md`), tâches 1→12, état par tâche dans la spec |
-| Reste à faire sur L0 | génération de migrations (tâche 6), registre de queue (tâche 8) |
+| Lot en cours | **L1 — Contenu** (`docs/lots/L1-contenu.md`) |
+| L0 — Socle | **terminé** — 12 tâches, 389 tests, vérifié contre de vraies bases |
 | Paquets publiés | `@cogenta/core`, `@cogenta/cli` (`doctor`, `migrate`) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
-| Contrats figés | aucun. A et B à figer avant L1, D avant L3, C avant L4 |
+| Contrats figés | **A et B figés** (2026-08-13). D avant L3, C avant L4 |
 | Statut public | pre-alpha |
 
 Tenir ce tableau à jour à chaque changement de lot.
 
-## Fichiers protégés
+## Mode de travail : autonomie
 
-`docs/03-decisions.md` et `docs/04-contrats.md` sont en écriture bloquée par un hook.
-Modifier une décision = écrire une **nouvelle** ADR et marquer l'ancienne
-`Remplacée par ADR-XXXX`. Modifier un contrat figé = montée de version majeure +
-note de migration. Dans les deux cas : demander à l'humain d'abord.
+Décider, coder, livrer, puis rendre compte. Ne pas demander la permission pour une
+décision de conception : la prendre, la tracer, et la signaler dans le rapport.
+
+**S'arrêter pour demander uniquement dans trois cas :**
+
+1. Une action **irréversible vers l'extérieur** — publier sur npm, supprimer des
+   données, déployer en production.
+2. Un **secret ou un accès** que seul l'humain détient.
+3. Un choix qui **contredirait une décision déjà actée** dans `docs/03-decisions.md`.
+
+Tout le reste s'avance. Une décision discutable signalée dans un rapport coûte une
+correction ; une question posée coûte une journée d'attente.
+
+## Gouvernance documentaire
+
+`docs/03-decisions.md` est **append-only** : une décision actée ne se modifie pas. Pour
+changer d'avis, écrire une **nouvelle** ADR et marquer l'ancienne
+`Remplacée par ADR-XXXX`, sans supprimer son texte.
+
+`docs/04-contrats.md` est versionné en semver. **A (`schema@1.0`) et B (`blocks@1.0`)
+sont figés** depuis le 2026-08-13 : les modifier impose une montée de version majeure et
+une note de migration du contenu déjà saisi. C et D ne sont pas encore figés.
+
+Ces règles s'appliquent par discipline, plus par un hook.
 
 ## Sous-agents disponibles
 

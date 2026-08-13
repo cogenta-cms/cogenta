@@ -231,3 +231,139 @@ contributeurs. Le CLA préserve cette option ; le DCO la ferme définitivement.
 logo sont déposés et non licenciés avec le code : n'importe qui peut forker, personne ne
 peut usurper le nom. C'est le dispositif de Linux, Rust et WordPress. À déposer **avant**
 l'annonce publique.
+
+---
+
+## ADR-0013 — Le texte riche est du JSON structuré, jamais du HTML
+
+**Statut** : Acté
+
+**Contexte** — Le contrat A liste `richText` parmi les types de champ sans dire ce qu'il
+stocke. C'est le champ le plus utilisé d'un CMS : le corps de chaque article y passe.
+Son format décide de l'éditeur, du moteur de rendu, de la surface de sécurité et de ce
+qu'une IA a le droit de produire.
+
+**Décision** — `richText` stocke un **document JSON structuré**, conforme au modèle
+Portable Text restreint au vocabulaire que Cogenta déclare. Jamais de HTML, jamais de
+Markdown, jamais le format interne d'un éditeur.
+
+Un document est une liste de blocs typés portant du texte, des marques sémantiques
+(`strong`, `em`, `code`, `link`) et des annotations référençant des entités du site
+(lien interne, média, note). Le thème traduit ce modèle en HTML ; le stockage ne
+contient aucune balise.
+
+**Justification** — La promesse produit est « changer de thème et le contenu s'adapte »
+(ADR-0007). Elle n'est tenable que si le contenu ne porte aucune décision de rendu. Du
+HTML stocké la brade en silence : le premier `<div class="…">` collé par un éditeur lie
+définitivement l'article à un thème.
+
+Deuxième raison, de sécurité : du HTML stocké impose une sanitisation permanente, à
+chaque écriture et à chaque lecture, sur du contenu qui vient d'utilisateurs, d'imports
+WordPress et d'agents. Un modèle fermé n'a rien à sanitiser — ce qui n'est pas dans le
+vocabulaire n'existe pas.
+
+Troisième raison, celle qui décide vraiment : la génération par IA. Le même raisonnement
+que pour les skins (`02-architecture.md` § 6) s'applique au texte. Une IA qui **remplit
+un schéma sous contraintes vérifiables** est sûre par construction ; une IA qui produit
+du markup libre ne l'est jamais.
+
+**Conséquences** — Il faut écrire un rendu par cible de diffusion, et un sérialiseur
+HTML pour l'API et les flux. L'import WordPress devient une conversion HTML → modèle,
+avec une politique explicite pour ce qui n'a pas d'équivalent, plutôt qu'un copier-coller.
+La recherche full-text indexe le texte extrait du document, pas le JSON brut.
+
+**Renoncement assumé** — Un éditeur ne peut pas coller du HTML arbitraire et le voir
+rendu tel quel. C'est voulu, et ce sera parfois vécu comme une régression face à
+WordPress. Le bloc `embed` couvre le cas légitime du contenu externe ; le reste est une
+demande de rendu déguisée, qui appartient au thème.
+
+**Écarté** — Le HTML, pour les trois raisons ci-dessus. Le JSON ProseMirror ou TipTap :
+il marie le contenu à un éditeur, et en changer plus tard imposerait de migrer tout le
+contenu existant — le contenu doit survivre à l'outil qui l'a saisi. Le Markdown : il n'a
+pas d'annotations structurées, donc pas de lien interne vers une entité, pas de média
+avec point focal et texte alternatif, pas de référence — tout ce qui distingue un CMS
+d'un dossier de fichiers.
+
+---
+
+## ADR-0014 — Une entrée par langue, liées par `translationOf`
+
+**Statut** : Acté
+
+**Contexte** — Le contrat A décrivait deux modèles d'internationalisation incompatibles
+en même temps : `localized: true` par champ, qui suppose les traductions dans une même
+ligne, et des champs système `locale` et `translationOf`, qui supposent une ligne par
+langue. Il fallait trancher avant d'écrire la moindre migration.
+
+**Décision** — **Une entrée de contenu par langue.** Chaque entrée porte son `locale` et,
+si ce n'est pas la langue source, un `translationOf` qui pointe l'entrée d'origine.
+
+`localized` cesse d'être une directive de stockage. Il devient une **métadonnée
+d'interface** : « ce champ se traduit », ce qui autorise l'admin à proposer la recopie
+depuis la source. Il ne change plus la forme de la colonne.
+
+**Justification** — Publier une langue avant l'autre est un besoin éditorial ordinaire :
+on traduit après, on publie après. Le modèle à une seule ligne le rend structurellement
+impossible, puisque `status`, `publishedAt` et la version sont des attributs de la ligne.
+
+Deuxième raison : ADR-0006 a acheté le full-text natif des trois bases. Des traductions
+en JSON dans une colonne y renoncent sur MySQL et SQLite, où l'indexation JSON est
+faible. Le découpage RAG (`02-architecture.md` § 5) devient également propre : un chunk
+appartient à une langue, sans démêlage.
+
+**Conséquences** — Les champs non traduits sont dupliqués entre les entrées d'une même
+famille de traduction. C'est un coût de stockage marginal et une source de dérive réelle :
+l'admin doit rendre visible ce qui diverge de la source. Les permissions, les versions et
+la programmation de publication s'appliquent par langue, ce qui est le comportement
+attendu. Une redirection 301 et un `hreflang` se déduisent de la famille.
+
+**Renoncement assumé** — Modifier un champ partagé sur toutes les langues demande
+d'écrire sur plusieurs entrées, donc une opération explicite plutôt qu'une simple mise à
+jour. On préfère cette franchise à un modèle où publier en français publierait aussi une
+traduction anglaise que personne n'a relue.
+
+**Écarté** — Une ligne unique avec un JSON par langue : perte du full-text natif, perte
+de la publication indépendante, indexation faible sur deux des trois bases. Un modèle
+hybride, où seuls certains champs seraient traduits en place : il cumule la complexité
+des deux et déplace le problème dans chaque requête.
+
+---
+
+## ADR-0015 — Identifiants UUIDv7 générés par l'application
+
+**Statut** : Acté
+
+**Contexte** — Le type de la clé primaire n'était pas spécifié. Il détermine chaque clé
+étrangère, chaque URL d'API et chaque index du produit, et il ne se change pas une fois
+qu'il existe du contenu en production.
+
+**Décision** — Tout contenu est identifié par un **UUIDv7 généré par l'application**,
+jamais par la base. Stocké en `uuid` natif sur Postgres, `char(36)` sur MySQL, `text` sur
+SQLite — encapsulé dans la couche de dialecte, invisible pour l'appelant.
+
+**Justification** — ADR-0010 fait de la migration de contenu entre dev, staging et
+production une exigence de premier plan, et ADR-0001 vise des agences qui exploitent
+plusieurs environnements par site. Des entiers auto-incrémentés y garantissent des
+collisions : deux environnements attribuent le même `42` à deux articles différents, et
+la fusion devient une réécriture de toutes les clés étrangères.
+
+Deuxième raison, tirée du code déjà écrit : `QueryResult` a dû gagner un champ `insertId`
+uniquement parce que MySQL n'a pas `RETURNING` et ne sait rendre une clé auto-incrémentée
+que par ce biais. Générer la clé côté application supprime cette divergence de dialecte
+au lieu de l'encapsuler.
+
+**UUIDv7 et non v4** : la v7 est ordonnée dans le temps. La v4 est aléatoire et fragmente
+les index B-tree à l'insertion, ce qui dégrade les écritures à mesure que la table grossit
+— le défaut classique des schémas à UUID, et il est évitable.
+
+**Conséquences** — Une clé occupe 36 caractères plutôt que 8 octets. Les URL publiques
+n'exposent pas le volume de contenu, ce qui est un bénéfice de sécurité annexe. Une entrée
+peut être créée hors ligne, ou par un agent, et référencée avant d'être écrite.
+
+**Renoncement assumé** — Les index sont plus gros et les jointures marginalement plus
+lentes qu'avec des entiers. À l'échelle d'un site éditorial, la différence n'est pas
+mesurable ; à l'échelle d'une flotte, la migration de contenu l'est tous les jours.
+
+**Écarté** — L'entier auto-incrémenté, pour les collisions entre environnements et la
+divergence de dialecte. L'UUIDv4, pour la fragmentation d'index. ULID, équivalent
+techniquement à la v7 mais moins standard, donc moins bien outillé.

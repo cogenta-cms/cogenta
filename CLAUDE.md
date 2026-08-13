@@ -23,8 +23,8 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâche 1 (coquille SPA) faite ; serveur HTTP (`cogenta serve`) et routes `/api/auth/*` faits côté backend ; reste : tâche 2 câblée côté SPA (formulaire de connexion, stockage du token, garde de route) |
-| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1711 tests unitaires, tous verts. |
+| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1 et 2 faites (coquille SPA, connexion mot de passe + TOTP, garde de route) ; tâche 3 (passkeys/WebAuthn) à faire ensuite |
+| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1723 tests unitaires, tous verts. |
 | Paquets publiés | `@cogenta/core`, `@cogenta/schema`, `@cogenta/blocks`, `@cogenta/api`, `@cogenta/render`, `@cogenta/seo`, `@cogenta/theme-canonical`, `@cogenta/auth`, `@cogenta/cli` (`doctor`, `migrate`, `users create`, `serve`), `@cogenta/admin` (coquille, non publié) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
 | Contrats figés | **A, B et D figés** (2026-08-13). C avant L4 |

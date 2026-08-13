@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { NavLink, Outlet } from 'react-router'
+import { useAuth } from '../auth/auth-context.js'
 import { NAV_ITEMS } from './nav-items.js'
 import '../styles/shell.css'
 
@@ -15,6 +16,9 @@ const MAIN_CONTENT_ID = 'main-content'
  * the kind of failure that only shows up when someone actually tries it.
  */
 export function AppShell(): JSX.Element {
+  const auth = useAuth()
+  const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
+
   return (
     <div className="app-shell">
       <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
@@ -22,6 +26,14 @@ export function AppShell(): JSX.Element {
       </a>
       <header className="app-shell__topbar">
         <span className="app-shell__brand">Cogenta</span>
+        {email !== null && (
+          <div className="app-shell__account">
+            <span>{email}</span>
+            <button type="button" onClick={() => void auth.logout()}>
+              Se déconnecter
+            </button>
+          </div>
+        )}
       </header>
       <nav className="app-shell__sidebar" aria-label="Navigation principale">
         <ul>

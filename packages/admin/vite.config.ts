@@ -6,4 +6,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  server: {
+    // `cogenta serve` (packages/cli) listens on 4000 by default. The admin
+    // dev server proxies to it so a relative fetch('/api/...') works the
+    // same way in dev as it does once `cogenta serve` serves this build.
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:4000', changeOrigin: true },
+    },
+  },
 })

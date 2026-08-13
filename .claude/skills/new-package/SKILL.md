@@ -48,8 +48,8 @@ Paquets prévus : `core`, `cli`, `schema`, `api`, `blocks`, `admin`, `render`,
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   }
 }
 ```
@@ -72,6 +72,8 @@ Paquets prévus : `core`, `cli`, `schema`, `api`, `blocks`, `admin`, `render`,
 - `"type": "module"` et rien d'autre. Aucun build CJS, aucun `main`, aucun `require`.
 - `"provenance": true` : la publication passe par GitHub Actions en OIDC, jamais par un
   jeton long-vivant (docs/02-architecture.md § 8).
+- `--passWithNoTests` n'est pas optionnel : sans lui, `vitest` sort en erreur pour un
+  paquet qui n'a pas encore de tests de ce type, et la CI échoue sur un paquet vide.
 - Un paquet publiable qui change **exige un changeset** (skill `changeset`).
 - Ajoute le paquet à la CI si elle liste les paquets explicitement.
 

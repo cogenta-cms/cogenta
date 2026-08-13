@@ -1,0 +1,78 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "sidebar content";
+  min-height: 100%;
+}
+
+.app-shell__topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.app-shell__brand {
+  font-weight: 600;
+}
+
+.app-shell__sidebar {
+  grid-area: sidebar;
+  border-right: 1px solid var(--color-border);
+  padding: var(--space-4) var(--space-2);
+}
+
+.app-shell__sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.app-shell__sidebar a {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.app-shell__sidebar a:hover {
+  background: var(--color-surface);
+}
+
+.app-shell__sidebar a.active {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.app-shell__content {
+  grid-area: content;
+  padding: var(--space-6);
+}
+
+/* Off-screen until focused, then pinned to the top: a sighted keyboard user
+   tabbing from the address bar sees it appear rather than losing focus into
+   nothing. */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: var(--space-2);
+  z-index: 100;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}

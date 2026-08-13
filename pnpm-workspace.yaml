@@ -13,13 +13,23 @@ catalog:
   astro: ^7.2.1
   '@simplewebauthn/browser': ^13.3.0
   '@simplewebauthn/server': ^13.3.2
+  '@testing-library/dom': ^10.4.1
+  '@testing-library/react': ^16.3.2
+  '@types/react': ^19.2.18
+  '@types/react-dom': ^19.2.4
+  '@vitejs/plugin-react': ^6.0.5
   bullmq: ^6.1.0
   drizzle-orm: ^0.45.2
   graphql: ^17.0.2
+  jsdom: ^27.4.0
   mysql2: ^3.23.3
   postgres: ^3.4.9
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  react-router: ^8.3.0
   sharp: ^0.35.3
   typescript: ^7.0.2
+  vite: ^8.2.1
   vitest: ^4.1.10
   wasm-vips: ^0.0.18
   zod: ^4.4.3

@@ -1,3 +1,4 @@
+import { isAbsolute, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { resolveConfig } from '../../src/config/index.js'
 import { CogentaError } from '../../src/errors/index.js'
@@ -231,5 +232,50 @@ describe('resolveConfig — invalid configuration fails at startup', () => {
     } catch (error) {
       expect((error as CogentaError).hint).toBeTruthy()
     }
+  })
+})
+
+describe('resolveConfig — paths are relative to the config file', () => {
+  // Found by running the CLI from a subdirectory: it opened an empty `./site.db`
+  // next to the shell and reported an already-migrated database as untouched.
+  // Absolute on every platform, including Windows, where it gains a drive.
+  const base = resolvePath('/projects/site')
+
+  it('resolves a relative SQLite path against the project, not the shell', () => {
+    const config = resolveConfig({ ...minimal, database: { url: './data/site.db' } }, noEnv, base)
+
+    expect(config.database.driver).toBe('sqlite')
+    expect(isAbsolute(config.database.url)).toBe(true)
+    expect(config.database.url).toBe(resolvePath(base, 'data/site.db'))
+  })
+
+  it('resolves the cache and media directories the same way', () => {
+    const config = resolveConfig(minimal, noEnv, base)
+
+    expect(config.cache.path).toBe(resolvePath(base, '.cogenta/cache'))
+    expect(config.storage.path).toBe(resolvePath(base, '.cogenta/media'))
+  })
+
+  it('leaves a server URL and an absolute path alone', () => {
+    const config = resolveConfig(
+      { ...minimal, database: { url: 'postgres://user@localhost:5432/app' } },
+      noEnv,
+      base,
+    )
+
+    expect(config.database.url).toBe('postgres://user@localhost:5432/app')
+    expect(resolveConfig({ ...minimal, cache: { path: base } }, noEnv, base).cache.path).toBe(base)
+  })
+
+  it('leaves an in-memory database alone', () => {
+    const config = resolveConfig({ ...minimal, database: { url: ':memory:' } }, noEnv, base)
+
+    expect(config.database.url).toBe(':memory:')
+  })
+
+  it('changes nothing when there is no config file to be relative to', () => {
+    const config = resolveConfig({ ...minimal, database: { url: './site.db' } }, noEnv)
+
+    expect(config.database.url).toBe('./site.db')
   })
 })

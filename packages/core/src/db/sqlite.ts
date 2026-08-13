@@ -3,10 +3,11 @@ import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import type { Driver, HealthReport } from '../drivers/index.js'
 import { CogentaError } from '../errors/index.js'
-import { compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
+import { type CompiledQuery, compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
 import type {
   DatabaseConfig,
   DatabaseHandle,
+  ExecuteOptions,
   QueryResult,
   SqlExecutor,
   TransactionOptions,
@@ -16,6 +17,12 @@ import type {
 interface StatementSyncLike {
   all(...params: readonly unknown[]): unknown[]
   run(...params: readonly unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint }
+  /**
+   * Optional because it landed after the first release of `node:sqlite`. When it
+   * is missing, `execute` falls back to reading the values out of the row
+   * objects, which is exact except when two selected columns share a name.
+   */
+  setReturnArrays?(enabled: boolean): void
 }
 
 interface DatabaseSyncLike {
@@ -86,15 +93,26 @@ function fileFromUrl(url: string): string {
 }
 
 function executorFor(database: DatabaseSyncLike): SqlExecutor {
-  return {
-    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> => {
-      const { text, params } = compile(fragment, 'sqlite')
+  const executor: SqlExecutor = {
+    dialect: 'sqlite',
 
+    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> =>
+      executor.execute<TRow>(compile(fragment, 'sqlite')),
+
+    execute: async <TRow>(
+      { text, params }: CompiledQuery,
+      options?: ExecuteOptions,
+    ): Promise<QueryResult<TRow>> => {
       try {
         const statement = database.prepare(text)
+        const asArrays = options?.asArrays === true
+        if (asArrays) statement.setReturnArrays?.(true)
 
         if (returnsRows(text)) {
-          const rows = statement.all(...params) as TRow[]
+          const raw = statement.all(...params)
+          const rows = (
+            asArrays && statement.setReturnArrays === undefined ? raw.map(toValues) : raw
+          ) as TRow[]
           return { rows, rowsAffected: isWrite(text) ? rows.length : 0 }
         }
 
@@ -113,6 +131,19 @@ function executorFor(database: DatabaseSyncLike): SqlExecutor {
       }
     },
   }
+
+  return executor
+}
+
+/**
+ * The values of a row in the order the statement selected them.
+ *
+ * Only reached on a runtime whose `node:sqlite` cannot return arrays directly.
+ * Object key order follows column order, so this is exact for every query except
+ * one that selects the same column name twice.
+ */
+function toValues(row: unknown): unknown[] {
+  return Object.values(row as Record<string, unknown>)
 }
 
 export interface SqliteHandleOptions {
@@ -158,6 +189,14 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
       depth > 0
         ? executor.query<TRow>(fragment)
         : withFileLock(lockKey, () => executor.query<TRow>(fragment)),
+
+    execute: async <TRow>(
+      query: CompiledQuery,
+      executeOptions?: ExecuteOptions,
+    ): Promise<QueryResult<TRow>> =>
+      depth > 0
+        ? executor.execute<TRow>(query, executeOptions)
+        : withFileLock(lockKey, () => executor.execute<TRow>(query, executeOptions)),
 
     transaction: async <T>(
       run: (tx: SqlExecutor) => Promise<T>,

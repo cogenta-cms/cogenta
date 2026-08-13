@@ -94,5 +94,8 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
     })
   }
 
-  return { config: resolveConfig(module.default, env), path }
+  // Relative paths in the file are relative to the file, not to the shell's
+  // working directory: running a command from a subdirectory must reach the same
+  // database, cache and media as running it from the project root.
+  return { config: resolveConfig(module.default, env, dirname(path)), path }
 }

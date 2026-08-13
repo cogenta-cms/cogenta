@@ -1,3 +1,4 @@
+import { isAbsolute, resolve as resolvePath } from 'node:path'
 import { CogentaError } from '../errors/index.js'
 import { applyEnv, findSecretsInFile, readSecrets, SECRET_KEYS } from './env.js'
 import { configSchema, formatIssues } from './schema.js'
@@ -40,14 +41,40 @@ function inferDatabaseDriver(url: string): DatabaseDriverName | undefined {
 }
 
 /**
+ * Resolves a path written in a config file against the directory that file
+ * lives in, rather than against the current working directory.
+ *
+ * Without this, running a command from a subdirectory silently uses different
+ * files: `cogenta migrate status` from `src/` opens an empty `./site.db` next to
+ * `src/` and reports every migration as pending, on a database that is already
+ * fully migrated. A relative path in a committed config file means "relative to
+ * the project", the way it does in every other tool that reads one.
+ *
+ * A URL is left alone, and so is `:memory:`. A Windows drive letter is not a
+ * scheme — the pattern needs two characters before the colon.
+ */
+function againstConfigFile(value: string, baseDir: string | undefined): string {
+  if (baseDir === undefined || value === ':memory:') return value
+  if (/^[a-z][a-z0-9+.-]+:/i.test(value)) return value
+  return isAbsolute(value) ? value : resolvePath(baseDir, value)
+}
+
+/**
  * Turns whatever was written in a config file into the fully resolved
  * configuration the rest of Cogenta consumes.
  *
  * Precedence is defaults → file → environment. An invalid configuration fails
  * here, at startup, naming every offending field at once — never three requests
  * later with a stack trace.
+ *
+ * `baseDir` is the directory of the config file, when there was one. Relative
+ * paths are resolved against it.
  */
-export function resolveConfig(input: unknown, env: Environment = process.env): CogentaConfig {
+export function resolveConfig(
+  input: unknown,
+  env: Environment = process.env,
+  baseDir?: string,
+): CogentaConfig {
   if (!isPlainObject(input)) {
     throw new CogentaError({
       code: 'CONFIG_INVALID',
@@ -99,13 +126,15 @@ export function resolveConfig(input: unknown, env: Environment = process.env): C
     }),
     database: Object.freeze({
       driver,
-      url: config.database.url,
+      // Only SQLite has a path for a URL; the others are server addresses.
+      url:
+        driver === 'sqlite' ? againstConfigFile(config.database.url, baseDir) : config.database.url,
       poolSize: config.database.poolSize,
     }),
     cache: Object.freeze({
       driver: config.cache.driver,
       url: config.cache.url,
-      path: config.cache.path,
+      path: againstConfigFile(config.cache.path, baseDir),
     }),
     queue: Object.freeze({ driver: config.queue.driver, url: config.queue.url }),
     storage: Object.freeze({
@@ -113,7 +142,7 @@ export function resolveConfig(input: unknown, env: Environment = process.env): C
       bucket: config.storage.bucket,
       region: config.storage.region,
       endpoint: config.storage.endpoint,
-      path: config.storage.path,
+      path: againstConfigFile(config.storage.path, baseDir),
       baseUrl: config.storage.baseUrl,
       accessKeyId: secrets.storageAccessKeyId,
       secretAccessKey: secrets.storageSecretAccessKey,

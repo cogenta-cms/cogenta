@@ -10,6 +10,8 @@ catalog:
   '@aws-sdk/lib-storage': ^3.1109.0
   '@aws-sdk/s3-request-presigner': ^3.1109.0
   '@redis/client': ^6.2.1
+  bullmq: ^6.1.0
+  drizzle-orm: ^0.45.2
   mysql2: ^3.23.3
   postgres: ^3.4.9
   typescript: ^7.0.2

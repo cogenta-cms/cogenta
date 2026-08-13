@@ -16,6 +16,17 @@ export {
   sql,
   unsafeRaw,
 } from './dialect.js'
+export type {
+  MySqlRemoteDatabase,
+  PgRemoteDatabase,
+  SqliteRemoteDatabase,
+} from './drizzle.js'
+export {
+  createMysqlDrizzle,
+  createPostgresDrizzle,
+  createSqliteDrizzle,
+  drizzleTransaction,
+} from './drizzle.js'
 export type { MysqlHandleOptions } from './mysql.js'
 export { createMysqlHandle, loadMysqlModule, mysqlDatabaseDriver } from './mysql.js'
 export type { PostgresHandleOptions } from './postgres.js'
@@ -27,6 +38,7 @@ export type {
   DatabaseDialect,
   DatabaseDriverOptions,
   DatabaseHandle,
+  ExecuteOptions,
   QueryResult,
   SqlExecutor,
   TransactionOptions,

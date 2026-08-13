@@ -1,9 +1,10 @@
 import type { Driver, HealthReport } from '../drivers/index.js'
 import { CogentaError } from '../errors/index.js'
-import { compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
+import { type CompiledQuery, compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
 import type {
   DatabaseConfig,
   DatabaseHandle,
+  ExecuteOptions,
   QueryResult,
   SqlExecutor,
   TransactionOptions,
@@ -17,8 +18,21 @@ interface PostgresResult extends Array<Record<string, unknown>> {
   readonly count: number
 }
 
+interface PostgresValuesResult extends Array<unknown[]> {
+  readonly count: number
+}
+
+/**
+ * The pending query postgres.js hands back. It is a thenable, so awaiting it
+ * yields rows as objects; `values()` asks the same query for its rows as ordered
+ * value lists instead.
+ */
+interface PostgresQuery extends Promise<PostgresResult> {
+  values(): Promise<PostgresValuesResult>
+}
+
 interface PostgresSql {
-  unsafe(query: string, parameters?: readonly unknown[]): Promise<PostgresResult>
+  unsafe(query: string, parameters?: readonly unknown[]): PostgresQuery
   reserve(): Promise<PostgresReserved>
   end(options?: { timeout?: number }): Promise<void>
 }
@@ -57,12 +71,20 @@ function fail(error: unknown, text: string): CogentaError {
 }
 
 function executorFor(connection: PostgresSql): SqlExecutor {
-  return {
-    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> => {
-      const { text, params } = compile(fragment, 'postgres')
+  const executor: SqlExecutor = {
+    dialect: 'postgres',
 
+    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> =>
+      executor.execute<TRow>(compile(fragment, 'postgres')),
+
+    execute: async <TRow>(
+      { text, params }: CompiledQuery,
+      options?: ExecuteOptions,
+    ): Promise<QueryResult<TRow>> => {
       try {
-        const result = await connection.unsafe(text, params)
+        const pending = connection.unsafe(text, params)
+        const result = options?.asArrays === true ? await pending.values() : await pending
+
         return {
           rows: returnsRows(text) ? ([...result] as TRow[]) : [],
           rowsAffected: isWrite(text) ? result.count : 0,
@@ -72,6 +94,8 @@ function executorFor(connection: PostgresSql): SqlExecutor {
       }
     },
   }
+
+  return executor
 }
 
 export interface PostgresHandleOptions {
@@ -98,9 +122,12 @@ export async function createPostgresHandle(
     onnotice: () => undefined,
   })
 
+  const executor = executorFor(pool)
+
   return {
     dialect: 'postgres',
-    query: executorFor(pool).query,
+    query: executor.query,
+    execute: executor.execute,
 
     transaction: async <T>(
       run: (tx: SqlExecutor) => Promise<T>,
@@ -110,7 +137,7 @@ export async function createPostgresHandle(
       // pool would start it on whichever connection was free and run the rest of
       // the statements on others, silently outside the transaction.
       const connection = await pool.reserve()
-      const executor = executorFor(connection)
+      const txExecutor = executorFor(connection)
       let depth = 0
 
       const enter = async (nested: (tx: SqlExecutor) => Promise<T>): Promise<T> => {
@@ -119,7 +146,7 @@ export async function createPostgresHandle(
         depth += 1
 
         try {
-          const result = await nested(executor)
+          const result = await nested(txExecutor)
           await connection.unsafe(depth === 1 ? 'commit' : `release savepoint ${savepoint}`)
           return result
         } catch (error) {

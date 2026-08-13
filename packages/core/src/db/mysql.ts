@@ -1,9 +1,10 @@
 import type { Driver, HealthReport } from '../drivers/index.js'
 import { CogentaError } from '../errors/index.js'
-import { compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
+import { type CompiledQuery, compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
 import type {
   DatabaseConfig,
   DatabaseHandle,
+  ExecuteOptions,
   QueryResult,
   SqlExecutor,
   TransactionOptions,
@@ -15,18 +16,28 @@ interface ResultSetHeader {
   readonly insertId: number
 }
 
-type MysqlQueryResult = [Record<string, unknown>[] | ResultSetHeader, unknown]
+type MysqlRows = Record<string, unknown>[] | unknown[][]
 
-interface MysqlConnection {
-  query(sql: string, values?: readonly unknown[]): Promise<MysqlQueryResult>
-  execute(sql: string, values?: readonly unknown[]): Promise<MysqlQueryResult>
+type MysqlQueryResult = [MysqlRows | ResultSetHeader, unknown]
+
+/** The options form of a statement, the only one that can ask for value lists. */
+interface MysqlQueryOptions {
+  readonly sql: string
+  readonly values?: readonly unknown[]
+  readonly rowsAsArray?: boolean
+}
+
+interface MysqlQueries {
+  query(sql: string | MysqlQueryOptions, values?: readonly unknown[]): Promise<MysqlQueryResult>
+  execute(sql: string | MysqlQueryOptions, values?: readonly unknown[]): Promise<MysqlQueryResult>
+}
+
+interface MysqlConnection extends MysqlQueries {
   release(): void
 }
 
-interface MysqlPool {
+interface MysqlPool extends MysqlQueries {
   getConnection(): Promise<MysqlConnection>
-  query(sql: string, values?: readonly unknown[]): Promise<MysqlQueryResult>
-  execute(sql: string, values?: readonly unknown[]): Promise<MysqlQueryResult>
   end(): Promise<void>
 }
 
@@ -43,26 +54,39 @@ export async function loadMysqlModule(): Promise<MysqlModuleLike | null> {
   }
 }
 
-function isHeader(value: Record<string, unknown>[] | ResultSetHeader): value is ResultSetHeader {
+function isHeader(value: MysqlRows | ResultSetHeader): value is ResultSetHeader {
   return !Array.isArray(value)
 }
 
-function executorFor(connection: Pick<MysqlPool, 'query' | 'execute'>): SqlExecutor {
-  return {
-    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> => {
-      const { text, params } = compile(fragment, 'mysql')
+function executorFor(connection: MysqlQueries): SqlExecutor {
+  const executor: SqlExecutor = {
+    dialect: 'mysql',
 
+    query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> =>
+      executor.execute<TRow>(compile(fragment, 'mysql')),
+
+    execute: async <TRow>(
+      { text, params }: CompiledQuery,
+      options?: ExecuteOptions,
+    ): Promise<QueryResult<TRow>> => {
       try {
+        const statement: MysqlQueryOptions = {
+          sql: text,
+          ...(options?.asArrays === true ? { rowsAsArray: true } : {}),
+        }
+
         // Prepared statements for anything with parameters — they are faster on
         // repeat and cannot be confused by the value. MySQL cannot prepare every
         // DDL statement, and DDL never carries parameters, so it goes through
         // the plain path.
         const [result] =
           params.length === 0
-            ? await connection.query(text)
-            : await connection.execute(text, params)
+            ? await connection.query(statement)
+            : await connection.execute({ ...statement, values: params })
 
-        if (isHeader(result)) return { rows: [], rowsAffected: result.affectedRows }
+        if (isHeader(result)) {
+          return { rows: [], rowsAffected: result.affectedRows, insertId: result.insertId }
+        }
 
         return {
           rows: returnsRows(text) ? (result as TRow[]) : [],
@@ -79,6 +103,8 @@ function executorFor(connection: Pick<MysqlPool, 'query' | 'execute'>): SqlExecu
       }
     },
   }
+
+  return executor
 }
 
 export interface MysqlHandleOptions {
@@ -109,9 +135,12 @@ export async function createMysqlHandle(options: MysqlHandleOptions): Promise<Da
     decimalNumbers: false,
   })
 
+  const executor = executorFor(pool)
+
   return {
     dialect: 'mysql',
-    query: executorFor(pool).query,
+    query: executor.query,
+    execute: executor.execute,
 
     transaction: async <T>(
       run: (tx: SqlExecutor) => Promise<T>,
@@ -120,7 +149,7 @@ export async function createMysqlHandle(options: MysqlHandleOptions): Promise<Da
       // Pinned to one connection: BEGIN on a pool would start the transaction on
       // whichever connection was free and run the rest outside it.
       const connection = await pool.getConnection()
-      const executor = executorFor(connection)
+      const txExecutor = executorFor(connection)
       let depth = 0
 
       const enter = async (nested: (tx: SqlExecutor) => Promise<T>): Promise<T> => {
@@ -129,7 +158,7 @@ export async function createMysqlHandle(options: MysqlHandleOptions): Promise<Da
         depth += 1
 
         try {
-          const result = await nested(executor)
+          const result = await nested(txExecutor)
           await connection.query(depth === 1 ? 'commit' : `release savepoint ${savepoint}`)
           return result
         } catch (error) {

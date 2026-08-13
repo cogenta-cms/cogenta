@@ -110,3 +110,77 @@ describe('the content client', () => {
     expect(calls[0]?.url).toContain('/api/content/-/by-path?path=%2Fblog%2Fhello')
   })
 })
+
+describe('dependencies declared on the wire', () => {
+  it('reports what a read actually depended on, entries stripped of their collection prefix', async () => {
+    // The API qualifies as `<collection>:<id>` because two collections can
+    // collide on a bare id; the render side tags by bare id because it does
+    // not know the collection and does not need to (ids are UUIDv7, unique
+    // everywhere). This is the seam between the two conventions.
+    const { fetch } = recorder([
+      json({
+        data: { id: 'article-1' },
+        meta: { dependencies: { entries: ['author:a1'], media: ['m1'], collections: ['tag'] } },
+      }),
+    ])
+    const seen: unknown[] = []
+
+    await createContentClient({
+      url: 'https://api.example.test',
+      token: 'read-only-token',
+      fetch,
+      onDependencies: (dependencies) => seen.push(dependencies),
+    }).entry('article', 'article-1')
+
+    expect(seen).toEqual([{ entries: ['a1'], media: ['m1'], collections: ['tag'] }])
+  })
+
+  it('fires on a list read too — the case a page-cache miss would otherwise hide', async () => {
+    // This is the exact failure the render cache exists to prevent: an article
+    // list inlines each article's author, the author's id never crosses the
+    // client as a request of its own, and without this hook the page would
+    // stay stale forever after the author is renamed.
+    const { fetch } = recorder([
+      json({
+        data: [{ id: 'article-1' }],
+        page: { hasMore: false, nextCursor: null },
+        meta: { dependencies: { entries: ['author:a1'], media: [], collections: ['article'] } },
+      }),
+    ])
+    const seen: unknown[] = []
+
+    await createContentClient({
+      url: 'https://api.example.test',
+      token: 'read-only-token',
+      fetch,
+      onDependencies: (dependencies) => seen.push(dependencies),
+    }).list({ collection: 'article' })
+
+    expect(seen).toEqual([{ entries: ['a1'], media: [], collections: ['article'] }])
+  })
+
+  it('does nothing when the response carries no dependency metadata', async () => {
+    const { fetch } = recorder([json({ data: { id: 'a' } })])
+    const seen: unknown[] = []
+
+    await createContentClient({
+      url: 'https://api.example.test',
+      token: 'read-only-token',
+      fetch,
+      onDependencies: (dependencies) => seen.push(dependencies),
+    }).entry('article', 'a')
+
+    expect(seen).toEqual([])
+  })
+
+  it('never throws for a caller that did not ask to be told', async () => {
+    const { fetch } = recorder([
+      json({
+        data: { id: 'a' },
+        meta: { dependencies: { entries: ['x:1'], media: [], collections: [] } },
+      }),
+    ])
+
+    await expect(client(fetch).entry('article', 'a')).resolves.toEqual({ id: 'a' })
+  })
+})

@@ -1,4 +1,10 @@
-import type { ContentClient, ContentEntry, MediaReference, Page } from '../content/types.js'
+import type {
+  ContentClient,
+  ContentEntry,
+  MediaReference,
+  Page,
+  ResponseDependencies,
+} from '../content/types.js'
 import type { ImageOptions, ImageSource, RenderContext } from '../context/types.js'
 import { collectionTag, entryTag, mediaTag, pathTag } from './tags.js'
 
@@ -20,6 +26,25 @@ export interface ReadRecorder {
   recordCollection(collection: string): void
   recordMedia(id: string): void
   recordPath(path: string): void
+}
+
+/**
+ * Feeds a response's declared dependencies into a recorder.
+ *
+ * This is the other half of what `recordingContentClient` cannot see: server-
+ * side relation expansion inlines an author into an article without the
+ * author's id ever crossing the client as a request of its own, so wrapping
+ * `ContentClient` alone misses it. Wire this into the concrete HTTP client's
+ * `onDependencies` option (see `createContentClient`) and both halves land in
+ * the same set.
+ */
+export function recordDependencies(
+  recorder: ReadRecorder,
+  dependencies: ResponseDependencies,
+): void {
+  for (const id of dependencies.entries) recorder.recordEntry(id)
+  for (const id of dependencies.media) recorder.recordMedia(id)
+  for (const collection of dependencies.collections) recorder.recordCollection(collection)
 }
 
 export function createReadRecorder(): ReadRecorder {

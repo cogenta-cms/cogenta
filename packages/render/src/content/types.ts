@@ -90,6 +90,25 @@ export interface ContentClient {
 }
 
 /**
+ * What a response was actually built from, entries a server-side relation
+ * expansion inlined included.
+ *
+ * A render cache keyed on tags can only invalidate what it knows a page read,
+ * and a page only asks for the entry it names directly — an article's response
+ * carries its author inlined by `depth`, and the author's id never crosses this
+ * client as a request of its own. Without this, publishing a new author name
+ * leaves the article page stale with no symptom at all. `@cogenta/api` derives
+ * this from the serialised payload and sends it back on every read; declared
+ * again here, structurally, for the same reason every other wire type is
+ * (ADR-0016) — not imported from the package that computed it.
+ */
+export interface ResponseDependencies {
+  readonly entries: readonly string[]
+  readonly media: readonly string[]
+  readonly collections: readonly string[]
+}
+
+/**
  * A media entity as a theme receives it.
  *
  * `kind` and `poster` are not decoration: `hero.media` and

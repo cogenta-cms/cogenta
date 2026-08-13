@@ -1,6 +1,12 @@
 import { CogentaError } from '@cogenta/core'
 import type { ContentApiConfig } from '../config.js'
-import type { ContentClient, ContentEntry, Page, QueryRequest } from './types.js'
+import type {
+  ContentClient,
+  ContentEntry,
+  Page,
+  QueryRequest,
+  ResponseDependencies,
+} from './types.js'
 
 /**
  * The content client of contract D, and it is HTTP on purpose (ADR-0016).
@@ -24,14 +30,31 @@ export interface ContentClientOptions extends ContentApiConfig {
   readonly fetch?: FetchLike | undefined
   /** Milliseconds before a request is abandoned. A slow API must not hang a build. */
   readonly timeoutMs?: number | undefined
+  /**
+   * Fired with what a response was actually built from, on every successful
+   * read — not only what the call asked for.
+   *
+   * This is the hook a render cache wires into. Without it, a page that embeds
+   * a related entry through server-side expansion tags only the entry it named
+   * directly, and stays stale forever after the related one changes: nothing in
+   * a direct request-response wrapping can see what the server inlined.
+   */
+  readonly onDependencies?: ((dependencies: ResponseDependencies) => void) | undefined
 }
 
 const DEFAULT_BASE_PATH = '/api/content'
 const DEFAULT_TIMEOUT_MS = 10_000
 
+interface WireDependencies {
+  readonly entries?: readonly string[]
+  readonly media?: readonly string[]
+  readonly collections?: readonly string[]
+}
+
 interface Envelope<T> {
   readonly data: T
   readonly page?: { readonly hasMore: boolean; readonly nextCursor: string | null }
+  readonly meta?: { readonly dependencies?: WireDependencies }
 }
 
 export function createContentClient(options: ContentClientOptions): ContentClient {
@@ -104,7 +127,30 @@ export function createContentClient(options: ContentClientOptions): ContentClien
   function entryFrom(payload: unknown): ContentEntry | null {
     if (payload === null) return null
     const envelope = payload as Envelope<ContentEntry | null>
+    reportDependencies(envelope)
     return envelope.data ?? null
+  }
+
+  // The API qualifies an entry dependency as `<collection>:<id>` so two
+  // collections can never collide in the same set; the render side only ever
+  // tags by id, because ids are UUIDv7 and unique across every collection
+  // (`@cogenta/schema` `newId`) — the qualifier has already done its job by the
+  // time it gets here.
+  function bareId(qualified: string): string {
+    const separator = qualified.indexOf(':')
+    return separator === -1 ? qualified : qualified.slice(separator + 1)
+  }
+
+  function reportDependencies(envelope: Envelope<unknown>): void {
+    if (options.onDependencies === undefined) return
+    const wire = envelope.meta?.dependencies
+    if (wire === undefined) return
+
+    options.onDependencies({
+      entries: (wire.entries ?? []).map(bareId),
+      media: wire.media ?? [],
+      collections: wire.collections ?? [],
+    })
   }
 
   return {
@@ -122,6 +168,7 @@ export function createContentClient(options: ContentClientOptions): ContentClien
       if (envelope === null || !Array.isArray(envelope.data)) {
         return { items: [], nextCursor: null, hasMore: false }
       }
+      reportDependencies(envelope)
       return {
         items: envelope.data,
         nextCursor: envelope.page?.nextCursor ?? null,

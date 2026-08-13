@@ -14,8 +14,13 @@ It watches its own security, patches itself, optimises itself, and reports back.
 
 ## Status
 
-**Pre-alpha. Not usable yet.** The design is complete and public; implementation
-has just started. Follow the [roadmap](docs/06-lots.md) to see where things stand.
+**Pre-alpha. Not usable yet.** The design is complete and public. Implementation is
+under way on the foundation package (L0): configuration, typed errors, structured
+logging, the driver system, database drivers for Postgres, MySQL/MariaDB and SQLite,
+cache, queue and storage drivers, the migration engine, and a `cogenta` command line
+with `doctor` and `migrate`. There is no content model, no admin and no agent runtime
+yet — those start at L1. Follow the [roadmap](docs/06-lots.md) to see where things
+stand.
 
 ## Why another CMS?
 

@@ -170,18 +170,31 @@ Toute erreur destinée à l'utilisateur final porte un `hint`. Interdiction de
 
 ## Tâches, dans l'ordre
 
-1. Monorepo, TypeScript strict partagé, lint, format, Turborepo, Changesets
-2. Chargement et validation de configuration
-3. Erreurs typées et logger structuré
-4. Interfaces de drivers + registre + sélection + rapport de santé
-5. Drivers base : Drizzle sur les trois dialectes, pool de connexions
-6. Moteur de migrations : génération, application, rollback, table de suivi
-7. Drivers cache : memory → file → redis
-8. Drivers queue : database → redis/BullMQ
-9. Drivers storage : local → S3
-10. Harnais de tests : conteneurs éphémères pour Postgres et MySQL, SQLite en fichier
-11. `cogenta doctor` : diagnostic d'environnement, drivers détectés, versions, avertissements
-12. CI : lint, types, tests sur Node 22 et 24, Linux et macOS, x64 et ARM
+État tenu à jour à chaque tâche terminée. ✅ fait · 🟡 partiel · ⬜ pas commencé.
+
+| # | Tâche | État | Où |
+|---|---|---|---|
+| 1 | Monorepo, TypeScript strict partagé, lint, format, Turborepo, Changesets | ✅ | racine, `biome.jsonc`, `turbo.json`, `.changeset/` |
+| 2 | Chargement et validation de configuration | ✅ | `packages/core/src/config/` |
+| 3 | Erreurs typées et logger structuré | ✅ | `packages/core/src/errors/`, `src/logger/` |
+| 4 | Interfaces de drivers + registre + sélection + rapport de santé | ✅ | `packages/core/src/drivers/` |
+| 5 | Drivers base : les trois dialectes, pool de connexions | ✅ | `packages/core/src/db/` |
+| 6 | Moteur de migrations : application, rollback, table de suivi | 🟡 | `packages/core/src/migrations/` — la **génération** de migrations reste à écrire |
+| 7 | Drivers cache : memory → file → redis | ✅ | `packages/core/src/cache/` |
+| 8 | Drivers queue : database → redis/BullMQ | 🟡 | `packages/core/src/queue/` — pas encore de `createQueueRegistry`, donc `doctor` ne rapporte pas la queue |
+| 9 | Drivers storage : local → S3 | ✅ | `packages/core/src/storage/` |
+| 10 | Harnais de tests : conteneurs éphémères Postgres et MySQL, SQLite en fichier | ✅ | `docker-compose.test.yml`, `packages/core/test/integration/` |
+| 11 | `cogenta doctor` : environnement, drivers détectés, versions, avertissements | ✅ | `packages/cli/src/commands/doctor.ts` |
+| 12 | CI : lint, types, tests sur Node 22 et 24, Linux et macOS, x64 et ARM | ✅ | `.github/workflows/ci.yml` (Windows couvert en plus) |
+
+Hors de la liste d'origine mais livré : `cogenta migrate status|up|down`
+(`packages/cli/src/commands/migrate.ts`), qui charge les migrations d'un répertoire
+`migrations/` du projet et relaie le refus des migrations destructives.
+
+Précision par rapport au périmètre : la couche `db` est écrite à la main (`sql` balisé,
+compilation par dialecte, pool et transactions maison). Drizzle est monté **par-dessus**,
+via ses proxy drivers, pour qu'il s'exécute sur notre connexion
+(`packages/core/src/db/drizzle.ts`).
 
 ## Critères d'acceptation
 

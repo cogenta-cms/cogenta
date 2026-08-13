@@ -45,12 +45,12 @@ migration.
 | Contrats | Première rédaction. **Aucun n'est figé** : A et B avant L1, D avant L3, C avant L4 |
 | Sécurité | Première rédaction |
 | Lots | Découpage validé, les dix specs détaillées sont écrites (`lots/`) |
-| Code | Socle du dépôt en place (monorepo, CI, outillage). L0 non commencé. |
+| Code | **L0 en cours.** `@cogenta/core` (config, erreurs, logger, drivers, db sur les trois dialectes, cache, queue, storage, moteur de migrations) et `@cogenta/cli` (`doctor`, `migrate`) sont écrits et testés. Restent la génération de migrations et le registre de queue. |
 
 ## Prochaine étape
 
-**L0 — Socle** (`lots/L0-socle.md`), tâche par tâche. La commande `/lot L0` charge le
-contexte complet avant de coder.
+**L0 — Socle** (`lots/L0-socle.md`), tâche par tâche. L'état par tâche est tenu dans
+cette spec. La commande `/lot L0` charge le contexte complet avant de coder.
 
 Les specs de lot sont écrites d'avance mais restent révisables : celle d'un lot lointain
 sera relue et amendée juste avant son démarrage, à la lumière de ce que les lots

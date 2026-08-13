@@ -23,7 +23,9 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L0 — Socle** (`docs/lots/L0-socle.md`) |
+| Lot en cours | **L0 — Socle** (`docs/lots/L0-socle.md`), tâches 1→12, état par tâche dans la spec |
+| Reste à faire sur L0 | génération de migrations (tâche 6), registre de queue (tâche 8) |
+| Paquets publiés | `@cogenta/core`, `@cogenta/cli` (`doctor`, `migrate`) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
 | Contrats figés | aucun. A et B à figer avant L1, D avant L3, C avant L4 |
 | Statut public | pre-alpha |

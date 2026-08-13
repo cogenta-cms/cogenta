@@ -7,6 +7,8 @@ packages:
 # pnpm resolves `catalog:` to the real range when publishing.
 catalog:
   '@redis/client': ^6.2.1
+  mysql2: ^3.23.3
+  postgres: ^3.4.9
   typescript: ^7.0.2
   vitest: ^4.1.10
   zod: ^4.4.3

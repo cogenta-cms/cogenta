@@ -73,6 +73,8 @@ export function applyEnv(
   if (database !== undefined) {
     assign(database, 'driver', read(env, 'COGENTA_DATABASE_DRIVER'))
     assign(database, 'url', read(env, 'COGENTA_DATABASE_URL', 'DATABASE_URL'))
+    const poolSize = read(env, 'COGENTA_DATABASE_POOL_SIZE')
+    if (poolSize !== undefined) database['poolSize'] = Number(poolSize)
     output['database'] = database
   }
 

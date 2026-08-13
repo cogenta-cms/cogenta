@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Driver, HealthReport } from '../drivers/index.js'
 import { CogentaError } from '../errors/index.js'
-import { compile, type SqlFragment } from './dialect.js'
+import { compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
 import type {
   DatabaseConfig,
   DatabaseHandle,
@@ -44,10 +44,6 @@ export async function loadSqliteModule(): Promise<SqliteModuleLike | null> {
   }
 }
 
-/** Statements that hand back rows. Everything else reports rows affected. */
-const RETURNS_ROWS = /^\s*(?:select|with|pragma|explain|values)\b/i
-const HAS_RETURNING = /\breturning\b/i
-
 function fileFromUrl(url: string): string {
   if (url === ':memory:') return ':memory:'
   if (url.startsWith('file:')) return url.slice('file:'.length).replace(/^\/\//, '')
@@ -63,9 +59,9 @@ function executorFor(database: DatabaseSyncLike): SqlExecutor {
       try {
         const statement = database.prepare(text)
 
-        if (RETURNS_ROWS.test(text) || HAS_RETURNING.test(text)) {
+        if (returnsRows(text)) {
           const rows = statement.all(...params) as TRow[]
-          return { rows, rowsAffected: 0 }
+          return { rows, rowsAffected: isWrite(text) ? rows.length : 0 }
         }
 
         const result = statement.run(...params)

@@ -1,10 +1,16 @@
 import { createDriverRegistry, type DriverRegistry } from '../drivers/index.js'
 import type { Logger } from '../logger/index.js'
+import { mysqlDatabaseDriver } from './mysql.js'
+import { postgresDatabaseDriver } from './postgres.js'
 import { sqliteDatabaseDriver } from './sqlite.js'
 import type { DatabaseConfig, DatabaseDriverOptions, DatabaseHandle } from './types.js'
 
 export type { CompiledQuery, SqlFragment } from './dialect.js'
 export { compile, encodeValue, identifier, sql, unsafeRaw } from './dialect.js'
+export type { MysqlHandleOptions } from './mysql.js'
+export { createMysqlHandle, loadMysqlModule, mysqlDatabaseDriver } from './mysql.js'
+export type { PostgresHandleOptions } from './postgres.js'
+export { createPostgresHandle, loadPostgresModule, postgresDatabaseDriver } from './postgres.js'
 export type { SqliteHandleOptions } from './sqlite.js'
 export { createSqliteHandle, loadSqliteModule, sqliteDatabaseDriver } from './sqlite.js'
 export type {
@@ -39,6 +45,8 @@ export function createDatabaseRegistry(
     ...(logger === undefined ? {} : { logger }),
   })
 
+  registry.register(postgresDatabaseDriver())
+  registry.register(mysqlDatabaseDriver())
   registry.register(sqliteDatabaseDriver())
 
   return registry

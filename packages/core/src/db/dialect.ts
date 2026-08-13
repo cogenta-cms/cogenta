@@ -146,3 +146,23 @@ export function compile(fragment: SqlFragment, dialect: DatabaseDialect): Compil
 
   return { text, params }
 }
+
+/**
+ * Statements that hand back rows: a read, or a write with `RETURNING`.
+ *
+ * Shared by every driver so `rows` and `rowsAffected` mean the same thing on all
+ * three dialects. Left to each driver, Postgres would report a `SELECT` of two
+ * rows as "two rows affected" while SQLite reported zero — the kind of quiet
+ * divergence the contract suite exists to prevent.
+ */
+export function returnsRows(text: string): boolean {
+  return READ_STATEMENT.test(text) || RETURNING_CLAUSE.test(text)
+}
+
+/** True when the statement creates, changes or removes rows. */
+export function isWrite(text: string): boolean {
+  return !READ_STATEMENT.test(text)
+}
+
+const READ_STATEMENT = /^[\s(]*(?:select|with|pragma|explain|show|values|describe)\b/i
+const RETURNING_CLAUSE = /\breturning\b/i

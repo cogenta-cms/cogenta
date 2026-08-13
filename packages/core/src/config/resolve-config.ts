@@ -97,7 +97,11 @@ export function resolveConfig(input: unknown, env: Environment = process.env): C
       locales: Object.freeze([...config.site.locales]),
       defaultLocale: config.site.defaultLocale,
     }),
-    database: Object.freeze({ driver, url: config.database.url }),
+    database: Object.freeze({
+      driver,
+      url: config.database.url,
+      poolSize: config.database.poolSize,
+    }),
     cache: Object.freeze({
       driver: config.cache.driver,
       url: config.cache.url,

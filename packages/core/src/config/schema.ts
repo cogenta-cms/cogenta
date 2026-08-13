@@ -27,6 +27,9 @@ const siteSchema = z
 const databaseSchema = z.strictObject({
   driver: z.enum(DATABASE_DRIVERS).optional(),
   url: nonEmpty,
+  // Modest by default: shared hosting allows very few connections, and
+  // exhausting them takes the site down rather than slowing it.
+  poolSize: z.number().int().positive().max(100).default(5),
 })
 
 const cacheSchema = z.strictObject({

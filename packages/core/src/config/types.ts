@@ -26,6 +26,8 @@ export interface CogentaConfigInput {
     /** Inferred from the URL scheme when absent. */
     readonly driver?: DatabaseDriverName
     readonly url?: string
+    /** Maximum simultaneous connections. Small by default. */
+    readonly poolSize?: number
   }
   readonly cache?: {
     readonly driver?: CacheDriverName
@@ -75,6 +77,7 @@ export interface CogentaConfig {
   readonly database: {
     readonly driver: DatabaseDriverName
     readonly url: string
+    readonly poolSize: number
   }
   readonly cache: {
     readonly driver: CacheDriverName

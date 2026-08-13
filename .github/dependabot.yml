@@ -21,6 +21,13 @@ updates:
           - 'vitest'
           - 'lefthook'
         update-types: [minor, patch]
+    ignore:
+      # @types/node tracks the Node major it describes. `engines` says >=22.11,
+      # so types from a later major would let code compile against APIs that do
+      # not exist on the minimum runtime we claim to support. This bump comes
+      # back with the Node minimum, not with Dependabot.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /

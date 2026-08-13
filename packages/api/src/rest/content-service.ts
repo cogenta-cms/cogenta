@@ -1,13 +1,15 @@
 import { CogentaError } from '@cogenta/core'
-import type {
-  CollectionDefinition,
-  ContentDiff,
-  ContentEntry,
-  ContentStore,
-  CreateInput,
-  EntryState,
-  UpdateInput,
-  VersionSummary,
+import {
+  type CollectionDefinition,
+  type ContentDiff,
+  type ContentEntry,
+  type ContentStore,
+  type CreateInput,
+  type EntryState,
+  type RouteMatch,
+  resolveUrl,
+  type UpdateInput,
+  type VersionSummary,
 } from '@cogenta/schema'
 import {
   assertUnpublishedReadable,
@@ -21,6 +23,12 @@ import {
   serialiseEntry,
 } from '../content/index.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
+import {
+  lookupFilter,
+  NO_REDIRECTS,
+  type PathResolution,
+  type RoutingOptions,
+} from './path-resolution.js'
 import { DEFAULT_LIMITS, type ListQuery, type QueryLimits } from './query.js'
 
 /**
@@ -42,6 +50,8 @@ export interface ContentServiceOptions {
   /** How to reach the persistence layer for a collection. */
   readonly storeFor: (collection: CollectionDefinition) => ContentStore
   readonly limits?: Partial<QueryLimits>
+  /** Locales and redirect table used to turn a URL into an entry. */
+  readonly routing?: RoutingOptions
 }
 
 export interface ContentPage {
@@ -59,6 +69,14 @@ export interface ContentService {
   readonly limits: QueryLimits
   /** Throws `CONTENT_NOT_FOUND` when the schema declares no such collection. */
   collection(name: string): CollectionDefinition
+  /**
+   * The same lookup without the refusal.
+   *
+   * Deriving a response's dependencies walks whatever the payload holds,
+   * including a relation into a collection the schema no longer declares; that
+   * walk asks a question, it does not make a demand.
+   */
+  definition(name: string): CollectionDefinition | undefined
   list(context: AccessContext, name: string, query: ListQuery): Promise<ContentPage>
   read(
     context: AccessContext,
@@ -66,6 +84,15 @@ export interface ContentService {
     id: string,
     options: ReadOptions,
   ): Promise<SerialisedEntry>
+  /**
+   * What a site URL resolves to: an entry, a redirect, or nothing.
+   *
+   * The renderer knows a URL and nothing else, so this is the one read path
+   * keyed on a path rather than on an identifier. It answers through the same
+   * permission and draft layer as `read` — a `public` actor resolves published
+   * content only, and a preview grant resolves its own entry and no other.
+   */
+  resolvePath(context: AccessContext, path: string, options: ReadOptions): Promise<PathResolution>
   create(
     context: AccessContext,
     name: string,
@@ -115,6 +142,7 @@ const SCAN_BATCH = 100
 export function createContentService(options: ContentServiceOptions): ContentService {
   const limits: QueryLimits = { ...DEFAULT_LIMITS, ...options.limits }
   const permissions = options.permissions
+  const routing: RoutingOptions = options.routing ?? {}
   const byName = new Map(options.collections.map((collection) => [collection.name, collection]))
   const stores = new Map<string, ContentStore>()
 
@@ -189,6 +217,42 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     throw notFound()
   }
 
+  /**
+   * The entry a matched route points at, or null.
+   *
+   * Deliberately the same gate as `read`, reached from a path instead of an
+   * identifier: `stateFor` decides which face of the content this request is
+   * entitled to — and refuses outright when an actor asks for the working state
+   * it may not have — and `draftGate` then narrows a working read to the entries
+   * a preview grant actually covers.
+   *
+   * The lookup runs against the live row's columns. An unpublished *rename* is
+   * therefore not reachable by its new path even in preview: the new slug is in
+   * a version row, and the URL it will be served at does not exist yet.
+   */
+  async function lookupRoute(
+    context: AccessContext,
+    match: RouteMatch,
+    requested: EntryState,
+  ): Promise<ContentEntry | null> {
+    const target = collection(match.collection)
+    const state = stateFor(target, context, requested)
+
+    const page = await store(target).list({
+      state,
+      where: lookupFilter(target, match.params),
+      limit: 1,
+      ...(match.locale === null ? {} : { locale: match.locale }),
+    })
+
+    const entry = page.items[0]
+    if (entry === undefined) return null
+    // Same silence as a missing entry: "this path exists but your token is for
+    // another entry" is itself a disclosure, so it resolves to nothing and the
+    // redirect table gets its turn.
+    return draftGate(target, context, state)(entry) ? entry : null
+  }
+
   function expansionSource(context: AccessContext): ExpansionSource {
     return {
       collection: (name) => byName.get(name),
@@ -214,6 +278,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
   return {
     limits,
     collection,
+    definition: (name) => byName.get(name),
 
     list: async (context, name, query) => {
       const target = collection(name)
@@ -284,6 +349,45 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       if (!draftGate(target, context, state)(entry)) throw notFound()
 
       return serialise(context, target, entry, { state, depth: readOptions.depth })
+    },
+
+    resolvePath: async (context, path, readOptions) => {
+      // Only routed collections this actor may read at all take part in the
+      // match. A collection whose `read` is closed must not answer a URL, and
+      // leaving it in the table would let a stranger learn its route shape from
+      // which paths behave differently.
+      const routable = options.collections.filter(
+        (candidate) =>
+          candidate.routing !== undefined && permissions.can('read', candidate, context).allowed,
+      )
+
+      const resolution = await resolveUrl(path, {
+        collections: routable,
+        redirects: routing.redirects ?? NO_REDIRECTS,
+        ...(routing.locales === undefined ? {} : { locales: routing.locales }),
+        ...(routing.defaultLocale === undefined ? {} : { defaultLocale: routing.defaultLocale }),
+        lookup: (match) => lookupRoute(context, match, readOptions.state),
+      })
+
+      if (resolution.kind === 'redirect') {
+        return { kind: 'redirect', to: resolution.to, status: resolution.status }
+      }
+      if (resolution.kind === 'notFound') return { kind: 'notFound' }
+
+      // `lookup` is the only thing that puts an entry here, and it returns a
+      // `ContentEntry` of the matched collection; the cast is the price of
+      // `resolveUrl` staying ignorant of the persistence layer's types.
+      const entry = resolution.entry as ContentEntry
+      const target = collection(resolution.match.collection)
+      const state = stateFor(target, context, readOptions.state)
+
+      return {
+        kind: 'entry',
+        collection: target.name,
+        locale: resolution.match.locale,
+        params: resolution.match.params,
+        entry: await serialise(context, target, entry, { state, depth: readOptions.depth }),
+      }
     },
 
     create: async (context, name, input, readOptions) => {

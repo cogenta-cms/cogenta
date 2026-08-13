@@ -1,10 +1,20 @@
+import type { BlockRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
+import type { SerialisedEntry } from '../content/index.js'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { parseCreateBody, parseRestoreBody, parseUpdateBody } from './body.js'
 import type { ContentService } from './content-service.js'
-import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
-import { parseListQuery, parsePositiveInteger, parseReadQuery } from './query.js'
+import type { DependencySource, ResponseDependencies } from './dependencies.js'
+import { collectDependencies } from './dependencies.js'
+import {
+  errorResponse,
+  jsonResponse,
+  queryError,
+  type RestRequest,
+  type RestResponse,
+} from './http.js'
+import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './query.js'
 
 /**
  * The REST transport.
@@ -13,6 +23,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery } from './query.js
  * router owns paths, methods and status codes and nothing else: every decision
  * that REST and GraphQL must agree on already happened in `ContentService`.
  *
+ *   GET    /-/by-path                      resolve a site URL
  *   GET    /{collection}                   list
  *   POST   /{collection}                   create
  *   GET    /{collection}/{id}              read
@@ -27,6 +38,11 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery } from './query.js
 export interface RestRouterOptions {
   readonly service: ContentService
   /**
+   * The blocks a response's media references are read through. Defaults to the
+   * twelve of contract B; a site with its own blocks passes its registry.
+   */
+  readonly blocks?: BlockRegistry
+  /**
    * Mount point. `/api/content` by default rather than `/api`, so that a
    * collection can be named `graphql` without shadowing the other transport.
    */
@@ -39,9 +55,67 @@ export interface RestRouter {
 
 const DEFAULT_BASE_PATH = '/api/content'
 
+/** The segment engine routes live under. No collection name may contain a hyphen alone. */
+const RESERVED_SEGMENT = '-'
+
+/**
+ * Longest URL this route will try to resolve.
+ *
+ * A redirect path is stored in a `varchar(512)`, and a route match walks
+ * segments, so an unbounded string here is free work for anyone who sends one.
+ */
+const MAX_PATH_LENGTH = 1_024
+
+/** The `path` parameter: required, one value, and a site path rather than a URL. */
+function parsePath(query: RestRequest['query']): string {
+  const raw = single(query, 'path')
+  if (raw === undefined || raw.length === 0) {
+    throw queryError(
+      'path',
+      'is required',
+      'Pass the site path to resolve, for example path=/blog/hello.',
+    )
+  }
+  if (raw.length > MAX_PATH_LENGTH) {
+    throw queryError(
+      'path',
+      'is longer than this API resolves',
+      `Site paths are at most ${MAX_PATH_LENGTH} characters.`,
+    )
+  }
+  // An absolute URL would make "which site is this?" a question this route
+  // cannot answer, and `//host/path` is a protocol-relative URL in disguise.
+  if (!raw.startsWith('/') || raw.startsWith('//')) {
+    throw queryError(
+      'path',
+      'is not a site path',
+      'Pass a path beginning with a single "/", not an absolute or protocol-relative URL.',
+    )
+  }
+  return raw
+}
+
 export function createRestRouter(options: RestRouterOptions): RestRouter {
   const service = options.service
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
+  const dependencySource: DependencySource = {
+    collection: (name) => service.definition(name),
+    ...(options.blocks === undefined ? {} : { blocks: options.blocks }),
+  }
+
+  /**
+   * What a read response was built from, alongside what it returned.
+   *
+   * Only the read routes carry it. A cache tags what it stores, and it stores
+   * answers to reads; a create or a publish is the event that *invalidates*
+   * those tags, so declaring dependencies on it would describe nothing.
+   */
+  function meta(
+    entries: readonly SerialisedEntry[],
+    queried: readonly string[],
+  ): { readonly dependencies: ResponseDependencies } {
+    return { dependencies: collectDependencies(entries, dependencySource, queried) }
+  }
 
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
@@ -63,6 +137,13 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
     // Fails before anything else so that an unknown collection is a 404 rather
     // than a permission decision about a collection that does not exist.
     if (name === undefined) throw noRoute()
+
+    // Before the collection lookup, and under a segment `-` that no collection
+    // name can take: engine routes have to live somewhere, and shadowing a
+    // collection called `by-path` would be a worse trade than reserving one
+    // character.
+    if (name === RESERVED_SEGMENT) return engineRoute(request, context, method, id, action)
+
     service.collection(name)
 
     if (id === undefined) {
@@ -72,6 +153,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         return jsonResponse(200, {
           data: page.items,
           page: { hasMore: page.hasMore, nextCursor: page.nextCursor },
+          meta: meta(page.items, [name]),
         })
       }
       if (method === 'POST') {
@@ -94,7 +176,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
           state: read.requestedState,
           depth: read.depth,
         })
-        return jsonResponse(200, { data: entry })
+        return jsonResponse(200, { data: entry, meta: meta([entry], [name]) })
       }
       if (method === 'PATCH' || method === 'PUT') {
         const input = parseUpdateBody(request.body, context.actor)
@@ -112,6 +194,61 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
     }
 
     return subroute(request, context, method, name, id, action)
+  }
+
+  /**
+   * The routes that belong to the engine rather than to a collection.
+   *
+   * Only `by-path` today. It answers the one question the renderer can ask —
+   * "what is served at this URL?" — and it answers all three outcomes, because a
+   * renderer that only learns "entry or nothing" cannot serve the 301 a rename
+   * created, and every old link dies at the next rename.
+   */
+  async function engineRoute(
+    request: RestRequest,
+    context: AccessContext,
+    method: string,
+    name: string | undefined,
+    extra: string | undefined,
+  ): Promise<RestResponse> {
+    if (name !== 'by-path' || extra !== undefined) throw noRoute()
+    if (method !== 'GET') return methodNotAllowed(['GET'])
+
+    const path = parsePath(request.query)
+    const read = parseReadQuery(request.query, service.limits)
+    const resolution = await service.resolvePath(context, path, {
+      state: read.requestedState,
+      depth: read.depth,
+    })
+
+    if (resolution.kind === 'notFound') {
+      throw new CogentaError({
+        code: 'CONTENT_NOT_FOUND',
+        message: 'Nothing is served at this path.',
+        hint: 'Check the path against the routing pattern of the collection, including its locale prefix. An unpublished entry has no public URL.',
+      })
+    }
+
+    // A redirect is a 200 describing one, not a 3xx performing one: the status
+    // in the body is what the *site* must serve its visitor, and moving it into
+    // the API response would have the renderer's own HTTP client follow it back
+    // into the API instead of handing it to the browser.
+    if (resolution.kind === 'redirect') {
+      return jsonResponse(200, {
+        data: null,
+        redirect: { to: resolution.to, status: resolution.status },
+      })
+    }
+
+    return jsonResponse(200, {
+      data: resolution.entry,
+      route: {
+        collection: resolution.collection,
+        locale: resolution.locale,
+        params: resolution.params,
+      },
+      meta: meta([resolution.entry], [resolution.collection]),
+    })
   }
 
   async function subroute(

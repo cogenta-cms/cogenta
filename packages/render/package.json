@@ -35,13 +35,21 @@
   "dependencies": {
     "@cogenta/blocks": "workspace:*",
     "@cogenta/core": "workspace:*",
+    "wasm-vips": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "astro": "catalog:"
+    "astro": "catalog:",
+    "sharp": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "sharp": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "astro": "catalog:",
+    "sharp": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

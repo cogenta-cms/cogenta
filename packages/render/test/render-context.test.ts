@@ -98,7 +98,14 @@ describe('links', () => {
 })
 
 describe('images', () => {
-  const media = { id: 'm1', alt: 'A cat', width: 1600, height: 900, focal: { x: 0.4, y: 0.2 } }
+  const media = {
+    id: 'm1',
+    kind: 'image',
+    alt: 'A cat',
+    width: 1600,
+    height: 900,
+    focal: { x: 0.4, y: 0.2 },
+  } as const
 
   it('returns what a responsive img needs and takes alt and focal from the media', () => {
     const source = context().image(media, { width: 800, format: 'avif' })
@@ -116,7 +123,7 @@ describe('images', () => {
   it('refuses a media with no size rather than guessing one', () => {
     const error = (() => {
       try {
-        context().image({ id: 'm2' })
+        context().image({ id: 'm2', kind: 'image' })
         return null
       } catch (caught: unknown) {
         return caught

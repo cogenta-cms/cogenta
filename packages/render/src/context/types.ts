@@ -38,19 +38,14 @@ export interface RenderContext {
 
 export type LinkTarget = { collection: string; id: string } | { path: string } | string
 
-export interface ImageOptions {
-  readonly width?: number | undefined
-  readonly height?: number | undefined
-  readonly format?: 'avif' | 'webp' | 'jpeg' | 'png' | undefined
-  readonly fit?: 'cover' | 'contain' | undefined
-}
+/**
+ * Contract D's image types live with the pipeline that produces them.
+ *
+ * They were briefly declared here as well, at `theme@1.0` — without `kind`,
+ * which `theme@1.1` added so a theme can tell an image from a video. Two
+ * declarations of a frozen type is how one of them silently falls behind, and
+ * this one had already done so.
+ */
+import type { ImageOptions, ImageSource } from '../images/types.js'
 
-export interface ImageSource {
-  readonly src: string
-  readonly srcset: string
-  readonly width: number
-  readonly height: number
-  /** Alt text and focal point come from the media entity, never invented here. */
-  readonly alt: string
-  readonly focal: { readonly x: number; readonly y: number } | null
-}
+export type { ImageOptions, ImageSource }

@@ -62,6 +62,11 @@ export const ERROR_CODES = [
   // Rendering — the content API a theme reads through (ADR-0016)
   'CONTENT_API_FAILED',
 
+  // Rendering — build targets. A target that cannot honour a declared runtime
+  // need refuses the build; it never degrades silently (ADR-0004).
+  'BUILD_TARGET_UNKNOWN',
+  'BUILD_RUNTIME_UNSATISFIED',
+
   // Access
   'FORBIDDEN',
   'UNAUTHENTICATED',

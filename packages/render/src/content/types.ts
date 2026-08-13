@@ -8,7 +8,12 @@
  * third-party theme code. What crosses the boundary is JSON over HTTP, so what
  * is declared here is JSON — structurally the same as the engine's entries,
  * deliberately not the same declaration.
+ *
+ * `MediaAsset` is the one exception, and it stays inside the delivery plane:
+ * the image pipeline lives here too, so this is not a link to the engine.
  */
+
+import type { MediaAsset } from '../images/types.js'
 
 export type ContentValues = Readonly<Record<string, unknown>>
 
@@ -84,11 +89,14 @@ export interface ContentClient {
   list(request: QueryRequest): Promise<Page<ContentEntry>>
 }
 
-/** What `ctx.image()` is handed. Never invented by the theme. */
-export interface MediaReference {
-  readonly id: string
-  readonly alt?: string | undefined
-  readonly width?: number | undefined
-  readonly height?: number | undefined
-  readonly focal?: { readonly x: number; readonly y: number } | undefined
-}
+/**
+ * A media entity as a theme receives it.
+ *
+ * `kind` and `poster` are not decoration: `hero.media` and
+ * `mediaFigure.media` accept an image **or** a video (contract B), and without
+ * them `ctx.image()` cannot say which it returned — every video renders as a
+ * broken `<img>`. Contract D names `MediaReference` without defining it; this
+ * is the definition, and it is the same shape the image pipeline consumes so
+ * that one concept has one type.
+ */
+export type MediaReference = MediaAsset

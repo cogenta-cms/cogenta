@@ -161,7 +161,26 @@ function buildImageSource(
   )
   const widths = [...new Set([...candidates, width])].sort((a, b) => a - b)
 
+  // A video is not resized and has no responsive source set: `kind` is what
+  // lets a theme render <video> instead of a broken <img> (contract D,
+  // theme@1.1). Without it every video in a hero renders as a broken image.
+  const kind = media.kind === 'video' ? 'video' : 'image'
+
+  if (kind === 'video') {
+    return {
+      kind,
+      src: variantUrl(endpoint, media, width, options),
+      srcset: '',
+      width,
+      height,
+      alt: media.alt ?? '',
+      focal: media.focal ?? null,
+      ...(media.poster === undefined ? {} : { poster: media.poster }),
+    }
+  }
+
   return {
+    kind,
     src: variantUrl(endpoint, media, width, options),
     srcset: widths.map((w) => `${variantUrl(endpoint, media, w, options)} ${w}w`).join(', '),
     width,

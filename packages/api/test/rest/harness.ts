@@ -2,8 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
-import type { CollectionDefinition, ContentStore } from '@cogenta/schema'
-import { createContentStore, createSchemaTables } from '@cogenta/schema'
+import type { CollectionDefinition, ContentStore, RedirectStore } from '@cogenta/schema'
+import { createContentStore, createRedirectStore, createSchemaTables } from '@cogenta/schema'
 import { createPermissionLayer } from '../../src/access/index.js'
 import { createContentService } from '../../src/rest/content-service.js'
 import type { RestRequest, RestResponse } from '../../src/rest/http.js'
@@ -64,7 +64,62 @@ export const NODE: CollectionDefinition = {
   permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
 }
 
-export const COLLECTIONS: readonly CollectionDefinition[] = [AUTHOR, TAG, ARTICLE, NODE]
+/** A routed, unlocalised collection: the `/blog/:slug` case. */
+export const PAGE: CollectionDefinition = {
+  name: 'rest_page',
+  labels: { singular: 'Page', plural: 'Pages' },
+  routing: { pattern: '/blog/:slug' },
+  versioning: { drafts: true, history: true, keep: 10 },
+  fields: {
+    slug: { kind: 'slug', options: { from: 'title' } },
+    title: { kind: 'text', required: true, options: { max: 200 } },
+  },
+  permissions: {
+    read: ['public'],
+    create: ['editor'],
+    update: ['editor'],
+    delete: ['admin'],
+    publish: ['editor'],
+  },
+}
+
+/** The same, behind a locale prefix: `/fr/guide/:slug`. */
+export const GUIDE: CollectionDefinition = {
+  name: 'rest_guide',
+  labels: { singular: 'Guide', plural: 'Guides' },
+  routing: { pattern: '/guide/:slug', locale: true },
+  fields: {
+    slug: { kind: 'slug', options: { from: 'title' } },
+    title: { kind: 'text', required: true, options: { max: 200 } },
+  },
+  permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
+}
+
+/** Routed, but not readable by the public: its URLs must not answer either. */
+export const MEMO: CollectionDefinition = {
+  name: 'rest_memo',
+  labels: { singular: 'Memo', plural: 'Memos' },
+  routing: { pattern: '/memo/:slug' },
+  fields: {
+    slug: { kind: 'slug', options: { from: 'title' } },
+    title: { kind: 'text', required: true, options: { max: 200 } },
+  },
+  permissions: { read: ['editor'], create: ['editor'], update: ['editor'], publish: ['editor'] },
+}
+
+export const COLLECTIONS: readonly CollectionDefinition[] = [
+  AUTHOR,
+  TAG,
+  ARTICLE,
+  NODE,
+  PAGE,
+  GUIDE,
+  MEMO,
+]
+
+/** The site's languages, as the by-path route needs them to read a prefix. */
+export const LOCALES = ['en', 'fr'] as const
+export const DEFAULT_LOCALE = 'en'
 
 export const EDITOR: Actor = { id: 'user-editor', roles: ['editor'] }
 export const ADMIN: Actor = { id: 'user-admin', roles: ['admin'] }
@@ -78,6 +133,7 @@ export const asViewer: AccessContext = { actor: VIEWER }
 export interface Harness {
   readonly db: DatabaseHandle
   readonly router: RestRouter
+  readonly redirects: RedirectStore
   store(collection: CollectionDefinition): ContentStore
   dispose(): Promise<void>
 }
@@ -96,14 +152,19 @@ export async function createHarness(): Promise<Harness> {
     return created
   }
 
+  const redirects = createRedirectStore({ db })
+  await redirects.ensureTable()
+
   const service = createContentService({
     collections: COLLECTIONS,
     permissions: createPermissionLayer({ collections: COLLECTIONS }),
     storeFor: store,
+    routing: { locales: LOCALES, defaultLocale: DEFAULT_LOCALE, redirects },
   })
 
   return {
     db,
+    redirects,
     router: createRestRouter({ service }),
     store,
     dispose: async () => {

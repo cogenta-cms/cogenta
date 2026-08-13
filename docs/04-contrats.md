@@ -344,9 +344,9 @@ defineAgent({
 > **Figé en `theme@1.1` le 2026-08-13.** Ajouter une entrée à `ctx` est mineur ; en
 > modifier une est majeur.
 >
-> `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` — deux manques trouvés en
-> écrivant le thème canonique, qui rendaient toute vidéo irrécupérable et laissaient le
-> type d'une entrée à l'interprétation de chaque thème.
+> `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
+> manques trouvés en écrivant les consommateurs du contrat, qui rendaient toute vidéo
+> irrécupérable et laissaient deux types centraux à l'interprétation de chaque thème.
 
 ### Structure minimale
 
@@ -432,6 +432,20 @@ interface RenderContext {
 
   /** Read-only content access. The only door to data a theme has. */
   readonly content: ContentClient
+}
+
+/**
+ * A media entity as a theme receives it. `kind` and `poster` are what let a
+ * theme render a `<video>` rather than a broken `<img>`.
+ */
+interface MediaReference {
+  readonly id: string
+  readonly kind: 'image' | 'video'
+  readonly alt?: string
+  readonly width?: number
+  readonly height?: number
+  readonly focal?: { readonly x: number; readonly y: number } | null
+  readonly poster?: string
 }
 
 interface ImageOptions {

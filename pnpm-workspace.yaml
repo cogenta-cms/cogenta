@@ -16,8 +16,10 @@ catalog:
   graphql: ^17.0.2
   mysql2: ^3.23.3
   postgres: ^3.4.9
+  sharp: ^0.35.3
   typescript: ^7.0.2
   vitest: ^4.1.10
+  wasm-vips: ^0.0.18
   zod: ^4.4.3
 
 # Native dependencies are opt-in only (rule R10): each one must ship a WASM fallback

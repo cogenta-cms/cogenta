@@ -1,6 +1,11 @@
 node_modules/
 dist/
 build/
+# ...except source directories that happen to be named `build`. The rule above
+# targets build *output*; `@cogenta/render` has a `build/` module — the three
+# delivery targets — and its sources and tests must be committed.
+!packages/*/src/build/
+!packages/*/test/build/
 .turbo/
 .cogenta/
 coverage/

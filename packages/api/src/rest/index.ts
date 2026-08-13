@@ -14,9 +14,13 @@ export type {
   ReadOptions,
 } from './content-service.js'
 export { createContentService } from './content-service.js'
+export type { DependencySource, ResponseDependencies } from './dependencies.js'
+export { collectDependencies } from './dependencies.js'
 export { FILTER_PREFIX, parseFilter } from './filter.js'
 export type { RestErrorBody, RestRequest, RestResponse } from './http.js'
 export { errorResponse, jsonResponse, queryError, statusFor } from './http.js'
+export type { PathResolution, RoutingOptions } from './path-resolution.js'
+export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
 export type { ListQuery, QueryLimits, ReadQuery } from './query.js'
 export {
   DEFAULT_LIMITS,

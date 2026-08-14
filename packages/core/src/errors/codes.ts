@@ -198,6 +198,9 @@ export const ERROR_CODES = [
   // Channels — Slack adapter (L6 task 9)
   'CHANNEL_SLACK_API_ERROR',
 
+  // Channels — Discord adapter (L6 task 10)
+  'CHANNEL_DISCORD_API_ERROR',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

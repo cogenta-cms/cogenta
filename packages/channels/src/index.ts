@@ -87,6 +87,35 @@ export {
   DEFAULT_CHANNEL_PREFERENCES,
   SEVERITY_RANK,
 } from './preferences/types.js'
+export type {
+  DiscordAdapter,
+  DiscordAdapterOptions,
+  DiscordLinkProof,
+} from './providers/discord/adapter.js'
+export { createDiscordAdapter } from './providers/discord/adapter.js'
+export type {
+  DiscordActionRow,
+  DiscordButtonComponent,
+  DiscordClient,
+  DiscordClientConfig,
+  DiscordEmbed,
+  DiscordEmbedField,
+  DiscordMessageResult,
+  DiscordSendMessageParams,
+  DiscordUpdateMessageParams,
+} from './providers/discord/client.js'
+export { createDiscordClient } from './providers/discord/client.js'
+export type {
+  DiscordDispatchEvent,
+  DiscordGatewayClient,
+  DiscordGatewayClientConfig,
+  DiscordGatewayPayload,
+} from './providers/discord/gateway.js'
+export { createDiscordGatewayClient } from './providers/discord/gateway.js'
+export type { DiscordInboundDeps } from './providers/discord/inbound.js'
+export { createDiscordInboundHandler } from './providers/discord/inbound.js'
+export type { RenderedDiscordMessage } from './providers/discord/render.js'
+export { renderDiscordMessage } from './providers/discord/render.js'
 export type { EmailAdapterOptions } from './providers/email/adapter.js'
 export { createEmailAdapter } from './providers/email/adapter.js'
 export type { FileEmailTransportOptions } from './providers/email/file-transport.js'

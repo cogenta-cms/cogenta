@@ -72,5 +72,12 @@ function toExecutableTool(
       }
       return parsedOutput.data
     },
+    ...(tool.revert === undefined
+      ? {}
+      : {
+          async revert(receipt: unknown, execCtx: ToolExecutionContext) {
+            await tool.revert?.(receipt, { ...context, signal: execCtx.signal })
+          },
+        }),
   }
 }

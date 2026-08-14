@@ -58,6 +58,14 @@ export type {
   StopReason,
   TokenUsage,
 } from './providers/types.js'
+export type { DiffChangeKind, DiffEntry } from './reversibility/diff.js'
+export { diffValues } from './reversibility/diff.js'
+export { createMemoryReceiptStore } from './reversibility/receipt-store.js'
+export type { RevertReceiptOptions } from './reversibility/revert.js'
+export { revertReceipt } from './reversibility/revert.js'
+export type { Receipt, ReceiptQuery, ReceiptStore } from './reversibility/types.js'
+export type { WithReceiptsOptions } from './reversibility/with-receipts.js'
+export { withReceipts, withReceiptsForManifest } from './reversibility/with-receipts.js'
 export { runAgentLoop } from './runtime/loop.js'
 export { RepetitionGuard } from './runtime/repetition.js'
 export { retryModelCall, withTimeout } from './runtime/retry.js'

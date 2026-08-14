@@ -120,6 +120,11 @@ export const ERROR_CODES = [
   // Agents — autonomy and approval (L4)
   'APPROVAL_REQUEST_UNKNOWN',
 
+  // Agents — reversibility (L4)
+  'RECEIPT_UNKNOWN',
+  'RECEIPT_ALREADY_REVERTED',
+  'RECEIPT_NOT_REVERTIBLE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

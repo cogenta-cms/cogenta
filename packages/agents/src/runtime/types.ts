@@ -24,6 +24,8 @@ export interface ExecutableTool {
   readonly sideEffects?: boolean
   readonly reversible?: boolean
   execute(input: Readonly<Record<string, unknown>>, ctx: ToolExecutionContext): Promise<unknown>
+  /** Undoes one past call, given the receipt (that call's own output) — present exactly when `reversible` is `true` (task 10). */
+  revert?(receipt: unknown, ctx: ToolExecutionContext): Promise<void>
 }
 
 export interface ToolCallOutcome {

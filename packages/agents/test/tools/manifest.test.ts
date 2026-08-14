@@ -141,4 +141,42 @@ describe('buildManifest', () => {
     expect(seenActorId).toBe('agent:security')
     expect(seenSignal).toBe(controller.signal)
   })
+
+  it('omits revert from the ExecutableTool when the ToolDefinition has none', () => {
+    const registry = createToolRegistry([publish])
+    const manifest = buildManifest(registry, ['content.publish'], CONTEXT)
+    expect(manifest[0]?.revert).toBeUndefined()
+  })
+
+  it('wires revert through to the tool’s own revert(), with manifest context and the per-call signal', async () => {
+    let seenReceipt: unknown
+    let seenActorId: string | null = null
+    let seenSignal: AbortSignal | undefined
+    const reversibleTool = defineTool({
+      name: 'content.write_draft',
+      version: '1.0.0',
+      description: 'Write draft.',
+      input: z.object({}),
+      output: z.object({}),
+      permissions: ['content.write_draft'],
+      sideEffects: true,
+      reversible: true,
+      cost: 'low' as const,
+      execute: async () => ({}),
+      revert: async (receipt, ctx) => {
+        seenReceipt = receipt
+        seenActorId = ctx.actor.id
+        seenSignal = ctx.signal
+      },
+    })
+    const registry = createToolRegistry([reversibleTool])
+    const manifest = buildManifest(registry, ['content.write_draft'], CONTEXT)
+    const controller = new AbortController()
+
+    await manifest[0]?.revert?.({ id: 'e1' }, { signal: controller.signal })
+
+    expect(seenReceipt).toEqual({ id: 'e1' })
+    expect(seenActorId).toBe('agent:security')
+    expect(seenSignal).toBe(controller.signal)
+  })
 })

@@ -1,0 +1,325 @@
+import { createUserStore, ensureAuthTables } from '@cogenta/auth'
+import { createDatabaseMediaStore, type DatabaseHandle, type StorageDriver } from '@cogenta/core'
+import {
+  buildPath,
+  createContentStore,
+  createRedirectStore,
+  createSchemaTables,
+} from '@cogenta/schema'
+import {
+  WORDPRESS_IMPORT_COLLECTIONS,
+  wpCategory,
+  wpComment,
+  wpPage,
+  wpPost,
+  wpTag,
+} from './collections.js'
+import {
+  type ContentConversionNote,
+  convertContent,
+  type DraftBlock,
+  mediaUrlsOf,
+  resolveMediaReferences,
+} from './content-convert.js'
+import { downloadAndStoreMedia } from './media.js'
+import { parseWxr } from './parse.js'
+import { type ConversionReport, emptyReport, type UnconvertedItem } from './report.js'
+import type { WxrItem } from './types.js'
+
+export interface ImportWordPressOptions {
+  readonly db: DatabaseHandle
+  readonly storage: StorageDriver
+  /** Injected for tests — real `fetch` by default. */
+  readonly fetchImpl?: typeof fetch
+}
+
+const APPROVED = '1'
+const IMPORTABLE_STATUSES = new Set(['publish', 'draft', 'pending', 'private', 'future'])
+
+function wpDateToIso(wpDate: string): string | null {
+  if (wpDate.length === 0 || wpDate === '0000-00-00 00:00:00') return null
+  const iso = wpDate.includes('T') ? wpDate : `${wpDate.replace(' ', 'T')}Z`
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+/**
+ * Contract A's `f.blocks()` zone shape — `_key`/`_type` folded into
+ * `key`/`type`, everything else under `data`. Not named `ContentBlock`: that
+ * name is already taken, by a *different* shape, in `@cogenta/schema`'s
+ * public export (`validation.ts`'s block-value `ContentBlock` wins over
+ * `store/types.ts`'s row shape when both are re-exported under one name) —
+ * this stays a local, structural type instead of importing either.
+ */
+interface StoredBlock {
+  readonly key: string
+  readonly type: string
+  readonly data: Readonly<Record<string, unknown>>
+}
+
+function toContentBlocks(blocks: readonly DraftBlock[]): readonly StoredBlock[] {
+  return blocks.map((block) => {
+    const { _key, _type, ...data } = block
+    return { key: _key, type: _type, data: data as Record<string, unknown> }
+  })
+}
+
+function relativePathOf(link: string, baseUrl: string): string | null {
+  try {
+    const url = new URL(link, baseUrl || link)
+    return url.pathname
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Imports a WordPress "Export All Content" WXR file into Cogenta.
+ *
+ * Every step degrades to a report entry rather than aborting the import: a
+ * dead media URL, an unmappable Gutenberg block, an author with no email, a
+ * redirect that would loop — none of them stop the run, because the lot's own
+ * framing is explicit that a reported partial loss beats a silent one. The
+ * only thing that stops the run is a document `parseWxr` cannot read at all.
+ */
+export async function importWordPress(
+  xml: string,
+  options: ImportWordPressOptions,
+): Promise<ConversionReport> {
+  const { db, storage } = options
+  const parsed = parseWxr(xml)
+  const acc = emptyReport()
+
+  await createSchemaTables(db, WORDPRESS_IMPORT_COLLECTIONS)
+  await ensureAuthTables(db)
+
+  const users = createUserStore(db)
+  const redirects = createRedirectStore({ db })
+  await redirects.ensureTable()
+  const mediaStore = createDatabaseMediaStore({ db })
+
+  const categoryStore = createContentStore({ db, collection: wpCategory })
+  const tagStore = createContentStore({ db, collection: wpTag })
+  const postStore = createContentStore({ db, collection: wpPost })
+  const pageStore = createContentStore({ db, collection: wpPage })
+  const commentStore = createContentStore({ db, collection: wpComment })
+
+  // ---- Authors -------------------------------------------------------
+  const loginToUserId = new Map<string, string>()
+  for (const author of parsed.authors) {
+    const email =
+      author.email.trim().length > 0
+        ? author.email.trim()
+        : `${author.login || 'author'}@imported.invalid`
+    if (author.email.trim().length === 0) {
+      acc.warnings.push(
+        `Author "${author.login}" had no email in the export; used a placeholder (${email}).`,
+      )
+    }
+    try {
+      const user = await users.create({ email, roles: ['author'] })
+      loginToUserId.set(author.login, user.id)
+      acc.imported.authors += 1
+    } catch {
+      // AUTH_USER_EXISTS: a previous import (or the site itself) already has
+      // this email — reuse that account rather than failing the whole run.
+      const existing = await users.byEmail(email)
+      if (existing !== null) loginToUserId.set(author.login, existing.id)
+    }
+  }
+
+  // ---- Categories & tags ----------------------------------------------
+  const categoryByNiceName = new Map<string, string>()
+  for (const category of parsed.categories) {
+    const entry = await categoryStore.create({
+      values: { name: category.name || category.niceName, slug: category.niceName },
+      status: 'published',
+    })
+    categoryByNiceName.set(category.niceName, entry.id)
+    acc.imported.categories += 1
+  }
+
+  const tagByNiceName = new Map<string, string>()
+  for (const tag of parsed.tags) {
+    const entry = await tagStore.create({
+      values: { name: tag.name || tag.slug, slug: tag.slug },
+      status: 'published',
+    })
+    tagByNiceName.set(tag.slug, entry.id)
+    acc.imported.tags += 1
+  }
+
+  // ---- Media --------------------------------------------------------
+  const posts = parsed.items.filter((item) => item.postType === 'post')
+  const pages = parsed.items.filter((item) => item.postType === 'page')
+  const attachments = parsed.items.filter((item) => item.postType === 'attachment')
+
+  const attachmentUrlById = new Map(
+    attachments
+      .filter((item): item is WxrItem & { attachmentUrl: string } => item.attachmentUrl !== null)
+      .map((item) => [item.postId, item.attachmentUrl] as const),
+  )
+
+  const converted = new Map<
+    string,
+    { blocks: readonly DraftBlock[]; notes: ContentConversionNote[] }
+  >()
+  const allMediaUrls = new Set<string>()
+  for (const item of [...posts, ...pages]) {
+    const { blocks, notes } = convertContent(item.contentEncoded)
+    converted.set(item.postId, { blocks, notes: [...notes] })
+    for (const url of mediaUrlsOf(blocks)) allMediaUrls.add(url)
+    const thumbnail =
+      item.thumbnailId === null ? undefined : attachmentUrlById.get(item.thumbnailId)
+    if (thumbnail !== undefined) allMediaUrls.add(thumbnail)
+  }
+  for (const url of attachmentUrlById.values()) allMediaUrls.add(url)
+
+  const mediaResult = await downloadAndStoreMedia([...allMediaUrls], {
+    mediaStore,
+    storage,
+    createdBy: null,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+  })
+  acc.imported.media = mediaResult.imported.length
+  for (const failure of mediaResult.failed) {
+    acc.warnings.push(`Media "${failure.url}" could not be downloaded: ${failure.reason}`)
+  }
+  for (const asset of mediaResult.imported) {
+    acc.warnings.push(
+      `Media "${asset.filename}" was imported with a synthesised alt text; review it.`,
+    )
+  }
+
+  // ---- Posts & pages --------------------------------------------------
+  async function writeEntry(
+    item: WxrItem,
+    store: typeof postStore | typeof pageStore,
+    kind: 'post' | 'page',
+  ): Promise<string | null> {
+    if (item.status === 'trash') {
+      acc.skipped.push({
+        type: kind,
+        wpId: item.postId,
+        title: item.title,
+        reason: 'Trashed in WordPress; not imported.',
+      })
+      return null
+    }
+    if (!IMPORTABLE_STATUSES.has(item.status)) {
+      acc.skipped.push({
+        type: kind,
+        wpId: item.postId,
+        title: item.title,
+        reason: `Unrecognised WordPress status "${item.status}".`,
+      })
+      return null
+    }
+
+    const draft = converted.get(item.postId)
+    const notes = draft?.notes ?? []
+    const resolvedBlocks = resolveMediaReferences(
+      draft?.blocks ?? [],
+      mediaResult.urlToMediaId,
+      notes,
+    )
+    for (const note of notes) {
+      acc.unconvertedBlocks.push({
+        ...note,
+        postTitle: item.title || `(untitled ${kind} ${item.postId})`,
+      })
+    }
+
+    const status = item.status === 'publish' ? 'published' : 'draft'
+    const createdBy = loginToUserId.get(item.creator) ?? null
+    if (createdBy === null && item.creator.length > 0) {
+      acc.warnings.push(
+        `Author "${item.creator}" of "${item.title}" was not found among the export's authors.`,
+      )
+    }
+
+    const customFields = Object.fromEntries(
+      item.postMeta
+        .filter((meta) => !meta.key.startsWith('_'))
+        .map((meta) => [meta.key, meta.value]),
+    )
+
+    const values: Record<string, unknown> = {
+      title: item.title || `(untitled ${item.postId})`,
+      slug: item.postName || item.postId,
+      publishedAt: wpDateToIso(item.postDate),
+      customFields,
+    }
+    if (kind === 'post') {
+      values['excerpt'] = item.excerptEncoded
+      const categoryRef = item.categories.find((ref) => ref.domain === 'category')
+      const category =
+        categoryRef === undefined ? null : (categoryByNiceName.get(categoryRef.niceName) ?? null)
+      if (category !== null) values['category'] = category
+      values['tags'] = item.categories
+        .filter((ref) => ref.domain === 'post_tag')
+        .map((ref) => tagByNiceName.get(ref.niceName))
+        .filter((id): id is string => id !== undefined)
+    }
+
+    const entry = await store.create({
+      id: item.postId,
+      status,
+      createdBy,
+      values,
+      blocks: { body: toContentBlocks(resolvedBlocks) },
+    })
+
+    const collection = kind === 'post' ? wpPost : wpPage
+    const to = buildPath(collection, { slug: values['slug'] as string })
+    const from = relativePathOf(item.link, parsed.baseUrl)
+    if (from !== null && from !== to) {
+      try {
+        await redirects.add({ from, to, reason: 'import', collection: kind, entryId: entry.id })
+        acc.redirectsCreated += 1
+      } catch (error) {
+        acc.warnings.push(
+          `Redirect ${from} → ${to} was not created: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
+
+    return entry.id
+  }
+
+  for (const item of posts) {
+    const id = await writeEntry(item, postStore, 'post')
+    if (id !== null) {
+      acc.imported.posts += 1
+
+      for (const comment of item.comments) {
+        if (comment.approved !== APPROVED) continue
+        await commentStore.create({
+          status: 'published',
+          values: {
+            post: id,
+            author: comment.author || 'Anonymous',
+            authorEmail: comment.authorEmail,
+            body: comment.content,
+            publishedAt: wpDateToIso(comment.date),
+          },
+        })
+        acc.imported.comments += 1
+      }
+    }
+  }
+
+  for (const item of pages) {
+    const id = await writeEntry(item, pageStore, 'page')
+    if (id !== null) acc.imported.pages += 1
+  }
+
+  const skipped: UnconvertedItem[] = acc.skipped
+  return {
+    imported: acc.imported,
+    redirectsCreated: acc.redirectsCreated,
+    skipped,
+    unconvertedBlocks: acc.unconvertedBlocks,
+    warnings: acc.warnings,
+  }
+}

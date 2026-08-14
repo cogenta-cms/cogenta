@@ -161,6 +161,10 @@ export const ERROR_CODES = [
   // create-cogenta — blueprints (L9)
   'BLUEPRINT_REGISTRY_CORRUPT',
 
+  // Import — WordPress WXR (L9)
+  'IMPORT_WXR_PARSE_FAILED',
+  'IMPORT_WXR_UNSAFE_DOCUMENT',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

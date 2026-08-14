@@ -2,6 +2,7 @@ import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
+import { runImport } from './commands/import.js'
 import { runMigrate } from './commands/migrate.js'
 import { runServe } from './commands/serve.js'
 import { runUsers } from './commands/users.js'
@@ -9,6 +10,8 @@ import { createOutput, shouldUseColour, type Writer } from './output.js'
 
 export type { DoctorCheck, DoctorOptions, DoctorReport } from './commands/doctor.js'
 export { formatDoctorReport, runDoctor } from './commands/doctor.js'
+export type { ImportOptions, ImportSubcommand } from './commands/import.js'
+export { runImport } from './commands/import.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
 export type { ServeOptions } from './commands/serve.js'
@@ -29,6 +32,7 @@ Commands
   migrate up       Apply the pending migrations
   migrate down     Revert applied migrations
   users create     Create a user — the first admin account is made this way
+  import wordpress <file.xml>   Import a WordPress WXR export, with a report
   serve            Run the content and auth API over HTTP
   help             Show this message
   version          Print the version
@@ -164,6 +168,18 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.email === 'string' ? { email: parsed.values.email } : {}),
       ...(typeof parsed.values.roles === 'string' ? { roles: parsed.values.roles } : {}),
       ...(parsed.values.admin === true ? { admin: true } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'import') {
+    return runImport({
+      subcommand: parsed.positionals[1],
+      file: parsed.positionals[2],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

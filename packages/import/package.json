@@ -1,12 +1,10 @@
 {
-  "name": "@cogenta/cli",
+  "name": "@cogenta/import",
   "version": "0.0.0",
-  "description": "The Cogenta command line: diagnose an install, run migrations, inspect drivers.",
+  "description": "Importers that bring content from another CMS into Cogenta, starting with WordPress WXR.",
   "license": "MPL-2.0",
   "type": "module",
-  "bin": {
-    "cogenta": "./dist/bin.js"
-  },
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -26,21 +24,18 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cogenta-cms/cogenta.git",
-    "directory": "packages/cli"
+    "directory": "packages/import"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.typecheck.json",
-    "test": "vitest run --passWithNoTests",
-    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@cogenta/api": "workspace:*",
     "@cogenta/auth": "workspace:*",
+    "@cogenta/blocks": "workspace:*",
     "@cogenta/core": "workspace:*",
-    "@cogenta/import": "workspace:*",
-    "@cogenta/schema": "workspace:*",
-    "graphql": "catalog:"
+    "@cogenta/schema": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

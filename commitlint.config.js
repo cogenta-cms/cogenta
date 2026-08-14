@@ -19,6 +19,7 @@ export default {
         'agents',
         'mcp',
         'create',
+        'import',
         'db',
         'cache',
         'queue',

@@ -18,7 +18,11 @@
     "@simplewebauthn/browser": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-router": "catalog:"
+    "react-router": "catalog:",
+    "slate": "catalog:",
+    "slate-dom": "catalog:",
+    "slate-history": "catalog:",
+    "slate-react": "catalog:"
   },
   "devDependencies": {
     "@testing-library/dom": "catalog:",

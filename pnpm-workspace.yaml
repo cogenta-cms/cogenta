@@ -28,6 +28,10 @@ catalog:
   react-dom: ^19.2.8
   react-router: ^8.3.0
   sharp: ^0.35.3
+  slate: ^0.126.2
+  slate-dom: ^0.126.0
+  slate-history: ^0.113.1
+  slate-react: ^0.126.0
   typescript: ^7.0.2
   vite: ^8.2.1
   vitest: ^4.1.10

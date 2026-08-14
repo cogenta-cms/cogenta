@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import type { RichTextDocument } from '../rich-text/portable-text.js'
 import type { SchemaField } from '../schema/types.js'
 import { BlocksField } from './blocks-field.js'
 import { BooleanField } from './boolean-field.js'
@@ -51,7 +52,7 @@ export function FieldInput(props: FieldInputProps): JSX.Element {
     case 'json':
       return <JsonField {...props} />
     case 'richText':
-      return <RichTextField {...props} />
+      return <RichTextField {...props} value={props.value as RichTextDocument | undefined} />
     case 'media':
       return <MediaField {...props} />
     case 'relation':

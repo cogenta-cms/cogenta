@@ -33,6 +33,8 @@ export type {
   BudgetTracker,
   KillSwitch,
 } from './budget/types.js'
+export type { EvalThresholdOptions } from './eval/assert-threshold.js'
+export { assertEvalThreshold } from './eval/assert-threshold.js'
 export type { PromptComparisonResult, PromptVersion } from './eval/compare-prompt-versions.js'
 export { comparePromptVersions } from './eval/compare-prompt-versions.js'
 export { runEvalSuite } from './eval/run-suite.js'

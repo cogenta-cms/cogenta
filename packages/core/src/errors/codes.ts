@@ -147,6 +147,9 @@ export const ERROR_CODES = [
   'AGENT_DEFINITION_INVALID',
   'AGENT_UNKNOWN',
 
+  // Agents — evaluation (L5)
+  'EVAL_THRESHOLD_NOT_MET',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

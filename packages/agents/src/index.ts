@@ -108,6 +108,9 @@ export type {
   ToolCallOutcome,
   ToolExecutionContext,
 } from './runtime/types.js'
+export type { SandboxCallResult } from './sandbox/types.js'
+export type { WithSandboxOptions } from './sandbox/with-sandbox.js'
+export { withSandbox, withSandboxForManifest } from './sandbox/with-sandbox.js'
 export { createFileSkillStore } from './skills/file-store.js'
 export { parseSkillFile } from './skills/frontmatter.js'
 export type { Skill, SkillMetadata, SkillStore } from './skills/types.js'

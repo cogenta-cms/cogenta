@@ -38,6 +38,30 @@
   "collections": {
     "heading": "Contenus"
   },
+  "media": {
+    "heading": "Médiathèque",
+    "loadError": "Impossible de charger la médiathèque.",
+    "empty": "Aucun média."
+  },
+  "collectionList": {
+    "newButton": "Nouveau",
+    "statusFilter": "Statut",
+    "allStatuses": "Tous",
+    "deleteSelected": "Supprimer ({{count}})",
+    "selectionColumn": "Sélection",
+    "selectRow": "Sélectionner {{title}}",
+    "titleColumn": "Titre",
+    "idColumn": "ID",
+    "statusColumn": "Statut",
+    "updatedColumn": "Modifié",
+    "noContent": "Aucun contenu.",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "notFoundHeading": "Contenu introuvable",
+    "notFoundBody": "Cette collection n'existe pas ou vous n'y avez pas accès.",
+    "back": "Retour",
+    "loadError": "Impossible de charger les contenus."
+  },
   "audit": {
     "heading": "Journal d'audit",
     "adminOnly": "Réservé au rôle « admin » : ce journal nomme les actions de tous les comptes.",

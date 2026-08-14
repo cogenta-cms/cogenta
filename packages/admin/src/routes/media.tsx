@@ -1,4 +1,5 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { listMedia, type MediaAsset } from '../api/media-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -9,6 +10,7 @@ import '../styles/media.css'
 
 /** L2 task 11: upload, list, focal point, alt-text/decorative — no crop, no variant picker, since the render pipeline already produces those lazily from the original. */
 export function MediaRoute(): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
 
@@ -25,25 +27,23 @@ export function MediaRoute(): JSX.Element {
       const page = await listMedia(token)
       setItems(page.items)
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : 'Impossible de charger la médiathèque.',
-      )
+      setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, t])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  if (token === null) return <p>Chargement…</p>
+  if (token === null) return <p>{t('common.loading')}</p>
 
   const selected = items.find((item) => item.id === selectedId) ?? null
 
   return (
     <section aria-labelledby="media-heading">
-      <h1 id="media-heading">Médiathèque</h1>
+      <h1 id="media-heading">{t('media.heading')}</h1>
 
       <UploadForm
         token={token}
@@ -51,7 +51,7 @@ export function MediaRoute(): JSX.Element {
       />
 
       {error !== null && <p role="alert">{error}</p>}
-      {loading && <p>Chargement…</p>}
+      {loading && <p>{t('common.loading')}</p>}
 
       {!loading && (
         <ul className="media-grid">
@@ -72,7 +72,7 @@ export function MediaRoute(): JSX.Element {
               </button>
             </li>
           ))}
-          {items.length === 0 && <li>Aucun média.</li>}
+          {items.length === 0 && <li>{t('media.empty')}</li>}
         </ul>
       )}
 

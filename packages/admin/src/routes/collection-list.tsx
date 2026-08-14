@@ -1,4 +1,5 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
@@ -28,6 +29,7 @@ function titleOf(entry: Entry): string {
  * can be clicked into a 403.
  */
 export function CollectionListRoute(): JSX.Element {
+  const { t } = useTranslation()
   const { name = '' } = useParams<{ name: string }>()
   const auth = useAuth()
   const schema = useSchema()
@@ -67,11 +69,11 @@ export function CollectionListRoute(): JSX.Element {
       setNextCursor(page.nextCursor)
       setSelected(new Set())
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Impossible de charger les contenus.')
+      setError(caught instanceof ApiError ? caught.message : t('collectionList.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [token, collection, sort, status, cursor])
+  }, [token, collection, sort, status, cursor, t])
 
   useEffect(() => {
     void load()
@@ -110,17 +112,17 @@ export function CollectionListRoute(): JSX.Element {
     [collection, roles],
   )
 
-  if (schema.status === 'loading') return <p>Chargement…</p>
+  if (schema.status === 'loading') return <p>{t('common.loading')}</p>
   if (schema.status === 'error') {
-    return <p role="alert">Impossible de charger le schéma : {schema.message}</p>
+    return <p role="alert">{t('common.schemaError', { message: schema.message })}</p>
   }
   if (collection === undefined || !canPerform('read', collection, roles)) {
     return (
       <section aria-labelledby="collection-heading">
-        <h1 id="collection-heading">Contenu introuvable</h1>
+        <h1 id="collection-heading">{t('collectionList.notFoundHeading')}</h1>
         <p>
-          Cette collection n'existe pas ou vous n'y avez pas accès.{' '}
-          <Link to="/collections">Retour</Link>
+          {t('collectionList.notFoundBody')}{' '}
+          <Link to="/collections">{t('collectionList.back')}</Link>
         </p>
       </section>
     )
@@ -130,10 +132,14 @@ export function CollectionListRoute(): JSX.Element {
     <section aria-labelledby="collection-heading">
       <h1 id="collection-heading">{collection.labels.plural}</h1>
 
-      {canCreate && <Link to={`/collections/${encodeURIComponent(name)}/new`}>Nouveau</Link>}
+      {canCreate && (
+        <Link to={`/collections/${encodeURIComponent(name)}/new`}>
+          {t('collectionList.newButton')}
+        </Link>
+      )}
 
       <div className="collection-list__toolbar">
-        <label htmlFor="status-filter">Statut</label>
+        <label htmlFor="status-filter">{t('collectionList.statusFilter')}</label>
         <select
           id="status-filter"
           value={status}
@@ -142,7 +148,7 @@ export function CollectionListRoute(): JSX.Element {
             setStatus(event.target.value)
           }}
         >
-          <option value="">Tous</option>
+          <option value="">{t('collectionList.allStatuses')}</option>
           {STATUSES.map((value) => (
             <option key={value} value={value}>
               {value}
@@ -152,24 +158,34 @@ export function CollectionListRoute(): JSX.Element {
 
         {canDelete && selected.size > 0 && (
           <button type="button" onClick={() => void deleteSelected()}>
-            Supprimer ({selected.size})
+            {t('collectionList.deleteSelected', { count: selected.size })}
           </button>
         )}
       </div>
 
       {error !== null && <p role="alert">{error}</p>}
-      {loading && <p>Chargement…</p>}
+      {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
         <>
           <table>
             <thead>
               <tr>
-                {canDelete && <th scope="col" aria-label="Sélection" />}
-                <th scope="col">Titre</th>
-                <SortableHeader field="id" label="ID" sort={sort} onSort={toggleSort} />
-                <th scope="col">Statut</th>
-                <SortableHeader field="updatedAt" label="Modifié" sort={sort} onSort={toggleSort} />
+                {canDelete && <th scope="col" aria-label={t('collectionList.selectionColumn')} />}
+                <th scope="col">{t('collectionList.titleColumn')}</th>
+                <SortableHeader
+                  field="id"
+                  label={t('collectionList.idColumn')}
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <th scope="col">{t('collectionList.statusColumn')}</th>
+                <SortableHeader
+                  field="updatedAt"
+                  label={t('collectionList.updatedColumn')}
+                  sort={sort}
+                  onSort={toggleSort}
+                />
               </tr>
             </thead>
             <tbody>
@@ -179,7 +195,7 @@ export function CollectionListRoute(): JSX.Element {
                     <td>
                       <input
                         type="checkbox"
-                        aria-label={`Sélectionner ${titleOf(entry)}`}
+                        aria-label={t('collectionList.selectRow', { title: titleOf(entry) })}
                         checked={selected.has(entry.id)}
                         onChange={() => toggleSelected(entry.id)}
                       />
@@ -199,7 +215,7 @@ export function CollectionListRoute(): JSX.Element {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={canDelete ? 5 : 4}>Aucun contenu.</td>
+                  <td colSpan={canDelete ? 5 : 4}>{t('collectionList.noContent')}</td>
                 </tr>
               )}
             </tbody>
@@ -211,14 +227,14 @@ export function CollectionListRoute(): JSX.Element {
               disabled={cursorStack.length <= 1}
               onClick={() => setCursorStack((s) => s.slice(0, -1))}
             >
-              Précédent
+              {t('collectionList.previous')}
             </button>
             <button
               type="button"
               disabled={!hasMore || nextCursor === null}
               onClick={() => setCursorStack((s) => [...s, nextCursor ?? undefined])}
             >
-              Suivant
+              {t('collectionList.next')}
             </button>
           </div>
         </>

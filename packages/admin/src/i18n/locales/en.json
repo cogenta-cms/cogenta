@@ -38,6 +38,30 @@
   "collections": {
     "heading": "Content"
   },
+  "media": {
+    "heading": "Media library",
+    "loadError": "Could not load the media library.",
+    "empty": "No media."
+  },
+  "collectionList": {
+    "newButton": "New",
+    "statusFilter": "Status",
+    "allStatuses": "All",
+    "deleteSelected": "Delete ({{count}})",
+    "selectionColumn": "Selection",
+    "selectRow": "Select {{title}}",
+    "titleColumn": "Title",
+    "idColumn": "ID",
+    "statusColumn": "Status",
+    "updatedColumn": "Updated",
+    "noContent": "No content.",
+    "previous": "Previous",
+    "next": "Next",
+    "notFoundHeading": "Content not found",
+    "notFoundBody": "This collection does not exist, or you do not have access to it.",
+    "back": "Back",
+    "loadError": "Could not load content."
+  },
   "audit": {
     "heading": "Audit log",
     "adminOnly": "Restricted to the \"admin\" role: this log names every account's actions.",

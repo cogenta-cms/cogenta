@@ -70,6 +70,10 @@ export type {
   StopReason,
   TokenUsage,
 } from './providers/types.js'
+export { chunkDocument } from './rag/chunking/chunk-document.js'
+export type { IngestionPlan } from './rag/chunking/incremental.js'
+export { planIncrementalIngestion } from './rag/chunking/incremental.js'
+export type { Chunk, ChunkableBlock, ChunkableDocument } from './rag/chunking/types.js'
 export { createHashingEmbeddingProvider } from './rag/embeddings/hashing-provider.js'
 export type { EmbeddingModelInfo, EmbeddingProvider } from './rag/embeddings/types.js'
 export type { DiffChangeKind, DiffEntry } from './reversibility/diff.js'

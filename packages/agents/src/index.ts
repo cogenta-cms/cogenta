@@ -44,6 +44,26 @@ export type {
   ToolCallOutcome,
   ToolExecutionContext,
 } from './runtime/types.js'
+export type {
+  ContentAccessContext,
+  ContentReadOptions,
+  ContentServiceLike,
+} from './tools/core/content.js'
+export {
+  createContentDeleteTool,
+  createContentPublishTool,
+  createContentReadTool,
+  createContentWriteDraftTool,
+} from './tools/core/content.js'
+export type {
+  HttpFetchInput,
+  HttpFetchOutput,
+  HttpFetchToolOptions,
+} from './tools/core/http-fetch.js'
+export { createHttpFetchTool } from './tools/core/http-fetch.js'
+export { createMediaReadTool, createMediaWriteTool } from './tools/core/media.js'
+export type { SiteConfig } from './tools/core/site-config.js'
+export { createSiteConfigReadTool } from './tools/core/site-config.js'
 export { defineTool } from './tools/define.js'
 export { buildManifest } from './tools/manifest.js'
 export type { ToolRegistry } from './tools/registry.js'

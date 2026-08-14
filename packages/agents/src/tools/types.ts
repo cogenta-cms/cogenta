@@ -15,7 +15,13 @@ export interface ToolLogger {
  * the minimal shape every tool can rely on regardless of what it does).
  */
 export interface ToolContext {
-  readonly site: { readonly name: string; readonly url?: string }
+  /** Mirrors `ResolvedConfig.site` (`@cogenta/core`'s config resolver) — the same shape, read-only from a tool's perspective. */
+  readonly site: {
+    readonly name: string
+    readonly url?: string
+    readonly locales: readonly string[]
+    readonly defaultLocale: string
+  }
   readonly actor: { readonly id: string | null; readonly roles: readonly string[] }
   readonly logger: ToolLogger
   /** The run's cancellation signal — set per call by the manifest, never by the tool definition itself. */

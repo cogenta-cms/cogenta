@@ -6,7 +6,7 @@ import { createToolRegistry } from '../../src/tools/registry.js'
 import type { ToolContext } from '../../src/tools/types.js'
 
 const CONTEXT: Omit<ToolContext, 'signal'> = {
-  site: { name: 'acme-blog' },
+  site: { name: 'acme-blog', locales: ['en'], defaultLocale: 'en' },
   actor: { id: 'agent:security', roles: ['agent'] },
   logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }

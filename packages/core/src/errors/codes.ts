@@ -113,6 +113,9 @@ export const ERROR_CODES = [
   'TOOL_INPUT_INVALID',
   'TOOL_OUTPUT_INVALID',
 
+  // Agents — core tools (L4)
+  'HTTP_FETCH_DOMAIN_DENIED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

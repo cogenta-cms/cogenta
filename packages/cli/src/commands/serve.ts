@@ -9,9 +9,11 @@ import {
   createAuthRouter,
   createContentGateway,
   createContentService,
+  createMediaRouter,
   createPermissionLayer,
   createRestRouter,
   executeGraphQL,
+  type MediaRouter,
   type RestRequest,
   type RestResponse,
   type RestRouter,
@@ -20,12 +22,15 @@ import {
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
   CogentaError,
+  createDatabaseMediaStore,
   createDatabaseRegistry,
   createLogger,
+  createStorageRegistry,
   type DatabaseHandle,
   isCogentaError,
   type Logger,
   loadConfig,
+  type StorageDriver,
 } from '@cogenta/core'
 import {
   buildSchemaDocument,
@@ -110,6 +115,7 @@ interface Site {
   readonly auth: AuthStore
   readonly restRouter: RestRouter
   readonly authRouter: AuthRouter
+  readonly mediaRouter: MediaRouter
   readonly graphqlSchema: GraphQLSchema
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
@@ -128,6 +134,7 @@ async function assembleSite(
   collections: readonly CollectionDefinition[],
   signingKey: string,
   site: { readonly name: string; readonly url: string },
+  storage: StorageDriver,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -159,11 +166,14 @@ async function assembleSite(
     webauthn: webauthnConfigFor(site),
   })
 
+  const mediaStore = createDatabaseMediaStore({ db })
+
   return {
     db,
     auth,
     restRouter: createRestRouter({ service }),
     authRouter: createAuthRouter({ auth }),
+    mediaRouter: createMediaRouter({ store: mediaStore, storage }),
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
     schemaDocument: buildSchemaDocument(collections),
@@ -302,6 +312,14 @@ export function createRequestListener(
         return
       }
 
+      if (url.pathname.startsWith('/api/media')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.mediaRouter.handle(request, context.actor))
+        return
+      }
+
       res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({
@@ -376,11 +394,13 @@ export async function runServe(options: ServeOptions): Promise<number> {
   }
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
+  const storageSelection = await createStorageRegistry({ logger }).select(loaded.config.storage)
   const site = await assembleSite(
     selection.instance,
     collections,
     loaded.config.auth.signingKey,
     loaded.config.site,
+    storageSelection.instance,
   )
 
   const server = createServer(createRequestListener(site, logger))
@@ -398,7 +418,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const address = server.address()
   const boundPort = typeof address === 'object' && address !== null ? address.port : port
   out.ok(`Listening on http://${host}:${boundPort}`)
-  out.detail(`${collections.length} collection(s), driver: ${selection.driver}`)
+  out.detail(
+    `${collections.length} collection(s), db driver: ${selection.driver}, storage driver: ${storageSelection.driver}`,
+  )
   options.onListening?.({ port: boundPort, host })
 
   await new Promise<void>((resolve) => {
@@ -414,6 +436,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     server.close((error) => (error ? reject(error) : resolve()))
   })
   await selection.dispose()
+  await storageSelection.dispose()
   await site.dispose().catch(() => undefined) // selection.dispose() already closed the same handle
 
   return 0

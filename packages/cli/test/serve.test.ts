@@ -219,4 +219,65 @@ describe('runServe', () => {
       await server.stop()
     }
   })
+
+  it('uploads, lists and reads back a media asset over /api/media', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const user = await users.create({ email: 'admin@example.com', roles: ['viewer'] })
+      await credentials.setPassword(user.id, 'correct horse battery staple')
+      await db.close()
+
+      const login = await fetch(`${server.base}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'admin@example.com',
+          password: 'correct horse battery staple',
+        }),
+      })
+      const loginBody = (await login.json()) as { data: { session: { token: string } } }
+      const auth = { authorization: `Bearer ${loginBody.data.session.token}` }
+
+      // A 1x1 transparent PNG — real magic bytes, so the server's own
+      // real-type check (not just its route wiring) is exercised.
+      const png =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+
+      const uploaded = await fetch(`${server.base}/api/media`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...auth },
+        body: JSON.stringify({
+          kind: 'image',
+          filename: 'cover.png',
+          mimeType: 'image/png',
+          data: png,
+          alt: 'A single transparent pixel',
+        }),
+      })
+      expect(uploaded.status).toBe(201)
+      const uploadedBody = (await uploaded.json()) as { data: { id: string; alt: string } }
+      expect(uploadedBody.data.alt).toBe('A single transparent pixel')
+
+      const listed = await fetch(`${server.base}/api/media`, { headers: auth })
+      expect(listed.status).toBe(200)
+      const listedBody = (await listed.json()) as { data: unknown[] }
+      expect(listedBody.data).toHaveLength(1)
+
+      const read = await fetch(`${server.base}/api/media/${uploadedBody.data.id}`, {
+        headers: auth,
+      })
+      expect(read.status).toBe(200)
+    } finally {
+      await server.stop()
+    }
+  })
 })

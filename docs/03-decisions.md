@@ -567,6 +567,56 @@ progressivement, un lot de vues à la fois, chacun avec ses tests de rendu incha
 (seul le texte affiché change de source, pas le comportement) — pas de migration
 « big bang » exigée par cette ADR, seulement la direction.
 
+---
+
+## ADR-0020 — Contrat C (`tools@1.0`) figé tel qu'esquissé, sans modification
+
+**Statut** : Acté
+
+**Contexte** — L2 (Admin) est terminé, ses 16 tâches traitées. L'ordre des lots
+(`L0 → L1 → L3 → L2 → L4 → L5 → L9 → L6 → L7 → L8`) place L4 (runtime agentique)
+ensuite, et `docs/lots/L4-runtime-agentique.md` (dépendances, l.10-12) l'exige
+explicitement : *« Contrat C (outil agentique) figé avant de commencer. »* Le même
+principe que pour A, B et D (`docs/04-contrats.md`, en-tête) : une interface consommée
+par un lot entier ne peut pas rester mouvante pendant qu'on l'implémente.
+
+Le Contrat C (`docs/04-contrats.md`, section « Contrat C — Outil agentique ») était déjà
+entièrement rédigé — `defineTool`, `defineAgent`, la taxonomie des permissions, les
+quatre règles (permissions vérifiées par le runtime, `sideEffects: true` exige `revert`
+ou validation humaine forcée, audit systématique, jamais de secret) — mais sans bannière
+« Figé » ni date, contrairement à A/B/D. Rien dans ce brouillon ne contredit R4/R6/R7/R8
+(`AGENTS.md`) ni les points de conception déjà écrits dans `L4-runtime-agentique.md`
+(hiérarchie d'autorité, sous-agents en sous-ensemble strict de `tools`, budgets, RAG
+filtré par permissions) : le contrat et le lot qui le consomme ont été conçus ensemble,
+avant ce jour, par la même main.
+
+**Décision** — Le Contrat C est figé **tel qu'il est déjà écrit**, en `tools@1.0`, à la
+date de cette ADR. Aucune réécriture n'accompagne ce figeage : la forme de `defineTool`
+(`name`, `version`, `description`, `input`/`output` Zod, `permissions`, `sideEffects`,
+`reversible`, `cost`, `rateLimit`, `execute`, `revert`), celle de `defineAgent`
+(`identity`, `model`, `tools`, `skills`, `subagents`, `autonomy`, `budget`, `memory`,
+`triggers`), et la taxonomie de permissions listée dans le contrat sont désormais la
+même règle qu'A/B/D : modifier une signature d'outil existante est une montée de version
+majeure avec note de migration ; ajouter un outil est mineur.
+
+**Justification** — Rediscuter la forme du contrat maintenant reviendrait à rouvrir une
+décision de conception déjà actée par construction (le brouillon existe, cohérent, depuis
+avant ce lot) sans fait nouveau pour la justifier — exactement ce qu'AGENTS.md interdit
+(« Ne jamais rediscuter une décision actée »). Le geste utile ici n'est pas de changer le
+contrat, c'est de le déclarer stable pour que L4 puisse s'appuyer dessus sans craindre un
+changement de signature à mi-parcours.
+
+**Conséquences** — Toute implémentation de `defineTool`/`defineAgent` dans
+`packages/agents` doit correspondre exactement aux signatures de `docs/04-contrats.md` ;
+un écart est soit un bug d'implémentation, soit un motif pour une ADR de remplacement (`C
+v2`), jamais une correction silencieuse du code sans mise à jour du contrat. Les 21 tâches
+de L4 peuvent commencer.
+
+**Écarté** — Ouvrir une nouvelle ronde de conception du contrat avant de figer (ex. :
+revoir la taxonomie de permissions, changer la forme de `revert`) : rien dans les tâches
+de L4 déjà écrites ne signale un manque, et retarder le figeage sans motif concret coûte
+un lot entier d'attente pour un bénéfice hypothétique.
+
 **Renoncement assumé** — Pas de détection de langue serveur (`Accept-Language`,
 paramètre d'URL) au lancement : l'admin est une SPA authentifiée, la préférence vit dans
 le navigateur de la personne, pas dans une session serveur. Un compte multi-appareils

@@ -266,6 +266,9 @@ majeur et impose une migration automatique du contenu déjà saisi.
 
 ## Contrat C — Outil agentique
 
+> **Figé en `tools@1.0` le 2026-08-14** (ADR-0020). Modifier la signature d'un outil
+> existant impose une montée de version majeure et une note de migration.
+
 ```ts
 defineTool({
   name: 'content.publish',

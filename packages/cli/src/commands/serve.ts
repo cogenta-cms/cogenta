@@ -175,7 +175,7 @@ async function assembleSite(
   return {
     db,
     auth,
-    restRouter: createRestRouter({ service }),
+    restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({ auth }),
     mediaRouter: createMediaRouter({ store: mediaStore, storage }),
     mediaStore,

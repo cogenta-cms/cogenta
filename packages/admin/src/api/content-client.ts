@@ -190,3 +190,23 @@ export function restoreVersion(
     { method: 'POST', headers: authHeader(token), body: JSON.stringify({ version }) },
   )
 }
+
+/** `POST /{collection}/{id}/preview`'s response — a token, the path it resolves to (null when the collection has no route), and the ready-made absolute URL (null when the server has no `site.url` configured). */
+export interface PreviewLink {
+  readonly token: string
+  readonly expiresIn: number
+  readonly path: string | null
+  readonly url: string | null
+}
+
+/**
+ * Mints a one-entry, time-limited link to the real rendered page — never a
+ * simulation inside the admin (L2-admin.md: "une prévisualisation qui ment
+ * est pire que pas de prévisualisation").
+ */
+export function issuePreview(token: string, collection: string, id: string): Promise<PreviewLink> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/preview`,
+    { method: 'POST', headers: authHeader(token) },
+  )
+}

@@ -2,7 +2,7 @@ import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
-import { createEntry, getEntry, updateEntry } from '../api/content-client.js'
+import { createEntry, getEntry, issuePreview, updateEntry } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { EntryForm } from '../collections/entry-form.js'
 import { canPerform } from '../schema/permissions.js'
@@ -33,6 +33,8 @@ export function EntryEditRoute(): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isNew || token === null || id === undefined) {
@@ -96,6 +98,32 @@ export function EntryEditRoute(): JSX.Element {
     }
   }
 
+  async function preview(): Promise<void> {
+    if (token === null || id === undefined) return
+    setPreviewing(true)
+    setPreviewError(null)
+    try {
+      const link = await issuePreview(token, name, id)
+      if (link.url === null) {
+        setPreviewError(
+          "Ce serveur n'a pas d'URL de site configurée (site.url) : impossible d'ouvrir la prévisualisation.",
+        )
+        return
+      }
+      // The real site, not a simulation inside the admin — the preview
+      // button's whole reason to exist (L2-admin.md).
+      window.open(link.url, '_blank', 'noopener')
+    } catch (caught) {
+      setPreviewError(
+        caught instanceof ApiError
+          ? caught.message
+          : 'Impossible de générer le lien de prévisualisation.',
+      )
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   if (schema.status === 'loading' || loading) return <p>Chargement…</p>
   if (schema.status === 'error') {
     return <p role="alert">Impossible de charger le schéma : {schema.message}</p>
@@ -126,6 +154,15 @@ export function EntryEditRoute(): JSX.Element {
       <p>
         <Link to={`/collections/${encodeURIComponent(name)}`}>Retour à la liste</Link>
       </p>
+
+      {!isNew && id !== undefined && (
+        <p>
+          <button type="button" disabled={previewing} onClick={() => void preview()}>
+            {previewing ? 'Génération du lien…' : 'Prévisualiser'}
+          </button>
+          {previewError !== null && <span role="alert"> {previewError}</span>}
+        </p>
+      )}
 
       {!canWrite && (
         <p role="alert">Lecture seule : vous n'avez pas la permission de modifier ce contenu.</p>

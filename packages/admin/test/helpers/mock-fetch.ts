@@ -200,7 +200,7 @@ export function installMockFetch(
       }
 
       const versionMatch =
-        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore)(?:\?.*)?$/u.exec(url)
+        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview)(?:\?.*)?$/u.exec(url)
       if (versionMatch !== null) {
         const [, collection, id, action] = versionMatch
 
@@ -227,6 +227,22 @@ export function installMockFetch(
                 live: true,
               },
             ],
+          })
+        }
+
+        if (
+          collection === 'article' &&
+          id === 'entry-1' &&
+          action === 'preview' &&
+          method === 'POST'
+        ) {
+          return json(201, {
+            data: {
+              token: 'preview-token-1',
+              expiresIn: 3600,
+              path: '/blog/first-article',
+              url: 'https://example.com/blog/first-article?state=working&preview=preview-token-1',
+            },
           })
         }
 

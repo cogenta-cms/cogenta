@@ -138,7 +138,7 @@ export interface Harness {
   dispose(): Promise<void>
 }
 
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(options: { readonly siteUrl?: string } = {}): Promise<Harness> {
   const directory = await mkdtemp(join(tmpdir(), 'cogenta-rest-'))
   const db = await createSqliteHandle({ url: join(directory, 'rest.db') })
   await createSchemaTables(db, COLLECTIONS)
@@ -165,7 +165,10 @@ export async function createHarness(): Promise<Harness> {
   return {
     db,
     redirects,
-    router: createRestRouter({ service }),
+    router: createRestRouter({
+      service,
+      ...(options.siteUrl === undefined ? {} : { siteUrl: options.siteUrl }),
+    }),
     store,
     dispose: async () => {
       await db.close()

@@ -1,10 +1,42 @@
+import { createHmac } from 'node:crypto'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { createLogger } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runServe } from '../src/commands/serve.js'
 import { createOutput } from '../src/output.js'
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+/** Independent RFC 6238 implementation — see packages/auth/test/helpers/totp-code.ts for why. */
+function codeFor(secret: string, nowSeconds: number): string {
+  const normalised = secret.toUpperCase().replace(/=+$/u, '')
+  let bits = 0
+  let value = 0
+  const bytes: number[] = []
+  for (const char of normalised) {
+    value = (value << 5) | BASE32_ALPHABET.indexOf(char)
+    bits += 5
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff)
+      bits -= 8
+    }
+  }
+  const key = Buffer.from(bytes)
+
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(nowSeconds / 30)))
+  const digest = createHmac('sha1', key).update(counter).digest()
+  const offset = (digest.at(-1) ?? 0) & 0x0f
+  const truncated =
+    ((digest[offset] ?? 0) & 0x7f) * 2 ** 24 +
+    ((digest[offset + 1] ?? 0) & 0xff) * 2 ** 16 +
+    ((digest[offset + 2] ?? 0) & 0xff) * 2 ** 8 +
+    ((digest[offset + 3] ?? 0) & 0xff)
+  return String(truncated % 1_000_000).padStart(6, '0')
+}
 
 async function project(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-serve-'))
@@ -216,6 +248,97 @@ describe('runServe', () => {
       const response = await fetch(`${server.base}/api/schema`, { method: 'POST' })
       expect(response.status).toBe(405)
     } finally {
+      await server.stop()
+    }
+  })
+
+  it("mints a preview link that unlocks a draft's working state for an anonymous reader", async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const savedKey = process.env['COGENTA_PREVIEW_SIGNING_KEY']
+    process.env['COGENTA_PREVIEW_SIGNING_KEY'] = 'e'.repeat(64)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const user = await users.create({ email: 'admin@example.com', roles: ['editor'] })
+      await credentials.setPassword(user.id, 'correct horse battery staple')
+      await db.close()
+
+      const login = await fetch(`${server.base}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'admin@example.com',
+          password: 'correct horse battery staple',
+        }),
+      })
+      // `editor` can publish `article`, so login stops at MFA enrolment
+      // rather than a session (the rule is not configurable — ADR/MFA
+      // policy) — complete it the same way a first-time editor would.
+      const loginBody = (await login.json()) as { data: { status: string; ticket: string } }
+      expect(loginBody.data.status).toBe('totp_setup_required')
+
+      const setup = await fetch(`${server.base}/api/auth/totp-setup`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ticket: loginBody.data.ticket }),
+      })
+      const setupBody = (await setup.json()) as { data: { secret: string } }
+
+      const confirmed = await fetch(`${server.base}/api/auth/totp-setup-confirm`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ticket: loginBody.data.ticket,
+          token: codeFor(setupBody.data.secret, Date.now() / 1000),
+        }),
+      })
+      const confirmedBody = (await confirmed.json()) as { data: { session: { token: string } } }
+      const auth = { authorization: `Bearer ${confirmedBody.data.session.token}` }
+
+      const created = await fetch(`${server.base}/api/content/article`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...auth },
+        body: JSON.stringify({ values: { title: 'A draft only editors can see' } }),
+      })
+      const createdBody = (await created.json()) as { data: { id: string; status: string } }
+      expect(createdBody.data.status).toBe('draft')
+
+      const minted = await fetch(
+        `${server.base}/api/content/article/${createdBody.data.id}/preview`,
+        { method: 'POST', headers: auth },
+      )
+      expect(minted.status).toBe(201)
+      const mintedBody = (await minted.json()) as {
+        data: { token: string; path: string | null; url: string | null }
+      }
+      expect(typeof mintedBody.data.token).toBe('string')
+      // The `article` collection declares no route, so there is no page URL
+      // to build — only the token, which the id-based read below still uses.
+      expect(mintedBody.data.path).toBeNull()
+
+      const previewed = await fetch(
+        `${server.base}/api/content/article/${createdBody.data.id}?state=working&preview=${encodeURIComponent(mintedBody.data.token)}`,
+      )
+      expect(previewed.status).toBe(200)
+      const previewedBody = (await previewed.json()) as { data: { id: string } }
+      expect(previewedBody.data.id).toBe(createdBody.data.id)
+
+      // The same request with no token at all is refused outright: a public
+      // reader has no working-state rights, preview or not.
+      const withoutToken = await fetch(
+        `${server.base}/api/content/article/${createdBody.data.id}?state=working`,
+      )
+      expect(withoutToken.status).toBe(403)
+    } finally {
+      if (savedKey === undefined) delete process.env['COGENTA_PREVIEW_SIGNING_KEY']
+      else process.env['COGENTA_PREVIEW_SIGNING_KEY'] = savedKey
       await server.stop()
     }
   })

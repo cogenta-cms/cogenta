@@ -1,5 +1,7 @@
 import type { BlockRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
+import { buildPath, type CollectionDefinition } from '@cogenta/schema'
+import { createPreviewTokens } from '../access/preview-token.js'
 import type { SerialisedEntry } from '../content/index.js'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
@@ -33,6 +35,12 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   GET    /{collection}/{id}/history      version list
  *   GET    /{collection}/{id}/diff         diff of two versions
  *   POST   /{collection}/{id}/restore      restore a version
+ *   POST   /{collection}/{id}/preview      mint a preview link
+ *
+ * A GET on `/{collection}/{id}` or `/-/by-path` also accepts `?preview=` —
+ * a token minted by the route above, unlocking exactly the one entry it
+ * names for this one request, in addition to `?state=working` (see
+ * `withPreview`).
  */
 
 export interface RestRouterOptions {
@@ -47,6 +55,8 @@ export interface RestRouterOptions {
    * collection can be named `graphql` without shadowing the other transport.
    */
   readonly basePath?: string
+  /** The site's public origin, used to turn a preview token into an absolute URL. Without it, `/preview` returns the token and path only. */
+  readonly siteUrl?: string
 }
 
 export interface RestRouter {
@@ -117,6 +127,20 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
     return { dependencies: collectDependencies(entries, dependencySource, queried) }
   }
 
+  /**
+   * Folds a `?preview=` token into the access context, when one was sent.
+   *
+   * A token is only ever verified here — never constructed eagerly for every
+   * request — so an ordinary read with no `preview` param never even looks at
+   * `COGENTA_PREVIEW_SIGNING_KEY`, let alone requires it to be set.
+   */
+  function withPreview(request: RestRequest, context: AccessContext): AccessContext {
+    const token = single(request.query, 'preview')
+    if (token === undefined) return context
+    const grant = createPreviewTokens().verify(token)
+    return { ...context, preview: grant }
+  }
+
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
       try {
@@ -172,7 +196,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
       const read = parseReadQuery(request.query, service.limits)
 
       if (method === 'GET') {
-        const entry = await service.read(context, name, id, {
+        const entry = await service.read(withPreview(request, context), name, id, {
           state: read.requestedState,
           depth: read.depth,
         })
@@ -216,7 +240,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
 
     const path = parsePath(request.query)
     const read = parseReadQuery(request.query, service.limits)
-    const resolution = await service.resolvePath(context, path, {
+    const resolution = await service.resolvePath(withPreview(request, context), path, {
       state: read.requestedState,
       depth: read.depth,
     })
@@ -296,10 +320,63 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         return jsonResponse(200, { data: entry })
       }
 
+      case 'preview': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        // Reusing `read` for the permission check, rather than duplicating it:
+        // only someone who can already read this exact entry's working state
+        // may mint a link that reveals it to whoever receives it.
+        const entry = await service.read(context, name, id, { state: 'working', depth: 0 })
+        const definition = service.collection(name)
+        const { token } = createPreviewTokens().issue({
+          collection: name,
+          entryId: id,
+          expiresIn: PREVIEW_LINK_LIFETIME_SECONDS,
+        })
+        const path = previewPath(definition, entry)
+        const query = `state=working&preview=${encodeURIComponent(token)}`
+        const url =
+          options.siteUrl === undefined || path === null
+            ? null
+            : `${options.siteUrl.replace(/\/+$/u, '')}${path}${path.includes('?') ? '&' : '?'}${query}`
+        return jsonResponse(201, {
+          data: {
+            token,
+            expiresIn: PREVIEW_LINK_LIFETIME_SECONDS,
+            path,
+            url,
+          },
+        })
+      }
+
       default:
         throw noRoute()
     }
   }
+}
+
+/**
+ * How long a preview link works before the editor has to ask for another.
+ *
+ * An hour outlives "open it, look, close it" and a short Slack round-trip,
+ * without turning into the kind of link that still works next month
+ * (`PreviewTokenService`'s own ceiling is 7 days for exactly that reason).
+ */
+const PREVIEW_LINK_LIFETIME_SECONDS = 60 * 60
+
+/**
+ * The path a preview link points at, or null when the collection has no
+ * route at all (unrouted collections have nothing to preview *as a page*,
+ * only the entry itself).
+ */
+function previewPath(collection: CollectionDefinition, entry: SerialisedEntry): string | null {
+  if (collection.routing === undefined) return null
+
+  const params: Record<string, string> = {}
+  for (const [key, value] of Object.entries(entry.values)) {
+    if (typeof value === 'string') params[key] = value
+  }
+
+  return buildPath(collection, params, entry.locale)
 }
 
 function methodNotAllowed(allowed: readonly string[]): RestResponse {
@@ -320,7 +397,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|history|diff|restore}.',
+    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|history|diff|restore|preview}.',
   })
 }
 

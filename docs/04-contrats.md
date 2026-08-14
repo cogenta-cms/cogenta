@@ -513,6 +513,25 @@ plutôt que d'être ajoutée par-dessus.
 Un thème ne voit jamais un brouillon : le jeton porte les droits du rôle `public`,
 sauf en prévisualisation où il porte un `PreviewGrant` limité à une entrée.
 
+**Le lien de prévisualisation** — `POST /api/content/{collection}/{id}/preview` (rôle
+requis : lecture de l'état `working` sur cette entrée précise) émet ce `PreviewGrant`
+sous forme de jeton signé HMAC-SHA256, valable une heure, et répond :
+
+```json
+{ "token": "…", "expiresIn": 3600, "path": "/blog/mon-article", "url": "https://…" }
+```
+
+`path` est `null` quand la collection n'a pas de route ; `url` est `null` quand le
+serveur n'a pas de `site.url` configuré — dans les deux cas, le jeton reste utilisable
+directement contre l'API de contenu.
+
+Toute lecture `GET /{collection}/{id}` ou `GET /-/by-path` accepte `?preview=<jeton>`
+en plus de `?state=working` (les deux sont nécessaires : le jeton ne change rien à
+l'état demandé, il ne fait que lever le refus que `working` opposerait sinon à un
+acteur `public`). Le jeton ne couvre que l'entrée qu'il nomme — toute autre entrée,
+même avec un jeton valide, répond comme si le jeton n'existait pas (même 404 qu'un
+inconnu, jamais un 403 qui confirmerait l'existence de l'entrée).
+
 ### Tokens de skin
 
 L'ensemble est **fermé et complet** : un skin qui omet un token est refusé. C'est la

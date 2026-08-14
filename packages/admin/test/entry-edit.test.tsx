@@ -40,6 +40,24 @@ describe('editing an existing entry', () => {
     expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Enregistré.')
   })
 
+  it('opens the real site URL a preview token was minted for, in a new tab', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser' }))
+
+    await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1))
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://example.com/blog/first-article?state=working&preview=preview-token-1',
+      '_blank',
+      'noopener',
+    )
+  })
+
   it('reports a nonexistent entry rather than showing a blank form', async () => {
     // Direct navigation to an id the mock server does not have — no list
     // detour needed, since the point is what happens when the URL itself is

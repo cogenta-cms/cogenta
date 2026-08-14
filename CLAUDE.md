@@ -23,8 +23,8 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1-11 faites (coquille, auth, schéma + permissions, champs, liste, formulaire généré, texte riche, blocs, versions, **médiathèque** : `MediaStore` + route REST `/api/media` + UI admin upload/grille/point focal/alt-text-décoratif + sélecteur `MediaField`) ; reste pour la tâche 3 : UI d'inscription de passkey ; tâche 12 (prévisualisation par token) à faire ensuite |
-| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1839 tests unitaires, tous verts (intégration Postgres/MySQL/MariaDB du `MediaStore` écrite mais non exécutée cette session — Docker Desktop indisponible dans l'environnement). |
+| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1-12 faites (…, médiathèque, **prévisualisation par token** : `POST /{collection}/{id}/preview` émet un `PreviewGrant` d'une heure, `?state=working&preview=<jeton>` le consomme sur `GET /{collection}/{id}` et `/-/by-path`, bouton « Prévisualiser » dans l'admin ouvrant la vraie URL du site) ; reste pour la tâche 3 : UI d'inscription de passkey ; tâche 13 (i18n) à faire ensuite |
+| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1849 tests unitaires, tous verts (intégration Postgres/MySQL/MariaDB du `MediaStore` écrite mais non exécutée cette session — Docker Desktop indisponible dans l'environnement). |
 | Paquets publiés | `@cogenta/core`, `@cogenta/schema`, `@cogenta/blocks`, `@cogenta/api`, `@cogenta/render`, `@cogenta/seo`, `@cogenta/theme-canonical`, `@cogenta/auth`, `@cogenta/cli` (`doctor`, `migrate`, `users create`, `serve`), `@cogenta/admin` (coquille, non publié) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
 | Contrats figés | **A, B et D figés** (2026-08-13). C avant L4 |

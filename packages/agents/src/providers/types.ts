@@ -59,9 +59,14 @@ export interface ChatResponse {
   readonly usage: TokenUsage
 }
 
+export interface ChatOptions {
+  /** Cancels the underlying HTTP request — the execution loop's own timeout/cancellation (task 2) threads through here. */
+  readonly signal?: AbortSignal
+}
+
 /** What every adapter implements — the execution loop (task 2) depends on this, never on a vendor SDK type directly. */
 export interface ProviderClient {
   readonly name: string
   readonly model: string
-  chat(request: ChatRequest): Promise<ChatResponse>
+  chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse>
 }

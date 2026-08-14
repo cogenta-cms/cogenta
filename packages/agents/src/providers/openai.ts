@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import type {
   ChatMessage,
+  ChatOptions,
   ChatRequest,
   ChatResponse,
   ProviderClient,
@@ -168,7 +169,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
   return {
     name: 'openai',
     model: config.model,
-    async chat(request: ChatRequest): Promise<ChatResponse> {
+    async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const response = await doFetch(url, {
         method: 'POST',
         headers: {
@@ -176,6 +177,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
           authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify(buildOpenAiRequest(request)),
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
       }).catch((cause: unknown) => {
         throw new CogentaError({
           code: 'PROVIDER_REQUEST_FAILED',

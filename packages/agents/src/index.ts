@@ -12,6 +12,7 @@ export type { ProviderName, ProviderRegistryConfig } from './providers/registry.
 export { createProviderRegistry, PROVIDER_NAMES } from './providers/registry.js'
 export type {
   ChatMessage,
+  ChatOptions,
   ChatRequest,
   ChatResponse,
   ChatRole,
@@ -21,3 +22,15 @@ export type {
   StopReason,
   TokenUsage,
 } from './providers/types.js'
+export { runAgentLoop } from './runtime/loop.js'
+export { RepetitionGuard } from './runtime/repetition.js'
+export { retryModelCall, withTimeout } from './runtime/retry.js'
+export type {
+  ExecutableTool,
+  RunAgentLoopInput,
+  RunResult,
+  RunStopReason,
+  StepRecord,
+  ToolCallOutcome,
+  ToolExecutionContext,
+} from './runtime/types.js'

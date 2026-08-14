@@ -104,6 +104,7 @@ export const ERROR_CODES = [
   'PROVIDER_REQUEST_FAILED',
   'PROVIDER_RESPONSE_INVALID',
   'PROVIDER_RATE_LIMITED',
+  'PROVIDER_TIMEOUT',
 
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',

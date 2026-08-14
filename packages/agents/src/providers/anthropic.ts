@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import type {
   ChatMessage,
+  ChatOptions,
   ChatRequest,
   ChatResponse,
   ProviderClient,
@@ -145,7 +146,7 @@ export function createAnthropicClient(config: AnthropicClientConfig): ProviderCl
   return {
     name: 'anthropic',
     model: config.model,
-    async chat(request: ChatRequest): Promise<ChatResponse> {
+    async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const response = await doFetch(url, {
         method: 'POST',
         headers: {
@@ -154,6 +155,7 @@ export function createAnthropicClient(config: AnthropicClientConfig): ProviderCl
           'anthropic-version': API_VERSION,
         },
         body: JSON.stringify(buildAnthropicRequest(request)),
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
       }).catch((cause: unknown) => {
         throw new CogentaError({
           code: 'PROVIDER_REQUEST_FAILED',

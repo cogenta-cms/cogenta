@@ -415,3 +415,58 @@ qu'on veut.
 l'isolation déclarative, donc fausse dès le premier thème tiers. Une API de données
 injectée en mémoire : plus rapide, mais elle place le thème dans le même processus que
 les secrets et supprime la sandbox obtenue gratuitement par ADR-0004.
+
+---
+
+## ADR-0017 — Un SVG téléversé est refusé par défaut, jamais servi brut
+
+**Statut** : Acté
+
+**Contexte** — `docs/lots/L2-admin.md` (tâche 11, médiathèque) exige : « SVG : assainis
+ou refusés selon la configuration, jamais servis bruts par défaut. » Un SVG est du XML,
+et peut porter `<script>`, des gestionnaires d'événements (`onload`, `onclick`) et des
+références externes (`<image href="...">`, `@import` CSS) — c'est du contenu exécutable
+déguisé en image, exactement le risque qu'un pipeline d'assainissement doit retirer avant
+de le laisser sortir. Aucun assainisseur de SVG n'existe dans le projet aujourd'hui, et en
+écrire un correct (résister aux vecteurs d'échappement connus, pas seulement à la liste
+la plus évidente) est un travail à part entière — le pipeline d'images existant
+(`packages/render/src/images/`) traite déjà explicitement le SVG comme hors de son champ
+(« Animated GIFs and SVGs are served untouched instead of being resized »).
+
+**Décision** — La médiathèque **refuse tout téléversement de SVG par défaut**. Le champ
+`decorative`/`alt` et le point focal ne changent rien à ce refus ; c'est un rejet au
+niveau du type de fichier, avant toute autre validation. Un futur mode « assaini »
+restera possible (option de configuration explicite), mais seulement une fois qu'un
+assainisseur réel existe et a été revu par `security-reviewer` — jusque-là, activer un
+mode qui n'existe pas doit échouer au démarrage plutôt que de servir un SVG non assaini
+en silence.
+
+Le refus s'appuie sur le même principe que le reste du pipeline : le type réel est lu
+dans les octets (`packages/core/src/media/format-sniff.ts`, `describeContainer`), jamais
+dans l'extension du fichier ni le `Content-Type` déclaré par le client — les deux sont
+falsifiables, et « téléverser un fichier déguisé » est un test de sécurité nommément
+exigé par le lot.
+
+**Justification** — « Refusé par défaut » satisfait littéralement l'exigence du lot
+(« jamais servis bruts par défaut ») sans construire un assainisseur dont une faille de
+contournement serait, par construction, une vulnérabilité XSS stockée dans la
+médiathèque — un risque disproportionné par rapport à la fréquence réelle du besoin
+« logo SVG dans le contenu ». Refuser maintenant et assainir plus tard est réversible ;
+assainir maintenant avec un assainisseur non revu ne l'est pas au sens où la faille aurait
+déjà pu être exploitée.
+
+**Conséquences** — Un site qui a réellement besoin de logos SVG doit les livrer par le
+thème (fichiers statiques, contrôlés par le développeur du thème, jamais par un
+formulaire d'upload d'éditeur) tant que le mode assaini n'existe pas. Le message de refus
+nomme le format détecté, pas une erreur générique, pour que l'éditeur comprenne
+immédiatement pourquoi son fichier a été rejeté.
+
+**Renoncement assumé** — Certains éditeurs voudront téléverser un logo vectoriel et ne
+pourront pas, temporairement. C'est le compromis assumé plutôt qu'un assainisseur écrit
+en urgence et non revu.
+
+**Écarté** — Assainir par une liste noire de balises/attributs dangereux, écrite pour
+cette tâche : les listes noires de XSS SVG sont connues pour être incomplètes (imbrication
+d'espaces de noms, entités, `foreignObject`) ; ce n'est pas un travail à faire en passant
+dans une tâche d'admin. Convertir tout SVG en PNG à l'upload : perd la vectorialité,
+qui est la seule raison de téléverser un SVG plutôt qu'un PNG/WebP.

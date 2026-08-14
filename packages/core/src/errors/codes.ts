@@ -89,6 +89,11 @@ export const ERROR_CODES = [
   'AUTH_ROLE_UNKNOWN',
   'AUDIT_CHAIN_BROKEN',
 
+  // Media
+  'MEDIA_NOT_FOUND',
+  'MEDIA_INVALID',
+  'MEDIA_TYPE_REJECTED',
+
   // Infrastructure
   'CACHE_FAILED',
   'QUEUE_FAILED',

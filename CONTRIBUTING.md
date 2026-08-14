@@ -86,6 +86,10 @@ A changeset is required whenever a published package changes:
 pnpm changeset
 ```
 
+See [`docs/versionnement.md`](docs/versionnement.md) for how a change maps to
+patch/minor/major, and how that differs from a contract's own version (A/B/C/D,
+`docs/04-contrats.md`) when your change touches one of the four frozen contracts.
+
 ## Contributor Licence Agreement
 
 Contributions are accepted under a lightweight CLA (ADR-0012). It preserves the

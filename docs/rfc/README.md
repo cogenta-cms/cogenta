@@ -49,12 +49,14 @@ Si la réponse est « oui, mais ce serait moins pratique », la RFC est refusée
 
 ## État des contrats
 
-| Contrat | Figé | À figer avant |
+| Contrat | Figé | Version |
 |---|---|---|
-| A — schéma de contenu | non | L1 |
-| B — vocabulaire de blocs | non | L1 |
-| C — outil agentique | non | L4 |
-| D — thème | non | L3 |
+| A — schéma de contenu | **oui**, depuis le 2026-08-13 | `schema@1.0` |
+| B — vocabulaire de blocs | **oui**, depuis le 2026-08-13 | `blocks@1.0` |
+| C — outil agentique | **oui**, depuis le 2026-08-14 (ADR-0020) | `tools@1.0` |
+| D — thème | **oui**, depuis le 2026-08-13 | `theme@1.1` |
 
-Tant qu'un contrat n'est pas figé, il évolue par décision de conception ordinaire, sans
-RFC. **Le figeage est une décision explicite** : il se note ici et dans `04-contrats.md`.
+**Les quatre contrats sont figés.** Toute modification de leur forme passe désormais par
+le processus ci-dessus, sans exception — voir `04-contrats.md` pour le détail par
+contrat de ce qui est majeur (rupture, migration exigée) contre mineur (ajout
+compatible, ex. une entrée à `ctx` pour le contrat D).

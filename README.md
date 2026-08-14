@@ -17,13 +17,23 @@ It watches its own security, patches itself, optimises itself, and reports back.
 **Pre-alpha. Not usable yet, but a real site can be scaffolded, run and edited.** The
 design is complete and public. The foundation (L0), the content model (L1), rendering
 (L3) and the admin (L2) are done. The multi-agent runtime (L4) and its built-in agents
-(L5 — security, SEO, performance, content, mostly complete) are in place, alongside the
-`cogenta` command line (`doctor`, `migrate`, `users create`, `serve`) and
-`npm create cogenta`, which scaffolds a working site — including a first real blueprint
-("blog") — end to end. See [`docs/getting-started.md`](docs/getting-started.md) to try
-it. What's left, in order, is the rest of the installer/ecosystem work (L9), then
-channels (L6), third-party plugin extensibility (L7) and fleet supervision (L8). Follow
-the [roadmap](docs/06-lots.md) to see where things stand.
+(L5 — security, SEO, performance, content, mostly complete) are in place. `npm create
+cogenta` scaffolds a working site end to end — any of eight blueprints (blank, blog,
+vitrine, portfolio, documentation, magazine, association, restaurant, saas), each with
+real demo content, plus an optional AI-generated skin validated against WCAG contrast
+and a monotone type scale before it's ever written to disk. The `cogenta` CLI covers
+`doctor`, `migrate`, `users create`, `serve`/`dev`, `import wordpress` (with a
+conversion report and preserved redirects), `generate types`, and `skin
+list/validate/apply/generate`; commands with no real capability behind them yet
+(`build`, `backup`, `upgrade`, `deploy`, `theme`, `agent`) are documented as
+deliberately deferred rather than stubbed. See
+[`docs/getting-started.md`](docs/getting-started.md) (developers) or
+[`docs/guide-editeur.md`](docs/guide-editeur.md) (editors) to try it. What's left, in
+order, is the rest of the installer/ecosystem work (L9 — governance files, functional
+docs and architecture diagrams are done; a real cPanel-hosting verification is
+documented but not yet run), then channels (L6), third-party plugin extensibility (L7)
+and fleet supervision (L8). Follow the [roadmap](docs/06-lots.md) to see where things
+stand.
 
 ## Why another CMS?
 
@@ -82,14 +92,18 @@ The full design lives in [`docs/`](docs/). Start with the
 
 | Document | Purpose |
 |---|---|
-| [`getting-started.md`](docs/getting-started.md) | Scaffold, run and edit a site |
+| [`getting-started.md`](docs/getting-started.md) | Scaffold, run and edit a site (developer) |
+| [`guide-editeur.md`](docs/guide-editeur.md) | Using the admin (editor/site owner, no jargon) |
+| [`hebergement-mutualise.md`](docs/hebergement-mutualise.md) | Shared/cPanel hosting profile — documented, not yet tested on real hosting |
 | [`00-vision.md`](docs/00-vision.md) | Positioning and non-goals |
 | [`01-prd.md`](docs/01-prd.md) | Personas, jobs-to-be-done, scope |
 | [`02-architecture.md`](docs/02-architecture.md) | Technical architecture |
 | [`03-decisions.md`](docs/03-decisions.md) | Architecture decision records |
-| [`04-contrats.md`](docs/04-contrats.md) | The four versioned interface contracts |
+| [`04-contrats.md`](docs/04-contrats.md) | The four versioned interface contracts (all frozen) |
 | [`05-securite.md`](docs/05-securite.md) | Threat model and security design |
 | [`06-lots.md`](docs/06-lots.md) | Work breakdown and roadmap |
+| [`versionnement.md`](docs/versionnement.md) | Package and contract versioning, deprecation policy |
+| [`rfc/README.md`](docs/rfc/README.md) | RFC process for contract/block-vocabulary changes |
 | [`lots/`](docs/lots/) | Detailed spec per work package |
 
 > Design documents are currently written in French. English translation will follow

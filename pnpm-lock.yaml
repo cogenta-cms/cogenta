@@ -416,6 +416,9 @@ importers:
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema

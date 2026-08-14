@@ -40,6 +40,7 @@
     "@cogenta/blocks": "workspace:*",
     "@cogenta/cli": "workspace:*",
     "@cogenta/core": "workspace:*",
+    "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/theme-canonical": "workspace:*"
   },

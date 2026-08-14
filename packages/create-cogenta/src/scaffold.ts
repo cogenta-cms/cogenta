@@ -5,6 +5,7 @@ import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { createOutput, runMigrate, runUsers } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger, type DatabaseHandle } from '@cogenta/core'
+import type { SkinTokens } from '@cogenta/render'
 import { type CollectionDefinition, createContentStore, createSchemaTables } from '@cogenta/schema'
 import {
   BLOG_COLLECTIONS,
@@ -31,6 +32,8 @@ export interface ScaffoldAnswers {
   readonly adminEmail: string
   /** Defaults to `blank` (`DEFAULT_BLUEPRINT_ID`) — the existing, unchanged behaviour. */
   readonly blueprintId?: string
+  /** Already generated and validated by `chooseSkin` (L9 task 7). Absent: the theme's default `tokens.json` is copied, exactly as before this option existed. */
+  readonly skinTokens?: SkinTokens
 }
 
 export interface ScaffoldResult {
@@ -44,6 +47,8 @@ export interface ScaffoldResult {
   readonly fellBackToBlank: boolean
   /** Present only when a blueprint wrote a content schema (e.g. `blog`). */
   readonly schemaPath?: string
+  /** Present only when a blueprint wrote `theme.tokens.json` — says whether the AI-generated skin was used or the theme's default was copied. */
+  readonly skinSource?: 'generated' | 'default'
 }
 
 function capture(): { readonly write: (text: string) => void; text(): string } {
@@ -230,15 +235,17 @@ export async function scaffoldSite(
   await writeFile(join(answers.targetDir, 'package.json'), packageJsonContents(answers), 'utf8')
 
   let schemaPath: string | undefined
+  let skinSource: 'generated' | 'default' | undefined
 
   if (blueprint.id === 'blog') {
     schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
     await writeFile(schemaPath, schemaFileContents(BLOG_COLLECTIONS), 'utf8')
-    await writeFile(
-      join(answers.targetDir, 'theme.tokens.json'),
-      await canonicalTokensJson(),
-      'utf8',
-    )
+    skinSource = answers.skinTokens === undefined ? 'default' : 'generated'
+    const tokensJson =
+      answers.skinTokens === undefined
+        ? await canonicalTokensJson()
+        : `${JSON.stringify(answers.skinTokens, null, 2)}\n`
+    await writeFile(join(answers.targetDir, 'theme.tokens.json'), tokensJson, 'utf8')
     await writeFile(
       join(answers.targetDir, '.cogenta', 'recommended-agents.json'),
       `${JSON.stringify(BLOG_RECOMMENDED_AGENTS, null, 2)}\n`,
@@ -293,5 +300,6 @@ export async function scaffoldSite(
     blueprintId: blueprint.id,
     fellBackToBlank,
     ...(schemaPath === undefined ? {} : { schemaPath }),
+    ...(skinSource === undefined ? {} : { skinSource }),
   }
 }

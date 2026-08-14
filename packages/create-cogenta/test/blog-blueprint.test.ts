@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { VocabularyBlock } from '@cogenta/blocks'
@@ -236,6 +236,67 @@ describe('scaffoldSite — blog blueprint', () => {
     expect(result.schemaPath).toBeUndefined()
 
     await expect(loadCollections(targetDir)).rejects.toThrow(/No schema file found/)
+  })
+
+  it('writes an AI-generated skin instead of the default when one is given, and reports it', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
+    dirs.push(targetDir)
+    const generated = {
+      color: {
+        bg: '#0b0d12',
+        fg: '#f4f6fb',
+        accent: '#7aa2ff',
+        accentFg: '#03050c',
+        muted: '#161a22',
+        mutedFg: '#c3c9d6',
+        border: '#2a3040',
+      },
+      font: {
+        sans: 'sans-serif',
+        serif: 'serif',
+        mono: 'monospace',
+        scale: 1.25,
+        baseSize: '1rem',
+      },
+      space: { unit: '0.25rem', density: 'comfortable' as const },
+      radius: { sm: '0.25rem', md: '0.5rem', lg: '1rem' },
+      motion: { duration: '180ms', easing: 'linear', reduced: true },
+      shadow: { sm: '0 1px 2px rgba(0,0,0,.4)', md: '0 6px 24px rgba(0,0,0,.4)' },
+    }
+
+    const result = await scaffoldSite({
+      targetDir,
+      siteName: 'My Blog',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'blog',
+      skinTokens: generated,
+    })
+
+    expect(result.skinSource).toBe('generated')
+    const written = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
+    expect(written).toEqual(generated)
+  })
+
+  it('reports "default" and copies the theme default when no generated skin is given', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
+    dirs.push(targetDir)
+
+    const result = await scaffoldSite({
+      targetDir,
+      siteName: 'My Blog',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'blog',
+    })
+
+    expect(result.skinSource).toBe('default')
+    const written = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
+    expect(written.color.bg).toBe('#ffffff')
   })
 })
 

@@ -2,10 +2,16 @@ import type { Output } from '@cogenta/cli'
 import { BLUEPRINTS, resolveBlueprint } from './blueprints/registry.js'
 import { loadConfigFile } from './config-file.js'
 import { checkEnvironment } from './environment.js'
-import { LLM_PROVIDERS, type LlmProviderId, validateApiKey } from './llm-setup.js'
+import {
+  createProviderClient,
+  LLM_PROVIDERS,
+  type LlmProviderId,
+  validateApiKey,
+} from './llm-setup.js'
 import type { Prompter } from './prompts.js'
 import { printRecap } from './recap.js'
 import { scaffoldSite } from './scaffold.js'
+import { chooseSkin, type SkinOutcome } from './skin-flow.js'
 import { defaultAnswers, type WizardAnswers } from './types.js'
 
 export interface RunWizardOptions {
@@ -52,10 +58,15 @@ async function collectAnswers(
 
   let llmModel: string | undefined
   let llmApiKey: string | undefined
+  let siteDescription: string | undefined
   if (llmChoice !== 'none') {
     const option = LLM_PROVIDERS.find((entry) => entry.id === llmChoice)
     llmModel = await prompter.text('Model', option?.defaultModel ?? '')
     llmApiKey = await prompter.text('API key', '')
+    siteDescription = await prompter.text(
+      'Site description for AI skin generation (sector, mood, audience, brand colours — leave blank to skip and keep the default skin)',
+      '',
+    )
   }
 
   const adminEmail = await prompter.text('Admin email', defaults.adminEmail)
@@ -70,6 +81,7 @@ async function collectAnswers(
     llmProvider: llmChoice,
     ...(llmModel === undefined || llmModel === '' ? {} : { llmModel }),
     ...(llmApiKey === undefined || llmApiKey === '' ? {} : { llmApiKey }),
+    ...(siteDescription === undefined || siteDescription === '' ? {} : { siteDescription }),
     adminEmail,
   }
 }
@@ -117,23 +129,54 @@ export async function runWizard(options: RunWizardOptions): Promise<number> {
       mysql: environment.detectedDatabases.includes('mysql'),
     })
   }
-  prompter.close()
-
   const resolvedBlueprint = resolveBlueprint(answers.blueprintId)
 
   let keyValidation: Awaited<ReturnType<typeof validateApiKey>> | undefined
+  let llmModel = ''
   if (
     answers.llmProvider !== 'none' &&
     answers.llmApiKey !== undefined &&
     answers.llmApiKey !== ''
   ) {
     const option = LLM_PROVIDERS.find((entry) => entry.id === answers.llmProvider)
+    llmModel = answers.llmModel ?? option?.defaultModel ?? ''
     keyValidation = await validateApiKey({
       provider: answers.llmProvider,
       apiKey: answers.llmApiKey,
-      model: answers.llmModel ?? option?.defaultModel ?? '',
+      model: llmModel,
     })
   }
+
+  // "Aperçu proposé sur trois pages types, avec possibilité de régénérer ou
+  // d'ajuster" (L9 task 7) needs the prompter, so it stays open until here —
+  // only `blog` writes a `theme.tokens.json` a generated skin could replace.
+  let skinOutcome: SkinOutcome | undefined
+  if (
+    resolvedBlueprint.blueprint.id === 'blog' &&
+    answers.llmProvider !== 'none' &&
+    answers.llmApiKey !== undefined &&
+    answers.llmApiKey !== '' &&
+    keyValidation?.valid === true &&
+    answers.siteDescription !== undefined &&
+    answers.siteDescription !== ''
+  ) {
+    out.heading('Skin generation')
+    skinOutcome = await chooseSkin({
+      prompter,
+      out,
+      client: createProviderClient({
+        provider: answers.llmProvider,
+        apiKey: answers.llmApiKey,
+        model: llmModel,
+      }),
+      model: llmModel,
+      description: answers.siteDescription,
+      blueprintLabel: resolvedBlueprint.blueprint.label,
+      siteName: answers.siteName,
+      targetDir: answers.targetDir,
+    })
+  }
+  prompter.close()
 
   const scaffold = await scaffoldSite(
     {
@@ -148,6 +191,7 @@ export async function runWizard(options: RunWizardOptions): Promise<number> {
         : { llm: { provider: answers.llmProvider, model: answers.llmModel ?? '' } }),
       adminEmail: answers.adminEmail,
       blueprintId: resolvedBlueprint.blueprint.id,
+      ...(skinOutcome?.kind === 'generated' ? { skinTokens: skinOutcome.tokens } : {}),
     },
     env,
   )
@@ -159,6 +203,7 @@ export async function runWizard(options: RunWizardOptions): Promise<number> {
       resolvedBlueprint,
       scaffold,
       ...(keyValidation === undefined ? {} : { keyValidation }),
+      ...(skinOutcome === undefined ? {} : { skinOutcome }),
     },
     out,
   )

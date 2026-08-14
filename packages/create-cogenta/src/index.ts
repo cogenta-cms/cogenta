@@ -10,17 +10,24 @@ export { ConfigFileError, loadConfigFile } from './config-file.js'
 export type { CheckStatus, EnvironmentCheck, EnvironmentReport } from './environment.js'
 export { checkEnvironment } from './environment.js'
 export type {
+  CreateProviderClientOptions,
   LlmProviderId,
   LlmProviderOption,
   ValidateKeyOptions,
   ValidateKeyResult,
 } from './llm-setup.js'
-export { LLM_PROVIDERS, validateApiKey } from './llm-setup.js'
+export { createProviderClient, LLM_PROVIDERS, validateApiKey } from './llm-setup.js'
 export type { Choice, Prompter, PromptIO } from './prompts.js'
 export { createDefaultsPrompter, createInteractivePrompter } from './prompts.js'
 export { printRecap } from './recap.js'
 export type { ScaffoldAnswers, ScaffoldResult } from './scaffold.js'
 export { scaffoldSite } from './scaffold.js'
+export type { ChooseSkinOptions, SkinOutcome } from './skin-flow.js'
+export { chooseSkin } from './skin-flow.js'
+export type { GenerateSkinOptions, GenerateSkinResult } from './skin-generation.js'
+export { generateSkin } from './skin-generation.js'
+export type { SkinPreviewPage } from './skin-preview.js'
+export { renderSkinPreview } from './skin-preview.js'
 export type { WizardAnswers } from './types.js'
 export { defaultAnswers } from './types.js'
 export type { RunWizardOptions } from './wizard.js'

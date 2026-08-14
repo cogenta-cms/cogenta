@@ -36,7 +36,16 @@ export interface ValidateKeyResult {
   readonly reason?: string
 }
 
-function clientFor(options: ValidateKeyOptions): ProviderClient {
+export interface CreateProviderClientOptions {
+  readonly provider: Exclude<LlmProviderId, 'none'>
+  readonly apiKey: string
+  readonly model: string
+  /** Test seam only — lets a test stand in for the network without mocking a shared module. */
+  readonly fetchImpl?: typeof fetch
+}
+
+/** The same adapter construction `validateApiKey` uses, exported so a later real call (skin generation, L9 task 7) does not duplicate it. */
+export function createProviderClient(options: CreateProviderClientOptions): ProviderClient {
   const config = {
     apiKey: options.apiKey,
     model: options.model,
@@ -45,6 +54,10 @@ function clientFor(options: ValidateKeyOptions): ProviderClient {
   if (options.provider === 'anthropic') return createAnthropicClient(config)
   if (options.provider === 'openai') return createOpenAiClient(config)
   return createGoogleClient(config)
+}
+
+function clientFor(options: ValidateKeyOptions): ProviderClient {
+  return createProviderClient(options)
 }
 
 /**

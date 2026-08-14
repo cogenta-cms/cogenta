@@ -12,6 +12,8 @@ export interface WizardAnswers {
   readonly llmProvider: LlmProviderId
   readonly llmModel?: string
   readonly llmApiKey?: string
+  /** Free text (sector, mood, audience, brand colours) driving AI skin generation (L9 task 7). Empty or absent: generation is skipped, the default skin is used. */
+  readonly siteDescription?: string
   readonly adminEmail: string
 }
 

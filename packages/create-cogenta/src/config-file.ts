@@ -93,6 +93,11 @@ export async function loadConfigFile(path: string, targetDir: string): Promise<W
     ...(optionalString(llm.apiKey, 'llm.apiKey') === undefined
       ? {}
       : { llmApiKey: optionalString(llm.apiKey, 'llm.apiKey') as string }),
+    ...(optionalString(llm.siteDescription, 'llm.siteDescription') === undefined
+      ? {}
+      : {
+          siteDescription: optionalString(llm.siteDescription, 'llm.siteDescription') as string,
+        }),
     ...(optionalString(root.adminEmail, 'adminEmail') === undefined
       ? {}
       : { adminEmail: optionalString(root.adminEmail, 'adminEmail') as string }),

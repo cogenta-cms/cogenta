@@ -161,6 +161,9 @@ export const ERROR_CODES = [
   // create-cogenta — blueprints (L9)
   'BLUEPRINT_REGISTRY_CORRUPT',
 
+  // create-cogenta — AI skin generation (L9)
+  'SKIN_GENERATION_RESPONSE_NOT_JSON',
+
   // Import — WordPress WXR (L9)
   'IMPORT_WXR_PARSE_FAILED',
   'IMPORT_WXR_UNSAFE_DOCUMENT',

@@ -3,6 +3,7 @@ import type { ResolvedBlueprint } from './blueprints/registry.js'
 import type { EnvironmentReport } from './environment.js'
 import type { ValidateKeyResult } from './llm-setup.js'
 import type { ScaffoldResult } from './scaffold.js'
+import type { SkinOutcome } from './skin-flow.js'
 import type { WizardAnswers } from './types.js'
 
 export interface RecapInput {
@@ -11,11 +12,13 @@ export interface RecapInput {
   readonly resolvedBlueprint: ResolvedBlueprint
   readonly keyValidation?: ValidateKeyResult
   readonly scaffold: ScaffoldResult
+  /** Present only when generation was attempted (L9 task 7) — absent means it was never offered (no LLM, no description). */
+  readonly skinOutcome?: SkinOutcome
 }
 
 /** Step 10: "ce qui est actif, ce qui est dégradé et pourquoi, prochaine étape." Every degraded item names why, never just that it is degraded. */
 export function printRecap(input: RecapInput, out: Output): void {
-  const { answers, environment, resolvedBlueprint, keyValidation, scaffold } = input
+  const { answers, environment, resolvedBlueprint, keyValidation, scaffold, skinOutcome } = input
 
   out.heading('Your site')
   out.ok(`${answers.siteName} — ${answers.siteUrl}`)
@@ -48,15 +51,23 @@ export function printRecap(input: RecapInput, out: Output): void {
   }
 
   out.heading('Skin')
-  if (resolvedBlueprint.blueprint.id === 'blog') {
-    out.ok('@cogenta/theme-canonical default skin — written to theme.tokens.json.')
-    out.detail(
-      'AI-generated skins are not built yet (a future task); run `cogenta skin generate` once they are.',
-    )
-  } else {
+  if (resolvedBlueprint.blueprint.id !== 'blog') {
     out.warn(
-      'Default skin — AI-generated skins are not built yet (a future task); run `cogenta skin generate` once they are.',
+      'Default skin — this blueprint has no theme.tokens.json step yet. AI skin generation applies only to "blog" today.',
     )
+  } else if (skinOutcome?.kind === 'generated') {
+    out.ok(
+      `AI-generated skin, validated in ${skinOutcome.attempts} attempt${skinOutcome.attempts === 1 ? '' : 's'} — written to theme.tokens.json.`,
+    )
+  } else if (skinOutcome?.kind === 'default') {
+    out.warn(`@cogenta/theme-canonical default skin — kept because ${skinOutcome.reason}.`)
+  } else {
+    out.ok('@cogenta/theme-canonical default skin — written to theme.tokens.json.')
+    if (answers.llmProvider === 'none' || answers.siteDescription === undefined) {
+      out.detail(
+        'AI skin generation was not offered: it needs an LLM provider and a site description. Run `cogenta skin generate` later (a future CLI task) to try it.',
+      )
+    }
   }
 
   if (resolvedBlueprint.blueprint.id === 'blog') {

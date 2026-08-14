@@ -191,6 +191,10 @@ export const ERROR_CODES = [
   // Channels — notification preferences (L6 task 7)
   'CHANNEL_PREFERENCES_INVALID',
 
+  // Channels — email adapter (L6 task 8)
+  'CHANNEL_EMAIL_TRANSPORT_ERROR',
+  'CHANNEL_EMAIL_INBOUND_UNSUPPORTED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

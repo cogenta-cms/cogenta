@@ -87,6 +87,13 @@ export {
   DEFAULT_CHANNEL_PREFERENCES,
   SEVERITY_RANK,
 } from './preferences/types.js'
+export type { EmailAdapterOptions } from './providers/email/adapter.js'
+export { createEmailAdapter } from './providers/email/adapter.js'
+export type { FileEmailTransportOptions } from './providers/email/file-transport.js'
+export { createFileEmailTransport } from './providers/email/file-transport.js'
+export type { EmailActionLinkOptions, RenderedEmailMessage } from './providers/email/render.js'
+export { renderEmailMessage } from './providers/email/render.js'
+export type { EmailTransport, OutgoingEmail, SentEmail } from './providers/email/transport.js'
 export type {
   TelegramAdapter,
   TelegramAdapterOptions,

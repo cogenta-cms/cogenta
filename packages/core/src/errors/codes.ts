@@ -195,6 +195,9 @@ export const ERROR_CODES = [
   'CHANNEL_EMAIL_TRANSPORT_ERROR',
   'CHANNEL_EMAIL_INBOUND_UNSUPPORTED',
 
+  // Channels — Slack adapter (L6 task 9)
+  'CHANNEL_SLACK_API_ERROR',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

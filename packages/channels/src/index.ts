@@ -95,6 +95,31 @@ export type { EmailActionLinkOptions, RenderedEmailMessage } from './providers/e
 export { renderEmailMessage } from './providers/email/render.js'
 export type { EmailTransport, OutgoingEmail, SentEmail } from './providers/email/transport.js'
 export type {
+  SlackAdapter,
+  SlackAdapterOptions,
+  SlackLinkProof,
+} from './providers/slack/adapter.js'
+export { createSlackAdapter } from './providers/slack/adapter.js'
+export type {
+  SlackBlock,
+  SlackClient,
+  SlackClientConfig,
+  SlackMessageResult,
+  SlackPostMessageParams,
+  SlackUpdateMessageParams,
+} from './providers/slack/client.js'
+export { createSlackClient } from './providers/slack/client.js'
+export type { SlackInboundDeps } from './providers/slack/inbound.js'
+export { createSlackInboundHandler } from './providers/slack/inbound.js'
+export type { RenderedSlackMessage } from './providers/slack/render.js'
+export { renderSlackMessage } from './providers/slack/render.js'
+export type {
+  SlackSocketClient,
+  SlackSocketClientConfig,
+  SlackSocketEnvelope,
+} from './providers/slack/socket.js'
+export { createSlackSocketClient } from './providers/slack/socket.js'
+export type {
   TelegramAdapter,
   TelegramAdapterOptions,
   TelegramLinkProof,

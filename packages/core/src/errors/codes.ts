@@ -99,6 +99,12 @@ export const ERROR_CODES = [
   'QUEUE_FAILED',
   'STORAGE_FAILED',
 
+  // Agents — LLM provider adapters (L4)
+  'PROVIDER_UNKNOWN',
+  'PROVIDER_REQUEST_FAILED',
+  'PROVIDER_RESPONSE_INVALID',
+  'PROVIDER_RATE_LIMITED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

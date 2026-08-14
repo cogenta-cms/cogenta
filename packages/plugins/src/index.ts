@@ -1,3 +1,5 @@
+export type { IsolatedRunResult, RunIsolatedOptions } from './host/worker-runner.js'
+export { runIsolated, runIsolatedOrThrow } from './host/worker-runner.js'
 export type { LoadPluginOptions, PluginSource, ResolvedPlugin } from './loader.js'
 export { loadPlugin, PLUGIN_MANIFEST_FILE_NAMES } from './loader.js'
 export type {

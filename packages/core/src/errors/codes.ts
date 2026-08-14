@@ -217,6 +217,11 @@ export const ERROR_CODES = [
   'PLUGIN_MANIFEST_LOAD_FAILED',
   'PLUGIN_MANIFEST_EXPORT_INVALID',
 
+  // Plugins — isolated worker execution (L7 task 3)
+  'PLUGIN_WORKER_TIMEOUT',
+  'PLUGIN_WORKER_CRASHED',
+  'PLUGIN_WORKER_RUNTIME_ERROR',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

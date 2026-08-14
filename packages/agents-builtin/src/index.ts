@@ -1,3 +1,16 @@
+export { contentAgent } from './content/agent.js'
+export type { ContentDraftToolOptions } from './content/provenance.js'
+export { createContentDraftTool } from './content/provenance.js'
+export type { TerminologyRule } from './content/terminology.js'
+export { checkTerminology } from './content/terminology.js'
+export type {
+  ExistingContent,
+  SuggestTopicGapsOptions,
+  TopicCandidate,
+  TopicGapSuggestion,
+} from './content/topic-gaps.js'
+export { suggestTopicGaps } from './content/topic-gaps.js'
+export type { ContentFinding, ContentProvenance, ContentSeverity } from './content/types.js'
 export { performanceAgent } from './performance/agent.js'
 export { compareToBudget } from './performance/budget.js'
 export type { CruxFormFactor, QueryCruxOptions } from './performance/crux-client.js'

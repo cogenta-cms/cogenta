@@ -46,6 +46,8 @@ function toExecutableTool(
       description: tool.description,
       inputSchema: z.toJSONSchema(tool.input) as Readonly<Record<string, unknown>>,
     },
+    sideEffects: tool.sideEffects,
+    reversible: tool.reversible,
     async execute(input: Readonly<Record<string, unknown>>, execCtx: ToolExecutionContext) {
       const parsedInput = tool.input.safeParse(input)
       if (!parsedInput.success) {

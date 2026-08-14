@@ -112,9 +112,13 @@ export const ERROR_CODES = [
   'TOOL_UNKNOWN',
   'TOOL_INPUT_INVALID',
   'TOOL_OUTPUT_INVALID',
+  'TOOL_CALL_REJECTED',
 
   // Agents — core tools (L4)
   'HTTP_FETCH_DOMAIN_DENIED',
+
+  // Agents — autonomy and approval (L4)
+  'APPROVAL_REQUEST_UNKNOWN',
 
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',

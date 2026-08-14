@@ -13,12 +13,16 @@ export interface ToolExecutionContext {
 }
 
 /**
- * A tool the loop can actually call. Permission checking, the full manifest,
- * and `revert` all belong to later tasks (4, 10) — this is deliberately just
- * enough surface for the loop to dispatch a call and get a result back.
+ * A tool the loop can actually call. `sideEffects`/`reversible` are optional
+ * because a bare `ExecutableTool` (hand-built in a test, or from a source
+ * that never declared them) should not silently claim safety it did not
+ * declare — `withAutonomy` (task 9) treats an unset `sideEffects` as "assume
+ * side-effecting" for exactly that reason.
  */
 export interface ExecutableTool {
   readonly spec: ProviderToolSpec
+  readonly sideEffects?: boolean
+  readonly reversible?: boolean
   execute(input: Readonly<Record<string, unknown>>, ctx: ToolExecutionContext): Promise<unknown>
 }
 

@@ -1,6 +1,18 @@
 export type { AuditLogLike, AuditRecordInput } from './audit/types.js'
 export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'
+export type { MemoryApprovalQueueOptions } from './autonomy/approval-queue.js'
+export { createMemoryApprovalQueue } from './autonomy/approval-queue.js'
+export type {
+  ApprovalQueue,
+  ApprovalRequest,
+  ApprovalRequestInput,
+  ApprovalStatus,
+  AutonomyConfig,
+  AutonomyLevel,
+} from './autonomy/types.js'
+export type { WithAutonomyOptions } from './autonomy/with-autonomy.js'
+export { withAutonomy, withAutonomyForManifest } from './autonomy/with-autonomy.js'
 export type { MutableKillSwitch } from './budget/kill-switch.js'
 export { createKillSwitch } from './budget/kill-switch.js'
 export type { BudgetTrackerOptions } from './budget/tracker.js'

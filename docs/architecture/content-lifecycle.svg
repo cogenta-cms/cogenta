@@ -1,0 +1,69 @@
+<svg viewBox="0 0 900 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le cycle de vie d'un contenu : modifier une entrée déjà publiée écrit une nouvelle version de travail sans jamais toucher la ligne live ; seul un appel explicite à publier fait avancer cette ligne live.">
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+    <marker id="arrowLive" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <!-- create -->
+  <circle cx="60" cy="90" r="6" fill="currentColor"/>
+  <text x="60" y="70" text-anchor="middle" font-family="sans-serif" font-size="11">créer</text>
+  <line x1="66" y1="90" x2="120" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+  <!-- draft box -->
+  <rect x="125" y="60" width="160" height="60" fill="none" stroke="currentColor" stroke-width="1.5" rx="5"/>
+  <text x="205" y="85" text-anchor="middle" font-family="sans-serif" font-size="12.5" fill="currentColor">Brouillon</text>
+  <text x="205" y="101" text-anchor="middle" font-family="sans-serif" font-size="10" fill="currentColor">status: draft</text>
+
+  <line x1="285" y1="90" x2="345" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <text x="315" y="80" text-anchor="middle" font-family="sans-serif" font-size="10.5">publier</text>
+
+  <!-- published / live box, accent -->
+  <rect x="350" y="60" width="220" height="60" fill="none" stroke="#d97706" stroke-width="2" rx="5"/>
+  <text x="460" y="85" text-anchor="middle" font-family="sans-serif" font-size="12.5" fill="#d97706" font-weight="bold">Publié — ligne live</text>
+  <text x="460" y="101" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#d97706">ce que le rendu public lit</text>
+
+  <!-- unpublish back to draft/archived -->
+  <path d="M 350 75 C 300 30, 250 30, 210 58" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#arrow2)"/>
+  <text x="270" y="30" text-anchor="middle" font-family="sans-serif" font-size="10">dépublier → draft / archived</text>
+
+  <!-- edit arrow going down to working version -->
+  <line x1="460" y1="120" x2="460" y2="200" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <text x="475" y="160" font-family="sans-serif" font-size="10.5">modifier</text>
+
+  <!-- working version box -->
+  <rect x="350" y="205" width="220" height="70" fill="none" stroke="currentColor" stroke-width="1.5" rx="5"/>
+  <text x="460" y="230" text-anchor="middle" font-family="sans-serif" font-size="12.5" fill="currentColor">Nouvelle version</text>
+  <text x="460" y="246" text-anchor="middle" font-family="sans-serif" font-size="10" fill="currentColor">table des versions (working)</text>
+  <text x="460" y="262" text-anchor="middle" font-family="sans-serif" font-size="10" fill="currentColor">la ligne live n'est pas touchée</text>
+
+  <!-- publish again: working -> live advances -->
+  <path d="M 460 205 C 460 140, 460 140, 460 122" fill="none" stroke="#d97706" stroke-width="1.6" marker-end="url(#arrowLive)"/>
+  <text x="600" y="165" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#d97706">publier → la ligne live avance</text>
+
+  <!-- history stack -->
+  <rect x="640" y="205" width="150" height="26" fill="none" stroke="currentColor" stroke-width="1" rx="3"/>
+  <text x="715" y="222" text-anchor="middle" font-family="sans-serif" font-size="10">version 4</text>
+  <rect x="650" y="235" width="150" height="26" fill="none" stroke="currentColor" stroke-width="1" rx="3"/>
+  <text x="725" y="252" text-anchor="middle" font-family="sans-serif" font-size="10">version 3</text>
+  <rect x="660" y="265" width="150" height="26" fill="none" stroke="currentColor" stroke-width="1" rx="3"/>
+  <text x="735" y="282" text-anchor="middle" font-family="sans-serif" font-size="10">version 2 …</text>
+  <text x="715" y="196" text-anchor="middle" font-family="sans-serif" font-size="10.5">history</text>
+
+  <path d="M 640 218 C 600 240, 580 240, 570 240" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#arrow2)"/>
+  <text x="605" y="290" text-anchor="middle" font-family="sans-serif" font-size="10">restaurer(version)</text>
+
+  <!-- animated token showing the real guarantee: edit -> working (live untouched) -> publish -> live advances -->
+  <circle r="6" fill="#d97706">
+    <animateMotion dur="5s" repeatCount="indefinite"
+      path="M 460,120 L 460,205 C 460,140 460,140 460,122" />
+  </circle>
+
+  <text x="450" y="340" text-anchor="middle" font-family="sans-serif" font-size="11.5" fill="currentColor">« Un brouillon d'une entrée déjà publiée est une ligne de la table des versions,</text>
+  <text x="450" y="357" text-anchor="middle" font-family="sans-serif" font-size="11.5" fill="currentColor">pas une mutation de la ligne live. » — propriété du stockage, pas d'un filtre.</text>
+
+  <text x="450" y="400" text-anchor="middle" font-family="sans-serif" font-size="10" fill="currentColor">ContentStatus : draft · scheduled · published · archived — indépendant de l'état live/working de la ligne.</text>
+</svg>

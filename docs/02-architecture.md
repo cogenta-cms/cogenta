@@ -23,6 +23,11 @@ Trois bénéfices en découlent, et ils portent une grande partie du produit :
   runtime vers le build et l'édition : l'agent sécurité devient un job CI qui ouvre une
   PR de correctif, l'agent SEO audite le build avant publication.
 
+<figure>
+  <img src="architecture/two-planes.svg" alt="Cogenta sépare le plan de diffusion, sans accès à la base ni aux secrets, du plan de contrôle, qui seul détient l'état et les secrets ; les deux ne communiquent que par l'API de contenu HTTP, à jeton restreint." />
+  <figcaption>Les deux plans et leur unique voie de communication : l'API de contenu, à jeton restreint.</figcaption>
+</figure>
+
 ### Profils de déploiement
 
 | Profil | Plan de contrôle | Diffusion | Cible |
@@ -93,6 +98,11 @@ niveau supérieur.** C'est la défense structurelle contre l'injection de prompt
 Un contenu lu par un agent (commentaire, article importé, page web) est **toujours**
 traité comme donnée, jamais comme instruction, et balisé comme tel dans le contexte.
 
+<figure>
+  <img src="architecture/agent-loop.svg" alt="Le cycle d'exécution d'un agent : à chaque étape, cinq garde-fous sont vérifiés dans un ordre fixe avant tout appel réel au modèle, puis la réponse est dispatchée vers l'exécution d'outils ou vers une des huit raisons d'arrêt réelles." />
+  <figcaption>Le cycle d'exécution d'un agent (<code>runAgentLoop</code>) : cinq garde-fous avant chaque appel modèle, huit raisons d'arrêt réelles, jamais de boucle infinie.</figcaption>
+</figure>
+
 ### 4.2 Outils
 
 Fonctions typées et versionnées, avec permissions déclarées dans leur manifeste.
@@ -160,6 +170,18 @@ transactions, l'intégrité référentielle, le JSONB indexé et le full-text na
 ORM typé unique (Drizzle) sur les trois dialectes. Les fonctionnalités qui exigent
 Postgres sont déclarées comme telles, jamais rabotées pour tout le monde.
 
+### Cycle de vie d'un contenu
+
+La table d'une entrée porte **la ligne live** — ce que lit le rendu public. Modifier une
+entrée déjà publiée écrit une nouvelle ligne dans la table des versions ; la ligne live
+n'avance que sur un appel explicite à `publish()`. C'est une garantie du stockage, pas
+d'un filtre qu'il faudrait se souvenir d'écrire ailleurs.
+
+<figure>
+  <img src="architecture/content-lifecycle.svg" alt="Le cycle de vie d'un contenu : modifier une entrée déjà publiée écrit une nouvelle version de travail sans jamais toucher la ligne live ; seul un appel explicite à publier fait avancer cette ligne live." />
+  <figcaption>Le cycle de vie d'un contenu : <code>create → update → publish → unpublish</code>, avec historique et restauration.</figcaption>
+</figure>
+
 ### RAG
 
 Ingestion incrémentale : publication → événement → découpage sémantique par bloc et
@@ -176,6 +198,11 @@ Embeddings locaux par défaut. L'index porte un triplet verrouillé
 réindexe en tâche de fond, bascule à la fin, conserve l'ancien pour rollback.
 
 ## 6. Rendu
+
+<figure>
+  <img src="architecture/build-pipeline.svg" alt="Le pipeline de rendu conçu : Astro compile un thème vers du HTML, au build ou à la requête, à partir de trois niveaux de thème empilables — canonique, skins JSON à chaud, thèmes complets exigeant un build — avec hydratation d'îlots limitée aux composants interactifs visibles. La commande cogenta build n'est pas encore câblée." />
+  <figcaption>Le pipeline de rendu <strong>tel que conçu</strong> — <code>cogenta build</code> n'est pas encore câblé (L9 tâche 9).</figcaption>
+</figure>
 
 **Astro** compile les thèmes et produit le HTML. Il tourne sur Node, au build ou à la
 requête. Le JavaScript du frontmatter ne part jamais au navigateur.

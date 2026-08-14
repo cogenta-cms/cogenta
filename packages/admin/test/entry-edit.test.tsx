@@ -69,6 +69,32 @@ describe('editing an existing entry', () => {
   })
 })
 
+describe('multilingual editing', () => {
+  it('lists the site locales, and starts a translation seeded from the source entry', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ siteLocales: ['en', 'fr'] })
+
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    await screen.findByRole('heading', { name: 'Traductions' })
+    expect(screen.getByText('en (courant)')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'fr — créer la traduction' }))
+    await screen.findByRole('heading', { name: 'Nouveau : Article' })
+
+    expect(screen.getByText('fr')).toBeDefined()
+    expect(screen.getByText('(nouvelle traduction)', { exact: false })).toBeDefined()
+    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+      'First article',
+    )
+  })
+})
+
 describe('creating a new entry', () => {
   it('shows the "Nouveau" link for a role that can create, and lands on the new entry after saving', async () => {
     render(<App />)

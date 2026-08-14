@@ -49,6 +49,8 @@ export const MOCK_ENTRIES = [
     version: 2,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
+    locale: 'en',
+    translationOf: null,
     values: { title: 'First article' },
     blocks: {},
   },
@@ -58,6 +60,8 @@ export const MOCK_ENTRIES = [
     version: 1,
     createdAt: '2026-01-02T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
+    locale: 'en',
+    translationOf: null,
     values: { title: 'Second article' },
     blocks: {},
   },
@@ -81,6 +85,8 @@ export function installMockFetch(
     readonly password?: string
     readonly requireTotp?: boolean
     readonly requireTotpSetup?: boolean
+    /** When set, `/api/schema` reports these as `site.locales` (ADR-0014's translation family switcher only renders with 2+). */
+    readonly siteLocales?: readonly string[]
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -196,13 +202,23 @@ export function installMockFetch(
       }
 
       if (url.endsWith('/api/schema') && method === 'GET') {
-        return json(200, { data: MOCK_SCHEMA })
+        const site =
+          options.siteLocales === undefined
+            ? {}
+            : { site: { locales: options.siteLocales, defaultLocale: options.siteLocales[0] } }
+        return json(200, { data: { ...MOCK_SCHEMA, ...site } })
       }
 
       const versionMatch =
-        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview)(?:\?.*)?$/u.exec(url)
+        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview|translations)(?:\?.*)?$/u.exec(
+          url,
+        )
       if (versionMatch !== null) {
         const [, collection, id, action] = versionMatch
+
+        if (collection === 'article' && action === 'translations' && method === 'GET') {
+          return json(200, { data: MOCK_ENTRIES.filter((candidate) => candidate.id === id) })
+        }
 
         if (
           collection === 'article' &&
@@ -420,6 +436,8 @@ export function installMockFetch(
             version: 1,
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
+            locale: body.locale ?? 'en',
+            translationOf: body.translationOf ?? null,
             values: body.values ?? {},
             blocks: body.blocks ?? {},
           }

@@ -23,6 +23,9 @@ export interface Entry {
   readonly version: number
   readonly createdAt: string
   readonly updatedAt: string
+  readonly locale: string
+  /** The source entry's id, when this one is a translation of it (ADR-0014). */
+  readonly translationOf: string | null
   readonly values: Readonly<Record<string, unknown>>
   readonly blocks: BlockZones
 }
@@ -89,16 +92,29 @@ export function getEntry(token: string, collection: string, id: string): Promise
   )
 }
 
+export interface CreateEntryOptions {
+  readonly blocks?: BlockZones
+  readonly locale?: string
+  /** The source entry's id — this create becomes its translation (ADR-0014). */
+  readonly translationOf?: string
+}
+
 export function createEntry(
   token: string,
   collection: string,
   values: Readonly<Record<string, unknown>>,
-  blocks?: BlockZones,
+  options: CreateEntryOptions = {},
 ): Promise<Entry> {
+  const { blocks, locale, translationOf } = options
   return request(`/api/content/${encodeURIComponent(collection)}`, {
     method: 'POST',
     headers: authHeader(token),
-    body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
+    body: JSON.stringify({
+      values,
+      ...(blocks === undefined ? {} : { blocks }),
+      ...(locale === undefined ? {} : { locale }),
+      ...(translationOf === undefined ? {} : { translationOf }),
+    }),
   })
 }
 
@@ -160,6 +176,18 @@ export function getHistory(
 ): Promise<readonly VersionSummary[]> {
   return request(
     `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/history`,
+    { headers: authHeader(token) },
+  )
+}
+
+/** Every live entry of the translation family this one belongs to (ADR-0014), itself included — one per locale. */
+export function getTranslations(
+  token: string,
+  collection: string,
+  id: string,
+): Promise<readonly Entry[]> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/translations`,
     { headers: authHeader(token) },
   )
 }

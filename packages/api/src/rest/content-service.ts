@@ -115,6 +115,12 @@ export interface ContentService {
     options: ReadOptions,
   ): Promise<SerialisedEntry>
   history(context: AccessContext, name: string, id: string): Promise<readonly VersionSummary[]>
+  /** Every live entry of the translation family `id` belongs to (ADR-0014) — itself included, one per locale. */
+  translations(
+    context: AccessContext,
+    name: string,
+    id: string,
+  ): Promise<readonly SerialisedEntry[]>
   diff(
     context: AccessContext,
     name: string,
@@ -431,6 +437,20 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       assertEntryDraftAccess(target, context, id)
 
       return store(target).history(id)
+    },
+
+    translations: async (context, name, id) => {
+      const target = collection(name)
+      permissions.assert('read', target, context)
+      // Same gate as history: the family of an entry an actor may not see the
+      // draft of is not theirs to enumerate either.
+      stateFor(target, context, 'working')
+      assertEntryDraftAccess(target, context, id)
+
+      const all = await store(target).translations(id)
+      return Promise.all(
+        all.map((entry) => serialise(context, target, entry, { state: 'working', depth: 0 })),
+      )
     },
 
     diff: async (context, name, id, from, to) => {

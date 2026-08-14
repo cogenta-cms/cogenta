@@ -1,14 +1,22 @@
 import { type FormEvent, type JSX, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
 import { createEntry, getEntry, issuePreview, updateEntry } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { EntryForm } from '../collections/entry-form.js'
+import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
+
+/** What `TranslationSwitcher`'s "create the translation" button hands the new-entry route. */
+interface NewTranslationState {
+  readonly locale?: string
+  readonly translationOf?: string
+  readonly values?: Readonly<Record<string, unknown>>
+}
 
 /**
  * One route for both "new" (`/collections/:name/new`) and "edit"
@@ -21,14 +29,21 @@ export function EntryEditRoute(): JSX.Element {
   const auth = useAuth()
   const schema = useSchema()
   const navigate = useNavigate()
+  const location = useLocation()
+  const newTranslation = isNew ? (location.state as NewTranslationState | null) : null
 
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const collection =
     schema.status === 'ready' ? schema.schema.collections.find((c) => c.name === name) : undefined
+  const siteLocales = schema.status === 'ready' ? (schema.schema.site?.locales ?? []) : []
+  const defaultLocale =
+    schema.status === 'ready' ? (schema.schema.site?.defaultLocale ?? 'en') : 'en'
 
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [blocks, setBlocks] = useState<BlockZones>({})
+  const [locale, setLocale] = useState(defaultLocale)
+  const [translationOf, setTranslationOf] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +52,16 @@ export function EntryEditRoute(): JSX.Element {
   const [previewError, setPreviewError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isNew || token === null || id === undefined) {
+    if (isNew) {
+      if (newTranslation?.values !== undefined) setValues({ ...newTranslation.values })
+      if (newTranslation?.locale !== undefined) setLocale(newTranslation.locale)
+      if (newTranslation?.translationOf !== undefined) {
+        setTranslationOf(newTranslation.translationOf)
+      }
+      setLoading(false)
+      return
+    }
+    if (token === null || id === undefined) {
       setLoading(false)
       return
     }
@@ -48,6 +72,8 @@ export function EntryEditRoute(): JSX.Element {
         if (!cancelled) {
           setValues({ ...entry.values })
           setBlocks({ ...entry.blocks })
+          setLocale(entry.locale)
+          setTranslationOf(entry.translationOf)
         }
       })
       .catch((caught: unknown) => {
@@ -63,7 +89,7 @@ export function EntryEditRoute(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [isNew, token, name, id])
+  }, [isNew, token, name, id, newTranslation])
 
   function setFieldValue(field: string, value: unknown): void {
     setValues((current) => ({ ...current, [field]: value }))
@@ -81,7 +107,11 @@ export function EntryEditRoute(): JSX.Element {
     setSaved(false)
     try {
       if (isNew) {
-        const entry = await createEntry(token, name, values, blocks)
+        const entry = await createEntry(token, name, values, {
+          blocks,
+          locale,
+          ...(translationOf === null ? {} : { translationOf }),
+        })
         navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`, {
           replace: true,
         })
@@ -151,6 +181,12 @@ export function EntryEditRoute(): JSX.Element {
           ? `Nouveau : ${collection.labels.singular}`
           : `Modifier : ${collection.labels.singular}`}
       </h1>
+      {siteLocales.length > 1 && (
+        <p>
+          Langue : <strong>{locale}</strong>
+          {isNew && translationOf !== null && ' (nouvelle traduction)'}
+        </p>
+      )}
       <p>
         <Link to={`/collections/${encodeURIComponent(name)}`}>Retour à la liste</Link>
       </p>
@@ -191,6 +227,17 @@ export function EntryEditRoute(): JSX.Element {
           </button>
         )}
       </form>
+
+      {!isNew && id !== undefined && token !== null && (
+        <TranslationSwitcher
+          token={token}
+          collection={name}
+          entryId={id}
+          currentLocale={locale}
+          locales={siteLocales}
+          currentValues={values}
+        />
+      )}
 
       {!isNew && id !== undefined && token !== null && (
         <VersionHistory

@@ -137,7 +137,12 @@ async function assembleSite(
   db: DatabaseHandle,
   collections: readonly CollectionDefinition[],
   signingKey: string,
-  site: { readonly name: string; readonly url: string },
+  site: {
+    readonly name: string
+    readonly url: string
+    readonly locales: readonly string[]
+    readonly defaultLocale: string
+  },
   storage: StorageDriver,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
@@ -159,7 +164,7 @@ async function assembleSite(
     collections,
     permissions,
     storeFor,
-    routing: { locales: ['en'], defaultLocale: 'en', redirects },
+    routing: { locales: site.locales, defaultLocale: site.defaultLocale, redirects },
   })
 
   const auth = await createAuthStore({
@@ -182,7 +187,10 @@ async function assembleSite(
     storage,
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
-    schemaDocument: buildSchemaDocument(collections),
+    schemaDocument: buildSchemaDocument(collections, {
+      locales: site.locales,
+      defaultLocale: site.defaultLocale,
+    }),
     dispose: async () => {
       await db.close()
     },

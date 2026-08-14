@@ -53,14 +53,28 @@ export interface SchemaField {
   readonly options: Readonly<Record<string, unknown>>
 }
 
+export interface CollectionRouting {
+  readonly pattern: string
+  /** Whether the route carries a locale prefix (ADR-0014's translation family). */
+  readonly locale?: boolean
+}
+
 export interface CollectionSummary {
   readonly name: string
   readonly labels: { readonly singular: string; readonly plural: string }
   readonly permissions: CollectionPermissions
   readonly fields: readonly SchemaField[]
+  readonly routing?: CollectionRouting
+}
+
+export interface SchemaSite {
+  readonly locales: readonly string[]
+  readonly defaultLocale: string
 }
 
 export interface SchemaDocument {
   readonly contract: string
   readonly collections: readonly CollectionSummary[]
+  /** Absent when the server has no locales configured beyond the default (or is too old to send it). */
+  readonly site?: SchemaSite
 }

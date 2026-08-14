@@ -52,15 +52,25 @@ export interface SchemaDocumentCollection {
   readonly fields: readonly SchemaDocumentField[]
 }
 
+export interface SchemaDocumentSite {
+  readonly locales: readonly string[]
+  readonly defaultLocale: string
+}
+
 export interface SchemaDocument {
   readonly contract: typeof SCHEMA_DOCUMENT_CONTRACT
   readonly systemFields: readonly SystemFieldDescriptor[]
   readonly collections: readonly SchemaDocumentCollection[]
+  /** Absent for the build-time `.cogenta/schema.json` (no config in scope there) — present when a live server serves `/api/schema`. */
+  readonly site?: SchemaDocumentSite
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
-export function buildSchemaDocument(collections: readonly CollectionDefinition[]): SchemaDocument {
+export function buildSchemaDocument(
+  collections: readonly CollectionDefinition[],
+  site?: SchemaDocumentSite,
+): SchemaDocument {
   validateCollectionSet(collections)
 
   const sorted = [...collections].sort((left, right) => (left.name < right.name ? -1 : 1))
@@ -69,6 +79,7 @@ export function buildSchemaDocument(collections: readonly CollectionDefinition[]
     contract: SCHEMA_DOCUMENT_CONTRACT,
     systemFields: SYSTEM_FIELD_DESCRIPTORS,
     collections: sorted.map(describeCollection),
+    ...(site === undefined ? {} : { site }),
   }
 }
 

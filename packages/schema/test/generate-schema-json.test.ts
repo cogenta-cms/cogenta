@@ -164,6 +164,16 @@ describe('buildSchemaDocument', () => {
   it('refuses to describe a set whose relation points nowhere', () => {
     expect(() => buildSchemaDocument([article])).toThrow(/points at "author"/)
   })
+
+  it('carries the site locales when given them, and omits the key otherwise', () => {
+    const withSite = buildSchemaDocument([author, article], {
+      locales: ['en', 'fr'],
+      defaultLocale: 'en',
+    })
+    expect(withSite.site).toEqual({ locales: ['en', 'fr'], defaultLocale: 'en' })
+
+    expect('site' in buildSchemaDocument([author, article])).toBe(false)
+  })
 })
 
 describe('renderSchemaJson', () => {

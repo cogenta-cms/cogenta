@@ -36,6 +36,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   GET    /{collection}/{id}/diff         diff of two versions
  *   POST   /{collection}/{id}/restore      restore a version
  *   POST   /{collection}/{id}/preview      mint a preview link
+ *   GET    /{collection}/{id}/translations the entry's translation family (ADR-0014)
  *
  * A GET on `/{collection}/{id}` or `/-/by-path` also accepts `?preview=` —
  * a token minted by the route above, unlocking exactly the one entry it
@@ -303,6 +304,11 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         return jsonResponse(200, { data: await service.history(context, name, id) })
       }
 
+      case 'translations': {
+        if (method !== 'GET') return methodNotAllowed(['GET'])
+        return jsonResponse(200, { data: await service.translations(context, name, id) })
+      }
+
       case 'diff': {
         if (method !== 'GET') return methodNotAllowed(['GET'])
         const from = parsePositiveInteger(request.query, 'from')
@@ -397,7 +403,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|history|diff|restore|preview}.',
+    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|history|diff|restore|preview|translations}.',
   })
 }
 

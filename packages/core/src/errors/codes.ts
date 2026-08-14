@@ -182,6 +182,9 @@ export const ERROR_CODES = [
   // Channels — inbound command routing (L6 task 3)
   'CHANNEL_COMMAND_DUPLICATE',
 
+  // Channels — Telegram adapter (L6 task 4)
+  'CHANNEL_TELEGRAM_API_ERROR',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

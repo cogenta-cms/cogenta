@@ -129,6 +129,10 @@ export const ERROR_CODES = [
   'AGENT_SUBAGENT_UNKNOWN',
   'AGENT_SUBAGENT_TOOLS_NOT_SUBSET',
 
+  // Agents — skills (L4)
+  'SKILL_UNKNOWN',
+  'SKILL_DEFINITION_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

@@ -78,6 +78,9 @@ export type {
   ToolCallOutcome,
   ToolExecutionContext,
 } from './runtime/types.js'
+export { createFileSkillStore } from './skills/file-store.js'
+export { parseSkillFile } from './skills/frontmatter.js'
+export type { Skill, SkillMetadata, SkillStore } from './skills/types.js'
 export { runSubagent } from './subagents/run-subagent.js'
 export type { AgentToolsDeclaration } from './subagents/types.js'
 export { validateSubagentTools } from './subagents/validate.js'

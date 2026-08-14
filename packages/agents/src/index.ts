@@ -34,6 +34,18 @@ export type {
   TaskContext,
 } from './identity/context.js'
 export { assembleContext } from './identity/context.js'
+export { createFileMemoryStore } from './memory/file-store.js'
+export type { ApprovalToMemoryOptions } from './memory/from-approval.js'
+export { approvalToMemoryRecord } from './memory/from-approval.js'
+export { createMemoryStore } from './memory/memory-store.js'
+export type {
+  MemoryConsolidateQuery,
+  MemoryPruneQuery,
+  MemoryQuery,
+  MemoryRecord,
+  MemoryStore,
+  MemoryType,
+} from './memory/types.js'
 export type { AnthropicClientConfig, AnthropicRequestBody } from './providers/anthropic.js'
 export {
   buildAnthropicRequest,

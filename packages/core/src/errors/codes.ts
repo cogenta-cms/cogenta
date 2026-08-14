@@ -133,6 +133,9 @@ export const ERROR_CODES = [
   'SKILL_UNKNOWN',
   'SKILL_DEFINITION_INVALID',
 
+  // Agents — memory (L4)
+  'AGENT_APPROVAL_NOT_DECIDED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

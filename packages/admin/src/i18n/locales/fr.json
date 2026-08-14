@@ -1,7 +1,44 @@
 {
   "common": {
     "loading": "Chargement…",
-    "schemaError": "Impossible de charger le schéma : {{message}}"
+    "schemaError": "Impossible de charger le schéma : {{message}}",
+    "cancel": "Annuler"
+  },
+  "fields": {
+    "geoLat": "Latitude",
+    "geoLng": "Longitude",
+    "jsonInvalid": "JSON invalide — les modifications ne sont pas prises en compte tant que ce n’est pas corrigé.",
+    "mediaChoose": "Choisir…",
+    "mediaRemove": "Retirer",
+    "mediaNoImages": "Aucune image dans la médiathèque.",
+    "relationPlaceholder": "Sélecteur de relation vers « {{target}} » à venir (tâche 7).",
+    "selectMultiNotSupported": "Ce champ accepte plusieurs valeurs ; l'éditeur correspondant n'est pas encore disponible.",
+    "blocksUnknownLabel": "Bloc inconnu : {{type}}",
+    "blocksMoveUp": "Monter le bloc {{position}}",
+    "blocksMoveDown": "Descendre le bloc {{position}}",
+    "blocksRemove": "Retirer le bloc {{position}}",
+    "blocksUnrecognized": "Ce type de bloc (« {{type}} ») n'est pas reconnu par cet admin — ses données sont conservées mais ne peuvent pas être éditées ici.",
+    "blocksAddLabel": "Ajouter un bloc"
+  },
+  "richText": {
+    "internalLinkTitle": "Lien interne : {{path}}",
+    "mediaLabel": "Média : {{id}}",
+    "placeholder": "Écrire…",
+    "toolbarLabel": "Mise en forme",
+    "markStrong": "Gras",
+    "markEm": "Italique",
+    "markCode": "Code",
+    "blockParagraph": "Paragraphe",
+    "blockH2": "Titre 2",
+    "blockH3": "Titre 3",
+    "blockH4": "Titre 4",
+    "blockQuote": "Citation",
+    "blockBullet": "Liste à puces",
+    "blockNumber": "Liste numérotée",
+    "removeLink": "Retirer le lien",
+    "linkButton": "Lien",
+    "linkUrlLabel": "URL du lien",
+    "linkPlaceholder": "https://…"
   },
   "nav": {
     "dashboard": "Tableau de bord",

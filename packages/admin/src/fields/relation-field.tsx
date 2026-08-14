@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -8,12 +9,13 @@ import type { FieldProps } from './types.js'
  * Lands with the schema-driven edit form (task 7).
  */
 export function RelationField({ id, field }: FieldProps<unknown>): JSX.Element {
+  const { t } = useTranslation()
   const options = field.options as { readonly to?: string; readonly many?: boolean }
 
   return (
     <FieldWrapper id={id} field={field}>
       <p className="field__placeholder">
-        Sélecteur de relation vers « {options.to ?? '?'} » à venir (tâche 7).
+        {t('fields.relationPlaceholder', { target: options.to ?? '?' })}
       </p>
     </FieldWrapper>
   )

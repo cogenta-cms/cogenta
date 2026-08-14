@@ -1,4 +1,6 @@
+import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createEditor, type Descendant as SlateDescendant } from 'slate'
 import { withHistory } from 'slate-history'
 import {
@@ -13,7 +15,10 @@ import type { RichTextDocument } from './portable-text.js'
 import { RichTextToolbar } from './toolbar.js'
 import { withInlines } from './with-inlines.js'
 
-function renderElement({ attributes, children, element }: RenderElementProps): JSX.Element {
+function renderElement(
+  { attributes, children, element }: RenderElementProps,
+  t: TFunction,
+): JSX.Element {
   switch (element.type) {
     case 'h2':
       return <h2 {...attributes}>{children}</h2>
@@ -38,7 +43,9 @@ function renderElement({ attributes, children, element }: RenderElementProps): J
           }
           title={
             element.kind === 'internal'
-              ? `Lien interne : ${element.collection}/${element.entryId}`
+              ? t('richText.internalLinkTitle', {
+                  path: `${element.collection}/${element.entryId}`,
+                })
               : undefined
           }
         >
@@ -48,7 +55,7 @@ function renderElement({ attributes, children, element }: RenderElementProps): J
     case 'media':
       return (
         <div {...attributes} contentEditable={false} className="rich-text-media">
-          <span>Média : {element.mediaId}</span>
+          <span>{t('richText.mediaLabel', { id: element.mediaId })}</span>
           {children}
         </div>
       )
@@ -85,6 +92,7 @@ export function RichTextEditor({
   disabled = false,
   onChange,
 }: RichTextEditorProps): JSX.Element {
+  const { t } = useTranslation()
   const editor = useMemo(() => withInlines(withHistory(withReact(createEditor()))), [])
   const [internalValue, setInternalValue] = useState<SlateDescendant[]>(() =>
     portableTextToSlate(value),
@@ -106,9 +114,9 @@ export function RichTextEditor({
         <Editable
           id={id}
           readOnly={disabled}
-          renderElement={renderElement}
+          renderElement={(props) => renderElement(props, t)}
           renderLeaf={renderLeaf}
-          placeholder="Écrire…"
+          placeholder={t('richText.placeholder')}
         />
       </Slate>
     </div>

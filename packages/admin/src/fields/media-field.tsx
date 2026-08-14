@@ -1,4 +1,5 @@
 import { type JSX, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { getMedia, listMedia, type MediaAsset } from '../api/media-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -19,6 +20,7 @@ export function MediaField({
   onChange,
   disabled = false,
 }: FieldProps<string | null>): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
 
@@ -53,16 +55,14 @@ export function MediaField({
       setChoices(page.items)
       setPicking(true)
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : 'Impossible de charger la médiathèque.',
-      )
+      setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
     }
   }
 
   if (token === null) {
     return (
       <FieldWrapper id={id} field={field}>
-        <p>Chargement…</p>
+        <p>{t('common.loading')}</p>
       </FieldWrapper>
     )
   }
@@ -85,11 +85,11 @@ export function MediaField({
         {!disabled && (
           <div className="media-field__actions">
             <button type="button" onClick={() => void openPicker()}>
-              Choisir…
+              {t('fields.mediaChoose')}
             </button>
             {value !== null && value !== '' && (
               <button type="button" onClick={() => onChange(null)}>
-                Retirer
+                {t('fields.mediaRemove')}
               </button>
             )}
           </div>
@@ -114,10 +114,10 @@ export function MediaField({
                 </button>
               </li>
             ))}
-            {choices.length === 0 && <li>Aucune image dans la médiathèque.</li>}
+            {choices.length === 0 && <li>{t('fields.mediaNoImages')}</li>}
             <li>
               <button type="button" onClick={() => setPicking(false)}>
-                Annuler
+                {t('common.cancel')}
               </button>
             </li>
           </ul>

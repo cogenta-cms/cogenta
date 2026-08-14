@@ -1,4 +1,5 @@
 import { type JSX, useId } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ContentBlock } from '../api/content-client.js'
 import { BlockForm } from '../blocks/block-form.js'
 import { BLOCK_VOCABULARY, blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
@@ -19,6 +20,7 @@ export function BlocksField({
   onChange,
   disabled = false,
 }: FieldProps<readonly ContentBlock[] | undefined>): JSX.Element {
+  const { t } = useTranslation()
   const blocks = value ?? []
   const pickerId = useId()
 
@@ -55,12 +57,14 @@ export function BlocksField({
           return (
             <li key={block.key} className="blocks-field__item">
               <div className="blocks-field__item-header">
-                <span>{definition?.label ?? `Bloc inconnu : ${block.type}`}</span>
+                <span>
+                  {definition?.label ?? t('fields.blocksUnknownLabel', { type: block.type })}
+                </span>
                 <div className="blocks-field__item-controls">
                   <button
                     type="button"
                     disabled={disabled || index === 0}
-                    aria-label={`Monter le bloc ${index + 1}`}
+                    aria-label={t('fields.blocksMoveUp', { position: index + 1 })}
                     onClick={() => moveBy(index, -1)}
                   >
                     ↑
@@ -68,7 +72,7 @@ export function BlocksField({
                   <button
                     type="button"
                     disabled={disabled || index === blocks.length - 1}
-                    aria-label={`Descendre le bloc ${index + 1}`}
+                    aria-label={t('fields.blocksMoveDown', { position: index + 1 })}
                     onClick={() => moveBy(index, 1)}
                   >
                     ↓
@@ -76,19 +80,16 @@ export function BlocksField({
                   <button
                     type="button"
                     disabled={disabled}
-                    aria-label={`Retirer le bloc ${index + 1}`}
+                    aria-label={t('fields.blocksRemove', { position: index + 1 })}
                     onClick={() => removeAt(index)}
                   >
-                    Retirer
+                    {t('fields.mediaRemove')}
                   </button>
                 </div>
               </div>
 
               {definition === undefined ? (
-                <p role="alert">
-                  Ce type de bloc (« {block.type} ») n'est pas reconnu par cet admin — ses données
-                  sont conservées mais ne peuvent pas être éditées ici.
-                </p>
+                <p role="alert">{t('fields.blocksUnrecognized', { type: block.type })}</p>
               ) : (
                 <BlockForm
                   idPrefix={itemId}
@@ -105,7 +106,7 @@ export function BlocksField({
 
       {!disabled && (
         <div className="blocks-field__add">
-          <label htmlFor={pickerId}>Ajouter un bloc</label>
+          <label htmlFor={pickerId}>{t('fields.blocksAddLabel')}</label>
           <select
             id={pickerId}
             value=""

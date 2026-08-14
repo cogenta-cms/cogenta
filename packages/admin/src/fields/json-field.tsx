@@ -1,4 +1,5 @@
 import { type JSX, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -15,6 +16,7 @@ export function JsonField({
   onChange,
   disabled,
 }: FieldProps<unknown>): JSX.Element {
+  const { t } = useTranslation()
   const [text, setText] = useState(() => JSON.stringify(value, null, 2) ?? '')
   const [error, setError] = useState<string | null>(null)
 
@@ -24,9 +26,7 @@ export function JsonField({
       onChange(JSON.parse(next))
       setError(null)
     } catch {
-      setError(
-        'JSON invalide — les modifications ne sont pas prises en compte tant que ce n’est pas corrigé.',
-      )
+      setError(t('fields.jsonInvalid'))
     }
   }
 

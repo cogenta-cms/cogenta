@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -14,6 +15,7 @@ export function SelectField({
   onChange,
   disabled,
 }: FieldProps<string>): JSX.Element {
+  const { t } = useTranslation()
   const options = field.options as {
     readonly options: readonly SelectChoice[]
     readonly many?: boolean
@@ -25,9 +27,7 @@ export function SelectField({
   if (options.many === true) {
     return (
       <FieldWrapper id={id} field={field}>
-        <p role="alert">
-          Ce champ accepte plusieurs valeurs ; l'éditeur correspondant n'est pas encore disponible.
-        </p>
+        <p role="alert">{t('fields.selectMultiNotSupported')}</p>
       </FieldWrapper>
     )
   }

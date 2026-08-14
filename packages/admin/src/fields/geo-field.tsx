@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps, GeoValue } from './types.js'
 
@@ -9,6 +10,7 @@ export function GeoField({
   onChange,
   disabled,
 }: FieldProps<GeoValue | null>): JSX.Element {
+  const { t } = useTranslation()
   const lat = value?.lat ?? null
   const lng = value?.lng ?? null
 
@@ -22,7 +24,7 @@ export function GeoField({
   return (
     <FieldWrapper id={id} field={field}>
       <div className="field__geo">
-        <label htmlFor={`${id}-lat`}>Latitude</label>
+        <label htmlFor={`${id}-lat`}>{t('fields.geoLat')}</label>
         <input
           id={`${id}-lat`}
           type="number"
@@ -35,7 +37,7 @@ export function GeoField({
             setLat(event.target.value === '' ? null : Number(event.target.value))
           }
         />
-        <label htmlFor={`${id}-lng`}>Longitude</label>
+        <label htmlFor={`${id}-lng`}>{t('fields.geoLng')}</label>
         <input
           id={`${id}-lng`}
           type="number"

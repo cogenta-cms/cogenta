@@ -1,4 +1,5 @@
 import { type JSX, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSlate } from 'slate-react'
 import {
   activeBlockKind,
@@ -12,31 +13,32 @@ import {
 } from './commands.js'
 import type { RichTextDecorator } from './portable-text.js'
 
-const MARK_BUTTONS: readonly { readonly mark: RichTextDecorator; readonly label: string }[] = [
-  { mark: 'strong', label: 'Gras' },
-  { mark: 'em', label: 'Italique' },
-  { mark: 'code', label: 'Code' },
+const MARK_BUTTONS: readonly { readonly mark: RichTextDecorator; readonly labelKey: string }[] = [
+  { mark: 'strong', labelKey: 'richText.markStrong' },
+  { mark: 'em', labelKey: 'richText.markEm' },
+  { mark: 'code', labelKey: 'richText.markCode' },
 ]
 
-const BLOCK_BUTTONS: readonly { readonly kind: BlockKind; readonly label: string }[] = [
-  { kind: 'paragraph', label: 'Paragraphe' },
-  { kind: 'h2', label: 'Titre 2' },
-  { kind: 'h3', label: 'Titre 3' },
-  { kind: 'h4', label: 'Titre 4' },
-  { kind: 'blockquote', label: 'Citation' },
-  { kind: 'bullet', label: 'Liste à puces' },
-  { kind: 'number', label: 'Liste numérotée' },
+const BLOCK_BUTTONS: readonly { readonly kind: BlockKind; readonly labelKey: string }[] = [
+  { kind: 'paragraph', labelKey: 'richText.blockParagraph' },
+  { kind: 'h2', labelKey: 'richText.blockH2' },
+  { kind: 'h3', labelKey: 'richText.blockH3' },
+  { kind: 'h4', labelKey: 'richText.blockH4' },
+  { kind: 'blockquote', labelKey: 'richText.blockQuote' },
+  { kind: 'bullet', labelKey: 'richText.blockBullet' },
+  { kind: 'number', labelKey: 'richText.blockNumber' },
 ]
 
 export function RichTextToolbar({ disabled }: { readonly disabled: boolean }): JSX.Element {
+  const { t } = useTranslation()
   const editor = useSlate()
   const [linkInput, setLinkInput] = useState<string | null>(null)
   const activeBlock = activeBlockKind(editor)
   const linkActive = isLinkActive(editor)
 
   return (
-    <div className="rich-text-toolbar" role="toolbar" aria-label="Mise en forme">
-      {MARK_BUTTONS.map(({ mark, label }) => (
+    <div className="rich-text-toolbar" role="toolbar" aria-label={t('richText.toolbarLabel')}>
+      {MARK_BUTTONS.map(({ mark, labelKey }) => (
         <button
           key={mark}
           type="button"
@@ -47,11 +49,11 @@ export function RichTextToolbar({ disabled }: { readonly disabled: boolean }): J
             toggleMark(editor, mark)
           }}
         >
-          {label}
+          {t(labelKey)}
         </button>
       ))}
 
-      {BLOCK_BUTTONS.map(({ kind, label }) => (
+      {BLOCK_BUTTONS.map(({ kind, labelKey }) => (
         <button
           key={kind}
           type="button"
@@ -62,7 +64,7 @@ export function RichTextToolbar({ disabled }: { readonly disabled: boolean }): J
             toggleBlock(editor, kind)
           }}
         >
-          {label}
+          {t(labelKey)}
         </button>
       ))}
 
@@ -75,7 +77,7 @@ export function RichTextToolbar({ disabled }: { readonly disabled: boolean }): J
             removeLink(editor)
           }}
         >
-          Retirer le lien
+          {t('richText.removeLink')}
         </button>
       ) : linkInput === null ? (
         <button
@@ -86,13 +88,13 @@ export function RichTextToolbar({ disabled }: { readonly disabled: boolean }): J
             setLinkInput('')
           }}
         >
-          Lien
+          {t('richText.linkButton')}
         </button>
       ) : (
         <input
           type="url"
-          aria-label="URL du lien"
-          placeholder="https://…"
+          aria-label={t('richText.linkUrlLabel')}
+          placeholder={t('richText.linkPlaceholder')}
           value={linkInput}
           onChange={(event) => setLinkInput(event.target.value)}
           onKeyDown={(event) => {

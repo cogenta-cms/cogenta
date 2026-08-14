@@ -1,7 +1,44 @@
 {
   "common": {
     "loading": "Loading…",
-    "schemaError": "Could not load the schema: {{message}}"
+    "schemaError": "Could not load the schema: {{message}}",
+    "cancel": "Cancel"
+  },
+  "fields": {
+    "geoLat": "Latitude",
+    "geoLng": "Longitude",
+    "jsonInvalid": "Invalid JSON — changes are not applied until this is fixed.",
+    "mediaChoose": "Choose…",
+    "mediaRemove": "Remove",
+    "mediaNoImages": "No images in the media library.",
+    "relationPlaceholder": "Relation picker to \"{{target}}\" coming soon (task 7).",
+    "selectMultiNotSupported": "This field accepts multiple values; its editor is not available yet.",
+    "blocksUnknownLabel": "Unknown block: {{type}}",
+    "blocksMoveUp": "Move block {{position}} up",
+    "blocksMoveDown": "Move block {{position}} down",
+    "blocksRemove": "Remove block {{position}}",
+    "blocksUnrecognized": "This block type (\"{{type}}\") is not recognised by this admin — its data is kept but cannot be edited here.",
+    "blocksAddLabel": "Add a block"
+  },
+  "richText": {
+    "internalLinkTitle": "Internal link: {{path}}",
+    "mediaLabel": "Media: {{id}}",
+    "placeholder": "Write…",
+    "toolbarLabel": "Formatting",
+    "markStrong": "Bold",
+    "markEm": "Italic",
+    "markCode": "Code",
+    "blockParagraph": "Paragraph",
+    "blockH2": "Heading 2",
+    "blockH3": "Heading 3",
+    "blockH4": "Heading 4",
+    "blockQuote": "Quote",
+    "blockBullet": "Bulleted list",
+    "blockNumber": "Numbered list",
+    "removeLink": "Remove link",
+    "linkButton": "Link",
+    "linkUrlLabel": "Link URL",
+    "linkPlaceholder": "https://…"
   },
   "nav": {
     "dashboard": "Dashboard",

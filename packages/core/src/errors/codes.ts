@@ -201,6 +201,13 @@ export const ERROR_CODES = [
   // Channels — Discord adapter (L6 task 10)
   'CHANNEL_DISCORD_API_ERROR',
 
+  // Channels — generic signed webhook (L6 task 11)
+  'CHANNEL_WEBHOOK_SIGNATURE_INVALID',
+  'CHANNEL_WEBHOOK_EXPIRED',
+  'CHANNEL_WEBHOOK_REPLAY_DETECTED',
+  'CHANNEL_WEBHOOK_DELIVERY_FAILED',
+  'CHANNEL_WEBHOOK_INBOUND_UNSUPPORTED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

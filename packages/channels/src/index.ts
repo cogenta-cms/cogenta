@@ -172,5 +172,22 @@ export type { TelegramInboundDeps } from './providers/telegram/inbound.js'
 export { createTelegramInboundHandler } from './providers/telegram/inbound.js'
 export type { RenderedTelegramMessage } from './providers/telegram/render.js'
 export { escapeMarkdownV2, renderTelegramMessage } from './providers/telegram/render.js'
+export type { WebhookAdapterOptions, WebhookFetch } from './providers/webhook/adapter.js'
+export { createWebhookAdapter } from './providers/webhook/adapter.js'
+export type { WebhookActionLinkOptions, WebhookPayload } from './providers/webhook/render.js'
+export { renderWebhookPayload } from './providers/webhook/render.js'
+export type {
+  SignedWebhookRequest,
+  VerifyIncomingWebhookInput,
+  WebhookVerificationResult,
+} from './providers/webhook/signing.js'
+export {
+  assertValidIncomingWebhook,
+  signOutgoingWebhook,
+  verifyIncomingWebhook,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  WebhookReplayGuard,
+} from './providers/webhook/signing.js'
 export type { ChannelRegistry } from './registry.js'
 export { createChannelRegistry } from './registry.js'

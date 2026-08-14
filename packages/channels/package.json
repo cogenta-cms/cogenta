@@ -1,0 +1,41 @@
+{
+  "name": "@cogenta/channels",
+  "version": "0.0.0",
+  "description": "Channel adapter interface and registry — Telegram, Slack, Discord, email, webhooks.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cogenta-cms/cogenta.git",
+    "directory": "packages/channels"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@cogenta/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

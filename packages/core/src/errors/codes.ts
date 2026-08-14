@@ -172,6 +172,10 @@ export const ERROR_CODES = [
   // create-cogenta — playground reset (L9)
   'PLAYGROUND_BLUEPRINT_UNKNOWN',
 
+  // Channels — adapter registry (L6)
+  'CHANNEL_UNKNOWN',
+  'CHANNEL_DUPLICATE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

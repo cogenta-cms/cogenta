@@ -20,6 +20,7 @@ export default {
         'mcp',
         'create',
         'import',
+        'channels',
         'db',
         'cache',
         'queue',

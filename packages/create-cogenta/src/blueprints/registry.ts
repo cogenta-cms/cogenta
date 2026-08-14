@@ -8,26 +8,27 @@ export interface Blueprint {
 }
 
 /**
- * "Type de site → sélection d'un blueprint." `blank` (empty schema, no demo
- * content), `blog` (L9 task 3), `vitrine`, `portfolio` and `documentation`
- * (L9 task 8, batch A) are real today. The remaining four (magazine,
- * association, restaurant, SaaS — L9 task 8, batch B) are listed so the
- * step exists and reads honestly, not synthesised as fake content now.
+ * "Type de site → sélection d'un blueprint." Every blueprint the lot
+ * commits to (`docs/lots/L9-ecosysteme.md`, "## Blueprints") is real as of
+ * L9 task 8, batch B: `blank` (empty schema, no demo content), `blog` (L9
+ * task 3), `vitrine`/`portfolio`/`documentation` (batch A) and
+ * `magazine`/`association`/`restaurant`/`saas` (batch B). Each beyond
+ * `blank` has a real `BlueprintContentPack` (`./content-packs.js`).
  */
 export const BLUEPRINTS: readonly Blueprint[] = [
   { id: 'blank', label: 'Blank — empty schema, nothing pre-configured', available: true },
   { id: 'vitrine', label: 'Showcase site — services, testimonials, demo content', available: true },
   { id: 'blog', label: 'Blog — posts, categories, demo content', available: true },
-  { id: 'magazine', label: 'Magazine (coming soon)', available: false },
+  { id: 'magazine', label: 'Magazine — articles by section, demo content', available: true },
   { id: 'portfolio', label: 'Portfolio — projects, demo content', available: true },
   {
     id: 'documentation',
     label: 'Documentation site — ordered doc pages, demo content',
     available: true,
   },
-  { id: 'association', label: 'Nonprofit / association (coming soon)', available: false },
-  { id: 'restaurant', label: 'Restaurant (coming soon)', available: false },
-  { id: 'saas', label: 'SaaS (coming soon)', available: false },
+  { id: 'association', label: 'Nonprofit / association — events, demo content', available: true },
+  { id: 'restaurant', label: 'Restaurant — menu, demo content', available: true },
+  { id: 'saas', label: 'SaaS — features, demo content', available: true },
 ]
 
 export const DEFAULT_BLUEPRINT_ID = 'blank'

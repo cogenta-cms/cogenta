@@ -80,15 +80,15 @@ describe('runWizard', () => {
     expect(text()).toContain('site.name')
   })
 
-  it('reports the fallback, never silently, when the requested blueprint is not built yet', async () => {
+  it('reports the fallback, never silently, when the requested blueprint is unknown', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-wizard-'))
     dirs.push(targetDir)
     const configPath = join(targetDir, 'install.json')
     await writeFile(
       configPath,
       JSON.stringify({
-        site: { name: 'Magazine Site', url: 'https://magazine.example' },
-        blueprint: 'magazine',
+        site: { name: 'Unknown Blueprint Site', url: 'https://unknown.example' },
+        blueprint: 'does-not-exist',
       }),
       'utf8',
     )

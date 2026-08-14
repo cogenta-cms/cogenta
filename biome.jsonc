@@ -70,6 +70,13 @@
       "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
     },
     {
+      // `cogenta schema.ts` files are loaded by `@cogenta/cli`'s `loadCollections`
+      // via `module.default` (see `packages/cli/src/commands/serve.ts`) — the
+      // default export is the contract, not a style choice.
+      "includes": ["**/cogenta.schema.ts"],
+      "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
+    },
+    {
       "includes": ["**/test/**", "**/*.test.ts", "**/*.spec.ts"],
       "linter": {
         "rules": {

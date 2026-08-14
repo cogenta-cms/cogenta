@@ -1,0 +1,22 @@
+{
+  "name": "@cogenta/example-getting-started",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runnable source for docs/getting-started.md — every fenced code block there is a literal copy of a file here, checked by scripts/check-docs-examples.mjs.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@cogenta/core": "workspace:*",
+    "@cogenta/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

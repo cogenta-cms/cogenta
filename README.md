@@ -14,13 +14,16 @@ It watches its own security, patches itself, optimises itself, and reports back.
 
 ## Status
 
-**Pre-alpha. Not usable yet.** The design is complete and public. Implementation is
-under way on the foundation package (L0): configuration, typed errors, structured
-logging, the driver system, database drivers for Postgres, MySQL/MariaDB and SQLite,
-cache, queue and storage drivers, the migration engine, and a `cogenta` command line
-with `doctor` and `migrate`. There is no content model, no admin and no agent runtime
-yet — those start at L1. Follow the [roadmap](docs/06-lots.md) to see where things
-stand.
+**Pre-alpha. Not usable yet, but a real site can be scaffolded, run and edited.** The
+design is complete and public. The foundation (L0), the content model (L1), rendering
+(L3) and the admin (L2) are done. The multi-agent runtime (L4) and its built-in agents
+(L5 — security, SEO, performance, content, mostly complete) are in place, alongside the
+`cogenta` command line (`doctor`, `migrate`, `users create`, `serve`) and
+`npm create cogenta`, which scaffolds a working site — including a first real blueprint
+("blog") — end to end. See [`docs/getting-started.md`](docs/getting-started.md) to try
+it. What's left, in order, is the rest of the installer/ecosystem work (L9), then
+channels (L6), third-party plugin extensibility (L7) and fleet supervision (L8). Follow
+the [roadmap](docs/06-lots.md) to see where things stand.
 
 ## Why another CMS?
 
@@ -79,6 +82,7 @@ The full design lives in [`docs/`](docs/). Start with the
 
 | Document | Purpose |
 |---|---|
+| [`getting-started.md`](docs/getting-started.md) | Scaffold, run and edit a site |
 | [`00-vision.md`](docs/00-vision.md) | Positioning and non-goals |
 | [`01-prd.md`](docs/01-prd.md) | Personas, jobs-to-be-done, scope |
 | [`02-architecture.md`](docs/02-architecture.md) | Technical architecture |

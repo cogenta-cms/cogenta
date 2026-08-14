@@ -1,6 +1,12 @@
 import { Worker } from 'node:worker_threads'
 import { CogentaError } from '@cogenta/core'
-import type { WorkerGuestMessage, WorkerRunMessage } from './protocol.js'
+import type { CapabilityHandler } from './capabilities.js'
+import type {
+  WorkerGuestMessage,
+  WorkerHostReplyMessage,
+  WorkerRunMessage,
+  WorkerSdkCallMessage,
+} from './protocol.js'
 
 /**
  * The isolated worker boundary itself — "Tout plugin tiers s'exécute dans un
@@ -24,6 +30,26 @@ export interface RunIsolatedOptions {
   readonly timeoutMs?: number
   /** Real V8 heap ceiling for the worker's old-generation heap. */
   readonly maxOldGenerationSizeMb?: number
+  /**
+   * Task 1's manifest capability strings actually granted to this run, e.g.
+   * `["content.read", "http.fetch:api.example.com"]`. The guest-side sandbox
+   * uses this to decide which SDK methods to construct at all — an absent
+   * capability means an absent key on `sdk`, never a present-but-refusing
+   * method (docs/lots/L7-extensibilite.md § Isolation, and the explicit
+   * acceptance criterion "une méthode non accordée est absente de l'objet
+   * SDK, pas seulement refusée").
+   */
+  readonly grantedCapabilities?: readonly string[]
+  /**
+   * Real host-side implementations for each granted capability's SDK
+   * method, keyed by capability name (`"content.read"`, `"http.fetch"`,
+   * `"storage.read"`, `"storage.write"`, ...). Task 4's real deliverable —
+   * see `./capabilities.js`. A capability granted but with no matching
+   * handler here is a host misconfiguration, not a security gap: the guest
+   * sandbox still won't expose a method for it unless BOTH `grantedCapabilities`
+   * names it AND a handler exists.
+   */
+  readonly handlers?: Readonly<Record<string, CapabilityHandler>>
 }
 
 const DEFAULT_TIMEOUT_MS = 2000
@@ -36,6 +62,42 @@ export interface IsolatedRunResult {
 }
 
 let nextRequestId = 1
+
+/**
+ * Dispatches one real SDK call from the sandbox to its host-side handler
+ * (`./capabilities.js`) and reports the outcome back — the handler itself
+ * re-verifies the specific request (a domain, a storage key) against the
+ * specific granted capability parameters; this function only routes.
+ */
+async function handleSdkCall(
+  message: WorkerSdkCallMessage,
+  handlers: Readonly<Record<string, CapabilityHandler>>,
+  grantedCapabilities: readonly string[],
+  worker: Worker,
+): Promise<void> {
+  const handler = handlers[message.method]
+  if (handler === undefined) {
+    const reply: WorkerHostReplyMessage = {
+      type: 'sdk-error',
+      callId: message.callId,
+      message: `no host handler registered for "${message.method}"`,
+    }
+    worker.postMessage(reply)
+    return
+  }
+  try {
+    const value = await handler(message.args, { grantedCapabilities })
+    const reply: WorkerHostReplyMessage = { type: 'sdk-result', callId: message.callId, value }
+    worker.postMessage(reply)
+  } catch (error) {
+    const reply: WorkerHostReplyMessage = {
+      type: 'sdk-error',
+      callId: message.callId,
+      message: error instanceof Error ? error.message : String(error),
+    }
+    worker.postMessage(reply)
+  }
+}
 
 /**
  * Runs `code` inside a fresh, isolated worker and reports the outcome.
@@ -55,6 +117,8 @@ export async function runIsolated(
   options: RunIsolatedOptions = {},
 ): Promise<IsolatedRunResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const grantedCapabilities = options.grantedCapabilities ?? []
+  const handlers = options.handlers ?? {}
   const id = nextRequestId
   nextRequestId += 1
 
@@ -88,9 +152,22 @@ export async function runIsolated(
       finish({ ok: false, error: 'plugin worker timed out' })
     }, timeoutMs)
 
-    worker.once('message', (message: WorkerGuestMessage) => {
-      if (message.type === 'result') finish({ ok: true, value: message.value })
-      else finish({ ok: false, error: message.message })
+    // `sdk-call` messages arrive zero or more times WHILE `code` runs, each
+    // one a real capability request that must be re-verified and executed
+    // host-side before the sandbox's own `await sdk.<ns>.<method>(...)` can
+    // resolve — this is the RPC loop the guest-side SDK methods (task 4)
+    // are built on. It stays a real `.on` listener, not `.once`, since a
+    // single run may call several SDK methods before finishing.
+    worker.on('message', (message: WorkerGuestMessage) => {
+      if (message.type === 'result') {
+        finish({ ok: true, value: message.value })
+        return
+      }
+      if (message.type === 'error') {
+        finish({ ok: false, error: message.message })
+        return
+      }
+      void handleSdkCall(message, handlers, grantedCapabilities, worker)
     })
 
     worker.once('error', (error) => {
@@ -101,7 +178,7 @@ export async function runIsolated(
       if (exitCode !== 0) finish({ ok: false, error: `plugin worker exited with code ${exitCode}` })
     })
 
-    const request: WorkerRunMessage = { id, type: 'run', code }
+    const request: WorkerRunMessage = { id, type: 'run', code, grantedCapabilities }
     worker.postMessage(request)
   })
 }

@@ -46,12 +46,54 @@ function toSerializable(value) {
   }
 }
 
-function buildSandbox() {
+let nextCallId = 1
+/** Pending SDK calls this sandbox is waiting on a host reply for, keyed by `callId`. */
+const pendingSdkCalls = new Map()
+
+/**
+ * One real RPC method, bound to a specific capability name. Calling it posts
+ * a `sdk-call` message to the host and returns a Promise that resolves or
+ * rejects when the matching `sdk-result`/`sdk-error` arrives — the host
+ * re-verifies the request against what was actually granted before ever
+ * executing it (`./host/capabilities.js`).
+ */
+function makeSdkMethod(method) {
+  return (args) =>
+    new Promise((resolve, reject) => {
+      const callId = nextCallId
+      nextCallId += 1
+      pendingSdkCalls.set(callId, { resolve, reject })
+      parentPort.postMessage({ type: 'sdk-call', callId, method, args })
+    })
+}
+
+/**
+ * Builds the plugin-visible `sdk` object from exactly the capability strings
+ * the host says were granted — task 4/5's central, testable property:
+ * "toute méthode non accordée est absente de l'objet, pas présente et
+ * refusée : absente." A namespace or method whose capability was never
+ * granted is never assigned onto `sdk` at all, so `'read' in sdk.content`
+ * is `false`, not a present method that throws when called.
+ */
+function buildSdk(grantedCapabilities) {
+  const sdk = {}
+  for (const capability of grantedCapabilities) {
+    const separatorIndex = capability.indexOf(':')
+    const name = separatorIndex === -1 ? capability : capability.slice(0, separatorIndex)
+    const dotIndex = name.indexOf('.')
+    if (dotIndex === -1) continue
+    const namespace = name.slice(0, dotIndex)
+    const method = name.slice(dotIndex + 1)
+    if (sdk[namespace] === undefined) sdk[namespace] = {}
+    if (sdk[namespace][method] === undefined) sdk[namespace][method] = makeSdkMethod(name)
+  }
+  return sdk
+}
+
+function buildSandbox(grantedCapabilities) {
   // Deliberately minimal. No `process`, no `require`, no `fetch`, no
-  // `Buffer`, no `fs`/`net`. Task 4 is where a real, capability-gated SDK
-  // object gets added to this list — until then, a plugin running in here
-  // has console/timers/JSON/Math/Promise and nothing that reaches the host,
-  // the filesystem, the network, or the environment.
+  // `Buffer`, no `fs`/`net` — only `sdk`, and only the namespaces/methods
+  // `grantedCapabilities` actually names.
   return {
     console,
     Math,
@@ -59,12 +101,26 @@ function buildSandbox() {
     Promise,
     setTimeout,
     clearTimeout,
+    sdk: buildSdk(grantedCapabilities),
   }
 }
 
 parentPort.on('message', (message) => {
-  if (message == null || message.type !== 'run') return
-  const { id, code } = message
+  if (message == null) return
+
+  // A reply to a pending SDK call — resolve/reject its Promise and let the
+  // sandbox's own `await` resume; this is not a new `run` request.
+  if (message.type === 'sdk-result' || message.type === 'sdk-error') {
+    const pending = pendingSdkCalls.get(message.callId)
+    if (pending === undefined) return
+    pendingSdkCalls.delete(message.callId)
+    if (message.type === 'sdk-result') pending.resolve(message.value)
+    else pending.reject(new Error(message.message))
+    return
+  }
+
+  if (message.type !== 'run') return
+  const { id, code, grantedCapabilities } = message
 
   // Fire-and-report, not awaited by the message handler itself: plugin code
   // may be a top-level `async () => {...}()` (e.g. to `await import(...)`
@@ -73,7 +129,7 @@ parentPort.on('message', (message) => {
   void (async () => {
     let result
     try {
-      const context = vm.createContext(buildSandbox(), {
+      const context = vm.createContext(buildSandbox(grantedCapabilities ?? []), {
         codeGeneration: { strings: false, wasm: false },
       })
       const script = new vm.Script(code, { filename: 'plugin.js' })

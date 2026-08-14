@@ -36,6 +36,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@cogenta/schema": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

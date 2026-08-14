@@ -1,3 +1,10 @@
+export type { CapabilityCallContext, CapabilityHandler } from './host/capabilities.js'
+export {
+  createContentReadHandler,
+  createHttpFetchHandler,
+  createStorageReadHandler,
+  createStorageWriteHandler,
+} from './host/capabilities.js'
 export type { IsolatedRunResult, RunIsolatedOptions } from './host/worker-runner.js'
 export { runIsolated, runIsolatedOrThrow } from './host/worker-runner.js'
 export type { LoadPluginOptions, PluginSource, ResolvedPlugin } from './loader.js'

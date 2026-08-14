@@ -222,6 +222,9 @@ export const ERROR_CODES = [
   'PLUGIN_WORKER_CRASHED',
   'PLUGIN_WORKER_RUNTIME_ERROR',
 
+  // Plugins — capability-gated SDK (L7 task 4)
+  'PLUGIN_CAPABILITY_REFUSED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

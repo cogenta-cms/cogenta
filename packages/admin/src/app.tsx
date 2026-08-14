@@ -9,6 +9,7 @@ import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
+import { SettingsRoute } from './routes/settings.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { AppShell } from './shell/app-shell.js'
 
@@ -42,6 +43,7 @@ export function App(): JSX.Element {
             <Route path="collections/:name/:id" element={<EntryEditRoute />} />
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />
+            <Route path="settings" element={<SettingsRoute />} />
           </Route>
         </Routes>
       </BrowserRouter>

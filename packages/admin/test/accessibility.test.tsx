@@ -108,4 +108,14 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     await screen.findByText('content.create')
     await expectNoSeriousA11yViolations(document.body)
   })
+
+  it('account settings', async () => {
+    installMockFetch()
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('link', { name: 'Paramètres' }))
+    await screen.findByRole('heading', { name: 'Paramètres du compte' })
+    await expectNoSeriousA11yViolations(document.body)
+  })
 })

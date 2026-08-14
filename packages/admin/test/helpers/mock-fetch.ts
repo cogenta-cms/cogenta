@@ -180,6 +180,36 @@ export function installMockFetch(
         return new Response(null, { status: 204 })
       }
 
+      if (url.endsWith('/api/auth/webauthn/register/begin') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return json(200, {
+          data: {
+            options: {
+              challenge: 'register-challenge',
+              rp: { id: 'example.com', name: 'Cogenta' },
+            },
+            ticket: 'register-ticket-1',
+          },
+        })
+      }
+
+      if (url.endsWith('/api/auth/webauthn/register/complete') && method === 'POST') {
+        if (body.ticket !== 'register-ticket-1') {
+          return json(401, { error: { code: 'AUTH_SESSION_INVALID', message: 'Invalid ticket.' } })
+        }
+        if (body.response?.id !== 'mock-new-credential-id') {
+          return json(401, {
+            error: {
+              code: 'AUTH_WEBAUTHN_FAILED',
+              message: 'The passkey response could not be verified.',
+            },
+          })
+        }
+        return json(200, { data: { registered: true } })
+      }
+
       if (url.endsWith('/api/auth/webauthn/login/begin') && method === 'POST') {
         return json(200, {
           data: {

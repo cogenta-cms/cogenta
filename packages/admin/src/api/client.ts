@@ -1,5 +1,8 @@
-import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
-import { startAuthentication } from '@simplewebauthn/browser'
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/browser'
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { API_BASE, authHeader, request } from './http.js'
 
 export { ApiError } from './http.js'
@@ -88,4 +91,42 @@ export async function loginWithPasskey(): Promise<LoginResult> {
 
 export async function logout(token: string): Promise<void> {
   await fetch(`${API_BASE}/api/auth/session`, { method: 'DELETE', headers: authHeader(token) })
+}
+
+interface WebAuthnRegistrationChallenge {
+  readonly options: PublicKeyCredentialCreationOptionsJSON
+  readonly ticket: string
+}
+
+function beginWebAuthnRegistration(token: string): Promise<WebAuthnRegistrationChallenge> {
+  return request('/api/auth/webauthn/register/begin', {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+function completeWebAuthnRegistration(
+  token: string,
+  ticket: string,
+  response: unknown,
+  label: string | undefined,
+): Promise<void> {
+  return request('/api/auth/webauthn/register/complete', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ ticket, response, ...(label === undefined ? {} : { label }) }),
+  })
+}
+
+/**
+ * The registration counterpart of `loginWithPasskey()`: mint a challenge for
+ * the already-signed-in account, hand it to the browser's WebAuthn API, send
+ * the attestation back. `label` is what a future "manage your passkeys" list
+ * would show next to this one — optional, since a device's own name is often
+ * good enough on its own.
+ */
+export async function registerPasskey(token: string, label?: string): Promise<void> {
+  const challenge = await beginWebAuthnRegistration(token)
+  const response = await startRegistration({ optionsJSON: challenge.options })
+  await completeWebAuthnRegistration(token, challenge.ticket, response, label)
 }

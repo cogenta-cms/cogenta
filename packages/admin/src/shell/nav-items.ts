@@ -15,4 +15,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/collections', label: 'Contenus' },
   { to: '/media', label: 'Médiathèque' },
   { to: '/audit', label: "Journal d'audit" },
+  { to: '/settings', label: 'Paramètres' },
 ]

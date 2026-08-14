@@ -21,6 +21,7 @@ export default {
         'create',
         'import',
         'channels',
+        'plugins',
         'db',
         'cache',
         'queue',

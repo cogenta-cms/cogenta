@@ -208,6 +208,9 @@ export const ERROR_CODES = [
   'CHANNEL_WEBHOOK_DELIVERY_FAILED',
   'CHANNEL_WEBHOOK_INBOUND_UNSUPPORTED',
 
+  // Plugins — manifest schema and validation (L7 task 1)
+  'PLUGIN_MANIFEST_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

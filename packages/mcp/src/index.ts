@@ -1,3 +1,15 @@
+export type { McpStdioClientOptions } from './client/stdio-client.js'
+export { createMcpStdioClient } from './client/stdio-client.js'
+export type {
+  ChildProcessLike,
+  McpClient,
+  McpContentBlock,
+  McpServerInfo,
+  McpToolCallResult,
+  McpToolSpec,
+} from './client/types.js'
+export type { WrapMcpToolOptions } from './client/wrap-tool.js'
+export { wrapMcpTool } from './client/wrap-tool.js'
 export type {
   JsonRpcError,
   JsonRpcErrorPayload,

@@ -136,6 +136,10 @@ export const ERROR_CODES = [
   // Agents — memory (L4)
   'AGENT_APPROVAL_NOT_DECIDED',
 
+  // MCP client (L4)
+  'MCP_CLIENT_REMOTE_ERROR',
+  'MCP_CLIENT_TOOL_FAILED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

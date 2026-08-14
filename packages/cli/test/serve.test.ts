@@ -507,4 +507,50 @@ describe('runServe', () => {
       await server.stop()
     }
   })
+
+  it('reports database and storage health, admin-only', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const admin = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+      await credentials.setPassword(admin.id, 'correct horse battery staple')
+      await db.close()
+
+      const anonymous = await fetch(`${server.base}/api/health`)
+      expect(anonymous.status).toBe(403)
+
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const response = await fetch(`${server.base}/api/health`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        data: {
+          database: { status: string; driver: string }
+          storage: { status: string; driver: string }
+        }
+      }
+      // SQLite and local storage are this project's degraded tier (R1) — a
+      // working install reports "degraded", not "ok", and that is the
+      // correct, expected reading rather than a fault.
+      expect(body.data.database.status).not.toBe('down')
+      expect(body.data.storage.status).not.toBe('down')
+      expect(body.data.database.driver).toBe('sqlite')
+      expect(body.data.storage.driver).toBe('local')
+    } finally {
+      await server.stop()
+    }
+  })
 })

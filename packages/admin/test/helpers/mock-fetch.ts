@@ -212,6 +212,20 @@ export function installMockFetch(
         return json(200, { data: { ...MOCK_SCHEMA, ...site } })
       }
 
+      if (url.endsWith('/api/health') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read site health.' },
+          })
+        }
+        return json(200, {
+          data: {
+            database: { status: 'degraded', driver: 'sqlite', tier: 'degraded' },
+            storage: { status: 'degraded', driver: 'local', tier: 'degraded' },
+          },
+        })
+      }
+
       if (url.includes('/api/audit')) {
         if (!user.roles.includes('admin')) {
           return json(403, {

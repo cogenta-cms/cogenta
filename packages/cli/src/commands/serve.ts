@@ -29,6 +29,7 @@ import {
   createLogger,
   createStorageRegistry,
   type DatabaseHandle,
+  type HealthReport,
   isCogentaError,
   type Logger,
   loadConfig,
@@ -127,6 +128,11 @@ interface Site {
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
   readonly schemaDocument: SchemaDocument
+  /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
+  readonly health: () => Promise<{
+    readonly database: HealthReport
+    readonly storage: HealthReport
+  }>
   dispose(): Promise<void>
 }
 
@@ -147,6 +153,7 @@ async function assembleSite(
     readonly defaultLocale: string
   },
   storage: StorageDriver,
+  health: () => Promise<{ readonly database: HealthReport; readonly storage: HealthReport }>,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -195,6 +202,7 @@ async function assembleSite(
       locales: site.locales,
       defaultLocale: site.defaultLocale,
     }),
+    health,
     dispose: async () => {
       await db.close()
     },
@@ -541,6 +549,27 @@ export function createRequestListener(
         return
       }
 
+      // Driver connectivity/latency, not process metrics or uptime — the
+      // same two live selections `cogenta doctor` reports from a terminal,
+      // here queried from the running server instead. Admin-only: a
+      // driver's `message`/`details` are documented as credential-free, but
+      // naming which driver and tier is running is still information the
+      // `public` role has no reason to see.
+      if (url.pathname === '/api/health') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        if (!actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may read site health.')
+          return
+        }
+        const health = await site.health()
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ data: health }))
+        return
+      }
+
       res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({
@@ -622,6 +651,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     loaded.config.auth.signingKey,
     loaded.config.site,
     storageSelection.instance,
+    async () => ({ database: await selection.health(), storage: await storageSelection.health() }),
   )
 
   const server = createServer(createRequestListener(site, logger))

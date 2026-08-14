@@ -1,4 +1,5 @@
 import type { Output } from '@cogenta/cli'
+import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import type { ResolvedBlueprint } from './blueprints/registry.js'
 import type { EnvironmentReport } from './environment.js'
 import type { ValidateKeyResult } from './llm-setup.js'
@@ -50,10 +51,12 @@ export function printRecap(input: RecapInput, out: Output): void {
     )
   }
 
+  const hasContentPack = BLUEPRINT_CONTENT_PACKS[resolvedBlueprint.blueprint.id] !== undefined
+
   out.heading('Skin')
-  if (resolvedBlueprint.blueprint.id !== 'blog') {
+  if (!hasContentPack) {
     out.warn(
-      'Default skin — this blueprint has no theme.tokens.json step yet. AI skin generation applies only to "blog" today.',
+      'Default skin — this blueprint has no theme.tokens.json step yet. AI skin generation applies only to blueprints with a real content pack today.',
     )
   } else if (skinOutcome?.kind === 'generated') {
     out.ok(
@@ -70,7 +73,7 @@ export function printRecap(input: RecapInput, out: Output): void {
     }
   }
 
-  if (resolvedBlueprint.blueprint.id === 'blog') {
+  if (hasContentPack) {
     out.heading('Recommended agents')
     out.detail(
       'Not enabled — no site runs a live agent scheduler yet. Recorded in .cogenta/recommended-agents.json for when one exists.',

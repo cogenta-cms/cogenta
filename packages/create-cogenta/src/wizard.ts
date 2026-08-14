@@ -1,4 +1,5 @@
 import type { Output } from '@cogenta/cli'
+import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import { BLUEPRINTS, resolveBlueprint } from './blueprints/registry.js'
 import { loadConfigFile } from './config-file.js'
 import { checkEnvironment } from './environment.js'
@@ -149,10 +150,11 @@ export async function runWizard(options: RunWizardOptions): Promise<number> {
 
   // "Aperçu proposé sur trois pages types, avec possibilité de régénérer ou
   // d'ajuster" (L9 task 7) needs the prompter, so it stays open until here —
-  // only `blog` writes a `theme.tokens.json` a generated skin could replace.
+  // only a blueprint with a real content pack writes a `theme.tokens.json` a
+  // generated skin could replace.
   let skinOutcome: SkinOutcome | undefined
   if (
-    resolvedBlueprint.blueprint.id === 'blog' &&
+    BLUEPRINT_CONTENT_PACKS[resolvedBlueprint.blueprint.id] !== undefined &&
     answers.llmProvider !== 'none' &&
     answers.llmApiKey !== undefined &&
     answers.llmApiKey !== '' &&

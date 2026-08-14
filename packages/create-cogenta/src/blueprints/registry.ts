@@ -9,19 +9,22 @@ export interface Blueprint {
 
 /**
  * "Type de site → sélection d'un blueprint." `blank` (empty schema, no demo
- * content) and `blog` (L9 task 3 — `post`/`category` collections, real demo
- * content, the canonical skin, recommended-agent hints) are real today. The
- * remaining six names the lot commits to (vitrine, magazine, portfolio,
- * documentation, association, restaurant, SaaS — L9 task 8) are listed so
- * the step exists and reads honestly, not synthesised as fake content now.
+ * content), `blog` (L9 task 3), `vitrine`, `portfolio` and `documentation`
+ * (L9 task 8, batch A) are real today. The remaining four (magazine,
+ * association, restaurant, SaaS — L9 task 8, batch B) are listed so the
+ * step exists and reads honestly, not synthesised as fake content now.
  */
 export const BLUEPRINTS: readonly Blueprint[] = [
   { id: 'blank', label: 'Blank — empty schema, nothing pre-configured', available: true },
-  { id: 'vitrine', label: 'Showcase site (coming soon)', available: false },
+  { id: 'vitrine', label: 'Showcase site — services, testimonials, demo content', available: true },
   { id: 'blog', label: 'Blog — posts, categories, demo content', available: true },
   { id: 'magazine', label: 'Magazine (coming soon)', available: false },
-  { id: 'portfolio', label: 'Portfolio (coming soon)', available: false },
-  { id: 'documentation', label: 'Documentation site (coming soon)', available: false },
+  { id: 'portfolio', label: 'Portfolio — projects, demo content', available: true },
+  {
+    id: 'documentation',
+    label: 'Documentation site — ordered doc pages, demo content',
+    available: true,
+  },
   { id: 'association', label: 'Nonprofit / association (coming soon)', available: false },
   { id: 'restaurant', label: 'Restaurant (coming soon)', available: false },
   { id: 'saas', label: 'SaaS (coming soon)', available: false },

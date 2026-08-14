@@ -65,7 +65,7 @@ export {
   systemFieldsSchema,
 } from './system-fields.js'
 export * from './types.js'
-export type { ContentBlock, GeoPoint, JsonValue } from './validation.js'
+export type { GeoPoint, JsonValue, RawBlockInput } from './validation.js'
 export {
   COLOR_PATTERN,
   collectionEntrySchema,

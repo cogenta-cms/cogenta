@@ -45,11 +45,10 @@ function wpDateToIso(wpDate: string): string | null {
 
 /**
  * Contract A's `f.blocks()` zone shape — `_key`/`_type` folded into
- * `key`/`type`, everything else under `data`. Not named `ContentBlock`: that
- * name is already taken, by a *different* shape, in `@cogenta/schema`'s
- * public export (`validation.ts`'s block-value `ContentBlock` wins over
- * `store/types.ts`'s row shape when both are re-exported under one name) —
- * this stays a local, structural type instead of importing either.
+ * `key`/`type`, everything else under `data`. `@cogenta/schema` exports the
+ * identical shape as `ContentBlock`; this stays a local, structural type
+ * rather than importing it, to keep this converter decoupled from that
+ * package's internal store types.
  */
 interface StoredBlock {
   readonly key: string

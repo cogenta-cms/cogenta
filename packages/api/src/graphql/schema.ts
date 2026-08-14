@@ -42,11 +42,7 @@ import {
   SortInputType,
 } from './scalars.js'
 
-/**
- * The store's block shape, reached through `BlockZones` on purpose: the name
- * `ContentBlock` is also exported by the schema validation module with contract
- * B's wire shape (`_key`/`_type`), and the store speaks the other one.
- */
+/** The store's block shape, reached through `BlockZones`. */
 type StoreBlock = BlockZones[string][number]
 
 /**

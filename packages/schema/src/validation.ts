@@ -56,7 +56,15 @@ export const contentBlockSchema = z.looseObject({
   _type: z.string().min(1),
 })
 
-export type ContentBlock = z.infer<typeof contentBlockSchema>
+/**
+ * The raw `_key`/`_type` wire envelope a `blocks` field accepts on write —
+ * distinct from the store's `ContentBlock` (`store/types.ts`, the normalised
+ * `key`/`type`/`data` shape `BlockZones` holds after `values.ts` unwraps
+ * this). Two types sharing the name `ContentBlock` used to collide in this
+ * package's public exports, with this one silently winning over the store's
+ * via `export *` — renamed so both are reachable under their own name.
+ */
+export type RawBlockInput = z.infer<typeof contentBlockSchema>
 
 function idSchema(): z.ZodType<string> {
   // Every content id is an application-minted UUIDv7 (ADR-0015), so a reference

@@ -155,6 +155,9 @@ export const ERROR_CODES = [
   'SECURITY_EPSS_QUERY_FAILED',
   'SECURITY_DEPENDENCY_NOT_FOUND',
 
+  // Agents-builtin — performance agent (L5)
+  'PERFORMANCE_CRUX_QUERY_FAILED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

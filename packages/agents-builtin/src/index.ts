@@ -1,3 +1,19 @@
+export { performanceAgent } from './performance/agent.js'
+export { compareToBudget } from './performance/budget.js'
+export type { CruxFormFactor, QueryCruxOptions } from './performance/crux-client.js'
+export { queryCrux } from './performance/crux-client.js'
+export { diagnosePerformanceRisks } from './performance/diagnosis.js'
+export { medianMetrics, medianOf } from './performance/median.js'
+export type { DetectRegressionOptions } from './performance/regression.js'
+export { detectRegression } from './performance/regression.js'
+export type {
+  CruxMetrics,
+  PerformanceBudget,
+  PerformanceFinding,
+  PerformanceImage,
+  PerformancePageInput,
+  PerformanceSeverity,
+} from './performance/types.js'
 export { securityAgent } from './security/agent.js'
 export { bumpDependencyVersion } from './security/bump-version.js'
 export type {

@@ -1,0 +1,24 @@
+{
+  "name": "@cogenta/project-site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cogenta's own project site (L9 task 12) — a real, modest presentation site built through the same content model and rendering pipeline any Cogenta site uses. Not deployed by this repo; deployment is out of scope (an irreversible external action requiring resources only a human holds).",
+  "license": "MPL-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@cogenta/blocks": "workspace:*",
+    "@cogenta/core": "workspace:*",
+    "@cogenta/schema": "workspace:*",
+    "@cogenta/theme-canonical": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

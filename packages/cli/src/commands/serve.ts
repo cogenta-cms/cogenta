@@ -47,6 +47,7 @@ import {
   createRedirectStore,
   createSchemaTables,
   type SchemaDocument,
+  withReadOnlyStore,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
@@ -161,6 +162,13 @@ async function assembleSite(
   health: () => Promise<{ readonly database: HealthReport; readonly storage: HealthReport }>,
   /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
   agents?: AgentsRouterOptions,
+  /**
+   * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
+   * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
+   * instead of landing — wrapped once here, at the one place both transports'
+   * stores are actually constructed, so neither can bypass it.
+   */
+  readOnly = false,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -169,8 +177,9 @@ async function assembleSite(
     const existing = stores.get(collection.name)
     if (existing !== undefined) return existing
     const created = createContentStore({ db, collection })
-    stores.set(collection.name, created)
-    return created
+    const stored = readOnly ? withReadOnlyStore(created) : created
+    stores.set(collection.name, stored)
+    return stored
   }
 
   const redirects = createRedirectStore({ db })
@@ -616,6 +625,13 @@ export interface ServeOptions {
   onListening?: (address: { port: number; host: string }) => void
   /** Stops the server and disposes the database when aborted. */
   readonly signal?: AbortSignal
+  /**
+   * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
+   * write attempt refuses with `CONTENT_READ_ONLY`; reads are unaffected.
+   * Scheduling a periodic reset back to demo content is an operational
+   * decision for whoever deploys a read-only instance, not made here.
+   */
+  readonly readOnly?: boolean
 }
 
 const DEFAULT_PORT = 4000
@@ -666,6 +682,8 @@ export async function runServe(options: ServeOptions): Promise<number> {
     loaded.config.site,
     storageSelection.instance,
     async () => ({ database: await selection.health(), storage: await storageSelection.health() }),
+    undefined,
+    options.readOnly ?? false,
   )
 
   const server = createServer(createRequestListener(site, logger))

@@ -37,6 +37,7 @@ export const ERROR_CODES = [
   'CONTENT_ROUTE_INVALID',
   'CONTENT_REDIRECT_LOOP',
   'CONTENT_SCHEDULE_INVALID',
+  'CONTENT_READ_ONLY',
 
   // Blocks
   'BLOCK_UNKNOWN',
@@ -167,6 +168,9 @@ export const ERROR_CODES = [
   // Import — WordPress WXR (L9)
   'IMPORT_WXR_PARSE_FAILED',
   'IMPORT_WXR_UNSAFE_DOCUMENT',
+
+  // create-cogenta — playground reset (L9)
+  'PLAYGROUND_BLUEPRINT_UNKNOWN',
 
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',

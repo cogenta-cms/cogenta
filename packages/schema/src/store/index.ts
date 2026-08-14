@@ -31,6 +31,7 @@ export {
   toSnakeCase,
   versionsTable,
 } from './naming.js'
+export { withReadOnlyStore } from './read-only.js'
 export type { ContentStore, ContentStoreOptions } from './store.js'
 export { createContentStore } from './store.js'
 export type { RelationTarget } from './tables.js'

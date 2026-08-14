@@ -55,6 +55,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   CONTENT_SLUG_INVALID: 400,
   CONTENT_SLUG_TAKEN: 409,
   CONTENT_SCHEDULE_INVALID: 400,
+  // Not FORBIDDEN (403 for "you may never do this"): a read-only instance
+  // refuses a write an actor is otherwise permitted to make — 403 is still
+  // the closest real status (the request is understood, authenticated where
+  // needed, and refused on policy, not on the request's shape).
+  CONTENT_READ_ONLY: 403,
   SCHEMA_INVALID: 400,
   BLOCK_UNKNOWN: 400,
   BLOCK_INVALID: 400,

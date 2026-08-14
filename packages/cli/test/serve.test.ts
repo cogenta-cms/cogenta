@@ -105,7 +105,10 @@ async function loginWithMfaSetup(base: string, email: string, password: string):
 
 const activeServers: AbortController[] = []
 
-async function startServer(root: string): Promise<{ base: string; stop: () => Promise<void> }> {
+async function startServer(
+  root: string,
+  options: { readonly readOnly?: boolean } = {},
+): Promise<{ base: string; stop: () => Promise<void> }> {
   const controller = new AbortController()
   activeServers.push(controller)
 
@@ -123,6 +126,7 @@ async function startServer(root: string): Promise<{ base: string; stop: () => Pr
     port: 0,
     signal: controller.signal,
     onListening: (a) => resolveAddress(a),
+    ...(options.readOnly === undefined ? {} : { readOnly: options.readOnly }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.
@@ -168,6 +172,51 @@ describe('runServe', () => {
       expect(response.status).toBe(200)
       const body = (await response.json()) as { data: unknown[] }
       expect(body.data).toEqual([])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('read-only mode: reads still work, a real write is refused with CONTENT_READ_ONLY', async () => {
+    const root = await project()
+    const server = await startServer(root, { readOnly: true })
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const user = await users.create({ email: 'editor@example.com', roles: ['editor'] })
+      await credentials.setPassword(user.id, 'correct horse battery staple')
+      await db.close()
+
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+
+      // Reads are unaffected by read-only mode.
+      const read = await fetch(`${server.base}/api/content/article`)
+      expect(read.status).toBe(200)
+
+      // A real, permitted write attempt is refused, not silently accepted.
+      const write = await fetch(`${server.base}/api/content/article`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ values: { title: 'Should not be saved' } }),
+      })
+      expect(write.status).toBe(403)
+      const writeBody = (await write.json()) as { error: { code: string } }
+      expect(writeBody.error.code).toBe('CONTENT_READ_ONLY')
+
+      // Nothing landed: the collection is still empty.
+      const after = await fetch(`${server.base}/api/content/article`)
+      const afterBody = (await after.json()) as { data: unknown[] }
+      expect(afterBody.data).toEqual([])
     } finally {
       await server.stop()
     }

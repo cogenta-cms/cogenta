@@ -4,6 +4,12 @@ import { createOutput, shouldUseColour, type Writer } from '@cogenta/cli'
 import { createDefaultsPrompter, createInteractivePrompter } from './prompts.js'
 import { runWizard } from './wizard.js'
 
+export type {
+  BlueprintContentPack,
+  RecommendedAgentHint,
+  SeedDemoContent,
+} from './blueprints/content-pack.js'
+export { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 export type { Blueprint, ResolvedBlueprint } from './blueprints/registry.js'
 export { BLUEPRINTS, DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 export { ConfigFileError, loadConfigFile } from './config-file.js'
@@ -17,6 +23,8 @@ export type {
   ValidateKeyResult,
 } from './llm-setup.js'
 export { createProviderClient, LLM_PROVIDERS, validateApiKey } from './llm-setup.js'
+export type { ResetPlaygroundDataOptions } from './playground-reset.js'
+export { resetPlaygroundData } from './playground-reset.js'
 export type { Choice, Prompter, PromptIO } from './prompts.js'
 export { createDefaultsPrompter, createInteractivePrompter } from './prompts.js'
 export { printRecap } from './recap.js'

@@ -1,5 +1,8 @@
 import { Worker } from 'node:worker_threads'
 import { CogentaError } from '@cogenta/core'
+import type { PluginManifest } from '../manifest.js'
+import type { PluginGrant } from '../permissions/grants.js'
+import { resolveGrantedCapabilities } from '../permissions/resolve.js'
 import type { CapabilityHandler } from './capabilities.js'
 import type {
   WorkerGuestMessage,
@@ -181,6 +184,25 @@ export async function runIsolated(
     const request: WorkerRunMessage = { id, type: 'run', code, grantedCapabilities }
     worker.postMessage(request)
   })
+}
+
+/**
+ * The real entry point for actually running a resolved plugin — unlike
+ * `runIsolated`, which task 4 left accepting an externally-decided
+ * `grantedCapabilities` list as a placeholder, this computes that list
+ * itself via `resolveGrantedCapabilities` (task 5) from the plugin's real
+ * manifest and its real, persisted grants. A caller cannot bypass grant
+ * resolution by simply passing whatever capability list it wants — the only
+ * way a capability reaches the sandbox is a real row in the grant store.
+ */
+export async function runPlugin(
+  manifest: PluginManifest,
+  code: string,
+  grants: readonly PluginGrant[],
+  options: Omit<RunIsolatedOptions, 'grantedCapabilities'> = {},
+): Promise<IsolatedRunResult> {
+  const grantedCapabilities = resolveGrantedCapabilities(manifest, grants)
+  return await runIsolated(code, { ...options, grantedCapabilities })
 }
 
 /** Throws instead of returning a discriminated failure — for call sites that want a plain success value or a real error. */

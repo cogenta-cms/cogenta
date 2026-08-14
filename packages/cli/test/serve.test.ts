@@ -176,4 +176,20 @@ describe('runServe', () => {
       await server.stop()
     }
   })
+
+  it('configures WebAuthn from site.url, so passkey login options resolve', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/api/auth/webauthn/login/begin`, {
+        method: 'POST',
+      })
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as { data: { options: { rpId: string } } }
+      // project()'s cogenta.config.mjs sets site.url to https://example.com.
+      expect(body.data.options.rpId).toBe('example.com')
+    } finally {
+      await server.stop()
+    }
+  })
 })

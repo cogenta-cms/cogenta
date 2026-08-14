@@ -97,6 +97,30 @@ export function installMockFetch(
         return new Response(null, { status: 204 })
       }
 
+      if (url.endsWith('/api/auth/webauthn/login/begin') && method === 'POST') {
+        return json(200, {
+          data: {
+            options: { challenge: 'test-challenge', rpId: 'example.com', allowCredentials: [] },
+            ticket: 'webauthn-ticket-1',
+          },
+        })
+      }
+
+      if (url.endsWith('/api/auth/webauthn/login/complete') && method === 'POST') {
+        if (body.ticket !== 'webauthn-ticket-1') {
+          return json(401, { error: { code: 'AUTH_SESSION_INVALID', message: 'Invalid ticket.' } })
+        }
+        if (body.response?.id !== 'mock-credential-id') {
+          return json(401, {
+            error: {
+              code: 'AUTH_WEBAUTHN_FAILED',
+              message: 'The passkey response could not be verified.',
+            },
+          })
+        }
+        return json(200, { data: session() })
+      }
+
       throw new Error(`unhandled request in test: ${method} ${url}`)
     }),
   )

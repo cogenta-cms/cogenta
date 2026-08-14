@@ -14,14 +14,16 @@ type Step =
   | { readonly kind: 'totp-setup'; readonly ticket: string; readonly setup: TotpSetup }
 
 /**
- * Password-then-TOTP, per `docs/lots/L2-admin.md`: "mot de passe plus TOTP en
- * secours". Passkeys are the primary method the spec asks for, but they need
- * a ceremony the backend does not expose yet (tracked alongside task 3) —
- * this is the fallback path, built first because it has no such dependency.
+ * Passkeys are the spec's primary sign-in method ("passkeys en méthode
+ * principale, mot de passe plus TOTP en secours"), with password-then-TOTP
+ * as the fallback. Passkey *registration* — adding one to an account — needs
+ * a settings surface that does not exist yet and lands with it; login does
+ * not need that surface, so it ships now.
  *
- * A role that needs MFA and has no factor yet does not get turned away: the
- * password step's ticket doubles as proof it can enrol TOTP right here,
- * `totp-setup`, rather than being locked out until an admin intervenes.
+ * A role that needs MFA and has no factor yet does not get turned away on
+ * the password path: the password step's ticket doubles as proof it can
+ * enrol TOTP right here, `totp-setup`, rather than being locked out until an
+ * admin intervenes.
  */
 export function LoginRoute(): JSX.Element {
   const auth = useAuth()
@@ -42,6 +44,23 @@ export function LoginRoute(): JSX.Element {
 
   function goToIntendedDestination(): void {
     navigate((location.state as LocationState | null)?.from?.pathname ?? '/', { replace: true })
+  }
+
+  async function submitPasskey(): Promise<void> {
+    setError(null)
+    setSubmitting(true)
+    try {
+      await auth.loginWithPasskey()
+      goToIntendedDestination()
+    } catch (caught) {
+      // A cancelled browser prompt throws too, and is not worth an alarming
+      // message — "try again" covers both that and a genuine failure.
+      setError(
+        caught instanceof ApiError ? caught.message : 'La clé d’accès a été refusée ou annulée.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function submitPassword(event: FormEvent): Promise<void> {
@@ -166,37 +185,43 @@ export function LoginRoute(): JSX.Element {
 
   return (
     <main className="auth-page">
-      <form className="auth-form" onSubmit={submitPassword} aria-labelledby="login-heading">
+      <div className="auth-form">
         <h1 id="login-heading">Connexion à Cogenta</h1>
-        <label htmlFor="email">Adresse e-mail</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <label htmlFor="password">Mot de passe</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {error !== null && (
-          <p role="alert" className="auth-form__error">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={submitting}>
-          Se connecter
+        <button type="button" onClick={() => void submitPasskey()} disabled={submitting}>
+          Se connecter avec une clé d'accès
         </button>
-      </form>
+        <p className="auth-form__divider">ou</p>
+        <form onSubmit={submitPassword} aria-labelledby="login-heading">
+          <label htmlFor="email">Adresse e-mail</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <label htmlFor="password">Mot de passe</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          {error !== null && (
+            <p role="alert" className="auth-form__error">
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={submitting}>
+            Se connecter
+          </button>
+        </form>
+      </div>
     </main>
   )
 }

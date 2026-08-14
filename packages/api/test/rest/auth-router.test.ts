@@ -47,6 +47,11 @@ function codeFor(secret: string, nowSeconds: number): string {
 }
 
 const SIGNING_KEY = 'test-signing-key-not-a-real-secret'
+const WEBAUTHN_CONFIG = {
+  relyingPartyName: 'Cogenta Test',
+  relyingPartyId: 'example.com',
+  origin: 'https://example.com',
+}
 
 let db: DatabaseHandle
 let auth: AuthStore
@@ -298,6 +303,156 @@ describe('TOTP self-service enrolment', () => {
     } finally {
       await db_.close()
     }
+  })
+})
+
+describe('WebAuthn passkeys', () => {
+  async function withWebauthn() {
+    const db_ = await createSqliteHandle({ url: ':memory:' })
+    const authWithWebauthn = await createAuthStore({
+      db: db_,
+      signingKey: SIGNING_KEY,
+      collections: [],
+      webauthn: WEBAUTHN_CONFIG,
+    })
+    const router = createAuthRouter({ auth: authWithWebauthn })
+    const user = await authWithWebauthn.users.create({
+      email: 'alice@example.com',
+      roles: ['viewer'],
+    })
+    const session = await authWithWebauthn.sessions.create(user.id)
+    return { db: db_, auth: authWithWebauthn, router, user, token: session.token }
+  }
+
+  describe('POST /api/auth/webauthn/register/begin', () => {
+    it('requires an authenticated session', async () => {
+      const { db: db_, router } = await withWebauthn()
+      try {
+        const response = await router.handle(request('POST', '/api/auth/webauthn/register/begin'))
+        expect(response.status).toBe(401)
+        expect((response.body as { error: { code: string } }).error.code).toBe('UNAUTHENTICATED')
+      } finally {
+        await db_.close()
+      }
+    })
+
+    it('returns registration options naming the relying party, and a ticket', async () => {
+      const { db: db_, router, token } = await withWebauthn()
+      try {
+        const response = await router.handle(
+          request('POST', '/api/auth/webauthn/register/begin', { token }),
+        )
+        expect(response.status).toBe(200)
+        const body = response.body as {
+          data: { options: { rp: { id: string } }; ticket: string }
+        }
+        expect(body.data.options.rp.id).toBe(WEBAUTHN_CONFIG.relyingPartyId)
+        expect(body.data.ticket).toBeTruthy()
+      } finally {
+        await db_.close()
+      }
+    })
+  })
+
+  describe('POST /api/auth/webauthn/register/complete', () => {
+    it('rejects a forged response with 401, never a raw crash', async () => {
+      const { db: db_, router, token } = await withWebauthn()
+      try {
+        const begin = await router.handle(
+          request('POST', '/api/auth/webauthn/register/begin', { token }),
+        )
+        const { ticket } = (begin.body as { data: { ticket: string } }).data
+
+        const response = await router.handle(
+          request('POST', '/api/auth/webauthn/register/complete', {
+            body: {
+              ticket,
+              response: {
+                id: 'forged',
+                rawId: 'forged',
+                type: 'public-key',
+                clientExtensionResults: {},
+                response: {
+                  clientDataJSON: Buffer.from('{}').toString('base64url'),
+                  attestationObject: Buffer.from('not-real-cbor').toString('base64url'),
+                },
+              },
+            },
+          }),
+        )
+        expect(response.status).toBe(401)
+        expect((response.body as { error: { code: string } }).error.code).toBe(
+          'AUTH_WEBAUTHN_FAILED',
+        )
+      } finally {
+        await db_.close()
+      }
+    })
+
+    it('rejects a request with no "response" field', async () => {
+      const { db: db_, router, token } = await withWebauthn()
+      try {
+        const begin = await router.handle(
+          request('POST', '/api/auth/webauthn/register/begin', { token }),
+        )
+        const { ticket } = (begin.body as { data: { ticket: string } }).data
+
+        const response = await router.handle(
+          request('POST', '/api/auth/webauthn/register/complete', { body: { ticket } }),
+        )
+        expect(response.status).toBe(400)
+      } finally {
+        await db_.close()
+      }
+    })
+  })
+
+  describe('POST /api/auth/webauthn/login/begin', () => {
+    it('returns discoverable-credential options and a ticket, with no session required', async () => {
+      const { db: db_, router } = await withWebauthn()
+      try {
+        const response = await router.handle(request('POST', '/api/auth/webauthn/login/begin'))
+        expect(response.status).toBe(200)
+        const body = response.body as {
+          data: { options: { allowCredentials: unknown[] }; ticket: string }
+        }
+        expect(body.data.options.allowCredentials).toEqual([])
+        expect(body.data.ticket).toBeTruthy()
+      } finally {
+        await db_.close()
+      }
+    })
+  })
+
+  describe('POST /api/auth/webauthn/login/complete', () => {
+    it('refuses a passkey nobody registered', async () => {
+      const { db: db_, router } = await withWebauthn()
+      try {
+        const begin = await router.handle(request('POST', '/api/auth/webauthn/login/begin'))
+        const { ticket } = (begin.body as { data: { ticket: string } }).data
+
+        const response = await router.handle(
+          request('POST', '/api/auth/webauthn/login/complete', {
+            body: { ticket, response: { id: 'never-registered' } },
+          }),
+        )
+        expect(response.status).toBe(401)
+        expect((response.body as { error: { code: string } }).error.code).toBe(
+          'AUTH_WEBAUTHN_FAILED',
+        )
+      } finally {
+        await db_.close()
+      }
+    })
+  })
+
+  it('reports AUTH_WEBAUTHN_FAILED when webauthn is not configured for the site', async () => {
+    const router = createAuthRouter({ auth })
+    const response = await router.handle(
+      request('POST', '/api/auth/webauthn/login/begin', { body: {} }),
+    )
+    expect(response.status).toBe(401)
+    expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_WEBAUTHN_FAILED')
   })
 })
 

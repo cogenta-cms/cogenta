@@ -1,17 +1,13 @@
 import type { AuthStore, LoginResult, User } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
+import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 import type { Actor } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 
 /**
- * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment, and
- * "who am I".
- *
- * Passkey ceremonies need a challenge held between two requests
- * (`@cogenta/auth`'s own doc says this is an API-layer concern, not the auth
- * package's) and are not built yet — tracked alongside the rest of L2 task 3
- * rather than rushed in alongside this router.
+ * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment,
+ * passkey registration and passkey sign-in, and "who am I".
  *
  * Same shape as the REST router: a plain request in, a plain response out,
  * nothing that listens on a port. `resolveActor` is exported separately
@@ -87,6 +83,26 @@ function stringField(body: Record<string, unknown>, field: string): string {
   return value
 }
 
+function objectField(body: Record<string, unknown>, field: string): Record<string, unknown> {
+  const value = body[field]
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: `"${field}" is required and must be an object.`,
+      hint: `Send the browser's WebAuthn "${field}" object as-is.`,
+    })
+  }
+  return value as Record<string, unknown>
+}
+
+function unauthenticated(): CogentaError {
+  return new CogentaError({
+    code: 'UNAUTHENTICATED',
+    message: 'Sign in before registering a passkey.',
+    hint: 'Send "Authorization: Bearer <token>" from an existing session.',
+  })
+}
+
 function loginResponseBody(result: LoginResult): unknown {
   if (result.status === 'session') {
     return {
@@ -137,9 +153,12 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
   async function route(request: RestRequest): Promise<RestResponse> {
     const segments = segmentsOf(request.path, basePath)
-    if (segments === null || segments.length !== 1) throw noRoute()
+    if (segments === null || segments.length === 0) throw noRoute()
     const method = request.method.toUpperCase()
     const [action] = segments
+
+    if (action === 'webauthn') return webauthnRoute(request, segments, method)
+    if (segments.length !== 1) throw noRoute()
 
     if (action === 'login') {
       if (method !== 'POST') return methodNotAllowed(['POST'])
@@ -203,6 +222,56 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
     throw noRoute()
   }
+
+  /**
+   * `/api/auth/webauthn/{register|login}/{begin|complete}` — three segments,
+   * routed apart from everything else above because registration's `begin`
+   * needs the caller's actor (an existing session adding a passkey) while
+   * every other WebAuthn step, like login itself, does not.
+   */
+  async function webauthnRoute(
+    request: RestRequest,
+    segments: readonly string[],
+    method: string,
+  ): Promise<RestResponse> {
+    if (segments.length !== 3) throw noRoute()
+    if (method !== 'POST') return methodNotAllowed(['POST'])
+    const [, resource, step] = segments
+
+    if (resource === 'register' && step === 'begin') {
+      const actor = await resolveActor(auth, request.headers)
+      if (actor.id === null) throw unauthenticated()
+      const challenge = await auth.login.beginWebAuthnRegistration(actor.id)
+      return jsonResponse(200, { data: challenge })
+    }
+
+    if (resource === 'register' && step === 'complete') {
+      const body = asRecord(request.body)
+      const label = typeof body['label'] === 'string' ? body['label'] : undefined
+      await auth.login.completeWebAuthnRegistration(
+        stringField(body, 'ticket'),
+        objectField(body, 'response') as unknown as RegistrationResponseJSON,
+        label,
+      )
+      return jsonResponse(200, { data: { registered: true } })
+    }
+
+    if (resource === 'login' && step === 'begin') {
+      const challenge = await auth.login.beginWebAuthnLogin()
+      return jsonResponse(200, { data: challenge })
+    }
+
+    if (resource === 'login' && step === 'complete') {
+      const body = asRecord(request.body)
+      const result = await auth.login.completeWebAuthnLogin(
+        stringField(body, 'ticket'),
+        objectField(body, 'response') as unknown as AuthenticationResponseJSON,
+      )
+      return jsonResponse(200, { data: loginResponseBody(result) })
+    }
+
+    throw noRoute()
+  }
 }
 
 function methodNotAllowed(allowed: readonly string[]): RestResponse {
@@ -225,7 +294,8 @@ function noRoute(): CogentaError {
     message: 'No route matches this path.',
     hint:
       'Auth routes are /api/auth/login, /api/auth/totp, /api/auth/totp-setup, ' +
-      '/api/auth/totp-setup-confirm and /api/auth/session.',
+      '/api/auth/totp-setup-confirm, /api/auth/session, and ' +
+      '/api/auth/webauthn/{register|login}/{begin|complete}.',
   })
 }
 

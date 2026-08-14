@@ -3,8 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, USER } from './helpers/mock-fetch.js'
 
+const startAuthentication = vi.fn()
+vi.mock('@simplewebauthn/browser', () => ({
+  startAuthentication: (...args: unknown[]) => startAuthentication(...args),
+}))
+
 beforeEach(() => {
   localStorage.clear()
+  startAuthentication.mockReset()
 })
 
 afterEach(() => {
@@ -40,6 +46,48 @@ describe('password login', () => {
       'Incorrect email or password.',
     )
     expect(screen.queryByRole('heading', { name: 'Tableau de bord' })).toBeNull()
+  })
+})
+
+describe('passkey login', () => {
+  it('reaches the dashboard when the browser returns a matching assertion', async () => {
+    installMockFetch()
+    startAuthentication.mockResolvedValue({ id: 'mock-credential-id' })
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+    fireEvent.click(screen.getByRole('button', { name: "Se connecter avec une clé d'accès" }))
+
+    expect(await screen.findByRole('heading', { name: 'Tableau de bord' })).toBeDefined()
+    expect(startAuthentication).toHaveBeenCalledWith({
+      optionsJSON: { challenge: 'test-challenge', rpId: 'example.com', allowCredentials: [] },
+    })
+  })
+
+  it('shows an error and stays on the login page when the browser prompt is cancelled', async () => {
+    installMockFetch()
+    startAuthentication.mockRejectedValue(new Error('cancelled by user'))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+    fireEvent.click(screen.getByRole('button', { name: "Se connecter avec une clé d'accès" }))
+
+    expect(await screen.findByRole('alert')).toBeDefined()
+    expect(screen.getByRole('heading', { name: 'Connexion à Cogenta' })).toBeDefined()
+  })
+
+  it('reports a passkey the server does not recognise', async () => {
+    installMockFetch()
+    startAuthentication.mockResolvedValue({ id: 'some-other-credential' })
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+    fireEvent.click(screen.getByRole('button', { name: "Se connecter avec une clé d'accès" }))
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'The passkey response could not be verified.',
+    )
   })
 })
 

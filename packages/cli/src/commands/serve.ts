@@ -113,10 +113,17 @@ interface Site {
   dispose(): Promise<void>
 }
 
+/** `relyingPartyId` is the bare host: WebAuthn ties a passkey to a domain, not a URL. */
+function webauthnConfigFor(site: { readonly name: string; readonly url: string }) {
+  const host = new URL(site.url).hostname
+  return { relyingPartyName: site.name, relyingPartyId: host, origin: site.url }
+}
+
 async function assembleSite(
   db: DatabaseHandle,
   collections: readonly CollectionDefinition[],
   signingKey: string,
+  site: { readonly name: string; readonly url: string },
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -140,7 +147,13 @@ async function assembleSite(
     routing: { locales: ['en'], defaultLocale: 'en', redirects },
   })
 
-  const auth = await createAuthStore({ db, signingKey, collections })
+  const auth = await createAuthStore({
+    db,
+    signingKey,
+    collections,
+    issuer: site.name,
+    webauthn: webauthnConfigFor(site),
+  })
 
   return {
     db,
@@ -345,7 +358,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
   }
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
-  const site = await assembleSite(selection.instance, collections, loaded.config.auth.signingKey)
+  const site = await assembleSite(
+    selection.instance,
+    collections,
+    loaded.config.auth.signingKey,
+    loaded.config.site,
+  )
 
   const server = createServer(createRequestListener(site, logger))
   const port = options.port ?? DEFAULT_PORT

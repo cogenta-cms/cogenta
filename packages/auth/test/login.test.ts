@@ -17,12 +17,27 @@ const PUBLISH_COLLECTIONS: readonly CollectionDefinition[] = [
     permissions: { publish: ['editor'] },
   },
 ]
+const WEBAUTHN_CONFIG = {
+  relyingPartyName: 'Cogenta Test',
+  relyingPartyId: 'example.com',
+  origin: 'https://example.com',
+}
 
-async function setup(collections: readonly CollectionDefinition[], now: () => number = Date.now) {
+async function setup(
+  collections: readonly CollectionDefinition[],
+  now: () => number = Date.now,
+  webauthn?: typeof WEBAUTHN_CONFIG,
+) {
   const db = await testDb()
   const users = createUserStore(db, now)
   const credentials = createCredentialStore(db, now)
-  const auth = createAuthService({ db, signingKey: SIGNING_KEY, collections, now })
+  const auth = createAuthService({
+    db,
+    signingKey: SIGNING_KEY,
+    collections,
+    now,
+    ...(webauthn === undefined ? {} : { webauthn }),
+  })
   return { db, users, credentials, auth }
 }
 
@@ -333,6 +348,124 @@ describe('TOTP self-service enrolment', () => {
     }
     await expect(auth.confirmTotpSetup(ticket, '000000')).rejects.toMatchObject({
       code: 'AUTH_RATE_LIMITED',
+    })
+  })
+})
+
+describe('WebAuthn passkeys', () => {
+  it('refuses every passkey method when webauthn is not configured', async () => {
+    const { users, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+
+    await expect(auth.beginWebAuthnRegistration(user.id)).rejects.toMatchObject({
+      code: 'AUTH_WEBAUTHN_FAILED',
+    })
+    await expect(auth.beginWebAuthnLogin()).rejects.toMatchObject({ code: 'AUTH_WEBAUTHN_FAILED' })
+  })
+
+  describe('registration', () => {
+    it('issues options naming the relying party and a ticket', async () => {
+      const { users, auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+
+      const challenge = await auth.beginWebAuthnRegistration(user.id)
+      expect(challenge.options.rp.id).toBe(WEBAUTHN_CONFIG.relyingPartyId)
+      expect(challenge.options.user.name).toBe('alice@example.com')
+      expect(challenge.ticket).toBeTruthy()
+    })
+
+    it('refuses registration for an unknown user', async () => {
+      const { auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      await expect(auth.beginWebAuthnRegistration('nonexistent')).rejects.toMatchObject({
+        code: 'AUTH_USER_NOT_FOUND',
+      })
+    })
+
+    it('rejects a forged registration response rather than throwing an unhandled error', async () => {
+      const { users, auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+      const challenge = await auth.beginWebAuthnRegistration(user.id)
+
+      await expect(
+        auth.completeWebAuthnRegistration(challenge.ticket, {
+          id: 'forged',
+          rawId: 'forged',
+          type: 'public-key',
+          clientExtensionResults: {},
+          response: {
+            clientDataJSON: Buffer.from('{}').toString('base64url'),
+            attestationObject: Buffer.from('not-real-cbor').toString('base64url'),
+          },
+        } as never),
+      ).rejects.toMatchObject({ code: 'AUTH_WEBAUTHN_FAILED' })
+    })
+
+    it('rejects a tampered registration ticket', async () => {
+      const { users, auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+      const challenge = await auth.beginWebAuthnRegistration(user.id)
+      const [payload] = challenge.ticket.split('.')
+
+      await expect(
+        auth.completeWebAuthnRegistration(`${payload}.not-the-real-signature`, {} as never),
+      ).rejects.toMatchObject({ code: 'AUTH_SESSION_INVALID' })
+    })
+
+    it('refuses a login-purpose ticket for completing a registration', async () => {
+      const { users, credentials, auth } = await setup(
+        PUBLISH_COLLECTIONS,
+        Date.now,
+        WEBAUTHN_CONFIG,
+      )
+      const user = await users.create({ email: 'ed@example.com', roles: ['editor'] })
+      await credentials.setPassword(user.id, 'correct horse battery staple')
+      await credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+      await credentials.confirmTotp(user.id)
+      const loginResult = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+      if (loginResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+
+      await expect(
+        auth.completeWebAuthnRegistration(loginResult.ticket, {} as never),
+      ).rejects.toMatchObject({ code: 'AUTH_SESSION_INVALID' })
+    })
+  })
+
+  describe('login', () => {
+    it('issues discoverable-credential options (no allowCredentials) and a ticket with no user yet', async () => {
+      const { auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      const challenge = await auth.beginWebAuthnLogin()
+      expect(challenge.options.allowCredentials).toEqual([])
+      expect(challenge.ticket).toBeTruthy()
+    })
+
+    it('refuses a passkey nobody registered', async () => {
+      const { auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      const challenge = await auth.beginWebAuthnLogin()
+
+      await expect(
+        auth.completeWebAuthnLogin(challenge.ticket, { id: 'never-registered' } as never),
+      ).rejects.toMatchObject({ code: 'AUTH_WEBAUTHN_FAILED' })
+    })
+
+    it('rejects an expired login ticket', async () => {
+      let clock = 1_000_000_000
+      const { auth } = await setup(NO_MFA_COLLECTIONS, () => clock, WEBAUTHN_CONFIG)
+      const challenge = await auth.beginWebAuthnLogin()
+
+      clock += 6 * 60 * 1000
+      await expect(
+        auth.completeWebAuthnLogin(challenge.ticket, { id: 'anything' } as never),
+      ).rejects.toMatchObject({ code: 'AUTH_SESSION_INVALID' })
+    })
+
+    it('refuses a registration-purpose ticket for completing a login', async () => {
+      const { users, auth } = await setup(NO_MFA_COLLECTIONS, Date.now, WEBAUTHN_CONFIG)
+      const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+      const registration = await auth.beginWebAuthnRegistration(user.id)
+
+      await expect(
+        auth.completeWebAuthnLogin(registration.ticket, { id: 'anything' } as never),
+      ).rejects.toMatchObject({ code: 'AUTH_SESSION_INVALID' })
     })
   })
 })

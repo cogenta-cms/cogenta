@@ -1,3 +1,6 @@
+import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
+import { startAuthentication } from '@simplewebauthn/browser'
+
 /**
  * The thin fetch layer over `/api/auth/*`.
  *
@@ -97,6 +100,34 @@ export function confirmTotpSetup(ticket: string, token: string): Promise<LoginRe
 
 export function currentSession(token: string): Promise<SessionUser> {
   return request('/api/auth/session', { headers: { authorization: `Bearer ${token}` } })
+}
+
+interface WebAuthnLoginChallenge {
+  readonly options: PublicKeyCredentialRequestOptionsJSON
+  readonly ticket: string
+}
+
+function beginWebAuthnLogin(): Promise<WebAuthnLoginChallenge> {
+  return request('/api/auth/webauthn/login/begin', { method: 'POST' })
+}
+
+function completeWebAuthnLogin(ticket: string, response: unknown): Promise<LoginResult> {
+  return request('/api/auth/webauthn/login/complete', {
+    method: 'POST',
+    body: JSON.stringify({ ticket, response }),
+  })
+}
+
+/**
+ * The whole usernameless passkey ceremony in one call: fetch the challenge,
+ * hand it to the browser's WebAuthn API, send the assertion back. The
+ * account is whichever one the passkey the person picked belongs to — never
+ * named up front.
+ */
+export async function loginWithPasskey(): Promise<LoginResult> {
+  const challenge = await beginWebAuthnLogin()
+  const response = await startAuthentication({ optionsJSON: challenge.options })
+  return completeWebAuthnLogin(challenge.ticket, response)
 }
 
 export async function logout(token: string): Promise<void> {

@@ -7,11 +7,16 @@ import { createRateLimiter } from './rate-limit.js'
 import { createSessionStore } from './sessions.js'
 import { ensureAuthTables } from './tables.js'
 import { createUserStore } from './users.js'
+import type { WebAuthnConfig } from './webauthn.js'
 
 export interface AuthStoreOptions {
   readonly db: DatabaseHandle
   readonly signingKey: string
   readonly collections: readonly CollectionDefinition[]
+  /** Shown in the authenticator app next to the account name. Defaults to "Cogenta". */
+  readonly issuer?: string
+  /** Absent means passkeys are off. */
+  readonly webauthn?: WebAuthnConfig
   readonly now?: () => number
 }
 
@@ -40,6 +45,8 @@ export async function createAuthStore(options: AuthStoreOptions): Promise<AuthSt
       signingKey: options.signingKey,
       collections: options.collections,
       now,
+      ...(options.issuer === undefined ? {} : { issuer: options.issuer }),
+      ...(options.webauthn === undefined ? {} : { webauthn: options.webauthn }),
     }),
   }
 }

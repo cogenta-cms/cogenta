@@ -38,6 +38,7 @@ export interface AuthContextValue {
   completeTotp(ticket: string, token: string): Promise<api.LoginResult>
   beginTotpSetup(ticket: string): Promise<api.TotpSetup>
   confirmTotpSetup(ticket: string, token: string): Promise<api.LoginResult>
+  loginWithPasskey(): Promise<api.LoginResult>
   logout(): Promise<void>
 }
 
@@ -54,6 +55,7 @@ const DEFAULT_CONTEXT: AuthContextValue = {
   completeTotp: () => Promise.reject(new Error('AuthProvider is not mounted')),
   beginTotpSetup: () => Promise.reject(new Error('AuthProvider is not mounted')),
   confirmTotpSetup: () => Promise.reject(new Error('AuthProvider is not mounted')),
+  loginWithPasskey: () => Promise.reject(new Error('AuthProvider is not mounted')),
   logout: () => Promise.reject(new Error('AuthProvider is not mounted')),
 }
 
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }): JS
       completeTotp: (ticket, token) => api.completeTotp(ticket, token).then(applyResult),
       beginTotpSetup: (ticket) => api.beginTotpSetup(ticket),
       confirmTotpSetup: (ticket, token) => api.confirmTotpSetup(ticket, token).then(applyResult),
+      loginWithPasskey: () => api.loginWithPasskey().then(applyResult),
       logout: async () => {
         if (state.status === 'authenticated') {
           await api.logout(state.token).catch(() => undefined)

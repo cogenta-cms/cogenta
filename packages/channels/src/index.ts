@@ -14,6 +14,30 @@ export type {
   NotificationChannelMessage,
   ReportChannelMessage,
 } from './adapter.js'
+export type { ApprovalCommandsOptions } from './approvals/commands.js'
+export { createApprovalCommands } from './approvals/commands.js'
+export type { DispatchApprovalOptions } from './approvals/dispatch.js'
+export { dispatchApproval } from './approvals/dispatch.js'
+export type { RenderApprovalMessageOptions } from './approvals/message.js'
+export { renderApprovalMessage } from './approvals/message.js'
+export {
+  buildSignedApprovalLink,
+  signApprovalLink,
+  verifyApprovalLinkSignature,
+} from './approvals/signed-link.js'
+export type {
+  ApprovalTokenOutcome,
+  ApprovalTokenStore,
+  ApprovalTokenStoreOptions,
+  GeneratedApprovalToken,
+} from './approvals/store.js'
+export { createApprovalTokenStore } from './approvals/store.js'
+export {
+  APPROVAL_TOKEN_TTL_MS,
+  generateApprovalToken,
+  hashApprovalToken,
+  normalizeApprovalToken,
+} from './approvals/token.js'
 export type {
   AuthorizationResult,
   AuthorizedResult,

@@ -23,3 +23,14 @@ export type { SecurityFinding, SecurityReport, SecurityReportEntry } from './sec
 export { buildSecurityReport } from './security/report.js'
 export type { SbomEntry } from './security/sbom.js'
 export { buildSbom } from './security/sbom.js'
+export { seoAgent } from './seo/agent.js'
+export { auditSeoPage } from './seo/audit.js'
+export { countWords, fleschReadingEase } from './seo/readability.js'
+export type {
+  SeoAuditResult,
+  SeoFinding,
+  SeoHeading,
+  SeoImage,
+  SeoIssueSeverity,
+  SeoPageInput,
+} from './seo/types.js'

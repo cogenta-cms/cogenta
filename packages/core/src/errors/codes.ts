@@ -125,6 +125,10 @@ export const ERROR_CODES = [
   'RECEIPT_ALREADY_REVERTED',
   'RECEIPT_NOT_REVERTIBLE',
 
+  // Agents — sub-agents (L4)
+  'AGENT_SUBAGENT_UNKNOWN',
+  'AGENT_SUBAGENT_TOOLS_NOT_SUBSET',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

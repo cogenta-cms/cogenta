@@ -78,6 +78,15 @@ export type {
   ToolCallOutcome,
   ToolExecutionContext,
 } from './runtime/types.js'
+export { runSubagent } from './subagents/run-subagent.js'
+export type { AgentToolsDeclaration } from './subagents/types.js'
+export { validateSubagentTools } from './subagents/validate.js'
+export type {
+  AgentDelegateInput,
+  AgentDelegateOutput,
+  AgentDelegateToolOptions,
+} from './tools/core/agent-delegate.js'
+export { createAgentDelegateTool } from './tools/core/agent-delegate.js'
 export type {
   ContentAccessContext,
   ContentReadOptions,

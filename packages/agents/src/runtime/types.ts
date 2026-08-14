@@ -52,6 +52,8 @@ export type RunStopReason =
   | 'budget_exceeded'
   | 'max_duration'
   | 'killed'
+  /** The run threw instead of returning — e.g. a model call's retries were exhausted (task 11: this is how `runSubagent` reports a sub-agent's crash as data instead of an exception, so it cannot propagate into the parent's own loop). */
+  | 'errored'
 
 export interface RunResult {
   readonly messages: readonly ChatMessage[]
@@ -60,6 +62,8 @@ export interface RunResult {
   readonly finalText: string | null
   readonly stopReason: RunStopReason
   readonly usage: TokenUsage
+  /** Set only when `stopReason` is `'errored'` — the caught error's message. */
+  readonly error?: string
 }
 
 export interface RunAgentLoopInput {

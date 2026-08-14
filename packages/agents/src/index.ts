@@ -1,3 +1,12 @@
+export { defineAgent } from './agents/define.js'
+export type { AgentRegistry } from './agents/registry.js'
+export { createAgentRegistry } from './agents/registry.js'
+export type {
+  AgentDeclaration,
+  AgentMemoryConfig,
+  AgentModelPreference,
+  AgentTrigger,
+} from './agents/types.js'
 export type { AuditLogLike, AuditRecordInput } from './audit/types.js'
 export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'

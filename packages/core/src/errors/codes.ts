@@ -143,6 +143,10 @@ export const ERROR_CODES = [
   // Agents — privacy (L4)
   'PRIVACY_NO_DATA_LEAVES_VIOLATION',
 
+  // Agents — agent format and registry (L5)
+  'AGENT_DEFINITION_INVALID',
+  'AGENT_UNKNOWN',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

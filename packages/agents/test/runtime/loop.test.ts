@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createBudgetTracker } from '../../src/budget/tracker.js'
+import type { BudgetTracker } from '../../src/budget/types.js'
 import type { ChatRequest, ChatResponse, ProviderClient } from '../../src/providers/types.js'
 import { runAgentLoop } from '../../src/runtime/loop.js'
 import type { ExecutableTool } from '../../src/runtime/types.js'
@@ -205,5 +207,91 @@ describe('runAgentLoop', () => {
     expect(client.calls[0]?.tools).toEqual([
       { name: 'x', description: 'x', inputSchema: { type: 'object' } },
     ])
+  })
+
+  it('stops immediately with killed when the kill switch is already active', async () => {
+    const client = fakeClient([textResponse('should not be reached')])
+
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 100,
+      killSwitch: { isActive: () => true },
+    })
+
+    expect(result.stopReason).toBe('killed')
+    expect(client.calls).toHaveLength(0)
+  })
+
+  it('stops with budget_exceeded before the call the budget would refuse, and alerts once with the reason', async () => {
+    const client = fakeClient([textResponse('should not be reached')])
+    const budget: BudgetTracker = {
+      checkCall: () => ({ allowed: false, reason: 'tokensPerDay' }),
+      recordCall: vi.fn(),
+    }
+    const onBudgetExceeded = vi.fn()
+
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 100,
+      budget,
+      onBudgetExceeded,
+    })
+
+    expect(result.stopReason).toBe('budget_exceeded')
+    expect(client.calls).toHaveLength(0)
+    expect(onBudgetExceeded).toHaveBeenCalledExactlyOnceWith('tokensPerDay')
+  })
+
+  it('records real usage into a live budget tracker after each call, so a later step can be refused', async () => {
+    const client = fakeClient([
+      toolCallResponse('x', {}),
+      toolCallResponse('x', { retry: true }),
+      textResponse('should not be reached'),
+    ])
+    const x: ExecutableTool = {
+      spec: { name: 'x', description: 'x', inputSchema: {} },
+      execute: async () => 'ok',
+    }
+    // USAGE is 15 tokens/call; the third call would push past 30.
+    const budget = createBudgetTracker({ limits: { tokensPerDay: 30 } })
+
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [x],
+      maxTokens: 100,
+      budget,
+    })
+
+    expect(result.stopReason).toBe('budget_exceeded')
+    expect(client.calls).toHaveLength(2)
+  })
+
+  it('stops with max_duration once the wall-clock ceiling is reached, using the injected clock', async () => {
+    const client = fakeClient([
+      toolCallResponse('x', {}),
+      toolCallResponse('x', { i: 2 }, 'call-2'),
+    ])
+    const x: ExecutableTool = {
+      spec: { name: 'x', description: 'x', inputSchema: {} },
+      execute: async () => 'ok',
+    }
+    let clock = 0
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [x],
+      maxTokens: 100,
+      maxRunDurationMs: 100,
+      now: () => {
+        clock += 60
+        return clock
+      },
+    })
+
+    expect(result.stopReason).toBe('max_duration')
+    expect(client.calls).toHaveLength(1)
   })
 })

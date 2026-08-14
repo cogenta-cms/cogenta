@@ -1,6 +1,17 @@
 export type { AuditLogLike, AuditRecordInput } from './audit/types.js'
 export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'
+export type { MutableKillSwitch } from './budget/kill-switch.js'
+export { createKillSwitch } from './budget/kill-switch.js'
+export type { BudgetTrackerOptions } from './budget/tracker.js'
+export { createBudgetTracker } from './budget/tracker.js'
+export type {
+  BudgetCheck,
+  BudgetExceededReason,
+  BudgetLimits,
+  BudgetTracker,
+  KillSwitch,
+} from './budget/types.js'
 export { CONSTITUTION_TEXT } from './identity/constitution.js'
 export type {
   AgentIdentity,

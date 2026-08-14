@@ -53,6 +53,7 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<RunResult>
   const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS
   const maxAttempts = input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const now = input.now ?? Date.now
   const tools = input.tools ?? []
   const toolIndex = toolByName(tools)
   const toolSpecs = tools.length === 0 ? undefined : tools.map((tool) => tool.spec)
@@ -62,10 +63,24 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<RunResult>
   const steps: StepRecord[] = []
   let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
   let finalText: string | null = null
+  const runStartedAt = now()
 
   for (let step = 0; step < maxSteps; step++) {
     if (input.signal?.aborted === true) {
       return { messages, steps, finalText, stopReason: 'cancelled', usage: totalUsage }
+    }
+    if (input.killSwitch?.isActive() === true) {
+      return { messages, steps, finalText, stopReason: 'killed', usage: totalUsage }
+    }
+    if (input.maxRunDurationMs !== undefined && now() - runStartedAt >= input.maxRunDurationMs) {
+      return { messages, steps, finalText, stopReason: 'max_duration', usage: totalUsage }
+    }
+    if (input.budget !== undefined) {
+      const check = input.budget.checkCall()
+      if (!check.allowed) {
+        if (check.reason !== undefined) input.onBudgetExceeded?.(check.reason)
+        return { messages, steps, finalText, stopReason: 'budget_exceeded', usage: totalUsage }
+      }
     }
 
     const response = await retryModelCall(
@@ -90,6 +105,7 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<RunResult>
     )
 
     totalUsage = addUsage(totalUsage, response.usage)
+    input.budget?.recordCall(response.usage)
 
     const assistantMessage: ChatMessage = {
       role: 'assistant',

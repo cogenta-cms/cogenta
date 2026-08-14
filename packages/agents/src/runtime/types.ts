@@ -1,3 +1,4 @@
+import type { BudgetExceededReason, BudgetTracker, KillSwitch } from '../budget/types.js'
 import type {
   ChatMessage,
   ProviderClient,
@@ -42,6 +43,9 @@ export type RunStopReason =
   | 'max_steps'
   | 'repetition_detected'
   | 'cancelled'
+  | 'budget_exceeded'
+  | 'max_duration'
+  | 'killed'
 
 export interface RunResult {
   readonly messages: readonly ChatMessage[]
@@ -68,4 +72,14 @@ export interface RunAgentLoopInput {
   /** How many times an identical tool call (name + input) may repeat before the run stops (default 2). */
   readonly maxRepeats?: number
   readonly signal?: AbortSignal
+  /** Checked before every model call; a call that would exceed it never happens ("arrêt propre et alerte, jamais dégradation silencieuse"). */
+  readonly budget?: BudgetTracker
+  /** Checked before every model call — an explicit, human-flipped stop, independent of budgets. */
+  readonly killSwitch?: KillSwitch
+  /** The alert half of a budget stop — called once, with which limit tripped, right before the run returns. */
+  readonly onBudgetExceeded?: (reason: BudgetExceededReason) => void
+  /** Wall-clock ceiling for the whole run — "durée maximale par run", the fourth budget dimension the lot's design section names, checked independently of `BudgetTracker` since it belongs to one run, not to the agent's calendar-bucketed totals. */
+  readonly maxRunDurationMs?: number
+  /** Clock the loop measures `maxRunDurationMs` against — injectable for tests, defaults to `Date.now`. */
+  readonly now?: () => number
 }

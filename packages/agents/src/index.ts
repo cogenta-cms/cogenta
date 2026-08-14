@@ -70,6 +70,8 @@ export type {
   StopReason,
   TokenUsage,
 } from './providers/types.js'
+export { createHashingEmbeddingProvider } from './rag/embeddings/hashing-provider.js'
+export type { EmbeddingModelInfo, EmbeddingProvider } from './rag/embeddings/types.js'
 export type { DiffChangeKind, DiffEntry } from './reversibility/diff.js'
 export { diffValues } from './reversibility/diff.js'
 export { createMemoryReceiptStore } from './reversibility/receipt-store.js'

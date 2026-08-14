@@ -153,6 +153,7 @@ export const ERROR_CODES = [
   // Agents-builtin — security agent (L5)
   'SECURITY_OSV_QUERY_FAILED',
   'SECURITY_EPSS_QUERY_FAILED',
+  'SECURITY_DEPENDENCY_NOT_FOUND',
 
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',

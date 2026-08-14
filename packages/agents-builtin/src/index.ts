@@ -1,3 +1,11 @@
+export { securityAgent } from './security/agent.js'
+export { bumpDependencyVersion } from './security/bump-version.js'
+export type {
+  DepsPatchInput,
+  DepsPatchOutput,
+  DepsPatchToolOptions,
+} from './security/deps-patch-tool.js'
+export { createDepsPatchTool } from './security/deps-patch-tool.js'
 export type {
   DepsScanInput,
   DepsScanOutput,
@@ -10,6 +18,7 @@ export type { ExploitabilityAssessment, Urgency } from './security/exploitabilit
 export { assessExploitability } from './security/exploitability.js'
 export type { OsvMatch, OsvVulnerability, QueryOsvOptions } from './security/osv-client.js'
 export { queryOsv } from './security/osv-client.js'
+export type { OpenPrOptions, PrClient, PrFile, PrResult } from './security/pr-client.js'
 export type { SecurityFinding, SecurityReport, SecurityReportEntry } from './security/report.js'
 export { buildSecurityReport } from './security/report.js'
 export type { SbomEntry } from './security/sbom.js'

@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { readableCollections } from '../schema/permissions.js'
@@ -13,17 +14,18 @@ import { useSchema } from '../schema/schema-context.js'
  * Links to task 6's list view; the schema-driven edit form itself is task 7.
  */
 export function CollectionsRoute(): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const schema = useSchema()
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
 
   return (
     <section aria-labelledby="collections-heading">
-      <h1 id="collections-heading">Contenus</h1>
+      <h1 id="collections-heading">{t('collections.heading')}</h1>
 
-      {schema.status === 'loading' && <p>Chargement…</p>}
+      {schema.status === 'loading' && <p>{t('common.loading')}</p>}
       {schema.status === 'error' && (
-        <p role="alert">Impossible de charger le schéma : {schema.message}</p>
+        <p role="alert">{t('common.schemaError', { message: schema.message })}</p>
       )}
       {schema.status === 'ready' && (
         <ul>

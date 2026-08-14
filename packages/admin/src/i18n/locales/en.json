@@ -1,4 +1,8 @@
 {
+  "common": {
+    "loading": "Loading…",
+    "schemaError": "Could not load the schema: {{message}}"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "collections": "Content",
@@ -30,6 +34,47 @@
     "passkeyRefused": "The passkey was refused or cancelled.",
     "connectionFailed": "Could not sign in.",
     "incorrectCode": "Incorrect code."
+  },
+  "collections": {
+    "heading": "Content"
+  },
+  "audit": {
+    "heading": "Audit log",
+    "adminOnly": "Restricted to the \"admin\" role: this log names every account's actions.",
+    "actor": "Actor",
+    "action": "Action",
+    "collection": "Collection",
+    "filter": "Filter",
+    "verify": "Verify integrity",
+    "verifying": "Verifying…",
+    "verifyOk": "Chain intact.",
+    "verifyBroken": "Anomaly detected.",
+    "verifyError": "Could not verify the log's integrity.",
+    "loadError": "Could not load the audit log.",
+    "date": "Date",
+    "roles": "Roles",
+    "entry": "Entry",
+    "noEntries": "No entries."
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "healthHeading": "Site health",
+    "adminOnly": "Restricted to the \"admin\" role.",
+    "database": "Database:",
+    "storage": "Storage:",
+    "healthLoadError": "Could not read the site's health.",
+    "activityHeading": "Recent activity",
+    "noActivity": "No activity.",
+    "activityLoadError": "Could not load recent activity.",
+    "scheduledHeading": "Scheduled content",
+    "noScheduled": "No scheduled content.",
+    "scheduledLoadError": "Could not load scheduled content.",
+    "cveHeading": "Open CVEs",
+    "cveBody": "No data source yet: this widget arrives with the security-monitoring agent (L5).",
+    "vitalsHeading": "Core Web Vitals",
+    "vitalsBody": "No data source yet: this widget arrives with measured rendering (L5).",
+    "backupsHeading": "Backup status",
+    "backupsBody": "No data source yet: this widget arrives with the backup agent (L5)."
   },
   "settings": {
     "heading": "Account settings",

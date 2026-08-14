@@ -1,4 +1,8 @@
 {
+  "common": {
+    "loading": "Chargement…",
+    "schemaError": "Impossible de charger le schéma : {{message}}"
+  },
   "nav": {
     "dashboard": "Tableau de bord",
     "collections": "Contenus",
@@ -30,6 +34,47 @@
     "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
     "connectionFailed": "Connexion impossible.",
     "incorrectCode": "Code incorrect."
+  },
+  "collections": {
+    "heading": "Contenus"
+  },
+  "audit": {
+    "heading": "Journal d'audit",
+    "adminOnly": "Réservé au rôle « admin » : ce journal nomme les actions de tous les comptes.",
+    "actor": "Acteur",
+    "action": "Action",
+    "collection": "Collection",
+    "filter": "Filtrer",
+    "verify": "Vérifier l'intégrité",
+    "verifying": "Vérification…",
+    "verifyOk": "Chaîne intacte.",
+    "verifyBroken": "Anomalie détectée.",
+    "verifyError": "Impossible de vérifier l'intégrité du journal.",
+    "loadError": "Impossible de charger le journal d'audit.",
+    "date": "Date",
+    "roles": "Rôles",
+    "entry": "Entrée",
+    "noEntries": "Aucune entrée."
+  },
+  "dashboard": {
+    "heading": "Tableau de bord",
+    "healthHeading": "Santé du site",
+    "adminOnly": "Réservé au rôle « admin ».",
+    "database": "Base de données :",
+    "storage": "Stockage :",
+    "healthLoadError": "Impossible de lire l'état du site.",
+    "activityHeading": "Activité récente",
+    "noActivity": "Aucune activité.",
+    "activityLoadError": "Impossible de charger l'activité.",
+    "scheduledHeading": "Contenus programmés",
+    "noScheduled": "Aucun contenu programmé.",
+    "scheduledLoadError": "Impossible de charger les contenus programmés.",
+    "cveHeading": "CVE ouvertes",
+    "cveBody": "Aucune source de données pour l'instant : ce widget arrive avec l'agent de veille de sécurité (L5).",
+    "vitalsHeading": "Core Web Vitals",
+    "vitalsBody": "Aucune source de données pour l'instant : ce widget arrive avec le rendu mesuré (L5).",
+    "backupsHeading": "État des sauvegardes",
+    "backupsBody": "Aucune source de données pour l'instant : ce widget arrive avec l'agent de sauvegarde (L5)."
   },
   "settings": {
     "heading": "Paramètres du compte",

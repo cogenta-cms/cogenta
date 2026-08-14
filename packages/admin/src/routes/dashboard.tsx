@@ -1,4 +1,5 @@
 import { type JSX, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { type AuditEntry, listAuditEntries } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
 import { type Entry, listEntries } from '../api/content-client.js'
@@ -33,6 +34,7 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
  * placeholder this replaces already applied to agent-related widgets.
  */
 export function DashboardRoute(): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const schema = useSchema()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
@@ -58,14 +60,14 @@ export function DashboardRoute(): JSX.Element {
       .catch((caught) => {
         if (!cancelled) {
           setHealthError(
-            caught instanceof ApiError ? caught.message : "Impossible de lire l'état du site.",
+            caught instanceof ApiError ? caught.message : t('dashboard.healthLoadError'),
           )
         }
       })
     return () => {
       cancelled = true
     }
-  }, [token, isAdmin])
+  }, [token, isAdmin, t])
 
   useEffect(() => {
     if (token === null || !isAdmin) return
@@ -77,14 +79,14 @@ export function DashboardRoute(): JSX.Element {
       .catch((caught) => {
         if (!cancelled) {
           setActivityError(
-            caught instanceof ApiError ? caught.message : "Impossible de charger l'activité.",
+            caught instanceof ApiError ? caught.message : t('dashboard.activityLoadError'),
           )
         }
       })
     return () => {
       cancelled = true
     }
-  }, [token, isAdmin])
+  }, [token, isAdmin, t])
 
   useEffect(() => {
     if (token === null || schema.status !== 'ready') return
@@ -109,43 +111,43 @@ export function DashboardRoute(): JSX.Element {
       .catch((caught) => {
         if (!cancelled) {
           setScheduledError(
-            caught instanceof ApiError
-              ? caught.message
-              : 'Impossible de charger les contenus programmés.',
+            caught instanceof ApiError ? caught.message : t('dashboard.scheduledLoadError'),
           )
         }
       })
     return () => {
       cancelled = true
     }
-  }, [token, schema, roles])
+  }, [token, schema, roles, t])
 
   return (
     <section aria-labelledby="dashboard-heading">
-      <h1 id="dashboard-heading">Tableau de bord</h1>
+      <h1 id="dashboard-heading">{t('dashboard.heading')}</h1>
 
       <section aria-labelledby="dashboard-health-heading">
-        <h2 id="dashboard-health-heading">Santé du site</h2>
-        {!isAdmin && <p>Réservé au rôle « admin ».</p>}
+        <h2 id="dashboard-health-heading">{t('dashboard.healthHeading')}</h2>
+        {!isAdmin && <p>{t('dashboard.adminOnly')}</p>}
         {isAdmin && healthError !== null && <p role="alert">{healthError}</p>}
-        {isAdmin && healthError === null && health === null && <p>Chargement…</p>}
+        {isAdmin && healthError === null && health === null && <p>{t('common.loading')}</p>}
         {isAdmin && health !== null && (
           <ul>
             <li>
-              Base de données : <HealthBadge report={health.database} />
+              {t('dashboard.database')} <HealthBadge report={health.database} />
             </li>
             <li>
-              Stockage : <HealthBadge report={health.storage} />
+              {t('dashboard.storage')} <HealthBadge report={health.storage} />
             </li>
           </ul>
         )}
       </section>
 
       <section aria-labelledby="dashboard-activity-heading">
-        <h2 id="dashboard-activity-heading">Activité récente</h2>
-        {!isAdmin && <p>Réservé au rôle « admin ».</p>}
+        <h2 id="dashboard-activity-heading">{t('dashboard.activityHeading')}</h2>
+        {!isAdmin && <p>{t('dashboard.adminOnly')}</p>}
         {isAdmin && activityError !== null && <p role="alert">{activityError}</p>}
-        {isAdmin && activityError === null && activity.length === 0 && <p>Aucune activité.</p>}
+        {isAdmin && activityError === null && activity.length === 0 && (
+          <p>{t('dashboard.noActivity')}</p>
+        )}
         {isAdmin && activity.length > 0 && (
           <ul>
             {activity.map((entry) => (
@@ -159,9 +161,9 @@ export function DashboardRoute(): JSX.Element {
       </section>
 
       <section aria-labelledby="dashboard-scheduled-heading">
-        <h2 id="dashboard-scheduled-heading">Contenus programmés</h2>
+        <h2 id="dashboard-scheduled-heading">{t('dashboard.scheduledHeading')}</h2>
         {scheduledError !== null && <p role="alert">{scheduledError}</p>}
-        {scheduledError === null && scheduled.length === 0 && <p>Aucun contenu programmé.</p>}
+        {scheduledError === null && scheduled.length === 0 && <p>{t('dashboard.noScheduled')}</p>}
         {scheduled.length > 0 && (
           <ul>
             {scheduled.map((item) => (
@@ -174,24 +176,18 @@ export function DashboardRoute(): JSX.Element {
       </section>
 
       <section aria-labelledby="dashboard-cve-heading">
-        <h2 id="dashboard-cve-heading">CVE ouvertes</h2>
-        <p>
-          Aucune source de données pour l'instant : ce widget arrive avec l'agent de veille de
-          sécurité (L5).
-        </p>
+        <h2 id="dashboard-cve-heading">{t('dashboard.cveHeading')}</h2>
+        <p>{t('dashboard.cveBody')}</p>
       </section>
 
       <section aria-labelledby="dashboard-vitals-heading">
-        <h2 id="dashboard-vitals-heading">Core Web Vitals</h2>
-        <p>Aucune source de données pour l'instant : ce widget arrive avec le rendu mesuré (L5).</p>
+        <h2 id="dashboard-vitals-heading">{t('dashboard.vitalsHeading')}</h2>
+        <p>{t('dashboard.vitalsBody')}</p>
       </section>
 
       <section aria-labelledby="dashboard-backups-heading">
-        <h2 id="dashboard-backups-heading">État des sauvegardes</h2>
-        <p>
-          Aucune source de données pour l'instant : ce widget arrive avec l'agent de sauvegarde
-          (L5).
-        </p>
+        <h2 id="dashboard-backups-heading">{t('dashboard.backupsHeading')}</h2>
+        <p>{t('dashboard.backupsBody')}</p>
       </section>
     </section>
   )

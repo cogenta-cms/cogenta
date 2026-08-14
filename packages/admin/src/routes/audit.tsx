@@ -1,10 +1,12 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { type AuditEntry, listAuditEntries, verifyAuditLog } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 
 /** L2 task 14: a consultable, filterable view over `@cogenta/auth`'s hash-chained audit log — read-only, `admin` only (the API refuses everyone else with 403). */
 export function AuditRoute(): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -31,13 +33,11 @@ export function AuditRoute(): JSX.Element {
       })
       setEntries(found)
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : "Impossible de charger le journal d'audit.",
-      )
+      setError(caught instanceof ApiError ? caught.message : t('audit.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [token, isAdmin, actorId, action, collection])
+  }, [token, isAdmin, actorId, action, collection, t])
 
   useEffect(() => {
     void load()
@@ -54,13 +54,9 @@ export function AuditRoute(): JSX.Element {
     setVerifyResult(null)
     try {
       const result = await verifyAuditLog(token)
-      setVerifyResult(result.ok ? 'Chaîne intacte.' : 'Anomalie détectée.')
+      setVerifyResult(result.ok ? t('audit.verifyOk') : t('audit.verifyBroken'))
     } catch (caught) {
-      setVerifyResult(
-        caught instanceof ApiError
-          ? caught.message
-          : "Impossible de vérifier l'intégrité du journal.",
-      )
+      setVerifyResult(caught instanceof ApiError ? caught.message : t('audit.verifyError'))
     } finally {
       setVerifying(false)
     }
@@ -69,21 +65,19 @@ export function AuditRoute(): JSX.Element {
   if (!isAdmin) {
     return (
       <section aria-labelledby="audit-heading">
-        <h1 id="audit-heading">Journal d'audit</h1>
-        <p role="alert">
-          Réservé au rôle « admin » : ce journal nomme les actions de tous les comptes.
-        </p>
+        <h1 id="audit-heading">{t('audit.heading')}</h1>
+        <p role="alert">{t('audit.adminOnly')}</p>
       </section>
     )
   }
 
   return (
     <section aria-labelledby="audit-heading">
-      <h1 id="audit-heading">Journal d'audit</h1>
+      <h1 id="audit-heading">{t('audit.heading')}</h1>
 
       <form onSubmit={submitFilters}>
         <div className="field">
-          <label htmlFor="audit-actor">Acteur</label>
+          <label htmlFor="audit-actor">{t('audit.actor')}</label>
           <input
             id="audit-actor"
             value={actorId}
@@ -91,7 +85,7 @@ export function AuditRoute(): JSX.Element {
           />
         </div>
         <div className="field">
-          <label htmlFor="audit-action">Action</label>
+          <label htmlFor="audit-action">{t('audit.action')}</label>
           <input
             id="audit-action"
             value={action}
@@ -99,36 +93,36 @@ export function AuditRoute(): JSX.Element {
           />
         </div>
         <div className="field">
-          <label htmlFor="audit-collection">Collection</label>
+          <label htmlFor="audit-collection">{t('audit.collection')}</label>
           <input
             id="audit-collection"
             value={collection}
             onChange={(event) => setCollection(event.target.value)}
           />
         </div>
-        <button type="submit">Filtrer</button>
+        <button type="submit">{t('audit.filter')}</button>
       </form>
 
       <p>
         <button type="button" disabled={verifying} onClick={() => void verify()}>
-          {verifying ? 'Vérification…' : "Vérifier l'intégrité"}
+          {verifying ? t('audit.verifying') : t('audit.verify')}
         </button>
         {verifyResult !== null && <span role="status"> {verifyResult}</span>}
       </p>
 
       {error !== null && <p role="alert">{error}</p>}
-      {loading && <p>Chargement…</p>}
+      {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
         <table>
           <thead>
             <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Acteur</th>
-              <th scope="col">Rôles</th>
-              <th scope="col">Action</th>
-              <th scope="col">Collection</th>
-              <th scope="col">Entrée</th>
+              <th scope="col">{t('audit.date')}</th>
+              <th scope="col">{t('audit.actor')}</th>
+              <th scope="col">{t('audit.roles')}</th>
+              <th scope="col">{t('audit.action')}</th>
+              <th scope="col">{t('audit.collection')}</th>
+              <th scope="col">{t('audit.entry')}</th>
             </tr>
           </thead>
           <tbody>
@@ -144,7 +138,7 @@ export function AuditRoute(): JSX.Element {
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={6}>Aucune entrée.</td>
+                <td colSpan={6}>{t('audit.noEntries')}</td>
               </tr>
             )}
           </tbody>

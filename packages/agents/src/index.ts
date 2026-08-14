@@ -1,3 +1,13 @@
+export { CONSTITUTION_TEXT } from './identity/constitution.js'
+export type {
+  AgentIdentity,
+  AssembleContextInput,
+  AssembledContext,
+  DataItem,
+  SiteContext,
+  TaskContext,
+} from './identity/context.js'
+export { assembleContext } from './identity/context.js'
 export type { AnthropicClientConfig, AnthropicRequestBody } from './providers/anthropic.js'
 export {
   buildAnthropicRequest,

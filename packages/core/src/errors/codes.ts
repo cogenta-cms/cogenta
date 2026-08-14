@@ -150,6 +150,10 @@ export const ERROR_CODES = [
   // Agents — evaluation (L5)
   'EVAL_THRESHOLD_NOT_MET',
 
+  // Agents-builtin — security agent (L5)
+  'SECURITY_OSV_QUERY_FAILED',
+  'SECURITY_EPSS_QUERY_FAILED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

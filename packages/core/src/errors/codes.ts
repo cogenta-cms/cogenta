@@ -211,6 +211,12 @@ export const ERROR_CODES = [
   // Plugins — manifest schema and validation (L7 task 1)
   'PLUGIN_MANIFEST_INVALID',
 
+  // Plugins — resolution and loading (L7 task 2)
+  'PLUGIN_SOURCE_NOT_FOUND',
+  'PLUGIN_MANIFEST_FILE_NOT_FOUND',
+  'PLUGIN_MANIFEST_LOAD_FAILED',
+  'PLUGIN_MANIFEST_EXPORT_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

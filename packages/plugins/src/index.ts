@@ -1,3 +1,5 @@
+export type { LoadPluginOptions, PluginSource, ResolvedPlugin } from './loader.js'
+export { loadPlugin, PLUGIN_MANIFEST_FILE_NAMES } from './loader.js'
 export type {
   PluginBlockProvision,
   PluginCapabilityName,
@@ -11,3 +13,5 @@ export {
   PLUGIN_CAPABILITY_NAMES,
   PLUGIN_RUNTIMES,
 } from './manifest.js'
+export type { SemverVersion } from './semver.js'
+export { compareVersions, parseVersion, satisfiesRange } from './semver.js'

@@ -84,7 +84,23 @@
   "media": {
     "heading": "Médiathèque",
     "loadError": "Impossible de charger la médiathèque.",
-    "empty": "Aucun média."
+    "empty": "Aucun média.",
+    "fileLabel": "Fichier",
+    "altLabel": "Texte alternatif",
+    "decorativeLabel": "Image décorative (aucune description nécessaire)",
+    "justificationLabel": "Pourquoi cette image est décorative",
+    "uploading": "Envoi…",
+    "uploadButton": "Téléverser",
+    "uploadError": "Impossible d'envoyer ce fichier.",
+    "closeButton": "Fermer",
+    "saveButton": "Enregistrer",
+    "deleting": "Suppression…",
+    "deleteButton": "Supprimer",
+    "updateError": "Impossible de mettre à jour ce média.",
+    "deleteError": "Impossible de supprimer ce média.",
+    "focalLoadError": "Impossible de charger l’image.",
+    "focalUpdateError": "Impossible de mettre à jour le point focal.",
+    "focalHint": "Cliquer sur l’image pour placer le point focal."
   },
   "collectionList": {
     "newButton": "Nouveau",

@@ -1,4 +1,5 @@
 import { type FormEvent, type JSX, useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { deleteMedia, type MediaAsset, updateMedia } from '../api/media-client.js'
 import { FocalPointEditor } from './focal-point-editor.js'
@@ -16,6 +17,7 @@ export function MediaDetail({
   onDeleted(id: string): void
   onClose(): void
 }): JSX.Element {
+  const { t } = useTranslation()
   const altId = useId()
   const decorativeId = useId()
   const justificationId = useId()
@@ -39,9 +41,7 @@ export function MediaDetail({
       })
       onChange(updated)
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : 'Impossible de mettre à jour ce média.',
-      )
+      setError(caught instanceof ApiError ? caught.message : t('media.updateError'))
     } finally {
       setSaving(false)
     }
@@ -54,7 +54,7 @@ export function MediaDetail({
       await deleteMedia(token, asset.id)
       onDeleted(asset.id)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Impossible de supprimer ce média.')
+      setError(caught instanceof ApiError ? caught.message : t('media.deleteError'))
       setDeleting(false)
     }
   }
@@ -63,7 +63,7 @@ export function MediaDetail({
     <section aria-labelledby="media-detail-heading" className="media-detail">
       <h2 id="media-detail-heading">{asset.filename}</h2>
       <button type="button" onClick={onClose}>
-        Fermer
+        {t('media.closeButton')}
       </button>
 
       {asset.kind === 'image' && (
@@ -79,7 +79,7 @@ export function MediaDetail({
       <form onSubmit={(event) => void save(event)}>
         {!decorative && (
           <div className="field">
-            <label htmlFor={altId}>Texte alternatif</label>
+            <label htmlFor={altId}>{t('media.altLabel')}</label>
             <input
               id={altId}
               type="text"
@@ -97,12 +97,12 @@ export function MediaDetail({
             checked={decorative}
             onChange={(event) => setDecorative(event.target.checked)}
           />
-          <label htmlFor={decorativeId}>Image décorative (aucune description nécessaire)</label>
+          <label htmlFor={decorativeId}>{t('media.decorativeLabel')}</label>
         </div>
 
         {decorative && (
           <div className="field">
-            <label htmlFor={justificationId}>Pourquoi cette image est décorative</label>
+            <label htmlFor={justificationId}>{t('media.justificationLabel')}</label>
             <input
               id={justificationId}
               type="text"
@@ -120,12 +120,12 @@ export function MediaDetail({
         )}
 
         <button type="submit" disabled={saving}>
-          Enregistrer
+          {t('media.saveButton')}
         </button>
       </form>
 
       <button type="button" disabled={deleting} onClick={() => void remove()}>
-        {deleting ? 'Suppression…' : 'Supprimer'}
+        {deleting ? t('media.deleting') : t('media.deleteButton')}
       </button>
     </section>
   )

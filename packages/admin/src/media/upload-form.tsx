@@ -1,4 +1,5 @@
 import { type FormEvent, type JSX, useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { fileToBase64, type MediaAsset, mediaKindFor, uploadMedia } from '../api/media-client.js'
 
@@ -16,6 +17,7 @@ export function UploadForm({
   readonly token: string
   onUploaded(asset: MediaAsset): void
 }): JSX.Element {
+  const { t } = useTranslation()
   const fileId = useId()
   const altId = useId()
   const decorativeId = useId()
@@ -50,7 +52,7 @@ export function UploadForm({
       setDecorative(false)
       setJustification('')
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Impossible d'envoyer ce fichier.")
+      setError(caught instanceof ApiError ? caught.message : t('media.uploadError'))
     } finally {
       setUploading(false)
     }
@@ -59,7 +61,7 @@ export function UploadForm({
   return (
     <form className="upload-form" onSubmit={(event) => void submit(event)}>
       <div className="field">
-        <label htmlFor={fileId}>Fichier</label>
+        <label htmlFor={fileId}>{t('media.fileLabel')}</label>
         <input
           id={fileId}
           type="file"
@@ -70,7 +72,7 @@ export function UploadForm({
       {!decorative && (
         <div className="field">
           <label htmlFor={altId}>
-            Texte alternatif
+            {t('media.altLabel')}
             <span aria-hidden="true" className="field__required">
               {' '}
               *
@@ -93,13 +95,13 @@ export function UploadForm({
           checked={decorative}
           onChange={(event) => setDecorative(event.target.checked)}
         />
-        <label htmlFor={decorativeId}>Image décorative (aucune description nécessaire)</label>
+        <label htmlFor={decorativeId}>{t('media.decorativeLabel')}</label>
       </div>
 
       {decorative && (
         <div className="field">
           <label htmlFor={justificationId}>
-            Pourquoi cette image est décorative
+            {t('media.justificationLabel')}
             <span aria-hidden="true" className="field__required">
               {' '}
               *
@@ -122,7 +124,7 @@ export function UploadForm({
       )}
 
       <button type="submit" disabled={uploading || file === null}>
-        {uploading ? 'Envoi…' : 'Téléverser'}
+        {uploading ? t('media.uploading') : t('media.uploadButton')}
       </button>
     </form>
   )

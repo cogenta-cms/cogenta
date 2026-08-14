@@ -84,7 +84,23 @@
   "media": {
     "heading": "Media library",
     "loadError": "Could not load the media library.",
-    "empty": "No media."
+    "empty": "No media.",
+    "fileLabel": "File",
+    "altLabel": "Alt text",
+    "decorativeLabel": "Decorative image (no description needed)",
+    "justificationLabel": "Why this image is decorative",
+    "uploading": "Uploading…",
+    "uploadButton": "Upload",
+    "uploadError": "Could not upload this file.",
+    "closeButton": "Close",
+    "saveButton": "Save",
+    "deleting": "Deleting…",
+    "deleteButton": "Delete",
+    "updateError": "Could not update this media asset.",
+    "deleteError": "Could not delete this media asset.",
+    "focalLoadError": "Could not load the image.",
+    "focalUpdateError": "Could not update the focal point.",
+    "focalHint": "Click the image to set the focal point."
   },
   "collectionList": {
     "newButton": "New",

@@ -1,4 +1,5 @@
 import { type JSX, type MouseEvent, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { type FocalPoint, fetchMediaBlobUrl, updateMedia } from '../api/media-client.js'
 
@@ -23,6 +24,7 @@ export function FocalPointEditor({
   readonly disabled?: boolean
   onChange(focal: FocalPoint): void
 }): JSX.Element {
+  const { t } = useTranslation()
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,14 +42,14 @@ export function FocalPointEditor({
         setUrl(created)
       })
       .catch(() => {
-        if (!cancelled) setError('Impossible de charger l’image.')
+        if (!cancelled) setError(t('media.focalLoadError'))
       })
 
     return () => {
       cancelled = true
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
     }
-  }, [token, id])
+  }, [token, id, t])
 
   async function place(event: MouseEvent<HTMLImageElement>): Promise<void> {
     if (disabled) return
@@ -59,14 +61,12 @@ export function FocalPointEditor({
       await updateMedia(token, id, { focal: next })
       onChange(next)
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : 'Impossible de mettre à jour le point focal.',
-      )
+      setError(caught instanceof ApiError ? caught.message : t('media.focalUpdateError'))
     }
   }
 
   if (error !== null) return <p role="alert">{error}</p>
-  if (url === null) return <p>Chargement…</p>
+  if (url === null) return <p>{t('common.loading')}</p>
 
   return (
     <div className="focal-point-editor">
@@ -86,7 +86,7 @@ export function FocalPointEditor({
           />
         )}
       </div>
-      <p className="field__help">Cliquer sur l’image pour placer le point focal.</p>
+      <p className="field__help">{t('media.focalHint')}</p>
     </div>
   )
 }

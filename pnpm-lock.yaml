@@ -388,6 +388,9 @@ importers:
       '@cogenta/auth':
         specifier: workspace:*
         version: link:../auth
+      '@cogenta/blocks':
+        specifier: workspace:*
+        version: link:../blocks
       '@cogenta/cli':
         specifier: workspace:*
         version: link:../cli

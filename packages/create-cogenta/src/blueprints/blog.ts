@@ -1,3 +1,4 @@
+import type { VocabularyBlock } from '@cogenta/blocks'
 import {
   type CollectionDefinition,
   defineCollection,
@@ -74,11 +75,39 @@ export const post = defineCollection({
 })
 
 /**
+ * The blueprint's "page types" (L9 task 4): standalone pages composed of
+ * vocabulary blocks rather than a bespoke template each — the same
+ * title-plus-block-zone shape `theme-canonical`'s own test fixtures already
+ * use for `{ collection: 'page', id: … }` internal-link targets, formalised
+ * here as a real `CollectionDefinition` for the first time. `blocks` uses
+ * `f.blocks()` (contract A), the field kind a `BlockZone` — an ordered list of
+ * vocabulary blocks — is stored under; `renderPage` (`@cogenta/theme-canonical`)
+ * takes exactly a title plus that list.
+ */
+export const page = defineCollection({
+  name: 'page',
+  labels: { singular: 'Page', plural: 'Pages' },
+  routing: { pattern: '/:slug' },
+  fields: {
+    title: f.text({ required: true, max: 200 }),
+    slug: f.slug({ from: 'title', unique: true }),
+    blocks: f.blocks({ required: true }),
+  },
+  indexes: [['slug']],
+  permissions: {
+    read: ['public'],
+    create: ['editor', 'admin'],
+    update: ['editor', 'admin'],
+    delete: ['admin'],
+  },
+})
+
+/**
  * Also the export written into the scaffolded site's `cogenta.schema.mjs`
  * (`scaffold.ts`), so `loadCollections` (`@cogenta/cli`) reads back exactly
- * these three collections.
+ * these four collections.
  */
-export const BLOG_COLLECTIONS: readonly CollectionDefinition[] = [post, category, tag]
+export const BLOG_COLLECTIONS: readonly CollectionDefinition[] = [post, category, tag, page]
 
 // Cross-collection checks (duplicate names, dangling relation targets) run
 // at import time, same as `defineCollection` itself: a mistake here costs a
@@ -187,6 +216,79 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
     ],
     categorySlug: 'guides',
     tagSlugs: ['agents', 'open-source'],
+  },
+]
+
+export interface BlogDemoPage {
+  readonly title: string
+  readonly slug: string
+  readonly blocks: readonly VocabularyBlock[]
+}
+
+const BLOCK_VERSION = '1.0.0'
+
+/**
+ * `home` and `about` — the two demo pages a freshly scaffolded blog needs so
+ * its front page is not the empty admin screen. `home` pairs a `hero` with a
+ * `collectionList` scoped to `post`, both part of the frozen block vocabulary
+ * (contract B) and both already rendered generically by
+ * `@cogenta/theme-canonical`'s `renderPage`/`renderBlock` — no bespoke
+ * "home page" or "about page" template is needed for either.
+ */
+export const BLOG_DEMO_PAGES: readonly BlogDemoPage[] = [
+  {
+    title: 'Home',
+    slug: 'home',
+    blocks: [
+      {
+        _key: 'demo-home-hero',
+        _type: 'hero',
+        _version: BLOCK_VERSION,
+        eyebrow: 'Cogenta',
+        title: 'A blog that runs itself',
+        subtitle:
+          'Scaffolded by create-cogenta with real demo posts, categories and tags — every one of them editable the moment you sign in.',
+        actions: [
+          {
+            label: 'Read the latest post',
+            target: { href: '/blog/welcome-to-cogenta' },
+            emphasis: 'primary',
+          },
+        ],
+      },
+      {
+        _key: 'demo-home-recent-posts',
+        _type: 'collectionList',
+        _version: BLOCK_VERSION,
+        title: 'Latest posts',
+        collection: 'post',
+        sort: { field: 'publishedAt', direction: 'desc' },
+        limit: 10,
+        layout: 'list',
+      },
+    ],
+  },
+  {
+    title: 'About',
+    slug: 'about',
+    blocks: [
+      {
+        _key: 'demo-about-prose',
+        _type: 'prose',
+        _version: BLOCK_VERSION,
+        body: [
+          paragraph(
+            'This is a demo blog, scaffolded by create-cogenta from the "blog" blueprint. Its posts, ' +
+              'categories, tags and this very page were seeded by the installer so there is real content to ' +
+              'look at from the first run, not an empty admin screen.',
+          ),
+          paragraph(
+            'Everything here — the schema, the content, the skin — is a normal part of the site and is meant ' +
+              'to be edited, renamed or deleted the moment the defaults stop fitting.',
+          ),
+        ],
+      },
+    ],
   },
 ]
 

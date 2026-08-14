@@ -1,11 +1,21 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { VocabularyBlock } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
-import { createContentStore } from '@cogenta/schema'
+import { buildPath, createContentStore, matchPath } from '@cogenta/schema'
+import {
+  type FetchedEntries,
+  type HtmlNode,
+  type PageContent,
+  type RenderContext,
+  renderPage,
+  serialize,
+  type ContentEntry as ThemeContentEntry,
+} from '@cogenta/theme-canonical'
 import { afterEach, describe, expect, it } from 'vitest'
-import { category, post, tag } from '../src/blueprints/blog.js'
+import { BLOG_COLLECTIONS, category, page, post, tag } from '../src/blueprints/blog.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
 describe('scaffoldSite — blog blueprint', () => {
@@ -15,7 +25,7 @@ describe('scaffoldSite — blog blueprint', () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  it('writes a schema file loadCollections can load back, with post/category/tag', async () => {
+  it('writes a schema file loadCollections can load back, with post/category/tag/page', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
     dirs.push(targetDir)
 
@@ -34,7 +44,7 @@ describe('scaffoldSite — blog blueprint', () => {
     expect(result.schemaPath).toBe(join(targetDir, 'cogenta.schema.mjs'))
 
     const collections = await loadCollections(targetDir)
-    expect(collections.map((c) => c.name).sort()).toEqual(['category', 'post', 'tag'])
+    expect(collections.map((c) => c.name).sort()).toEqual(['category', 'page', 'post', 'tag'])
   })
 
   it('seeds real demo posts, categories and tags into real SQLite — not the scaffold return value alone', async () => {
@@ -86,6 +96,128 @@ describe('scaffoldSite — blog blueprint', () => {
     }
   })
 
+  it('seeds real home/about demo pages, each a title plus a real block zone', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
+    dirs.push(targetDir)
+
+    await scaffoldSite({
+      targetDir,
+      siteName: 'My Blog',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'blog',
+    })
+
+    const logger = createLogger({ level: 'silent' })
+    const selection = await createDatabaseRegistry({ logger }).select({
+      driver: 'sqlite',
+      url: join(targetDir, '.cogenta', 'site.db'),
+    })
+    try {
+      const pageStore = createContentStore({ db: selection.instance, collection: page })
+      const pages = await pageStore.list()
+      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(['about', 'home'])
+
+      const home = pages.items.find((entry) => entry.values.slug === 'home')
+      expect(home).toBeDefined()
+      if (home === undefined) throw new Error('unreachable')
+      expect(home.status).toBe('published')
+      const homeBlocks = home.blocks.blocks
+      expect(homeBlocks?.map((block) => block.type)).toEqual(['hero', 'collectionList'])
+    } finally {
+      await selection.dispose()
+    }
+  })
+
+  it('resolves /blog/:slug, /blog/category/:slug and /:slug generically through @cogenta/schema routing', () => {
+    expect(matchPath(BLOG_COLLECTIONS, '/blog/welcome-to-cogenta')).toEqual({
+      collection: 'post',
+      locale: null,
+      params: { slug: 'welcome-to-cogenta' },
+    })
+    expect(matchPath(BLOG_COLLECTIONS, '/blog/category/guides')).toEqual({
+      collection: 'category',
+      locale: null,
+      params: { slug: 'guides' },
+    })
+    expect(matchPath(BLOG_COLLECTIONS, '/about')).toEqual({
+      collection: 'page',
+      locale: null,
+      params: { slug: 'about' },
+    })
+  })
+
+  it('renders the seeded home page into real HTML through the real theme-canonical pipeline', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
+    dirs.push(targetDir)
+
+    await scaffoldSite({
+      targetDir,
+      siteName: 'My Blog',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'blog',
+    })
+
+    const logger = createLogger({ level: 'silent' })
+    const selection = await createDatabaseRegistry({ logger }).select({
+      driver: 'sqlite',
+      url: join(targetDir, '.cogenta', 'site.db'),
+    })
+    try {
+      const pageStore = createContentStore({ db: selection.instance, collection: page })
+      const postStore = createContentStore({ db: selection.instance, collection: post })
+
+      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
+      expect(home).toBeDefined()
+      if (home === undefined) throw new Error('unreachable')
+
+      const pageContent: PageContent = {
+        title: home.values.title as string,
+        blocks: (home.blocks.blocks ?? []).map(
+          (block): VocabularyBlock =>
+            ({
+              _key: block.key,
+              _type: block.type,
+              _version: '1.0.0',
+              ...block.data,
+            }) as VocabularyBlock,
+        ),
+      }
+
+      const recentPosts = await postStore.list({
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 10,
+      })
+      const themeEntries: readonly ThemeContentEntry[] = recentPosts.items.map((entry) => ({
+        id: entry.id,
+        collection: 'post',
+        locale: entry.locale,
+        status: entry.status,
+        ...entry.values,
+      }))
+
+      const slugById = new Map(
+        recentPosts.items.map((entry) => [entry.id, entry.values.slug as string]),
+      )
+      const ctx = fakeThemeContext(slugById)
+      const entries: FetchedEntries = { 'demo-home-recent-posts': themeEntries }
+
+      const html = htmlOf(renderPage(pageContent, ctx, entries))
+
+      expect(html).toContain('A blog that runs itself')
+      expect(html).toContain('cg-collection')
+      expect(html).toContain('Welcome to Cogenta')
+      expect(html).toContain('/blog/welcome-to-cogenta')
+    } finally {
+      await selection.dispose()
+    }
+  })
+
   it('leaves the blank blueprint byte-for-byte unchanged', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blank-'))
     dirs.push(targetDir)
@@ -106,3 +238,38 @@ describe('scaffoldSite — blog blueprint', () => {
     await expect(loadCollections(targetDir)).rejects.toThrow(/No schema file found/)
   })
 })
+
+function htmlOf(node: HtmlNode | null): string {
+  if (node === null) throw new Error('renderPage returned null')
+  return serialize(node)
+}
+
+/**
+ * A minimal, real `RenderContext`: `link` resolves an entry id to its real
+ * routed URL via `buildPath` — the same generic routing every collection in
+ * `BLOG_COLLECTIONS` gets from its `routing.pattern` — rather than a stub URL
+ * unrelated to the actual route.
+ */
+function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext {
+  return {
+    site: { name: 'My Blog', url: 'http://localhost:4000', locales: ['en'], defaultLocale: 'en' },
+    locale: 'en',
+    url: new URL('http://localhost:4000/home'),
+    t: (key) => key,
+    image: () => {
+      throw new Error('not used by this test')
+    },
+    link: (target) => {
+      if (typeof target === 'string') return target
+      if ('path' in target) return target.path
+      const slug = slugById.get(target.id)
+      if (slug === undefined) throw new Error(`no slug indexed for entry ${target.id}`)
+      return buildPath(post, { slug })
+    },
+    content: {
+      entry: async () => null,
+      byPath: async () => null,
+      list: async () => ({ items: [], nextCursor: null }),
+    },
+  }
+}

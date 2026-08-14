@@ -2,16 +2,19 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
+import type { VocabularyBlock } from '@cogenta/blocks'
 import { createOutput, runMigrate, runUsers } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger, type DatabaseHandle } from '@cogenta/core'
 import { type CollectionDefinition, createContentStore, createSchemaTables } from '@cogenta/schema'
 import {
   BLOG_COLLECTIONS,
   BLOG_DEMO_CATEGORIES,
+  BLOG_DEMO_PAGES,
   BLOG_DEMO_POSTS,
   BLOG_DEMO_TAGS,
   BLOG_RECOMMENDED_AGENTS,
   category,
+  page,
   post,
   tag,
 } from './blueprints/blog.js'
@@ -125,6 +128,20 @@ async function canonicalTokensJson(): Promise<string> {
 }
 
 /**
+ * A `VocabularyBlock` (contract B: `_key`/`_type`/`_version` plus its own
+ * fields) as the block zone `f.blocks()` stores it: `key`/`type`/`data`,
+ * where `data` is everything but the three contract-B envelope fields.
+ */
+function toBlockZoneEntry(block: VocabularyBlock): {
+  key: string
+  type: string
+  data: Record<string, unknown>
+} {
+  const { _key, _type, _version: _discard, ...data } = block
+  return { key: _key, type: _type, data }
+}
+
+/**
  * Inserts the `blog` blueprint's demo content through the real `ContentStore`
  * — never mocked (house rule) — so a scaffolded blog blueprint has genuine
  * rows to look at, not a claim that it does.
@@ -137,6 +154,7 @@ async function seedBlogDemoContent(
   const categoryStore = createContentStore({ db, collection: category, defaultLocale })
   const tagStore = createContentStore({ db, collection: tag, defaultLocale })
   const postStore = createContentStore({ db, collection: post, defaultLocale })
+  const pageStore = createContentStore({ db, collection: page, defaultLocale })
 
   const categoryIdBySlug = new Map<string, string>()
   for (const demo of BLOG_DEMO_CATEGORIES) {
@@ -170,6 +188,15 @@ async function seedBlogDemoContent(
         category: categoryIdBySlug.get(demo.categorySlug) ?? null,
         tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
       },
+    })
+  }
+
+  for (const demo of BLOG_DEMO_PAGES) {
+    await pageStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: { title: demo.title, slug: demo.slug },
+      blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
     })
   }
 }

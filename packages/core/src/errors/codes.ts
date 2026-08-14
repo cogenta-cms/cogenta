@@ -106,6 +106,13 @@ export const ERROR_CODES = [
   'PROVIDER_RATE_LIMITED',
   'PROVIDER_TIMEOUT',
 
+  // Agents — tool registry (L4)
+  'TOOL_DEFINITION_INVALID',
+  'TOOL_DUPLICATE',
+  'TOOL_UNKNOWN',
+  'TOOL_INPUT_INVALID',
+  'TOOL_OUTPUT_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

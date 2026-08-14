@@ -44,3 +44,8 @@ export type {
   ToolCallOutcome,
   ToolExecutionContext,
 } from './runtime/types.js'
+export { defineTool } from './tools/define.js'
+export { buildManifest } from './tools/manifest.js'
+export type { ToolRegistry } from './tools/registry.js'
+export { createToolRegistry } from './tools/registry.js'
+export type { ToolContext, ToolCost, ToolDefinition, ToolLogger } from './tools/types.js'

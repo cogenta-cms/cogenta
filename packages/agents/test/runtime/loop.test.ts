@@ -294,4 +294,30 @@ describe('runAgentLoop', () => {
     expect(result.stopReason).toBe('max_duration')
     expect(client.calls).toHaveLength(1)
   })
+
+  it('throws PRIVACY_NO_DATA_LEAVES_VIOLATION before the first model call when the client is outside the allowlist', async () => {
+    const client = fakeClient([textResponse('should never be reached')])
+
+    await expect(
+      runAgentLoop({
+        client,
+        messages: [{ role: 'user', content: 'hi' }],
+        maxTokens: 100,
+        privacyPolicy: { enabled: true, localProviderNames: ['ollama'] },
+      }),
+    ).rejects.toThrowError(/"fake" is not in the local provider allowlist/)
+    expect(client.calls).toHaveLength(0)
+  })
+
+  it('never checks the privacy policy when it is not set at all', async () => {
+    const client = fakeClient([textResponse('fine')])
+
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 100,
+    })
+
+    expect(result.stopReason).toBe('end_turn')
+  })
 })

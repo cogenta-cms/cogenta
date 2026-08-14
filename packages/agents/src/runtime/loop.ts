@@ -1,3 +1,4 @@
+import { assertProviderAllowed } from '../privacy/assert-provider-allowed.js'
 import type { ChatMessage, ProviderToolCall, TokenUsage } from '../providers/types.js'
 import { RepetitionGuard } from './repetition.js'
 import { retryModelCall, withTimeout } from './retry.js'
@@ -66,6 +67,9 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<RunResult>
   const runStartedAt = now()
 
   for (let step = 0; step < maxSteps; step++) {
+    if (input.privacyPolicy !== undefined) {
+      assertProviderAllowed(input.client, input.privacyPolicy)
+    }
     if (input.signal?.aborted === true) {
       return { messages, steps, finalText, stopReason: 'cancelled', usage: totalUsage }
     }

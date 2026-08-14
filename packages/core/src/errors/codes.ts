@@ -140,6 +140,9 @@ export const ERROR_CODES = [
   'MCP_CLIENT_REMOTE_ERROR',
   'MCP_CLIENT_TOOL_FAILED',
 
+  // Agents — privacy (L4)
+  'PRIVACY_NO_DATA_LEAVES_VIOLATION',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

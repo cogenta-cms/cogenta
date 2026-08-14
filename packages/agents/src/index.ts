@@ -51,6 +51,10 @@ export type {
   MemoryStore,
   MemoryType,
 } from './memory/types.js'
+export { assertProviderAllowed } from './privacy/assert-provider-allowed.js'
+export { redactFields } from './privacy/redact-fields.js'
+export { redactText } from './privacy/redact-text.js'
+export type { NoDataLeavesPolicy, PiiKind, PiiMatch, RedactionResult } from './privacy/types.js'
 export type { AnthropicClientConfig, AnthropicRequestBody } from './providers/anthropic.js'
 export {
   buildAnthropicRequest,

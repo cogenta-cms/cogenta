@@ -1,6 +1,6 @@
-import type { ChatRequest, ChatResponse, ProviderClient } from '@cogenta/agents'
 import { describe, expect, it } from 'vitest'
-import { generateSkin } from '../src/skin-generation.js'
+import type { ChatRequest, ChatResponse, ProviderClient } from '../../src/providers/types.js'
+import { generateSkin } from '../../src/skin/generate.js'
 
 const VALID_TOKENS = {
   color: {

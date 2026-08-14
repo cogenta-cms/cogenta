@@ -35,10 +35,12 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
+    "@cogenta/agents": "workspace:*",
     "@cogenta/api": "workspace:*",
     "@cogenta/auth": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/import": "workspace:*",
+    "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "graphql": "catalog:"
   },

@@ -2,20 +2,26 @@ import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
+import { runGenerate } from './commands/generate.js'
 import { runImport } from './commands/import.js'
 import { runMigrate } from './commands/migrate.js'
 import { runServe } from './commands/serve.js'
+import { runSkin } from './commands/skin.js'
 import { runUsers } from './commands/users.js'
 import { createOutput, shouldUseColour, type Writer } from './output.js'
 
 export type { DoctorCheck, DoctorOptions, DoctorReport } from './commands/doctor.js'
 export { formatDoctorReport, runDoctor } from './commands/doctor.js'
+export type { GenerateOptions, GenerateSubcommand } from './commands/generate.js'
+export { runGenerate } from './commands/generate.js'
 export type { ImportOptions, ImportSubcommand } from './commands/import.js'
 export { runImport } from './commands/import.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
 export type { ServeOptions } from './commands/serve.js'
 export { loadCollections, runServe } from './commands/serve.js'
+export type { SkinOptions, SkinSubcommand } from './commands/skin.js'
+export { runSkin } from './commands/skin.js'
 export type { UsersOptions, UsersSubcommand } from './commands/users.js'
 export { runUsers } from './commands/users.js'
 export type { Output, Writer } from './output.js'
@@ -33,14 +39,25 @@ Commands
   migrate down     Revert applied migrations
   users create     Create a user — the first admin account is made this way
   import wordpress <file.xml>   Import a WordPress WXR export, with a report
-  serve            Run the content and auth API over HTTP
+  generate types   Write TypeScript declarations for the content schema
+  skin list        Show the site's active skin
+  skin validate <tokens.json>   Check a token file against contract D
+  skin apply <tokens.json>      Validate, then make it the active skin
+  skin generate --description "…"   Generate a skin from a description
+  serve, dev       Run the content and auth API over HTTP
   help             Show this message
   version          Print the version
+
+Not built yet: build, backup, upgrade, deploy, theme, agent, and
+generate schema/generate migrations — see CLAUDE.md for why each is
+deferred rather than stubbed.
 
 Options
   --cwd <path>            Run as if from this directory
   --no-color              Never colour the output (NO_COLOR is honoured too)
   --verbose               Send structured driver logs to stderr
+  --out <path>            generate types: where to write the declarations
+  --description <text>    skin generate: free text describing the site
 
 Migration options
   --to <id>               Stop at this migration, inclusive
@@ -104,6 +121,8 @@ export async function run(options: RunOptions): Promise<number> {
         admin: { type: 'boolean' },
         port: { type: 'string' },
         host: { type: 'string' },
+        out: { type: 'string' },
+        description: { type: 'string' },
       },
     })
   } catch (error) {
@@ -184,7 +203,34 @@ export async function run(options: RunOptions): Promise<number> {
     })
   }
 
-  if (command === 'serve') {
+  if (command === 'generate') {
+    return runGenerate({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.out === 'string' ? { outFile: parsed.values.out } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'skin') {
+    return runSkin({
+      subcommand: parsed.positionals[1],
+      file: parsed.positionals[2],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.description === 'string'
+        ? { description: parsed.values.description }
+        : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'serve' || command === 'dev') {
     let port: number | undefined
     if (typeof parsed.values.port === 'string') {
       port = Number(parsed.values.port)

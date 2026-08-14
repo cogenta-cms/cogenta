@@ -1,10 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ProviderClient } from '@cogenta/agents'
+import { generateSkin, type ProviderClient } from '@cogenta/agents'
 import type { Output } from '@cogenta/cli'
 import type { SkinTokens } from '@cogenta/render'
 import type { Prompter } from './prompts.js'
-import { generateSkin } from './skin-generation.js'
 import { renderSkinPreview } from './skin-preview.js'
 
 export interface ChooseSkinOptions {

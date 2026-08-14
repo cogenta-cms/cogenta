@@ -232,6 +232,9 @@ importers:
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -336,6 +339,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@cogenta/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@cogenta/api':
         specifier: workspace:*
         version: link:../api
@@ -348,6 +354,9 @@ importers:
       '@cogenta/import':
         specifier: workspace:*
         version: link:../import
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema

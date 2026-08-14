@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@cogenta/core": "workspace:*",
+    "@cogenta/render": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

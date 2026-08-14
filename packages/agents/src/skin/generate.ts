@@ -1,4 +1,3 @@
-import type { ProviderClient } from '@cogenta/agents'
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import {
   CONTRAST_PAIRS,
@@ -8,16 +7,26 @@ import {
   TOKEN_SPECS,
   validateSkin,
 } from '@cogenta/render'
+import type { ProviderClient } from '../providers/types.js'
 
 /**
- * L9 task 7: "L'IA ne produit pas de CSS. Elle remplit le schéma de tokens du
- * contrat D." Generation, validation and the three-attempt correction loop —
- * validation itself is not reimplemented here: `validateSkin` (`@cogenta/render`)
+ * L9 task 7 (`create-cogenta`) / task 9 (`cogenta skin generate`): "L'IA ne
+ * produit pas de CSS. Elle remplit le schéma de tokens du contrat D."
+ * Generation, validation and the three-attempt correction loop — validation
+ * itself is not reimplemented here: `validateSkin` (`@cogenta/render`)
  * already does hard-refusal contrast/scale/completeness/motion checks with
- * actionable `hint`s on every `CogentaError` it throws, written (its own source
- * comment says so) for exactly this — "the author is a model, which can only
- * correct what the message actually measures." This module's only job is to
- * turn that hint into the next attempt's correction prompt.
+ * actionable `hint`s on every `CogentaError` it throws, written (its own
+ * source comment says so) for exactly this — "the author is a model, which
+ * can only correct what the message actually measures." This module's only
+ * job is to turn that hint into the next attempt's correction prompt.
+ *
+ * Lives in `@cogenta/agents` rather than `@cogenta/render` or
+ * `create-cogenta`: the retry-on-model-feedback loop is an AI-orchestration
+ * concern (this package's own domain — providers, retry, structured
+ * generation), not a rendering concern, and both `create-cogenta` (the
+ * installer) and `@cogenta/cli` (`cogenta skin generate`, task 9) need to
+ * call it without either depending on the other. `@cogenta/render` owns
+ * contract D and stays the single source of truth this validates against.
  */
 
 const KIND_HINT: Readonly<Record<string, string>> = {

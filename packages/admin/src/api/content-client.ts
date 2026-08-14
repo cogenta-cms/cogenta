@@ -69,3 +69,36 @@ export async function deleteEntry(token: string, collection: string, id: string)
     headers: authHeader(token),
   })
 }
+
+/** `state=working`, same reasoning as `listEntries`: editing means seeing the draft face, not just the published one. */
+export function getEntry(token: string, collection: string, id: string): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?state=working`,
+    { headers: authHeader(token) },
+  )
+}
+
+export function createEntry(
+  token: string,
+  collection: string,
+  values: Readonly<Record<string, unknown>>,
+): Promise<Entry> {
+  return request(`/api/content/${encodeURIComponent(collection)}`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ values }),
+  })
+}
+
+export function updateEntry(
+  token: string,
+  collection: string,
+  id: string,
+  values: Readonly<Record<string, unknown>>,
+): Promise<Entry> {
+  return request(`/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify({ values }),
+  })
+}

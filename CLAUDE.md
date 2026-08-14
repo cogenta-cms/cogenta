@@ -23,8 +23,8 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1-6 faites (coquille, auth complète, schéma + permissions, composants de champ, liste de collection avec filtres/tri/pagination/suppression groupée) ; reste pour la tâche 3 : UI d'inscription de passkey (page réglages pas encore construite) ; tâche 7 (formulaire d'édition généré depuis schema.json) à faire ensuite |
-| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1786 tests unitaires, tous verts. |
+| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1-7 faites (coquille, auth complète, schéma + permissions, composants de champ, liste de collection, formulaire d'édition/création généré depuis schema.json) ; reste pour la tâche 3 : UI d'inscription de passkey (page réglages pas encore construite) ; tâche 8 (éditeur de texte riche structuré) à faire ensuite — « le composant le plus coûteux du projet » selon la spec |
+| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1789 tests unitaires, tous verts. |
 | Paquets publiés | `@cogenta/core`, `@cogenta/schema`, `@cogenta/blocks`, `@cogenta/api`, `@cogenta/render`, `@cogenta/seo`, `@cogenta/theme-canonical`, `@cogenta/auth`, `@cogenta/cli` (`doctor`, `migrate`, `users create`, `serve`), `@cogenta/admin` (coquille, non publié) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
 | Contrats figés | **A, B et D figés** (2026-08-13). C avant L4 |

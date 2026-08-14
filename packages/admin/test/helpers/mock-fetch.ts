@@ -15,8 +15,23 @@ export const MOCK_SCHEMA = {
     {
       name: 'article',
       labels: { singular: 'Article', plural: 'Articles' },
-      permissions: { read: ['public'], create: ['editor'], delete: ['editor'] },
-      fields: [],
+      permissions: {
+        read: ['public'],
+        create: ['editor'],
+        update: ['editor'],
+        delete: ['editor'],
+      },
+      fields: [
+        {
+          name: 'title',
+          kind: 'text',
+          required: true,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: {},
+        },
+      ],
     },
     {
       name: 'secret-memo',
@@ -174,6 +189,38 @@ export function installMockFetch(
               ? MOCK_ENTRIES
               : MOCK_ENTRIES.filter((entry) => entry.status === statusFilter)
           return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+        }
+
+        if (collection === 'article' && id !== undefined && method === 'GET') {
+          const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
+          if (entry === undefined) {
+            return json(404, {
+              error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+            })
+          }
+          return json(200, { data: entry })
+        }
+
+        if (collection === 'article' && id === undefined && method === 'POST') {
+          const created = {
+            id: 'entry-new',
+            status: 'draft',
+            version: 1,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            values: body.values ?? {},
+          }
+          return json(201, { data: created })
+        }
+
+        if (collection === 'article' && id !== undefined && method === 'PATCH') {
+          const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
+          if (entry === undefined) {
+            return json(404, {
+              error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+            })
+          }
+          return json(200, { data: { ...entry, values: { ...entry.values, ...body.values } } })
         }
 
         if (collection === 'article' && id !== undefined && method === 'DELETE') {

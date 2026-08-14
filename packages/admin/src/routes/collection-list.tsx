@@ -105,6 +105,10 @@ export function CollectionListRoute(): JSX.Element {
     () => collection !== undefined && canPerform('delete', collection, roles),
     [collection, roles],
   )
+  const canCreate = useMemo(
+    () => collection !== undefined && canPerform('create', collection, roles),
+    [collection, roles],
+  )
 
   if (schema.status === 'loading') return <p>Chargement…</p>
   if (schema.status === 'error') {
@@ -125,6 +129,8 @@ export function CollectionListRoute(): JSX.Element {
   return (
     <section aria-labelledby="collection-heading">
       <h1 id="collection-heading">{collection.labels.plural}</h1>
+
+      {canCreate && <Link to={`/collections/${encodeURIComponent(name)}/new`}>Nouveau</Link>}
 
       <div className="collection-list__toolbar">
         <label htmlFor="status-filter">Statut</label>
@@ -179,7 +185,13 @@ export function CollectionListRoute(): JSX.Element {
                       />
                     </td>
                   )}
-                  <td>{titleOf(entry)}</td>
+                  <td>
+                    <Link
+                      to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`}
+                    >
+                      {titleOf(entry)}
+                    </Link>
+                  </td>
                   <td>{entry.id}</td>
                   <td>{entry.status}</td>
                   <td>{entry.updatedAt}</td>

@@ -6,6 +6,7 @@ import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
 import { DashboardRoute } from './routes/dashboard.js'
+import { EntryEditRoute } from './routes/entry-edit.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
 import { SchemaProvider } from './schema/schema-context.js'
@@ -37,6 +38,8 @@ export function App(): JSX.Element {
             <Route index element={<DashboardRoute />} />
             <Route path="collections" element={<CollectionsRoute />} />
             <Route path="collections/:name" element={<CollectionListRoute />} />
+            <Route path="collections/:name/new" element={<EntryEditRoute />} />
+            <Route path="collections/:name/:id" element={<EntryEditRoute />} />
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />
           </Route>

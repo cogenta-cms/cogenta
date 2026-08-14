@@ -76,6 +76,44 @@ describe('MFA-required login', () => {
   })
 })
 
+describe('first-time TOTP enrolment', () => {
+  it('shows the secret to scan, then reaches the dashboard with the right code', async () => {
+    installMockFetch({ requireTotpSetup: true })
+    render(<App />)
+
+    await fillAndSubmitPassword(USER.email, 'correct horse battery staple')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Configurer la vérification en deux étapes' }),
+    ).toBeDefined()
+    expect(screen.getByText('JBSWY3DPEHPK3PXP')).toBeDefined()
+
+    fireEvent.change(screen.getByLabelText('Code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
+
+    expect(await screen.findByRole('heading', { name: 'Tableau de bord' })).toBeDefined()
+  })
+
+  it('reports an incorrect confirmation code without dropping back to the password step', async () => {
+    installMockFetch({ requireTotpSetup: true })
+    render(<App />)
+
+    await fillAndSubmitPassword(USER.email, 'correct horse battery staple')
+    await screen.findByRole('heading', { name: 'Configurer la vérification en deux étapes' })
+
+    fireEvent.change(screen.getByLabelText('Code'), { target: { value: '000000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'Incorrect verification code.',
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Configurer la vérification en deux étapes' }),
+    ).toBeDefined()
+  })
+})
+
 describe('session restore', () => {
   it('goes straight to the dashboard with a token the server still honours', async () => {
     installMockFetch()

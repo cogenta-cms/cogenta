@@ -23,9 +23,18 @@ function json(status: number, body: unknown): Response {
  * end-to-end against a real server in `packages/cli/test/serve.test.ts`.
  */
 export function installMockFetch(
-  options: { readonly password?: string; readonly requireTotp?: boolean } = {},
+  options: {
+    readonly password?: string
+    readonly requireTotp?: boolean
+    readonly requireTotpSetup?: boolean
+  } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
+  const session = () => ({
+    status: 'session',
+    session: { id: 'session-1', token: VALID_TOKEN, expiresAt: '2030-01-01T00:00:00.000Z' },
+    user: USER,
+  })
 
   vi.stubGlobal(
     'fetch',
@@ -41,18 +50,15 @@ export function installMockFetch(
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect email or password.' },
           })
         }
+        if (options.requireTotpSetup === true) {
+          return json(200, { data: { status: 'totp_setup_required', ticket: 'setup-ticket-1' } })
+        }
         if (options.requireTotp === true) {
           return json(200, {
             data: { status: 'mfa_required', ticket: 'ticket-1', availableFactors: ['totp'] },
           })
         }
-        return json(200, {
-          data: {
-            status: 'session',
-            session: { id: 'session-1', token: VALID_TOKEN, expiresAt: '2030-01-01T00:00:00.000Z' },
-            user: USER,
-          },
-        })
+        return json(200, { data: session() })
       }
 
       if (url.endsWith('/api/auth/totp') && method === 'POST') {
@@ -61,13 +67,25 @@ export function installMockFetch(
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect verification code.' },
           })
         }
+        return json(200, { data: session() })
+      }
+
+      if (url.endsWith('/api/auth/totp-setup') && method === 'POST') {
+        if (body.ticket !== 'setup-ticket-1') {
+          return json(401, { error: { code: 'AUTH_SESSION_INVALID', message: 'Invalid ticket.' } })
+        }
         return json(200, {
-          data: {
-            status: 'session',
-            session: { id: 'session-1', token: VALID_TOKEN, expiresAt: '2030-01-01T00:00:00.000Z' },
-            user: USER,
-          },
+          data: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cogenta:alice@example.com' },
         })
+      }
+
+      if (url.endsWith('/api/auth/totp-setup-confirm') && method === 'POST') {
+        if (body.ticket !== 'setup-ticket-1' || body.token !== '123456') {
+          return json(401, {
+            error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect verification code.' },
+          })
+        }
+        return json(200, { data: session() })
       }
 
       if (url.endsWith('/api/auth/session') && method === 'GET') {

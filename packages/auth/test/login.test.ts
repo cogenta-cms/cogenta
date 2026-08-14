@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto'
 import { isCogentaError } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
@@ -6,6 +5,7 @@ import { createCredentialStore } from '../src/credentials.js'
 import { createAuthService } from '../src/login.js'
 import { createUserStore } from '../src/users.js'
 import { testDb } from './helpers/db.js'
+import { codeFor } from './helpers/totp-code.js'
 
 const SIGNING_KEY = 'test-signing-key-not-a-real-secret'
 const NO_MFA_COLLECTIONS: readonly CollectionDefinition[] = []
@@ -79,14 +79,14 @@ describe('passwordLogin', () => {
     }
   })
 
-  it('refuses to sign in a sensitive role with no second factor set up', async () => {
+  it('returns totp_setup_required for a sensitive role with no second factor set up', async () => {
     const { users, credentials, auth } = await setup(PUBLISH_COLLECTIONS)
     const user = await users.create({ email: 'ed@example.com', roles: ['editor'] })
     await credentials.setPassword(user.id, 'correct horse battery staple')
 
-    await expect(
-      auth.passwordLogin('ed@example.com', 'correct horse battery staple'),
-    ).rejects.toMatchObject({ code: 'AUTH_MFA_REQUIRED' })
+    const result = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    expect(result.status).toBe('totp_setup_required')
+    if (result.status === 'totp_setup_required') expect(result.ticket).toBeTruthy()
   })
 
   it('rate-limits repeated failed password attempts for the same subject', async () => {
@@ -131,42 +131,6 @@ describe('totpLogin', () => {
     await bundle.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
     await bundle.credentials.confirmTotp(user.id)
     return { ...bundle, user }
-  }
-
-  const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-
-  /**
-   * A fresh, independent RFC 6238 implementation — computing the expected code
-   * directly rather than depending on src/totp.ts's internals (this file only
-   * imports its public login surface) or brute-forcing all 1e6 candidates,
-   * which timed out under a loaded machine running the whole workspace's
-   * tests at once.
-   */
-  function codeFor(secret: string, now: number): string {
-    const normalised = secret.toUpperCase().replace(/=+$/u, '')
-    let bits = 0
-    let value = 0
-    const bytes: number[] = []
-    for (const char of normalised) {
-      value = (value << 5) | BASE32_ALPHABET.indexOf(char)
-      bits += 5
-      if (bits >= 8) {
-        bytes.push((value >>> (bits - 8)) & 0xff)
-        bits -= 8
-      }
-    }
-    const key = Buffer.from(bytes)
-
-    const counter = Buffer.alloc(8)
-    counter.writeBigUInt64BE(BigInt(Math.floor(now / 30)))
-    const digest = createHmac('sha1', key).update(counter).digest()
-    const offset = (digest.at(-1) ?? 0) & 0x0f
-    const truncated =
-      ((digest[offset] ?? 0) & 0x7f) * 2 ** 24 +
-      ((digest[offset + 1] ?? 0) & 0xff) * 2 ** 16 +
-      ((digest[offset + 2] ?? 0) & 0xff) * 2 ** 8 +
-      ((digest[offset + 3] ?? 0) & 0xff)
-    return String(truncated % 1_000_000).padStart(6, '0')
   }
 
   it('completes a login when given the correct code and a valid ticket', async () => {
@@ -253,6 +217,122 @@ describe('totpLogin', () => {
     // The ticket was signed with a different key than this service holds.
     await expect(bundle.auth.totpLogin(passwordResult.ticket, '000000')).rejects.toMatchObject({
       code: 'AUTH_SESSION_INVALID',
+    })
+  })
+})
+
+describe('TOTP self-service enrolment', () => {
+  async function editorNeedingSetup() {
+    const bundle = await setup(PUBLISH_COLLECTIONS)
+    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
+    const result = await bundle.auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    if (result.status !== 'totp_setup_required') throw new Error('expected totp_setup_required')
+    return { ...bundle, user, ticket: result.ticket }
+  }
+
+  it('generates a secret and an otpauth:// URI naming the account', async () => {
+    const { auth, ticket, user } = await editorNeedingSetup()
+    const enrolment = await auth.beginTotpSetup(ticket)
+
+    expect(enrolment.secret.length).toBeGreaterThan(0)
+    expect(enrolment.uri).toMatch(/^otpauth:\/\/totp\//)
+    expect(decodeURIComponent(enrolment.uri)).toContain(user.email)
+  })
+
+  it('confirms with the right code and signs the user in', async () => {
+    const { auth, ticket } = await editorNeedingSetup()
+    const now = Math.floor(Date.now() / 1000)
+    const enrolment = await auth.beginTotpSetup(ticket)
+
+    const result = await auth.confirmTotpSetup(ticket, codeFor(enrolment.secret, now))
+    expect(result.status).toBe('session')
+  })
+
+  it('leaves the account able to sign in normally afterwards, this time as mfa_required', async () => {
+    const { auth, ticket } = await editorNeedingSetup()
+    const now = Math.floor(Date.now() / 1000)
+    const enrolment = await auth.beginTotpSetup(ticket)
+    await auth.confirmTotpSetup(ticket, codeFor(enrolment.secret, now))
+
+    const second = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    expect(second.status).toBe('mfa_required')
+  })
+
+  it('rejects the wrong code without confirming the secret', async () => {
+    const { auth, ticket, credentials, user } = await editorNeedingSetup()
+    await auth.beginTotpSetup(ticket)
+
+    await expect(auth.confirmTotpSetup(ticket, '000000')).rejects.toMatchObject({
+      code: 'AUTH_INVALID_CREDENTIALS',
+    })
+    expect((await credentials.totpSecret(user.id))?.verified).toBe(false)
+  })
+
+  it('only the most recently requested secret can be confirmed', async () => {
+    const { auth, ticket } = await editorNeedingSetup()
+    const now = Math.floor(Date.now() / 1000)
+    const first = await auth.beginTotpSetup(ticket)
+    const second = await auth.beginTotpSetup(ticket)
+    expect(second.secret).not.toBe(first.secret)
+
+    await expect(auth.confirmTotpSetup(ticket, codeFor(first.secret, now))).rejects.toMatchObject({
+      code: 'AUTH_INVALID_CREDENTIALS',
+    })
+    await expect(auth.confirmTotpSetup(ticket, codeFor(second.secret, now))).resolves.toMatchObject(
+      {
+        status: 'session',
+      },
+    )
+  })
+
+  it('refuses a login-purpose ticket for setup, and a setup-purpose ticket for login', async () => {
+    const bundle = await setup(PUBLISH_COLLECTIONS)
+    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
+    await bundle.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+    await bundle.credentials.confirmTotp(user.id)
+
+    // This account already has TOTP confirmed, so its ticket is a login one.
+    const loginResult = await bundle.auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (loginResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+
+    await expect(bundle.auth.beginTotpSetup(loginResult.ticket)).rejects.toMatchObject({
+      code: 'AUTH_SESSION_INVALID',
+    })
+
+    const { auth, ticket } = await editorNeedingSetup()
+    await expect(auth.totpLogin(ticket, '000000')).rejects.toMatchObject({
+      code: 'AUTH_SESSION_INVALID',
+    })
+  })
+
+  it('rejects an expired setup ticket', async () => {
+    let clock = 1_000_000_000
+    const bundle = await setup(PUBLISH_COLLECTIONS, () => clock)
+    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
+    const result = await bundle.auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    if (result.status !== 'totp_setup_required') throw new Error('expected totp_setup_required')
+
+    clock += 6 * 60 * 1000
+    await expect(bundle.auth.beginTotpSetup(result.ticket)).rejects.toMatchObject({
+      code: 'AUTH_SESSION_INVALID',
+    })
+  })
+
+  it('rate-limits repeated wrong confirmation codes', async () => {
+    const { auth, ticket } = await editorNeedingSetup()
+    await auth.beginTotpSetup(ticket)
+
+    for (let i = 0; i < 5; i += 1) {
+      await auth.confirmTotpSetup(ticket, '000000').catch(() => undefined)
+    }
+    await expect(auth.confirmTotpSetup(ticket, '000000')).rejects.toMatchObject({
+      code: 'AUTH_RATE_LIMITED',
     })
   })
 })

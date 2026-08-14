@@ -5,13 +5,13 @@ import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 
 /**
- * `/api/auth/*` — sign-in, its second factor, and "who am I".
+ * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment, and
+ * "who am I".
  *
- * Deliberately narrow for a first pass: password login, TOTP completion, and
- * session lookup/revoke. Passkey ceremonies and TOTP enrolment need a
- * challenge held between two requests (`@cogenta/auth`'s own doc says this is
- * an API-layer concern, not the auth package's), and are not built yet —
- * tracked for L2 task 3 rather than rushed in alongside this router.
+ * Passkey ceremonies need a challenge held between two requests
+ * (`@cogenta/auth`'s own doc says this is an API-layer concern, not the auth
+ * package's) and are not built yet — tracked alongside the rest of L2 task 3
+ * rather than rushed in alongside this router.
  *
  * Same shape as the REST router: a plain request in, a plain response out,
  * nothing that listens on a port. `resolveActor` is exported separately
@@ -99,11 +99,14 @@ function loginResponseBody(result: LoginResult): unknown {
       user: { id: result.user.id, email: result.user.email, roles: result.user.roles },
     }
   }
-  return {
-    status: 'mfa_required',
-    ticket: result.ticket,
-    availableFactors: result.availableFactors,
+  if (result.status === 'mfa_required') {
+    return {
+      status: 'mfa_required',
+      ticket: result.ticket,
+      availableFactors: result.availableFactors,
+    }
   }
+  return { status: 'totp_setup_required', ticket: result.ticket }
 }
 
 function whoami(user: User): unknown {
@@ -158,6 +161,23 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
       return jsonResponse(200, { data: loginResponseBody(result) })
     }
 
+    if (action === 'totp-setup') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      const body = asRecord(request.body)
+      const setup = await auth.login.beginTotpSetup(stringField(body, 'ticket'))
+      return jsonResponse(200, { data: setup })
+    }
+
+    if (action === 'totp-setup-confirm') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      const body = asRecord(request.body)
+      const result = await auth.login.confirmTotpSetup(
+        stringField(body, 'ticket'),
+        stringField(body, 'token'),
+      )
+      return jsonResponse(200, { data: loginResponseBody(result) })
+    }
+
     if (action === 'session') {
       if (method === 'GET') {
         const token = bearerToken(request.headers)
@@ -203,7 +223,9 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Auth routes are /api/auth/login, /api/auth/totp and /api/auth/session.',
+    hint:
+      'Auth routes are /api/auth/login, /api/auth/totp, /api/auth/totp-setup, ' +
+      '/api/auth/totp-setup-confirm and /api/auth/session.',
   })
 }
 

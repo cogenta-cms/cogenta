@@ -36,6 +36,8 @@ export interface AuthContextValue {
   readonly state: AuthState
   login(email: string, password: string): Promise<api.LoginResult>
   completeTotp(ticket: string, token: string): Promise<api.LoginResult>
+  beginTotpSetup(ticket: string): Promise<api.TotpSetup>
+  confirmTotpSetup(ticket: string, token: string): Promise<api.LoginResult>
   logout(): Promise<void>
 }
 
@@ -50,6 +52,8 @@ const DEFAULT_CONTEXT: AuthContextValue = {
   state: { status: 'loading' },
   login: () => Promise.reject(new Error('AuthProvider is not mounted')),
   completeTotp: () => Promise.reject(new Error('AuthProvider is not mounted')),
+  beginTotpSetup: () => Promise.reject(new Error('AuthProvider is not mounted')),
+  confirmTotpSetup: () => Promise.reject(new Error('AuthProvider is not mounted')),
   logout: () => Promise.reject(new Error('AuthProvider is not mounted')),
 }
 
@@ -90,6 +94,8 @@ export function AuthProvider({ children }: { readonly children: ReactNode }): JS
       state,
       login: (email, password) => api.login(email, password).then(applyResult),
       completeTotp: (ticket, token) => api.completeTotp(ticket, token).then(applyResult),
+      beginTotpSetup: (ticket) => api.beginTotpSetup(ticket),
+      confirmTotpSetup: (ticket, token) => api.confirmTotpSetup(ticket, token).then(applyResult),
       logout: async () => {
         if (state.status === 'authenticated') {
           await api.logout(state.token).catch(() => undefined)

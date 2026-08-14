@@ -1,9 +1,50 @@
+import { createHmac } from 'node:crypto'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
+import type { CollectionDefinition } from '@cogenta/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createAuthRouter, resolveActor } from '../../src/rest/auth-router.js'
 import type { RestRequest } from '../../src/rest/http.js'
 import { ANONYMOUS } from '../../src/types.js'
+
+const PUBLISH_COLLECTIONS: readonly CollectionDefinition[] = [
+  {
+    name: 'article',
+    labels: { singular: 'Article', plural: 'Articles' },
+    fields: {},
+    permissions: { publish: ['editor'] },
+  },
+]
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+/** Independent RFC 6238 implementation — see packages/auth/test/helpers/totp-code.ts for why. */
+function codeFor(secret: string, nowSeconds: number): string {
+  const normalised = secret.toUpperCase().replace(/=+$/u, '')
+  let bits = 0
+  let value = 0
+  const bytes: number[] = []
+  for (const char of normalised) {
+    value = (value << 5) | BASE32_ALPHABET.indexOf(char)
+    bits += 5
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff)
+      bits -= 8
+    }
+  }
+  const key = Buffer.from(bytes)
+
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(nowSeconds / 30)))
+  const digest = createHmac('sha1', key).update(counter).digest()
+  const offset = (digest.at(-1) ?? 0) & 0x0f
+  const truncated =
+    ((digest[offset] ?? 0) & 0x7f) * 2 ** 24 +
+    ((digest[offset + 1] ?? 0) & 0xff) * 2 ** 16 +
+    ((digest[offset + 2] ?? 0) & 0xff) * 2 ** 8 +
+    ((digest[offset + 3] ?? 0) & 0xff)
+  return String(truncated % 1_000_000).padStart(6, '0')
+}
 
 const SIGNING_KEY = 'test-signing-key-not-a-real-secret'
 
@@ -134,6 +175,129 @@ describe('DELETE /api/auth/session', () => {
     const router = createAuthRouter({ auth })
     const response = await router.handle(request('DELETE', '/api/auth/session'))
     expect(response.status).toBe(204)
+  })
+})
+
+describe('TOTP self-service enrolment', () => {
+  async function editorNeedingSetup() {
+    const db_ = await createSqliteHandle({ url: ':memory:' })
+    const authWithMfa = await createAuthStore({
+      db: db_,
+      signingKey: SIGNING_KEY,
+      collections: PUBLISH_COLLECTIONS,
+    })
+    const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
+    const router = createAuthRouter({ auth: authWithMfa })
+
+    const login = await router.handle(
+      request('POST', '/api/auth/login', {
+        body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+      }),
+    )
+    const body = login.body as { data: { status: string; ticket: string } }
+    if (body.data.status !== 'totp_setup_required') throw new Error('expected totp_setup_required')
+
+    return { db: db_, auth: authWithMfa, router, ticket: body.data.ticket, user }
+  }
+
+  it('returns totp_setup_required from login for a role with no factor yet', async () => {
+    const { db: db_, router } = await editorNeedingSetup()
+    try {
+      const login = await router.handle(
+        request('POST', '/api/auth/login', {
+          body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+        }),
+      )
+      expect(login.status).toBe(200)
+      const body = login.body as { data: { status: string; ticket: string } }
+      expect(body.data.status).toBe('totp_setup_required')
+      expect(body.data.ticket).toBeTruthy()
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('begins enrolment with a secret and a QR-ready URI', async () => {
+    const { db: db_, router, ticket } = await editorNeedingSetup()
+    try {
+      const response = await router.handle(
+        request('POST', '/api/auth/totp-setup', { body: { ticket } }),
+      )
+      expect(response.status).toBe(200)
+      const body = response.body as { data: { secret: string; uri: string } }
+      expect(body.data.secret.length).toBeGreaterThan(0)
+      expect(body.data.uri).toMatch(/^otpauth:\/\/totp\//)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('confirms with the right code and returns a session', async () => {
+    const { db: db_, router, ticket, user } = await editorNeedingSetup()
+    try {
+      const now = Math.floor(Date.now() / 1000)
+      const begin = await router.handle(
+        request('POST', '/api/auth/totp-setup', { body: { ticket } }),
+      )
+      const { secret } = (begin.body as { data: { secret: string } }).data
+
+      const confirm = await router.handle(
+        request('POST', '/api/auth/totp-setup-confirm', {
+          body: { ticket, token: codeFor(secret, now) },
+        }),
+      )
+      expect(confirm.status).toBe(200)
+      const body = confirm.body as { data: { status: string; user: { id: string } } }
+      expect(body.data.status).toBe('session')
+      expect(body.data.user.id).toBe(user.id)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('rejects the wrong confirmation code with 401', async () => {
+    const { db: db_, router, ticket } = await editorNeedingSetup()
+    try {
+      await router.handle(request('POST', '/api/auth/totp-setup', { body: { ticket } }))
+      const response = await router.handle(
+        request('POST', '/api/auth/totp-setup-confirm', { body: { ticket, token: '000000' } }),
+      )
+      expect(response.status).toBe(401)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('refuses a login-purpose ticket on the setup routes', async () => {
+    const db_ = await createSqliteHandle({ url: ':memory:' })
+    try {
+      const authWithMfa = await createAuthStore({
+        db: db_,
+        signingKey: SIGNING_KEY,
+        collections: PUBLISH_COLLECTIONS,
+      })
+      const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
+      await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
+      await authWithMfa.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+      await authWithMfa.credentials.confirmTotp(user.id)
+      const router = createAuthRouter({ auth: authWithMfa })
+
+      const login = await router.handle(
+        request('POST', '/api/auth/login', {
+          body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+        }),
+      )
+      const { ticket } = (login.body as { data: { ticket: string } }).data
+
+      const response = await router.handle(
+        request('POST', '/api/auth/totp-setup', { body: { ticket } }),
+      )
+      expect(response.status).toBe(401)
+      expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_SESSION_INVALID')
+    } finally {
+      await db_.close()
+    }
   })
 })
 

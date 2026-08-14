@@ -28,6 +28,17 @@ export type LoginResult =
       readonly ticket: string
       readonly availableFactors: readonly ('totp' | 'webauthn')[]
     }
+  | {
+      /** This role needs MFA and has no factor set up — enrol one with the ticket. */
+      readonly status: 'totp_setup_required'
+      readonly ticket: string
+    }
+
+export interface TotpSetup {
+  readonly secret: string
+  /** `otpauth://` URI — shown as text pending a QR code renderer. */
+  readonly uri: string
+}
 
 export class ApiError extends Error {
   readonly code: string
@@ -71,6 +82,17 @@ export function login(email: string, password: string): Promise<LoginResult> {
 
 export function completeTotp(ticket: string, token: string): Promise<LoginResult> {
   return request('/api/auth/totp', { method: 'POST', body: JSON.stringify({ ticket, token }) })
+}
+
+export function beginTotpSetup(ticket: string): Promise<TotpSetup> {
+  return request('/api/auth/totp-setup', { method: 'POST', body: JSON.stringify({ ticket }) })
+}
+
+export function confirmTotpSetup(ticket: string, token: string): Promise<LoginResult> {
+  return request('/api/auth/totp-setup-confirm', {
+    method: 'POST',
+    body: JSON.stringify({ ticket, token }),
+  })
 }
 
 export function currentSession(token: string): Promise<SessionUser> {

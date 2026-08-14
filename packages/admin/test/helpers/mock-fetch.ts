@@ -90,6 +90,26 @@ export function installMockFetch(
     user: USER,
   })
 
+  // Media state lives per `installMockFetch()` call — each test starts with
+  // an empty library and grows it through the same upload/edit/delete routes
+  // the real server exposes, not through a shared module-level fixture.
+  let mediaCounter = 0
+  const media: {
+    id: string
+    kind: string
+    filename: string
+    mimeType: string
+    size: number
+    width: number | null
+    height: number | null
+    alt: string
+    decorative: boolean
+    decorativeJustification: string | null
+    focal: { x: number; y: number } | null
+    createdAt: string
+    createdBy: string | null
+  }[] = []
+
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -242,6 +262,114 @@ export function installMockFetch(
           return json(200, {
             data: { ...entry, version: entry.version + 1, values: { title: 'Restored title' } },
           })
+        }
+      }
+
+      const mediaFileMatch = /\/api\/media\/([^/?]+)\/file(?:\?.*)?$/u.exec(url)
+      if (mediaFileMatch !== null) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to view media.' },
+          })
+        }
+        const found = media.find((item) => item.id === mediaFileMatch[1])
+        if (found === undefined) {
+          return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+        }
+        return new Response(new Blob(['fake-bytes'], { type: found.mimeType }), {
+          status: 200,
+          headers: { 'content-type': found.mimeType },
+        })
+      }
+
+      const mediaMatch = /\/api\/media(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
+      if (mediaMatch !== null) {
+        const [, id] = mediaMatch
+
+        if (id === undefined && method === 'GET') {
+          const parsed = new URL(url, 'http://localhost')
+          const kindFilter = parsed.searchParams.get('kind')
+          const items =
+            kindFilter === null ? media : media.filter((item) => item.kind === kindFilter)
+          return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+        }
+
+        if (id === undefined && method === 'POST') {
+          if (auth !== `Bearer ${VALID_TOKEN}`) {
+            return json(401, {
+              error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+            })
+          }
+          const decorative = body.decorative === true
+          if (decorative && (body.decorativeJustification ?? '').length === 0) {
+            return json(400, {
+              error: {
+                code: 'MEDIA_INVALID',
+                message: 'A decorative image needs a justification.',
+              },
+            })
+          }
+          if (!decorative && (body.alt ?? '').length === 0) {
+            return json(400, {
+              error: { code: 'MEDIA_INVALID', message: 'Alt text is required.' },
+            })
+          }
+          mediaCounter += 1
+          const created = {
+            id: `media-${mediaCounter}`,
+            kind: body.kind,
+            filename: body.filename,
+            mimeType: body.mimeType,
+            size: 10,
+            width: null,
+            height: null,
+            alt: decorative ? '' : (body.alt ?? ''),
+            decorative,
+            decorativeJustification: decorative ? (body.decorativeJustification ?? null) : null,
+            focal: body.focal ?? null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            createdBy: USER.id,
+          }
+          media.unshift(created)
+          return json(201, { data: created })
+        }
+
+        if (id !== undefined && method === 'GET') {
+          const found = media.find((item) => item.id === id)
+          if (found === undefined) {
+            return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+          }
+          return json(200, { data: found })
+        }
+
+        if (id !== undefined && (method === 'PATCH' || method === 'PUT')) {
+          if (auth !== `Bearer ${VALID_TOKEN}`) {
+            return json(401, {
+              error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+            })
+          }
+          const found = media.find((item) => item.id === id)
+          if (found === undefined) {
+            return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+          }
+          if (body.decorative !== undefined) found.decorative = body.decorative
+          if (found.decorative) {
+            found.alt = ''
+            if (body.decorativeJustification !== undefined) {
+              found.decorativeJustification = body.decorativeJustification
+            }
+          } else {
+            if (body.alt !== undefined) found.alt = body.alt
+            found.decorativeJustification = null
+          }
+          if (body.focal !== undefined) found.focal = body.focal
+          return json(200, { data: found })
+        }
+
+        if (id !== undefined && method === 'DELETE') {
+          const index = media.findIndex((item) => item.id === id)
+          if (index !== -1) media.splice(index, 1)
+          return new Response(null, { status: 204 })
         }
       }
 

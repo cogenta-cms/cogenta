@@ -276,6 +276,16 @@ describe('runServe', () => {
         headers: auth,
       })
       expect(read.status).toBe(200)
+
+      const file = await fetch(`${server.base}/api/media/${uploadedBody.data.id}/file`, {
+        headers: auth,
+      })
+      expect(file.status).toBe(200)
+      expect(file.headers.get('content-type')).toBe('image/png')
+      expect(Buffer.from(await file.arrayBuffer()).toString('base64')).toBe(png)
+
+      const anonymousFile = await fetch(`${server.base}/api/media/${uploadedBody.data.id}/file`)
+      expect(anonymousFile.status).toBe(401)
     } finally {
       await server.stop()
     }

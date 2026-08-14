@@ -30,6 +30,7 @@ import {
   isCogentaError,
   type Logger,
   loadConfig,
+  type MediaStore,
   type StorageDriver,
 } from '@cogenta/core'
 import {
@@ -116,6 +117,9 @@ interface Site {
   readonly restRouter: RestRouter
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
+  /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
+  readonly mediaStore: MediaStore
+  readonly storage: StorageDriver
   readonly graphqlSchema: GraphQLSchema
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
@@ -174,6 +178,8 @@ async function assembleSite(
     restRouter: createRestRouter({ service }),
     authRouter: createAuthRouter({ auth }),
     mediaRouter: createMediaRouter({ store: mediaStore, storage }),
+    mediaStore,
+    storage,
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
     schemaDocument: buildSchemaDocument(collections),
@@ -230,6 +236,43 @@ function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   )
 }
 
+function jsonError(res: ServerResponse, status: number, code: string, message: string): void {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
+  res.end(JSON.stringify({ error: { code, message } }))
+}
+
+/** Same authentication gate as every other `/api/media` route — the file itself is not public. */
+async function serveMediaFile(
+  site: Site,
+  actor: AccessContext['actor'],
+  id: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (req.method !== 'GET') {
+    res.writeHead(405, { allow: 'GET' }).end()
+    return
+  }
+  if (actor.id === null) {
+    jsonError(res, 401, 'UNAUTHENTICATED', 'Sign in to view media.')
+    return
+  }
+
+  const asset = await site.mediaStore.get(id)
+  if (asset === null) {
+    jsonError(res, 404, 'MEDIA_NOT_FOUND', `No media asset with id "${id}".`)
+    return
+  }
+
+  const stream = await site.storage.get(asset.storageKey)
+  res.writeHead(200, {
+    'content-type': asset.mimeType,
+    'cache-control': 'private, max-age=3600',
+  })
+  stream.on('error', () => res.destroy())
+  stream.pipe(res)
+}
+
 /**
  * Builds the Node request handler from an already-assembled site.
  *
@@ -278,6 +321,15 @@ export function createRequestListener(
         ),
       )
       const context: AccessContext = { actor }
+
+      // Serving the file itself sits outside `mediaRouter`: its `RestResponse`
+      // is JSON-only, and a binary body has no shape to fit into that without
+      // widening the transport contract every other route relies on.
+      const fileMatch = /^\/api\/media\/([^/]+)\/file$/u.exec(url.pathname)
+      if (fileMatch !== null) {
+        await serveMediaFile(site, actor, decodeURIComponent(fileMatch[1] ?? ''), req, res)
+        return
+      }
 
       if (url.pathname === '/api/graphql') {
         if (req.method !== 'POST') {

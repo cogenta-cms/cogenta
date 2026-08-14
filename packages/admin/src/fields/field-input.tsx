@@ -55,7 +55,7 @@ export function FieldInput(props: FieldInputProps): JSX.Element {
     case 'richText':
       return <RichTextField {...props} value={props.value as RichTextDocument | undefined} />
     case 'media':
-      return <MediaField {...props} />
+      return <MediaField {...props} value={props.value as string | null} />
     case 'relation':
       return <RelationField {...props} />
     case 'blocks':

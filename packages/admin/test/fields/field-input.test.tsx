@@ -167,11 +167,6 @@ describe('FieldInput — json', () => {
 })
 
 describe('FieldInput — deferred kinds', () => {
-  it('shows an honest placeholder for media, relation and blocks', () => {
-    render(<FieldInput id="cover" field={field('media')} value={null} onChange={vi.fn()} />)
-    expect(screen.getByText(/Médiathèque à venir/)).toBeDefined()
-  })
-
   it("names the target collection in the relation field's placeholder", () => {
     render(
       <FieldInput

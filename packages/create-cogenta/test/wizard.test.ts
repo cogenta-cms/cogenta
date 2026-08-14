@@ -87,8 +87,8 @@ describe('runWizard', () => {
     await writeFile(
       configPath,
       JSON.stringify({
-        site: { name: 'Blog Site', url: 'https://blog.example' },
-        blueprint: 'blog',
+        site: { name: 'Showcase Site', url: 'https://showcase.example' },
+        blueprint: 'vitrine',
       }),
       'utf8',
     )

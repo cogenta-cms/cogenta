@@ -147,6 +147,7 @@ export async function runWizard(options: RunWizardOptions): Promise<number> {
         ? {}
         : { llm: { provider: answers.llmProvider, model: answers.llmModel ?? '' } }),
       adminEmail: answers.adminEmail,
+      blueprintId: resolvedBlueprint.blueprint.id,
     },
     env,
   )

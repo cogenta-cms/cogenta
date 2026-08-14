@@ -158,6 +158,9 @@ export const ERROR_CODES = [
   // Agents-builtin — performance agent (L5)
   'PERFORMANCE_CRUX_QUERY_FAILED',
 
+  // create-cogenta — blueprints (L9)
+  'BLUEPRINT_REGISTRY_CORRUPT',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

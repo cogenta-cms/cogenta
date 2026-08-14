@@ -1,6 +1,21 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createOutput, runMigrate, runUsers } from '@cogenta/cli'
+import { createDatabaseRegistry, createLogger, type DatabaseHandle } from '@cogenta/core'
+import { type CollectionDefinition, createContentStore, createSchemaTables } from '@cogenta/schema'
+import {
+  BLOG_COLLECTIONS,
+  BLOG_DEMO_CATEGORIES,
+  BLOG_DEMO_POSTS,
+  BLOG_DEMO_TAGS,
+  BLOG_RECOMMENDED_AGENTS,
+  category,
+  post,
+  tag,
+} from './blueprints/blog.js'
+import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 
 export interface ScaffoldAnswers {
   readonly targetDir: string
@@ -11,6 +26,8 @@ export interface ScaffoldAnswers {
   readonly databaseUrl?: string
   readonly llm?: { readonly provider: string; readonly model: string }
   readonly adminEmail: string
+  /** Defaults to `blank` (`DEFAULT_BLUEPRINT_ID`) — the existing, unchanged behaviour. */
+  readonly blueprintId?: string
 }
 
 export interface ScaffoldResult {
@@ -19,6 +36,11 @@ export interface ScaffoldResult {
   readonly migrateOutput: string
   readonly usersExitCode: number
   readonly usersOutput: string
+  /** The blueprint actually applied — may be `blank` if the requested one fell back. */
+  readonly blueprintId: string
+  readonly fellBackToBlank: boolean
+  /** Present only when a blueprint wrote a content schema (e.g. `blog`). */
+  readonly schemaPath?: string
 }
 
 function capture(): { readonly write: (text: string) => void; text(): string } {
@@ -64,6 +86,15 @@ ${llmBlock}}
 `
 }
 
+function schemaFileContents(collections: readonly CollectionDefinition[]): string {
+  // Every `FieldDefinition` a blueprint declares here is plain, serialisable
+  // data (contract A) — `defineCollection` validates and returns it as-is,
+  // never wrapping it in behaviour — so writing it out as a JSON literal is
+  // exactly the array `loadCollections` (`@cogenta/cli`) reads back, not an
+  // approximation of it.
+  return `export default ${JSON.stringify(collections, null, 2)}\n`
+}
+
 function packageJsonContents(answers: ScaffoldAnswers): string {
   const pkg = {
     name:
@@ -84,22 +115,109 @@ function packageJsonContents(answers: ScaffoldAnswers): string {
 }
 
 /**
+ * The tokens.json this site's skin starts from — the canonical theme's own
+ * default, copied verbatim. L9 task 7's AI skin-generation pipeline is a
+ * different, later job; this is "apply an existing skin", nothing more.
+ */
+async function canonicalTokensJson(): Promise<string> {
+  const url = import.meta.resolve('@cogenta/theme-canonical/tokens.json')
+  return readFile(fileURLToPath(url), 'utf8')
+}
+
+/**
+ * Inserts the `blog` blueprint's demo content through the real `ContentStore`
+ * — never mocked (house rule) — so a scaffolded blog blueprint has genuine
+ * rows to look at, not a claim that it does.
+ */
+async function seedBlogDemoContent(
+  db: DatabaseHandle,
+  defaultLocale: string,
+  adminId: string | null,
+): Promise<void> {
+  const categoryStore = createContentStore({ db, collection: category, defaultLocale })
+  const tagStore = createContentStore({ db, collection: tag, defaultLocale })
+  const postStore = createContentStore({ db, collection: post, defaultLocale })
+
+  const categoryIdBySlug = new Map<string, string>()
+  for (const demo of BLOG_DEMO_CATEGORIES) {
+    const entry = await categoryStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: { name: demo.name, slug: demo.slug },
+    })
+    categoryIdBySlug.set(demo.slug, entry.id)
+  }
+
+  const tagIdBySlug = new Map<string, string>()
+  for (const demo of BLOG_DEMO_TAGS) {
+    const entry = await tagStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: { name: demo.name, slug: demo.slug },
+    })
+    tagIdBySlug.set(demo.slug, entry.id)
+  }
+
+  for (const demo of BLOG_DEMO_POSTS) {
+    await postStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: {
+        title: demo.title,
+        slug: demo.slug,
+        excerpt: demo.excerpt,
+        body: demo.body,
+        category: categoryIdBySlug.get(demo.categorySlug) ?? null,
+        tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
+      },
+    })
+  }
+}
+
+/**
  * Step 9: "Installation, migrations, contenu de démo." Writes the site's
  * own files, then genuinely runs it up — `runMigrate`/`runUsers` are the
  * exact functions `cogenta migrate up`/`cogenta users create` call, reused
  * rather than re-implemented, so a scaffolded site is provably the same
  * thing those commands would produce by hand afterwards.
+ *
+ * A blueprint beyond `blank` (currently only `blog`, L9 task 3) additionally
+ * writes a content schema, materialises its tables, seeds real demo content,
+ * applies a skin and records which agents it recommends — see
+ * `./blueprints/blog.ts`. `blank` takes none of these branches, so its
+ * output is unchanged.
  */
 export async function scaffoldSite(
   answers: ScaffoldAnswers,
   env: Record<string, string | undefined> = process.env,
 ): Promise<ScaffoldResult> {
+  const { blueprint, fellBackToBlank } = resolveBlueprint(
+    answers.blueprintId ?? DEFAULT_BLUEPRINT_ID,
+  )
+
   await mkdir(answers.targetDir, { recursive: true })
   await mkdir(join(answers.targetDir, '.cogenta'), { recursive: true })
 
   const configPath = join(answers.targetDir, 'cogenta.config.mjs')
   await writeFile(configPath, configFileContents(answers), 'utf8')
   await writeFile(join(answers.targetDir, 'package.json'), packageJsonContents(answers), 'utf8')
+
+  let schemaPath: string | undefined
+
+  if (blueprint.id === 'blog') {
+    schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
+    await writeFile(schemaPath, schemaFileContents(BLOG_COLLECTIONS), 'utf8')
+    await writeFile(
+      join(answers.targetDir, 'theme.tokens.json'),
+      await canonicalTokensJson(),
+      'utf8',
+    )
+    await writeFile(
+      join(answers.targetDir, '.cogenta', 'recommended-agents.json'),
+      `${JSON.stringify(BLOG_RECOMMENDED_AGENTS, null, 2)}\n`,
+      'utf8',
+    )
+  }
 
   const migrateCapture = capture()
   const migrateStderr = capture()
@@ -123,11 +241,30 @@ export async function scaffoldSite(
     stderr: usersStderr.write,
   })
 
+  if (blueprint.id === 'blog' && migrateExitCode === 0 && usersExitCode === 0) {
+    const logger = createLogger({ level: 'silent' })
+    const selection = await createDatabaseRegistry({ logger }).select({
+      driver: answers.databaseDriver,
+      url: databaseUrlFor(answers),
+    })
+    try {
+      await createSchemaTables(selection.instance, BLOG_COLLECTIONS)
+      await ensureAuthTables(selection.instance)
+      const admin = await createUserStore(selection.instance).byEmail(answers.adminEmail)
+      await seedBlogDemoContent(selection.instance, answers.defaultLocale, admin?.id ?? null)
+    } finally {
+      await selection.dispose()
+    }
+  }
+
   return {
     configPath,
     migrateExitCode,
     migrateOutput: migrateCapture.text() + migrateStderr.text(),
     usersExitCode,
     usersOutput: usersCapture.text() + usersStderr.text(),
+    blueprintId: blueprint.id,
+    fellBackToBlank,
+    ...(schemaPath === undefined ? {} : { schemaPath }),
   }
 }

@@ -385,16 +385,22 @@ importers:
       '@cogenta/agents':
         specifier: workspace:*
         version: link:../agents
+      '@cogenta/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@cogenta/cli':
         specifier: workspace:*
         version: link:../cli
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
-      '@cogenta/auth':
+      '@cogenta/schema':
         specifier: workspace:*
-        version: link:../auth
+        version: link:../schema
+      '@cogenta/theme-canonical':
+        specifier: workspace:*
+        version: link:../theme-canonical
+    devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

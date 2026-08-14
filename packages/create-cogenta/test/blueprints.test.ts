@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { BLUEPRINTS, DEFAULT_BLUEPRINT_ID, resolveBlueprint } from '../src/blueprints/registry.js'
 
 describe('BLUEPRINTS registry', () => {
-  it('lists exactly one available blueprint — blank — plus the eight named ones as coming soon', () => {
+  it('lists blank and blog as available, plus the seven remaining ones as coming soon', () => {
     const available = BLUEPRINTS.filter((entry) => entry.available)
-    expect(available).toHaveLength(1)
-    expect(available[0]?.id).toBe('blank')
+    expect(available.map((entry) => entry.id)).toEqual(['blank', 'blog'])
     expect(BLUEPRINTS).toHaveLength(9)
   })
 })
@@ -17,8 +16,14 @@ describe('resolveBlueprint', () => {
     expect(resolved.blueprint.id).toBe('blank')
   })
 
-  it('falls back to blank, and says so, for an unavailable blueprint', () => {
+  it('resolves the blog blueprint directly, without falling back', () => {
     const resolved = resolveBlueprint('blog')
+    expect(resolved.fellBackToBlank).toBe(false)
+    expect(resolved.blueprint.id).toBe('blog')
+  })
+
+  it('falls back to blank, and says so, for a blueprint that is still coming soon', () => {
+    const resolved = resolveBlueprint('vitrine')
     expect(resolved.fellBackToBlank).toBe(true)
     expect(resolved.blueprint.id).toBe('blank')
   })

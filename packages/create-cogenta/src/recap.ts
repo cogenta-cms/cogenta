@@ -48,9 +48,23 @@ export function printRecap(input: RecapInput, out: Output): void {
   }
 
   out.heading('Skin')
-  out.warn(
-    'Default skin — AI-generated skins are not built yet (a future task); run `cogenta skin generate` once they are.',
-  )
+  if (resolvedBlueprint.blueprint.id === 'blog') {
+    out.ok('@cogenta/theme-canonical default skin — written to theme.tokens.json.')
+    out.detail(
+      'AI-generated skins are not built yet (a future task); run `cogenta skin generate` once they are.',
+    )
+  } else {
+    out.warn(
+      'Default skin — AI-generated skins are not built yet (a future task); run `cogenta skin generate` once they are.',
+    )
+  }
+
+  if (resolvedBlueprint.blueprint.id === 'blog') {
+    out.heading('Recommended agents')
+    out.detail(
+      'Not enabled — no site runs a live agent scheduler yet. Recorded in .cogenta/recommended-agents.json for when one exists.',
+    )
+  }
 
   out.heading('Admin account')
   if (scaffold.usersExitCode === 0) {

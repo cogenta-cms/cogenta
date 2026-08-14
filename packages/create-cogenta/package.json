@@ -36,11 +36,13 @@
   },
   "dependencies": {
     "@cogenta/agents": "workspace:*",
+    "@cogenta/auth": "workspace:*",
     "@cogenta/cli": "workspace:*",
-    "@cogenta/core": "workspace:*"
+    "@cogenta/core": "workspace:*",
+    "@cogenta/schema": "workspace:*",
+    "@cogenta/theme-canonical": "workspace:*"
   },
   "devDependencies": {
-    "@cogenta/auth": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -1,5 +1,5 @@
 import type { TokenUsage } from '../providers/types.js'
-import type { BudgetCheck, BudgetLimits, BudgetTracker } from './types.js'
+import type { BudgetCheck, BudgetLimits, BudgetTracker, BudgetUsage } from './types.js'
 
 export interface BudgetTrackerOptions {
   readonly limits: BudgetLimits
@@ -73,6 +73,10 @@ export function createBudgetTracker(options: BudgetTrackerOptions): BudgetTracke
       callsThisHour += 1
       tokensToday += usage.inputTokens + usage.outputTokens
       eurThisMonth += costOf(usage)
+    },
+    usage(): BudgetUsage {
+      rollBuckets(now())
+      return { tokensToday, eurThisMonth, callsThisHour }
     },
   }
 }

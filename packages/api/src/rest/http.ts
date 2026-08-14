@@ -81,6 +81,8 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AUTH_USER_NOT_FOUND: 404,
   AUTH_ROLE_UNKNOWN: 400,
 
+  AGENT_UNKNOWN: 404,
+
   // A verified-broken chain is a server-side integrity failure, not
   // something the caller's request could have avoided — the default 500
   // already fits, spelled out so it is not mistaken for an oversight.

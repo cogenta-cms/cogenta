@@ -102,6 +102,8 @@ export function installMockFetch(
   // Media state lives per `installMockFetch()` call — each test starts with
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
+  let securityAgentEnabled = true
+
   let mediaCounter = 0
   const media: {
     id: string
@@ -280,6 +282,79 @@ export function installMockFetch(
               previousHash: null,
             },
           ],
+        })
+      }
+
+      if (url.includes('/api/agents')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may manage agents.' },
+          })
+        }
+        const agentMatch = /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history))?/u.exec(
+          url,
+        )
+        if (agentMatch === null) {
+          return json(200, {
+            data: [
+              {
+                name: 'security',
+                tools: ['deps.scan', 'deps.patch'],
+                autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
+                budget: { tokensPerDay: 200_000 },
+                enabled: securityAgentEnabled,
+                usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 },
+              },
+            ],
+          })
+        }
+        const [, name, action] = agentMatch
+        if (name === 'ghost') {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
+        }
+        if (action === 'enable' && method === 'POST') {
+          securityAgentEnabled = true
+          return json(200, { data: { name, enabled: true } })
+        }
+        if (action === 'disable' && method === 'POST') {
+          securityAgentEnabled = false
+          return json(200, { data: { name, enabled: false } })
+        }
+        if (action === 'traces' && method === 'GET') {
+          return json(200, {
+            data: [
+              {
+                id: 'trace-1',
+                agentName: name,
+                startedAt: '2026-03-01T00:00:00.000Z',
+                finishedAt: '2026-03-01T00:01:00.000Z',
+                stopReason: 'end_turn',
+                usage: { inputTokens: 100, outputTokens: 50 },
+              },
+            ],
+          })
+        }
+        if (action === 'history' && method === 'GET') {
+          return json(200, {
+            data: [
+              {
+                id: 'audit-agent-1',
+                at: '2026-03-01T00:00:00.000Z',
+                actorId: `agent:${name}`,
+                action: 'deps.scan',
+              },
+            ],
+          })
+        }
+        return json(200, {
+          data: {
+            name,
+            tools: ['deps.scan', 'deps.patch'],
+            autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
+            budget: { tokensPerDay: 200_000 },
+            enabled: securityAgentEnabled,
+            usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 },
+          },
         })
       }
 

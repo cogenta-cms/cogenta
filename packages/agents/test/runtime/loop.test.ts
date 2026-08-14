@@ -228,6 +228,7 @@ describe('runAgentLoop', () => {
     const budget: BudgetTracker = {
       checkCall: () => ({ allowed: false, reason: 'tokensPerDay' }),
       recordCall: vi.fn(),
+      usage: () => ({ tokensToday: 0, eurThisMonth: 0, callsThisHour: 0 }),
     }
     const onBudgetExceeded = vi.fn()
 

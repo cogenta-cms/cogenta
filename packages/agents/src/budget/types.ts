@@ -14,6 +14,13 @@ export interface BudgetCheck {
   readonly reason?: BudgetExceededReason
 }
 
+/** The same three calendar-bucketed counters `BudgetLimits` names, read without side effect — "le coût mensuel réel de chaque agent est mesuré et affiché" (L5's admin acceptance criterion) needs a current-usage snapshot, not just the allow/deny `checkCall` already gives. */
+export interface BudgetUsage {
+  readonly tokensToday: number
+  readonly eurThisMonth: number
+  readonly callsThisHour: number
+}
+
 export interface BudgetTracker {
   /**
    * Pure — no side effect. Called before a model call is made, so an agent
@@ -24,6 +31,8 @@ export interface BudgetTracker {
   checkCall(): BudgetCheck
   /** Aggregates one call's actual usage into the tracker's windows — tokens and EUR cost measured per call, per L4's own pitfall about cost exploding silently otherwise. */
   recordCall(usage: TokenUsage): void
+  /** Rolls the calendar buckets forward (same as `checkCall`/`recordCall`) and reports where they currently stand — read-only, no bucket reset beyond what elapsed time itself would already do. */
+  usage(): BudgetUsage
 }
 
 export interface KillSwitch {

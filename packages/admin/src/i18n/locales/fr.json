@@ -45,6 +45,7 @@
     "collections": "Contenus",
     "media": "Médiathèque",
     "audit": "Journal d'audit",
+    "agents": "Agents",
     "settings": "Paramètres"
   },
   "shell": {
@@ -175,6 +176,27 @@
     "roles": "Rôles",
     "entry": "Entrée",
     "noEntries": "Aucune entrée."
+  },
+  "agents": {
+    "heading": "Agents",
+    "adminOnly": "Réservé au rôle « admin » : cette page pilote l'activation et le budget de chaque agent.",
+    "name": "Nom",
+    "state": "État",
+    "autonomy": "Autonomie",
+    "budget": "Budget (jetons/jour utilisés)",
+    "actions": "Actions",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "enable": "Activer",
+    "disable": "Désactiver",
+    "noAgents": "Aucun agent configuré.",
+    "loadError": "Impossible de charger la liste des agents.",
+    "toggleError": "Impossible de changer l'état de cet agent.",
+    "detailHeading": "Agent : {{name}}",
+    "traces": "Traces récentes",
+    "noTraces": "Aucune trace pour l'instant.",
+    "history": "Historique",
+    "noHistory": "Aucun historique pour l'instant."
   },
   "dashboard": {
     "heading": "Tableau de bord",

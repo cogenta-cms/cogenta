@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
+import { AgentsRoute } from './routes/agents.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
@@ -44,6 +45,7 @@ export function App(): JSX.Element {
             <Route path="collections/:name/:id" element={<EntryEditRoute />} />
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />
+            <Route path="agents" element={<AgentsRoute />} />
             <Route path="settings" element={<SettingsRoute />} />
           </Route>
         </Routes>

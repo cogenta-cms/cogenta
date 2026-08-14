@@ -42,6 +42,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@cogenta/agents": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

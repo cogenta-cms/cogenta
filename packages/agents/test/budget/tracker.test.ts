@@ -65,4 +65,36 @@ describe('createBudgetTracker', () => {
     tracker.recordCall({ inputTokens: 100, outputTokens: 100 })
     expect(tracker.checkCall().reason).toBe('callsPerHour')
   })
+
+  it('reports zero usage before any call is recorded', () => {
+    const tracker = createBudgetTracker({ limits: {} })
+    expect(tracker.usage()).toEqual({ tokensToday: 0, eurThisMonth: 0, callsThisHour: 0 })
+  })
+
+  it('reflects recordCall in usage(), across all three counters', () => {
+    const tracker = createBudgetTracker({
+      limits: {},
+      costOf: (usage) => (usage.inputTokens + usage.outputTokens) * 0.001,
+    })
+
+    tracker.recordCall({ inputTokens: 10, outputTokens: 20 })
+    tracker.recordCall({ inputTokens: 5, outputTokens: 5 })
+
+    expect(tracker.usage()).toEqual({ tokensToday: 40, eurThisMonth: 0.04, callsThisHour: 2 })
+  })
+
+  it('resets usage() across the same calendar boundaries checkCall resets against', () => {
+    let current = new Date('2026-01-01T10:59:00.000Z').getTime()
+    const tracker = createBudgetTracker({ limits: {}, now: () => current })
+
+    tracker.recordCall({ inputTokens: 10, outputTokens: 10 })
+    expect(tracker.usage()).toEqual({ tokensToday: 20, eurThisMonth: 0, callsThisHour: 1 })
+
+    current = new Date('2026-01-01T11:00:01.000Z').getTime()
+    expect(tracker.usage().callsThisHour).toBe(0)
+    expect(tracker.usage().tokensToday).toBe(20)
+
+    current = new Date('2026-01-02T00:00:00.000Z').getTime()
+    expect(tracker.usage().tokensToday).toBe(0)
+  })
 })

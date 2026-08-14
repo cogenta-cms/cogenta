@@ -4,9 +4,12 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
   type AccessContext,
+  type AgentsRouter,
+  type AgentsRouterOptions,
   type AuditRouter,
   type AuthRouter,
   buildContentSchema,
+  createAgentsRouter,
   createAuditRouter,
   createAuthRouter,
   createContentGateway,
@@ -121,6 +124,8 @@ interface Site {
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
   readonly auditRouter: AuditRouter
+  /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
+  readonly agentsRouter?: AgentsRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -154,6 +159,8 @@ async function assembleSite(
   },
   storage: StorageDriver,
   health: () => Promise<{ readonly database: HealthReport; readonly storage: HealthReport }>,
+  /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
+  agents?: AgentsRouterOptions,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -194,6 +201,7 @@ async function assembleSite(
     authRouter: createAuthRouter({ auth }),
     mediaRouter: createMediaRouter({ store: mediaStore, storage }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
+    ...(agents === undefined ? {} : { agentsRouter: createAgentsRouter(agents) }),
     mediaStore,
     storage,
     graphqlSchema: buildContentSchema({ collections }),
@@ -546,6 +554,12 @@ export function createRequestListener(
       if (url.pathname.startsWith('/api/audit')) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
+        return
+      }
+
+      if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.agentsRouter.handle(request, context.actor))
         return
       }
 

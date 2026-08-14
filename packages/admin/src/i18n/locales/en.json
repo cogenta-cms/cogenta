@@ -45,6 +45,7 @@
     "collections": "Content",
     "media": "Media library",
     "audit": "Audit log",
+    "agents": "Agents",
     "settings": "Settings"
   },
   "shell": {
@@ -175,6 +176,27 @@
     "roles": "Roles",
     "entry": "Entry",
     "noEntries": "No entries."
+  },
+  "agents": {
+    "heading": "Agents",
+    "adminOnly": "Restricted to the \"admin\" role: this manages every agent's activation and budget.",
+    "name": "Name",
+    "state": "State",
+    "autonomy": "Autonomy",
+    "budget": "Budget (tokens/day used)",
+    "actions": "Actions",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "noAgents": "No agents configured.",
+    "loadError": "Could not load the agent list.",
+    "toggleError": "Could not change this agent's state.",
+    "detailHeading": "Agent: {{name}}",
+    "traces": "Recent traces",
+    "noTraces": "No traces yet.",
+    "history": "History",
+    "noHistory": "No history yet."
   },
   "dashboard": {
     "heading": "Dashboard",

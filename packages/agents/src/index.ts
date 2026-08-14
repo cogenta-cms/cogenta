@@ -31,6 +31,7 @@ export type {
   BudgetExceededReason,
   BudgetLimits,
   BudgetTracker,
+  BudgetUsage,
   KillSwitch,
 } from './budget/types.js'
 export type { EvalThresholdOptions } from './eval/assert-threshold.js'

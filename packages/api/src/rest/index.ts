@@ -6,6 +6,16 @@
  * live — the ones GraphQL shares rather than reimplements.
  */
 
+export type {
+  AgentRegistryLike,
+  AgentSummary,
+  AgentsRouter,
+  AgentsRouterOptions,
+  AgentUsage,
+  AuditLogLike,
+  TraceStoreLike,
+} from './agents-router.js'
+export { createAgentsRouter } from './agents-router.js'
 export type { AuditRouter, AuditRouterOptions } from './audit-router.js'
 export { createAuditRouter } from './audit-router.js'
 export type { AuthRouter, AuthRouterOptions } from './auth-router.js'

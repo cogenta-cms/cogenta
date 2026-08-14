@@ -24,6 +24,11 @@ export type {
   BudgetTracker,
   KillSwitch,
 } from './budget/types.js'
+export type { PromptComparisonResult, PromptVersion } from './eval/compare-prompt-versions.js'
+export { comparePromptVersions } from './eval/compare-prompt-versions.js'
+export { runEvalSuite } from './eval/run-suite.js'
+export { scoreFinalTextIncludes, scoreStopReason, scoreToolSequence } from './eval/scorers.js'
+export type { EvalCase, EvalCaseResult, EvalReport } from './eval/types.js'
 export { CONSTITUTION_TEXT } from './identity/constitution.js'
 export type {
   AgentIdentity,

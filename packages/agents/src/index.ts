@@ -1,3 +1,6 @@
+export type { AuditLogLike, AuditRecordInput } from './audit/types.js'
+export type { WithAuditOptions } from './audit/with-audit.js'
+export { withAudit, withAuditForManifest } from './audit/with-audit.js'
 export { CONSTITUTION_TEXT } from './identity/constitution.js'
 export type {
   AgentIdentity,

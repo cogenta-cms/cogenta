@@ -185,6 +185,9 @@ export const ERROR_CODES = [
   // Channels — Telegram adapter (L6 task 4)
   'CHANNEL_TELEGRAM_API_ERROR',
 
+  // Channels — message formats (L6 task 6)
+  'CHANNEL_MESSAGE_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

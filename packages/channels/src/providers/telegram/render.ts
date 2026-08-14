@@ -21,6 +21,18 @@ const SEVERITY_PREFIX: Record<ChannelSeverity, string> = {
   critical: '🔴',
 }
 
+/**
+ * Telegram's real, hard API limit on `sendMessage`'s `text`
+ * (https://core.telegram.org/bots/api#sendmessage) — not the abstract
+ * screen-budget `buildReport` (`../../formats/report.js`) already enforces
+ * at construction time. That budget is deliberately smaller and about
+ * readability; this one is a last-resort safety net so a `ReportChannelMessage`
+ * assembled without going through `buildReport` can never produce a request
+ * Telegram would reject outright.
+ */
+const TELEGRAM_MAX_TEXT_CHARS = 4096
+const TRUNCATION_MARK = '…'
+
 function renderActions(
   actions: readonly ChannelAction[] | undefined,
 ): TelegramReplyMarkup | undefined {
@@ -78,8 +90,19 @@ export function renderTelegramMessage(message: ChannelMessage): RenderedTelegram
     const heading = section.heading === undefined ? '' : `*${escapeMarkdownV2(section.heading)}*\n`
     lines.push(`${heading}${escapeMarkdownV2(section.body)}`)
   }
-  if (message.moreUrl !== undefined) {
-    lines.push(`[${escapeMarkdownV2('Voir le détail')}](${message.moreUrl})`)
-  }
-  return { text: lines.join('\n\n') }
+  const footer =
+    message.moreUrl === undefined
+      ? ''
+      : `\n\n[${escapeMarkdownV2('Voir le détail')}](${message.moreUrl})`
+
+  const body = lines.join('\n\n')
+  // Telegram's real limit applies to `body + footer` together — the footer
+  // (the reader's only way to the full detail) must never itself be the
+  // part that gets cut off, so the body is what shrinks.
+  const budget = TELEGRAM_MAX_TEXT_CHARS - footer.length
+  const truncated =
+    body.length > budget
+      ? `${body.slice(0, Math.max(0, budget - TRUNCATION_MARK.length))}${TRUNCATION_MARK}`
+      : body
+  return { text: `${truncated}${footer}` }
 }

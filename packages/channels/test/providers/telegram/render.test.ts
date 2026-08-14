@@ -58,4 +58,29 @@ describe('renderTelegramMessage', () => {
     expect(rendered.text).toContain('admin.example')
     expect(rendered.replyMarkup).toBeUndefined()
   })
+
+  it('truncates an oversized report body to stay within Telegram’s real 4096-character limit, without ever cutting the moreUrl footer', () => {
+    const message: ChannelMessage = {
+      level: 'report',
+      title: 'Rapport géant',
+      keyFigures: [{ label: 'x', value: '1' }],
+      sections: [{ body: 'x'.repeat(10_000) }],
+      moreUrl: 'https://admin.example/reports/huge',
+    }
+    const rendered = renderTelegramMessage(message)
+    expect(rendered.text.length).toBeLessThanOrEqual(4096)
+    expect(rendered.text).toContain('admin.example/reports/huge')
+    expect(rendered.text).toContain('…')
+  })
+
+  it('never exceeds 4096 characters even without a moreUrl to fall back on', () => {
+    const message: ChannelMessage = {
+      level: 'report',
+      title: 'Rapport géant sans repli',
+      keyFigures: [{ label: 'x', value: '1' }],
+      sections: [{ body: 'x'.repeat(10_000) }],
+    }
+    const rendered = renderTelegramMessage(message)
+    expect(rendered.text.length).toBeLessThanOrEqual(4096)
+  })
 })

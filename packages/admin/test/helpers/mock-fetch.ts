@@ -15,15 +15,36 @@ export const MOCK_SCHEMA = {
     {
       name: 'article',
       labels: { singular: 'Article', plural: 'Articles' },
-      permissions: { read: ['public'], create: ['editor'] },
+      permissions: { read: ['public'], create: ['editor'], delete: ['editor'] },
+      fields: [],
     },
     {
       name: 'secret-memo',
       labels: { singular: 'Secret memo', plural: 'Secret memos' },
       permissions: { read: ['admin'] },
+      fields: [],
     },
   ],
 }
+
+export const MOCK_ENTRIES = [
+  {
+    id: 'entry-1',
+    status: 'published',
+    version: 2,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-02-01T00:00:00.000Z',
+    values: { title: 'First article' },
+  },
+  {
+    id: 'entry-2',
+    status: 'draft',
+    version: 1,
+    createdAt: '2026-01-02T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    values: { title: 'Second article' },
+  },
+]
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -139,6 +160,25 @@ export function installMockFetch(
 
       if (url.endsWith('/api/schema') && method === 'GET') {
         return json(200, { data: MOCK_SCHEMA })
+      }
+
+      const contentMatch = /\/api\/content\/([^/?]+)(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
+      if (contentMatch !== null) {
+        const [, collection, id] = contentMatch
+
+        if (collection === 'article' && id === undefined && method === 'GET') {
+          const parsed = new URL(url, 'http://localhost')
+          const statusFilter = parsed.searchParams.get('status')
+          const items =
+            statusFilter === null
+              ? MOCK_ENTRIES
+              : MOCK_ENTRIES.filter((entry) => entry.status === statusFilter)
+          return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+        }
+
+        if (collection === 'article' && id !== undefined && method === 'DELETE') {
+          return new Response(null, { status: 204 })
+        }
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

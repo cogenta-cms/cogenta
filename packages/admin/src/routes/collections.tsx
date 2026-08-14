@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { Link } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { readableCollections } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -9,8 +10,7 @@ import { useSchema } from '../schema/schema-context.js'
  * does not see the corresponding action, and a collection they cannot read
  * has no action here worth showing at all.
  *
- * List and edit views for one collection land in tasks 6-9; this is the
- * "which collections exist, for me" step ahead of them.
+ * Links to task 6's list view; the schema-driven edit form itself is task 7.
  */
 export function CollectionsRoute(): JSX.Element {
   const auth = useAuth()
@@ -28,7 +28,9 @@ export function CollectionsRoute(): JSX.Element {
       {schema.status === 'ready' && (
         <ul>
           {readableCollections(schema.schema.collections, roles).map((collection) => (
-            <li key={collection.name}>{collection.labels.plural}</li>
+            <li key={collection.name}>
+              <Link to={`/collections/${collection.name}`}>{collection.labels.plural}</Link>
+            </li>
           ))}
         </ul>
       )}

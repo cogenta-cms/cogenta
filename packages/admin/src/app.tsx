@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import { AuditRoute } from './routes/audit.js'
+import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { LoginRoute } from './routes/login.js'
@@ -35,6 +36,7 @@ export function App(): JSX.Element {
           >
             <Route index element={<DashboardRoute />} />
             <Route path="collections" element={<CollectionsRoute />} />
+            <Route path="collections/:name" element={<CollectionListRoute />} />
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />
           </Route>

@@ -9,6 +9,22 @@ export interface MockUser {
 export const USER: MockUser = { id: 'user-1', email: 'alice@example.com', roles: ['editor'] }
 export const VALID_TOKEN = 'valid-test-token'
 
+export const MOCK_SCHEMA = {
+  contract: 'schema@1.0',
+  collections: [
+    {
+      name: 'article',
+      labels: { singular: 'Article', plural: 'Articles' },
+      permissions: { read: ['public'], create: ['editor'] },
+    },
+    {
+      name: 'secret-memo',
+      labels: { singular: 'Secret memo', plural: 'Secret memos' },
+      permissions: { read: ['admin'] },
+    },
+  ],
+}
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -119,6 +135,10 @@ export function installMockFetch(
           })
         }
         return json(200, { data: session() })
+      }
+
+      if (url.endsWith('/api/schema') && method === 'GET') {
+        return json(200, { data: MOCK_SCHEMA })
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

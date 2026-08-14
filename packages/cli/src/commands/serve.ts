@@ -28,11 +28,13 @@ import {
   loadConfig,
 } from '@cogenta/core'
 import {
+  buildSchemaDocument,
   type CollectionDefinition,
   type ContentStore,
   createContentStore,
   createRedirectStore,
   createSchemaTables,
+  type SchemaDocument,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
@@ -110,6 +112,8 @@ interface Site {
   readonly authRouter: AuthRouter
   readonly graphqlSchema: GraphQLSchema
   readonly gateway: ReturnType<typeof createContentGateway>
+  /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
+  readonly schemaDocument: SchemaDocument
   dispose(): Promise<void>
 }
 
@@ -162,6 +166,7 @@ async function assembleSite(
     authRouter: createAuthRouter({ auth }),
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
+    schemaDocument: buildSchemaDocument(collections),
     dispose: async () => {
       await db.close()
     },
@@ -237,6 +242,19 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.authRouter.handle(request))
+        return
+      }
+
+      // Public and read-only: `schema.json` describes collection shapes and
+      // which role names an action needs, never any content — the admin
+      // reads this to know what to show before it has ever signed in.
+      if (url.pathname === '/api/schema') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ data: site.schemaDocument }))
         return
       }
 

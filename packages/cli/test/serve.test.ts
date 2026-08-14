@@ -192,4 +192,31 @@ describe('runServe', () => {
       await server.stop()
     }
   })
+
+  it('serves schema.json, with permissions, for the admin to read', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/api/schema`)
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        data: { collections: readonly { name: string; permissions: Record<string, string[]> }[] }
+      }
+      const article = body.data.collections.find((c) => c.name === 'article')
+      expect(article?.permissions.create).toEqual(['editor'])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('refuses a non-GET method on /api/schema', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/api/schema`, { method: 'POST' })
+      expect(response.status).toBe(405)
+    } finally {
+      await server.stop()
+    }
+  })
 })

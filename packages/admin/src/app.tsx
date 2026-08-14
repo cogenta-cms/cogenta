@@ -7,12 +7,16 @@ import { CollectionsRoute } from './routes/collections.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
+import { SchemaProvider } from './schema/schema-context.js'
 import { AppShell } from './shell/app-shell.js'
 
 /**
  * Routing skeleton for L2 task 1, now with task 2's password/session guard:
  * `/login` is the only public route, and everything under `AppShell` needs
  * an authenticated session or bounces to it, remembering where it came from.
+ *
+ * `SchemaProvider` wraps only the authenticated section — `/login` has no
+ * use for `/api/schema`, so it does not pay for fetching it.
  */
 export function App(): JSX.Element {
   return (
@@ -23,7 +27,9 @@ export function App(): JSX.Element {
           <Route
             element={
               <RequireAuth>
-                <AppShell />
+                <SchemaProvider>
+                  <AppShell />
+                </SchemaProvider>
               </RequireAuth>
             }
           >

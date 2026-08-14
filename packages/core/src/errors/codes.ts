@@ -188,6 +188,9 @@ export const ERROR_CODES = [
   // Channels — message formats (L6 task 6)
   'CHANNEL_MESSAGE_INVALID',
 
+  // Channels — notification preferences (L6 task 7)
+  'CHANNEL_PREFERENCES_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

@@ -66,6 +66,28 @@ export type { ChannelLinkStore, GeneratedLinkCode, LinkedChannel } from './linki
 export { createChannelLinkStore } from './linking/store.js'
 export { ensureChannelTables, LINKING_TABLES } from './linking/tables.js'
 export type {
+  CreateNotificationDispatcherOptions,
+  NotificationDispatcher,
+  NotifyInput,
+  NotifyOutcome,
+} from './preferences/dispatcher.js'
+export { createNotificationDispatcher } from './preferences/dispatcher.js'
+export { isWithinQuietHours, minuteOfDayUtc } from './preferences/quiet-hours.js'
+export type { PreferenceStore } from './preferences/store.js'
+export { createPreferenceStore } from './preferences/store.js'
+export { ensurePreferenceTables, PREFERENCE_TABLES } from './preferences/tables.js'
+export type {
+  ChannelEventType,
+  ChannelPreferences,
+  GroupingMode,
+  QuietHours,
+} from './preferences/types.js'
+export {
+  CHANNEL_EVENT_TYPES,
+  DEFAULT_CHANNEL_PREFERENCES,
+  SEVERITY_RANK,
+} from './preferences/types.js'
+export type {
   TelegramAdapter,
   TelegramAdapterOptions,
   TelegramLinkProof,

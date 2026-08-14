@@ -50,6 +50,7 @@ export const MOCK_ENTRIES = [
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
     values: { title: 'First article' },
+    blocks: {},
   },
   {
     id: 'entry-2',
@@ -58,6 +59,7 @@ export const MOCK_ENTRIES = [
     createdAt: '2026-01-02T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
     values: { title: 'Second article' },
+    blocks: {},
   },
 ]
 
@@ -209,6 +211,7 @@ export function installMockFetch(
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
             values: body.values ?? {},
+            blocks: body.blocks ?? {},
           }
           return json(201, { data: created })
         }
@@ -220,7 +223,13 @@ export function installMockFetch(
               error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
             })
           }
-          return json(200, { data: { ...entry, values: { ...entry.values, ...body.values } } })
+          return json(200, {
+            data: {
+              ...entry,
+              values: { ...entry.values, ...body.values },
+              blocks: { ...entry.blocks, ...body.blocks },
+            },
+          })
         }
 
         if (collection === 'article' && id !== undefined && method === 'DELETE') {

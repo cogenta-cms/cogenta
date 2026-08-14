@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import type { ContentBlock } from '../api/content-client.js'
 import type { RichTextDocument } from '../rich-text/portable-text.js'
 import type { SchemaField } from '../schema/types.js'
 import { BlocksField } from './blocks-field.js'
@@ -58,6 +59,6 @@ export function FieldInput(props: FieldInputProps): JSX.Element {
     case 'relation':
       return <RelationField {...props} />
     case 'blocks':
-      return <BlocksField {...props} />
+      return <BlocksField {...props} value={props.value as readonly ContentBlock[] | undefined} />
   }
 }

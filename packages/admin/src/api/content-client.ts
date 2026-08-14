@@ -7,6 +7,16 @@ import { authHeader, request, requestBody } from './http.js'
  * document shape: this is a browser bundle, and that package is Node code.
  */
 
+/** One block of a block zone — contract B's `key`/`type`/`data`, the wire shape `/api/content/*` actually sends and accepts (not `@cogenta/blocks`'s internal `_key`/`_type`/`_version` envelope). */
+export interface ContentBlock {
+  readonly key: string
+  readonly type: string
+  readonly data: Readonly<Record<string, unknown>>
+}
+
+/** Block zones of an entry, keyed by the name of the `blocks` field. */
+export type BlockZones = Readonly<Record<string, readonly ContentBlock[]>>
+
 export interface Entry {
   readonly id: string
   readonly status: string
@@ -14,6 +24,7 @@ export interface Entry {
   readonly createdAt: string
   readonly updatedAt: string
   readonly values: Readonly<Record<string, unknown>>
+  readonly blocks: BlockZones
 }
 
 export interface EntryPage {
@@ -82,11 +93,12 @@ export function createEntry(
   token: string,
   collection: string,
   values: Readonly<Record<string, unknown>>,
+  blocks?: BlockZones,
 ): Promise<Entry> {
   return request(`/api/content/${encodeURIComponent(collection)}`, {
     method: 'POST',
     headers: authHeader(token),
-    body: JSON.stringify({ values }),
+    body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
   })
 }
 
@@ -95,10 +107,11 @@ export function updateEntry(
   collection: string,
   id: string,
   values: Readonly<Record<string, unknown>>,
+  blocks?: BlockZones,
 ): Promise<Entry> {
   return request(`/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: authHeader(token),
-    body: JSON.stringify({ values }),
+    body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
   })
 }

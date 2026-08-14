@@ -1,6 +1,7 @@
 import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
+import type { BlockZones } from '../api/content-client.js'
 import { createEntry, getEntry, updateEntry } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { EntryForm } from '../collections/entry-form.js'
@@ -26,6 +27,7 @@ export function EntryEditRoute(): JSX.Element {
     schema.status === 'ready' ? schema.schema.collections.find((c) => c.name === name) : undefined
 
   const [values, setValues] = useState<Record<string, unknown>>({})
+  const [blocks, setBlocks] = useState<BlockZones>({})
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +42,10 @@ export function EntryEditRoute(): JSX.Element {
     setLoading(true)
     getEntry(token, name, id)
       .then((entry) => {
-        if (!cancelled) setValues({ ...entry.values })
+        if (!cancelled) {
+          setValues({ ...entry.values })
+          setBlocks({ ...entry.blocks })
+        }
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
@@ -61,6 +66,10 @@ export function EntryEditRoute(): JSX.Element {
     setValues((current) => ({ ...current, [field]: value }))
   }
 
+  function setBlockZone(zone: string, value: unknown): void {
+    setBlocks((current) => ({ ...current, [zone]: value as BlockZones[string] }))
+  }
+
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
@@ -69,13 +78,14 @@ export function EntryEditRoute(): JSX.Element {
     setSaved(false)
     try {
       if (isNew) {
-        const entry = await createEntry(token, name, values)
+        const entry = await createEntry(token, name, values, blocks)
         navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`, {
           replace: true,
         })
       } else if (id !== undefined) {
-        const entry = await updateEntry(token, name, id, values)
+        const entry = await updateEntry(token, name, id, values, blocks)
         setValues({ ...entry.values })
+        setBlocks({ ...entry.blocks })
         setSaved(true)
       }
     } catch (caught) {
@@ -124,7 +134,9 @@ export function EntryEditRoute(): JSX.Element {
         <EntryForm
           collection={collection}
           values={values}
+          blocks={blocks}
           onChange={setFieldValue}
+          onBlocksChange={setBlockZone}
           disabled={!canWrite}
         />
 

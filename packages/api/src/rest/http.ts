@@ -80,6 +80,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AUTH_USER_EXISTS: 409,
   AUTH_USER_NOT_FOUND: 404,
   AUTH_ROLE_UNKNOWN: 400,
+
+  // A verified-broken chain is a server-side integrity failure, not
+  // something the caller's request could have avoided — the default 500
+  // already fits, spelled out so it is not mistaken for an oversight.
+  AUDIT_CHAIN_BROKEN: 500,
 }
 
 export function statusFor(code: ErrorCode): number {

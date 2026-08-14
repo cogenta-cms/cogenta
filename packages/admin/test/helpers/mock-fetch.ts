@@ -87,13 +87,16 @@ export function installMockFetch(
     readonly requireTotpSetup?: boolean
     /** When set, `/api/schema` reports these as `site.locales` (ADR-0014's translation family switcher only renders with 2+). */
     readonly siteLocales?: readonly string[]
+    /** Overrides the signed-in user's roles — `['editor']` by default. */
+    readonly roles?: readonly string[]
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
+  const user = options.roles === undefined ? USER : { ...USER, roles: options.roles }
   const session = () => ({
     status: 'session',
     session: { id: 'session-1', token: VALID_TOKEN, expiresAt: '2030-01-01T00:00:00.000Z' },
-    user: USER,
+    user,
   })
 
   // Media state lives per `installMockFetch()` call — each test starts with
@@ -169,7 +172,7 @@ export function installMockFetch(
       }
 
       if (url.endsWith('/api/auth/session') && method === 'GET') {
-        if (auth === `Bearer ${VALID_TOKEN}`) return json(200, { data: USER })
+        if (auth === `Bearer ${VALID_TOKEN}`) return json(200, { data: user })
         return json(401, { error: { code: 'AUTH_SESSION_INVALID', message: 'No active session.' } })
       }
 
@@ -207,6 +210,33 @@ export function installMockFetch(
             ? {}
             : { site: { locales: options.siteLocales, defaultLocale: options.siteLocales[0] } }
         return json(200, { data: { ...MOCK_SCHEMA, ...site } })
+      }
+
+      if (url.includes('/api/audit')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read the audit log.' },
+          })
+        }
+        if (url.includes('/api/audit/verify')) {
+          return json(200, { data: { ok: true } })
+        }
+        return json(200, {
+          data: [
+            {
+              id: 'audit-1',
+              at: '2026-03-01T00:00:00.000Z',
+              actorId: 'user-1',
+              actorRoles: ['editor'],
+              action: 'content.create',
+              collection: 'article',
+              entryId: 'entry-1',
+              diff: { title: 'First article' },
+              hash: 'abc',
+              previousHash: null,
+            },
+          ],
+        })
       }
 
       const versionMatch =

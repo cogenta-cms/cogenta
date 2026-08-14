@@ -4,8 +4,10 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
   type AccessContext,
+  type AuditRouter,
   type AuthRouter,
   buildContentSchema,
+  createAuditRouter,
   createAuthRouter,
   createContentGateway,
   createContentService,
@@ -117,6 +119,7 @@ interface Site {
   readonly restRouter: RestRouter
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
+  readonly auditRouter: AuditRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -183,6 +186,7 @@ async function assembleSite(
     restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({ auth }),
     mediaRouter: createMediaRouter({ store: mediaStore, storage }),
+    auditRouter: createAuditRouter({ audit: auth.audit }),
     mediaStore,
     storage,
     graphqlSchema: buildContentSchema({ collections }),
@@ -233,6 +237,143 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
     headers,
     ...(body === undefined ? {} : { body }),
   }
+}
+
+function responseId(response: RestResponse): string | undefined {
+  const data = (response.body as { readonly data?: { readonly id?: unknown } } | null)?.data
+  return typeof data?.id === 'string' ? data.id : undefined
+}
+
+/**
+ * Every mutation lands in `@cogenta/auth`'s hash-chained audit log
+ * (`packages/auth/src/audit.ts`), which existed since L2's own `AuthStore`
+ * was built but had no writer until now. Recording here, at the transport
+ * boundary, rather than inside `ContentService`/`MediaRouter`, means every
+ * route that mutates something is covered by one place instead of every
+ * write path remembering to call it — the same reasoning that keeps actor
+ * resolution itself at this layer rather than duplicated per route.
+ *
+ * Never blocks or fails the response it is auditing: a write that succeeded
+ * must reach the caller whether or not the audit row could be appended, and
+ * a broken audit log is something `verify()` surfaces on its own.
+ */
+async function recordContentAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  body: unknown,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+  const segments = pathname
+    .replace(/^\/api\/content\/?/u, '')
+    .split('/')
+    .filter((segment) => segment.length > 0)
+  const [collection, id, subAction] = segments
+  if (collection === undefined || collection === '-') return
+
+  const action =
+    subAction === 'publish'
+      ? 'content.publish'
+      : subAction === 'restore'
+        ? 'content.restore'
+        : subAction !== undefined
+          ? null // history/diff/preview/translations are reads
+          : method === 'POST'
+            ? 'content.create'
+            : method === 'PATCH' || method === 'PUT'
+              ? 'content.update'
+              : method === 'DELETE'
+                ? 'content.delete'
+                : null
+  if (action === null) return
+
+  const entryId = id ?? responseId(response)
+  const values =
+    typeof body === 'object' && body !== null && 'values' in body
+      ? (body as { readonly values?: Record<string, unknown> }).values
+      : undefined
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action,
+      collection,
+      ...(entryId === undefined ? {} : { entryId }),
+      ...(values === undefined ? {} : { diff: values }),
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+async function recordMediaAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+  const [id] = pathname
+    .replace(/^\/api\/media\/?/u, '')
+    .split('/')
+    .filter((segment) => segment.length > 0)
+
+  const action =
+    method === 'POST'
+      ? 'media.upload'
+      : method === 'PATCH' || method === 'PUT'
+        ? 'media.update'
+        : method === 'DELETE'
+          ? 'media.delete'
+          : null
+  if (action === null) return
+
+  const entryId = id ?? responseId(response)
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action,
+      ...(entryId === undefined ? {} : { entryId }),
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+async function recordAuthAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+
+  if (pathname.endsWith('/api/auth/session') && method === 'DELETE') {
+    await site.auth.audit
+      .record({ actorId: actor.id, actorRoles: actor.roles, action: 'auth.logout' })
+      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+    return
+  }
+
+  // Login, TOTP completion and passkey completion all land here the same
+  // way: whichever step actually produced a session is the one worth
+  // recording, not every intermediate MFA round trip.
+  const data = (response.body as { readonly data?: { readonly status?: unknown } } | null)?.data
+  if (data?.status !== 'session') return
+  const user = (data as { readonly user?: { readonly id?: unknown; readonly roles?: unknown } })
+    .user
+  const userId = typeof user?.id === 'string' ? user.id : null
+  const roles = Array.isArray(user?.roles) ? (user.roles as string[]) : []
+
+  await site.auth.audit
+    .record({ actorId: userId, actorRoles: roles, action: 'auth.login' })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
 function writeRestResponse(res: ServerResponse, response: RestResponse): void {
@@ -298,11 +439,24 @@ export function createRequestListener(
     const url = new URL(req.url ?? '/', 'http://localhost')
 
     try {
+      const actor = await resolveActor(
+        site.auth,
+        Object.fromEntries(
+          Object.entries(req.headers).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? value.join(', ') : value,
+          ]),
+        ),
+      )
+      const context: AccessContext = { actor }
+
       if (url.pathname.startsWith('/api/auth/')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.authRouter.handle(request))
+        const response = await site.authRouter.handle(request)
+        writeRestResponse(res, response)
+        await recordAuthAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
         return
       }
 
@@ -318,17 +472,6 @@ export function createRequestListener(
         res.end(JSON.stringify({ data: site.schemaDocument }))
         return
       }
-
-      const actor = await resolveActor(
-        site.auth,
-        Object.fromEntries(
-          Object.entries(req.headers).map(([key, value]) => [
-            key,
-            Array.isArray(value) ? value.join(', ') : value,
-          ]),
-        ),
-      )
-      const context: AccessContext = { actor }
 
       // Serving the file itself sits outside `mediaRouter`: its `RestResponse`
       // is JSON-only, and a binary body has no shape to fit into that without
@@ -368,7 +511,17 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.restRouter.handle(request, context))
+        const response = await site.restRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordContentAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          body,
+          response,
+          logger,
+        )
         return
       }
 
@@ -376,7 +529,15 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.mediaRouter.handle(request, context.actor))
+        const response = await site.mediaRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordMediaAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        return
+      }
+
+      if (url.pathname.startsWith('/api/audit')) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
         return
       }
 

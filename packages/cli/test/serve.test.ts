@@ -67,6 +67,42 @@ async function project(): Promise<string> {
   return root
 }
 
+/**
+ * Signs in a user whose role can publish, completing the mandatory TOTP
+ * enrolment along the way (roles that can publish are always MFA-sensitive
+ * — see `packages/auth/src/mfa.ts` — so login never returns a session on
+ * the first call for one of them). Returns the bearer token.
+ */
+async function loginWithMfaSetup(base: string, email: string, password: string): Promise<string> {
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  const loginBody = (await login.json()) as { data: { status: string; ticket: string } }
+  if (loginBody.data.status !== 'totp_setup_required') {
+    throw new Error(`expected totp_setup_required, got ${loginBody.data.status}`)
+  }
+
+  const setup = await fetch(`${base}/api/auth/totp-setup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ticket: loginBody.data.ticket }),
+  })
+  const setupBody = (await setup.json()) as { data: { secret: string } }
+
+  const confirmed = await fetch(`${base}/api/auth/totp-setup-confirm`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ticket: loginBody.data.ticket,
+      token: codeFor(setupBody.data.secret, Date.now() / 1000),
+    }),
+  })
+  const confirmedBody = (await confirmed.json()) as { data: { session: { token: string } } }
+  return confirmedBody.data.session.token
+}
+
 const activeServers: AbortController[] = []
 
 async function startServer(root: string): Promise<{ base: string; stop: () => Promise<void> }> {
@@ -409,6 +445,64 @@ describe('runServe', () => {
 
       const anonymousFile = await fetch(`${server.base}/api/media/${uploadedBody.data.id}/file`)
       expect(anonymousFile.status).toBe(401)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('records logins and content writes in the audit log, readable only by admin', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const editor = await users.create({ email: 'editor@example.com', roles: ['editor'] })
+      await credentials.setPassword(editor.id, 'correct horse battery staple')
+      const admin = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+      await credentials.setPassword(admin.id, 'correct horse battery staple')
+      await db.close()
+
+      const editorToken = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      await fetch(`${server.base}/api/content/article`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${editorToken}` },
+        body: JSON.stringify({ values: { title: 'Audited article' } }),
+      })
+
+      const adminToken = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const auditHeaders = { authorization: `Bearer ${adminToken}` }
+
+      const asEditor = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${editorToken}` },
+      })
+      expect(asEditor.status).toBe(403)
+
+      const asAdmin = await fetch(`${server.base}/api/audit`, { headers: auditHeaders })
+      expect(asAdmin.status).toBe(200)
+      const entries = (await asAdmin.json()) as {
+        data: { action: string; actorId: string | null }[]
+      }
+      const actions = entries.data.map((entry) => entry.action)
+      expect(actions).toContain('content.create')
+      expect(actions.filter((action) => action === 'auth.login').length).toBeGreaterThanOrEqual(2)
+
+      const verify = await fetch(`${server.base}/api/audit/verify`, { headers: auditHeaders })
+      expect(verify.status).toBe(200)
+      expect(((await verify.json()) as { data: { ok: boolean } }).data.ok).toBe(true)
     } finally {
       await server.stop()
     }

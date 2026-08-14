@@ -470,3 +470,53 @@ cette tâche : les listes noires de XSS SVG sont connues pour être incomplètes
 d'espaces de noms, entités, `foreignObject`) ; ce n'est pas un travail à faire en passant
 dans une tâche d'admin. Convertir tout SVG en PNG à l'upload : perd la vectorialité,
 qui est la seule raison de téléverser un SVG plutôt qu'un PNG/WebP.
+
+---
+
+## ADR-0018 — Le journal d'audit se lit, mais seulement par `admin`
+
+**Statut** : Acté
+
+**Contexte** — `packages/auth` porte depuis L2 un journal d'audit à chaînage de hash
+(`createAuditLog`, `docs/02-architecture.md` § 4.7), généreux exprès pour que L4 n'ait
+qu'à devenir un second rédacteur. Personne n'y écrivait encore et rien ne l'exposait :
+la tâche 14 de L2 (« Journal d'audit consultable et filtrable ») en fait le premier
+rédacteur réel (connexions, écritures de contenu, médias) et lui donne une route REST.
+Aucune décision n'existait sur qui a le droit de le lire — le journal nomme, par
+construction, l'identité et l'activité de tous les comptes, ce qui en fait une surface
+différente d'une simple liste de contenu.
+
+**Décision** — `GET /api/audit` (liste, filtrable par acteur/action/collection/date) et
+`GET /api/audit/verify` (intégrité de la chaîne) sont réservés au rôle `admin`. Aucun
+autre rôle, même `editor` capable de publier, n'y a accès — la lecture de l'audit n'est
+pas un privilège qu'on étend à qui peut déjà beaucoup, c'est une capacité à part.
+
+L'écriture, elle, est automatique et non désactivable : chaque connexion, création,
+mise à jour, suppression, publication, restauration et opération média réussie produit
+une entrée, enregistrée à la couche transport (`cogenta serve`) plutôt que dans chaque
+service, pour qu'aucun nouveau point d'écriture n'ait à s'en souvenir séparément.
+
+**Justification** — Le rôle `admin` est déjà, dans ce lot, celui où la MFA est
+obligatoire sans exception (`packages/auth/src/mfa.ts`, `ALWAYS_SENSITIVE_ROLES`) et
+celui « où le pouvoir se concentre tant qu'un modèle dédié n'existe pas » selon son
+propre commentaire — le journal d'audit est exactement le genre de pouvoir qui doit
+rester concentré là plutôt que de fuir vers un rôle créé pour un besoin de contenu.
+Un enregistrement qui échoue ne doit jamais faire échouer l'action qu'il journalise :
+une écriture de contenu réussie doit atteindre l'appelant que la ligne d'audit ait pu
+être ajoutée ou non — c'est `verify()` qui révèle une chaîne cassée, pas une requête
+utilisateur bloquée en attendant.
+
+**Conséquences** — Un site à un seul rôle `admin` (le cas le plus commun au démarrage)
+peut déjà consulter son propre journal sans configuration supplémentaire. Un rôle
+personnalisé qui aurait besoin d'un accès de lecture partiel (par exemple, un rôle
+« conformité » qui ne publie rien) n'existe pas encore ; ce sera une extension du modèle
+de permissions, pas un contournement de cette règle.
+
+**Renoncement assumé** — Pas de granularité par collection ni par type d'action pour la
+lecture : `admin` voit tout ou rien. Un site qui voudrait déléguer la lecture du journal
+sans déléguer le rôle `admin` complet doit attendre ce modèle plus fin.
+
+**Écarté** — Réutiliser les permissions par collection (`read`/`create`/…) pour
+l'audit : le journal traverse toutes les collections et les connexions, il n'appartient
+à aucune d'elles — le forcer dans ce modèle aurait fait mentir un rôle qui ne lit qu'une
+collection en lui laissant croire qu'il ne voit que « son » activité.

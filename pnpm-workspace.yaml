@@ -11,6 +11,7 @@ catalog:
   '@aws-sdk/s3-request-presigner': ^3.1109.0
   '@redis/client': ^6.2.1
   astro: ^7.2.1
+  'axe-core': ^4.13.0
   '@simplewebauthn/browser': ^13.3.0
   '@simplewebauthn/server': ^13.3.2
   '@testing-library/dom': ^10.4.1

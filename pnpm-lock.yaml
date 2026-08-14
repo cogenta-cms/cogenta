@@ -42,6 +42,9 @@ catalogs:
     astro:
       specifier: ^7.2.1
       version: 7.2.1
+    axe-core:
+      specifier: ^4.13.0
+      version: 4.13.0
     bullmq:
       specifier: ^6.1.0
       version: 6.1.0
@@ -180,6 +183,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.0.5(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.6.1)(yaml@2.9.0))
+      axe-core:
+        specifier: 'catalog:'
+        version: 4.13.0
       jsdom:
         specifier: 'catalog:'
         version: 27.4.0
@@ -1831,6 +1837,10 @@ packages:
   aws-ssl-profiles@1.1.2:
     resolution: {integrity: sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==}
     engines: {node: '>= 6.0.0'}
+
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
+    engines: {node: '>=4'}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -4821,6 +4831,8 @@ snapshots:
       - yaml
 
   aws-ssl-profiles@1.1.2: {}
+
+  axe-core@4.13.0: {}
 
   axobject-query@4.1.0: {}
 

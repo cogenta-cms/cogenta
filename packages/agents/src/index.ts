@@ -76,6 +76,18 @@ export { planIncrementalIngestion } from './rag/chunking/incremental.js'
 export type { Chunk, ChunkableBlock, ChunkableDocument } from './rag/chunking/types.js'
 export { createHashingEmbeddingProvider } from './rag/embeddings/hashing-provider.js'
 export type { EmbeddingModelInfo, EmbeddingProvider } from './rag/embeddings/types.js'
+export { bm25Rank } from './rag/index/bm25.js'
+export { createMemoryRagIndex } from './rag/index/memory-index.js'
+export { reciprocalRankFusion } from './rag/index/rrf.js'
+export type {
+  HybridSearchOptions,
+  HybridSearchQuery,
+  HybridSearchResult,
+  IndexedChunk,
+  RagIndex,
+  RankedId,
+} from './rag/index/types.js'
+export { vectorRank } from './rag/index/vector-rank.js'
 export type { DiffChangeKind, DiffEntry } from './reversibility/diff.js'
 export { diffValues } from './reversibility/diff.js'
 export { createMemoryReceiptStore } from './reversibility/receipt-store.js'

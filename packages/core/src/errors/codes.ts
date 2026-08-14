@@ -179,6 +179,9 @@ export const ERROR_CODES = [
   // Channels — identity linking (L6 task 2)
   'CHANNEL_LINK_CODE_INVALID',
 
+  // Channels — inbound command routing (L6 task 3)
+  'CHANNEL_COMMAND_DUPLICATE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

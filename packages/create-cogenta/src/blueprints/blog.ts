@@ -1,11 +1,18 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
+import type { DatabaseHandle } from '@cogenta/core'
 import {
   type CollectionDefinition,
+  createContentStore,
   defineCollection,
   f,
   type RichTextDocument,
   validateCollectionSet,
 } from '@cogenta/schema'
+import {
+  type BlueprintContentPack,
+  type RecommendedAgentHint,
+  toBlockZoneEntry,
+} from './content-pack.js'
 
 /**
  * The `blog` blueprint's content model (L9 task 3).
@@ -292,22 +299,6 @@ export const BLOG_DEMO_PAGES: readonly BlogDemoPage[] = [
   },
 ]
 
-export interface RecommendedAgentHint {
-  readonly name: string
-  readonly package: string
-  readonly reason: string
-}
-
-/**
- * Names, and does not wire, the agents this blueprint recommends.
- *
- * No site anywhere in this codebase constructs a live `AgentRegistry` yet
- * (see `Site.agentsRouter` in `@cogenta/cli`'s `serve.ts`) — R2 requires the
- * CMS to work with no AI provider configured at all. Pretending to schedule
- * these agents from the installer would be dishonest about what actually
- * runs; naming them here is the scoped, truthful version of "agents
- * préconfigurés" until a live scheduler exists somewhere to preconfigure.
- */
 export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
     name: 'seoAgent',
@@ -320,3 +311,69 @@ export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
     reason: 'Flags terminology drift and topic gaps across the post archive.',
   },
 ]
+
+/**
+ * Inserts the `blog` blueprint's demo content through the real `ContentStore`
+ * — never mocked (house rule) — so a scaffolded blog blueprint has genuine
+ * rows to look at, not a claim that it does.
+ */
+async function seedBlogDemoContent(
+  db: DatabaseHandle,
+  defaultLocale: string,
+  adminId: string | null,
+): Promise<void> {
+  const categoryStore = createContentStore({ db, collection: category, defaultLocale })
+  const tagStore = createContentStore({ db, collection: tag, defaultLocale })
+  const postStore = createContentStore({ db, collection: post, defaultLocale })
+  const pageStore = createContentStore({ db, collection: page, defaultLocale })
+
+  const categoryIdBySlug = new Map<string, string>()
+  for (const demo of BLOG_DEMO_CATEGORIES) {
+    const entry = await categoryStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: { name: demo.name, slug: demo.slug },
+    })
+    categoryIdBySlug.set(demo.slug, entry.id)
+  }
+
+  const tagIdBySlug = new Map<string, string>()
+  for (const demo of BLOG_DEMO_TAGS) {
+    const entry = await tagStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: { name: demo.name, slug: demo.slug },
+    })
+    tagIdBySlug.set(demo.slug, entry.id)
+  }
+
+  for (const demo of BLOG_DEMO_POSTS) {
+    await postStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: {
+        title: demo.title,
+        slug: demo.slug,
+        excerpt: demo.excerpt,
+        body: demo.body,
+        category: categoryIdBySlug.get(demo.categorySlug) ?? null,
+        tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
+      },
+    })
+  }
+
+  for (const demo of BLOG_DEMO_PAGES) {
+    await pageStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: { title: demo.title, slug: demo.slug },
+      blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
+    })
+  }
+}
+
+export const blogContentPack: BlueprintContentPack = {
+  collections: BLOG_COLLECTIONS,
+  recommendedAgents: BLOG_RECOMMENDED_AGENTS,
+  seedDemoContent: seedBlogDemoContent,
+}

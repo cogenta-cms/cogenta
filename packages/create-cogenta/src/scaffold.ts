@@ -2,23 +2,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
-import type { VocabularyBlock } from '@cogenta/blocks'
 import { createOutput, runMigrate, runUsers } from '@cogenta/cli'
-import { createDatabaseRegistry, createLogger, type DatabaseHandle } from '@cogenta/core'
+import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
-import { type CollectionDefinition, createContentStore, createSchemaTables } from '@cogenta/schema'
-import {
-  BLOG_COLLECTIONS,
-  BLOG_DEMO_CATEGORIES,
-  BLOG_DEMO_PAGES,
-  BLOG_DEMO_POSTS,
-  BLOG_DEMO_TAGS,
-  BLOG_RECOMMENDED_AGENTS,
-  category,
-  page,
-  post,
-  tag,
-} from './blueprints/blog.js'
+import { type CollectionDefinition, createSchemaTables } from '@cogenta/schema'
+import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 
 export interface ScaffoldAnswers {
@@ -133,91 +121,17 @@ async function canonicalTokensJson(): Promise<string> {
 }
 
 /**
- * A `VocabularyBlock` (contract B: `_key`/`_type`/`_version` plus its own
- * fields) as the block zone `f.blocks()` stores it: `key`/`type`/`data`,
- * where `data` is everything but the three contract-B envelope fields.
- */
-function toBlockZoneEntry(block: VocabularyBlock): {
-  key: string
-  type: string
-  data: Record<string, unknown>
-} {
-  const { _key, _type, _version: _discard, ...data } = block
-  return { key: _key, type: _type, data }
-}
-
-/**
- * Inserts the `blog` blueprint's demo content through the real `ContentStore`
- * — never mocked (house rule) — so a scaffolded blog blueprint has genuine
- * rows to look at, not a claim that it does.
- */
-async function seedBlogDemoContent(
-  db: DatabaseHandle,
-  defaultLocale: string,
-  adminId: string | null,
-): Promise<void> {
-  const categoryStore = createContentStore({ db, collection: category, defaultLocale })
-  const tagStore = createContentStore({ db, collection: tag, defaultLocale })
-  const postStore = createContentStore({ db, collection: post, defaultLocale })
-  const pageStore = createContentStore({ db, collection: page, defaultLocale })
-
-  const categoryIdBySlug = new Map<string, string>()
-  for (const demo of BLOG_DEMO_CATEGORIES) {
-    const entry = await categoryStore.create({
-      status: 'published',
-      createdBy: adminId,
-      values: { name: demo.name, slug: demo.slug },
-    })
-    categoryIdBySlug.set(demo.slug, entry.id)
-  }
-
-  const tagIdBySlug = new Map<string, string>()
-  for (const demo of BLOG_DEMO_TAGS) {
-    const entry = await tagStore.create({
-      status: 'published',
-      createdBy: adminId,
-      values: { name: demo.name, slug: demo.slug },
-    })
-    tagIdBySlug.set(demo.slug, entry.id)
-  }
-
-  for (const demo of BLOG_DEMO_POSTS) {
-    await postStore.create({
-      status: 'published',
-      createdBy: adminId,
-      values: {
-        title: demo.title,
-        slug: demo.slug,
-        excerpt: demo.excerpt,
-        body: demo.body,
-        category: categoryIdBySlug.get(demo.categorySlug) ?? null,
-        tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
-      },
-    })
-  }
-
-  for (const demo of BLOG_DEMO_PAGES) {
-    await pageStore.create({
-      status: 'published',
-      createdBy: adminId,
-      values: { title: demo.title, slug: demo.slug },
-      blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
-    })
-  }
-}
-
-/**
  * Step 9: "Installation, migrations, contenu de démo." Writes the site's
  * own files, then genuinely runs it up — `runMigrate`/`runUsers` are the
  * exact functions `cogenta migrate up`/`cogenta users create` call, reused
  * rather than re-implemented, so a scaffolded site is provably the same
  * thing those commands would produce by hand afterwards.
  *
- * A blueprint beyond `blank` (currently only `blog`, L9 task 3) additionally
- * writes a content schema, materialises its tables, seeds real demo content,
- * applies a skin and records which agents it recommends — see
- * `./blueprints/blog.ts`. `blank` takes none of these branches, so its
- * output is unchanged.
+ * A blueprint with a real `BlueprintContentPack` (`./blueprints/content-packs.js`)
+ * additionally writes a content schema, materialises its tables, seeds real
+ * demo content, applies a skin and records which agents it recommends.
+ * `blank` (and any blueprint without a pack yet) takes none of these
+ * branches, so its output is unchanged.
  */
 export async function scaffoldSite(
   answers: ScaffoldAnswers,
@@ -234,12 +148,13 @@ export async function scaffoldSite(
   await writeFile(configPath, configFileContents(answers), 'utf8')
   await writeFile(join(answers.targetDir, 'package.json'), packageJsonContents(answers), 'utf8')
 
+  const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
   let schemaPath: string | undefined
   let skinSource: 'generated' | 'default' | undefined
 
-  if (blueprint.id === 'blog') {
+  if (pack !== undefined) {
     schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
-    await writeFile(schemaPath, schemaFileContents(BLOG_COLLECTIONS), 'utf8')
+    await writeFile(schemaPath, schemaFileContents(pack.collections), 'utf8')
     skinSource = answers.skinTokens === undefined ? 'default' : 'generated'
     const tokensJson =
       answers.skinTokens === undefined
@@ -248,7 +163,7 @@ export async function scaffoldSite(
     await writeFile(join(answers.targetDir, 'theme.tokens.json'), tokensJson, 'utf8')
     await writeFile(
       join(answers.targetDir, '.cogenta', 'recommended-agents.json'),
-      `${JSON.stringify(BLOG_RECOMMENDED_AGENTS, null, 2)}\n`,
+      `${JSON.stringify(pack.recommendedAgents, null, 2)}\n`,
       'utf8',
     )
   }
@@ -275,17 +190,17 @@ export async function scaffoldSite(
     stderr: usersStderr.write,
   })
 
-  if (blueprint.id === 'blog' && migrateExitCode === 0 && usersExitCode === 0) {
+  if (pack !== undefined && migrateExitCode === 0 && usersExitCode === 0) {
     const logger = createLogger({ level: 'silent' })
     const selection = await createDatabaseRegistry({ logger }).select({
       driver: answers.databaseDriver,
       url: databaseUrlFor(answers),
     })
     try {
-      await createSchemaTables(selection.instance, BLOG_COLLECTIONS)
+      await createSchemaTables(selection.instance, pack.collections)
       await ensureAuthTables(selection.instance)
       const admin = await createUserStore(selection.instance).byEmail(answers.adminEmail)
-      await seedBlogDemoContent(selection.instance, answers.defaultLocale, admin?.id ?? null)
+      await pack.seedDemoContent(selection.instance, answers.defaultLocale, admin?.id ?? null)
     } finally {
       await selection.dispose()
     }

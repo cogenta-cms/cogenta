@@ -12,12 +12,14 @@ const ARTICLE: CollectionSummary = {
     delete: ['admin'],
     publish: ['editor'],
   },
+  fields: [],
 }
 
 const MEMO: CollectionSummary = {
   name: 'memo',
   labels: { singular: 'Memo', plural: 'Memos' },
   permissions: { read: ['editor'], create: ['editor'], update: ['editor'] },
+  fields: [],
 }
 
 describe('canPerform', () => {
@@ -62,6 +64,7 @@ describe('readableCollections', () => {
       name: 'closed',
       labels: { singular: 'Closed', plural: 'Closed' },
       permissions: { read: ['admin'] },
+      fields: [],
     }
     expect(readableCollections([closed], ['viewer'])).toEqual([])
   })

@@ -7,6 +7,7 @@ import { useAuth } from '../auth/auth-context.js'
 import { EntryForm } from '../collections/entry-form.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
 
 /**
@@ -153,6 +154,20 @@ export function EntryEditRoute(): JSX.Element {
           </button>
         )}
       </form>
+
+      {!isNew && id !== undefined && token !== null && (
+        <VersionHistory
+          token={token}
+          collection={name}
+          entryId={id}
+          canRestore={canWrite}
+          onRestored={(entry) => {
+            setValues({ ...entry.values })
+            setBlocks({ ...entry.blocks })
+            setSaved(true)
+          }}
+        />
+      )}
     </section>
   )
 }

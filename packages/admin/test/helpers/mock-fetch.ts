@@ -179,6 +179,72 @@ export function installMockFetch(
         return json(200, { data: MOCK_SCHEMA })
       }
 
+      const versionMatch =
+        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore)(?:\?.*)?$/u.exec(url)
+      if (versionMatch !== null) {
+        const [, collection, id, action] = versionMatch
+
+        if (
+          collection === 'article' &&
+          id === 'entry-1' &&
+          action === 'history' &&
+          method === 'GET'
+        ) {
+          return json(200, {
+            data: [
+              {
+                version: 1,
+                status: 'draft',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                createdBy: 'user-1',
+                live: false,
+              },
+              {
+                version: 2,
+                status: 'published',
+                createdAt: '2026-02-01T00:00:00.000Z',
+                createdBy: 'user-1',
+                live: true,
+              },
+            ],
+          })
+        }
+
+        if (collection === 'article' && id === 'entry-1' && action === 'diff' && method === 'GET') {
+          return json(200, {
+            data: {
+              fields: [
+                {
+                  field: 'title',
+                  change: 'changed',
+                  before: 'First draft',
+                  after: 'First article',
+                },
+              ],
+              blocks: [],
+              changed: true,
+            },
+          })
+        }
+
+        if (
+          collection === 'article' &&
+          id === 'entry-1' &&
+          action === 'restore' &&
+          method === 'POST'
+        ) {
+          const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
+          if (entry === undefined) {
+            return json(404, {
+              error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+            })
+          }
+          return json(200, {
+            data: { ...entry, version: entry.version + 1, values: { title: 'Restored title' } },
+          })
+        }
+      }
+
       const contentMatch = /\/api\/content\/([^/?]+)(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
       if (contentMatch !== null) {
         const [, collection, id] = contentMatch

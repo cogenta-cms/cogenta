@@ -115,3 +115,78 @@ export function updateEntry(
     body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
   })
 }
+
+/** One entry of `GET /{collection}/{id}/history` — `packages/schema/src/store/types.ts`'s `VersionSummary`. */
+export interface VersionSummary {
+  readonly version: number
+  readonly status: string
+  readonly createdAt: string
+  readonly createdBy: string | null
+  /** True for the version the live row currently holds. */
+  readonly live: boolean
+}
+
+export type ChangeKind = 'added' | 'removed' | 'changed'
+
+export interface FieldChange {
+  readonly field: string
+  readonly change: ChangeKind
+  readonly before: unknown
+  readonly after: unknown
+}
+
+export interface BlockChange {
+  readonly zone: string
+  readonly key: string
+  readonly type: string
+  readonly change: ChangeKind | 'moved'
+  readonly fromIndex: number | null
+  readonly toIndex: number | null
+  /** Populated for `changed`: what changed inside the block. */
+  readonly fields: readonly FieldChange[]
+}
+
+/** `GET /{collection}/{id}/diff`'s response — a field-by-field and block-by-block diff, never a diff of a serialisation (`packages/schema/src/store/diff.ts`). */
+export interface ContentDiff {
+  readonly fields: readonly FieldChange[]
+  readonly blocks: readonly BlockChange[]
+  readonly changed: boolean
+}
+
+export function getHistory(
+  token: string,
+  collection: string,
+  id: string,
+): Promise<readonly VersionSummary[]> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/history`,
+    { headers: authHeader(token) },
+  )
+}
+
+export function getDiff(
+  token: string,
+  collection: string,
+  id: string,
+  from: number,
+  to: number,
+): Promise<ContentDiff> {
+  const params = new URLSearchParams({ from: String(from), to: String(to) })
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/diff?${params.toString()}`,
+    { headers: authHeader(token) },
+  )
+}
+
+/** Restore writes a new working version copied from `version` — it never republishes on its own, and never rewinds the version counter (rule R6: reversible, and the restore itself stays undoable). */
+export function restoreVersion(
+  token: string,
+  collection: string,
+  id: string,
+  version: number,
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/restore`,
+    { method: 'POST', headers: authHeader(token), body: JSON.stringify({ version }) },
+  )
+}

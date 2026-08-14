@@ -23,8 +23,8 @@ La commande `/lot <L0..L9>` fait ce chargement pour toi.
 
 | Élément | Valeur |
 |---|---|
-| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1-9 faites (coquille, auth complète, schéma + permissions, composants de champ, liste de collection, formulaire d'édition/création généré depuis schema.json, éditeur de texte riche structuré sur Slate, éditeur de blocs généré depuis le vocabulaire des douze blocs — contrat B) ; reste pour la tâche 3 : UI d'inscription de passkey (page réglages pas encore construite) ; tâche 10 (versions : historique, diff, restauration) à faire ensuite |
-| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1811 tests unitaires, tous verts. |
+| Lot en cours | **L2 — Admin** (`docs/lots/L2-admin.md`) — tâches 1-10 faites (coquille, auth complète, schéma + permissions, composants de champ, liste de collection, formulaire d'édition/création généré depuis schema.json, éditeur de texte riche structuré sur Slate, éditeur de blocs généré depuis le vocabulaire des douze blocs — contrat B, historique de versions + diff structuré + restauration) ; reste pour la tâche 3 : UI d'inscription de passkey (page réglages pas encore construite) ; tâche 11 (médiathèque et pipeline d'images) à faire ensuite |
+| Lots terminés | L0 (socle), L1 (contenu), L3 (rendu). 1815 tests unitaires, tous verts. |
 | Paquets publiés | `@cogenta/core`, `@cogenta/schema`, `@cogenta/blocks`, `@cogenta/api`, `@cogenta/render`, `@cogenta/seo`, `@cogenta/theme-canonical`, `@cogenta/auth`, `@cogenta/cli` (`doctor`, `migrate`, `users create`, `serve`), `@cogenta/admin` (coquille, non publié) |
 | Ordre des lots | `L0 → L1 → L3 → L2 → L4 → L5 → L9(installeur) → L6 → L7 → L8` |
 | Contrats figés | **A, B et D figés** (2026-08-13). C avant L4 |

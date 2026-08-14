@@ -1,4 +1,5 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
   type BlockChange,
@@ -33,6 +34,7 @@ export function VersionHistory({
   readonly canRestore: boolean
   onRestored(entry: Entry): void
 }): JSX.Element {
+  const { t } = useTranslation()
   const [versions, setVersions] = useState<readonly VersionSummary[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -51,11 +53,11 @@ export function VersionHistory({
     try {
       setVersions(await getHistory(token, collection, entryId))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Impossible de charger l'historique.")
+      setError(caught instanceof ApiError ? caught.message : t('versions.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [token, collection, entryId])
+  }, [token, collection, entryId, t])
 
   useEffect(() => {
     void load()
@@ -77,9 +79,7 @@ export function VersionHistory({
     try {
       setDiff(await getDiff(token, collection, entryId, version, liveVersion))
     } catch (caught) {
-      setDiffError(
-        caught instanceof ApiError ? caught.message : 'Impossible de calculer les différences.',
-      )
+      setDiffError(caught instanceof ApiError ? caught.message : t('versions.diffError'))
     } finally {
       setDiffLoading(false)
     }
@@ -95,9 +95,7 @@ export function VersionHistory({
       setComparing(null)
       setDiff(null)
     } catch (caught) {
-      setRestoreError(
-        caught instanceof ApiError ? caught.message : 'Impossible de restaurer cette version.',
-      )
+      setRestoreError(caught instanceof ApiError ? caught.message : t('versions.restoreError'))
     } finally {
       setRestoring(null)
     }
@@ -105,9 +103,9 @@ export function VersionHistory({
 
   return (
     <section aria-labelledby="version-history-heading" className="version-history">
-      <h2 id="version-history-heading">Historique des versions</h2>
+      <h2 id="version-history-heading">{t('versions.heading')}</h2>
 
-      {loading && <p>Chargement…</p>}
+      {loading && <p>{t('common.loading')}</p>}
       {error !== null && <p role="alert">{error}</p>}
       {restoreError !== null && <p role="alert">{restoreError}</p>}
 
@@ -117,16 +115,14 @@ export function VersionHistory({
             <li key={entry.version} className="version-history__item">
               <span>
                 v{entry.version} — {entry.status}
-                {entry.live && ' (version actuelle)'}
+                {entry.live && t('versions.current')}
               </span>
               <span>{entry.createdAt}</span>
 
               {!entry.live && (
                 <div className="version-history__actions">
                   <button type="button" onClick={() => void compare(entry.version)}>
-                    {comparing === entry.version
-                      ? 'Masquer les différences'
-                      : 'Comparer à la version actuelle'}
+                    {comparing === entry.version ? t('versions.hideDiff') : t('versions.compare')}
                   </button>
                   {canRestore && (
                     <button
@@ -134,7 +130,9 @@ export function VersionHistory({
                       disabled={restoring !== null}
                       onClick={() => void restore(entry.version)}
                     >
-                      {restoring === entry.version ? 'Restauration…' : 'Restaurer'}
+                      {restoring === entry.version
+                        ? t('versions.restoring')
+                        : t('versions.restore')}
                     </button>
                   )}
                 </div>
@@ -142,7 +140,7 @@ export function VersionHistory({
 
               {comparing === entry.version && (
                 <div className="version-history__diff">
-                  {diffLoading && <p>Calcul des différences…</p>}
+                  {diffLoading && <p>{t('versions.computingDiff')}</p>}
                   {diffError !== null && <p role="alert">{diffError}</p>}
                   {diff !== null && <DiffView diff={diff} />}
                 </div>
@@ -156,7 +154,8 @@ export function VersionHistory({
 }
 
 function DiffView({ diff }: { readonly diff: ContentDiff }): JSX.Element {
-  if (!diff.changed) return <p>Aucune différence.</p>
+  const { t } = useTranslation()
+  if (!diff.changed) return <p>{t('versions.noDiff')}</p>
 
   return (
     <>
@@ -180,28 +179,26 @@ function DiffView({ diff }: { readonly diff: ContentDiff }): JSX.Element {
 }
 
 function FieldChangeRow({ change }: { readonly change: FieldChange }): JSX.Element {
+  const { t } = useTranslation()
   return (
     <li>
-      <strong>{change.field}</strong> — {labelFor(change.change)}
-      {change.change !== 'added' && <>, avant : {stringify(change.before)}</>}
-      {change.change !== 'removed' && <>, après : {stringify(change.after)}</>}
+      <strong>{change.field}</strong> — {labelFor(change.change, t)}
+      {change.change !== 'added' && t('versions.before', { value: stringify(change.before) })}
+      {change.change !== 'removed' && t('versions.after', { value: stringify(change.after) })}
     </li>
   )
 }
 
 function BlockChangeRow({ change }: { readonly change: BlockChange }): JSX.Element {
+  const { t } = useTranslation()
   return (
     <li>
       <strong>
         {change.zone} / {change.type}
       </strong>{' '}
-      — {labelFor(change.change)}
-      {change.change === 'moved' && (
-        <>
-          {' '}
-          (position {change.fromIndex} → {change.toIndex})
-        </>
-      )}
+      — {labelFor(change.change, t)}
+      {change.change === 'moved' &&
+        t('versions.movedPosition', { from: change.fromIndex, to: change.toIndex })}
       {change.fields.length > 0 && (
         <ul>
           {change.fields.map((fieldChange) => (
@@ -213,16 +210,16 @@ function BlockChangeRow({ change }: { readonly change: BlockChange }): JSX.Eleme
   )
 }
 
-function labelFor(change: ChangeKind | 'moved'): string {
+function labelFor(change: ChangeKind | 'moved', t: (key: string) => string): string {
   switch (change) {
     case 'added':
-      return 'ajouté'
+      return t('versions.changeAdded')
     case 'removed':
-      return 'retiré'
+      return t('versions.changeRemoved')
     case 'changed':
-      return 'modifié'
+      return t('versions.changeChanged')
     case 'moved':
-      return 'déplacé'
+      return t('versions.changeMoved')
   }
 }
 

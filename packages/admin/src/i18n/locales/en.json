@@ -38,6 +38,49 @@
   "collections": {
     "heading": "Content"
   },
+  "versions": {
+    "heading": "Version history",
+    "loadError": "Could not load the history.",
+    "current": " (current version)",
+    "hideDiff": "Hide differences",
+    "compare": "Compare to the current version",
+    "restoring": "Restoring…",
+    "restore": "Restore",
+    "computingDiff": "Computing differences…",
+    "diffError": "Could not compute the differences.",
+    "restoreError": "Could not restore this version.",
+    "noDiff": "No difference.",
+    "before": ", before: {{value}}",
+    "after": ", after: {{value}}",
+    "movedPosition": " (position {{from}} → {{to}})",
+    "changeAdded": "added",
+    "changeRemoved": "removed",
+    "changeChanged": "changed",
+    "changeMoved": "moved"
+  },
+  "translations": {
+    "heading": "Translations",
+    "loadError": "Could not load translations.",
+    "current": "{{locale}} (current)",
+    "create": "{{locale}} — create translation"
+  },
+  "entryEdit": {
+    "newHeading": "New: {{label}}",
+    "editHeading": "Edit: {{label}}",
+    "languageLabel": "Language:",
+    "newTranslationSuffix": " (new translation)",
+    "backToList": "Back to the list",
+    "previewButton": "Preview",
+    "previewGenerating": "Generating the link…",
+    "previewNoSiteUrl": "This server has no site URL configured (site.url): the preview cannot be opened.",
+    "previewError": "Could not generate the preview link.",
+    "readOnly": "Read-only: you do not have permission to edit this content.",
+    "saved": "Saved.",
+    "createButton": "Create",
+    "saveButton": "Save",
+    "loadError": "Could not load this content.",
+    "saveError": "Could not save this content."
+  },
   "media": {
     "heading": "Media library",
     "loadError": "Could not load the media library.",

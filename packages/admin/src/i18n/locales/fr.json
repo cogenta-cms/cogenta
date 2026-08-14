@@ -38,6 +38,49 @@
   "collections": {
     "heading": "Contenus"
   },
+  "versions": {
+    "heading": "Historique des versions",
+    "loadError": "Impossible de charger l'historique.",
+    "current": " (version actuelle)",
+    "hideDiff": "Masquer les différences",
+    "compare": "Comparer à la version actuelle",
+    "restoring": "Restauration…",
+    "restore": "Restaurer",
+    "computingDiff": "Calcul des différences…",
+    "diffError": "Impossible de calculer les différences.",
+    "restoreError": "Impossible de restaurer cette version.",
+    "noDiff": "Aucune différence.",
+    "before": ", avant : {{value}}",
+    "after": ", après : {{value}}",
+    "movedPosition": " (position {{from}} → {{to}})",
+    "changeAdded": "ajouté",
+    "changeRemoved": "retiré",
+    "changeChanged": "modifié",
+    "changeMoved": "déplacé"
+  },
+  "translations": {
+    "heading": "Traductions",
+    "loadError": "Impossible de charger les traductions.",
+    "current": "{{locale}} (courant)",
+    "create": "{{locale}} — créer la traduction"
+  },
+  "entryEdit": {
+    "newHeading": "Nouveau : {{label}}",
+    "editHeading": "Modifier : {{label}}",
+    "languageLabel": "Langue :",
+    "newTranslationSuffix": " (nouvelle traduction)",
+    "backToList": "Retour à la liste",
+    "previewButton": "Prévisualiser",
+    "previewGenerating": "Génération du lien…",
+    "previewNoSiteUrl": "Ce serveur n'a pas d'URL de site configurée (site.url) : impossible d'ouvrir la prévisualisation.",
+    "previewError": "Impossible de générer le lien de prévisualisation.",
+    "readOnly": "Lecture seule : vous n'avez pas la permission de modifier ce contenu.",
+    "saved": "Enregistré.",
+    "createButton": "Créer",
+    "saveButton": "Enregistrer",
+    "loadError": "Impossible de charger ce contenu.",
+    "saveError": "Impossible d'enregistrer ce contenu."
+  },
   "media": {
     "heading": "Médiathèque",
     "loadError": "Impossible de charger la médiathèque.",

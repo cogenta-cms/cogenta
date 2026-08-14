@@ -1,4 +1,5 @@
 import { type JSX, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { type Entry, getTranslations } from '../api/content-client.js'
@@ -25,6 +26,7 @@ export function TranslationSwitcher({
   /** Handed to a new translation as its starting point — copied wholesale, not merged field by field, since only the editor knows which `localized` fields still need translating. */
   readonly currentValues: Readonly<Record<string, unknown>>
 }): JSX.Element | null {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [family, setFamily] = useState<readonly Entry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -37,23 +39,21 @@ export function TranslationSwitcher({
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
-          setError(
-            caught instanceof ApiError ? caught.message : 'Impossible de charger les traductions.',
-          )
+          setError(caught instanceof ApiError ? caught.message : t('translations.loadError'))
         }
       })
     return () => {
       cancelled = true
     }
-  }, [token, collection, entryId])
+  }, [token, collection, entryId, t])
 
   if (locales.length < 2) return null
 
   return (
     <section aria-labelledby="translations-heading" className="translation-switcher">
-      <h2 id="translations-heading">Traductions</h2>
+      <h2 id="translations-heading">{t('translations.heading')}</h2>
       {error !== null && <p role="alert">{error}</p>}
-      {family === null && error === null && <p>Chargement…</p>}
+      {family === null && error === null && <p>{t('common.loading')}</p>}
       {family !== null && (
         <ul>
           {locales.map((locale) => {
@@ -61,7 +61,7 @@ export function TranslationSwitcher({
             return (
               <li key={locale}>
                 {locale === currentLocale ? (
-                  <strong>{locale} (courant)</strong>
+                  <strong>{t('translations.current', { locale })}</strong>
                 ) : existing !== undefined ? (
                   <button
                     type="button"
@@ -82,7 +82,7 @@ export function TranslationSwitcher({
                       })
                     }
                   >
-                    {locale} — créer la traduction
+                    {t('translations.create', { locale })}
                   </button>
                 )}
               </li>

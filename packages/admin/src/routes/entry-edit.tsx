@@ -1,4 +1,5 @@
 import { type FormEvent, type JSX, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
@@ -24,6 +25,7 @@ interface NewTranslationState {
  * whether there was an entry to load first.
  */
 export function EntryEditRoute(): JSX.Element {
+  const { t } = useTranslation()
   const { name = '', id } = useParams<{ name: string; id?: string }>()
   const isNew = id === undefined
   const auth = useAuth()
@@ -78,9 +80,7 @@ export function EntryEditRoute(): JSX.Element {
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
-          setError(
-            caught instanceof ApiError ? caught.message : 'Impossible de charger ce contenu.',
-          )
+          setError(caught instanceof ApiError ? caught.message : t('entryEdit.loadError'))
         }
       })
       .finally(() => {
@@ -89,7 +89,7 @@ export function EntryEditRoute(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [isNew, token, name, id, newTranslation])
+  }, [isNew, token, name, id, newTranslation, t])
 
   function setFieldValue(field: string, value: unknown): void {
     setValues((current) => ({ ...current, [field]: value }))
@@ -122,7 +122,7 @@ export function EntryEditRoute(): JSX.Element {
         setSaved(true)
       }
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Impossible d'enregistrer ce contenu.")
+      setError(caught instanceof ApiError ? caught.message : t('entryEdit.saveError'))
     } finally {
       setSaving(false)
     }
@@ -135,38 +135,32 @@ export function EntryEditRoute(): JSX.Element {
     try {
       const link = await issuePreview(token, name, id)
       if (link.url === null) {
-        setPreviewError(
-          "Ce serveur n'a pas d'URL de site configurée (site.url) : impossible d'ouvrir la prévisualisation.",
-        )
+        setPreviewError(t('entryEdit.previewNoSiteUrl'))
         return
       }
       // The real site, not a simulation inside the admin — the preview
       // button's whole reason to exist (L2-admin.md).
       window.open(link.url, '_blank', 'noopener')
     } catch (caught) {
-      setPreviewError(
-        caught instanceof ApiError
-          ? caught.message
-          : 'Impossible de générer le lien de prévisualisation.',
-      )
+      setPreviewError(caught instanceof ApiError ? caught.message : t('entryEdit.previewError'))
     } finally {
       setPreviewing(false)
     }
   }
 
-  if (schema.status === 'loading' || loading) return <p>Chargement…</p>
+  if (schema.status === 'loading' || loading) return <p>{t('common.loading')}</p>
   if (schema.status === 'error') {
-    return <p role="alert">Impossible de charger le schéma : {schema.message}</p>
+    return <p role="alert">{t('common.schemaError', { message: schema.message })}</p>
   }
 
   const requiredAction = isNew ? 'create' : 'update'
   if (collection === undefined || !canPerform('read', collection, roles)) {
     return (
       <section aria-labelledby="entry-heading">
-        <h1 id="entry-heading">Contenu introuvable</h1>
+        <h1 id="entry-heading">{t('collectionList.notFoundHeading')}</h1>
         <p>
-          Cette collection n'existe pas ou vous n'y avez pas accès.{' '}
-          <Link to="/collections">Retour</Link>
+          {t('collectionList.notFoundBody')}{' '}
+          <Link to="/collections">{t('collectionList.back')}</Link>
         </p>
       </section>
     )
@@ -177,32 +171,30 @@ export function EntryEditRoute(): JSX.Element {
   return (
     <section aria-labelledby="entry-heading">
       <h1 id="entry-heading">
-        {isNew
-          ? `Nouveau : ${collection.labels.singular}`
-          : `Modifier : ${collection.labels.singular}`}
+        {t(isNew ? 'entryEdit.newHeading' : 'entryEdit.editHeading', {
+          label: collection.labels.singular,
+        })}
       </h1>
       {siteLocales.length > 1 && (
         <p>
-          Langue : <strong>{locale}</strong>
-          {isNew && translationOf !== null && ' (nouvelle traduction)'}
+          {t('entryEdit.languageLabel')} <strong>{locale}</strong>
+          {isNew && translationOf !== null && t('entryEdit.newTranslationSuffix')}
         </p>
       )}
       <p>
-        <Link to={`/collections/${encodeURIComponent(name)}`}>Retour à la liste</Link>
+        <Link to={`/collections/${encodeURIComponent(name)}`}>{t('entryEdit.backToList')}</Link>
       </p>
 
       {!isNew && id !== undefined && (
         <p>
           <button type="button" disabled={previewing} onClick={() => void preview()}>
-            {previewing ? 'Génération du lien…' : 'Prévisualiser'}
+            {previewing ? t('entryEdit.previewGenerating') : t('entryEdit.previewButton')}
           </button>
           {previewError !== null && <span role="alert"> {previewError}</span>}
         </p>
       )}
 
-      {!canWrite && (
-        <p role="alert">Lecture seule : vous n'avez pas la permission de modifier ce contenu.</p>
-      )}
+      {!canWrite && <p role="alert">{t('entryEdit.readOnly')}</p>}
 
       <form onSubmit={(event) => void submit(event)}>
         <EntryForm
@@ -219,11 +211,11 @@ export function EntryEditRoute(): JSX.Element {
             {error}
           </p>
         )}
-        {saved && <p role="status">Enregistré.</p>}
+        {saved && <p role="status">{t('entryEdit.saved')}</p>}
 
         {canWrite && (
           <button type="submit" disabled={saving}>
-            {isNew ? 'Créer' : 'Enregistrer'}
+            {isNew ? t('entryEdit.createButton') : t('entryEdit.saveButton')}
           </button>
         )}
       </form>

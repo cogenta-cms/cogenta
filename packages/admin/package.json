@@ -16,8 +16,10 @@
   },
   "dependencies": {
     "@simplewebauthn/browser": "catalog:",
+    "i18next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-i18next": "catalog:",
     "react-router": "catalog:",
     "slate": "catalog:",
     "slate-dom": "catalog:",

@@ -520,3 +520,63 @@ sans déléguer le rôle `admin` complet doit attendre ce modèle plus fin.
 l'audit : le journal traverse toutes les collections et les connexions, il n'appartient
 à aucune d'elles — le forcer dans ce modèle aurait fait mentir un rôle qui ne lit qu'une
 collection en lui laissant croire qu'il ne voit que « son » activité.
+
+---
+
+## ADR-0019 — L'interface admin se traduit avec `react-i18next`, français et anglais au lancement
+
+**Statut** : Acté
+
+**Contexte** — La tâche 13 de L2 (« i18n de l'interface et édition multilingue du
+contenu ») a livré sa seconde moitié seule : ADR-0014 couvre la langue du *contenu*
+(`locale`/`translationOf`, par entrée), mais rien ne tranchait la langue de l'*interface*
+elle-même — les quelque 21 fichiers `.tsx` de `packages/admin/src` portent leurs libellés
+en français, en dur, sans mécanisme d'extraction. Les deux langues sont des axes
+indépendants : la langue de l'interface est une préférence de la personne qui
+administre le site, pas une propriété du contenu qu'elle édite — un éditeur anglophone
+doit pouvoir gérer un site en français, et réciproquement.
+
+**Décision** — `react-i18next` (+ `i18next`) porte la traduction de l'interface admin.
+Catalogues `fr.json`/`en.json` sous `packages/admin/src/i18n/locales/`, un par langue,
+clé plate par chaîne (`login.heading`, `dashboard.health.title`…). Langue par défaut
+détectée depuis `navigator.language` quand elle correspond à `fr` ou `en` ; sinon, et
+tant qu'aucune préférence n'est enregistrée, **le français** — c'est la seule langue que
+l'interface ait jamais parlée jusqu'ici, et un site déjà déployé ne doit pas en changer
+sous les pieds de qui l'administre au premier lancement de cette version. Un sélecteur
+dans `/settings` permet de fixer la langue explicitement, persistée dans `localStorage`
+sous une clé dédiée (jamais mêlée à `cogenta.session.token`). Le français reste la
+langue source du code (texte existant déplacé tel quel dans `fr.json`), l'anglais est la
+traduction de lancement — Cogenta est un projet open source et `AGENTS.md` fixe déjà
+l'anglais comme langue du code, des commentaires et des issues, donc de tout
+contributeur non francophone potentiel.
+
+**Justification** — `react-i18next` est la bibliothèque React la plus mûre pour ce
+problème exact (interpolation, pluriels ICU si besoin plus tard, chargement paresseux
+par langue), déjà dans l'écosystème que ce projet utilise ailleurs (React 19, pas de
+framework meta au-dessus). Une solution maison referait, moins bien, ce qu'elle fait
+déjà : c'est le cas où R9 (« préférer zéro dépendance ») cède devant un besoin réel et
+récurrent plutôt qu'un besoin ponctuel. `navigator.language` en détection par défaut
+évite de forcer un choix au premier lancement ; la persistance explicite en confirme un
+qui divergerait (ex. : navigateur en anglais, préférence assumée pour le français).
+
+**Conséquences** — Toute nouvelle chaîne d'interface passe par `useTranslation()` et une
+clé dans les deux catalogues, jamais par du texte en dur — un futur `contract-guardian`
+ou une revue peut grep `>[A-ZÀ-Ÿ][a-zà-ÿ]` dans `src/routes` et `src/**/*.tsx` (hors
+`i18n/locales`) pour repérer une régression. Les 21 fichiers déjà écrits migrent
+progressivement, un lot de vues à la fois, chacun avec ses tests de rendu inchangés
+(seul le texte affiché change de source, pas le comportement) — pas de migration
+« big bang » exigée par cette ADR, seulement la direction.
+
+**Renoncement assumé** — Pas de détection de langue serveur (`Accept-Language`,
+paramètre d'URL) au lancement : l'admin est une SPA authentifiée, la préférence vit dans
+le navigateur de la personne, pas dans une session serveur. Un compte multi-appareils
+verra sa préférence de langue d'interface non synchronisée entre eux ; ce n'est pas plus
+grave que n'importe quelle autre préférence `localStorage` déjà dans ce paquet
+(`cogenta.session.token` lui-même ne l'est pas).
+
+**Écarté** — `next-intl`/`formatjs` seuls (sans wrapper React) : plus verbeux pour le
+cas d'usage ici (pas de routing par langue, pas de rendu serveur à raccorder) sans
+bénéfice supplémentaire. Une solution maison (`Record<string,string>` + contexte React) :
+suffisante pour deux langues aujourd'hui, mais réinvente l'interpolation et le pluriel
+dès la première chaîne avec une variable, ce qui arrivera vite (« %d éléments », dates
+relatives dans le tableau de bord).

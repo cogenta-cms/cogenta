@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NAV_ITEMS } from './nav-items.js'
@@ -16,31 +17,32 @@ const MAIN_CONTENT_ID = 'main-content'
  * the kind of failure that only shows up when someone actually tries it.
  */
 export function AppShell(): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
 
   return (
     <div className="app-shell">
       <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
-        Aller au contenu principal
+        {t('shell.skipLink')}
       </a>
       <header className="app-shell__topbar">
-        <span className="app-shell__brand">Cogenta</span>
+        <span className="app-shell__brand">{t('shell.brand')}</span>
         {email !== null && (
           <div className="app-shell__account">
             <span>{email}</span>
             <button type="button" onClick={() => void auth.logout()}>
-              Se déconnecter
+              {t('shell.logout')}
             </button>
           </div>
         )}
       </header>
-      <nav className="app-shell__sidebar" aria-label="Navigation principale">
+      <nav className="app-shell__sidebar" aria-label={t('shell.nav')}>
         <ul>
           {NAV_ITEMS.map((item) => (
             <li key={item.to}>
               <NavLink to={item.to} end={item.to === '/'}>
-                {item.label}
+                {t(item.labelKey)}
               </NavLink>
             </li>
           ))}

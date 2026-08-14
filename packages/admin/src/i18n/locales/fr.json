@@ -1,0 +1,48 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "collections": "Contenus",
+    "media": "Médiathèque",
+    "audit": "Journal d'audit",
+    "settings": "Paramètres"
+  },
+  "shell": {
+    "skipLink": "Aller au contenu principal",
+    "brand": "Cogenta",
+    "logout": "Se déconnecter",
+    "nav": "Navigation principale"
+  },
+  "login": {
+    "heading": "Connexion à Cogenta",
+    "passkeyButton": "Se connecter avec une clé d'accès",
+    "or": "ou",
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "submit": "Se connecter",
+    "totpHeading": "Code de vérification",
+    "totpPrompt": "Entrez le code à 6 chiffres de votre application d'authentification.",
+    "code": "Code",
+    "verify": "Vérifier",
+    "totpSetupHeading": "Configurer la vérification en deux étapes",
+    "totpSetupPrompt": "Ce rôle exige un second facteur. Scannez ce code dans une application d'authentification (Google Authenticator, 1Password…), ou saisissez la clé manuellement, puis entrez le code affiché.",
+    "totpSetupKeyLabel": "Clé :",
+    "confirm": "Confirmer",
+    "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
+    "connectionFailed": "Connexion impossible.",
+    "incorrectCode": "Code incorrect."
+  },
+  "settings": {
+    "heading": "Paramètres du compte",
+    "signedInAs": "Connecté en tant que {{email}}.",
+    "passkeysHeading": "Clés d'accès",
+    "passkeysIntro": "Ajoutez une clé d'accès (Touch ID, Windows Hello, clé de sécurité…) pour vous connecter sans mot de passe.",
+    "passkeyLabelField": "Nom de l'appareil (facultatif)",
+    "passkeyLabelPlaceholder": "Ex. : ordinateur portable professionnel",
+    "passkeyAdded": "Clé d'accès ajoutée.",
+    "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
+    "passkeySubmitting": "Enregistrement…",
+    "passkeySubmit": "Ajouter une clé d’accès",
+    "languageHeading": "Langue de l'interface",
+    "languageLabel": "Langue"
+  }
+}

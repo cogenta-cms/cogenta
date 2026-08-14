@@ -1,6 +1,7 @@
 export interface NavItem {
   readonly to: string
-  readonly label: string
+  /** A key into `i18n/locales/*.json`'s `nav` section, resolved at render time. */
+  readonly labelKey: string
 }
 
 /**
@@ -8,12 +9,14 @@ export interface NavItem {
  *
  * Driven by data rather than one `<Link>` per section so a role that cannot
  * see a section (once permissions land, task 4) removes it by filtering this
- * list, not by editing markup in two places.
+ * list, not by editing markup in two places. `labelKey` rather than a literal
+ * label for the same reason (ADR-0019): this list is a module-level constant,
+ * outside any component, so it cannot call `useTranslation()` itself.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: '/', label: 'Tableau de bord' },
-  { to: '/collections', label: 'Contenus' },
-  { to: '/media', label: 'Médiathèque' },
-  { to: '/audit', label: "Journal d'audit" },
-  { to: '/settings', label: 'Paramètres' },
+  { to: '/', labelKey: 'nav.dashboard' },
+  { to: '/collections', labelKey: 'nav.collections' },
+  { to: '/media', labelKey: 'nav.media' },
+  { to: '/audit', labelKey: 'nav.audit' },
+  { to: '/settings', labelKey: 'nav.settings' },
 ]

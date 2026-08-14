@@ -1,4 +1,5 @@
 import { type FormEvent, type JSX, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError, type TotpSetup } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -26,6 +27,7 @@ type Step =
  * admin intervenes.
  */
 export function LoginRoute(): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -55,9 +57,7 @@ export function LoginRoute(): JSX.Element {
     } catch (caught) {
       // A cancelled browser prompt throws too, and is not worth an alarming
       // message — "try again" covers both that and a genuine failure.
-      setError(
-        caught instanceof ApiError ? caught.message : 'La clé d’accès a été refusée ou annulée.',
-      )
+      setError(caught instanceof ApiError ? caught.message : t('login.passkeyRefused'))
     } finally {
       setSubmitting(false)
     }
@@ -78,7 +78,7 @@ export function LoginRoute(): JSX.Element {
         setStep({ kind: 'totp-setup', ticket: result.ticket, setup })
       }
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Connexion impossible.')
+      setError(caught instanceof ApiError ? caught.message : t('login.connectionFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -93,7 +93,7 @@ export function LoginRoute(): JSX.Element {
       await auth.completeTotp(step.ticket, code)
       goToIntendedDestination()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Code incorrect.')
+      setError(caught instanceof ApiError ? caught.message : t('login.incorrectCode'))
     } finally {
       setSubmitting(false)
     }
@@ -108,7 +108,7 @@ export function LoginRoute(): JSX.Element {
       await auth.confirmTotpSetup(step.ticket, code)
       goToIntendedDestination()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Code incorrect.')
+      setError(caught instanceof ApiError ? caught.message : t('login.incorrectCode'))
     } finally {
       setSubmitting(false)
     }
@@ -118,16 +118,12 @@ export function LoginRoute(): JSX.Element {
     return (
       <main className="auth-page">
         <form className="auth-form" onSubmit={submitTotpSetup} aria-labelledby="totp-setup-heading">
-          <h1 id="totp-setup-heading">Configurer la vérification en deux étapes</h1>
+          <h1 id="totp-setup-heading">{t('login.totpSetupHeading')}</h1>
+          <p>{t('login.totpSetupPrompt')}</p>
           <p>
-            Ce rôle exige un second facteur. Scannez ce code dans une application d'authentification
-            (Google Authenticator, 1Password…), ou saisissez la clé manuellement, puis entrez le
-            code affiché.
+            <strong>{t('login.totpSetupKeyLabel')}</strong> <code>{step.setup.secret}</code>
           </p>
-          <p>
-            <strong>Clé :</strong> <code>{step.setup.secret}</code>
-          </p>
-          <label htmlFor="totp-setup-code">Code</label>
+          <label htmlFor="totp-setup-code">{t('login.code')}</label>
           <input
             id="totp-setup-code"
             name="totp-setup-code"
@@ -145,7 +141,7 @@ export function LoginRoute(): JSX.Element {
             </p>
           )}
           <button type="submit" disabled={submitting}>
-            Confirmer
+            {t('login.confirm')}
           </button>
         </form>
       </main>
@@ -156,9 +152,9 @@ export function LoginRoute(): JSX.Element {
     return (
       <main className="auth-page">
         <form className="auth-form" onSubmit={submitTotp} aria-labelledby="totp-heading">
-          <h1 id="totp-heading">Code de vérification</h1>
-          <p>Entrez le code à 6 chiffres de votre application d'authentification.</p>
-          <label htmlFor="totp-code">Code</label>
+          <h1 id="totp-heading">{t('login.totpHeading')}</h1>
+          <p>{t('login.totpPrompt')}</p>
+          <label htmlFor="totp-code">{t('login.code')}</label>
           <input
             id="totp-code"
             name="totp-code"
@@ -176,7 +172,7 @@ export function LoginRoute(): JSX.Element {
             </p>
           )}
           <button type="submit" disabled={submitting}>
-            Vérifier
+            {t('login.verify')}
           </button>
         </form>
       </main>
@@ -186,13 +182,13 @@ export function LoginRoute(): JSX.Element {
   return (
     <main className="auth-page">
       <div className="auth-form">
-        <h1 id="login-heading">Connexion à Cogenta</h1>
+        <h1 id="login-heading">{t('login.heading')}</h1>
         <button type="button" onClick={() => void submitPasskey()} disabled={submitting}>
-          Se connecter avec une clé d'accès
+          {t('login.passkeyButton')}
         </button>
-        <p className="auth-form__divider">ou</p>
+        <p className="auth-form__divider">{t('login.or')}</p>
         <form onSubmit={submitPassword} aria-labelledby="login-heading">
-          <label htmlFor="email">Adresse e-mail</label>
+          <label htmlFor="email">{t('login.email')}</label>
           <input
             id="email"
             name="email"
@@ -202,7 +198,7 @@ export function LoginRoute(): JSX.Element {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
-          <label htmlFor="password">Mot de passe</label>
+          <label htmlFor="password">{t('login.password')}</label>
           <input
             id="password"
             name="password"
@@ -218,7 +214,7 @@ export function LoginRoute(): JSX.Element {
             </p>
           )}
           <button type="submit" disabled={submitting}>
-            Se connecter
+            {t('login.submit')}
           </button>
         </form>
       </div>

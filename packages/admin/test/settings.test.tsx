@@ -62,3 +62,16 @@ describe('account settings — passkey registration', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 })
+
+describe('account settings — interface language', () => {
+  it('switches the whole interface to English and persists the choice', async () => {
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.change(screen.getByLabelText('Langue'), { target: { value: 'en' } })
+
+    expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeDefined()
+    expect(localStorage.getItem('cogenta.admin.language')).toBe('en')
+  })
+})

@@ -1,0 +1,48 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "collections": "Content",
+    "media": "Media library",
+    "audit": "Audit log",
+    "settings": "Settings"
+  },
+  "shell": {
+    "skipLink": "Skip to main content",
+    "brand": "Cogenta",
+    "logout": "Sign out",
+    "nav": "Main navigation"
+  },
+  "login": {
+    "heading": "Sign in to Cogenta",
+    "passkeyButton": "Sign in with a passkey",
+    "or": "or",
+    "email": "Email address",
+    "password": "Password",
+    "submit": "Sign in",
+    "totpHeading": "Verification code",
+    "totpPrompt": "Enter the 6-digit code from your authenticator app.",
+    "code": "Code",
+    "verify": "Verify",
+    "totpSetupHeading": "Set up two-factor verification",
+    "totpSetupPrompt": "This role requires a second factor. Scan this code in an authenticator app (Google Authenticator, 1Password…), or enter the key by hand, then type the code it shows.",
+    "totpSetupKeyLabel": "Key:",
+    "confirm": "Confirm",
+    "passkeyRefused": "The passkey was refused or cancelled.",
+    "connectionFailed": "Could not sign in.",
+    "incorrectCode": "Incorrect code."
+  },
+  "settings": {
+    "heading": "Account settings",
+    "signedInAs": "Signed in as {{email}}.",
+    "passkeysHeading": "Passkeys",
+    "passkeysIntro": "Add a passkey (Touch ID, Windows Hello, a security key…) to sign in without a password.",
+    "passkeyLabelField": "Device name (optional)",
+    "passkeyLabelPlaceholder": "E.g.: work laptop",
+    "passkeyAdded": "Passkey added.",
+    "passkeyRefused": "The passkey was refused or cancelled.",
+    "passkeySubmitting": "Registering…",
+    "passkeySubmit": "Add a passkey",
+    "languageHeading": "Interface language",
+    "languageLabel": "Language"
+  }
+}

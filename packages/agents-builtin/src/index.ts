@@ -25,7 +25,26 @@ export type { SbomEntry } from './security/sbom.js'
 export { buildSbom } from './security/sbom.js'
 export { seoAgent } from './seo/agent.js'
 export { auditSeoPage } from './seo/audit.js'
+export type {
+  CannibalizationCandidatePage,
+  CannibalizationPair,
+  DetectCannibalizationOptions,
+} from './seo/cannibalization.js'
+export { detectCannibalization } from './seo/cannibalization.js'
+export type {
+  InternalLinkCandidatePage,
+  InternalLinkProposal,
+  InternalLinkSourcePage,
+  ProposeInternalLinksOptions,
+} from './seo/internal-linking.js'
+export { proposeInternalLinks } from './seo/internal-linking.js'
+export type { ArticleJsonLdInput, ArticleJsonLdType, JsonLd } from './seo/json-ld.js'
+export { buildArticleJsonLd, validateJsonLd } from './seo/json-ld.js'
+export { validateLlmsTxt } from './seo/llms-txt.js'
 export { countWords, fleschReadingEase } from './seo/readability.js'
+export type { Redirect } from './seo/redirects.js'
+export { findOrphanedRedirects } from './seo/redirects.js'
+export { cosineSimilarity } from './seo/similarity.js'
 export type {
   SeoAuditResult,
   SeoFinding,

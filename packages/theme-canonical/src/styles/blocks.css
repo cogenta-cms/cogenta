@@ -676,22 +676,48 @@
 
 /* --- logos --------------------------------------------------------------- */
 
+/* A grid, not a wrapping row: a flex row leaves the last line ragged, and a
+   row of logos that does not line up reads as an oversight rather than as a
+   list of names. */
 .cg-logos__items {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--cg-gap);
   align-items: center;
-  gap: var(--cg-gap-loose);
+}
+
+.cg-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cg-s4);
 }
 
 .cg-logo__image {
-  block-size: 2.5rem;
+  /* One optical height for every logo, whatever its own proportions: `contain`
+     keeps a wide wordmark and a square mark at the same weight on the page. */
+  block-size: var(--cg-s10);
   inline-size: auto;
+  max-inline-size: 100%;
   object-fit: contain;
+  /* Held back so the logos read as a supporting row rather than as eight
+     competing brands, and brought fully forward on hover. Opacity, not
+     `grayscale`: a filtered logo is a logo whose owner did not approve it. */
+  opacity: 0.72;
+  transition: opacity var(--cg-duration) var(--cg-ease);
 }
 
 .cg-logo__link {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  border-radius: var(--cg-radius-md);
+}
+
+.cg-logo:hover .cg-logo__image,
+.cg-logo__link:focus-visible .cg-logo__image {
+  opacity: 1;
 }
 
 /* --- collectionList ------------------------------------------------------ */

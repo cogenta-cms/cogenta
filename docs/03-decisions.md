@@ -630,3 +630,57 @@ bénéfice supplémentaire. Une solution maison (`Record<string,string>` + conte
 suffisante pour deux langues aujourd'hui, mais réinvente l'interpolation et le pluriel
 dès la première chaîne avec une variable, ce qui arrivera vite (« %d éléments », dates
 relatives dans le tableau de bord).
+
+---
+
+## ADR-0021 — La MFA admin est recommandée, plus imposée à la première connexion
+
+**Statut** : Acté
+
+**Contexte** — Depuis L2, `packages/auth/src/mfa.ts` impose la MFA sans exception au
+rôle `admin` (et à tout rôle pouvant publier), non désactivable, dès la première
+connexion — la spec du lot dit explicitement « non contournable par configuration ».
+En usage réel, ce blocage immédiat après l'installation, avant même d'avoir vu le
+tableau de bord, s'est révélé être une friction d'onboarding lourde, sans qu'aucune
+limite de temps ni contexte n'accompagne l'obligation. L'utilisateur a demandé que
+l'accès initial ne soit plus bloqué, tout en gardant l'esprit de recommandation forte
+— pas une désactivation pure et simple.
+
+**Décision** — La MFA n'est plus un blocage à la connexion. Un compte admin (ou tout
+rôle sensible) se connecte avec identifiant et mot de passe seuls et accède
+immédiatement au tableau de bord. Un système de notices/recommandations dans l'admin
+(nouveau, dans l'esprit de ce que WordPress fait pour ses propres rappels de sécurité
+et de mise à jour) affiche de façon visible et persistante — jusqu'à action ou rejet
+explicite — la recommandation d'activer la MFA pour tout compte sensible qui ne l'a
+pas encore fait. Le système de notices est générique : il sert aussi à d'autres
+recommandations futures (mise à jour de plugin, certificat expirant, etc.), pas
+seulement la MFA.
+
+**Justification** — Le blocage immédiat protégeait contre un compte admin jamais
+sécurisé, mais au prix d'un onboarding qui échoue avant que l'utilisateur ait vu quoi
+que ce soit du produit — un coût réel, mesuré directement sur ce projet. Une
+recommandation visible et persistante — le patron que la plupart des CMS matures
+utilisent, WordPress signale les mises à jour de sécurité de façon proéminente sans
+bloquer l'accès — obtient une meilleure part des deux exigences : le compte reste
+utilisable immédiatement, et l'absence de MFA reste visible à chaque connexion tant
+qu'elle n'est pas résolue, plutôt que configurable une fois puis oubliée.
+
+**Conséquences** — `requiresMfa()` (`packages/auth/src/mfa.ts`) n'est plus consultée
+pour bloquer une connexion ; elle reste le calcul de qui est concerné par la
+recommandation. Un système de notices générique existe désormais dans l'admin (L11
+tâche 2). `ALWAYS_SENSITIVE_ROLES`/`sensitiveRoles()` restent réutilisés tels quels par
+le nouveau système plutôt que dupliqués.
+
+**Renoncement assumé** — Un compte admin peut rester durablement sans MFA si son
+titulaire ignore la recommandation à chaque connexion — la garantie « aucun compte
+sensible sans MFA » que la version précédente offrait disparaît. Choix explicite de
+l'utilisateur, pas un oubli.
+
+**Écarté** — Un blocage différé de N jours (délai de grâce puis blocage) : gardait la
+garantie forte, mais l'utilisateur a explicitement demandé le patron « recommandation,
+jamais bloquant » plutôt qu'un blocage simplement repoussé dans le temps.
+
+Cette ADR ne remplace pas l'ADR-0018 — le journal d'audit reste réservé à `admin` sur
+ses propres mérites, la concentration de pouvoir dans ce rôle. Elle nuance seulement sa
+justification : la phrase « la MFA est obligatoire sans exception » qu'elle cite décrit
+l'état avant cette ADR, pas l'état actuel.

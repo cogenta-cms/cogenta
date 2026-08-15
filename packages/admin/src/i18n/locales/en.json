@@ -117,7 +117,11 @@
     "createButton": "Create",
     "saveButton": "Save",
     "loadError": "Could not load this content.",
-    "saveError": "Could not save this content."
+    "saveError": "Could not save this content.",
+    "autosaveKept": "Unsaved changes kept in this browser at {{at}}. Save to record a version.",
+    "autosaveFound": "Unsaved changes from {{at}} were found in this browser, newer than the last saved version.",
+    "autosaveRestore": "Restore them",
+    "autosaveDiscard": "Discard them"
   },
   "media": {
     "heading": "Media library",

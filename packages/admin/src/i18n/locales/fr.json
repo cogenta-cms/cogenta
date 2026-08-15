@@ -117,7 +117,11 @@
     "createButton": "Créer",
     "saveButton": "Enregistrer",
     "loadError": "Impossible de charger ce contenu.",
-    "saveError": "Impossible d'enregistrer ce contenu."
+    "saveError": "Impossible d'enregistrer ce contenu.",
+    "autosaveKept": "Modifications non enregistrées conservées dans ce navigateur à {{at}}. Enregistrez pour créer une version.",
+    "autosaveFound": "Des modifications non enregistrées datant de {{at}} ont été retrouvées dans ce navigateur, plus récentes que la dernière version enregistrée.",
+    "autosaveRestore": "Les restaurer",
+    "autosaveDiscard": "Les abandonner"
   },
   "media": {
     "heading": "Médiathèque",

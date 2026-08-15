@@ -1,5 +1,33 @@
 # @cogenta/core
 
+## 0.2.0
+
+### Minor Changes
+
+- [`4c95475`](https://github.com/cogenta-cms/cogenta/commit/4c9547543ec9a4464d8c9a05d1967dd15b7953aa) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `THEME_IMAGE_UNSUPPORTED`, thrown by `cogenta serve`'s new theme-render
+  fallback (`@cogenta/cli`) when a theme block asks for an image — no image
+  pipeline is wired into that in-process fallback yet, so a theme gets a clear,
+  typed refusal rather than a broken `<img>`.
+
+### Patch Changes
+
+- [`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `loadConfig` now auto-loads a `.env` file next to `cogenta.config.mjs`, using
+  Node's own `process.loadEnvFile` (no new dependency, R9) — so a real secret
+  like `COGENTA_AUTH_SIGNING_KEY` no longer has to be exported by hand in every
+  shell before `cogenta serve` will start. Skipped whenever the resolved `env`
+  is not really `process.env` (identity check, not `options.env === undefined`
+  — real callers like the CLI's own `run()` resolve `options.env ?? process.env`
+  once and thread that same object down explicitly, so `options.env` is
+  "defined" even in a real, unconfigured shell; a test injecting its own
+  synthetic map is still exempt, since that map is a different object).
+  
+  Found via the user's own real end-to-end test: `npx cogenta serve` refused to
+  start with "COGENTA_AUTH_SIGNING_KEY is not set", and the only documented fix
+  was a manual, shell-specific `export`/`$env:` command with no Windows/Mac/
+  Linux guidance. `create-cogenta` now writes a real generated key into `.env`
+  (see `create-cogenta`'s own changeset) — this is the half of the fix that
+  makes `cogenta serve` actually read it back.
+
 ## 0.1.0
 
 ### Minor Changes

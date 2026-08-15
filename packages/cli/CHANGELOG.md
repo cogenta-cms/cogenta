@@ -1,5 +1,98 @@
 # @cogenta/cli
 
+## 0.2.0
+
+### Minor Changes
+
+- [`7ff79a2`](https://github.com/cogenta-cms/cogenta/commit/7ff79a260f97c79192553e88e2e7e4d22e0d8965) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` now serves the real admin SPA (`@cogenta/admin`) under
+  `/admin/*`, alongside the public theme render at `/` — there was previously
+  no way to reach the admin UI from a scaffolded site at all (`/admin` 404'd,
+  and nothing in the installer's recap explained how to get there). The
+  admin's own `vite build` is copied into `@cogenta/cli`'s `dist/admin-assets`
+  at build time (a plain file copy, not a real npm dependency — `@cogenta/admin`
+  stays `private` and unpublished); a request for a real built asset gets that
+  exact file (still a real 404 if missing, never silently swapped for HTML),
+  and any other path under `/admin` gets `index.html` so the SPA's own
+  client-side router (now mounted with `basename="/admin"`, matching the
+  build's `base: '/admin/'`) resolves deep links. The API the SPA talks to is
+  same-origin (`fetch('/api/...')`), so no CORS or separate-origin auth
+  wiring was needed — that boundary was already designed into
+  `@cogenta/admin`'s `http.ts`, just never connected to a real server.
+  
+  Found while answering "how do I log into the admin UI" — the admin app
+  itself was real and complete (auth, schema-driven editing, media, audit,
+  agents, fleet), it had simply never been wired to anything a scaffolded
+  site's `cogenta serve` could reach.
+
+- [`cb69cab`](https://github.com/cogenta-cms/cogenta/commit/cb69cab09b89d3cc5b8d15f5887ec93f82e32599) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` now renders real HTML pages, not just the `/api/*` REST and
+  GraphQL surface. Until a real Astro build exists (`cogenta build`/`theme` are
+  still honestly deferred — no static site generation, no theme dev server),
+  this is a scoped in-process stand-in: a GET request that doesn't match
+  `/api/*` is resolved against the site's real collection routes
+  (`matchPath`/`buildPath`, `@cogenta/schema`), the matching published entry is
+  fetched through the exact same permission-checked `ContentGateway` every
+  REST and GraphQL request already goes through, and rendered with
+  `@cogenta/theme-canonical`'s real `renderPage` — the same function the
+  `create-cogenta` blueprint tests already exercise. A collection with a
+  `blocks` field renders its real block zone; a `richText`-only collection
+  (e.g. `post`) gets its body wrapped in a single real `prose` block rather
+  than a second hand-rolled serialiser. Styling comes from
+  `@cogenta/render`'s already-tested `renderSkin` against the site's real
+  `theme.tokens.json`, never a second token-to-CSS mapping.
+  
+  No secret, database handle or config value ever reaches theme code — only
+  the same `ContentEntry` shape a real HTTP client would receive through
+  `@cogenta/theme-canonical`'s own, deliberately separate `ContentEntry`/
+  `QueryRequest` contract (ADR-0016's boundary holds even in-process).
+  
+  Scoped deliberately: no image pipeline is wired in yet (a theme asking for
+  one gets `THEME_IMAGE_UNSUPPORTED`, not a broken `<img>`), and a
+  cross-reference to an entry this render didn't already fetch resolves to
+  `#` rather than a guessed URL — a real Astro site would build a full
+  link-graph ahead of render; this stand-in doesn't.
+  
+  Found and built while investigating why a scaffolded site had nothing to
+  show a browser: `cogenta serve` had never rendered a page, only the API.
+  
+  Building it against a real seeded site surfaced a real, separate bug in
+  `assembleSite`: the `ContentGateway`'s store map was only ever populated
+  lazily, by REST's own `storeFor` — a collection no REST request had touched
+  yet had no store at all, so the very first GraphQL (or now theme-render)
+  query against it failed with `INTERNAL`/"has no store" instead of a real
+  answer. `assembleSite` now populates every collection's store eagerly, once,
+  so REST, GraphQL and the theme-render fallback all see the same complete
+  map from the first request.
+
+### Patch Changes
+
+- [`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve`'s theme-render fallback (added in a previous, unreleased
+  change on this package) 404'd on `/` itself: every `page` collection's route
+  pattern is `/:slug`, which structurally cannot match an empty segment. `/`
+  now retries once as `/home` — the real, consistent slug every
+  `create-cogenta` blueprint seeds its home page at — before giving up. A site
+  with no page at that slug still 404s honestly, exactly like any other
+  unmatched path; this is not a magic redirect.
+  
+  Also fixes `runServe` passing its resolved `env` object down to `loadConfig`
+  in a way that always looked "explicitly supplied" (see `@cogenta/core`'s
+  `env-file-autoload` changeset) — without this, `@cogenta/core`'s new `.env`
+  auto-loading could never actually fire from a real `cogenta serve` run.
+  
+  Both found via the user's own real end-to-end test against a freshly
+  scaffolded Portfolio-blueprint site: `/` returned `CONTENT_NOT_FOUND`, and
+  `cogenta serve` still demanded a manually exported signing key despite a
+  `.env` file sitting right next to the config.
+- Updated dependencies [[`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f), [`4c95475`](https://github.com/cogenta-cms/cogenta/commit/4c9547543ec9a4464d8c9a05d1967dd15b7953aa)]:
+  - @cogenta/core@0.2.0
+  - @cogenta/agents@0.1.2
+  - @cogenta/api@0.1.2
+  - @cogenta/auth@0.1.2
+  - @cogenta/blocks@0.1.2
+  - @cogenta/import@0.1.2
+  - @cogenta/render@0.1.2
+  - @cogenta/schema@0.1.2
+  - @cogenta/theme-canonical@0.1.2
+
 ## 0.1.0
 
 ### Minor Changes

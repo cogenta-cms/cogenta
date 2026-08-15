@@ -225,6 +225,9 @@ export const ERROR_CODES = [
   // Plugins — capability-gated SDK (L7 task 4)
   'PLUGIN_CAPABILITY_REFUSED',
 
+  // Plugins — resource limits, kill and disable (L7 task 6)
+  'PLUGIN_DISABLED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

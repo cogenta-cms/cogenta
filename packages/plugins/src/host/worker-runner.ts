@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import { CogentaError } from '@cogenta/core'
 import type { PluginManifest } from '../manifest.js'
+import type { PluginDisableStore, PluginViolationReason } from '../permissions/disabled.js'
 import type { PluginGrant } from '../permissions/grants.js'
 import { resolveGrantedCapabilities } from '../permissions/resolve.js'
 import type { CapabilityHandler } from './capabilities.js'
@@ -62,6 +63,30 @@ export interface IsolatedRunResult {
   readonly ok: boolean
   readonly value?: unknown
   readonly error?: string
+  /**
+   * Set only when `ok` is `false` — classifies WHY the worker failed, so a
+   * caller (task 6's disable policy) can tell "the plugin's own code threw a
+   * normal error" apart from "it exceeded its time or memory budget", which
+   * is the distinction "tué et désactivé" hinges on. `'crash'` covers any
+   * other non-zero exit that isn't recognizably a timeout or a heap-limit
+   * violation (e.g. a native worker fault) — still real grounds to disable,
+   * just not one of the two named-and-required policies.
+   */
+  readonly reason?: PluginViolationReason
+}
+
+/**
+ * Node signals a `resourceLimits` heap-limit violation to the parent via the
+ * `Worker`'s `'error'` event, carrying a message from V8's own OOM reporting
+ * (observed shape: "Worker terminated due to reaching memory limit: JS heap
+ * out of memory") — never a distinct error class or a dedicated event type,
+ * so this is a real, deliberately narrow message-pattern match, not a guess
+ * at a documented API. Anything else that reaches `'error'`/a non-zero exit
+ * is classified `'crash'`: still real grounds to disable the plugin, just
+ * not a heap-limit violation specifically.
+ */
+function classifyFailure(message: string): PluginViolationReason {
+  return /heap|memory limit|out of memory/i.test(message) ? 'memory' : 'crash'
 }
 
 let nextRequestId = 1
@@ -152,7 +177,7 @@ export async function runIsolated(
     }
 
     const timer = setTimeout(() => {
-      finish({ ok: false, error: 'plugin worker timed out' })
+      finish({ ok: false, error: 'plugin worker timed out', reason: 'timeout' })
     }, timeoutMs)
 
     // `sdk-call` messages arrive zero or more times WHILE `code` runs, each
@@ -174,16 +199,35 @@ export async function runIsolated(
     })
 
     worker.once('error', (error) => {
-      finish({ ok: false, error: error instanceof Error ? error.message : String(error) })
+      const message = error instanceof Error ? error.message : String(error)
+      finish({ ok: false, error: message, reason: classifyFailure(message) })
     })
 
     worker.once('exit', (exitCode) => {
-      if (exitCode !== 0) finish({ ok: false, error: `plugin worker exited with code ${exitCode}` })
+      if (exitCode !== 0) {
+        const message = `plugin worker exited with code ${exitCode}`
+        finish({ ok: false, error: message, reason: 'crash' })
+      }
     })
 
     const request: WorkerRunMessage = { id, type: 'run', code, grantedCapabilities }
     worker.postMessage(request)
   })
+}
+
+/** Emitted once, synchronously, the moment a plugin is disabled — never a hard dependency on any specific notification transport (channels, email, ...); wiring this to a real alert is an integration decision for whatever assembles a site, not this package's job. */
+export interface PluginDisabledEvent {
+  readonly pluginName: string
+  readonly reason: PluginViolationReason
+  readonly at: string
+  readonly details?: string
+}
+
+export interface RunPluginOptions extends Omit<RunIsolatedOptions, 'grantedCapabilities'> {
+  /** Task 6's real, persisted "is this plugin currently disabled" gate — required, not optional, since a caller with no store to check against cannot honestly claim to enforce "tué et désactivé". */
+  readonly disableStore: PluginDisableStore
+  /** Fired synchronously right after a violation is recorded — the real "avec alerte" half of "tué et désactivé, avec alerte". */
+  readonly onPluginDisabled?: (event: PluginDisabledEvent) => void
 }
 
 /**
@@ -194,15 +238,44 @@ export async function runIsolated(
  * manifest and its real, persisted grants. A caller cannot bypass grant
  * resolution by simply passing whatever capability list it wants — the only
  * way a capability reaches the sandbox is a real row in the grant store.
+ *
+ * Task 6 adds the other two real gates the lot demands: a disabled plugin is
+ * refused BEFORE a worker is ever spawned (`PLUGIN_DISABLED`, not a silent
+ * no-op), and a timeout or memory-limit violation disables the plugin for
+ * every future run, not just the one that failed — "il ne peut pas faire
+ * tomber le CMS" is the isolation boundary's job (task 3); making sure it
+ * cannot even try again unsupervised is this task's.
  */
 export async function runPlugin(
   manifest: PluginManifest,
   code: string,
   grants: readonly PluginGrant[],
-  options: Omit<RunIsolatedOptions, 'grantedCapabilities'> = {},
+  options: RunPluginOptions,
 ): Promise<IsolatedRunResult> {
+  const alreadyDisabled = await options.disableStore.isDisabled(manifest.name)
+  if (alreadyDisabled !== null) {
+    throw new CogentaError({
+      code: 'PLUGIN_DISABLED',
+      message: `Plugin "${manifest.name}" is disabled (${alreadyDisabled.reason}, since ${alreadyDisabled.disabledAt}) and cannot be run.`,
+      hint: 'A human must explicitly re-enable this plugin before it can run again.',
+      details: { pluginName: manifest.name, reason: alreadyDisabled.reason },
+    })
+  }
+
   const grantedCapabilities = resolveGrantedCapabilities(manifest, grants)
-  return await runIsolated(code, { ...options, grantedCapabilities })
+  const result = await runIsolated(code, { ...options, grantedCapabilities })
+
+  if (!result.ok && (result.reason === 'timeout' || result.reason === 'memory')) {
+    await options.disableStore.disable(manifest.name, result.reason, result.error)
+    options.onPluginDisabled?.({
+      pluginName: manifest.name,
+      reason: result.reason,
+      at: new Date().toISOString(),
+      ...(result.error === undefined ? {} : { details: result.error }),
+    })
+  }
+
+  return result
 }
 
 /** Throws instead of returning a discriminated failure — for call sites that want a plain success value or a real error. */

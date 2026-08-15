@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createContentReadHandler } from '../../src/host/capabilities.js'
 import { runPlugin } from '../../src/host/worker-runner.js'
 import type { PluginManifest } from '../../src/manifest.js'
+import { createPluginDisableStore } from '../../src/permissions/disabled.js'
 import { createPluginGrantStore } from '../../src/permissions/grants.js'
 import { testDb as permissionsDb } from '../helpers/db.js'
 
@@ -54,15 +55,16 @@ describe('runPlugin — the real entry point, grant resolution end to end', () =
     const seeded = await store.create({ status: 'published', values: { title: 'Via runPlugin' } })
     const handlers = { 'content.read': createContentReadHandler((id) => store.read(id)) }
     const code = `('content' in sdk) ? sdk.content.read({ id: ${JSON.stringify(seeded.id)} }).then((e) => e.values.title) : 'ABSENT'`
+    const disableStore = createPluginDisableStore(grantDb)
 
-    const withoutGrant = await runPlugin(manifest(), code, [], { handlers })
+    const withoutGrant = await runPlugin(manifest(), code, [], { handlers, disableStore })
     expect(withoutGrant).toEqual({ ok: true, value: 'ABSENT' })
 
     const grantStore = createPluginGrantStore(grantDb)
     await grantStore.grant('@auteur/mon-plugin', 'content.read')
     const grants = await grantStore.listGrants('@auteur/mon-plugin')
 
-    const withGrant = await runPlugin(manifest(), code, grants, { handlers })
+    const withGrant = await runPlugin(manifest(), code, grants, { handlers, disableStore })
     expect(withGrant).toEqual({ ok: true, value: 'Via runPlugin' })
   })
 
@@ -70,6 +72,7 @@ describe('runPlugin — the real entry point, grant resolution end to end', () =
     const grantStore = createPluginGrantStore(grantDb)
     await grantStore.grant('@auteur/mon-plugin', 'content.read')
     const oldGrants = await grantStore.listGrants('@auteur/mon-plugin')
+    const disableStore = createPluginDisableStore(grantDb)
 
     const newManifest = manifest({
       capabilities: ['content.read', 'http.fetch:new.exemple.com'],
@@ -78,7 +81,7 @@ describe('runPlugin — the real entry point, grant resolution end to end', () =
 
     // Running the new manifest against the OLD (unrevised) grants must never
     // expose the capability that was never actually approved for it.
-    const result = await runPlugin(newManifest, code, oldGrants, {})
+    const result = await runPlugin(newManifest, code, oldGrants, { disableStore })
     expect(result).toEqual({ ok: true, value: 'contained' })
   })
 })

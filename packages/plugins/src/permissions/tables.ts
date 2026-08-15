@@ -9,6 +9,7 @@ import {
 
 export const PERMISSION_TABLES = {
   grants: 'cogenta_plugin_grants',
+  disabled: 'cogenta_plugin_disabled',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -47,6 +48,15 @@ export async function ensurePluginTables(db: DatabaseHandle): Promise<void> {
     grants,
     sql`(plugin_name, capability)`,
   )
+
+  const disabled = identifier(PERMISSION_TABLES.disabled, d)
+  await db.query(sql`
+    create table if not exists ${disabled} (
+      plugin_name ${t255} not null primary key,
+      reason ${t255} not null,
+      details ${t512},
+      disabled_at ${t255} not null
+    )`)
 }
 
 async function createIndexIfMissing(

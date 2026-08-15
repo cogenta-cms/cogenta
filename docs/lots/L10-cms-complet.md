@@ -166,15 +166,21 @@ thème public — décision à trancher en premier, voir Tâche 1).
 
 ### Périmètre
 
-**Décision préalable (à trancher avec l'utilisateur, pas à deviner)** : bibliothèque
-de composants. Trois options réalistes, à choisir avant de coder quoi que ce soit :
-(a) un design system maison léger (cohérent avec R9 « pas de dépendance sans
-justification », mais plus de travail) ; (b) une bibliothèque existante non stylée
-(Radix UI / Ariakit — logique d'accessibilité gratuite, style maison par-dessus) ;
-(c) une bibliothèque stylée (shadcn/ui sur Tailwind — le plus rapide à un résultat
-« pro », le plus de dépendances). Vu l'urgence exprimée, (b) ou (c) sont les choix
-réalistes ; (c) est probablement le bon calcul vitesse/qualité ici mais c'est un choix
-produit, pas une évidence technique.
+**Décision tranchée (2026-08-15)** : shadcn/ui sur Tailwind. Composants copiés dans le
+repo (pas une dépendance opaque à mettre à jour), accessibilité correcte par défaut,
+résultat visuel « pro » atteignable vite. Contrepartie assumée : Tailwind entre comme
+dépendance de build de `packages/admin` — à signaler dans la PR qui l'introduit (R9),
+mais déjà décidé, pas à re-questionner.
+
+**Système de notices/recommandations (ADR-0021)** : un mécanisme générique
+d'admin-notices, dans l'esprit de ce que WordPress fait pour ses rappels de sécurité et
+de mise à jour — persistant jusqu'à action ou rejet explicite, jamais bloquant l'accès.
+Premier consommateur réel : la recommandation d'activer la MFA pour tout compte
+sensible qui ne l'a pas fait (`sensitiveRoles()`/`requiresMfa()` de
+`packages/auth/src/mfa.ts`, réutilisés tels quels — `requiresMfa()` ne bloque plus une
+connexion, elle calcule qui reçoit la recommandation). Conçu dès le départ pour porter
+d'autres recommandations futures (plugin à mettre à jour, certificat expirant) sans
+nouveau mécanisme à chaque fois.
 
 **Gestion des utilisateurs (le trou le plus visible)** :
 - Liste des utilisateurs, filtrable par rôle
@@ -209,16 +215,23 @@ aujourd'hui seul l'écran de permissions existe (`granted-permissions.tsx`,
 
 ### Tâches, dans l'ordre
 
-1. Décision design system (voir ci-dessus) + fondations de tokens/composants
-2. Gestion des utilisateurs (liste, CRUD, rôles, sessions, profil)
-3. Dashboard en grille avec vrais widgets, recherche globale
-4. Refonte visuelle des listes de contenu existantes sur les nouveaux composants
-5. Export CSV, filtres avancés
-6. Éditeur riche étendu
-7. Marketplace de plugins (UI)
+1. Fondations shadcn/ui + Tailwind (tokens, composants de base : bouton, champ,
+   table, carte, modale, notification)
+2. Système de notices/recommandations générique + recommandation MFA (ADR-0021) —
+   retirer le blocage de connexion existant dans `mfa.ts`/le flux de login au même
+   moment, les deux moitiés d'un seul changement cohérent
+3. Gestion des utilisateurs (liste, CRUD, rôles, sessions, profil)
+4. Dashboard en grille avec vrais widgets, recherche globale
+5. Refonte visuelle des listes de contenu existantes sur les nouveaux composants
+6. Export CSV, filtres avancés
+7. Éditeur riche étendu
+8. Marketplace de plugins (UI)
 
 ### Critères d'acceptation
 
+- Un compte admin fraîchement créé se connecte avec identifiant/mot de passe seuls,
+  sans jamais être bloqué par une exigence de MFA (ADR-0021) — la recommandation
+  apparaît, visible et persistante, mais ne bloque rien
 - Un admin peut créer, modifier le rôle et révoquer un autre utilisateur sans jamais
   toucher la CLI
 - Un utilisateur peut voir et révoquer ses propres sessions actives

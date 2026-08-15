@@ -42,14 +42,27 @@ async function collectAnswers(
     0,
   )
 
+  // Postgres and MySQL are always offered, not only when a local server is
+  // detected — a real site is as likely to point at a managed remote
+  // database (Neon, PlanetScale, a hosting provider's MySQL) as at one
+  // running on this machine, and hiding the option entirely made those two
+  // of the three supported drivers unreachable from the wizard.
   const databaseChoices: readonly { label: string; value: WizardAnswers['databaseDriver'] }[] = [
-    { label: 'SQLite (default — you can change this later)', value: 'sqlite' },
-    ...(detectedDatabases.postgres
-      ? [{ label: 'Postgres (detected)', value: 'postgres' as const }]
-      : []),
-    ...(detectedDatabases.mysql ? [{ label: 'MySQL (detected)', value: 'mysql' as const }] : []),
+    { label: 'SQLite (default — no separate database server needed)', value: 'sqlite' },
+    {
+      label: detectedDatabases.postgres ? 'Postgres (detected locally)' : 'Postgres',
+      value: 'postgres',
+    },
+    { label: detectedDatabases.mysql ? 'MySQL (detected locally)' : 'MySQL', value: 'mysql' },
   ]
   const databaseDriver = await prompter.choice('Database', databaseChoices, 0)
+
+  let databaseUrl: string | undefined
+  if (databaseDriver === 'postgres' && !detectedDatabases.postgres) {
+    databaseUrl = await prompter.text('Postgres connection URL', '')
+  } else if (databaseDriver === 'mysql' && !detectedDatabases.mysql) {
+    databaseUrl = await prompter.text('MySQL connection URL', '')
+  }
 
   const llmChoice = await prompter.choice<LlmProviderId>(
     'LLM provider',
@@ -79,6 +92,7 @@ async function collectAnswers(
     defaultLocale: locale,
     blueprintId,
     databaseDriver,
+    ...(databaseUrl === undefined || databaseUrl === '' ? {} : { databaseUrl }),
     llmProvider: llmChoice,
     ...(llmModel === undefined || llmModel === '' ? {} : { llmModel }),
     ...(llmApiKey === undefined || llmApiKey === '' ? {} : { llmApiKey }),

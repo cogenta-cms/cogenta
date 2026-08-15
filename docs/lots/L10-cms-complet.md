@@ -1,4 +1,4 @@
-# L10-L18 — De « ça marche » à « CMS complet »
+# L10-L19 — De « ça marche » à « CMS complet »
 
 ## Pourquoi ce document existe
 
@@ -35,9 +35,12 @@ un thème public qui ne ressemblent pas à un formulaire HTML par défaut.
 l'e-commerce, le page builder visuel, la marketplace et l'IA avancée. L'utilisateur a
 tranché : aucune exclusion — l'objectif est un CMS complet, qui couvre absolument
 toutes les fonctionnalités qu'on trouve sur WordPress/Strapi/Drupal/Joomla, plus des
-améliorations. Neuf lots parallélisables, **L10 à L18**, chacun exécutable par un
-agent différent sans attendre les autres au-delà des dépendances explicitement
-listées. Chaque lot a son périmètre, ses tâches dans l'ordre, ses critères
+améliorations. Un dixième lot, **L19**, ajoute ce que l'utilisateur a nommé comme le
+cœur du caractère agentique du produit : téléverser des documents de spécification et
+laisser l'IA comprendre le besoin, proposer un modèle de contenu et plusieurs gabarits,
+que l'utilisateur valide — à l'installation et après. Dix lots parallélisables,
+**L10 à L19**, chacun exécutable par un agent différent sans attendre les autres
+au-delà des dépendances explicitement listées. Chaque lot a son périmètre, ses tâches dans l'ordre, ses critères
 d'acceptation. Un agent peut recevoir « exécute L12 » sans lire les autres sections.
 
 **Contrats à surveiller** : `docs/04-contrats.md` fige A (`schema@1.0`) et B
@@ -800,6 +803,138 @@ bruyamment, cohérent avec comment le reste du produit traite déjà l'absence d
 
 ---
 
+## L19 — Création de site pilotée par l'IA (agentique de bout en bout)
+
+### Objectif
+
+C'est le chantier que l'utilisateur a nommé comme central, pas périphérique : « comme
+c'est un CMS agentique, il faut que ça soit vraiment au cœur du fonctionnement ».
+Aujourd'hui, `npm create cogenta` produit un squelette (blueprint + skin par défaut ou
+généré depuis une simple description texte, `chooseSkin`/`generateSkin`). Ce lot va
+plus loin : l'utilisateur peut téléverser de vrais documents (cahier des charges,
+brief client, spécifications), un agent les lit, comprend le besoin, et propose une
+structure de site complète (modèle de contenu, pages, choix de gabarit) que
+l'utilisateur valide et affine — pas seulement un skin de couleurs, un vrai plan de
+site. Et ce n'est pas réservé à l'installation : la même capacité doit exister dans
+l'admin après coup, pour qu'un site existant puisse être restructuré à partir de
+nouveaux documents.
+
+### Dépendances
+
+Réutilise le runtime agentique existant (`@cogenta/agents`) et le patron déjà
+éprouvé de `chooseSkin`/`generateSkin` (génération avec validation, régénération si
+invalide, jamais livré tel quel si ça ne passe pas la validation) — ce lot l'étend,
+ne le réinvente pas. Dépend de L11 (l'admin a besoin d'une UI de téléversement et de
+validation) pour le volet post-installation. Le volet installeur peut démarrer
+indépendamment.
+
+### Périmètre
+
+**Téléversement et analyse de documents** : accepter PDF, DOCX, Markdown, texte brut
+— un nouvel outil d'agent (contrat C `tools@1.0`) qui extrait le texte, puis un agent
+qui structure le besoin exprimé (type d'activité, pages nécessaires, contenus
+attendus, ton, contraintes explicites). Le contenu du document est une donnée, jamais
+une instruction (R8) — un cahier des charges qui contiendrait par accident une
+formulation ressemblant à une instruction système ne doit jamais changer le
+comportement de l'agent au-delà de structurer un site.
+
+**Proposition de plan de site** : à partir de l'analyse, l'agent propose :
+- un modèle de contenu (quelles collections, quels champs — en s'appuyant sur les 13
+  types de champs déjà réels de contrat A, jamais en inventant un format parallèle)
+- une arborescence de pages
+- **entre deux et cinq gabarits/designs proposés**, que l'utilisateur choisit et
+  peut affiner (extension directe de `generateSkin`, qui aujourd'hui n'en propose
+  qu'un ; ici plusieurs candidats générés et présentés côte à côte)
+- du contenu de démonstration cohérent avec le besoin exprimé, pas un texte
+  générique
+
+**Rien n'est jamais appliqué automatiquement** (R6) : la proposition est un
+brouillon présenté à l'utilisateur, qui valide section par section (accepter le
+modèle de contenu, choisir un gabarit parmi les propositions, ajuster avant
+application) — jamais un site généré et publié sans repasser par un humain.
+
+**Deux points d'entrée, une seule capacité** :
+1. **Dans `npm create cogenta`** : une étape optionnelle avant le scaffold —
+   « avez-vous un document de spécification à téléverser ? » — qui, si oui, lance le
+   flux d'analyse avant même de poser les questions actuelles (nom, type de site,
+   base de données…), et peut pré-remplir ces réponses à partir de ce qui a été
+   compris (l'utilisateur les confirme ou les corrige, jamais un remplissage
+   silencieux).
+2. **Dans l'admin, après installation** : un site déjà en production peut recevoir
+   de nouveaux documents à tout moment (nouvelle phase du projet, besoin qui évolue)
+   et l'agent propose une évolution du modèle de contenu / des pages / du design,
+   toujours en brouillon validable — jamais une réécriture destructive du site
+   existant sans confirmation explicite par section touchée.
+
+**Type de site par défaut, sans document** : quand l'utilisateur ne téléverse rien,
+garder et enrichir ce qui existe déjà (le choix « Site type » du wizard, déjà réel,
+mappé sur les neuf blueprints) — ajouter des paramètres par défaut sensés par type de
+site (ex. portfolio → pas de panier, e-commerce → collections produit/commande
+pré-câblées avec L15) que l'utilisateur valide au fur et à mesure plutôt que de tout
+redéfinir à la main.
+
+### Tâches, dans l'ordre
+
+1. Outil d'agent d'extraction de texte (PDF/DOCX/Markdown/texte brut) — contrat C
+2. Agent d'analyse du besoin (structuration : type d'activité, pages, contenus,
+   ton, contraintes) à partir du texte extrait, avec balisage explicite R8
+3. Extension de `generateSkin` pour produire deux à cinq candidats au lieu d'un,
+   avec la même boucle de validation existante appliquée à chacun
+4. Agent de proposition de modèle de contenu (collections/champs) à partir de
+   l'analyse
+5. UI de validation en admin : présentation du plan proposé, choix du gabarit parmi
+   les candidats, validation section par section, jamais une case « tout accepter »
+   qui masque le détail
+6. Intégration dans le wizard `npm create cogenta` (étape optionnelle de
+   téléversement avant les questions actuelles, pré-remplissage confirmable)
+7. Volet post-installation dans l'admin (mêmes agents, réutilisés sur un site déjà
+   vivant — évolution plutôt que création)
+8. Paramètres par défaut enrichis par type de site (sans document), validables au
+   fur et à mesure
+
+### Critères d'acceptation
+
+- Téléverser un vrai cahier des charges produit un plan de site cohérent avec son
+  contenu réel (testé sur un corpus de documents réels et variés, pas un seul
+  document propre fabriqué pour l'occasion — même piège déjà documenté pour l'import
+  WordPress de L9, il se répète ici)
+- L'utilisateur voit et choisit explicitement entre deux et cinq gabarits proposés,
+  jamais un seul choix imposé
+- Rien n'est appliqué à un site existant sans validation explicite, section par
+  section
+- Le CMS scaffoldé sans aucun document ni fournisseur LLM configuré continue de
+  fonctionner exactement comme aujourd'hui (R2 non négociable — cette capacité est un
+  ajout, jamais un chemin obligatoire)
+- Un contenu de document conçu comme une tentative d'injection de prompt ne fait
+  jamais dévier l'agent de sa tâche de structuration (testé avec un cas réel, R8)
+
+### Tests exigés
+
+Corpus de documents réels et variés (formats différents, qualité différente,
+longueurs différentes) pour l'analyse de besoin — même discipline que l'import
+WordPress. Test d'injection de prompt via le contenu d'un document téléversé. Test
+que la boucle de validation de gabarits rejette et régénère un candidat invalide
+(réutilise directement la logique déjà testée de `chooseSkin`). Test que le CMS
+fonctionne sans LLM configuré (R2).
+
+### Pièges connus
+
+**C'est le lot le plus proche de « magie » du produit — donc celui qui déçoit le
+plus s'il ment.** Un plan de site généré qui ignore une contrainte explicite du
+document (« pas de blog », « en anglais uniquement ») casse la confiance
+immédiatement. Construire le test d'acceptation autour de contraintes explicites
+extraites d'un document réel, vérifier qu'elles sont respectées dans la proposition,
+pas seulement que « quelque chose de plausible » est généré.
+
+**La tentation de tout auto-appliquer pour aller vite.** L'utilisateur a explicitement
+demandé la validation (« que l'utilisateur peut valider », « affiner ») — ne jamais
+publier un site généré sans repasser par cette étape, même en mode `--yes` de
+l'installeur (dans ce cas, soit l'étape de document est simplement absente du flux
+non interactif, soit elle produit un brouillon qui attend d'être validé au premier
+lancement de l'admin, jamais une publication automatique).
+
+---
+
 ## Vue d'ensemble pour l'exécution parallèle
 
 | Lot | Peut démarrer maintenant | Touche un contrat figé | Dépend de |
@@ -813,25 +948,28 @@ bruyamment, cohérent avec comment le reste du produit traite déjà l'absence d
 | L16 | Non | Non | L12 (blocs modernisés) |
 | L17 | Partiellement (registre lecture seule) | Non | L13 (clés API), L15 (paiement, volet commercial) |
 | L18 | Partiellement (vérif driver vector) | Possible (C, si un nouvel outil en a besoin) | L10 (recherche) |
+| L19 | Partiellement (volet installeur) | Non | L11 (UI de validation post-install) |
 
-Aucun lot ne bloque un autre au-delà des dépendances listées. Neuf agents peuvent
-travailler en parallèle dès l'accord sur ce document, avec deux points de
+Aucun lot ne bloque un autre au-delà des dépendances listées. Dix agents peuvent
+travailler en parallèle dès l'accord sur ce document, avec trois points de
 coordination réels : L11 tranche sa décision de design system avant que L12 fige sa
-palette de tokens, et L16 attend que L12 ait modernisé les blocs avant de construire
-le builder par-dessus.
+palette de tokens, L16 attend que L12 ait modernisé les blocs avant de construire le
+builder par-dessus, et L19 attend l'UI de validation de L11 pour son volet
+post-installation (le volet installeur, lui, démarre sans attendre).
 
 ## Ce que « CMS complet » veut dire ici
 
 Toutes les dix-neuf catégories de la liste de l'utilisateur sont couvertes par
-L10-L18, sans exclusion : gestion de contenu et médias (L10, L13), design admin et
+L10-L19, sans exclusion : gestion de contenu et médias (L10, L13), design admin et
 public (L11, L12), SEO (L10), utilisateurs/permissions/workflow (L11, L13),
 multilingue (déjà robuste, exposé par L11), extensions/marketplace (L11, L17), API/
 headless (L10, L13, L14), performance (L10, L12), sécurité (L10, L13, L14),
 analytics (L13), recherche (L10, L18), communication (L13 notifications, L15
 factures/emails via `@cogenta/channels`), e-commerce (L15), architecture technique
-(déjà largement en place, L0-L9), administration (L11), IA (L18), content model
-(déjà le point fort du projet, étendu par L13). Rien de la liste n'est laissé de
-côté ; ce qui reste ouvert, ce sont des décisions d'architecture précises (données
-commerce dans le contrat A ou un contrat E séparé, iframe ou réimplémentation pour
-le page builder) explicitement signalées comme telles dans chaque lot concerné,
-plutôt que tranchées en silence.
+(déjà largement en place, L0-L9), administration (L11), IA (L18, plus la création de
+site pilotée par IA de L19 — le point que l'utilisateur a nommé comme central au
+caractère agentique du produit), content model (déjà le point fort du projet, étendu
+par L13). Rien de la liste n'est laissé de côté ; ce qui reste ouvert, ce sont des
+décisions d'architecture précises (données commerce dans le contrat A ou un contrat E
+séparé, iframe ou réimplémentation pour le page builder) explicitement signalées comme
+telles dans chaque lot concerné, plutôt que tranchées en silence.

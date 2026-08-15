@@ -123,6 +123,7 @@ export function resolveConfig(
       url: config.site.url,
       locales: Object.freeze([...config.site.locales]),
       defaultLocale: config.site.defaultLocale,
+      notFoundPath: config.site.notFoundPath,
     }),
     database: Object.freeze({
       driver,

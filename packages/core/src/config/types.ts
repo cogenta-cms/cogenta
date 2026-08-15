@@ -21,6 +21,8 @@ export interface CogentaConfigInput {
     readonly url: string
     readonly locales?: readonly string[]
     readonly defaultLocale?: string
+    /** Which page answers an unmatched URL. `/404` by default; absent content falls back to a plain refusal. */
+    readonly notFoundPath?: string
   }
   readonly database: {
     /** Inferred from the URL scheme when absent. */
@@ -108,6 +110,7 @@ export interface CogentaConfig {
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
+    readonly notFoundPath: string
   }
   readonly database: {
     readonly driver: DatabaseDriverName

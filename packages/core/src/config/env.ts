@@ -59,6 +59,7 @@ export function applyEnv(
     assign(site, 'name', read(env, 'COGENTA_SITE_NAME'))
     assign(site, 'url', read(env, 'COGENTA_SITE_URL'))
     assign(site, 'defaultLocale', read(env, 'COGENTA_SITE_DEFAULT_LOCALE'))
+    assign(site, 'notFoundPath', read(env, 'COGENTA_SITE_NOT_FOUND_PATH'))
 
     const locales = read(env, 'COGENTA_SITE_LOCALES')
     if (locales !== undefined) {

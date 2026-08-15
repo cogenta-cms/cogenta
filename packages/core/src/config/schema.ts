@@ -18,6 +18,20 @@ const siteSchema = z
     url: z.url(),
     locales: z.array(nonEmpty).min(1).default(['en']),
     defaultLocale: nonEmpty.default('en'),
+    /**
+     * Which page answers a URL that matches nothing (L14 task 2).
+     *
+     * A path, not a template name: the "custom 404" a site really wants is a
+     * page its editors wrote — with the site's own blocks, links and wording —
+     * and this codebase already has exactly one way to turn a path into a
+     * rendered page. So the 404 body is a real entry, editable in the admin
+     * like any other, and a site that has not written one still gets the plain
+     * refusal it got before.
+     */
+    notFoundPath: z
+      .string()
+      .startsWith('/', { error: 'notFoundPath must be a site-relative path starting with "/"' })
+      .default('/404'),
   })
   .refine((site) => site.locales.includes(site.defaultLocale), {
     error: 'defaultLocale must be one of the configured locales',

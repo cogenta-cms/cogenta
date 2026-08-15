@@ -207,6 +207,8 @@ interface Site {
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
+    /** Which page answers an unmatched URL (L14 task 2). `/404` by default. */
+    readonly notFoundPath: string
   }
   /** The skin's custom properties plus the theme's own stylesheet, minified into one. `null` when neither could be loaded — the theme-render fallback serves unstyled HTML rather than refusing. */
   readonly styles: string | null
@@ -235,6 +237,8 @@ interface AssembleSiteOptions {
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
+    /** Which page answers an unmatched URL (L14 task 2). `/404` by default. */
+    readonly notFoundPath: string
   }
   readonly storage: StorageDriver
   readonly logger: Logger
@@ -1114,21 +1118,36 @@ export function createRequestListener(
       // (no Astro build, one theme, no image pipeline). GET only: rendering
       // a page has no meaningful response to any other method.
       if (req.method === 'GET') {
-        const html = await renderRequestedPage(
-          url.pathname,
-          {
-            collections: site.collections,
-            gateway: site.gateway,
-            site: site.site,
-            styles: site.styles,
-            loadMedia: (ids) => loadRenderMedia(site, ids),
-          },
-          context,
-        )
+        const renderOptions = {
+          collections: site.collections,
+          gateway: site.gateway,
+          site: site.site,
+          styles: site.styles,
+          loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+        }
+        const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
           res.end(html)
           return
+        }
+
+        // The site's own 404 page (L14 task 2). It is an ordinary entry at
+        // `site.notFoundPath`, rendered by exactly the same function and
+        // through exactly the same permission-checked gateway as any other
+        // page — a custom 404 that could show content the visitor may not read
+        // would be a hole, not a feature.
+        //
+        // The guard matters: without it, a site whose 404 page is missing (or
+        // whose `notFoundPath` is itself unroutable) would ask for it again
+        // for every unmatched URL forever. One extra lookup, never two.
+        if (url.pathname !== site.site.notFoundPath) {
+          const notFound = await renderRequestedPage(site.site.notFoundPath, renderOptions, context)
+          if (notFound !== null) {
+            res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' })
+            res.end(notFound)
+            return
+          }
         }
       }
 

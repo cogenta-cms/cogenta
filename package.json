@@ -16,8 +16,8 @@
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
-    "test:integration": "turbo run test:integration",
+    "test": "turbo run test --concurrency=4",
+    "test:integration": "turbo run test:integration --concurrency=4",
     "test:e2e": "playwright test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

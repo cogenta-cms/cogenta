@@ -97,6 +97,7 @@ export function printRecap(input: RecapInput, out: Output): void {
 
   out.heading('Next step')
   out.line(`cd ${answers.targetDir}`)
+  out.line('npm install')
   out.line('npx cogenta serve')
   out.detail(
     'Sign in with the admin account above and enrol a passkey from the admin UI — that ceremony needs a browser, so it never runs during install.',

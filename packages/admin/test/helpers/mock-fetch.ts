@@ -84,11 +84,18 @@ export function installMockFetch(
   options: {
     readonly password?: string
     readonly requireTotp?: boolean
-    readonly requireTotpSetup?: boolean
     /** When set, `/api/schema` reports these as `site.locales` (ADR-0014's translation family switcher only renders with 2+). */
     readonly siteLocales?: readonly string[]
     /** Overrides the signed-in user's roles — `['editor']` by default. */
     readonly roles?: readonly string[]
+    /** What `GET /api/notices` answers with. Empty by default: most screens have nothing to recommend. */
+    readonly notices?: readonly {
+      id: string
+      code: string
+      severity: string
+      dismissible: boolean
+      action?: { code: string; href: string }
+    }[]
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -103,6 +110,7 @@ export function installMockFetch(
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
+  let notices = [...(options.notices ?? [])]
 
   let mediaCounter = 0
   const media: {
@@ -135,9 +143,6 @@ export function installMockFetch(
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect email or password.' },
           })
         }
-        if (options.requireTotpSetup === true) {
-          return json(200, { data: { status: 'totp_setup_required', ticket: 'setup-ticket-1' } })
-        }
         if (options.requireTotp === true) {
           return json(200, {
             data: { status: 'mfa_required', ticket: 'ticket-1', availableFactors: ['totp'] },
@@ -155,22 +160,55 @@ export function installMockFetch(
         return json(200, { data: session() })
       }
 
-      if (url.endsWith('/api/auth/totp-setup') && method === 'POST') {
-        if (body.ticket !== 'setup-ticket-1') {
-          return json(401, { error: { code: 'AUTH_SESSION_INVALID', message: 'Invalid ticket.' } })
+      // Self-service enrolment (ADR-0021): identified by the bearer token, never
+      // by anything in the request body.
+      if (url.endsWith('/api/auth/totp/enrol') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
         return json(200, {
           data: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cogenta:alice@example.com' },
         })
       }
 
-      if (url.endsWith('/api/auth/totp-setup-confirm') && method === 'POST') {
-        if (body.ticket !== 'setup-ticket-1' || body.token !== '123456') {
+      if (url.endsWith('/api/auth/totp/enrol/confirm') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        if (body.token !== '123456') {
           return json(401, {
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect verification code.' },
           })
         }
-        return json(200, { data: session() })
+        return json(200, { data: { enrolled: true } })
+      }
+
+      if (url.endsWith('/api/auth/totp') && method === 'DELETE') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return new Response(null, { status: 204 })
+      }
+
+      const dismissMatch = /\/api\/notices\/([^/?]+)\/dismiss$/u.exec(url)
+      if (dismissMatch !== null && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const id = decodeURIComponent(dismissMatch[1] ?? '')
+        const found = notices.find((notice) => notice.id === id)
+        if (found === undefined) {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such notice.' } })
+        }
+        notices = notices.filter((notice) => notice.id !== id)
+        return new Response(null, { status: 204 })
+      }
+
+      if (url.endsWith('/api/notices') && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return json(200, { data: notices })
       }
 
       if (url.endsWith('/api/auth/session') && method === 'GET') {

@@ -10,5 +10,6 @@
 export * from './access/index.js'
 export * from './content/index.js'
 export * from './graphql/index.js'
+export * from './notices/index.js'
 export * from './rest/index.js'
 export * from './types.js'

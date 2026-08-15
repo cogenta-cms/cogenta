@@ -65,13 +65,19 @@
     "totpPrompt": "Enter the 6-digit code from your authenticator app.",
     "code": "Code",
     "verify": "Verify",
-    "totpSetupHeading": "Set up two-factor verification",
-    "totpSetupPrompt": "This role requires a second factor. Scan this code in an authenticator app (Google Authenticator, 1Password…), or enter the key by hand, then type the code it shows.",
-    "totpSetupKeyLabel": "Key:",
-    "confirm": "Confirm",
     "passkeyRefused": "The passkey was refused or cancelled.",
     "connectionFailed": "Could not sign in.",
     "incorrectCode": "Incorrect code."
+  },
+  "notices": {
+    "dismiss": "Hide this recommendation",
+    "security": {
+      "mfa-recommended": {
+        "title": "Turn on two-factor verification",
+        "body": "This account can publish or administer the site. A second factor (an authenticator app or a passkey) protects it if its password ever leaks. Nothing forces you to: this recommendation stays until it is followed or hidden.",
+        "action": "Set it up now"
+      }
+    }
   },
   "collections": {
     "heading": "Content"

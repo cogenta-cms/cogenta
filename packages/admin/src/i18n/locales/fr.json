@@ -65,13 +65,19 @@
     "totpPrompt": "Entrez le code à 6 chiffres de votre application d'authentification.",
     "code": "Code",
     "verify": "Vérifier",
-    "totpSetupHeading": "Configurer la vérification en deux étapes",
-    "totpSetupPrompt": "Ce rôle exige un second facteur. Scannez ce code dans une application d'authentification (Google Authenticator, 1Password…), ou saisissez la clé manuellement, puis entrez le code affiché.",
-    "totpSetupKeyLabel": "Clé :",
-    "confirm": "Confirmer",
     "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
     "connectionFailed": "Connexion impossible.",
     "incorrectCode": "Code incorrect."
+  },
+  "notices": {
+    "dismiss": "Masquer cette recommandation",
+    "security": {
+      "mfa-recommended": {
+        "title": "Activez la vérification en deux étapes",
+        "body": "Ce compte peut publier ou administrer le site. Un second facteur (application d'authentification ou clé d'accès) le protège si son mot de passe fuite. Rien ne vous y oblige : cette recommandation reste affichée tant qu'elle n'est pas suivie ou masquée.",
+        "action": "Configurer maintenant"
+      }
+    }
   },
   "collections": {
     "heading": "Contenus"

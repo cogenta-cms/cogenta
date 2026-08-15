@@ -94,14 +94,48 @@ describe('passwordLogin', () => {
     }
   })
 
-  it('returns totp_setup_required for a sensitive role with no second factor set up', async () => {
+  // ADR-0021. A sensitive role used to be refused a session until it enrolled a
+  // second factor, which locked the first admin of a brand-new site out of
+  // their own site. The recommendation to turn MFA on now lives in the admin's
+  // notices instead, where it persists but never blocks.
+  it('signs a sensitive role straight in when it has no second factor set up', async () => {
     const { users, credentials, auth } = await setup(PUBLISH_COLLECTIONS)
     const user = await users.create({ email: 'ed@example.com', roles: ['editor'] })
     await credentials.setPassword(user.id, 'correct horse battery staple')
 
     const result = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
-    expect(result.status).toBe('totp_setup_required')
-    if (result.status === 'totp_setup_required') expect(result.ticket).toBeTruthy()
+    expect(result.status).toBe('session')
+  })
+
+  it('signs a brand-new admin straight in, with no MFA ceremony in the way', async () => {
+    const { users, credentials, auth } = await setup(PUBLISH_COLLECTIONS)
+    const user = await users.create({ email: 'root@example.com', roles: ['admin'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+
+    const result = await auth.passwordLogin('root@example.com', 'correct horse battery staple')
+    expect(result.status).toBe('session')
+    if (result.status === 'session') expect(result.session.token).toBeTruthy()
+  })
+
+  it('still challenges an account that enrolled TOTP, whatever its role', async () => {
+    const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'viewer@example.com', roles: ['viewer'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+    await credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+    await credentials.confirmTotp(user.id)
+
+    const result = await auth.passwordLogin('viewer@example.com', 'correct horse battery staple')
+    expect(result.status).toBe('mfa_required')
+  })
+
+  it('ignores a TOTP secret that was never confirmed, rather than asking for a code nobody has', async () => {
+    const { users, credentials, auth } = await setup(PUBLISH_COLLECTIONS)
+    const user = await users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+    await credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+
+    const result = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    expect(result.status).toBe('session')
   })
 
   it('rate-limits repeated failed password attempts for the same subject', async () => {
@@ -236,117 +270,107 @@ describe('totpLogin', () => {
   })
 })
 
+/**
+ * ADR-0021 moved enrolment out of the sign-in flow entirely. It is no longer
+ * driven by a ticket the password step handed out — it is driven by an already
+ * signed-in session, from the account's own profile, and the only account it
+ * can ever touch is the caller's own.
+ */
 describe('TOTP self-service enrolment', () => {
-  async function editorNeedingSetup() {
+  async function signedInEditor() {
     const bundle = await setup(PUBLISH_COLLECTIONS)
     const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
     await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
     const result = await bundle.auth.passwordLogin('ed@example.com', 'correct horse battery staple')
-    if (result.status !== 'totp_setup_required') throw new Error('expected totp_setup_required')
-    return { ...bundle, user, ticket: result.ticket }
+    if (result.status !== 'session') throw new Error('expected a session')
+    return { ...bundle, user }
   }
 
   it('generates a secret and an otpauth:// URI naming the account', async () => {
-    const { auth, ticket, user } = await editorNeedingSetup()
-    const enrolment = await auth.beginTotpSetup(ticket)
+    const { auth, user } = await signedInEditor()
+    const enrolment = await auth.beginTotpEnrolment(user.id)
 
     expect(enrolment.secret.length).toBeGreaterThan(0)
     expect(enrolment.uri).toMatch(/^otpauth:\/\/totp\//)
     expect(decodeURIComponent(enrolment.uri)).toContain(user.email)
   })
 
-  it('confirms with the right code and signs the user in', async () => {
-    const { auth, ticket } = await editorNeedingSetup()
-    const now = Math.floor(Date.now() / 1000)
-    const enrolment = await auth.beginTotpSetup(ticket)
+  it('leaves the factor unusable until the code from the app confirms it', async () => {
+    const { auth, credentials, user } = await signedInEditor()
+    await auth.beginTotpEnrolment(user.id)
 
-    const result = await auth.confirmTotpSetup(ticket, codeFor(enrolment.secret, now))
-    expect(result.status).toBe('session')
+    expect((await credentials.totpSecret(user.id))?.verified).toBe(false)
+    const beforeConfirming = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    expect(beforeConfirming.status).toBe('session')
   })
 
-  it('leaves the account able to sign in normally afterwards, this time as mfa_required', async () => {
-    const { auth, ticket } = await editorNeedingSetup()
+  it('makes the next sign-in ask for a code once enrolment is confirmed', async () => {
+    const { auth, user } = await signedInEditor()
     const now = Math.floor(Date.now() / 1000)
-    const enrolment = await auth.beginTotpSetup(ticket)
-    await auth.confirmTotpSetup(ticket, codeFor(enrolment.secret, now))
+    const enrolment = await auth.beginTotpEnrolment(user.id)
+    await auth.confirmTotpEnrolment(user.id, codeFor(enrolment.secret, now))
 
     const second = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
     expect(second.status).toBe('mfa_required')
+    if (second.status === 'mfa_required') expect(second.availableFactors).toEqual(['totp'])
   })
 
   it('rejects the wrong code without confirming the secret', async () => {
-    const { auth, ticket, credentials, user } = await editorNeedingSetup()
-    await auth.beginTotpSetup(ticket)
+    const { auth, credentials, user } = await signedInEditor()
+    await auth.beginTotpEnrolment(user.id)
 
-    await expect(auth.confirmTotpSetup(ticket, '000000')).rejects.toMatchObject({
+    await expect(auth.confirmTotpEnrolment(user.id, '000000')).rejects.toMatchObject({
       code: 'AUTH_INVALID_CREDENTIALS',
     })
     expect((await credentials.totpSecret(user.id))?.verified).toBe(false)
   })
 
   it('only the most recently requested secret can be confirmed', async () => {
-    const { auth, ticket } = await editorNeedingSetup()
+    const { auth, user } = await signedInEditor()
     const now = Math.floor(Date.now() / 1000)
-    const first = await auth.beginTotpSetup(ticket)
-    const second = await auth.beginTotpSetup(ticket)
+    const first = await auth.beginTotpEnrolment(user.id)
+    const second = await auth.beginTotpEnrolment(user.id)
     expect(second.secret).not.toBe(first.secret)
 
-    await expect(auth.confirmTotpSetup(ticket, codeFor(first.secret, now))).rejects.toMatchObject({
-      code: 'AUTH_INVALID_CREDENTIALS',
-    })
-    await expect(auth.confirmTotpSetup(ticket, codeFor(second.secret, now))).resolves.toMatchObject(
-      {
-        status: 'session',
-      },
-    )
+    await expect(
+      auth.confirmTotpEnrolment(user.id, codeFor(first.secret, now)),
+    ).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' })
+    await expect(
+      auth.confirmTotpEnrolment(user.id, codeFor(second.secret, now)),
+    ).resolves.toBeUndefined()
   })
 
-  it('refuses a login-purpose ticket for setup, and a setup-purpose ticket for login', async () => {
-    const bundle = await setup(PUBLISH_COLLECTIONS)
-    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
-    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
-    await bundle.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
-    await bundle.credentials.confirmTotp(user.id)
+  it('refuses to enrol a disabled account', async () => {
+    const { auth, users, user } = await signedInEditor()
+    await users.setStatus(user.id, 'disabled')
 
-    // This account already has TOTP confirmed, so its ticket is a login one.
-    const loginResult = await bundle.auth.passwordLogin(
-      'ed@example.com',
-      'correct horse battery staple',
-    )
-    if (loginResult.status !== 'mfa_required') throw new Error('expected mfa_required')
-
-    await expect(bundle.auth.beginTotpSetup(loginResult.ticket)).rejects.toMatchObject({
-      code: 'AUTH_SESSION_INVALID',
-    })
-
-    const { auth, ticket } = await editorNeedingSetup()
-    await expect(auth.totpLogin(ticket, '000000')).rejects.toMatchObject({
-      code: 'AUTH_SESSION_INVALID',
+    await expect(auth.beginTotpEnrolment(user.id)).rejects.toMatchObject({
+      code: 'AUTH_USER_NOT_FOUND',
     })
   })
 
-  it('rejects an expired setup ticket', async () => {
-    let clock = 1_000_000_000
-    const bundle = await setup(PUBLISH_COLLECTIONS, () => clock)
-    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
-    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
-    const result = await bundle.auth.passwordLogin('ed@example.com', 'correct horse battery staple')
-    if (result.status !== 'totp_setup_required') throw new Error('expected totp_setup_required')
+  it('turns the factor back off, and the next sign-in stops asking', async () => {
+    const { auth, user } = await signedInEditor()
+    const now = Math.floor(Date.now() / 1000)
+    const enrolment = await auth.beginTotpEnrolment(user.id)
+    await auth.confirmTotpEnrolment(user.id, codeFor(enrolment.secret, now))
 
-    clock += 6 * 60 * 1000
-    await expect(bundle.auth.beginTotpSetup(result.ticket)).rejects.toMatchObject({
-      code: 'AUTH_SESSION_INVALID',
-    })
+    await auth.disableTotp(user.id)
+    const after = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    expect(after.status).toBe('session')
   })
 
   it('rate-limits repeated wrong confirmation codes', async () => {
-    const { auth, ticket } = await editorNeedingSetup()
-    await auth.beginTotpSetup(ticket)
+    const { auth, user } = await signedInEditor()
+    await auth.beginTotpEnrolment(user.id)
 
     for (let i = 0; i < 5; i += 1) {
-      await auth.confirmTotpSetup(ticket, '000000').catch(() => undefined)
+      await auth.confirmTotpEnrolment(user.id, '000000').catch(() => undefined)
     }
-    await expect(auth.confirmTotpSetup(ticket, '000000')).rejects.toMatchObject({
+    await expect(auth.confirmTotpEnrolment(user.id, '000000')).rejects.toMatchObject({
       code: 'AUTH_RATE_LIMITED',
     })
   })

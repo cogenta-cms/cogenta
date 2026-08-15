@@ -68,39 +68,27 @@ async function project(): Promise<string> {
 }
 
 /**
- * Signs in a user whose role can publish, completing the mandatory TOTP
- * enrolment along the way (roles that can publish are always MFA-sensitive
- * — see `packages/auth/src/mfa.ts` — so login never returns a session on
- * the first call for one of them). Returns the bearer token.
+ * Signs in with email and password only, and returns the bearer token.
+ *
+ * Since ADR-0021 this is all it takes for any role, including one that can
+ * publish and including `admin`: a second factor is recommended through the
+ * admin's notices, never demanded at the door. This helper used to walk a
+ * whole forced TOTP enrolment before it could get a token.
  */
-async function loginWithMfaSetup(base: string, email: string, password: string): Promise<string> {
-  const login = await fetch(`${base}/api/auth/login`, {
+async function login(base: string, email: string, password: string): Promise<string> {
+  const response = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
-  const loginBody = (await login.json()) as { data: { status: string; ticket: string } }
-  if (loginBody.data.status !== 'totp_setup_required') {
-    throw new Error(`expected totp_setup_required, got ${loginBody.data.status}`)
+  const body = (await response.json()) as {
+    data: { status: string; session?: { token: string } }
   }
-
-  const setup = await fetch(`${base}/api/auth/totp-setup`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ticket: loginBody.data.ticket }),
-  })
-  const setupBody = (await setup.json()) as { data: { secret: string } }
-
-  const confirmed = await fetch(`${base}/api/auth/totp-setup-confirm`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      ticket: loginBody.data.ticket,
-      token: codeFor(setupBody.data.secret, Date.now() / 1000),
-    }),
-  })
-  const confirmedBody = (await confirmed.json()) as { data: { session: { token: string } } }
-  return confirmedBody.data.session.token
+  const token = body.data.session?.token
+  if (body.data.status !== 'session' || token === undefined) {
+    throw new Error(`expected a session, got ${body.data.status}`)
+  }
+  return token
 }
 
 const activeServers: AbortController[] = []
@@ -193,11 +181,7 @@ describe('runServe', () => {
       await credentials.setPassword(user.id, 'correct horse battery staple')
       await db.close()
 
-      const token = await loginWithMfaSetup(
-        server.base,
-        'editor@example.com',
-        'correct horse battery staple',
-      )
+      const token = await login(server.base, 'editor@example.com', 'correct horse battery staple')
 
       // Reads are unaffected by read-only mode.
       const read = await fetch(`${server.base}/api/content/article`)
@@ -355,37 +339,8 @@ describe('runServe', () => {
       await credentials.setPassword(user.id, 'correct horse battery staple')
       await db.close()
 
-      const login = await fetch(`${server.base}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email: 'admin@example.com',
-          password: 'correct horse battery staple',
-        }),
-      })
-      // `editor` can publish `article`, so login stops at MFA enrolment
-      // rather than a session (the rule is not configurable — ADR/MFA
-      // policy) — complete it the same way a first-time editor would.
-      const loginBody = (await login.json()) as { data: { status: string; ticket: string } }
-      expect(loginBody.data.status).toBe('totp_setup_required')
-
-      const setup = await fetch(`${server.base}/api/auth/totp-setup`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ticket: loginBody.data.ticket }),
-      })
-      const setupBody = (await setup.json()) as { data: { secret: string } }
-
-      const confirmed = await fetch(`${server.base}/api/auth/totp-setup-confirm`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ticket: loginBody.data.ticket,
-          token: codeFor(setupBody.data.secret, Date.now() / 1000),
-        }),
-      })
-      const confirmedBody = (await confirmed.json()) as { data: { session: { token: string } } }
-      const auth = { authorization: `Bearer ${confirmedBody.data.session.token}` }
+      const token = await login(server.base, 'admin@example.com', 'correct horse battery staple')
+      const auth = { authorization: `Bearer ${token}` }
 
       const created = await fetch(`${server.base}/api/content/article`, {
         method: 'POST',
@@ -517,7 +472,7 @@ describe('runServe', () => {
       await credentials.setPassword(admin.id, 'correct horse battery staple')
       await db.close()
 
-      const editorToken = await loginWithMfaSetup(
+      const editorToken = await login(
         server.base,
         'editor@example.com',
         'correct horse battery staple',
@@ -528,7 +483,7 @@ describe('runServe', () => {
         body: JSON.stringify({ values: { title: 'Audited article' } }),
       })
 
-      const adminToken = await loginWithMfaSetup(
+      const adminToken = await login(
         server.base,
         'admin@example.com',
         'correct horse battery staple',
@@ -576,11 +531,7 @@ describe('runServe', () => {
       const anonymous = await fetch(`${server.base}/api/health`)
       expect(anonymous.status).toBe(403)
 
-      const token = await loginWithMfaSetup(
-        server.base,
-        'admin@example.com',
-        'correct horse battery staple',
-      )
+      const token = await login(server.base, 'admin@example.com', 'correct horse battery staple')
       const response = await fetch(`${server.base}/api/health`, {
         headers: { authorization: `Bearer ${token}` },
       })
@@ -598,6 +549,121 @@ describe('runServe', () => {
       expect(body.data.storage.status).not.toBe('down')
       expect(body.data.database.driver).toBe('sqlite')
       expect(body.data.storage.driver).toBe('local')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  /**
+   * ADR-0021, end to end against a real server rather than a router in
+   * isolation: a brand-new admin signs in with nothing but a password, is told
+   * about MFA instead of being stopped by it, and the moment they actually
+   * enrol — through the real HTTP routes, with a real TOTP code — the
+   * recommendation is gone.
+   */
+  it('recommends MFA to a fresh admin instead of blocking them, and stops once they enrol', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const admin = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+      await credentials.setPassword(admin.id, 'correct horse battery staple')
+      await db.close()
+
+      // A password alone is enough, for `admin`, on the very first sign-in.
+      const token = await login(server.base, 'admin@example.com', 'correct horse battery staple')
+      const auth = { authorization: `Bearer ${token}` }
+
+      const before = await fetch(`${server.base}/api/notices`, { headers: auth })
+      expect(before.status).toBe(200)
+      const beforeBody = (await before.json()) as { data: { id: string; severity: string }[] }
+      expect(beforeBody.data.map((notice) => notice.id)).toContain('security.mfa-recommended')
+
+      // Nobody else's notices, and no notices at all without a session.
+      const anonymous = await fetch(`${server.base}/api/notices`)
+      expect(anonymous.status).toBe(401)
+
+      const begin = await fetch(`${server.base}/api/auth/totp/enrol`, {
+        method: 'POST',
+        headers: auth,
+      })
+      expect(begin.status).toBe(200)
+      const { secret } = ((await begin.json()) as { data: { secret: string } }).data
+
+      const confirm = await fetch(`${server.base}/api/auth/totp/enrol/confirm`, {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ token: codeFor(secret, Date.now() / 1000) }),
+      })
+      expect(confirm.status).toBe(200)
+
+      const after = await fetch(`${server.base}/api/notices`, { headers: auth })
+      const afterBody = (await after.json()) as { data: { id: string }[] }
+      expect(afterBody.data.map((notice) => notice.id)).not.toContain('security.mfa-recommended')
+
+      // And the factor is real: the next sign-in asks for a code.
+      const second = await fetch(`${server.base}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'admin@example.com',
+          password: 'correct horse battery staple',
+        }),
+      })
+      expect(((await second.json()) as { data: { status: string } }).data.status).toBe(
+        'mfa_required',
+      )
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('remembers a dismissed notice across sessions, for that account only', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const one = await users.create({ email: 'one@example.com', roles: ['admin'] })
+      await credentials.setPassword(one.id, 'correct horse battery staple')
+      const two = await users.create({ email: 'two@example.com', roles: ['admin'] })
+      await credentials.setPassword(two.id, 'correct horse battery staple')
+      await db.close()
+
+      const first = await login(server.base, 'one@example.com', 'correct horse battery staple')
+      const dismissed = await fetch(`${server.base}/api/notices/security.mfa-recommended/dismiss`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${first}` },
+      })
+      expect(dismissed.status).toBe(204)
+
+      // A brand-new session for the same account: still dismissed, because the
+      // answer lives on the account, not in one browser.
+      const again = await login(server.base, 'one@example.com', 'correct horse battery staple')
+      const mine = await fetch(`${server.base}/api/notices`, {
+        headers: { authorization: `Bearer ${again}` },
+      })
+      expect(((await mine.json()) as { data: unknown[] }).data).toEqual([])
+
+      const otherToken = await login(server.base, 'two@example.com', 'correct horse battery staple')
+      const theirs = await fetch(`${server.base}/api/notices`, {
+        headers: { authorization: `Bearer ${otherToken}` },
+      })
+      const theirBody = (await theirs.json()) as { data: { id: string }[] }
+      expect(theirBody.data.map((notice) => notice.id)).toContain('security.mfa-recommended')
     } finally {
       await server.stop()
     }

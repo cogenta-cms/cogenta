@@ -183,8 +183,14 @@ describe('DELETE /api/auth/session', () => {
   })
 })
 
-describe('TOTP self-service enrolment', () => {
-  async function editorNeedingSetup() {
+/**
+ * ADR-0021. Sign-in no longer turns anyone away for lacking a second factor, so
+ * enrolment is no longer a step in the sign-in flow: it is self-service on an
+ * account that is already signed in, and the account it touches is whichever
+ * one the bearer token resolves to.
+ */
+describe('POST /api/auth/login, since MFA stopped being a gate', () => {
+  async function editorWithoutMfa() {
     const db_ = await createSqliteHandle({ url: ':memory:' })
     const authWithMfa = await createAuthStore({
       db: db_,
@@ -193,21 +199,11 @@ describe('TOTP self-service enrolment', () => {
     })
     const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
     await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
-    const router = createAuthRouter({ auth: authWithMfa })
-
-    const login = await router.handle(
-      request('POST', '/api/auth/login', {
-        body: { email: 'ed@example.com', password: 'correct horse battery staple' },
-      }),
-    )
-    const body = login.body as { data: { status: string; ticket: string } }
-    if (body.data.status !== 'totp_setup_required') throw new Error('expected totp_setup_required')
-
-    return { db: db_, auth: authWithMfa, router, ticket: body.data.ticket, user }
+    return { db: db_, auth: authWithMfa, router: createAuthRouter({ auth: authWithMfa }), user }
   }
 
-  it('returns totp_setup_required from login for a role with no factor yet', async () => {
-    const { db: db_, router } = await editorNeedingSetup()
+  it('issues a session to a publish-capable role with no second factor at all', async () => {
+    const { db: db_, router } = await editorWithoutMfa()
     try {
       const login = await router.handle(
         request('POST', '/api/auth/login', {
@@ -215,20 +211,72 @@ describe('TOTP self-service enrolment', () => {
         }),
       )
       expect(login.status).toBe(200)
-      const body = login.body as { data: { status: string; ticket: string } }
-      expect(body.data.status).toBe('totp_setup_required')
-      expect(body.data.ticket).toBeTruthy()
+      const body = login.body as { data: { status: string; session: { token: string } } }
+      expect(body.data.status).toBe('session')
+      expect(body.data.session.token).toBeTruthy()
+    } finally {
+      await db_.close()
+    }
+  })
+})
+
+describe('TOTP self-service enrolment', () => {
+  async function signedInEditor() {
+    const db_ = await createSqliteHandle({ url: ':memory:' })
+    const authWithMfa = await createAuthStore({
+      db: db_,
+      signingKey: SIGNING_KEY,
+      collections: PUBLISH_COLLECTIONS,
+    })
+    const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
+    const session = await authWithMfa.sessions.create(user.id)
+    return {
+      db: db_,
+      auth: authWithMfa,
+      router: createAuthRouter({ auth: authWithMfa }),
+      user,
+      token: session.token,
+    }
+  }
+
+  it('refuses to begin enrolment without a session', async () => {
+    const { db: db_, router } = await signedInEditor()
+    try {
+      const response = await router.handle(request('POST', '/api/auth/totp/enrol'))
+      expect(response.status).toBe(401)
+      expect((response.body as { error: { code: string } }).error.code).toBe('UNAUTHENTICATED')
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('refuses to confirm enrolment without a session', async () => {
+    const { db: db_, router } = await signedInEditor()
+    try {
+      const response = await router.handle(
+        request('POST', '/api/auth/totp/enrol/confirm', { body: { token: '000000' } }),
+      )
+      expect(response.status).toBe(401)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('refuses to turn the factor off without a session', async () => {
+    const { db: db_, router } = await signedInEditor()
+    try {
+      const response = await router.handle(request('DELETE', '/api/auth/totp'))
+      expect(response.status).toBe(401)
     } finally {
       await db_.close()
     }
   })
 
   it('begins enrolment with a secret and a QR-ready URI', async () => {
-    const { db: db_, router, ticket } = await editorNeedingSetup()
+    const { db: db_, router, token } = await signedInEditor()
     try {
-      const response = await router.handle(
-        request('POST', '/api/auth/totp-setup', { body: { ticket } }),
-      )
+      const response = await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
       expect(response.status).toBe(200)
       const body = response.body as { data: { secret: string; uri: string } }
       expect(body.data.secret.length).toBeGreaterThan(0)
@@ -238,68 +286,85 @@ describe('TOTP self-service enrolment', () => {
     }
   })
 
-  it('confirms with the right code and returns a session', async () => {
-    const { db: db_, router, ticket, user } = await editorNeedingSetup()
+  it('makes the next sign-in ask for a code once the right code confirms it', async () => {
+    const { db: db_, router, token } = await signedInEditor()
     try {
       const now = Math.floor(Date.now() / 1000)
-      const begin = await router.handle(
-        request('POST', '/api/auth/totp-setup', { body: { ticket } }),
-      )
+      const begin = await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
       const { secret } = (begin.body as { data: { secret: string } }).data
 
       const confirm = await router.handle(
-        request('POST', '/api/auth/totp-setup-confirm', {
-          body: { ticket, token: codeFor(secret, now) },
+        request('POST', '/api/auth/totp/enrol/confirm', {
+          token,
+          body: { token: codeFor(secret, now) },
         }),
       )
       expect(confirm.status).toBe(200)
-      const body = confirm.body as { data: { status: string; user: { id: string } } }
-      expect(body.data.status).toBe('session')
-      expect(body.data.user.id).toBe(user.id)
-    } finally {
-      await db_.close()
-    }
-  })
-
-  it('rejects the wrong confirmation code with 401', async () => {
-    const { db: db_, router, ticket } = await editorNeedingSetup()
-    try {
-      await router.handle(request('POST', '/api/auth/totp-setup', { body: { ticket } }))
-      const response = await router.handle(
-        request('POST', '/api/auth/totp-setup-confirm', { body: { ticket, token: '000000' } }),
-      )
-      expect(response.status).toBe(401)
-    } finally {
-      await db_.close()
-    }
-  })
-
-  it('refuses a login-purpose ticket on the setup routes', async () => {
-    const db_ = await createSqliteHandle({ url: ':memory:' })
-    try {
-      const authWithMfa = await createAuthStore({
-        db: db_,
-        signingKey: SIGNING_KEY,
-        collections: PUBLISH_COLLECTIONS,
-      })
-      const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
-      await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
-      await authWithMfa.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
-      await authWithMfa.credentials.confirmTotp(user.id)
-      const router = createAuthRouter({ auth: authWithMfa })
 
       const login = await router.handle(
         request('POST', '/api/auth/login', {
           body: { email: 'ed@example.com', password: 'correct horse battery staple' },
         }),
       )
-      const { ticket } = (login.body as { data: { ticket: string } }).data
+      expect((login.body as { data: { status: string } }).data.status).toBe('mfa_required')
+    } finally {
+      await db_.close()
+    }
+  })
 
+  it('rejects the wrong confirmation code with 401', async () => {
+    const { db: db_, router, token } = await signedInEditor()
+    try {
+      await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
       const response = await router.handle(
-        request('POST', '/api/auth/totp-setup', { body: { ticket } }),
+        request('POST', '/api/auth/totp/enrol/confirm', { token, body: { token: '000000' } }),
       )
       expect(response.status).toBe(401)
-      expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_SESSION_INVALID')
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('enrols only the caller, never an account named in the request', async () => {
+    const { db: db_, auth: authWithMfa, router, token } = await signedInEditor()
+    try {
+      const other = await authWithMfa.users.create({
+        email: 'victim@example.com',
+        roles: ['editor'],
+      })
+
+      await router.handle(
+        request('POST', '/api/auth/totp/enrol', { token, body: { userId: other.id } }),
+      )
+
+      expect(await authWithMfa.credentials.totpSecret(other.id)).toBeNull()
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('turns the factor back off, and the next sign-in stops asking', async () => {
+    const { db: db_, router, token } = await signedInEditor()
+    try {
+      const now = Math.floor(Date.now() / 1000)
+      const begin = await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
+      const { secret } = (begin.body as { data: { secret: string } }).data
+      await router.handle(
+        request('POST', '/api/auth/totp/enrol/confirm', {
+          token,
+          body: { token: codeFor(secret, now) },
+        }),
+      )
+
+      const off = await router.handle(request('DELETE', '/api/auth/totp', { token }))
+      expect(off.status).toBe(204)
+
+      const login = await router.handle(
+        request('POST', '/api/auth/login', {
+          body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+        }),
+      )
+      expect((login.body as { data: { status: string } }).data.status).toBe('session')
     } finally {
       await db_.close()
     }

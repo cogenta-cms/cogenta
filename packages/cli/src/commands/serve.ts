@@ -16,10 +16,14 @@ import {
   createContentGateway,
   createContentService,
   createMediaRouter,
+  createMfaRecommendationSource,
+  createNoticeDismissalStore,
+  createNoticeRouter,
   createPermissionLayer,
   createRestRouter,
   executeGraphQL,
   type MediaRouter,
+  type NoticeRouter,
   type RestRequest,
   type RestResponse,
   type RestRouter,
@@ -137,6 +141,8 @@ interface Site {
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
   readonly auditRouter: AuditRouter
+  /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
+  readonly noticeRouter: NoticeRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
@@ -233,6 +239,9 @@ async function assembleSite(
 
   const mediaStore = createDatabaseMediaStore({ db })
 
+  const noticeDismissals = createNoticeDismissalStore(db)
+  await noticeDismissals.ensureTable()
+
   return {
     db,
     auth,
@@ -240,6 +249,13 @@ async function assembleSite(
     authRouter: createAuthRouter({ auth }),
     mediaRouter: createMediaRouter({ store: mediaStore, storage }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
+    noticeRouter: createNoticeRouter({
+      // One source today, and the seam is the array: a future recommendation
+      // (a plugin update waiting, a certificate about to expire) is one more
+      // entry here and nothing else anywhere.
+      sources: [createMfaRecommendationSource({ collections, credentials: auth.credentials })],
+      dismissals: noticeDismissals,
+    }),
     ...(agents === undefined ? {} : { agentsRouter: createAgentsRouter(agents) }),
     mediaStore,
     storage,
@@ -616,6 +632,12 @@ export function createRequestListener(
       if (url.pathname.startsWith('/api/audit')) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
+        return
+      }
+
+      if (url.pathname.startsWith('/api/notices')) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.noticeRouter.handle(request, context.actor))
         return
       }
 

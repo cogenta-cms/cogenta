@@ -95,10 +95,10 @@ function objectField(body: Record<string, unknown>, field: string): Record<strin
   return value as Record<string, unknown>
 }
 
-function unauthenticated(): CogentaError {
+function unauthenticated(what: string): CogentaError {
   return new CogentaError({
     code: 'UNAUTHENTICATED',
-    message: 'Sign in before registering a passkey.',
+    message: `Sign in before ${what}.`,
     hint: 'Send "Authorization: Bearer <token>" from an existing session.',
   })
 }
@@ -115,14 +115,11 @@ function loginResponseBody(result: LoginResult): unknown {
       user: { id: result.user.id, email: result.user.email, roles: result.user.roles },
     }
   }
-  if (result.status === 'mfa_required') {
-    return {
-      status: 'mfa_required',
-      ticket: result.ticket,
-      availableFactors: result.availableFactors,
-    }
+  return {
+    status: 'mfa_required',
+    ticket: result.ticket,
+    availableFactors: result.availableFactors,
   }
-  return { status: 'totp_setup_required', ticket: result.ticket }
 }
 
 function whoami(user: User): unknown {
@@ -158,6 +155,7 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     const [action] = segments
 
     if (action === 'webauthn') return webauthnRoute(request, segments, method)
+    if (action === 'totp') return totpRoute(request, segments, method)
     if (segments.length !== 1) throw noRoute()
 
     if (action === 'login') {
@@ -166,33 +164,6 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
       const result = await auth.login.passwordLogin(
         stringField(body, 'email'),
         stringField(body, 'password'),
-      )
-      return jsonResponse(200, { data: loginResponseBody(result) })
-    }
-
-    if (action === 'totp') {
-      if (method !== 'POST') return methodNotAllowed(['POST'])
-      const body = asRecord(request.body)
-      const result = await auth.login.totpLogin(
-        stringField(body, 'ticket'),
-        stringField(body, 'token'),
-      )
-      return jsonResponse(200, { data: loginResponseBody(result) })
-    }
-
-    if (action === 'totp-setup') {
-      if (method !== 'POST') return methodNotAllowed(['POST'])
-      const body = asRecord(request.body)
-      const setup = await auth.login.beginTotpSetup(stringField(body, 'ticket'))
-      return jsonResponse(200, { data: setup })
-    }
-
-    if (action === 'totp-setup-confirm') {
-      if (method !== 'POST') return methodNotAllowed(['POST'])
-      const body = asRecord(request.body)
-      const result = await auth.login.confirmTotpSetup(
-        stringField(body, 'ticket'),
-        stringField(body, 'token'),
       )
       return jsonResponse(200, { data: loginResponseBody(result) })
     }
@@ -224,6 +195,64 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
   }
 
   /**
+   * `/api/auth/totp*` — one route that answers with a session, and three that
+   * manage the factor for an account that is already signed in.
+   *
+   * The split matters. `POST /api/auth/totp` completes a sign-in and is
+   * therefore reachable without a session, on the strength of the ticket the
+   * password step issued. The other three are self-service: the account they
+   * touch is the one the bearer token resolves to, never one named in the
+   * request, so there is no shape of request that lets one person enrol or
+   * disable a second factor on someone else's account (R4).
+   *
+   * Since ADR-0021 there is no ticket-driven enrolment at all: nobody is turned
+   * away at sign-in for lacking a second factor, so nothing needs to hand out
+   * proof that a password step happened for the purpose of enrolling one.
+   */
+  async function totpRoute(
+    request: RestRequest,
+    segments: readonly string[],
+    method: string,
+  ): Promise<RestResponse> {
+    if (segments.length === 1) {
+      if (method === 'POST') {
+        const body = asRecord(request.body)
+        const result = await auth.login.totpLogin(
+          stringField(body, 'ticket'),
+          stringField(body, 'token'),
+        )
+        return jsonResponse(200, { data: loginResponseBody(result) })
+      }
+
+      if (method === 'DELETE') {
+        const actor = await resolveActor(auth, request.headers)
+        if (actor.id === null) throw unauthenticated('turning off two-step verification')
+        await auth.login.disableTotp(actor.id)
+        return { status: 204, body: null, headers: {} }
+      }
+
+      return methodNotAllowed(['POST', 'DELETE'])
+    }
+
+    if (segments.length === 2 && segments[1] === 'enrol') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      const actor = await resolveActor(auth, request.headers)
+      if (actor.id === null) throw unauthenticated('setting up two-step verification')
+      return jsonResponse(200, { data: await auth.login.beginTotpEnrolment(actor.id) })
+    }
+
+    if (segments.length === 3 && segments[1] === 'enrol' && segments[2] === 'confirm') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      const actor = await resolveActor(auth, request.headers)
+      if (actor.id === null) throw unauthenticated('setting up two-step verification')
+      await auth.login.confirmTotpEnrolment(actor.id, stringField(asRecord(request.body), 'token'))
+      return jsonResponse(200, { data: { enrolled: true } })
+    }
+
+    throw noRoute()
+  }
+
+  /**
    * `/api/auth/webauthn/{register|login}/{begin|complete}` — three segments,
    * routed apart from everything else above because registration's `begin`
    * needs the caller's actor (an existing session adding a passkey) while
@@ -240,7 +269,7 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
     if (resource === 'register' && step === 'begin') {
       const actor = await resolveActor(auth, request.headers)
-      if (actor.id === null) throw unauthenticated()
+      if (actor.id === null) throw unauthenticated('registering a passkey')
       const challenge = await auth.login.beginWebAuthnRegistration(actor.id)
       return jsonResponse(200, { data: challenge })
     }
@@ -293,8 +322,8 @@ function noRoute(): CogentaError {
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
     hint:
-      'Auth routes are /api/auth/login, /api/auth/totp, /api/auth/totp-setup, ' +
-      '/api/auth/totp-setup-confirm, /api/auth/session, and ' +
+      'Auth routes are /api/auth/login, /api/auth/totp, /api/auth/totp/enrol, ' +
+      '/api/auth/totp/enrol/confirm, /api/auth/session, and ' +
       '/api/auth/webauthn/{register|login}/{begin|complete}.',
   })
 }

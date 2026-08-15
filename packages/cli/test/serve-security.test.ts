@@ -240,6 +240,49 @@ describe('cogenta serve — cache-control (L10 task 6)', () => {
     }
   }, 60_000)
 
+  it('never lets a shared cache store a page rendered for a signed-in actor', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ values: { title: 'Embargoed', slug: 'embargoed' } }),
+        })
+      ).json()) as { data: { id: string } }
+      await fetch(`${server.base}/api/content/page/${created.data.id}/publish`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+
+      // A page render is per-actor: the same URL answers with the draft for
+      // an editor. `public, s-maxage=…` is exactly what RFC 9111 §3.5 says
+      // re-authorises a shared cache to store a response to a request that
+      // carried `Authorization` — a CDN would then serve it to everyone.
+      const asEditor = await fetch(`${server.base}/embargoed`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(asEditor.headers.get('cache-control')).toBe('private, no-store')
+      await asEditor.arrayBuffer()
+
+      const anonymous = await fetch(`${server.base}/embargoed`)
+      expect(anonymous.headers.get('cache-control')).toBe(
+        'public, max-age=0, s-maxage=60, must-revalidate',
+      )
+      await anonymous.arrayBuffer()
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('honours a configured page lifetime, including zero', async () => {
     const root = await project('{ pageMaxAge: 0 }')
     const server = await startServer(root, { registry: activeServers })

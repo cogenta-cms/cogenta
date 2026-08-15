@@ -70,6 +70,14 @@ import { DEFAULT_IMAGE_ENDPOINT, loadSkinCss, renderRequestedPage } from './them
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
 
+/** The only `Content-Type` values `/_image` will ever put on the wire. */
+const SERVABLE_IMAGE_TYPES: ReadonlySet<string> = new Set([
+  'image/avif',
+  'image/webp',
+  'image/jpeg',
+  'image/png',
+])
+
 const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
   'cogenta.schema.mts',
@@ -598,7 +606,14 @@ async function serveImageVariant(
   }
 
   let key = asset.storageKey
-  let contentType = asset.mimeType
+  // Never the asset's recorded `mimeType` unquestioned. Uploads now record
+  // the sniffed type, but an asset stored before that fix — or by a future
+  // writer that skips the route — could carry `text/html`, and this endpoint
+  // is public, unauthenticated and on the site's own origin. A type that is
+  // not an image serves as an opaque download instead of executing.
+  let contentType = SERVABLE_IMAGE_TYPES.has(asset.mimeType)
+    ? asset.mimeType
+    : 'application/octet-stream'
 
   const requested = Number(url.searchParams.get('w'))
   if (
@@ -615,7 +630,7 @@ async function serveImageVariant(
       const variantKey = variantKeyFor(id, match)
       if (await site.storage.exists(variantKey)) {
         key = variantKey
-        contentType = match.endsWith('.webp') ? 'image/webp' : asset.mimeType
+        if (match.endsWith('.webp')) contentType = 'image/webp'
       }
     }
   }

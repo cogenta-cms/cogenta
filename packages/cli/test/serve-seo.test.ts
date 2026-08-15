@@ -40,6 +40,22 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
     fields: { title: { kind: 'text', required: true, options: { max: 200 } } },
     permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
   },
+  /**
+   * Routed, but not readable by `public` — a members-only section. The
+   * sitemap must skip it silently rather than fail: reading it as ANONYMOUS
+   * makes the gateway throw `FORBIDDEN`, and an unhandled throw turned
+   * `/sitemap.xml` into a 500 for every crawler.
+   */
+  {
+    name: 'memberPage',
+    labels: { singular: 'Member page', plural: 'Member pages' },
+    routing: { pattern: '/members/:slug' },
+    fields: {
+      title: { kind: 'text', required: true, options: { max: 200 } },
+      slug: { kind: 'slug', required: true, options: { from: 'title' } },
+    },
+    permissions: { read: ['viewer'], create: ['editor'], update: ['editor'], publish: ['editor'] },
+  },
 ]
 
 const PAGE_COLLECTION = COLLECTIONS[0] as CollectionDefinition
@@ -251,6 +267,8 @@ describe('cogenta serve — sitemap, robots and redirects (L10 task 2)', () => {
       expect(xml).not.toContain('still-a-draft')
       // `note` has no routing, so it contributes no URL however many entries it holds.
       expect(xml).not.toContain('/note')
+      // `memberPage` is routed but closed to `public`: skipped, not fatal.
+      expect(xml).not.toContain('/members/')
     } finally {
       await server.stop()
     }

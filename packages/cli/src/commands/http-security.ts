@@ -108,10 +108,25 @@ function baseHeadersFor(
   const origin = headerOf(req, 'origin')
   Object.assign(headers, corsHeadersFor(origin, security))
 
-  const cacheControl = cacheControlFor(pathname, security)
+  // A page render is per-actor: `renderRequestedPage` passes the requesting
+  // actor's context down, so an editor's `GET /blog/embargoed` returns the
+  // draft. `public, s-maxage=…` is precisely the pair RFC 9111 §3.5 says
+  // re-authorises a *shared* cache to store a response to a request carrying
+  // `Authorization` — a CDN in front of the site would then serve that draft
+  // to everyone for a minute. Anything sent with credentials is private and
+  // unstorable, whatever class its path belongs to. Found by the security
+  // review of L10 task 6.
+  const cacheControl = hasCredentials(req)
+    ? 'private, no-store'
+    : cacheControlFor(pathname, security)
   if (cacheControl !== null) headers['cache-control'] = cacheControl
 
   return headers
+}
+
+/** True when the request carries something that makes its answer actor-specific. */
+function hasCredentials(req: IncomingMessage): boolean {
+  return headerOf(req, 'authorization') !== undefined || headerOf(req, 'cookie') !== undefined
 }
 
 function headerOf(req: IncomingMessage, name: string): string | undefined {

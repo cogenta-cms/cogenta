@@ -1,4 +1,5 @@
 import { type AccessContext, ANONYMOUS, type ContentGateway } from '@cogenta/api'
+import { isCogentaError } from '@cogenta/core'
 import type { CollectionDefinition, ContentEntry } from '@cogenta/schema'
 import {
   alternatesFor,
@@ -80,23 +81,34 @@ export async function collectRoutedResources(
   for (const collection of collections) {
     if (collection.routing === undefined) continue
 
-    let cursor: string | undefined
-    let read = 0
-    for (;;) {
-      const page = await gateway.list(
-        {
-          collection: collection.name,
-          limit: SCAN_PAGE,
-          ...(cursor === undefined ? {} : { after: cursor }),
-        },
-        context,
-      )
-      for (const entry of page.items) resources.push({ collection, entry })
-      read += page.items.length
+    // A routed collection the `public` role may not read at all makes the
+    // gateway *throw* `FORBIDDEN` rather than answer an empty page. Skipping
+    // it is the right answer — such a collection has no public URLs to list —
+    // and catching is what keeps one login-only section from turning
+    // `/sitemap.xml` into a 500 for every crawler. Found by the security
+    // review of L10 task 2.
+    try {
+      let cursor: string | undefined
+      let read = 0
+      for (;;) {
+        const page = await gateway.list(
+          {
+            collection: collection.name,
+            limit: SCAN_PAGE,
+            ...(cursor === undefined ? {} : { after: cursor }),
+          },
+          context,
+        )
+        for (const entry of page.items) resources.push({ collection, entry })
+        read += page.items.length
 
-      const next = page.nextCursor
-      if (next === null || read >= MAX_SITEMAP_ENTRIES_PER_COLLECTION) break
-      cursor = next
+        const next = page.nextCursor
+        if (next === null || read >= MAX_SITEMAP_ENTRIES_PER_COLLECTION) break
+        cursor = next
+      }
+    } catch (error) {
+      if (isCogentaError(error) && error.code === 'FORBIDDEN') continue
+      throw error
     }
   }
 

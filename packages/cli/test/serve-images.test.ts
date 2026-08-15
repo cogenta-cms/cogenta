@@ -159,6 +159,44 @@ describe('cogenta serve — images (L10 task 5)', () => {
 
       expect((await fetch(`${server.base}/_image`)).status).toBe(400)
       expect((await fetch(`${server.base}/_image?id=nope`)).status).toBe(404)
+
+      // And the ids it is keyed on are not enumerable: the library itself
+      // needs a session, so an unguessable URL stays unguessable.
+      expect((await fetch(`${server.base}/api/media`)).status).toBe(401)
+      expect((await fetch(`${server.base}/api/media/${asset.id}`)).status).toBe(401)
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('never serves an image with a content type that could execute on the site origin', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+
+      // A genuine PNG announced as a document by the uploader. The upload is
+      // accepted — the bytes really are a PNG — but nothing downstream may
+      // repeat the claim: this endpoint is public, cacheable for a year and
+      // on the same origin as the admin.
+      const response = await fetch(`${server.base}/api/media`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          kind: 'image',
+          filename: 'disguised.png',
+          mimeType: 'text/html',
+          data: makePng(400, 300).toString('base64'),
+          alt: 'x',
+        }),
+      })
+      expect(response.status).toBe(201)
+      const asset = ((await response.json()) as { data: Asset }).data
+
+      const served = await fetch(`${server.base}/_image?id=${asset.id}`)
+      expect(served.status).toBe(200)
+      expect(served.headers.get('content-type')).toBe('image/png')
+      await served.arrayBuffer()
     } finally {
       await server.stop()
     }

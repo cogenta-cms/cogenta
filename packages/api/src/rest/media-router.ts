@@ -187,11 +187,34 @@ function decodeBase64(data: string): Buffer {
  * (L2-admin.md). Only images are sniffed in this pass; video/audio/file
  * uploads are stored as declared.
  */
-function verifyRealType(kind: MediaKind, bytes: Buffer): void {
-  if (kind !== 'image') return
+/**
+ * The content type an image is stored and served with — derived from the
+ * bytes, never from what the uploader declared.
+ *
+ * Sniffing already decided whether the file *is* an image; trusting
+ * `mimeType` for the response header after that is the hole it left open. An
+ * editor could upload a genuine PNG, declare it `text/html`, and have the
+ * delivery endpoint serve it as a document on the site's own origin —
+ * `X-Content-Type-Options: nosniff` does not help, because the declared type
+ * *is* the executable one. Found by the security review of L10 task 5.
+ */
+const CONTENT_TYPE_BY_FORMAT: Readonly<Record<string, string>> = Object.freeze({
+  avif: 'image/avif',
+  webp: 'image/webp',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+})
+
+/**
+ * Checks an image is really an image, and answers with the content type its
+ * bytes earn. `null` for every other kind, which is stored as declared —
+ * those are never served on a public, unauthenticated route.
+ */
+function verifyRealType(kind: MediaKind, bytes: Buffer): string | null {
+  if (kind !== 'image') return null
 
   const format = sniffImageFormat(bytes)
-  if (format !== null) return
+  if (format !== null) return CONTENT_TYPE_BY_FORMAT[format] ?? 'application/octet-stream'
 
   throw new CogentaError({
     code: 'MEDIA_TYPE_REJECTED',
@@ -238,18 +261,26 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const [id] = segments
 
     if (id === undefined) {
-      if (method === 'GET') return list(request)
+      if (method === 'GET') return list(request, actor)
       if (method === 'POST') return upload(request, actor)
       return methodNotAllowed(['GET', 'POST'])
     }
 
-    if (method === 'GET') return read(id)
+    if (method === 'GET') return read(id, actor)
     if (method === 'PATCH' || method === 'PUT') return update(id, request, actor)
     if (method === 'DELETE') return remove(id, actor)
     return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
   }
 
-  async function list(request: RestRequest): Promise<RestResponse> {
+  async function list(request: RestRequest, actor: Actor): Promise<RestResponse> {
+    // The media library is an admin screen, not a public catalogue. Listing it
+    // anonymously handed out every asset's id, filename and storage key —
+    // including for content nobody has published — and the ids are what a
+    // public delivery endpoint like `/_image` is keyed on, so an open list
+    // turns an unguessable URL into an enumerable one. Found by the security
+    // review of L10 task 5, which introduced that endpoint; the doc comment
+    // at the top of this file had claimed this gate existed since L2.
+    requireActor(actor)
     const kind = single(request.query, 'kind')
     if (kind !== undefined && !(MEDIA_KINDS as readonly string[]).includes(kind)) {
       throw queryError('kind', 'is not a media kind', `Use one of: ${MEDIA_KINDS.join(', ')}.`)
@@ -276,12 +307,15 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     requireActor(actor)
     const input = decode(uploadSchema, request.body)
     const bytes = decodeBase64(input.data)
-    verifyRealType(input.kind, bytes)
+    // For an image this is the type the *bytes* say, not the one the uploader
+    // typed — the asset record and every response built from it use it, so a
+    // disguised type cannot travel back out as a `Content-Type`.
+    const mimeType = verifyRealType(input.kind, bytes) ?? input.mimeType
 
     const id = randomUUID()
     const storageKey = storageKeyFor(id, input.filename)
 
-    await storage.put(storageKey, bytes, { contentType: input.mimeType })
+    await storage.put(storageKey, bytes, { contentType: mimeType })
 
     // Dimensions and renditions, once, at upload — not on every request
     // (L10 task 5). A failure here must not lose the upload: the original is
@@ -313,7 +347,7 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         id,
         kind: input.kind,
         filename: input.filename,
-        mimeType: input.mimeType,
+        mimeType,
         size: bytes.length,
         ...(intrinsic === null ? {} : { width: intrinsic.width, height: intrinsic.height }),
         alt: input.alt ?? '',
@@ -337,7 +371,10 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     return jsonResponse(201, { data: asset })
   }
 
-  async function read(id: string): Promise<RestResponse> {
+  async function read(id: string, actor: Actor): Promise<RestResponse> {
+    // Same gate as `list`, and for the same reason: the metadata of an asset
+    // (its storage key above all) is not public just because its bytes may be.
+    requireActor(actor)
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
     return jsonResponse(200, { data: asset })

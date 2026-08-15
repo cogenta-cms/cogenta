@@ -368,21 +368,48 @@
 /* --- cta ----------------------------------------------------------------- */
 
 .cg-cta {
-  padding: var(--cg-s12) var(--cg-gutter);
-  background: var(--cg-surface-sunken);
-  border-radius: var(--cg-radius-lg);
+  position: relative;
+  overflow: hidden;
+  padding: var(--cg-s16) var(--cg-s8);
+  background: var(--cg-surface-tinted);
+  border-radius: var(--cg-radius-xl);
+  box-shadow: var(--cg-ring-accent);
   text-align: center;
+}
+
+/* A single diagonal sheen of the accent. `overflow: hidden` on the panel keeps
+   it inside the radius, so it never leaks past a rounded corner. */
+.cg-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--cg-accent-soft), transparent 55%);
+  pointer-events: none;
+}
+
+/* The panel's own children have to sit above that sheen. */
+.cg-cta > * {
+  position: relative;
 }
 
 .cg-cta__title {
   margin: 0;
-  font-size: var(--cg-text-xl);
+  /* One step above a section heading: this block asks for something, and the
+     ask has to outrank the headings around it. */
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
 }
 
 .cg-cta__text {
   margin: var(--cg-s4) auto 0;
-  max-inline-size: var(--cg-measure);
+  max-inline-size: var(--cg-measure-narrow);
   color: var(--cg-ink-muted);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
 }
 
 .cg-cta .cg-actions {

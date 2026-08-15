@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Configuration, typed errors, structured logging and the driver system behind Cogenta.",
   "license": "MPL-2.0",
   "type": "module",

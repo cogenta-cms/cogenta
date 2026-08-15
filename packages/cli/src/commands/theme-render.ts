@@ -149,13 +149,21 @@ async function fetchOne(
  * published entry there, or `null` for "no route" or "nothing published" —
  * the two callers (`renderRequestedPage` and its own `content.byPath`) share
  * this rather than each re-deriving the same filter from `match.params`.
+ *
+ * `/` itself matches no collection's route (every `page` pattern is
+ * `/:slug`, which needs a real segment) — every `create-cogenta` blueprint
+ * seeds its home page at the real, consistent slug `home`, so `/` retries
+ * once as `/home` rather than 404ing on the one URL a real visitor always
+ * tries first. Not a magic redirect: a site with no page at that slug still
+ * 404s honestly, exactly like every other unmatched path.
  */
 async function resolveEntry(
   pathname: string,
   options: ThemeRenderOptions,
   context: AccessContext,
 ): Promise<{ readonly collection: CollectionDefinition; readonly entry: ContentEntry } | null> {
-  const match = matchPath(options.collections, pathname, {
+  const effectivePath = pathname === '/' ? '/home' : pathname
+  const match = matchPath(options.collections, effectivePath, {
     locales: options.site.locales,
     defaultLocale: options.site.defaultLocale,
   })

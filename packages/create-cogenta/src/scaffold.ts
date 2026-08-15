@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -149,6 +150,24 @@ export async function scaffoldSite(
   const configPath = join(answers.targetDir, 'cogenta.config.mjs')
   await writeFile(configPath, configFileContents(answers), 'utf8')
   await writeFile(join(answers.targetDir, 'package.json'), packageJsonContents(answers), 'utf8')
+
+  // A real, generated secret, not a manual step: `cogenta serve` refuses to
+  // start without `COGENTA_AUTH_SIGNING_KEY`, and asking a brand-new user to
+  // find and run the right key-generation command for their own shell (and
+  // know it needs to be `export`ed, and know that differs on Windows) was
+  // real friction before `@cogenta/core`'s `loadConfig` learned to read a
+  // `.env` file here automatically (Node's own `--env-file` support, no new
+  // dependency). Never committed — `.gitignore` below covers it.
+  await writeFile(
+    join(answers.targetDir, '.env'),
+    `COGENTA_AUTH_SIGNING_KEY=${randomBytes(32).toString('base64')}\n`,
+    'utf8',
+  )
+  await writeFile(
+    join(answers.targetDir, '.gitignore'),
+    ['node_modules/', '.env', '.cogenta/'].join('\n') + '\n',
+    'utf8',
+  )
 
   const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
   // `cogenta serve` (`@cogenta/cli`) hard-requires a `cogenta.schema.*` file

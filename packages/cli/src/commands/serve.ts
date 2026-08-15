@@ -20,12 +20,14 @@ import {
   createRestRouter,
   createSearchRouter,
   executeGraphQL,
+  type MediaImageProcessor,
   type MediaRouter,
   type RestRequest,
   type RestResponse,
   type RestRouter,
   resolveActor,
   type SearchRouter,
+  variantKeyFor,
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
@@ -42,6 +44,7 @@ import {
   type MediaStore,
   type StorageDriver,
 } from '@cogenta/core'
+import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   buildSchemaDocument,
   type CollectionDefinition,
@@ -58,9 +61,10 @@ import {
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
-import { loadSkinCss, renderRequestedPage } from './theme-render.js'
+import { DEFAULT_IMAGE_ENDPOINT, loadSkinCss, renderRequestedPage } from './theme-render.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
@@ -154,6 +158,8 @@ interface Site {
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
+  /** `null` when no image driver loaded — `/_image` then serves originals only. */
+  readonly images: MediaImageProcessor | null
   readonly graphqlSchema: GraphQLSchema
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
@@ -216,6 +222,14 @@ interface AssembleSiteOptions {
   readonly readOnly?: boolean
   /** `null` when `theme.tokens.json` is absent or invalid — see `loadSkinCss`. */
   readonly skinCss?: string | null
+  /**
+   * Resizes and re-encodes images at upload (L10 task 5).
+   *
+   * `null` when no image driver loads on this host: uploads still work and
+   * originals are still served, they simply carry no dimensions and no
+   * variants. Absent, not broken.
+   */
+  readonly images?: MediaImageProcessor | null
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -282,7 +296,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     auth,
     restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({ auth }),
-    mediaRouter: createMediaRouter({ store: mediaStore, storage }),
+    mediaRouter: createMediaRouter({
+      store: mediaStore,
+      storage,
+      ...(options.images === undefined || options.images === null
+        ? {}
+        : { images: options.images }),
+    }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -293,6 +313,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
     mediaStore,
     storage,
+    images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
     schemaDocument: buildSchemaDocument(collections, {
@@ -532,6 +553,111 @@ async function serveMediaFile(
 }
 
 /**
+ * `GET /_image?id=…&w=…` — the public delivery endpoint for images.
+ *
+ * **Public on purpose, and only for images.** A `<img src>` in a published
+ * page is fetched by a visitor's browser with no session, so an endpoint the
+ * theme can point at cannot be behind the same authentication as
+ * `/api/media/{id}/file`. Restricting it to `kind === 'image'` is what keeps
+ * that from widening to every uploaded PDF and video: those stay behind the
+ * authenticated route, unchanged.
+ *
+ * It serves the rendition the upload already produced, and falls back to the
+ * original when there is none — an asset uploaded before the pipeline
+ * existed, a width outside the ladder, or a host with no image driver. It
+ * never renders on demand: nothing here decodes an image, so a public URL
+ * cannot be turned into CPU by asking for a size nobody stored.
+ */
+async function serveImageVariant(
+  site: Site,
+  url: URL,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { allow: 'GET' }).end()
+    return
+  }
+
+  const id = url.searchParams.get('id')
+  if (id === null || id === '') {
+    jsonError(res, 400, 'QUERY_INVALID', 'An image request must name the media it wants.')
+    return
+  }
+
+  const asset = await site.mediaStore.get(id)
+  if (asset === null || asset.kind !== 'image') {
+    jsonError(res, 404, 'MEDIA_NOT_FOUND', `No image asset with id "${id}".`)
+    return
+  }
+
+  let key = asset.storageKey
+  let contentType = asset.mimeType
+
+  const requested = Number(url.searchParams.get('w'))
+  if (
+    site.images !== null &&
+    Number.isInteger(requested) &&
+    requested > 0 &&
+    asset.width !== null &&
+    asset.height !== null
+  ) {
+    const names = site.images.variantNames({ width: asset.width, height: asset.height })
+    const wanted = `${requested}.`
+    const match = names.find((name) => name.startsWith(wanted))
+    if (match !== undefined) {
+      const variantKey = variantKeyFor(id, match)
+      if (await site.storage.exists(variantKey)) {
+        key = variantKey
+        contentType = match.endsWith('.webp') ? 'image/webp' : asset.mimeType
+      }
+    }
+  }
+
+  const stream = await site.storage.get(key)
+  res.writeHead(200, {
+    'content-type': contentType,
+    // Long, because the URL names an immutable rendition of an immutable
+    // upload: replacing an image means a new media id, never new bytes under
+    // the same one.
+    'cache-control': 'public, max-age=31536000, immutable',
+  })
+  stream.on('error', () => res.destroy())
+  stream.pipe(res)
+}
+
+/**
+ * Loads the media a theme render references, as `@cogenta/render`'s
+ * `MediaAsset`.
+ *
+ * The two shapes are deliberately different types (ADR-0016: the delivery
+ * plane declares its own wire types rather than importing the engine's), so
+ * this is the one place they are mapped. Only images and videos exist in that
+ * shape at all — a PDF has no `srcset` — so anything else is left out and
+ * `ctx.image()` refuses it clearly.
+ */
+async function loadRenderMedia(
+  site: Site,
+  ids: readonly string[],
+): Promise<ReadonlyMap<string, RenderMediaAsset>> {
+  const found = new Map<string, RenderMediaAsset>()
+  for (const id of new Set(ids)) {
+    const asset = await site.mediaStore.get(id)
+    if (asset === null) continue
+    if (asset.kind !== 'image' && asset.kind !== 'video') continue
+    found.set(id, {
+      id: asset.id,
+      kind: asset.kind,
+      alt: asset.alt,
+      ...(asset.width === null ? {} : { width: asset.width }),
+      ...(asset.height === null ? {} : { height: asset.height }),
+      focal: asset.focal,
+    })
+  }
+  return found
+}
+
+/**
  * Builds the Node request handler from an already-assembled site.
  *
  * All the actual logic — routing, permissions, actor resolution — was already
@@ -605,6 +731,14 @@ export function createRequestListener(
       // Serving the file itself sits outside `mediaRouter`: its `RestResponse`
       // is JSON-only, and a binary body has no shape to fit into that without
       // widening the transport contract every other route relies on.
+      // The public image endpoint (L10 task 5). Before the `/api/*` block on
+      // purpose: it is not an API route, and it is the one media path a
+      // visitor's browser reaches with no session.
+      if (url.pathname === DEFAULT_IMAGE_ENDPOINT) {
+        await serveImageVariant(site, url, req, res)
+        return
+      }
+
       const fileMatch = /^\/api\/media\/([^/]+)\/file$/u.exec(url.pathname)
       if (fileMatch !== null) {
         await serveMediaFile(site, actor, decodeURIComponent(fileMatch[1] ?? ''), req, res)
@@ -802,6 +936,7 @@ export function createRequestListener(
             gateway: site.gateway,
             site: site.site,
             skinCss: site.skinCss,
+            loadMedia: (ids) => loadRenderMedia(site, ids),
           },
           context,
         )
@@ -856,6 +991,9 @@ export interface ServeOptions {
 const DEFAULT_PORT = 4000
 const DEFAULT_HOST = '127.0.0.1'
 
+/** How long a shutdown waits for open connections before cutting them. */
+const SHUTDOWN_GRACE_MS = 2_000
+
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
  * startup failed — nothing here calls `process.exit` (same convention as
@@ -898,6 +1036,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     (path) => readFile(path, 'utf8'),
     join(projectRoot, 'theme.tokens.json'),
   )
+  const images = await selectMediaImageProcessor(logger)
   const site = await assembleSite({
     db: selection.instance,
     collections,
@@ -911,6 +1050,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     }),
     readOnly: options.readOnly ?? false,
     skinCss,
+    images: images?.processor ?? null,
   })
 
   const server = createServer(createRequestListener(site, logger))
@@ -929,7 +1069,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const boundPort = typeof address === 'object' && address !== null ? address.port : port
   out.ok(`Listening on http://${host}:${boundPort}`)
   out.detail(
-    `${collections.length} collection(s), db driver: ${selection.driver}, storage driver: ${storageSelection.driver}`,
+    `${collections.length} collection(s), db driver: ${selection.driver}, storage driver: ${storageSelection.driver}, image driver: ${images?.driver ?? 'none'}`,
   )
   options.onListening?.({ port: boundPort, host })
 
@@ -944,6 +1084,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))
+    // `close()` alone waits for every open connection to end, and a client
+    // that fetched a large response and never read the body holds one open
+    // indefinitely — a media download is exactly that shape. Without the
+    // grace period, one such client turns Ctrl-C into a hang. Found while
+    // writing the image tests, where a deliberately unread image body kept
+    // the whole process alive.
+    const grace = setTimeout(() => server.closeAllConnections(), SHUTDOWN_GRACE_MS)
+    grace.unref()
   })
   await selection.dispose()
   await storageSelection.dispose()

@@ -1,0 +1,180 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  createDatabaseMediaStore,
+  createLocalStorage,
+  createSqliteHandle,
+  type DatabaseHandle,
+  type MediaStore,
+  type StorageDriver,
+} from '@cogenta/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  createMediaRouter,
+  type ImageSize,
+  type MediaImageProcessor,
+  type MediaRouter,
+  variantKeyFor,
+} from '../../src/rest/media-router.js'
+
+/**
+ * The upload-time image pipeline (L10 task 5), from this package's side.
+ *
+ * The database and the storage are real (AGENTS.md: never a mock). The
+ * *processor* is a stand-in on purpose: it is an injected interface, not
+ * infrastructure, and this package deliberately does not depend on
+ * `@cogenta/render` — the real encoder is exercised end to end in
+ * `packages/cli/test/serve-images.test.ts`, against real bytes. What is
+ * proved here is the contract the router holds up around it.
+ */
+
+const EDITOR = { id: 'user-1', roles: ['editor'] }
+
+/** A 1x1 transparent PNG — real magic bytes, which is what the type check reads. */
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+
+const NAMES = ['320.webp', '640.webp']
+
+function processorThat(
+  behaviour: {
+    readonly probe?: () => Promise<ImageSize | null>
+    readonly variants?: () => Promise<never>
+  } = {},
+): MediaImageProcessor {
+  return {
+    probe: behaviour.probe ?? (async () => ({ width: 1000, height: 500 })),
+    variants:
+      behaviour.variants ??
+      (async () =>
+        NAMES.map((name, index) => ({
+          name,
+          bytes: new Uint8Array([index, index, index]),
+          contentType: 'image/webp',
+        }))),
+    variantNames: () => NAMES,
+  }
+}
+
+let db: DatabaseHandle
+let store: MediaStore
+let storage: StorageDriver
+let storageRoot: string
+
+beforeEach(async () => {
+  db = await createSqliteHandle({ url: ':memory:' })
+  store = createDatabaseMediaStore({ db })
+  storageRoot = await mkdtemp(join(tmpdir(), 'cogenta-media-images-'))
+  storage = createLocalStorage({ path: storageRoot })
+})
+
+afterEach(async () => {
+  await db.close()
+  await rm(storageRoot, { recursive: true, force: true })
+})
+
+async function upload(
+  router: MediaRouter,
+  kind: 'image' | 'file' = 'image',
+): Promise<{ readonly id: string; readonly width: number | null; readonly height: number | null }> {
+  const response = await router.handle(
+    {
+      method: 'POST',
+      path: '/api/media',
+      query: {},
+      body: {
+        kind,
+        filename: 'a.png',
+        mimeType: kind === 'image' ? 'image/png' : 'application/octet-stream',
+        data: PNG_BASE64,
+        alt: 'x',
+      },
+    },
+    EDITOR,
+  )
+  if (response.status !== 201) throw new Error(`upload failed: ${response.status}`)
+  return (response.body as { data: { id: string; width: number | null; height: number | null } })
+    .data
+}
+
+describe('media upload with an image processor', () => {
+  it('records the probed dimensions and writes every variant beside the original', async () => {
+    const router = createMediaRouter({ store, storage, images: processorThat() })
+    const asset = await upload(router)
+
+    expect(asset.width).toBe(1000)
+    expect(asset.height).toBe(500)
+    for (const name of NAMES) {
+      expect(await storage.exists(variantKeyFor(asset.id, name))).toBe(true)
+    }
+  })
+
+  it('leaves a non-image alone', async () => {
+    const router = createMediaRouter({ store, storage, images: processorThat() })
+    const asset = await upload(router, 'file')
+
+    expect(asset.width).toBeNull()
+    for (const name of NAMES) {
+      expect(await storage.exists(variantKeyFor(asset.id, name))).toBe(false)
+    }
+  })
+
+  it('still accepts the upload when the processor cannot read the image at all', async () => {
+    const router = createMediaRouter({
+      store,
+      storage,
+      images: processorThat({ probe: async () => null }),
+    })
+    const asset = await upload(router)
+
+    // No dimensions, no variants — and a perfectly usable asset. The original
+    // is what the editor uploaded; a pipeline failure must not lose it.
+    expect(asset.width).toBeNull()
+    expect(await storage.exists(variantKeyFor(asset.id, '320.webp'))).toBe(false)
+    const read = await store.get(asset.id)
+    expect(read).not.toBeNull()
+    expect(await storage.exists(read?.storageKey ?? '')).toBe(true)
+  })
+
+  it('leaves no half-written variants behind when the encoder throws', async () => {
+    const router = createMediaRouter({
+      store,
+      storage,
+      images: processorThat({
+        variants: async () => {
+          throw new Error('encoder exploded')
+        },
+      }),
+    })
+    const asset = await upload(router)
+
+    expect(await store.get(asset.id)).not.toBeNull()
+    for (const name of NAMES) {
+      expect(await storage.exists(variantKeyFor(asset.id, name))).toBe(false)
+    }
+  })
+
+  it('deletes the variants with the asset', async () => {
+    const router = createMediaRouter({ store, storage, images: processorThat() })
+    const asset = await upload(router)
+    expect(await storage.exists(variantKeyFor(asset.id, '320.webp'))).toBe(true)
+
+    const response = await router.handle(
+      { method: 'DELETE', path: `/api/media/${asset.id}`, query: {} },
+      EDITOR,
+    )
+    expect(response.status).toBe(204)
+    for (const name of NAMES) {
+      expect(await storage.exists(variantKeyFor(asset.id, name))).toBe(false)
+    }
+  })
+
+  it('uploads exactly as before when no processor is configured', async () => {
+    const router = createMediaRouter({ store, storage })
+    const asset = await upload(router)
+
+    expect(asset.width).toBeNull()
+    expect(await storage.exists(variantKeyFor(asset.id, '320.webp'))).toBe(false)
+  })
+})

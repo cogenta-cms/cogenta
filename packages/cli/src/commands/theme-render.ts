@@ -1,7 +1,13 @@
-import type { AccessContext, ContentGateway, Filter, QueryRequest } from '@cogenta/api'
+import {
+  type AccessContext,
+  type ContentGateway,
+  collectDependencies,
+  type Filter,
+  type QueryRequest,
+} from '@cogenta/api'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
-import { renderSkin } from '@cogenta/render'
+import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type ContentEntry, matchPath } from '@cogenta/schema'
 import type { SeoImage } from '@cogenta/seo'
 import {
@@ -81,6 +87,9 @@ async function listAsTheme(
  * one theme, no build step, no static generation.
  */
 
+/** Where `cogenta serve` publishes image variants. Public: a visitor's browser fetches them. */
+export const DEFAULT_IMAGE_ENDPOINT = '/_image'
+
 export interface ThemeRenderOptions {
   readonly collections: readonly CollectionDefinition[]
   readonly gateway: ContentGateway
@@ -93,13 +102,21 @@ export interface ThemeRenderOptions {
   /** `null` when the project has no `theme.tokens.json` — served unstyled rather than refused. */
   readonly skinCss: string | null
   /**
-   * Resolves a media id to a publishable image, for `og:image` and JSON-LD.
+   * Loads the media a render references, in one batch, before rendering.
    *
-   * Synchronous because `@cogenta/seo`'s `SeoResolvers.media` is: it is asked
-   * from inside a pure tag builder. `serve.ts` pre-loads the assets a render
-   * needs and hands a lookup over that map — see `mediaResolverFor`.
+   * It has to be a batch: `renderBlock` is pure and synchronous (contract D),
+   * and `@cogenta/seo`'s `SeoResolvers.media` is synchronous too, so neither
+   * `ctx.image()` nor an `og:image` can await a lookup. Which ids a page
+   * needs is answered by `collectDependencies` — the same walk `/api/content`
+   * already uses to declare a response's media dependencies — rather than by
+   * a fresh heuristic over block JSON.
+   *
+   * Absent means no images: `ctx.image()` refuses clearly, exactly as it did
+   * before the pipeline existed.
    */
-  readonly media?: (id: string) => SeoImage | null
+  readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, RenderMediaAsset>>
+  /** Where image variants are served from. Defaults to `/_image`. */
+  readonly imageEndpoint?: string
 }
 
 function fieldOfKind(collection: CollectionDefinition, kind: string): string | undefined {
@@ -231,6 +248,8 @@ export async function renderRequestedPage(
   // either.
   const fetchedEntries: Record<string, readonly ThemeContentEntry[]> = {}
   const knownEntries = new Map<string, ContentEntry>([[entry.id, entry]])
+  /** Which collection each known entry came from — a `ContentEntry` does not say. */
+  const entryCollections = new Map<string, string>([[entry.id, collection.name]])
   for (const block of blocks) {
     if (block._type !== 'collectionList') continue
     const themeQuery = collectionListQuery(block)
@@ -238,10 +257,37 @@ export async function renderRequestedPage(
     fetchedEntries[block._key] = results.items.map((found) =>
       toThemeEntry(found, themeQuery.collection),
     )
-    for (const found of results.items) knownEntries.set(found.id, found)
+    for (const found of results.items) {
+      knownEntries.set(found.id, found)
+      entryCollections.set(found.id, themeQuery.collection)
+    }
   }
 
   const collectionsByName = new Map(options.collections.map((entry) => [entry.name, entry]))
+
+  // Which media this page references, from the same walk `/api/content` uses
+  // to declare a response's dependencies (`collectDependencies`): declared
+  // `media` fields *and* the media inside every block, resolved through the
+  // block registry rather than guessed at from the JSON. A `ContentEntry`
+  // plus its collection name is exactly a `SerialisedEntry`, which is why
+  // this reuse costs nothing.
+  const mediaAssets = new Map<string, RenderMediaAsset>()
+  if (options.loadMedia !== undefined) {
+    const dependencies = collectDependencies(
+      [...knownEntries].map(([id, found]) => ({
+        ...found,
+        collection: entryCollections.get(id) ?? collection.name,
+      })),
+      { collection: (name) => collectionsByName.get(name) },
+    )
+    if (dependencies.media.length > 0) {
+      for (const [id, asset] of await options.loadMedia(dependencies.media)) {
+        mediaAssets.set(id, asset)
+      }
+    }
+  }
+
+  const imageEndpoint = options.imageEndpoint ?? DEFAULT_IMAGE_ENDPOINT
 
   const link = (target: LinkTargetInput): string => {
     if (typeof target === 'string') return target
@@ -271,14 +317,23 @@ export async function renderRequestedPage(
     locale: entry.locale,
     url: new URL(pathname, options.site.url),
     t: (key) => key,
-    // No image pipeline exists yet (`@cogenta/render`'s `images/`) wired to
-    // this in-process path — a theme that asks for one gets a clear refusal,
-    // not a broken <img>.
-    image: () => {
-      throw new CogentaError({
-        code: 'THEME_IMAGE_UNSUPPORTED',
-        message: 'cogenta serve cannot render images yet.',
-        hint: 'No image pipeline is wired into this in-process rendering fallback (no real Astro build exists yet). Avoid mediaFigure/gallery blocks until it is.',
+    // The real `srcset`, from `@cogenta/render`'s own `describeMedia` (L10
+    // task 5). Pure and synchronous, as contract D requires: the asset was
+    // loaded before this render started, and this only builds URLs against
+    // the variants the upload already wrote.
+    image: (media, imageOptions) => {
+      const asset = mediaAssets.get(media)
+      if (asset === undefined) {
+        throw new CogentaError({
+          code: 'THEME_IMAGE_UNSUPPORTED',
+          message: `No media asset "${media}" is available to this render.`,
+          hint: 'The image must be referenced by a media field or a block of this page — those are the ones loaded before rendering. Check that the asset still exists in the media library.',
+          details: { media },
+        })
+      }
+      return describeMedia(asset, imageOptions ?? {}, {
+        endpoint: imageEndpoint,
+        mediaEndpoint: imageEndpoint,
       })
     },
     link,
@@ -334,9 +389,29 @@ export async function renderRequestedPage(
     context,
     options.site.locales,
   )
+  // `og:image` and JSON-LD's `image` come from the same assets the page just
+  // rendered, resolved to an absolute URL — a social crawler never sends a
+  // session and never follows a relative path.
+  const seoMedia = (id: string): SeoImage | null => {
+    const asset = mediaAssets.get(id)
+    if (asset === undefined || asset.kind !== 'image') return null
+    if (asset.width === undefined || asset.height === undefined) return null
+    const source = describeMedia(
+      asset,
+      {},
+      { endpoint: imageEndpoint, mediaEndpoint: imageEndpoint },
+    )
+    return {
+      url: new URL(source.src, options.site.url).toString(),
+      width: source.width,
+      height: source.height,
+      ...(source.alt === '' ? {} : { alt: source.alt }),
+    }
+  }
+
   const head = renderSeoHead(seoSite, resource, {
     ...(alternates.length === 0 ? {} : { alternates }),
-    ...(options.media === undefined ? {} : { media: options.media }),
+    ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
   })
 
   return `<!doctype html>

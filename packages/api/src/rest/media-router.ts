@@ -37,9 +37,59 @@ import { single } from './query.js'
  * wire — an acceptable trade for an admin-only upload path.
  */
 
+/** The intrinsic size of an image, in its own pixels. */
+export interface ImageSize {
+  readonly width: number
+  readonly height: number
+}
+
+/** One derived rendition, ready to be written next to the original. */
+export interface UploadedImageVariant {
+  /** Suffix under the asset's variant prefix — `640.webp`. Never a full key. */
+  readonly name: string
+  readonly bytes: Uint8Array
+  readonly contentType: string
+}
+
+/**
+ * Image processing at upload time, injected rather than imported.
+ *
+ * `@cogenta/render` owns the pipeline (sharp or WASM libvips, `planTransform`,
+ * the `srcset` ladder) and this package must not depend on it: a REST
+ * transport has no business pulling a 12 MB WebAssembly dependency into its
+ * tree. So the router takes this interface and `@cogenta/cli` supplies the
+ * implementation built from the real driver registry — the same shape rule
+ * every other driver in the project follows.
+ *
+ * Absent means "no image processing": uploads still work, they simply carry
+ * no dimensions and no variants. Rule R2's shape, applied to images.
+ */
+export interface MediaImageProcessor {
+  /** Intrinsic size, or null when the bytes cannot be read as an image. */
+  probe(bytes: Uint8Array): Promise<ImageSize | null>
+  /** The renditions to store beside the original, for an image of this size. */
+  variants(bytes: Uint8Array, intrinsic: ImageSize): Promise<readonly UploadedImageVariant[]>
+  /**
+   * The names `variants()` would produce for this size.
+   *
+   * Deleting needs it: `StorageDriver` has no `list`, so the only way to
+   * clean up an asset's renditions is to know what they were called. Keeping
+   * it deterministic — a fixed ladder, not a per-upload decision — is what
+   * makes that possible at all.
+   */
+  variantNames(intrinsic: ImageSize): readonly string[]
+}
+
 export interface MediaRouterOptions {
   readonly store: MediaStore
   readonly storage: StorageDriver
+  /**
+   * Generates resized/re-encoded variants at upload time (L10 task 5).
+   *
+   * Absent by default: the pipeline is optional, and an install without it
+   * uploads and serves originals exactly as before.
+   */
+  readonly images?: MediaImageProcessor
   /** Mount point. `/api/media` by default. */
   readonly basePath?: string
 }
@@ -154,6 +204,18 @@ function storageKeyFor(id: string, filename: string): string {
   return `media/${id}/${sanitiseFilename(filename)}`
 }
 
+/**
+ * Where a derived rendition lives.
+ *
+ * Under the asset's own prefix, in a `variants/` folder of its own, so that
+ * "everything belonging to this asset" stays one path prefix on every storage
+ * driver — and so that a variant name can never collide with the original
+ * filename however the uploader named it.
+ */
+export function variantKeyFor(id: string, name: string): string {
+  return `media/${id}/variants/${sanitiseFilename(name)}`
+}
+
 export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
   const { store, storage } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
@@ -221,6 +283,30 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
 
     await storage.put(storageKey, bytes, { contentType: input.mimeType })
 
+    // Dimensions and renditions, once, at upload — not on every request
+    // (L10 task 5). A failure here must not lose the upload: the original is
+    // already stored and the asset is what the editor asked for, so a missing
+    // variant degrades to "served at full size", never to "upload refused".
+    const written: string[] = []
+    let intrinsic: ImageSize | null = null
+    if (options.images !== undefined && input.kind === 'image') {
+      try {
+        intrinsic = await options.images.probe(bytes)
+        if (intrinsic !== null) {
+          for (const variant of await options.images.variants(bytes, intrinsic)) {
+            const key = variantKeyFor(id, variant.name)
+            await storage.put(key, Buffer.from(variant.bytes), {
+              contentType: variant.contentType,
+            })
+            written.push(key)
+          }
+        }
+      } catch {
+        for (const key of written) await storage.delete(key).catch(() => undefined)
+        written.length = 0
+      }
+    }
+
     let asset: MediaAsset
     try {
       asset = await store.create({
@@ -229,6 +315,7 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         filename: input.filename,
         mimeType: input.mimeType,
         size: bytes.length,
+        ...(intrinsic === null ? {} : { width: intrinsic.width, height: intrinsic.height }),
         alt: input.alt ?? '',
         ...(input.decorative === undefined ? {} : { decorative: input.decorative }),
         ...(input.decorativeJustification === undefined
@@ -241,8 +328,9 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     } catch (error) {
       // The asset row is what makes the upload real; if it is refused (an
       // invalid alt-text/decorative combination), the blob must not become
-      // an orphan nothing ever lists or cleans up.
+      // an orphan nothing ever lists or cleans up. Its variants neither.
       await storage.delete(storageKey).catch(() => undefined)
+      for (const key of written) await storage.delete(key).catch(() => undefined)
       throw error
     }
 
@@ -274,6 +362,18 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
     await storage.delete(asset.storageKey)
+
+    // The renditions go with the original. Their names are recomputed from
+    // the recorded size rather than listed, because `StorageDriver` has no
+    // `list` — which is exactly why `variantNames` exists and why the ladder
+    // is fixed. A variant that was never written deletes as a no-op.
+    if (options.images !== undefined && asset.width !== null && asset.height !== null) {
+      const names = options.images.variantNames({ width: asset.width, height: asset.height })
+      for (const name of names) {
+        await storage.delete(variantKeyFor(id, name)).catch(() => undefined)
+      }
+    }
+
     await store.delete(id)
     return jsonResponse(204, null)
   }

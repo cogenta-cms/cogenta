@@ -6,6 +6,8 @@ export type {
   FleetCommandVerification,
 } from './agent/commands.js'
 export { dispatchFleetCommand, verifyFleetCommand } from './agent/commands.js'
+export type { RollbackIntent } from './agent/rollback-handler.js'
+export { createRollbackIntentHandler } from './agent/rollback-handler.js'
 export type { SignedTelemetry } from './agent/sign.js'
 export { signTelemetryPayload, verifyTelemetrySignature } from './agent/sign.js'
 export type {
@@ -72,4 +74,6 @@ export {
   orderSitesForCanary,
   planWaves,
 } from './rollout/campaign.js'
+export type { RollbackCandidate } from './rollout/rollback.js'
+export { listRollbackCandidates, triggerRollback } from './rollout/rollback.js'
 export { ensureRolloutTables, ROLLOUT_TABLES } from './rollout/tables.js'

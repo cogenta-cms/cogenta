@@ -155,6 +155,14 @@ export interface RolloutCampaignStore {
   checkProgress(campaignId: string, now?: () => number, timeoutMs?: number): Promise<CampaignRecord>
   /** Reloads a campaign from real persisted storage — proves campaign state survives a control-plane restart. */
   getCampaign(campaignId: string): Promise<CampaignRecord | null>
+  /**
+   * Every real rollout record for one site within one campaign (task 8's
+   * real version-history read path) — ordered oldest wave first. A site
+   * only ever appears in one wave per campaign, so this is normally a
+   * single-element list, but the shape stays an array rather than assuming
+   * that never changes.
+   */
+  getSiteRolloutRecords(campaignId: string, siteId: string): Promise<readonly SiteRolloutRecord[]>
 }
 
 interface CampaignRow {
@@ -402,5 +410,22 @@ export function createRolloutCampaignStore(
     },
 
     getCampaign: loadCampaign,
+
+    async getSiteRolloutRecords(campaignId, siteId) {
+      const rows = await db.query<SiteStatusRow>(sql`
+        select id, campaign_id, site_id, wave_index, status, pre_update_version, dispatched_at, resolved_at
+        from ${siteStatus} where campaign_id = ${campaignId} and site_id = ${siteId}
+        order by wave_index asc`)
+      return rows.rows.map(
+        (row): SiteRolloutRecord => ({
+          siteId: row.site_id,
+          waveIndex: row.wave_index,
+          status: row.status as SiteRolloutStatus,
+          preUpdateVersion: row.pre_update_version,
+          dispatchedAt: row.dispatched_at ?? '',
+          resolvedAt: row.resolved_at,
+        }),
+      )
+    },
   }
 }

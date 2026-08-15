@@ -240,6 +240,9 @@ export const ERROR_CODES = [
   'FLEET_CAMPAIGN_NOT_FOUND',
   'FLEET_CAMPAIGN_STATE_CORRUPT',
 
+  // Fleet — per-site rollback (L8 task 8)
+  'FLEET_ROLLBACK_NO_PRIOR_VERSION',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

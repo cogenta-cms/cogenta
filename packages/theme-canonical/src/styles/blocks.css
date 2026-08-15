@@ -297,19 +297,72 @@
 
 .cg-features__items {
   display: grid;
-  gap: var(--cg-gap-loose);
+  gap: var(--cg-gap);
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
 }
 
+.cg-feature {
+  position: relative;
+  padding: var(--cg-s6);
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+  transition:
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-feature:hover {
+  box-shadow: var(--cg-elevation-2), var(--cg-ring-accent);
+  transform: translateY(-2px);
+}
+
+/* The whole card becomes the link's hit area, without a second link for a
+   screen reader to announce: the overlay is drawn from the one anchor the
+   markup already has, whose accessible name is the feature's title. */
+.cg-feature__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.cg-feature__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cg-feature:hover .cg-feature__link {
+  color: var(--cg-accent);
+}
+
+/* The vocabulary's `icon` names a symbol, never markup, and this theme ships no
+   icon set — so the chip is what the name gets: a tinted, ringed square that
+   holds the space an icon would, rather than a broken glyph or an invented one. */
+.cg-feature__icon {
+  display: block;
+  inline-size: var(--cg-s10);
+  block-size: var(--cg-s10);
+  margin-block-end: var(--cg-s5);
+  background: var(--cg-accent-soft);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cg-ring-accent);
+}
+
 .cg-feature__title {
-  margin: var(--cg-s3) 0 var(--cg-s2);
+  margin: 0 0 var(--cg-s2);
   font-size: var(--cg-text-md);
+  font-weight: var(--cg-weight-semibold);
   line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
 }
 
 .cg-feature__text {
   margin: 0;
   color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
 }
 
 /* --- cta ----------------------------------------------------------------- */

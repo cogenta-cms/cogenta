@@ -46,3 +46,5 @@ export {
 } from './query.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
+export type { UsersRouter, UsersRouterOptions } from './users-router.js'
+export { createUsersRouter } from './users-router.js'

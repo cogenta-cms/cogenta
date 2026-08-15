@@ -125,7 +125,7 @@ export async function runUsers(options: UsersOptions): Promise<number> {
       out.line()
       out.warn('This password is shown once. It is stored only as a salted hash.')
       out.detail(
-        'A role that can publish, or admin, will be asked to set up a second factor at first sign-in.',
+        'Sign in with it straight away — a second factor is recommended for a role that can publish, or admin, but never demanded at sign-in (ADR-0021). Turn it on from the profile screen in the admin.',
       )
       return 0
     })

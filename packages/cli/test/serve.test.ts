@@ -625,6 +625,98 @@ describe('runServe', () => {
     }
   })
 
+  /**
+   * L11 task 3, end to end: an admin creates an account from the API the admin
+   * screen uses, that account signs in with the password the response carried,
+   * an editor is refused the same routes, and the audit log names who did what.
+   */
+  it('manages accounts over HTTP, admin only, and records it in the audit log', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const admin = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+      await credentials.setPassword(admin.id, 'correct horse battery staple')
+      const editor = await users.create({ email: 'editor@example.com', roles: ['editor'] })
+      await credentials.setPassword(editor.id, 'correct horse battery staple')
+      await db.close()
+
+      const adminToken = await login(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const editorToken = await login(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+
+      // R4, over the wire: the refusal is the server's, not the screen's.
+      const refused = await fetch(`${server.base}/api/users`, {
+        headers: { authorization: `Bearer ${editorToken}` },
+      })
+      expect(refused.status).toBe(403)
+
+      const anonymous = await fetch(`${server.base}/api/users`)
+      expect(anonymous.status).toBe(403)
+
+      const created = await fetch(`${server.base}/api/users`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'carol@example.com', roles: ['editor'] }),
+      })
+      expect(created.status).toBe(201)
+      const createdBody = (await created.json()) as {
+        data: { user: { id: string; email: string }; password: string }
+      }
+
+      // The generated password is real: it signs the new account in.
+      const carolToken = await login(server.base, 'carol@example.com', createdBody.data.password)
+      expect(carolToken.length).toBeGreaterThan(0)
+
+      // Carol can see her own sessions; the editor cannot see hers.
+      const own = await fetch(`${server.base}/api/users/me/sessions`, {
+        headers: { authorization: `Bearer ${carolToken}` },
+      })
+      expect(own.status).toBe(200)
+      const nosy = await fetch(`${server.base}/api/users/${createdBody.data.user.id}/sessions`, {
+        headers: { authorization: `Bearer ${editorToken}` },
+      })
+      expect(nosy.status).toBe(403)
+
+      // Disabling ends her session there and then.
+      const disabled = await fetch(`${server.base}/api/users/${createdBody.data.user.id}`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'disabled' }),
+      })
+      expect(disabled.status).toBe(200)
+      const afterDisable = await fetch(`${server.base}/api/users/me`, {
+        headers: { authorization: `Bearer ${carolToken}` },
+      })
+      expect(afterDisable.status).toBe(401)
+
+      const audit = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      const actions = ((await audit.json()) as { data: { action: string }[] }).data.map(
+        (entry) => entry.action,
+      )
+      expect(actions).toContain('user.create')
+      expect(actions).toContain('user.update')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('remembers a dismissed notice across sessions, for that account only', async () => {
     const root = await project()
     const server = await startServer(root)

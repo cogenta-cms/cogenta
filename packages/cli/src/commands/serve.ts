@@ -21,6 +21,7 @@ import {
   createNoticeRouter,
   createPermissionLayer,
   createRestRouter,
+  createUsersRouter,
   executeGraphQL,
   type MediaRouter,
   type NoticeRouter,
@@ -28,6 +29,7 @@ import {
   type RestResponse,
   type RestRouter,
   resolveActor,
+  type UsersRouter,
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
@@ -143,6 +145,8 @@ interface Site {
   readonly auditRouter: AuditRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
+  /** Account management from the admin instead of `cogenta users create` on a terminal (L11 task 3). */
+  readonly usersRouter: UsersRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
@@ -256,6 +260,7 @@ async function assembleSite(
       sources: [createMfaRecommendationSource({ collections, credentials: auth.credentials })],
       dismissals: noticeDismissals,
     }),
+    usersRouter: createUsersRouter({ auth }),
     ...(agents === undefined ? {} : { agentsRouter: createAgentsRouter(agents) }),
     mediaStore,
     storage,
@@ -450,6 +455,63 @@ async function recordAuthAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/**
+ * Account management, in the audit log.
+ *
+ * Who created an account, who changed a role, who disabled someone and who cut
+ * a session short are exactly the events an append-only, hash-chained log
+ * exists for — and they were previously invisible, since the only way to do any
+ * of it was a terminal.
+ *
+ * Recorded here, at the transport boundary, for the same reason the content and
+ * media audits are: the router stays a pure request-in/response-out value, and
+ * only a response that actually succeeded is written down.
+ */
+async function recordUserAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+
+  const segments = pathname.split('/').filter((segment) => segment.length > 0)
+  // ['api', 'users', <id?>, <'sessions' | 'password'>?, <sessionId?>]
+  const target = segments[2]
+  const sub = segments[3]
+
+  const action =
+    method === 'POST' && target === undefined
+      ? 'user.create'
+      : method === 'PATCH' && target !== undefined && sub === undefined
+        ? 'user.update'
+        : method === 'POST' && sub === 'password'
+          ? 'user.password_change'
+          : method === 'DELETE' && sub === 'sessions'
+            ? 'user.session_revoke'
+            : null
+  if (action === null) return
+
+  // The subject is named, never anything that could sign anyone in: no
+  // password, no token, not even the new roles' provenance beyond the id.
+  const created = (
+    response.body as { readonly data?: { readonly user?: { readonly id?: unknown } } } | null
+  )?.data?.user
+  const subjectId =
+    typeof created?.id === 'string' ? created.id : target === 'me' ? actor.id : (target ?? null)
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action,
+      ...(subjectId === null ? {} : { entryId: subjectId }),
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
 function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   res.writeHead(response.status, response.headers)
   res.end(
@@ -638,6 +700,16 @@ export function createRequestListener(
       if (url.pathname.startsWith('/api/notices')) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.noticeRouter.handle(request, context.actor))
+        return
+      }
+
+      if (url.pathname.startsWith('/api/users')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        const response = await site.usersRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordUserAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
         return
       }
 

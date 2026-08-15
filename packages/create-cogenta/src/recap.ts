@@ -101,6 +101,6 @@ export function printRecap(input: RecapInput, out: Output): void {
   out.line('npx cogenta serve')
   out.detail(`Then open ${answers.siteUrl}/admin and sign in with the admin account above.`)
   out.detail(
-    'A role that can publish, or admin, is asked to set up a second factor (or a passkey) at first sign-in — that ceremony needs a browser, so it never runs during install.',
+    'A password is all it takes to sign in, for every role (ADR-0021). The admin recommends a second factor for an account that can publish or administer, and the profile screen is where to turn one on — it is never demanded at the door.',
   )
 }

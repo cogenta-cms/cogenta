@@ -1,0 +1,22 @@
+{
+  "name": "@cogenta/example-plugin-starter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A real, minimal Cogenta plugin — the starting point docs/guide-plugin.md links to. Loaded and validated for real by its own test, so it cannot silently rot.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@cogenta/core": "workspace:*",
+    "@cogenta/plugins": "workspace:*",
+    "@cogenta/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -77,6 +77,18 @@
       "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
     },
     {
+      // A plugin manifest is loaded by `@cogenta/plugins`'s `loadPlugin` via
+      // `module.default` (`packages/plugins/src/loader.ts`), same reasoning
+      // as `cogenta.schema.ts` above — the default export is the contract.
+      "includes": [
+        "**/plugin.manifest.ts",
+        "**/plugin.manifest.mts",
+        "**/plugin.manifest.js",
+        "**/plugin.manifest.mjs"
+      ],
+      "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
+    },
+    {
       "includes": ["**/test/**", "**/*.test.ts", "**/*.spec.ts"],
       "linter": {
         "rules": {

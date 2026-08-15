@@ -12,6 +12,7 @@ export const TABLES = {
   credentials: 'cogenta_credentials',
   sessions: 'cogenta_sessions',
   loginAttempts: 'cogenta_login_attempts',
+  passwordResets: 'cogenta_password_resets',
   auditLog: 'cogenta_audit_log',
 } as const
 
@@ -37,6 +38,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   const credentials = identifier(TABLES.credentials, d)
   const sessions = identifier(TABLES.sessions, d)
   const loginAttempts = identifier(TABLES.loginAttempts, d)
+  const passwordResets = identifier(TABLES.passwordResets, d)
   const auditLog = identifier(TABLES.auditLog, d)
   const t512 = textColumn(d, 512)
   const t255 = textColumn(d, 255)
@@ -95,6 +97,20 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
     )`)
 
   await db.query(sql`
+    create table if not exists ${passwordResets} (
+      id ${t64} not null primary key,
+      user_id ${t64} not null,
+      -- Hashed like a session token: a leaked table must not hand out a live
+      -- account takeover. Unique so the same token can never name two rows.
+      token_hash ${t512} not null unique,
+      created_at ${t64} not null,
+      expires_at ${t64} not null,
+      -- Null while the token is still usable; stamped once, and the stamping
+      -- is what makes the token single-use (see resets.ts).
+      used_at ${t64}
+    )`)
+
+  await db.query(sql`
     create table if not exists ${auditLog} (
       id ${t64} not null primary key,
       at ${t64} not null,
@@ -116,6 +132,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
     loginAttempts,
     sql`(subject, at)`,
   )
+  await createIndexIfMissing(db, 'cogenta_password_resets_user', passwordResets, sql`(user_id)`)
 }
 
 async function createIndexIfMissing(

@@ -18,6 +18,12 @@ export { requiresMfa, sensitiveRoles } from './mfa.js'
 export { hashPassword, verifyPassword } from './password.js'
 export type { RateLimiter } from './rate-limit.js'
 export { createRateLimiter } from './rate-limit.js'
+export type {
+  IssuedPasswordReset,
+  PasswordResetOutcome,
+  PasswordResetStore,
+} from './resets.js'
+export { createPasswordResetStore, PASSWORD_RESET_TTL_MS } from './resets.js'
 export type { SessionStore } from './sessions.js'
 export { createSessionStore } from './sessions.js'
 export type { AuthStore, AuthStoreOptions } from './store.js'

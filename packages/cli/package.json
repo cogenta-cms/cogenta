@@ -39,6 +39,7 @@
     "@cogenta/api": "workspace:*",
     "@cogenta/auth": "workspace:*",
     "@cogenta/blocks": "workspace:*",
+    "@cogenta/channels": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/import": "workspace:*",
     "@cogenta/render": "workspace:*",

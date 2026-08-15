@@ -1,0 +1,138 @@
+import { createHash, randomBytes } from 'node:crypto'
+import { type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import { TABLES } from './tables.js'
+
+/**
+ * Password reset: a single-use, short-lived token bound to one user.
+ *
+ * Until now a person who forgot their password had no way back in — the only
+ * account command was `users create`, so the recovery procedure was "ask an
+ * administrator to make you a second account". This is the missing half.
+ *
+ * The token is opaque random bytes stored only as a hash, for the same reason
+ * a session token is (`sessions.ts`): a leaked table must hand out nothing
+ * live. It is deliberately **not** a signed/HMAC'd payload. A signature would
+ * let a link be validated without touching the database, and that is exactly
+ * what must not happen here — single use and revocation are properties of a
+ * row, not of a signature, and a signed token that has already been used is
+ * still a valid signature. The database round trip is the feature.
+ */
+
+const TOKEN_BYTES = 32
+
+/**
+ * 30 minutes. Long enough to walk to the inbox and back, short enough that a
+ * reset link sitting in a mailbox archive is worthless within the hour — a
+ * reset token is a full account takeover if it leaks, so it gets a far
+ * shorter life than the 30-day session it can be exchanged for.
+ */
+export const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000
+
+export interface IssuedPasswordReset {
+  readonly id: string
+  readonly userId: string
+  /** Shown once, to be put in the link. Never stored, never recoverable. */
+  readonly token: string
+  readonly expiresAt: string
+}
+
+/**
+ * What redeeming a token found. Separate cases rather than a boolean, so the
+ * caller can say *why* a link did not work — "this link has already been
+ * used" and "this link has expired" send a person to different next steps.
+ */
+export type PasswordResetOutcome =
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'expired' }
+  | { readonly kind: 'used' }
+  | { readonly kind: 'ready'; readonly userId: string; readonly resetId: string }
+
+export interface PasswordResetStore {
+  /**
+   * Issues a token for a user, invalidating any still outstanding for them.
+   *
+   * Only one live reset per person: asking again because the first mail never
+   * arrived must not leave two working links behind, and the newest request
+   * is always the one the person is actually looking at.
+   */
+  issue(userId: string, options?: { readonly ttlMs?: number }): Promise<IssuedPasswordReset>
+  /**
+   * Consumes a token. Redeeming is the single-use point: a `ready` outcome is
+   * returned at most once for a given token, ever, even if two processes ask
+   * at the same instant.
+   */
+  redeem(token: string): Promise<PasswordResetOutcome>
+  /** Invalidates every outstanding reset for a user, used or not. */
+  revokeAllFor(userId: string): Promise<void>
+}
+
+interface ResetRow {
+  id: string
+  user_id: string
+  expires_at: string
+  used_at: string | null
+}
+
+function issueToken(): string {
+  return randomBytes(TOKEN_BYTES).toString('base64url')
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('base64url')
+}
+
+export function createPasswordResetStore(
+  db: DatabaseHandle,
+  now: () => number = Date.now,
+): PasswordResetStore {
+  const table = identifier(TABLES.passwordResets, db.dialect)
+
+  async function markUsed(id: string, at: string): Promise<boolean> {
+    // The `used_at is null` guard is what makes single use real rather than
+    // hoped for: two concurrent redemptions both read a usable row, but only
+    // one UPDATE matches, and the other sees zero rows affected.
+    const result = await db.query(
+      sql`update ${table} set used_at = ${at} where id = ${id} and used_at is null`,
+    )
+    return result.rowsAffected > 0
+  }
+
+  return {
+    issue: async (userId, options) => {
+      await db.query(sql`delete from ${table} where user_id = ${userId} and used_at is null`)
+
+      const token = issueToken()
+      const id = newId(now)
+      const created = new Date(now()).toISOString()
+      const expires = new Date(now() + (options?.ttlMs ?? PASSWORD_RESET_TTL_MS)).toISOString()
+
+      await db.query(sql`
+        insert into ${table} (id, user_id, token_hash, created_at, expires_at, used_at)
+        values (${id}, ${userId}, ${hashToken(token)}, ${created}, ${expires}, ${null})`)
+
+      return { id, userId, token, expiresAt: expires }
+    },
+
+    redeem: async (token) => {
+      const result = await db.query<ResetRow>(
+        sql`select * from ${table} where token_hash = ${hashToken(token)}`,
+      )
+      const row = result.rows[0]
+      if (row === undefined) return { kind: 'invalid' }
+      if (row.used_at !== null) return { kind: 'used' }
+
+      const at = now()
+      if (new Date(row.expires_at).getTime() <= at) return { kind: 'expired' }
+
+      const claimed = await markUsed(row.id, new Date(at).toISOString())
+      // Lost the race: another caller consumed it between the read and here.
+      if (!claimed) return { kind: 'used' }
+
+      return { kind: 'ready', userId: row.user_id, resetId: row.id }
+    },
+
+    revokeAllFor: async (userId) => {
+      await db.query(sql`delete from ${table} where user_id = ${userId}`)
+    },
+  }
+}

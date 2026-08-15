@@ -31,6 +31,14 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      # npm Trusted Publishing (OIDC) needs npm CLI 11.5.0+ to do the token
+      # exchange at all — Node 22.23.2 (`.node-version`) still bundles npm
+      # 10.9.8, which silently falls back to an unauthenticated publish
+      # instead of failing loudly, and the registry answers that with a
+      # confusing 404 rather than a 401/403. Upgrading only the CLI here
+      # keeps the pinned Node runtime version untouched everywhere else.
+      - run: npm install -g npm@latest
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 

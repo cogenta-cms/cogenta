@@ -477,35 +477,69 @@
 /* --- quote --------------------------------------------------------------- */
 
 .cg-quote {
-  max-inline-size: var(--cg-measure);
+  max-inline-size: var(--cg-page-narrow);
   margin-inline: auto;
+  text-align: center;
+}
+
+/* The quotation mark, drawn rather than typed. The `/ ""` gives it an empty
+   alternative text, so a screen reader that supports it announces nothing —
+   the mark is decoration, and the `<blockquote>` already says what it means.
+   A browser without alt-text support reads one quote character, which is
+   harmless; hiding it with `aria-hidden` is impossible on a pseudo-element. */
+.cg-quote::before {
+  content: "\201C" / "";
+  display: block;
+  margin-block-end: calc(var(--cg-s4) * -1);
+  color: var(--cg-accent-soft);
+  font-family: var(--cogenta-font-serif);
+  font-size: calc(var(--cg-text-3xl) * 2);
+  line-height: 1;
 }
 
 .cg-quote__text {
   margin: 0;
   font-family: var(--cogenta-font-serif);
-  font-size: var(--cg-text-lg);
+  /* A pull quote, so it outranks body copy by two steps and sits one below the
+     hero. Balanced wrap matters more here than anywhere: a centred quote with
+     a two-word last line looks broken. */
+  font-size: var(--cg-text-2xl);
   line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
 }
 
 .cg-quote__attribution {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--cg-s3);
-  margin-block-start: var(--cg-s5);
-  color: var(--cg-ink-muted);
+  margin-block-start: var(--cg-s8);
+  color: var(--cg-ink-subtle);
   font-size: var(--cg-text-sm);
 }
 
 .cg-quote__avatar {
-  inline-size: 3rem;
-  block-size: 3rem;
-  border-radius: 50%;
+  inline-size: var(--cg-s12);
+  block-size: var(--cg-s12);
+  border-radius: var(--cg-radius-pill);
+  box-shadow: var(--cg-ring);
 }
 
 .cg-quote__author {
   font-weight: var(--cg-weight-semibold);
   color: var(--cg-ink);
+}
+
+/* A hairline between name and role, instead of a comma the markup does not
+   have and the theme has no business inventing. */
+.cg-quote__role::before {
+  content: "";
+  display: inline-block;
+  inline-size: var(--cg-s3);
+  border-block-start: 1px solid var(--cg-line-strong);
+  vertical-align: middle;
+  margin-inline-end: var(--cg-s3);
 }
 
 /* --- faq ----------------------------------------------------------------- */

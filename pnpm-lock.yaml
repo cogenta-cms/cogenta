@@ -479,6 +479,12 @@ importers:
 
   packages/fleet:
     dependencies:
+      '@cogenta/agents-builtin':
+        specifier: workspace:*
+        version: link:../agents-builtin
+      '@cogenta/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

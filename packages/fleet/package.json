@@ -32,6 +32,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@cogenta/agents-builtin": "workspace:*",
+    "@cogenta/auth": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/plugins": "workspace:*"
   },

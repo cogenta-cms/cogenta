@@ -233,6 +233,9 @@ export const ERROR_CODES = [
   'PLUGIN_SIGNATURE_MISSING',
   'PLUGIN_SIGNATURE_INVALID',
 
+  // Fleet — site-side telemetry emission (L8 task 2)
+  'FLEET_TELEMETRY_FORBIDDEN_FIELD',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

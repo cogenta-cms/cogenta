@@ -27,7 +27,8 @@
     "services:down": "docker compose -f docker-compose.test.yml down -v",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only",
-    "release": "turbo run build && changeset publish",
+    "release": "turbo run build && node scripts/publish-changed.mjs",
+    "release:manual": "turbo run build && node scripts/publish-changed.mjs --no-provenance",
     "prepare": "lefthook install"
   },
   "devDependencies": {

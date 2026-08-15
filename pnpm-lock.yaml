@@ -477,6 +477,22 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@22.20.1)(jsdom@27.4.0)(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.6.1)(yaml@2.9.0))
 
+  packages/fleet:
+    dependencies:
+      '@cogenta/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cogenta/plugins':
+        specifier: workspace:*
+        version: link:../plugins
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@22.20.1)(jsdom@27.4.0)(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.6.1)(yaml@2.9.0))
+
   packages/import:
     dependencies:
       '@cogenta/auth':

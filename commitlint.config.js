@@ -22,6 +22,7 @@ export default {
         'import',
         'channels',
         'plugins',
+        'fleet',
         'db',
         'cache',
         'queue',

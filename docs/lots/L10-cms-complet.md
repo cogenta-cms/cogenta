@@ -1,4 +1,4 @@
-# L10-L14 — De « ça marche » à « plateforme professionnelle »
+# L10-L18 — De « ça marche » à « CMS complet »
 
 ## Pourquoi ce document existe
 
@@ -31,10 +31,14 @@ un thème public qui ne ressemblent pas à un formulaire HTML par défaut.
 
 ## Comment lire ce document
 
-Cinq lots parallélisables, **L10 à L14**, chacun exécutable par un agent différent sans
-attendre les autres au-delà des dépendances explicitement listées. Chaque lot a son
-périmètre, ses tâches dans l'ordre, ses critères d'acceptation. Un agent peut recevoir
-« exécute L12 » sans lire les autres sections.
+**Périmètre : tout.** Version précédente de ce document excluait explicitement
+l'e-commerce, le page builder visuel, la marketplace et l'IA avancée. L'utilisateur a
+tranché : aucune exclusion — l'objectif est un CMS complet, qui couvre absolument
+toutes les fonctionnalités qu'on trouve sur WordPress/Strapi/Drupal/Joomla, plus des
+améliorations. Neuf lots parallélisables, **L10 à L18**, chacun exécutable par un
+agent différent sans attendre les autres au-delà des dépendances explicitement
+listées. Chaque lot a son périmètre, ses tâches dans l'ordre, ses critères
+d'acceptation. Un agent peut recevoir « exécute L12 » sans lire les autres sections.
 
 **Contrats à surveiller** : `docs/04-contrats.md` fige A (`schema@1.0`) et B
 (`blocks@1.0`) depuis le 2026-08-13 — toute tâche qui ajoute un champ système (statut
@@ -43,13 +47,11 @@ et exige une montée en `2.0` avec note de migration, pas un ajout silencieux. C
 signalé à chaque tâche concernée par **[CONTRAT A]**. Avant de commencer une tâche
 marquée ainsi, écrire l'ADR de montée de version (skill `write-adr`) et la faire
 valider — ne pas la contourner en douce, la règle du projet est explicite là-dessus.
-
-**Hors périmètre de ces cinq lots, assumé** : e-commerce (produits/paniers/paiements —
-un CMS n'est pas une plateforme e-commerce, ce serait un lot séparé si jamais décidé),
-fonctionnalités IA avancées au-delà de ce que `@cogenta/agents` fait déjà (RAG sur le
-contenu, chat avec le site — un lot L15 séparé, après que ces cinq-là donnent une base
-stable), marketplace commerciale de plugins, page builder drag & drop pixel-perfect
-(L11 pose l'UI de blocs modernisée, pas un éditeur visuel type Elementor).
+Le e-commerce (L15) et la marketplace (L17) ajoutent chacun un domaine de données
+entier — probablement leur propre montée de contrat ou un nouveau contrat E dédié
+(produits/commandes) plutôt que de forcer ce vocabulaire dans le contrat A pensé pour
+du contenu éditorial ; à trancher dans l'ADR de la tâche 1 de chaque lot, pas deviné en
+cours de route.
 
 ---
 
@@ -502,6 +504,302 @@ tâches indépendantes (1-4).
 
 ---
 
+## L15 — E-commerce
+
+### Objectif
+
+Produits, panier, commandes, paiements — le domaine commerce complet listé par
+l'utilisateur (catégorie 15 : produits, variantes, prix, promotions, coupons, panier,
+commandes, clients, paiements, factures, taxes, livraison, stocks, abonnements,
+remboursements, passerelles de paiement).
+
+### Dépendances
+
+Indépendant de L10-L14. Dépend de L13 (clés API) si le paiement passe par un webhook
+entrant signé (réutiliser la primitive HMAC de `@cogenta/channels`, jamais un nouveau
+mécanisme de signature).
+
+### Périmètre
+
+**Modèle de données [nouveau contrat, ADR obligatoire en tâche 1]** : `Product`
+(variantes, prix, stock), `Order` (lignes, statut, historique), `Customer`
+(distinct d'un `User` de `@cogenta/auth` — un client n'est pas forcément un compte
+admin), `Coupon`/`Promotion`, `Cart` (persistant, lié à une session ou un compte).
+Décider en ADR si ce vocabulaire vit dans une extension du contrat A (collections
+`product`/`order` prédéfinies) ou dans un contrat E séparé — l'e-commerce a des
+invariants (un stock ne doit jamais devenir négatif sous écriture concurrente, un
+total de commande doit rester cohérent avec ses lignes) que le modèle de contenu
+éditorial n'a pas à porter.
+
+**Panier et commande** : panier persistant, calcul de totaux (taxes, livraison,
+remises), passage de commande, statuts de commande (en attente/payée/expédiée/
+livrée/annulée/remboursée), historique client.
+
+**Paiement** : intégration d'au moins une passerelle réelle (Stripe — la plus
+standard, webhooks entrants pour la confirmation asynchrone), architecture en
+interface + implémentations comme tout driver du projet (R1 : pas de dépendance
+dure à un service externe — un mode « paiement manuel/virement » comme driver
+dégradé, pour qu'un site fonctionne sans compte Stripe).
+
+**Taxes et livraison** : règles de taxe configurables par zone, méthodes de
+livraison avec tarifs, intégration transporteur en driver optionnel (pas de
+dépendance dure).
+
+**Factures** : génération PDF réelle, numérotation séquentielle non modifiable
+(contrainte comptable, pas juste un nice-to-have).
+
+**Abonnements** : cycle de facturation récurrent, lié à la passerelle de paiement.
+
+### Tâches, dans l'ordre
+
+1. ADR du modèle de données commerce (contrat A étendu vs contrat E séparé)
+2. `Product`/variantes/stock + admin CRUD
+3. `Cart` + calcul de totaux
+4. `Order` + statuts + historique
+5. Driver de paiement (interface + Stripe + manuel dégradé)
+6. Taxes et livraison
+7. Coupons/promotions
+8. Factures PDF
+9. Abonnements
+
+### Critères d'acceptation
+
+- Une commande passée avec le driver de paiement dégradé (virement manuel) fonctionne
+  de bout en bout sans aucune clé API externe configurée (R1/R2 : le cœur marche sans
+  service tiers)
+- Un stock ne devient jamais négatif sous deux achats concurrents du dernier
+  exemplaire — testé avec de vraies requêtes concurrentes, pas supposé
+- Une facture générée a un numéro séquentiel jamais réutilisé, même après une
+  commande annulée
+
+### Tests exigés
+
+Intégration sur les trois bases pour le modèle produit/commande. Test de
+concurrence réel sur la décrémentation de stock. Test d'intégration avec un vrai
+sandbox Stripe (pas mocké) pour le driver de paiement optimal.
+
+### Pièges connus
+
+**L'argent ne pardonne pas l'approximatif.** Toute opération touchant un total de
+commande ou un stock doit être une transaction de base de données réelle, jamais une
+suite de lectures/écritures séparées — c'est le genre de lot où le driver dégradé
+(SQLite) doit être testé aussi rigoureusement que l'optimal, la règle du projet le
+dit déjà mais elle compte double ici.
+
+---
+
+## L16 — Page builder visuel
+
+### Objectif
+
+Un vrai constructeur de page par glisser-déposer, au-delà du formulaire de champs
+actuel (`block-form.tsx`) et des sections réutilisables de L12. C'est la
+fonctionnalité P2 que la V1 de ce document excluait explicitement — elle rentre
+maintenant dans le périmètre.
+
+### Dépendances
+
+Dépend de L12 (système de tokens visuel, blocs refaits) — construire le builder sur
+des blocs déjà modernisés, pas sur les anciens qu'il faudrait refaire une deuxième
+fois.
+
+### Périmètre
+
+- Glisser-déposer de blocs dans la page, réordonnancement visuel (au lieu des
+  boutons monter/descendre actuels du `block-form.tsx`)
+- Édition inline : cliquer un texte dans l'aperçu pour l'éditer directement, plutôt
+  que via un formulaire séparé
+- Aperçu en temps réel fidèle au rendu public (même pipeline que `theme-render.ts`,
+  pas une approximation React qui diverge du HTML réellement servi)
+- Bibliothèque de blocs avec recherche/catégories dans le panneau d'insertion
+- Undo/redo sur les actions de mise en page
+- Prévisualisation responsive (desktop/tablette/mobile) dans le builder lui-même
+
+### Tâches, dans l'ordre
+
+1. Décision d'architecture : rendre l'aperçu via un iframe pointant le vrai rendu
+   serveur (fidélité garantie, plus simple) vs. réimplémentation React des blocs
+   (plus réactif, risque de divergence avec le rendu réel) — trancher avant de coder,
+   la fidélité au rendu réel est non négociable pour ce projet (même philosophie que
+   « le thème ne touche jamais la base », le builder ne doit jamais mentir sur ce qui
+   sera réellement publié)
+2. Glisser-déposer + réordonnancement
+3. Édition inline
+4. Panneau de blocs avec recherche
+5. Undo/redo
+6. Prévisualisation responsive
+
+### Critères d'acceptation
+
+- Ce qui s'affiche dans le builder est pixel-identique à ce que `cogenta serve` rend
+  réellement pour la même page — vérifié par comparaison, pas par confiance
+- Un contenu construit visuellement reste des données sémantiques en base (contrat B
+  intact) — le builder ne stocke jamais de HTML/CSS généré
+
+### Tests exigés
+
+Test de fidélité visuelle (capture d'écran builder vs rendu public réel, même
+contenu). Test que le contrat B reste respecté après une session d'édition visuelle
+complète.
+
+### Pièges connus
+
+**La divergence builder/rendu réel est le bug de tous les page builders.** Elle
+apparaît des mois après le lancement, sur un cas limite (police custom, breakpoint
+particulier). L'architecture en iframe sur le vrai rendu serveur (option 1 de la
+tâche 1) élimine structurellement ce risque ; la réimplémentation React ne fait que
+le repousser. Le choisir sciemment, pas par défaut.
+
+---
+
+## L17 — Marketplace
+
+### Objectif
+
+Une vraie marketplace de plugins/thèmes/skins, au-delà de l'écran de permissions
+actuel (`packages/admin/src/plugins/`) qui ne fait que réviser ce qu'un plugin déjà
+installé demande.
+
+### Dépendances
+
+Dépend de L13 (clés API) si la marketplace est un service distinct interrogé par
+API. Dépend de la signature Ed25519 déjà réelle dans `@cogenta/plugins` (L7) — la
+marketplace distribue des paquets déjà signés, elle ne réinvente pas la confiance.
+
+### Périmètre
+
+- Registre de plugins/thèmes/skins consultable (recherche, catégories, notes/avis)
+- Installation/mise à jour/désactivation depuis l'admin, un clic, réutilisant le
+  pipeline de vérification de signature déjà réel
+- Fiche détaillée par extension : capacités demandées en langage clair (déjà fait
+  pour l'écran de permissions, réutiliser), captures d'écran, changelog
+- Volet « commercial » explicitement optionnel : un plugin/thème peut être payant —
+  si ce choix est confirmé, ça implique un vrai flux de paiement (réutiliser le
+  driver de paiement de L15, pas un deuxième système)
+
+### Tâches, dans l'ordre
+
+1. Registre consultable (recherche/catégories) — commencer en lecture seule
+2. Installation en un clic depuis l'admin
+3. Fiche détaillée par extension
+4. Mises à jour groupées avec diff de permissions avant d'accepter (ne jamais
+   auto-accorder une capacité élargie silencieusement — c'est déjà une règle actée
+   du projet pour les mises à jour de plugins, L7)
+5. Volet commercial (si confirmé), réutilisant le driver de paiement de L15
+
+### Critères d'acceptation
+
+- Installer une extension depuis la marketplace vérifie sa signature avant toute
+  exécution, jamais une confiance implicite parce qu'elle vient « du registre
+  officiel »
+- Une mise à jour qui élargit les permissions s'arrête et demande confirmation
+  explicite, ne s'applique jamais silencieusement
+
+### Tests exigés
+
+Réutiliser la suite de tests d'évasion déjà exigée pour `@cogenta/plugins` (L7) sur
+tout ce qui transite par la marketplace — aucune extension installée via ce canal ne
+doit contourner le sandbox existant.
+
+### Pièges connus
+
+**Une marketplace est une nouvelle surface de confiance.** Le sandbox worker_threads
++vm et la signature Ed25519 existent déjà et sont éprouvés (L7) — la marketplace ne
+doit rien affaiblir de ça pour aller plus vite. Passer par `security-reviewer` avant
+toute mise en service.
+
+---
+
+## L18 — IA avancée
+
+### Objectif
+
+Ce que la liste de l'utilisateur nomme en catégorie 18 : génération de contenu,
+réécriture, correction grammaticale, résumé, traduction, génération de meta
+descriptions/titres/tags/alt text, génération d'images, recherche sémantique,
+assistant IA dans l'admin, chat avec le contenu du site, RAG, classification
+automatique, modération automatique, détection de doublon, suggestions SEO,
+génération automatique de FAQ/Schema.org.
+
+### Dépendances
+
+Dépend de L10 (recherche full-text branchée — la recherche sémantique s'ajoute à
+côté, pas à la place) et s'appuie sur `@cogenta/agents` (existant, runtime agentique
+déjà réel) plutôt que de construire un système parallèle. R2 reste non négociable :
+rien ici ne doit rendre le CMS dépendant d'une clé API pour fonctionner — chaque
+fonctionnalité de cette liste est un outil d'agent optionnel, jamais un chemin
+obligatoire.
+
+### Périmètre
+
+**Assistant dans l'admin** : panneau de suggestions IA sur une fiche de contenu —
+réécriture, correction, résumé, traduction, génération de meta description/titre/
+tags/alt text — chacun un outil d'agent réel (contrat C `tools@1.0`, déjà figé,
+donc chaque nouvel outil respecte ce contrat existant plutôt que d'en inventer un
+autre).
+
+**Génération d'images** : outil d'agent qui appelle un fournisseur d'image
+(driver, comme les fournisseurs LLM existants — plusieurs implémentations,
+jamais un seul fournisseur en dur).
+
+**Recherche sémantique** : embeddings sur le contenu (nouveau driver `vector`,
+suivre le même patron interface+implémentations que `packages/core` applique déjà à
+cache/queue/storage — chercher si un driver vecteur existe déjà avant d'en créer un,
+`docs/02-architecture.md` en parle peut-être déjà comme prévu et jamais implémenté).
+
+**Chat avec le contenu du site / RAG** : agent conversationnel qui répond en citant
+ses sources dans le contenu réel du site (R8 : le contenu externe/interne cité est
+toujours balisé comme donnée, jamais confondu avec une instruction).
+
+**Classification et modération automatiques** : agent qui suggère des tags/
+catégories, détecte un contenu dupliqué (utile aussi hors contexte IA — recouvre une
+partie du besoin de L13), signale un contenu à modérer sans jamais le supprimer tout
+seul (une action à effet de bord irréversible passe par la validation humaine, R6,
+déjà une règle actée du projet).
+
+**Génération automatique de FAQ/Schema.org** : agent qui propose un bloc `faq` ou un
+JSON-LD à partir du contenu existant — jamais publié automatiquement, toujours en
+brouillon proposé.
+
+### Tâches, dans l'ordre
+
+1. Vérifier l'existant : driver `vector` déjà prévu dans l'architecture ou pas —
+   ne pas dupliquer si `packages/core` a déjà une interface
+2. Outils d'agent d'écriture (réécriture/correction/résumé/traduction/meta/tags/alt)
+3. Panneau assistant dans l'admin, branché sur ces outils
+4. Génération d'images (driver fournisseur)
+5. Recherche sémantique (driver vector + branchement recherche de L10)
+6. Chat/RAG sur le contenu du site
+7. Classification/détection de doublon/modération (jamais d'action destructive
+   automatique)
+8. Génération FAQ/Schema.org (toujours en brouillon)
+
+### Critères d'acceptation
+
+- Le CMS entier continue de fonctionner à 100 % (R2) sans aucun fournisseur LLM
+  configuré — chaque fonctionnalité de ce lot disparaît proprement, rien ne casse
+- Aucune action de ce lot ne modifie ou supprime du contenu sans validation humaine
+  explicite (R6)
+- Le chat/RAG cite ses sources et ne peut jamais faire passer un texte de commentaire
+  ou de contenu importé pour une instruction (R8, testé avec un cas d'injection
+  réel dans le contenu)
+
+### Tests exigés
+
+Test que chaque fonctionnalité se dégrade proprement sans fournisseur configuré.
+Test d'injection de prompt via du contenu marqué comme donnée (R8) pour le RAG/chat.
+Test que la modération/classification ne supprime ni ne publie jamais rien seule.
+
+### Pièges connus
+
+**Le driver dégradé de l'IA, c'est « absent, pas cassé ».** Contrairement à
+cache/storage où un driver dégradé fait le même travail plus lentement, il n'existe
+pas de version dégradée locale crédible de « génère un résumé » — la dégradation
+correcte ici est que la fonctionnalité disparaît de l'UI plutôt que d'échouer
+bruyamment, cohérent avec comment le reste du produit traite déjà l'absence de LLM.
+
+---
+
 ## Vue d'ensemble pour l'exécution parallèle
 
 | Lot | Peut démarrer maintenant | Touche un contrat figé | Dépend de |
@@ -511,19 +809,29 @@ tâches indépendantes (1-4).
 | L12 | Oui | Possible (B, si nouveau champ de bloc) | — |
 | L13 | Oui | Oui (A, tâches 2-3 ; possiblement C, tâche 8) | — |
 | L14 | Partiellement (tâches 1-4) | Non | L13 tâche 8 pour OAuth2 |
+| L15 | Oui | Oui (nouveau domaine, ADR tâche 1) | — |
+| L16 | Non | Non | L12 (blocs modernisés) |
+| L17 | Partiellement (registre lecture seule) | Non | L13 (clés API), L15 (paiement, volet commercial) |
+| L18 | Partiellement (vérif driver vector) | Possible (C, si un nouvel outil en a besoin) | L10 (recherche) |
 
-Aucun lot n'attend qu'un autre soit *terminé* pour démarrer — seules quelques tâches
-précises (notées ci-dessus) ont une vraie dépendance. Cinq agents peuvent travailler
-en parallèle dès l'accord sur ce document, à condition que L11 tranche sa décision de
-design system avant que L12 fige sa propre palette de tokens, pour éviter deux
-systèmes visuels incohérents entre admin et thème public.
+Aucun lot ne bloque un autre au-delà des dépendances listées. Neuf agents peuvent
+travailler en parallèle dès l'accord sur ce document, avec deux points de
+coordination réels : L11 tranche sa décision de design system avant que L12 fige sa
+palette de tokens, et L16 attend que L12 ait modernisé les blocs avant de construire
+le builder par-dessus.
 
-## Ce que « la prochaine version coche toutes les cases » veut dire ici, honnêtement
+## Ce que « CMS complet » veut dire ici
 
-Toutes les cases du tableau **P0 et P1** que l'utilisateur a donné sont couvertes par
-L10-L14, sauf : page builder visuel drag & drop (P2, explicitement hors périmètre —
-L12 fait des sections réutilisables, pas un éditeur visuel), marketplace commerciale
-(P2, hors périmètre), e-commerce (P2, hors périmètre), fonctionnalités IA avancées
-au-delà de l'existant (P2, hors périmètre, lot séparé si décidé plus tard). C'est un
-choix de scope assumé, pas un oubli — le signaler explicitement plutôt que de
-prétendre à l'exhaustivité totale de la liste.
+Toutes les dix-neuf catégories de la liste de l'utilisateur sont couvertes par
+L10-L18, sans exclusion : gestion de contenu et médias (L10, L13), design admin et
+public (L11, L12), SEO (L10), utilisateurs/permissions/workflow (L11, L13),
+multilingue (déjà robuste, exposé par L11), extensions/marketplace (L11, L17), API/
+headless (L10, L13, L14), performance (L10, L12), sécurité (L10, L13, L14),
+analytics (L13), recherche (L10, L18), communication (L13 notifications, L15
+factures/emails via `@cogenta/channels`), e-commerce (L15), architecture technique
+(déjà largement en place, L0-L9), administration (L11), IA (L18), content model
+(déjà le point fort du projet, étendu par L13). Rien de la liste n'est laissé de
+côté ; ce qui reste ouvert, ce sont des décisions d'architecture précises (données
+commerce dans le contrat A ou un contrat E séparé, iframe ou réimplémentation pour
+le page builder) explicitement signalées comme telles dans chaque lot concerné,
+plutôt que tranchées en silence.

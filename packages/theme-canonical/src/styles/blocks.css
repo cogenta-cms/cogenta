@@ -102,50 +102,129 @@
 .cg-prose {
   max-inline-size: var(--cg-measure);
   margin-inline: auto;
+  /* Body copy is the one place in the theme that reads for minutes rather than
+     seconds, so it gets the loosest leading of the scale. */
+  line-height: var(--cg-leading-relaxed);
 }
 
-.cg-prose h2 {
-  margin-block: var(--cg-s12) var(--cg-s3);
-  font-size: var(--cg-text-xl);
+/* A block's first and last child must not push the block's own rhythm around:
+   without these, a prose block that opens on a heading sits a full step lower
+   than one that opens on a paragraph. */
+.cg-prose > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-prose > :last-child {
+  margin-block-end: 0;
+}
+
+.cg-prose h2,
+.cg-prose h3,
+.cg-prose h4 {
+  letter-spacing: var(--cg-tracking-snug);
   line-height: var(--cg-leading-snug);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+/* Asymmetric on purpose: the space above a heading belongs to the section it
+   opens, so it is much larger than the space below it. */
+.cg-prose h2 {
+  margin-block: var(--cg-s12) var(--cg-s4);
+  font-size: var(--cg-text-xl);
   letter-spacing: var(--cg-tracking-tight);
 }
 
 .cg-prose h3 {
-  margin-block: var(--cg-s8) var(--cg-s2);
+  margin-block: var(--cg-s10) var(--cg-s3);
   font-size: var(--cg-text-lg);
-  line-height: var(--cg-leading-snug);
 }
 
 .cg-prose h4 {
-  margin-block: var(--cg-s6) var(--cg-s2);
+  margin-block: var(--cg-s8) var(--cg-s2);
   font-size: var(--cg-text-md);
 }
 
-.cg-prose p,
-.cg-prose ul,
-.cg-prose ol {
-  margin-block: var(--cg-s4);
+.cg-prose p {
+  margin-block: var(--cg-s5);
+  /* Stops the one-word last line, which is the most visible defect in a
+     justified-looking column and costs nothing to avoid. */
+  text-wrap: pretty;
 }
 
+.cg-prose ul,
+.cg-prose ol {
+  margin-block: var(--cg-s5);
+  padding-inline-start: var(--cg-s6);
+}
+
+.cg-prose li {
+  margin-block: var(--cg-s2);
+  padding-inline-start: var(--cg-s1);
+}
+
+/* The marker is the only decoration a list gets, so it is the one that carries
+   the accent. */
+.cg-prose li::marker {
+  color: var(--cg-accent);
+}
+
+.cg-prose strong {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+/* A quoted passage inside an article, not the `quote` block: a panel with a
+   rule, sized down from the pull quote so the two never compete. */
 .cg-prose blockquote {
+  margin-block: var(--cg-s8);
   margin-inline: 0;
-  padding-inline-start: var(--cg-s5);
+  padding: var(--cg-s5) var(--cg-s6);
   border-inline-start: 3px solid var(--cg-accent);
+  border-start-end-radius: var(--cg-radius-md);
+  border-end-end-radius: var(--cg-radius-md);
+  background: var(--cg-surface-sunken);
   color: var(--cg-ink-muted);
   font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-normal);
+}
+
+.cg-prose blockquote > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-prose blockquote > :last-child {
+  margin-block-end: 0;
 }
 
 .cg-prose code {
   font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-sm);
+  /* `em`, not a scale step: inline code has to match the size of the text it
+     sits in, and monospace faces read larger at the same nominal size. */
+  font-size: 0.875em;
   background: var(--cg-surface-sunken);
   border-radius: var(--cg-radius-sm);
-  padding: 0.15em 0.35em;
+  box-shadow: var(--cg-ring);
+  padding: 0.15em 0.4em;
 }
 
 .cg-prose__figure {
+  margin-block: var(--cg-s8);
   margin-inline: 0;
+}
+
+.cg-prose__figure img {
+  inline-size: 100%;
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-elevation-2);
+}
+
+.cg-prose__figure figcaption {
+  margin-block-start: var(--cg-s3);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-normal);
 }
 
 /* --- mediaFigure --------------------------------------------------------- */

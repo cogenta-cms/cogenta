@@ -119,6 +119,32 @@ export const PORTFOLIO_DEMO_PAGES: readonly PortfolioDemoPage[] = [
         limit: 10,
         layout: 'grid',
       },
+      {
+        _key: 'demo-home-services',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'What I take on',
+        items: [
+          {
+            _key: 'demo-service-1',
+            icon: 'identity',
+            title: 'Identity',
+            text: 'Naming, marks and the small rules that keep a brand recognisable once other people apply it.',
+          },
+          {
+            _key: 'demo-service-2',
+            icon: 'editorial',
+            title: 'Editorial design',
+            text: 'Books, reports and long-form sites. Typography first, because that is where the reading happens.',
+          },
+          {
+            _key: 'demo-service-3',
+            icon: 'signage',
+            title: 'Signage and print',
+            text: 'Things that get made once and have to be right. Proofed on the material, not on a screen.',
+          },
+        ],
+      },
     ],
   },
   {

@@ -279,6 +279,32 @@ export const BLOG_DEMO_PAGES: readonly BlogDemoPage[] = [
         limit: 10,
         layout: 'list',
       },
+      {
+        _key: 'demo-home-what',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'What you are looking at',
+        items: [
+          {
+            _key: 'demo-what-1',
+            icon: 'blocks',
+            title: 'Blocks, not HTML',
+            text: 'Every section of this page is a block storing plain data. The theme decides what it looks like, so a new skin restyles all of it at once.',
+          },
+          {
+            _key: 'demo-what-2',
+            icon: 'content',
+            title: 'Real content, from the first run',
+            text: 'The posts, categories and tags below were seeded by the installer. Rename them, delete them — nothing here is special.',
+          },
+          {
+            _key: 'demo-what-3',
+            icon: 'zero-js',
+            title: 'No client JavaScript',
+            text: 'The accordion, the carousel and the dark mode are all CSS. There is no bundle to wait for on a slow connection.',
+          },
+        ],
+      },
     ],
   },
   {

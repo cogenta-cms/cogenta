@@ -12,6 +12,7 @@ import { buildPath, type CollectionDefinition, type ContentEntry, matchPath } fr
 import type { SeoImage } from '@cogenta/seo'
 import {
   query as collectionListQuery,
+  escapeAttribute,
   type FetchedEntries,
   type LinkTargetInput,
   type PageContent,
@@ -23,6 +24,7 @@ import {
   type QueryRequest as ThemeQueryRequest,
 } from '@cogenta/theme-canonical'
 import { alternatesForEntry, renderSeoHead, seoSiteFor } from './seo.js'
+import { minifyCss } from './theme-css.js'
 
 /**
  * The theme's own `ContentEntry`/`QueryRequest` (`theme-contract.ts`) are a
@@ -99,8 +101,16 @@ export interface ThemeRenderOptions {
     readonly locales: readonly string[]
     readonly defaultLocale: string
   }
-  /** `null` when the project has no `theme.tokens.json` — served unstyled rather than refused. */
-  readonly skinCss: string | null
+  /**
+   * The whole stylesheet: the skin's generated `--cogenta-*` custom properties
+   * followed by the theme's own sheet, already flattened and minified (see
+   * `theme-css.ts`). `null` when neither could be loaded — served unstyled
+   * rather than refused.
+   *
+   * The sheet is *linked*, not inlined: only the presence of one is needed
+   * here, so that a site with no stylesheet emits no dead `<link>`.
+   */
+  readonly styles: string | null
   /**
    * Loads the media a render references, in one batch, before rendering.
    *
@@ -118,6 +128,13 @@ export interface ThemeRenderOptions {
   /** Where image variants are served from. Defaults to `/_image`. */
   readonly imageEndpoint?: string
 }
+
+/**
+ * Where the served stylesheet lives. Under `/_cogenta/` for the same reason
+ * `Base.astro` puts the skin there: it is a namespace no collection route can
+ * ever claim, since every route pattern starts from a collection's own path.
+ */
+export const STYLESHEET_PATH = '/_cogenta/styles.css'
 
 function fieldOfKind(collection: CollectionDefinition, kind: string): string | undefined {
   return Object.entries(collection.fields).find(([, field]) => field.kind === kind)?.[0]
@@ -409,21 +426,34 @@ export async function renderRequestedPage(
     }
   }
 
+  // `head` already carries a real `<title>` (`renderSeoHead`, above) — no
+  // second one is written into the template below.
   const head = renderSeoHead(seoSite, resource, {
     ...(alternates.length === 0 ? {} : { alternates }),
     ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
   })
 
+  const siteName = escapeAttribute(options.site.name)
+
+  // The same frame `Base.astro` builds for a real Astro build: a skip link
+  // first, the site name as a header, the content, a footer. Rendering the
+  // `<main>` alone — which this did until the theme's own stylesheet started
+  // being served — left every page with no landmark to skip to and no way back
+  // to the home page.
   return `<!doctype html>
-<html lang="${themeContext.locale}">
+<html lang="${themeContext.locale}" dir="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 ${head}
-${options.skinCss === null ? '' : `<style>${options.skinCss}</style>`}
+${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
 <body>
+<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a></div></header>
 ${bodyHtml}
+<footer class="cg-site-footer"><div class="cg-site-footer__inner">${siteName}</div></footer>
 </body>
 </html>
 `
@@ -445,4 +475,20 @@ export async function loadSkinCss(
   } catch {
     return null
   }
+}
+
+/**
+ * The two sheets a page needs, in the only order that works: the skin's
+ * generated custom properties first, then the theme's stylesheet that reads
+ * them. Either half may be missing — a project with no `theme.tokens.json`
+ * still gets the theme's layout, and a theme package that cannot be resolved
+ * still gets the skin's properties — and a page with neither is served
+ * unstyled rather than refused.
+ */
+export function joinStyles(skinCss: string | null, themeCss: string | null): string | null {
+  const sheets = [
+    skinCss === null ? null : minifyCss(skinCss),
+    themeCss === null ? null : minifyCss(themeCss),
+  ].filter((sheet): sheet is string => sheet !== null)
+  return sheets.length === 0 ? null : sheets.join('\n')
 }

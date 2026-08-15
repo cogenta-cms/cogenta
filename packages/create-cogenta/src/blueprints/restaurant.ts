@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  richTextParagraph,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -152,6 +153,32 @@ export const RESTAURANT_DEMO_PAGES: readonly RestaurantDemoPage[] = [
         limit: 10,
         layout: 'grid',
       },
+      {
+        _key: 'demo-home-kitchen',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'How we cook',
+        items: [
+          {
+            _key: 'demo-kitchen-1',
+            icon: 'market',
+            title: 'Bought that morning',
+            text: 'The menu is written after the market, not before it. That is why it changes twice a week.',
+          },
+          {
+            _key: 'demo-kitchen-2',
+            icon: 'fire',
+            title: 'Cooked to order',
+            text: 'Nothing is held under a lamp. Twenty minutes on a full service is normal, and worth it.',
+          },
+          {
+            _key: 'demo-kitchen-3',
+            icon: 'leaf',
+            title: 'Always one of each',
+            text: 'A vegetarian main and a dessert without gluten, every service, without needing to be asked.',
+          },
+        ],
+      },
     ],
   },
   {
@@ -166,6 +193,38 @@ export const RESTAURANT_DEMO_PAGES: readonly RestaurantDemoPage[] = [
         'demo-contact-hours',
         'Open Tuesday to Sunday, 18:00 to 23:00. 12 Market Street. Reservations recommended on weekends.',
       ),
+      {
+        _key: 'demo-contact-faq',
+        _type: 'faq',
+        _version: BLOCK_VERSION,
+        title: 'Before you book',
+        items: [
+          {
+            _key: 'demo-contact-faq-1',
+            question: 'Can you cater for allergies?',
+            answer: richTextParagraph(
+              'demo-contact-faq-1-a',
+              'Tell us when you book rather than on the night — most of the menu can be adjusted with a few hours of notice, and almost none of it can be adjusted at 20:30.',
+            ),
+          },
+          {
+            _key: 'demo-contact-faq-2',
+            question: 'Do you take large tables?',
+            answer: richTextParagraph(
+              'demo-contact-faq-2-a',
+              'Up to ten, on Tuesday to Thursday. The room seats thirty-two, so a party of ten on a Saturday is a third of the service.',
+            ),
+          },
+          {
+            _key: 'demo-contact-faq-3',
+            question: 'Is there parking?',
+            answer: richTextParagraph(
+              'demo-contact-faq-3-a',
+              'Not our own. The market car park two streets away is free after 19:00, which is when most people arrive anyway.',
+            ),
+          },
+        ],
+      },
     ],
   },
 ]

@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  richTextParagraph,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -139,6 +140,32 @@ export const ASSOCIATION_DEMO_PAGES: readonly AssociationDemoPage[] = [
         layout: 'list',
       },
       {
+        _key: 'demo-home-work',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'What we do',
+        items: [
+          {
+            _key: 'demo-work-1',
+            icon: 'basket',
+            title: 'Weekly food distribution',
+            text: 'Thursday evenings, from the hall on rue des Tilleuls. No paperwork, no means test.',
+          },
+          {
+            _key: 'demo-work-2',
+            icon: 'book',
+            title: 'Homework club',
+            text: 'Two afternoons a week for children in years 6 to 9, run entirely by volunteers.',
+          },
+          {
+            _key: 'demo-work-3',
+            icon: 'hands',
+            title: 'Neighbour to neighbour',
+            text: 'Shopping, paperwork and a bit of company for people who cannot easily get out.',
+          },
+        ],
+      },
+      {
         _key: 'demo-home-cta',
         _type: 'cta',
         _version: BLOCK_VERSION,
@@ -165,6 +192,38 @@ export const ASSOCIATION_DEMO_PAGES: readonly AssociationDemoPage[] = [
           { _key: 'demo-stat-1', value: '12', unit: 'years', label: 'serving the community' },
           { _key: 'demo-stat-2', value: '340+', label: 'volunteers this year' },
           { _key: 'demo-stat-3', value: '60', label: 'families supported' },
+        ],
+      },
+      {
+        _key: 'demo-mission-faq',
+        _type: 'faq',
+        _version: BLOCK_VERSION,
+        title: 'Before you get in touch',
+        items: [
+          {
+            _key: 'demo-mission-faq-1',
+            question: 'Do I have to commit to a regular slot to volunteer?',
+            answer: richTextParagraph(
+              'demo-mission-faq-1-a',
+              'No. Some people come every week for years, some come twice. Both are useful, and the second kind is the one we are usually short of in August.',
+            ),
+          },
+          {
+            _key: 'demo-mission-faq-2',
+            question: 'Where does a donation actually go?',
+            answer: richTextParagraph(
+              'demo-mission-faq-2-a',
+              'Rent on the hall, the van, and the food we buy to fill the gaps in what is donated. Nobody here is paid, which is why the accounts are short enough to publish in full.',
+            ),
+          },
+          {
+            _key: 'demo-mission-faq-3',
+            question: 'Can my company help without writing a cheque?',
+            answer: richTextParagraph(
+              'demo-mission-faq-3-a',
+              'Often more usefully, yes — storage space, a van on Thursdays, or an hour of an accountant every quarter are all things we have had to buy in the past.',
+            ),
+          },
         ],
       },
     ],

@@ -71,7 +71,14 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
-import { DEFAULT_IMAGE_ENDPOINT, loadSkinCss, renderRequestedPage } from './theme-render.js'
+import { cssEtag, loadThemeCss } from './theme-css.js'
+import {
+  DEFAULT_IMAGE_ENDPOINT,
+  joinStyles,
+  loadSkinCss,
+  renderRequestedPage,
+  STYLESHEET_PATH,
+} from './theme-render.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
@@ -198,8 +205,8 @@ interface Site {
     readonly locales: readonly string[]
     readonly defaultLocale: string
   }
-  /** `null` when the project has no `theme.tokens.json` — the theme-render fallback serves unstyled HTML rather than refusing. */
-  readonly skinCss: string | null
+  /** The skin's custom properties plus the theme's own stylesheet, minified into one. `null` when neither could be loaded — the theme-render fallback serves unstyled HTML rather than refusing. */
+  readonly styles: string | null
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -241,8 +248,8 @@ interface AssembleSiteOptions {
    * stores are actually constructed, so neither can bypass it.
    */
   readonly readOnly?: boolean
-  /** `null` when `theme.tokens.json` is absent or invalid — see `loadSkinCss`. */
-  readonly skinCss?: string | null
+  /** `null` when neither the skin nor the theme stylesheet could be loaded — see `joinStyles`. */
+  readonly styles?: string | null
   /**
    * Resizes and re-encodes images at upload (L10 task 5).
    *
@@ -258,6 +265,7 @@ interface AssembleSiteOptions {
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const { db, collections, site, storage, logger } = options
   const readOnly = options.readOnly ?? false
+  const styles = options.styles ?? null
   await createSchemaTables(db, collections)
 
   // Full-text search, connected for the first time (L10 task 3). The index is
@@ -357,7 +365,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     redirects,
     collections,
     site,
-    skinCss: options.skinCss ?? null,
+    styles,
     security: options.security,
     health: options.health,
     dispose: async () => {
@@ -809,6 +817,38 @@ export function createRequestListener(
         return
       }
 
+      // The theme's stylesheet: public, cacheable, and the same URL every
+      // page links, so a visitor pays for ~26 kB once instead of on every
+      // page. Inlining it in each document would cost that on every
+      // navigation; a `<link>` with a real ETag costs a conditional request
+      // that answers 304. There is nothing to permission-check — the sheet is
+      // derived from the skin's tokens and contains no content.
+      if (url.pathname === STYLESHEET_PATH) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        if (site.styles === null) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This site has no stylesheet.')
+          return
+        }
+        const etag = cssEtag(site.styles)
+        if (req.headers['if-none-match'] === etag) {
+          res.writeHead(304, { etag }).end()
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'text/css; charset=utf-8',
+          etag,
+          // Revalidate every time: a skin swap must show up on the next
+          // request, which is the whole promise of contract D's hot swap. The
+          // ETag makes that revalidation a 304 rather than a re-download.
+          'cache-control': 'public, max-age=0, must-revalidate',
+        })
+        res.end(site.styles)
+        return
+      }
+
       if (url.pathname.startsWith('/api/auth/')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -1032,7 +1072,7 @@ export function createRequestListener(
             gateway: site.gateway,
             collections: site.collections,
             site: site.site,
-            skinCss: site.skinCss,
+            styles: site.styles,
           },
           context,
         )
@@ -1055,7 +1095,7 @@ export function createRequestListener(
             collections: site.collections,
             gateway: site.gateway,
             site: site.site,
-            skinCss: site.skinCss,
+            styles: site.styles,
             loadMedia: (ids) => loadRenderMedia(site, ids),
           },
           context,
@@ -1152,9 +1192,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
   const storageSelection = await createStorageRegistry({ logger }).select(loaded.config.storage)
-  const skinCss = await loadSkinCss(
-    (path) => readFile(path, 'utf8'),
-    join(projectRoot, 'theme.tokens.json'),
+  const styles = joinStyles(
+    await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),
+    await loadThemeCss({ read: (url) => readFile(url, 'utf8') }),
   )
   const images = await selectMediaImageProcessor(logger)
   const site = await assembleSite({
@@ -1169,7 +1209,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
       storage: await storageSelection.health(),
     }),
     readOnly: options.readOnly ?? false,
-    skinCss,
+    styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
   })

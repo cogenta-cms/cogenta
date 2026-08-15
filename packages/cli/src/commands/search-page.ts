@@ -1,6 +1,7 @@
 import type { AccessContext, ContentGateway, SearchRouter } from '@cogenta/api'
 import { buildPath, type CollectionDefinition, type SearchHit } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import { STYLESHEET_PATH } from './theme-render.js'
 
 /**
  * `GET /search?q=…` — the public half of L10 task 3.
@@ -32,7 +33,8 @@ export interface SearchPageOptions {
     readonly locales: readonly string[]
     readonly defaultLocale: string
   }
-  readonly skinCss: string | null
+  /** The joined skin+theme stylesheet `cogenta serve` serves at `STYLESHEET_PATH` (`theme-render.ts`'s `joinStyles`). `null` when neither could be loaded — served unstyled rather than refused. */
+  readonly styles: string | null
 }
 
 interface ResolvedHit {
@@ -160,7 +162,7 @@ export async function renderSearchPage(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${heading} — ${escapeHtmlText(options.site.name)}</title>
 <meta name="robots" content="noindex, follow" />
-${options.skinCss === null ? '' : `<style>${options.skinCss}</style>`}
+${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
 <body>
 <main class="cg-main" id="cg-main">

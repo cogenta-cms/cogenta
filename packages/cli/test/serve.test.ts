@@ -761,3 +761,165 @@ describe('runServe', () => {
     }
   })
 })
+
+describe('the theme stylesheet', () => {
+  it('serves one cacheable sheet, without asking who is reading it', async () => {
+    const server = await startServer(await project())
+    try {
+      const response = await fetch(`${server.base}/_cogenta/styles.css`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('text/css')
+
+      const css = await response.text()
+      // One marker per layer of `theme.css`, so a lost `@import` fails here as
+      // well as in the theme's own tests.
+      expect(css).toContain('--cg-canvas')
+      expect(css).toContain('.cg-skip-link')
+      expect(css).toContain('.cg-hero__title')
+      // The skin's generated custom properties travel in the same sheet.
+      expect(css).toContain('--cogenta-color-accent')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('answers a repeat visit with 304 rather than the whole sheet again', async () => {
+    const server = await startServer(await project())
+    try {
+      const first = await fetch(`${server.base}/_cogenta/styles.css`)
+      const etag = first.headers.get('etag')
+      expect(etag).not.toBeNull()
+      await first.text()
+
+      const second = await fetch(`${server.base}/_cogenta/styles.css`, {
+        headers: { 'if-none-match': etag as string },
+      })
+      expect(second.status).toBe(304)
+      expect(await second.text()).toBe('')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('refuses a method that has no meaning for a stylesheet', async () => {
+    const server = await startServer(await project())
+    try {
+      const response = await fetch(`${server.base}/_cogenta/styles.css`, { method: 'POST' })
+      expect(response.status).toBe(405)
+      expect(response.headers.get('allow')).toBe('GET')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
+/**
+ * A page with a real block zone, seeded straight into the store the server
+ * reads from, then fetched over HTTP. The point is the seam nothing else
+ * covers: that the document `cogenta serve` writes around `renderPage` is a
+ * whole page — a skip link, a landmark, a link to the stylesheet — and not a
+ * bare `<main>`.
+ */
+async function themedProject(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'cogenta-theme-'))
+  await writeFile(
+    join(root, 'cogenta.config.mjs'),
+    `export default {
+  site: { name: 'Themed site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+}
+`,
+    'utf8',
+  )
+  await writeFile(
+    join(root, 'cogenta.schema.mjs'),
+    `import { defineCollection, f } from '@cogenta/schema'
+
+export default [
+  defineCollection({
+    name: 'page',
+    labels: { singular: 'Page', plural: 'Pages' },
+    routing: { pattern: '/:slug' },
+    fields: {
+      title: f.text({ required: true, max: 200 }),
+      slug: f.slug({ from: 'title', unique: true }),
+      blocks: f.blocks({ required: true }),
+    },
+    indexes: [['slug']],
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  }),
+]
+`,
+    'utf8',
+  )
+  return root
+}
+
+describe('a themed page over HTTP', () => {
+  it('serves a whole document, not just the rendered blocks', async () => {
+    const root = await themedProject()
+    // Seeded before the server starts: `createSchemaTables` runs at assembly,
+    // so the tables have to exist first — which they do, because this handle
+    // creates them through the same code path the server uses.
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const page = defineCollection({
+      name: 'page',
+      labels: { singular: 'Page', plural: 'Pages' },
+      routing: { pattern: '/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+        blocks: f.blocks({ required: true }),
+      },
+      indexes: [['slug']],
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await createSchemaTables(db, [page])
+    await createContentStore({ db, collection: page, defaultLocale: 'en' }).create({
+      status: 'published',
+      createdBy: null,
+      values: { title: 'Home', slug: 'home' },
+      blocks: {
+        blocks: [
+          {
+            key: 'hero',
+            type: 'hero',
+            data: { title: 'Two planes, one site', eyebrow: 'Demo' },
+          },
+        ],
+      },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('text/html')
+
+      const html = await response.text()
+      // The block itself.
+      expect(html).toContain('Two planes, one site')
+      expect(html).toContain('cg-hero__eyebrow')
+      // The document around it — none of which existed before L12.
+      expect(html).toContain(`<link rel="stylesheet" href="/_cogenta/styles.css">`)
+      expect(html).toContain('<meta name="color-scheme" content="light dark">')
+      expect(html).toContain('class="cg-skip-link"')
+      expect(html).toContain('class="cg-site-header"')
+      expect(html).toContain('Themed site')
+      // Still no *executable* client JavaScript anywhere on the page — the
+      // one <script> tag present is L10's JSON-LD structured data
+      // (application/ld+json), which a browser never runs.
+      expect(html).toContain('<script type="application/ld+json">')
+      expect(html).not.toMatch(/<script(?![^>]*application\/ld\+json)/i)
+    } finally {
+      await server.stop()
+    }
+  })
+})

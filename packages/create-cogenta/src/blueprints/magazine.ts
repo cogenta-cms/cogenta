@@ -150,6 +150,32 @@ export const MAGAZINE_DEMO_PAGES: readonly MagazineDemoPage[] = [
         limit: 10,
         layout: 'list',
       },
+      {
+        _key: 'demo-home-sections',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'What we cover',
+        items: [
+          {
+            _key: 'demo-section-1',
+            icon: 'city',
+            title: 'The city',
+            text: 'Housing, transport and the decisions taken in rooms nobody reports from.',
+          },
+          {
+            _key: 'demo-section-2',
+            icon: 'work',
+            title: 'Work',
+            text: 'What people here actually do all day, and what it pays. Long interviews, few numbers.',
+          },
+          {
+            _key: 'demo-section-3',
+            icon: 'culture',
+            title: 'Culture',
+            text: 'Reviews written by people who paid for the ticket, and profiles of the ones who made it.',
+          },
+        ],
+      },
     ],
   },
   {
@@ -160,6 +186,14 @@ export const MAGAZINE_DEMO_PAGES: readonly MagazineDemoPage[] = [
         'demo-about-prose',
         'This is a demo magazine, scaffolded by create-cogenta from the "magazine" blueprint. Its articles and this page were seeded by the installer so there is real content to look at from the first run.',
       ),
+      {
+        _key: 'demo-about-quote',
+        _type: 'quote',
+        _version: BLOCK_VERSION,
+        text: 'A magazine is a promise about what you will not have to read: everything we decided was not worth your evening.',
+        author: 'Noor Hassani',
+        role: 'Editor',
+      },
     ],
   },
 ]

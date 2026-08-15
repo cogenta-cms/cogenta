@@ -1,0 +1,890 @@
+/*
+ * The twelve vocabulary blocks.
+ *
+ * One section per block, in the contract-B order. Nothing here declares a
+ * colour, a size, a radius or a duration of its own: a block composes the
+ * design system from `tokens.css` and nothing else, which is what keeps a skin
+ * swap a whole-theme change rather than a per-block one.
+ */
+
+/* --- hero ----------------------------------------------------------------
+   The page's first impression, so it is the one block that gets a decorative
+   element of its own: a soft wash of the skin's accent behind the media. It is
+   drawn on a pseudo-element and sized to stay inside the block's own box —
+   a decoration that widens the page produces a horizontal scrollbar, which is
+   the classic way a hero breaks a phone.
+   ------------------------------------------------------------------------- */
+
+.cg-hero {
+  position: relative;
+  /* A stacking context of its own, so `z-index: -1` on the wash puts it behind
+     the hero's content and not behind the page background. */
+  isolation: isolate;
+  display: grid;
+  gap: var(--cg-gap-loose);
+  align-items: center;
+  margin-block-start: var(--cg-s10);
+}
+
+.cg-hero::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: var(--cg-gutter);
+  inline-size: min(30rem, 70%);
+  aspect-ratio: 1;
+  z-index: -1;
+  background: radial-gradient(circle at 60% 40%, var(--cg-accent-soft), transparent 68%);
+  pointer-events: none;
+}
+
+@media (min-width: 60rem) {
+  .cg-hero {
+    /* Not 1fr 1fr: the copy carries the weight, and an even split makes both
+       halves look accidental. */
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: var(--cg-s16);
+  }
+}
+
+/* A badge, not a line of small text: it is the one label above the h1 and it
+   has to look deliberate. */
+.cg-hero__eyebrow {
+  display: inline-block;
+  margin: 0 0 var(--cg-s5);
+  padding: var(--cg-s1) var(--cg-s3);
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+  border-radius: var(--cg-radius-pill);
+  box-shadow: var(--cg-ring-accent);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-hero__title {
+  margin: 0;
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  /* Display type wraps into a shape, not into a ragged column. */
+  text-wrap: balance;
+}
+
+/* Above 60rem the title is allowed one step larger than the page title — the
+   hero *is* the page title there, and the extra step is what separates a hero
+   from a heading with a picture next to it. */
+@media (min-width: 60rem) {
+  .cg-hero__title {
+    font-size: calc(var(--cg-text-3xl) * 1.15);
+  }
+}
+
+.cg-hero__subtitle {
+  margin: var(--cg-s5) 0 0;
+  max-inline-size: var(--cg-measure-narrow);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  color: var(--cg-ink-muted);
+  text-wrap: pretty;
+}
+
+.cg-hero__media img {
+  inline-size: 100%;
+  border-radius: var(--cg-radius-xl);
+  box-shadow: var(--cg-elevation-3), var(--cg-ring);
+}
+
+/* --- prose --------------------------------------------------------------- */
+
+.cg-prose {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+  /* Body copy is the one place in the theme that reads for minutes rather than
+     seconds, so it gets the loosest leading of the scale. */
+  line-height: var(--cg-leading-relaxed);
+}
+
+/* A block's first and last child must not push the block's own rhythm around:
+   without these, a prose block that opens on a heading sits a full step lower
+   than one that opens on a paragraph. */
+.cg-prose > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-prose > :last-child {
+  margin-block-end: 0;
+}
+
+.cg-prose h2,
+.cg-prose h3,
+.cg-prose h4 {
+  letter-spacing: var(--cg-tracking-snug);
+  line-height: var(--cg-leading-snug);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+/* Asymmetric on purpose: the space above a heading belongs to the section it
+   opens, so it is much larger than the space below it. */
+.cg-prose h2 {
+  margin-block: var(--cg-s12) var(--cg-s4);
+  font-size: var(--cg-text-xl);
+  letter-spacing: var(--cg-tracking-tight);
+}
+
+.cg-prose h3 {
+  margin-block: var(--cg-s10) var(--cg-s3);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-prose h4 {
+  margin-block: var(--cg-s8) var(--cg-s2);
+  font-size: var(--cg-text-md);
+}
+
+.cg-prose p {
+  margin-block: var(--cg-s5);
+  /* Stops the one-word last line, which is the most visible defect in a
+     justified-looking column and costs nothing to avoid. */
+  text-wrap: pretty;
+}
+
+.cg-prose ul,
+.cg-prose ol {
+  margin-block: var(--cg-s5);
+  padding-inline-start: var(--cg-s6);
+}
+
+.cg-prose li {
+  margin-block: var(--cg-s2);
+  padding-inline-start: var(--cg-s1);
+}
+
+/* The marker is the only decoration a list gets, so it is the one that carries
+   the accent. */
+.cg-prose li::marker {
+  color: var(--cg-accent);
+}
+
+.cg-prose strong {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+/* A quoted passage inside an article, not the `quote` block: a panel with a
+   rule, sized down from the pull quote so the two never compete. */
+.cg-prose blockquote {
+  margin-block: var(--cg-s8);
+  margin-inline: 0;
+  padding: var(--cg-s5) var(--cg-s6);
+  border-inline-start: 3px solid var(--cg-accent);
+  border-start-end-radius: var(--cg-radius-md);
+  border-end-end-radius: var(--cg-radius-md);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-normal);
+}
+
+.cg-prose blockquote > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-prose blockquote > :last-child {
+  margin-block-end: 0;
+}
+
+.cg-prose code {
+  font-family: var(--cogenta-font-mono);
+  /* `em`, not a scale step: inline code has to match the size of the text it
+     sits in, and monospace faces read larger at the same nominal size. */
+  font-size: 0.875em;
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-sm);
+  box-shadow: var(--cg-ring);
+  padding: 0.15em 0.4em;
+}
+
+.cg-prose__figure {
+  margin-block: var(--cg-s8);
+  margin-inline: 0;
+}
+
+.cg-prose__figure img {
+  inline-size: 100%;
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-elevation-2);
+}
+
+.cg-prose__figure figcaption {
+  margin-block-start: var(--cg-s3);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-normal);
+}
+
+/* --- mediaFigure --------------------------------------------------------- */
+
+.cg-figure {
+  margin-inline: auto;
+}
+
+.cg-figure[data-align="start"],
+.cg-figure[data-align="end"] {
+  max-inline-size: calc(var(--cg-measure) / 2);
+}
+
+.cg-figure[data-align="start"] {
+  float: inline-start;
+  margin-inline-end: var(--cg-s6);
+}
+
+.cg-figure[data-align="end"] {
+  float: inline-end;
+  margin-inline-start: var(--cg-s6);
+}
+
+.cg-figure[data-align="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-figure__media {
+  inline-size: 100%;
+  aspect-ratio: var(--cg-ratio, auto);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-elevation-2), var(--cg-ring);
+}
+
+/* Full bleed keeps its corners square: a rounded corner against the viewport
+   edge reads as a mistake, not as a radius. */
+.cg-figure[data-align="full"] .cg-figure__media {
+  border-radius: 0;
+}
+
+/* An indented caption with a rule, so it reads as annotation rather than as a
+   stray paragraph that happens to follow a picture. */
+.cg-figure__caption {
+  margin-block-start: var(--cg-s4);
+  padding-inline-start: var(--cg-s4);
+  border-inline-start: 2px solid var(--cg-line-strong);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-normal);
+  text-wrap: pretty;
+}
+
+.cg-figure[data-align="full"] .cg-figure__caption {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+  border-inline-start: 0;
+}
+
+.cg-figure__credit {
+  color: var(--cg-ink-subtle);
+}
+
+.cg-figure__credit::before {
+  content: " — ";
+}
+
+/* --- featureGrid --------------------------------------------------------- */
+
+.cg-features__items {
+  display: grid;
+  gap: var(--cg-gap);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.cg-feature {
+  position: relative;
+  padding: var(--cg-s6);
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+  transition:
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-feature:hover {
+  box-shadow: var(--cg-elevation-2), var(--cg-ring-accent);
+  transform: translateY(-2px);
+}
+
+/* The whole card becomes the link's hit area, without a second link for a
+   screen reader to announce: the overlay is drawn from the one anchor the
+   markup already has, whose accessible name is the feature's title. */
+.cg-feature__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.cg-feature__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cg-feature:hover .cg-feature__link {
+  color: var(--cg-accent);
+}
+
+/* The vocabulary's `icon` names a symbol, never markup, and this theme ships no
+   icon set — so the chip is what the name gets: a tinted, ringed square that
+   holds the space an icon would, rather than a broken glyph or an invented one. */
+.cg-feature__icon {
+  display: block;
+  inline-size: var(--cg-s10);
+  block-size: var(--cg-s10);
+  margin-block-end: var(--cg-s5);
+  background: var(--cg-accent-soft);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cg-ring-accent);
+}
+
+.cg-feature__title {
+  margin: 0 0 var(--cg-s2);
+  font-size: var(--cg-text-md);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
+}
+
+.cg-feature__text {
+  margin: 0;
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
+}
+
+/* --- cta ----------------------------------------------------------------- */
+
+.cg-cta {
+  position: relative;
+  overflow: hidden;
+  padding: var(--cg-s16) var(--cg-s8);
+  background: var(--cg-surface-tinted);
+  border-radius: var(--cg-radius-xl);
+  box-shadow: var(--cg-ring-accent);
+  text-align: center;
+}
+
+/* A single diagonal sheen of the accent. `overflow: hidden` on the panel keeps
+   it inside the radius, so it never leaks past a rounded corner. */
+.cg-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--cg-accent-soft), transparent 55%);
+  pointer-events: none;
+}
+
+/* The panel's own children have to sit above that sheen. */
+.cg-cta > * {
+  position: relative;
+}
+
+.cg-cta__title {
+  margin: 0;
+  /* One step above a section heading: this block asks for something, and the
+     ask has to outrank the headings around it. */
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-cta__text {
+  margin: var(--cg-s4) auto 0;
+  max-inline-size: var(--cg-measure-narrow);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
+}
+
+.cg-cta .cg-actions {
+  justify-content: center;
+}
+
+/* --- gallery ------------------------------------------------------------- */
+
+.cg-gallery__items {
+  display: grid;
+  gap: var(--cg-gap-tight);
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+/* The frame, shared by all three layouts: it is what clips the hover zoom
+   below, so the picture can grow without the tile growing with it. */
+.cg-gallery__item {
+  overflow: hidden;
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-gallery__item img {
+  inline-size: 100%;
+  block-size: 100%;
+  transition: transform var(--cg-duration-slow) var(--cg-ease);
+}
+
+.cg-gallery__item:hover img {
+  transform: scale(1.04);
+}
+
+/* A grid of pictures needs one shape, or the rows read as an accident. Masonry
+   is the one layout that opts out, since its whole point is not to. */
+.cg-gallery:not([data-layout="masonry"]) .cg-gallery__item img {
+  aspect-ratio: 4 / 3;
+}
+
+.cg-gallery[data-layout="masonry"] .cg-gallery__items {
+  display: block;
+  columns: 3 14rem;
+  column-gap: var(--cg-gap-tight);
+}
+
+.cg-gallery[data-layout="masonry"] .cg-gallery__item {
+  break-inside: avoid;
+  margin-block-end: var(--cg-gap-tight);
+}
+
+.cg-gallery[data-layout="carousel"] .cg-gallery__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(16rem, 40%);
+}
+
+.cg-gallery[data-layout="carousel"] .cg-gallery__item {
+  scroll-snap-align: start;
+}
+
+.cg-collection img {
+  inline-size: 100%;
+  border-radius: var(--cg-radius-md);
+}
+
+/* --- quote --------------------------------------------------------------- */
+
+.cg-quote {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+  text-align: center;
+}
+
+/* The quotation mark, drawn rather than typed. The `/ ""` gives it an empty
+   alternative text, so a screen reader that supports it announces nothing —
+   the mark is decoration, and the `<blockquote>` already says what it means.
+   A browser without alt-text support reads one quote character, which is
+   harmless; hiding it with `aria-hidden` is impossible on a pseudo-element. */
+.cg-quote::before {
+  content: "\201C" / "";
+  display: block;
+  margin-block-end: calc(var(--cg-s4) * -1);
+  color: var(--cg-accent-soft);
+  font-family: var(--cogenta-font-serif);
+  font-size: calc(var(--cg-text-3xl) * 2);
+  line-height: 1;
+}
+
+.cg-quote__text {
+  margin: 0;
+  font-family: var(--cogenta-font-serif);
+  /* A pull quote, so it outranks body copy by two steps and sits one below the
+     hero. Balanced wrap matters more here than anywhere: a centred quote with
+     a two-word last line looks broken. */
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
+}
+
+.cg-quote__attribution {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s8);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-quote__avatar {
+  inline-size: var(--cg-s12);
+  block-size: var(--cg-s12);
+  border-radius: var(--cg-radius-pill);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-quote__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+/* A hairline between name and role, instead of a comma the markup does not
+   have and the theme has no business inventing. */
+.cg-quote__role::before {
+  content: "";
+  display: inline-block;
+  inline-size: var(--cg-s3);
+  border-block-start: 1px solid var(--cg-line-strong);
+  vertical-align: middle;
+  margin-inline-end: var(--cg-s3);
+}
+
+/* --- faq ----------------------------------------------------------------- */
+
+.cg-faq {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+}
+
+.cg-faq__items {
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+  /* Clips the first and last rows to the container's radius, so the list reads
+     as one panel rather than as rows that happen to be stacked. */
+  overflow: hidden;
+}
+
+.cg-faq__item + .cg-faq__item {
+  border-block-start: 1px solid var(--cg-line-soft);
+}
+
+.cg-faq__question {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s4);
+  padding: var(--cg-s5) var(--cg-s6);
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+  /* The marker is replaced below; both properties are needed, and the vendor
+     one still is on WebKit. */
+  list-style: none;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-faq__question::-webkit-details-marker {
+  display: none;
+}
+
+.cg-faq__question:hover {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+/* A chevron drawn from two borders — no icon set, no glyph that depends on a
+   font shipping it. It is a pseudo-element on a `<summary>` whose expanded
+   state the browser already announces, so it stays purely visual. */
+.cg-faq__question::after {
+  content: "";
+  flex: none;
+  margin-inline-start: auto;
+  inline-size: 0.5em;
+  block-size: 0.5em;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: translateY(-0.15em) rotate(45deg);
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-faq__details[open] .cg-faq__question::after {
+  transform: translateY(0.1em) rotate(-135deg);
+}
+
+.cg-faq__details[open] .cg-faq__question {
+  color: var(--cg-accent);
+}
+
+.cg-faq__answer {
+  padding: 0 var(--cg-s6) var(--cg-s6);
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+}
+
+.cg-faq__answer > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-faq__answer > :last-child {
+  margin-block-end: 0;
+}
+
+/* --- stats --------------------------------------------------------------- */
+
+.cg-stats__items {
+  display: grid;
+  gap: var(--cg-gap);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  margin: 0;
+}
+
+/* Reading order is label then figure; the stylesheet shows the figure first.
+   The markup is what a screen reader follows, so the two must not be
+   conflated — `column-reverse` reorders the paint, never the `<dl>`. */
+.cg-stat {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--cg-s2);
+  padding: var(--cg-s6);
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-stat__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s1);
+  margin: 0;
+  color: var(--cg-accent);
+  font-size: var(--cg-text-3xl);
+  font-weight: var(--cg-weight-bold);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  /* Figures that change between pages must not change width with the digits. */
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-stat__unit {
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-medium);
+  color: var(--cg-ink-muted);
+  letter-spacing: var(--cg-tracking-normal);
+}
+
+/* Small caps under a large figure: the label is a caption for the number, and
+   at body size it competes with it. */
+.cg-stat__label {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* --- logos --------------------------------------------------------------- */
+
+/* A grid, not a wrapping row: a flex row leaves the last line ragged, and a
+   row of logos that does not line up reads as an oversight rather than as a
+   list of names. */
+.cg-logos__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--cg-gap);
+  align-items: center;
+}
+
+.cg-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cg-s4);
+}
+
+.cg-logo__image {
+  /* One optical height for every logo, whatever its own proportions: `contain`
+     keeps a wide wordmark and a square mark at the same weight on the page. */
+  block-size: var(--cg-s10);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+  /* Held back so the logos read as a supporting row rather than as eight
+     competing brands, and brought fully forward on hover. Opacity, not
+     `grayscale`: a filtered logo is a logo whose owner did not approve it. */
+  opacity: 0.72;
+  transition: opacity var(--cg-duration) var(--cg-ease);
+}
+
+.cg-logo__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  border-radius: var(--cg-radius-md);
+}
+
+.cg-logo:hover .cg-logo__image,
+.cg-logo__link:focus-visible .cg-logo__image {
+  opacity: 1;
+}
+
+/* --- collectionList ------------------------------------------------------ */
+
+.cg-collection__items {
+  display: grid;
+  gap: var(--cg-gap);
+}
+
+.cg-collection[data-layout="grid"] .cg-collection__items {
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+}
+
+.cg-collection[data-layout="carousel"] .cg-collection__items {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(18rem, 45%);
+}
+
+.cg-collection[data-layout="carousel"] .cg-entry {
+  scroll-snap-align: start;
+}
+
+.cg-entry {
+  position: relative;
+  padding: var(--cg-s6);
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+  transition:
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-entry:hover {
+  box-shadow: var(--cg-elevation-2), var(--cg-ring-accent);
+  transform: translateY(-2px);
+}
+
+/* Same overlay as `featureGrid`: the card is the hit area, drawn from the one
+   link the markup has, so nothing extra is announced. */
+.cg-entry__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cg-entry__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.cg-entry:hover .cg-entry__link {
+  color: var(--cg-accent);
+}
+
+/* Date first in the paint, title under it: a list of entries is scanned by
+   recency, and the markup still reads title then date. */
+.cg-entry__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.cg-entry__title {
+  order: 2;
+  margin: 0;
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
+}
+
+.cg-entry__date {
+  order: 1;
+  margin-block-end: var(--cg-s2);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-entry__excerpt {
+  order: 3;
+  margin: var(--cg-s3) 0 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-relaxed);
+  /* Three lines, so cards in a row keep their heights close whatever the
+     editor wrote. Nothing is lost: the entry's own page carries the full text. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.cg-collection__empty {
+  padding: var(--cg-s8);
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-lg);
+  color: var(--cg-ink-subtle);
+  text-align: center;
+}
+
+/* --- embed --------------------------------------------------------------- */
+
+.cg-embed {
+  aspect-ratio: var(--cg-ratio, 16 / 9);
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-embed__frame {
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+  border-radius: var(--cg-radius-md);
+}
+
+/* The consent placeholder is a real card, not a grey box: it says what would be
+   loaded and offers a way out to the source. It requests nothing third-party. */
+.cg-embed__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s5);
+  block-size: 100%;
+  padding: var(--cg-s8);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  /* Dashed, and kept dashed: it is the one place in the theme where the border
+     says "nothing has loaded here yet" rather than "this is a panel". */
+  border: 1px dashed var(--cg-line-strong);
+  border-radius: var(--cg-radius-lg);
+  text-align: center;
+}
+
+.cg-embed__notice {
+  margin: 0;
+  max-inline-size: var(--cg-measure-narrow);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
+}
+
+/* The way out is an action, not a sentence with a link in it: this card exists
+   because the visitor has to choose, and a choice needs something to press. */
+.cg-embed__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding: var(--cg-s3) var(--cg-s6);
+  background: var(--cg-surface-raised);
+  color: var(--cg-accent);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cg-ring-accent);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration: none;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-embed__link:hover {
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}

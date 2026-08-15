@@ -55,9 +55,21 @@ export function versionsTable(collection: string): string {
   return checked(`${entriesTable(collection)}_versions`)
 }
 
-/** The join table of a `many: true` relation. */
+/** The join table of a `many: true` relation, or of a `taxonomy` field. */
 export function relationTable(collection: string, field: string): string {
   return checked(`${entriesTable(collection)}_${toSnakeCase(field)}`)
+}
+
+/**
+ * The terms of a taxonomy (`schema@2.0`, ADR-0022).
+ *
+ * A prefix of its own rather than `entriesTable`: a taxonomy and a collection
+ * may legitimately share a name — a site can have a `category` collection and
+ * a `category` taxonomy — and two different things must never land on one
+ * table.
+ */
+export function taxonomyTable(taxonomy: string): string {
+  return checked(`${PREFIX}tax_${toSnakeCase(taxonomy)}`)
 }
 
 export function indexName(table: string, suffix: string): string {
@@ -80,6 +92,7 @@ export const SYSTEM_COLUMNS = [
   'created_by',
   'updated_by',
   'status',
+  'deleted_at',
   'locale',
   'translation_of',
   'version',

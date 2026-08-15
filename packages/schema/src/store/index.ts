@@ -28,6 +28,7 @@ export {
   isSystemColumn,
   relationTable,
   SYSTEM_COLUMNS,
+  taxonomyTable,
   toSnakeCase,
   versionsTable,
 } from './naming.js'
@@ -44,6 +45,24 @@ export {
   orderByDependency,
   relationsOf,
 } from './tables.js'
+export {
+  assertDepth,
+  childPath,
+  depthOf,
+  isBelow,
+  isWithin,
+  MAX_TAXONOMY_DEPTH,
+  rebasedPath,
+  TAXONOMY_PATH_LENGTH,
+} from './taxonomy-path.js'
+export type {
+  CreateTermInput,
+  ListTermsOptions,
+  TaxonomyStore,
+  TaxonomyStoreOptions,
+  UpdateTermInput,
+} from './taxonomy-store.js'
+export { createTaxonomyStore } from './taxonomy-store.js'
 export type {
   BlockZones,
   ContentBlock,
@@ -57,9 +76,13 @@ export type {
   LocaleResolution,
   Page,
   PublishInput,
+  PurgeReport,
+  ReadOptions,
   ResolveLocaleOptions,
   SortField,
   SortOrder,
+  TrashFilter,
+  TrashOptions,
   UpdateInput,
   VersionSummary,
 } from './types.js'

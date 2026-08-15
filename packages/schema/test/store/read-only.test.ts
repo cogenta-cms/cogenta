@@ -47,6 +47,11 @@ describe('withReadOnlyStore', () => {
       code: 'CONTENT_READ_ONLY',
     })
     await expect(readOnly.delete(seeded.id)).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
+    // The three trash methods of `schema@2.0`. `purge` most of all: a demo
+    // that let a visitor empty the trash would destroy content for good.
+    await expect(readOnly.untrash(seeded.id)).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
+    await expect(readOnly.purge(seeded.id)).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
+    await expect(readOnly.purgeExpired()).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
     await expect(readOnly.publish(seeded.id)).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
     await expect(readOnly.unpublish(seeded.id)).rejects.toMatchObject({
       code: 'CONTENT_READ_ONLY',

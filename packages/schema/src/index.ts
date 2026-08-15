@@ -7,6 +7,7 @@
  */
 
 export { defineCollection, validateCollectionSet } from './define-collection.js'
+export { defineTaxonomy, validateTaxonomySet } from './define-taxonomy.js'
 export type { SchemaIssue } from './errors.js'
 export { schemaError } from './errors.js'
 export type {
@@ -18,6 +19,7 @@ export type {
   SelectChoice,
   SelectFieldOptions,
   SlugFieldOptions,
+  TaxonomyFieldOptions,
   TextFieldOptions,
 } from './fields.js'
 export { f, MEDIA_ACCEPT_KINDS } from './fields.js'

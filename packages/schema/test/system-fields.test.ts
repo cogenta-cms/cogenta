@@ -25,6 +25,7 @@ function systemValues(overrides: Record<string, unknown> = {}): Record<string, u
     createdBy: null,
     updatedBy: null,
     status: 'draft',
+    deletedAt: null,
     locale: 'fr',
     translationOf: null,
     version: 1,
@@ -35,7 +36,7 @@ function systemValues(overrides: Record<string, unknown> = {}): Record<string, u
 }
 
 describe('system fields', () => {
-  it('declares the eleven fields of the contract, in the order the contract lists them', () => {
+  it('declares the twelve fields of the contract, in the order the contract lists them', () => {
     expect(SYSTEM_FIELD_NAMES).toEqual([
       'id',
       'createdAt',
@@ -43,12 +44,26 @@ describe('system fields', () => {
       'createdBy',
       'updatedBy',
       'status',
+      'deletedAt',
       'locale',
       'translationOf',
       'version',
       'provenance',
       'provenanceDetail',
     ])
+  })
+
+  it('keeps deletedAt orthogonal to status rather than adding a status value', () => {
+    // ADR-0022's central design point, asserted rather than assumed: a trashed
+    // entry remembers what it was, and no `switch` on ContentStatus silently
+    // grew a case it does not handle.
+    expect(SYSTEM_FIELD_NAMES).toContain('deletedAt')
+    const trashedButPublished = systemValues({
+      status: 'published',
+      deletedAt: '2026-08-16T10:00:00Z',
+    })
+    expect(systemFieldsSchema.safeParse(trashedButPublished).success).toBe(true)
+    expect(systemFieldsSchema.safeParse(systemValues({ status: 'trashed' })).success).toBe(false)
   })
 
   it('describes every system field for the admin, and none that does not exist', () => {

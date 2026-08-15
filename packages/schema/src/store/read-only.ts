@@ -5,9 +5,15 @@ import type { ContentValues } from './types.js'
 /**
  * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Wraps
  * any `ContentStore` so every mutating method refuses instead of writing —
- * `create`/`duplicate`/`update`/`delete`/`publish`/`unpublish`/`restore` — while every
- * read (`read`/`list`/`history`/`readVersion`/`diff`/`translations`/
- * `resolveLocale`) passes straight through, unchanged.
+ * `create`/`duplicate`/`update`/`delete`/`untrash`/`purge`/`purgeExpired`/
+ * `publish`/`unpublish`/`restore` — while every read (`read`/`list`/`history`/
+ * `readVersion`/`diff`/`translations`/`resolveLocale`) passes straight
+ * through, unchanged.
+ *
+ * The three trash methods are refused for the reason `delete` always was, and
+ * `purge` most of all: a read-only demo that let a visitor empty the trash
+ * would destroy content irrecoverably, which is worse than the write it was
+ * meant to prevent (ADR-0022).
  *
  * A single wrap at the store level protects every consumer built on top of
  * it — REST's `ContentService` and GraphQL's gateway both construct their
@@ -35,6 +41,9 @@ export function withReadOnlyStore<TValues extends ContentValues = ContentValues>
     duplicate: () => refuse(),
     update: () => refuse(),
     delete: () => refuse(),
+    untrash: () => refuse(),
+    purge: () => refuse(),
+    purgeExpired: () => refuse(),
     publish: () => refuse(),
     unpublish: () => refuse(),
     restore: () => refuse(),

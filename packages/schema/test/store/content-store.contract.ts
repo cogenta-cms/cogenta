@@ -65,7 +65,16 @@ const article: CollectionDefinition = {
   },
 }
 
-const schema = [tag, author, article]
+/** `trash: false` is the documented way back to a hard delete (ADR-0022). */
+const note: CollectionDefinition = {
+  name: 'store_note',
+  labels: { singular: 'Note', plural: 'Notes' },
+  trash: false,
+  fields: { title: { kind: 'text', options: { max: 120 } } },
+  permissions: { read: ['public'] },
+}
+
+const schema = [tag, author, article, note]
 
 const richText = [
   {
@@ -100,9 +109,14 @@ export function runContentStoreContract(
       await createSchemaTables(db, schema)
 
       const now = (): Date => clock
-      articles = createContentStore({ db, collection: article, now, defaultLocale: 'fr' })
-      authors = createContentStore({ db, collection: author, now, defaultLocale: 'fr' })
-      tags = createContentStore({ db, collection: tag, now, defaultLocale: 'fr' })
+      // `siblings` is what lets `delete()` enforce `restrict` in application
+      // code (ADR-0022): trashing is not a DELETE, so the foreign key has
+      // nothing left to refuse. Every real runtime passes the whole set, and
+      // so does this suite.
+      const common = { db, now, defaultLocale: 'fr', siblings: schema } as const
+      articles = createContentStore({ ...common, collection: article })
+      authors = createContentStore({ ...common, collection: author })
+      tags = createContentStore({ ...common, collection: tag })
     })
 
     afterEach(async () => {
@@ -179,13 +193,13 @@ export function runContentStoreContract(
         })
       })
 
-      it('removes an entry with its versions and its blocks', async () => {
+      it('purges an entry with its versions and its blocks', async () => {
         const entry = await articles.create({
           values: { title: 'à supprimer' },
           blocks: { zone: [{ key: 'k1', type: 'prose', data: { text: 'x' } }] },
         })
 
-        expect(await articles.delete(entry.id)).toBe(true)
+        expect(await articles.purge(entry.id)).toBe(true)
         expect(await articles.read(entry.id, { state: 'working' })).toBeNull()
         expect(await countRows(blocksTable(article.name), entry.id)).toBe(0)
         expect(await countRows(versionsTable(article.name), entry.id)).toBe(0)
@@ -217,6 +231,229 @@ export function runContentStoreContract(
         await articles.create({ values: { title: 'Sido', writer: writer.id } })
 
         await expect(authors.delete(writer.id)).rejects.toMatchObject({ name: 'CogentaError' })
+      })
+    })
+
+    /**
+     * The trash (`schema@2.0`, ADR-0022).
+     *
+     * Every one of these is a property the ADR states in prose; asserting them
+     * here is what keeps the prose true on all four dialects rather than on
+     * the one someone happened to develop against.
+     */
+    describe('trash', () => {
+      it('keeps the entry, its versions and its blocks when it is trashed', async () => {
+        const entry = await articles.create({
+          values: { title: 'à jeter' },
+          blocks: { zone: [{ key: 'k1', type: 'prose', data: { text: 'x' } }] },
+        })
+
+        expect(await articles.delete(entry.id)).toBe(true)
+        // Nothing was destroyed — which is the only way untrash() can give
+        // back exactly what was taken.
+        expect(await countRows(blocksTable(article.name), entry.id)).toBeGreaterThan(0)
+        expect(await countRows(versionsTable(article.name), entry.id)).toBeGreaterThan(0)
+      })
+
+      it('hides a trashed entry from every read unless the trash is asked for', async () => {
+        const entry = await articles.create({ values: { title: 'à jeter' }, status: 'published' })
+        await articles.publish(entry.id)
+        await articles.delete(entry.id)
+
+        expect(await articles.read(entry.id)).toBeNull()
+        expect(await articles.read(entry.id, { state: 'working' })).toBeNull()
+        expect((await articles.list()).items).toHaveLength(0)
+        expect((await articles.list({ state: 'working' })).items).toHaveLength(0)
+        await expect(articles.history(entry.id)).rejects.toMatchObject({
+          code: 'CONTENT_NOT_FOUND',
+        })
+
+        const seen = await articles.read(entry.id, { state: 'working', trashed: 'include' })
+        expect(seen?.id).toBe(entry.id)
+        expect(seen?.deletedAt).not.toBeNull()
+        expect((await articles.history(entry.id, { trashed: 'include' })).length).toBeGreaterThan(0)
+      })
+
+      it('lists only the trash when that is what was asked for', async () => {
+        const kept = await articles.create({ values: { title: 'gardé' } })
+        const thrown = await articles.create({ values: { title: 'jeté' } })
+        await articles.delete(thrown.id)
+
+        const live = await articles.list({ state: 'working' })
+        expect(live.items.map((item) => item.id)).toEqual([kept.id])
+
+        const trash = await articles.list({ state: 'working', trashed: 'only' })
+        expect(trash.items.map((item) => item.id)).toEqual([thrown.id])
+      })
+
+      it('gives an entry back with the status it went in with, never as a draft', async () => {
+        const entry = await articles.create({ values: { title: 'publié' } })
+        await articles.publish(entry.id)
+        await articles.delete(entry.id)
+
+        const back = await articles.untrash(entry.id)
+
+        // The whole reason deletedAt is orthogonal to status: restoring a
+        // published article must not quietly demote it and invite a second,
+        // accidental publication.
+        expect(back.status).toBe('published')
+        expect(back.deletedAt).toBeNull()
+        expect(await articles.read(entry.id)).not.toBeNull()
+      })
+
+      it('refuses to take an entry out of the trash it was never in', async () => {
+        const entry = await articles.create({ values: { title: 'vivant' } })
+
+        await expect(articles.untrash(entry.id)).rejects.toMatchObject({
+          code: 'CONTENT_NOT_TRASHED',
+        })
+      })
+
+      it('leaves a translation family intact while its source is in the trash', async () => {
+        const source = await articles.create({ values: { title: 'Source' }, status: 'published' })
+        const translated = await articles.create({
+          locale: 'en',
+          translationOf: source.id,
+          status: 'published',
+          values: { title: 'Source', slug: 'source-en' },
+        })
+
+        await articles.delete(source.id)
+
+        // Before 2.0 this deleted the source row, and `on delete set null`
+        // silently broke the family. Now the link survives untouched.
+        const stillLinked = await articles.read(translated.id, { state: 'working' })
+        expect(stillLinked?.translationOf).toBe(source.id)
+
+        await articles.untrash(source.id)
+        const family = await articles.translations(translated.id)
+        expect(family.map((member) => member.id).sort()).toEqual([source.id, translated.id].sort())
+      })
+
+      it('hides a trashed member from its own translation family', async () => {
+        const source = await articles.create({ values: { title: 'Source' }, status: 'published' })
+        const translated = await articles.create({
+          locale: 'en',
+          translationOf: source.id,
+          status: 'published',
+          values: { title: 'Source', slug: 'source-en-2' },
+        })
+
+        await articles.delete(translated.id)
+
+        expect((await articles.translations(source.id)).map((member) => member.id)).toEqual([
+          source.id,
+        ])
+        expect(
+          (await articles.translations(source.id, { trashed: 'include' }))
+            .map((member) => member.id)
+            .sort(),
+        ).toEqual([source.id, translated.id].sort())
+      })
+
+      it('never resolves a locale to a trashed entry', async () => {
+        const source = await articles.create({ values: { title: 'Source' }, status: 'published' })
+        const translated = await articles.create({
+          locale: 'en',
+          translationOf: source.id,
+          status: 'published',
+          values: { title: 'Source', slug: 'source-en-3' },
+        })
+        await articles.delete(translated.id)
+
+        const resolved = await articles.resolveLocale(source.id, 'en', { fallback: 'original' })
+        expect(resolved.outcome).toBe('found')
+        if (resolved.outcome === 'found') {
+          expect(resolved.entry.id).toBe(source.id)
+          expect(resolved.fellBack).toBe(true)
+        }
+      })
+
+      it('refuses to trash an entry a restrict relation still points at', async () => {
+        const writer = await authors.create({ values: { name: 'Colette' } })
+        await articles.create({ values: { title: 'Sido', writer: writer.id } })
+
+        // The foreign key cannot refuse an UPDATE, so this has to be — and is
+        // — enforced in application code, naming what blocks.
+        await expect(authors.delete(writer.id)).rejects.toMatchObject({
+          code: 'CONTENT_REFERENCED',
+        })
+        expect(await authors.read(writer.id, { state: 'working' })).not.toBeNull()
+      })
+
+      it('names how many entries block, and which collection they are in', async () => {
+        const writer = await authors.create({ values: { name: 'Colette' } })
+        await articles.create({ values: { title: 'Sido', writer: writer.id } })
+        await articles.create({ values: { title: 'Chéri', writer: writer.id } })
+
+        await expect(authors.delete(writer.id)).rejects.toMatchObject({
+          message: expect.stringContaining('2 entries of "store_article"'),
+        })
+      })
+
+      it('stops blocking once the referring entry is itself in the trash', async () => {
+        const writer = await authors.create({ values: { name: 'Colette' } })
+        const referring = await articles.create({ values: { title: 'Sido', writer: writer.id } })
+
+        await articles.delete(referring.id)
+        expect(await authors.delete(writer.id)).toBe(true)
+      })
+
+      it('refuses to purge an entry a restrict relation still points at', async () => {
+        const writer = await authors.create({ values: { name: 'Colette' } })
+        await articles.create({ values: { title: 'Sido', writer: writer.id } })
+
+        // The same sentence on both paths, rather than a written error on one
+        // and a raw driver message on the other.
+        await expect(authors.purge(writer.id)).rejects.toMatchObject({
+          code: 'CONTENT_REFERENCED',
+        })
+      })
+
+      it('purges for real, leaving nothing behind', async () => {
+        const entry = await articles.create({
+          values: { title: 'définitif' },
+          blocks: { zone: [{ key: 'k1', type: 'prose', data: { text: 'x' } }] },
+        })
+        await articles.delete(entry.id)
+
+        expect(await articles.purge(entry.id)).toBe(true)
+        expect(await articles.read(entry.id, { state: 'working', trashed: 'include' })).toBeNull()
+        expect(await countRows(versionsTable(article.name), entry.id)).toBe(0)
+      })
+
+      it('deletes for real, with no trash at all, when the collection opts out', async () => {
+        const notes = createContentStore({
+          db,
+          collection: note,
+          now: () => clock,
+          defaultLocale: 'fr',
+          siblings: schema,
+        })
+        const entry = await notes.create({ values: { title: 'éphémère' } })
+
+        expect(await notes.delete(entry.id)).toBe(true)
+        // Not trashed — gone. `trash: false` is exactly the pre-2.0 behaviour.
+        expect(await notes.read(entry.id, { state: 'working', trashed: 'include' })).toBeNull()
+        expect((await notes.purgeExpired()).purged).toBe(0)
+      })
+
+      it('purges only what has sat in the trash longer than the retention window', async () => {
+        const old = await articles.create({ values: { title: 'vieux' } })
+        await articles.delete(old.id)
+
+        // The article collection keeps its trash 30 days (the default); move
+        // the clock past that and only this entry is old enough.
+        clock = new Date('2026-09-20T09:00:00.000Z')
+        const recent = await articles.create({ values: { title: 'récent' } })
+        await articles.delete(recent.id)
+
+        const report = await articles.purgeExpired()
+        expect(report.purged).toBe(1)
+        expect(await articles.read(old.id, { state: 'working', trashed: 'include' })).toBeNull()
+        expect(
+          await articles.read(recent.id, { state: 'working', trashed: 'include' }),
+        ).not.toBeNull()
       })
     })
 

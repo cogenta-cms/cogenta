@@ -8,7 +8,12 @@ import {
   limit as sqlLimit,
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
-import type { CollectionDefinition, ContentStatus, Provenance } from '../types.js'
+import {
+  type CollectionDefinition,
+  type ContentStatus,
+  DEFAULT_TRASH_RETAIN_DAYS,
+  type Provenance,
+} from '../types.js'
 import { isColumnless } from './columns.js'
 import { type Cursor, decodeCursor, encodeCursor } from './cursor.js'
 import { type ContentDiff, diffContent } from './diff.js'
@@ -26,8 +31,12 @@ import type {
   ListOptions,
   LocaleResolution,
   Page,
+  PurgeReport,
+  ReadOptions,
   ResolveLocaleOptions,
   SortOrder,
+  TrashFilter,
+  TrashOptions,
   UpdateInput,
   VersionSummary,
 } from './types.js'
@@ -53,6 +62,18 @@ import { decodeFieldValue, normaliseBlocks, normaliseValues } from './values.js'
 export interface ContentStoreOptions {
   readonly db: DatabaseHandle
   readonly collection: CollectionDefinition
+  /**
+   * The other collections of the site, so `delete()` can enforce `restrict`.
+   *
+   * Trashing is not a `DELETE`, so the foreign key cannot refuse it any more
+   * (ADR-0022) — the check has to be made in application code, and this is
+   * what makes it possible: a store only knows its own collection otherwise.
+   *
+   * Left out, only self-references are checked. That degrades honestly rather
+   * than silently: nothing is destroyed, since `purge()` still meets the real
+   * foreign key. Every real runtime (`serve.ts`) passes the whole set.
+   */
+  readonly siblings?: readonly CollectionDefinition[]
   /** The locale an entry gets when the caller does not say. */
   readonly defaultLocale?: string
   /** Injectable so tests can pin time; nothing else should pass it. */
@@ -64,9 +85,26 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   create(input: CreateInput<TValues>): Promise<ContentEntry<TValues>>
   /** Copies an entry into a new, independent draft. See the implementation for what is deliberately not copied. */
   duplicate(id: string, input?: DuplicateInput<TValues>): Promise<ContentEntry<TValues>>
-  read(id: string, options?: { readonly state?: EntryState }): Promise<ContentEntry<TValues> | null>
+  read(id: string, options?: ReadOptions): Promise<ContentEntry<TValues> | null>
   update(id: string, input: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
+  /**
+   * Moves an entry to the trash (`schema@2.0`, ADR-0022).
+   *
+   * **This used to be a hard `DELETE`.** It now writes `deletedAt` and leaves
+   * every row — versions, blocks, join rows, the `translation_of` of its
+   * translations — exactly where it was, which is the only way `untrash()` can
+   * give back precisely what was taken.
+   *
+   * A collection declared `trash: false` keeps the old behaviour: `delete()`
+   * is `purge()`.
+   */
   delete(id: string): Promise<boolean>
+  /** Takes an entry back out of the trash, with the status it went in with. */
+  untrash(id: string): Promise<ContentEntry<TValues>>
+  /** The real `DELETE`, and the only one. What `delete()` did before 2.0. */
+  purge(id: string): Promise<boolean>
+  /** Purges what has sat in the trash longer than `trash.retainDays`. */
+  purgeExpired(): Promise<PurgeReport>
   list(options?: ListOptions): Promise<Page<ContentEntry<TValues>>>
   publish(
     id: string,
@@ -76,11 +114,11 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
     id: string,
     input?: { readonly status?: 'draft' | 'archived' },
   ): Promise<ContentEntry<TValues>>
-  history(id: string): Promise<readonly VersionSummary[]>
+  history(id: string, options?: TrashOptions): Promise<readonly VersionSummary[]>
   readVersion(id: string, version: number): Promise<ContentEntry<TValues> | null>
   restore(id: string, version: number, input?: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
   diff(id: string, from: number, to: number): Promise<ContentDiff>
-  translations(id: string): Promise<readonly ContentEntry<TValues>[]>
+  translations(id: string, options?: TrashOptions): Promise<readonly ContentEntry<TValues>[]>
   resolveLocale(
     id: string,
     locale: string,
@@ -109,6 +147,7 @@ const MAX_PAGE_SIZE = 200
 const DEFAULT_SORT: SortOrder = { field: 'id', direction: 'desc' }
 /** Enough history to answer "what changed last week" without unbounded growth. */
 const DEFAULT_KEEP = 20
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const SORT_COLUMNS = { id: 'id', createdAt: 'created_at', updatedAt: 'updated_at' } as const
 
@@ -154,7 +193,159 @@ export function createContentStore<TValues extends ContentValues = ContentValues
   )
   const draftsEnabled = collection.versioning?.drafts === true
 
+  /** `trash: false` opts back out; absent means the default window is on. */
+  const trashEnabled = collection.trash !== false
+  const retainDays =
+    collection.trash === false || collection.trash === undefined
+      ? DEFAULT_TRASH_RETAIN_DAYS
+      : collection.trash.retainDays
+
   const stamp = (): string => now().toISOString()
+
+  // -------------------------------------------------------------- the trash
+
+  const deletedAt = identifier('deleted_at', dialect)
+
+  /**
+   * The one place the trash filter is spelled out.
+   *
+   * Returning `null` for `'include'` rather than a `1 = 1` fragment keeps the
+   * generated SQL identical to what it was before 2.0 whenever the caller
+   * wanted everything — nothing to explain in a query plan.
+   */
+  function trashPredicate(filter: TrashFilter | undefined): SqlFragment | null {
+    const effective = filter ?? 'exclude'
+    if (effective === 'include') return null
+    return effective === 'only' ? sql`${deletedAt} is not null` : sql`${deletedAt} is null`
+  }
+
+  function isTrashed(row: Row): boolean {
+    return row['deleted_at'] !== null && row['deleted_at'] !== undefined
+  }
+
+  /** True when this row is invisible to a caller asking for `filter`. */
+  function hiddenBy(row: Row, filter: TrashFilter | undefined): boolean {
+    const effective = filter ?? 'exclude'
+    if (effective === 'include') return false
+    return effective === 'only' ? !isTrashed(row) : isTrashed(row)
+  }
+
+  /**
+   * Every `restrict` relation pointing at this collection, from any collection
+   * the store was told about — including this one, whose self-references it
+   * would otherwise miss.
+   */
+  const restrictingRelations = (options.siblings ?? [collection]).flatMap((sibling) =>
+    relationsOf(sibling)
+      .filter(
+        (relation) =>
+          relation.kind === 'relation' &&
+          relation.to === collection.name &&
+          relation.onDelete === 'restrict',
+      )
+      .map((relation) => ({ sibling, relation })),
+  )
+
+  /**
+   * Refuses to remove an entry that something still points at.
+   *
+   * Before 2.0 the foreign key did this, and only ever at `DELETE` time.
+   * Trashing is an `UPDATE`, so the database has nothing to refuse — which is
+   * precisely why contract A now requires the check in application code. The
+   * message names what blocks, exactly as the contract's own example does.
+   *
+   * `purge()` runs the same check, so an operator gets the same sentence
+   * whichever of the two they reached for, instead of a raw driver error on
+   * one path and a written one on the other.
+   */
+  interface Blocker {
+    readonly collection: string
+    readonly field: string
+    readonly count: number
+  }
+
+  async function referencesTo(tx: SqlExecutor, id: string): Promise<Blocker[]> {
+    const blocking: Blocker[] = []
+
+    for (const { sibling, relation } of restrictingRelations) {
+      const siblingEntries = identifier(entriesTable(sibling.name), dialect)
+      const count = relation.many
+        ? await countJoinReferences(tx, sibling, relation.field, siblingEntries, id)
+        : await countColumnReferences(tx, relation.field, siblingEntries, id)
+
+      if (count > 0) {
+        blocking.push({ collection: sibling.name, field: relation.field, count })
+      }
+    }
+
+    return blocking
+  }
+
+  async function isReferenced(tx: SqlExecutor, id: string): Promise<boolean> {
+    return (await referencesTo(tx, id)).length > 0
+  }
+
+  async function assertNotReferenced(tx: SqlExecutor, id: string): Promise<void> {
+    const blocking = await referencesTo(tx, id)
+    if (blocking.length === 0) return
+
+    const naming = blocking
+      .map(
+        ({ count, collection: name }) =>
+          `${count} ${count === 1 ? 'entry' : 'entries'} of "${name}"`,
+      )
+      .join(', ')
+
+    throw new CogentaError({
+      code: 'CONTENT_REFERENCED',
+      message: `"${id}" cannot be removed from "${collection.name}": ${naming} still reference it.`,
+      hint: "Point those entries somewhere else first, or declare the relation with onDelete: 'cascade' if losing them along with their target is really what you want.",
+      details: { collection: collection.name, id, blocking },
+    })
+  }
+
+  /** The real `DELETE`. Cascades take the versions, blocks and join rows. */
+  async function hardDelete(tx: SqlExecutor, id: string): Promise<boolean> {
+    const removed = await tx.query(
+      sql`delete from ${entries} where ${identifier('id', dialect)} = ${id}`,
+    )
+    return removed.rowsAffected > 0
+  }
+
+  async function countColumnReferences(
+    tx: SqlExecutor,
+    field: string,
+    table: SqlFragment,
+    id: string,
+  ): Promise<number> {
+    // A referrer that is itself in the trash does not block: it is not visible
+    // content any more, and blocking on it would make the trash a place
+    // entries can enter but never leave in the right order.
+    const found = await tx.query<Row>(
+      sql`select ${identifier('id', dialect)} from ${table}
+          where ${identifier(columnFor(field), dialect)} = ${id}
+            and ${identifier('deleted_at', dialect)} is null`,
+    )
+    return found.rows.length
+  }
+
+  async function countJoinReferences(
+    tx: SqlExecutor,
+    sibling: CollectionDefinition,
+    field: string,
+    siblingEntries: SqlFragment,
+    id: string,
+  ): Promise<number> {
+    const join = identifier(relationTable(sibling.name, field), dialect)
+    const found = await tx.query<Row>(
+      sql`select ${join}.${identifier('entry_id', dialect)} from ${join}
+          join ${siblingEntries}
+            on ${siblingEntries}.${identifier('id', dialect)} = ${join}.${identifier('entry_id', dialect)}
+          where ${join}.${identifier('target_id', dialect)} = ${id}
+            and ${siblingEntries}.${identifier('deleted_at', dialect)} is null`,
+    )
+    return found.rows.length
+  }
 
   // ---------------------------------------------------------------- reading
 
@@ -314,6 +505,7 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       createdBy: nullableText(row['created_by']),
       updatedBy: nullableText(row['updated_by']),
       status,
+      deletedAt: nullableText(row['deleted_at']),
       locale: text(row['locale']),
       translationOf: nullableText(row['translation_of']),
       version: Number(overrides.version ?? row['version']),
@@ -789,6 +981,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       const state = readOptions?.state ?? 'published'
       const row = await loadRow(db, id)
       if (row === null) return null
+      // The trash is invisible unless it is asked for by name (ADR-0022) —
+      // the same safe-by-default posture as `state` on the line below.
+      if (hiddenBy(row, readOptions?.trashed)) return null
 
       // The safe default: a caller that says nothing gets the published state,
       // never a draft. The public role has no way to ask for one.
@@ -852,11 +1047,96 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         { immediate: true },
       ),
 
-    delete: async (id) => {
-      const removed = await db.query(
-        sql`delete from ${entries} where ${identifier('id', dialect)} = ${id}`,
+    delete: async (id) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) return false
+          // Already in the trash: nothing to do, and saying so with `false`
+          // matches what the method meant before 2.0 for a missing row.
+          if (isTrashed(row)) return false
+
+          await assertNotReferenced(tx, id)
+          if (!trashEnabled) return hardDelete(tx, id)
+
+          const removed = await tx.query(
+            sql`update ${entries} set ${deletedAt} = ${stamp()}
+                where ${identifier('id', dialect)} = ${id}`,
+          )
+          return removed.rowsAffected > 0
+        },
+        { immediate: true },
+      ),
+
+    untrash: async (id) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+
+          if (!isTrashed(row)) {
+            throw new CogentaError({
+              code: 'CONTENT_NOT_TRASHED',
+              message: `"${id}" is not in the "${collection.name}" trash.`,
+              hint: 'Only an entry that was trashed can be taken back out. Nothing was changed.',
+              details: { collection: collection.name, id },
+            })
+          }
+
+          // `status` is deliberately untouched: an article that was published
+          // when it was trashed comes back published (ADR-0022). Restoring it
+          // as a draft would lose information and invite a second, accidental
+          // publication.
+          await tx.query(
+            sql`update ${entries} set ${deletedAt} = ${null}
+                where ${identifier('id', dialect)} = ${id}`,
+          )
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          return { ...(await liveEntry(tx, after)), state: 'working' as const }
+        },
+        { immediate: true },
+      ),
+
+    purge: async (id) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) return false
+          await assertNotReferenced(tx, id)
+          return hardDelete(tx, id)
+        },
+        { immediate: true },
+      ),
+
+    purgeExpired: async () => {
+      const olderThan = new Date(now().getTime() - retainDays * DAY_MS).toISOString()
+      if (!trashEnabled) return { purged: 0, olderThan }
+
+      return db.transaction(
+        async (tx) => {
+          const expired = await tx.query<Row>(
+            sql`select ${identifier('id', dialect)} from ${entries}
+                where ${deletedAt} is not null and ${deletedAt} < ${olderThan}`,
+          )
+
+          let purged = 0
+          for (const row of expired.rows) {
+            const id = text(row['id'])
+            // Each one is still checked — a sweep that quietly broke a
+            // `restrict` relation would be the hole the trash exists to close
+            // — but one blocked entry is **skipped**, not fatal: a scheduled
+            // sweep that dies on the first stuck row purges nothing ever
+            // again, and nobody would notice.
+            if (await isReferenced(tx, id)) continue
+            if (await hardDelete(tx, id)) purged += 1
+          }
+
+          return { purged, olderThan }
+        },
+        { immediate: true },
       )
-      return removed.rowsAffected > 0
     },
 
     list: async (listOptions = {}) => {
@@ -865,6 +1145,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       const size = Math.min(Math.max(listOptions.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
 
       const predicates: SqlFragment[] = []
+
+      const trash = trashPredicate(listOptions.trashed)
+      if (trash !== null) predicates.push(trash)
 
       if (listOptions.status !== undefined) {
         predicates.push(sql`${identifier('status', dialect)} = ${listOptions.status}`)
@@ -1002,9 +1285,13 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         { immediate: true },
       ),
 
-    history: async (id) => {
+    history: async (id, historyOptions) => {
       const row = await loadRow(db, id)
       if (row === null) throw notFound(collection.name, id)
+      // A trashed entry has no history as far as an ordinary caller is
+      // concerned: it does not exist for them, and saying "not found" is the
+      // same answer `read()` gives.
+      if (hiddenBy(row, historyOptions?.trashed)) throw notFound(collection.name, id)
 
       const found = await db.query<VersionRow>(
         sql`select * from ${versions}
@@ -1113,9 +1400,10 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       return diffContent(await load(from), await load(to))
     },
 
-    translations: async (id) => {
+    translations: async (id, translationsOptions) => {
       const row = await loadRow(db, id)
       if (row === null) return []
+      if (hiddenBy(row, translationsOptions?.trashed)) return []
 
       const sourceId = nullableText(row['translation_of']) ?? text(row['id'])
       const found = await db.query<Row>(
@@ -1125,13 +1413,18 @@ export function createContentStore<TValues extends ContentValues = ContentValues
             order by ${identifier('locale', dialect)} asc`,
       )
 
-      return liveEntries(db, found.rows)
+      // A trashed member of the family is filtered out here rather than in the
+      // query, so that the family is still found through *any* of its members
+      // — including one whose source is in the trash.
+      const visible = found.rows.filter((member) => !hiddenBy(member, translationsOptions?.trashed))
+      return liveEntries(db, visible)
     },
 
     resolveLocale: async (id, locale, resolveOptions) => {
       const state = resolveOptions.state ?? 'published'
       const row = await loadRow(db, id)
       if (row === null) return { outcome: 'notFound' }
+      if (hiddenBy(row, resolveOptions.trashed)) return { outcome: 'notFound' }
 
       const sourceId = nullableText(row['translation_of']) ?? text(row['id'])
       const found = await db.query<Row>(
@@ -1144,7 +1437,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       // its English translation is still a draft, and the renderer must treat
       // the draft as if it did not exist.
       const visible = found.rows.filter(
-        (member) => state === 'working' || text(member['status']) === 'published',
+        (member) =>
+          !hiddenBy(member, resolveOptions.trashed) &&
+          (state === 'working' || text(member['status']) === 'published'),
       )
 
       const match = visible.find((member) => text(member['locale']) === locale)

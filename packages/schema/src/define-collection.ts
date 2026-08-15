@@ -75,6 +75,7 @@ function collectIssues(definition: CollectionDefinition): SchemaIssue[] {
   checkIndexes(definition, fieldNames, issues)
   checkPermissions(definition, issues)
   checkVersioning(definition, issues)
+  checkTrash(definition, issues)
 
   return issues
 }
@@ -120,6 +121,9 @@ function checkField(
     case 'blocks':
       checkBlocks(path, field, issues)
       break
+    case 'taxonomy':
+      checkTaxonomyField(path, field, issues)
+      break
     default:
       break
   }
@@ -157,6 +161,18 @@ function checkRelation(path: string, field: FieldDefinition, issues: SchemaIssue
       })
     }
   }
+}
+
+function checkTaxonomyField(path: string, field: FieldDefinition, issues: SchemaIssue[]): void {
+  const of = field.options.of
+  if (typeof of !== 'string' || of === '') {
+    issues.push({
+      path: `${path}.of`,
+      message: 'a taxonomy field must name the taxonomy it points to',
+    })
+  }
+  // Whether that taxonomy exists is a cross-object question, answered by
+  // `validateTaxonomySet` — a single `defineCollection` call cannot know.
 }
 
 function checkSelect(path: string, field: FieldDefinition, issues: SchemaIssue[]): void {
@@ -333,6 +349,25 @@ function checkVersioning(definition: CollectionDefinition, issues: SchemaIssue[]
   if (keep === undefined) return
   if (!Number.isInteger(keep) || keep < 1) {
     issues.push({ path: 'versioning.keep', message: 'must be a positive whole number of versions' })
+  }
+}
+
+/**
+ * `trash: false` is the only way back to a hard `delete()` (ADR-0022), so it is
+ * accepted; anything else must be a real, positive window.
+ */
+function checkTrash(definition: CollectionDefinition, issues: SchemaIssue[]): void {
+  const trash = definition.trash
+  if (trash === undefined || trash === false) return
+
+  if (typeof trash !== 'object') {
+    issues.push({ path: 'trash', message: 'must be false or { retainDays: n }' })
+    return
+  }
+
+  const { retainDays } = trash
+  if (!Number.isInteger(retainDays) || retainDays < 1) {
+    issues.push({ path: 'trash.retainDays', message: 'must be a positive whole number of days' })
   }
 }
 

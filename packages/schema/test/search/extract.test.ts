@@ -27,6 +27,7 @@ function entry(overrides: Partial<ContentEntry> = {}): ContentEntry {
     createdBy: null,
     updatedBy: null,
     status: 'published',
+    deletedAt: null,
     locale: 'fr',
     translationOf: null,
     version: 1,

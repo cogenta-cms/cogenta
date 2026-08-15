@@ -107,6 +107,7 @@ function vitrailEntry(id: string): ContentEntry {
     createdBy: null,
     updatedBy: null,
     status: 'published',
+    deletedAt: null,
     locale: 'fr',
     translationOf: null,
     version: 1,

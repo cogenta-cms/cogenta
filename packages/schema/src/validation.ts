@@ -99,7 +99,11 @@ function manyOf<T extends z.ZodType>(item: T, field: FieldDefinition): z.ZodArra
 
 export function isCollectionValued(field: FieldDefinition): boolean {
   if (field.kind === 'blocks') return true
-  const isManyKind = field.kind === 'media' || field.kind === 'relation' || field.kind === 'select'
+  const isManyKind =
+    field.kind === 'media' ||
+    field.kind === 'relation' ||
+    field.kind === 'select' ||
+    field.kind === 'taxonomy'
   return isManyKind && field.options.many === true
 }
 
@@ -137,6 +141,7 @@ function baseSchemaFor(field: FieldDefinition): z.ZodType {
       return z.iso.datetime({ offset: true })
     case 'media':
     case 'relation':
+    case 'taxonomy':
       return field.options.many === true ? manyOf(idSchema(), field) : idSchema()
     case 'select': {
       const choice = z.enum(selectValues(field))

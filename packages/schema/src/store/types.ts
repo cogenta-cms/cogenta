@@ -27,6 +27,31 @@ export type BlockZones = Readonly<Record<string, readonly ContentBlock[]>>
  */
 export type EntryState = 'published' | 'working'
 
+/**
+ * Whether a read reaches into the trash (`schema@2.0`, ADR-0022).
+ *
+ * `'exclude'` is the default everywhere, and that direction is the whole
+ * point: a caller written before the trash existed — a renderer, a sitemap, a
+ * headless client — keeps returning live content without being changed. Only a
+ * screen that *is* the trash asks for `'only'`.
+ */
+export type TrashFilter = 'exclude' | 'include' | 'only'
+
+export interface TrashOptions {
+  readonly trashed?: TrashFilter
+}
+
+export interface ReadOptions extends TrashOptions {
+  readonly state?: EntryState
+}
+
+/** What `purgeExpired()` actually removed, so a caller can report it. */
+export interface PurgeReport {
+  readonly purged: number
+  /** The cut-off used, derived from the collection's `trash.retainDays`. */
+  readonly olderThan: string
+}
+
 export interface ContentEntry<TValues extends ContentValues = ContentValues> extends SystemFields {
   /** When this entry went public, per language. Null while it never has. */
   readonly publishedAt: string | null
@@ -96,7 +121,7 @@ export interface SortOrder {
   readonly direction: 'asc' | 'desc'
 }
 
-export interface ListOptions {
+export interface ListOptions extends TrashOptions {
   readonly state?: EntryState
   readonly locale?: string
   readonly status?: ContentStatus
@@ -137,7 +162,7 @@ export type LocaleResolution<TValues extends ContentValues = ContentValues> =
   | { readonly outcome: 'hidden' }
   | { readonly outcome: 'notFound' }
 
-export interface ResolveLocaleOptions {
+export interface ResolveLocaleOptions extends TrashOptions {
   readonly fallback: LocaleFallback
   readonly state?: EntryState
 }

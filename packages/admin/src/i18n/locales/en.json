@@ -247,5 +247,20 @@
     "revoke": "Revoke",
     "pendingHeading": "New permissions requested",
     "pendingIntro": "A new version of this plugin requests additional permissions. They will not take effect until you approve them."
+  },
+  "fleetDashboard": {
+    "heading": "Fleet",
+    "searchLabel": "Search a site or client",
+    "searchPlaceholder": "Site or client name…",
+    "clientFilterLabel": "Client",
+    "allClients": "All clients",
+    "minTierLabel": "Minimum risk",
+    "tierCritical": "Critical",
+    "tierHigh": "High",
+    "tierMedium": "Medium",
+    "tierLow": "All",
+    "empty": "No site matches these filters.",
+    "score": "Risk score: {{score}}",
+    "noClient": "No client"
   }
 }

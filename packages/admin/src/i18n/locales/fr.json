@@ -247,5 +247,20 @@
     "revoke": "Révoquer",
     "pendingHeading": "Nouvelles autorisations demandées",
     "pendingIntro": "Une nouvelle version de ce plugin demande des autorisations supplémentaires. Elles ne prendront effet qu'après votre accord."
+  },
+  "fleetDashboard": {
+    "heading": "Flotte",
+    "searchLabel": "Rechercher un site ou un client",
+    "searchPlaceholder": "Nom du site ou du client…",
+    "clientFilterLabel": "Client",
+    "allClients": "Tous les clients",
+    "minTierLabel": "Risque minimum",
+    "tierCritical": "Critique",
+    "tierHigh": "Élevé",
+    "tierMedium": "Modéré",
+    "tierLow": "Tous",
+    "empty": "Aucun site ne correspond à ces filtres.",
+    "score": "Score de risque : {{score}}",
+    "noClient": "Sans client"
   }
 }

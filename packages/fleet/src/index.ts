@@ -14,6 +14,13 @@ export type {
 } from './agent/types.js'
 export type { IngestResult } from './control/ingest.js'
 export { ingestTelemetry } from './control/ingest.js'
+export type { FleetFilter, RiskReason, RiskTier, SiteRisk } from './control/risk.js'
+export {
+  computeSiteRisk,
+  filterRisks,
+  groupRisksByClient,
+  rankSitesByRisk,
+} from './control/risk.js'
 export type { SiteStateStore, TelemetrySnapshot } from './control/state.js'
 export { createSiteStateStore } from './control/state.js'
 export { CONTROL_TABLES, ensureControlTables } from './control/tables.js'

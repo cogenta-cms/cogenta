@@ -57,7 +57,7 @@ describe('createEnrollmentStore', () => {
     let clock = 1_000_000
     const store = createEnrollmentStore(db, () => clock)
 
-    const { token } = await store.issuePairingToken('client-a', 1000)
+    const { token } = await store.issuePairingToken('client-a', { ttlMs: 1000 })
     clock += 2000 // past the 1000ms TTL
 
     const result = await store.consumePairingToken(token, SITE_PUBLIC_KEY)
@@ -101,5 +101,23 @@ describe('createEnrollmentStore', () => {
     const sites = await store.listSites()
     expect(sites.map((site) => site.name).sort()).toEqual(['client-a', 'client-b'])
     expect(sites.every((site) => site.publicKey === SITE_PUBLIC_KEY)).toBe(true)
+  })
+
+  it('carries the agency client from issuance through consumption to listSites — null when never set', async () => {
+    const db = await testDb()
+    const store = createEnrollmentStore(db)
+
+    const labeled = await store.issuePairingToken('site-with-client', { client: 'agency-acme' })
+    const labeledResult = await store.consumePairingToken(labeled.token, SITE_PUBLIC_KEY)
+    const unlabeled = await store.issuePairingToken('site-without-client')
+    const unlabeledResult = await store.consumePairingToken(unlabeled.token, SITE_PUBLIC_KEY)
+    if (!labeledResult.ok || !unlabeledResult.ok) throw new Error('unreachable')
+
+    expect(labeledResult.site.client).toBe('agency-acme')
+    expect(unlabeledResult.site.client).toBeNull()
+
+    const sites = await store.listSites()
+    const found = sites.find((site) => site.name === 'site-with-client')
+    expect(found?.client).toBe('agency-acme')
   })
 })

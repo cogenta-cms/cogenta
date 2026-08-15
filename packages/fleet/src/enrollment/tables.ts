@@ -53,7 +53,8 @@ export async function ensureFleetTables(db: DatabaseHandle): Promise<void> {
       site_name ${t255} not null,
       expires_at ${t255} not null,
       consumed_at ${t255},
-      site_id ${t255}
+      site_id ${t255},
+      client ${t255}
     )`)
   await createIndexIfMissing(db, 'cogenta_fleet_pairing_tokens_hash', tokens, sql`(token_hash)`)
 
@@ -64,6 +65,8 @@ export async function ensureFleetTables(db: DatabaseHandle): Promise<void> {
       name ${t255} not null,
       public_key ${t1024} not null,
       registered_at ${t255} not null,
-      revoked_at ${t255}
+      revoked_at ${t255},
+      client ${t255}
     )`)
+  await createIndexIfMissing(db, 'cogenta_fleet_sites_client', sites, sql`(client)`)
 }

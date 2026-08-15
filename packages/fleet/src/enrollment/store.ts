@@ -19,6 +19,15 @@ export interface SiteRegistration {
   readonly registeredAt: string
   readonly revoked: boolean
   readonly revokedAt: string | null
+  /**
+   * Which agency client this site belongs to — real, minimal, optional (an
+   * agency running a single-client fleet has no reason to fill it in).
+   * `null` for a site enrolled without one. The one client concept this
+   * package has: needed for the dashboard's real "regroupement par client"
+   * (`docs/lots/L8-flotte.md`, "## Pièges connus"), which had nothing to
+   * group by before this field existed.
+   */
+  readonly client: string | null
 }
 
 /**
@@ -41,7 +50,10 @@ export interface EnrollmentStore {
    * whoever presents the token — the token authorizes registering
    * *this specific, pre-named* site, not an arbitrary one.
    */
-  issuePairingToken(siteName: string, ttlMs?: number): Promise<PairingToken>
+  issuePairingToken(
+    siteName: string,
+    options?: { ttlMs?: number; client?: string },
+  ): Promise<PairingToken>
   /**
    * The site's real Ed25519 public key, submitted at consumption time —
    * this is the one moment a site's identity is established; every later
@@ -70,6 +82,7 @@ interface TokenRow {
   expires_at: string
   consumed_at: string | null
   site_id: string | null
+  client: string | null
 }
 
 interface SiteRow {
@@ -78,6 +91,7 @@ interface SiteRow {
   public_key: string
   registered_at: string
   revoked_at: string | null
+  client: string | null
 }
 
 function toSite(row: SiteRow): SiteRegistration {
@@ -88,6 +102,7 @@ function toSite(row: SiteRow): SiteRegistration {
     registeredAt: row.registered_at,
     revoked: row.revoked_at !== null,
     revokedAt: row.revoked_at,
+    client: row.client,
   }
 }
 
@@ -99,19 +114,20 @@ export function createEnrollmentStore(
   const sites = identifier(FLEET_TABLES.sites, db.dialect)
 
   return {
-    async issuePairingToken(siteName, ttlMs = DEFAULT_TTL_MS) {
+    async issuePairingToken(siteName, options = {}) {
       const token = generatePairingToken()
-      const expiresAt = new Date(now() + ttlMs).toISOString()
+      const expiresAt = new Date(now() + (options.ttlMs ?? DEFAULT_TTL_MS)).toISOString()
+      const client = options.client ?? null
       await db.query(sql`
-        insert into ${tokens} (id, token_hash, site_name, expires_at, consumed_at, site_id)
-        values (${newId(now)}, ${hashPairingToken(token)}, ${siteName}, ${expiresAt}, ${null}, ${null})`)
+        insert into ${tokens} (id, token_hash, site_name, expires_at, consumed_at, site_id, client)
+        values (${newId(now)}, ${hashPairingToken(token)}, ${siteName}, ${expiresAt}, ${null}, ${null}, ${client})`)
       return { token, expiresAt }
     },
 
     async consumePairingToken(token, sitePublicKey) {
       const hash = hashPairingToken(token)
       const result = await db.query<TokenRow>(
-        sql`select id, token_hash, site_name, expires_at, consumed_at, site_id from ${tokens} where token_hash = ${hash}`,
+        sql`select id, token_hash, site_name, expires_at, consumed_at, site_id, client from ${tokens} where token_hash = ${hash}`,
       )
       const row = result.rows[0]
       if (row === undefined) return { ok: false, reason: 'invalid' }
@@ -121,8 +137,8 @@ export function createEnrollmentStore(
       const siteId = newId(now)
       const registeredAt = new Date(now()).toISOString()
       await db.query(sql`
-        insert into ${sites} (id, name, public_key, registered_at, revoked_at)
-        values (${siteId}, ${row.site_name}, ${sitePublicKey}, ${registeredAt}, ${null})`)
+        insert into ${sites} (id, name, public_key, registered_at, revoked_at, client)
+        values (${siteId}, ${row.site_name}, ${sitePublicKey}, ${registeredAt}, ${null}, ${row.client})`)
       await db.query(
         sql`update ${tokens} set consumed_at = ${registeredAt}, site_id = ${siteId} where id = ${row.id}`,
       )
@@ -136,6 +152,7 @@ export function createEnrollmentStore(
           registeredAt,
           revoked: false,
           revokedAt: null,
+          client: row.client,
         },
       }
     },
@@ -153,7 +170,7 @@ export function createEnrollmentStore(
 
     async getSite(siteId) {
       const result = await db.query<SiteRow>(
-        sql`select id, name, public_key, registered_at, revoked_at from ${sites} where id = ${siteId}`,
+        sql`select id, name, public_key, registered_at, revoked_at, client from ${sites} where id = ${siteId}`,
       )
       const row = result.rows[0]
       return row === undefined ? null : toSite(row)
@@ -161,7 +178,7 @@ export function createEnrollmentStore(
 
     async listSites() {
       const result = await db.query<SiteRow>(
-        sql`select id, name, public_key, registered_at, revoked_at from ${sites} order by registered_at asc`,
+        sql`select id, name, public_key, registered_at, revoked_at, client from ${sites} order by registered_at asc`,
       )
       return result.rows.map(toSite)
     },

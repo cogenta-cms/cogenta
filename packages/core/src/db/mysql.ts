@@ -58,6 +58,25 @@ function isHeader(value: MysqlRows | ResultSetHeader): value is ResultSetHeader 
   return !Array.isArray(value)
 }
 
+/**
+ * A deadlock victim is not a bug to surface — InnoDB expects the losing
+ * transaction to simply restart from scratch. Two concurrent writers hitting
+ * the same rows (two agents publishing at once, real production traffic, not
+ * just this test's ten concurrent inserts) is exactly the case this covers.
+ */
+const DEADLOCK_ERROR_CODE = 'ER_LOCK_DEADLOCK'
+
+function isDeadlock(error: unknown): boolean {
+  if (!(error instanceof CogentaError)) return false
+  const cause = error.cause
+  return (
+    typeof cause === 'object' &&
+    cause !== null &&
+    'code' in cause &&
+    (cause as { code?: unknown }).code === DEADLOCK_ERROR_CODE
+  )
+}
+
 function executorFor(connection: MysqlQueries): SqlExecutor {
   const executor: SqlExecutor = {
     dialect: 'mysql',
@@ -169,8 +188,19 @@ export async function createMysqlHandle(options: MysqlHandleOptions): Promise<Da
         }
       }
 
+      // Retries only apply to the outer transaction: a deadlock aborts the
+      // whole thing regardless of how many savepoints were nested inside it,
+      // so a partially-applied nested savepoint is never left dangling —
+      // `enter` always resets `depth` back to 0 on its way out.
+      const MAX_DEADLOCK_RETRIES = 3
       try {
-        return await enter(run)
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            return await enter(run)
+          } catch (error) {
+            if (!isDeadlock(error) || attempt >= MAX_DEADLOCK_RETRIES) throw error
+          }
+        }
       } finally {
         connection.release()
       }

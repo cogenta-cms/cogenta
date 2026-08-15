@@ -33,8 +33,8 @@ export interface ScaffoldResult {
   /** The blueprint actually applied — may be `blank` if the requested one fell back. */
   readonly blueprintId: string
   readonly fellBackToBlank: boolean
-  /** Present only when a blueprint wrote a content schema (e.g. `blog`). */
-  readonly schemaPath?: string
+  /** Always written — `[]` for `blank`, a real content pack's collections otherwise. `cogenta serve` requires this file to exist regardless of blueprint. */
+  readonly schemaPath: string
   /** Present only when a blueprint wrote `theme.tokens.json` — says whether the AI-generated skin was used or the theme's default was copied. */
   readonly skinSource?: 'generated' | 'default'
 }
@@ -128,10 +128,12 @@ async function canonicalTokensJson(): Promise<string> {
  * thing those commands would produce by hand afterwards.
  *
  * A blueprint with a real `BlueprintContentPack` (`./blueprints/content-packs.js`)
- * additionally writes a content schema, materialises its tables, seeds real
- * demo content, applies a skin and records which agents it recommends.
- * `blank` (and any blueprint without a pack yet) takes none of these
- * branches, so its output is unchanged.
+ * additionally materialises its tables, seeds real demo content, applies a
+ * skin and records which agents it recommends. `blank` (and any blueprint
+ * without a pack yet) takes none of those branches — but the content schema
+ * file itself is written unconditionally either way (an empty array for
+ * `blank`), since `cogenta serve` requires one to exist regardless of
+ * blueprint.
  */
 export async function scaffoldSite(
   answers: ScaffoldAnswers,
@@ -149,12 +151,16 @@ export async function scaffoldSite(
   await writeFile(join(answers.targetDir, 'package.json'), packageJsonContents(answers), 'utf8')
 
   const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
-  let schemaPath: string | undefined
+  // `cogenta serve` (`@cogenta/cli`) hard-requires a `cogenta.schema.*` file
+  // to exist next to the config — including for `blank`, whose whole point
+  // is an empty collections array, not a missing file. Writing it
+  // unconditionally is what makes "npm create cogenta" with every default
+  // answer produce a site `cogenta serve` can actually start.
+  const schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
+  await writeFile(schemaPath, schemaFileContents(pack?.collections ?? []), 'utf8')
   let skinSource: 'generated' | 'default' | undefined
 
   if (pack !== undefined) {
-    schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
-    await writeFile(schemaPath, schemaFileContents(pack.collections), 'utf8')
     skinSource = answers.skinTokens === undefined ? 'default' : 'generated'
     const tokensJson =
       answers.skinTokens === undefined
@@ -214,7 +220,7 @@ export async function scaffoldSite(
     usersOutput: usersCapture.text() + usersStderr.text(),
     blueprintId: blueprint.id,
     fellBackToBlank,
-    ...(schemaPath === undefined ? {} : { schemaPath }),
+    schemaPath,
     ...(skinSource === undefined ? {} : { skinSource }),
   }
 }

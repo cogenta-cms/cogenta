@@ -218,7 +218,7 @@ describe('scaffoldSite — blog blueprint', () => {
     }
   })
 
-  it('leaves the blank blueprint byte-for-byte unchanged', async () => {
+  it('writes an empty schema file for the blank blueprint — cogenta serve needs one to exist', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blank-'))
     dirs.push(targetDir)
 
@@ -233,9 +233,9 @@ describe('scaffoldSite — blog blueprint', () => {
 
     expect(result.blueprintId).toBe('blank')
     expect(result.fellBackToBlank).toBe(false)
-    expect(result.schemaPath).toBeUndefined()
+    expect(result.schemaPath).toBe(join(targetDir, 'cogenta.schema.mjs'))
 
-    await expect(loadCollections(targetDir)).rejects.toThrow(/No schema file found/)
+    await expect(loadCollections(targetDir)).resolves.toEqual([])
   })
 
   it('writes an AI-generated skin instead of the default when one is given, and reports it', async () => {

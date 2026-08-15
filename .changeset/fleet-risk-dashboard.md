@@ -1,6 +1,5 @@
 ---
 '@cogenta/fleet': minor
-'@cogenta/admin': minor
 ---
 
 `@cogenta/fleet` gains real risk scoring (`computeSiteRisk`/`rankSitesByRisk`, `packages/fleet/src/control/risk.ts`) and query helpers (`filterRisks`/`groupRisksByClient`) for L8 task 5, "Tableau de bord de flotte : tri par risque, pas par ordre alphabétique."

@@ -1,7 +1,6 @@
 ---
 '@cogenta/auth': minor
 '@cogenta/api': minor
-'@cogenta/admin': minor
 ---
 
 Add TOTP self-service enrolment, so a sensitive role with no second factor yet can set

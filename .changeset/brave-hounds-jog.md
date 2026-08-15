@@ -2,7 +2,6 @@
 '@cogenta/auth': minor
 '@cogenta/api': minor
 '@cogenta/cli': minor
-'@cogenta/admin': minor
 ---
 
 Add passkey registration and passkey login (WebAuthn), completing L2 task 3's second

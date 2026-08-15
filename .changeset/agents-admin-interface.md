@@ -2,7 +2,6 @@
 '@cogenta/agents': minor
 '@cogenta/api': minor
 '@cogenta/cli': minor
-'@cogenta/admin': minor
 ---
 
 Add the agent administration interface (L5 task 9): "état, autonomie,

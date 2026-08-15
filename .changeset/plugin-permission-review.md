@@ -1,6 +1,5 @@
 ---
 '@cogenta/plugins': minor
-'@cogenta/admin': minor
 ---
 
 L7 task 8: "Révision et révocation de permissions après installation."

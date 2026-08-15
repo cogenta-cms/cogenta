@@ -1,6 +1,5 @@
 ---
 '@cogenta/plugins': minor
-'@cogenta/admin': minor
 ---
 
 L7 task 7 — "Écran de permissions en langage clair."

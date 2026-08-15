@@ -1,6 +1,5 @@
 ---
 '@cogenta/cli': minor
-'@cogenta/admin': minor
 ---
 
 Add `GET /api/schema` and wire the admin's collection list to it — L2 task 4, "rôles et

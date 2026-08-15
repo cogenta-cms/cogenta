@@ -1,7 +1,6 @@
 ---
 '@cogenta/api': minor
 '@cogenta/cli': minor
-'@cogenta/admin': patch
 ---
 
 Add `cogenta serve` — a real HTTP server over `@cogenta/api` and `@cogenta/auth`, and

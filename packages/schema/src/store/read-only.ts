@@ -5,7 +5,7 @@ import type { ContentValues } from './types.js'
 /**
  * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Wraps
  * any `ContentStore` so every mutating method refuses instead of writing —
- * `create`/`update`/`delete`/`publish`/`unpublish`/`restore` — while every
+ * `create`/`duplicate`/`update`/`delete`/`publish`/`unpublish`/`restore` — while every
  * read (`read`/`list`/`history`/`readVersion`/`diff`/`translations`/
  * `resolveLocale`) passes straight through, unchanged.
  *
@@ -32,6 +32,7 @@ export function withReadOnlyStore<TValues extends ContentValues = ContentValues>
   return {
     ...store,
     create: () => refuse(),
+    duplicate: () => refuse(),
     update: () => refuse(),
     delete: () => refuse(),
     publish: () => refuse(),

@@ -5,8 +5,17 @@ import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
 import { createEntry, getEntry, issuePreview, updateEntry } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import type { AutosaveRecord, AutosaveSnapshot } from '../collections/autosave.js'
+import {
+  autosaveKey,
+  browserAutosaveStorage,
+  clearAutosave,
+  isRecoverable,
+  readAutosave,
+} from '../collections/autosave.js'
 import { EntryForm } from '../collections/entry-form.js'
 import { TranslationSwitcher } from '../collections/translation-switcher.js'
+import { useAutosave } from '../collections/use-autosave.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { VersionHistory } from '../versions/version-history.js'
@@ -17,6 +26,14 @@ interface NewTranslationState {
   readonly locale?: string
   readonly translationOf?: string
   readonly values?: Readonly<Record<string, unknown>>
+}
+
+const EMPTY_SNAPSHOT: AutosaveSnapshot = { values: {}, blocks: {} }
+
+/** Just the clock time: the autosave being reported is always minutes old, never days. */
+function formatTime(iso: string): string {
+  const at = new Date(iso)
+  return Number.isNaN(at.getTime()) ? iso : at.toLocaleTimeString()
 }
 
 /**
@@ -52,14 +69,20 @@ export function EntryEditRoute(): JSX.Element {
   const [saved, setSaved] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  /** What the server last confirmed — the thing autosave compares against. */
+  const [baseline, setBaseline] = useState<AutosaveSnapshot>(EMPTY_SNAPSHOT)
+  /** A newer local draft found on open, waiting for the editor to accept or drop it. */
+  const [recovered, setRecovered] = useState<AutosaveRecord | null>(null)
 
   useEffect(() => {
     if (isNew) {
-      if (newTranslation?.values !== undefined) setValues({ ...newTranslation.values })
+      const prefilled = { ...(newTranslation?.values ?? {}) }
+      if (newTranslation?.values !== undefined) setValues(prefilled)
       if (newTranslation?.locale !== undefined) setLocale(newTranslation.locale)
       if (newTranslation?.translationOf !== undefined) {
         setTranslationOf(newTranslation.translationOf)
       }
+      setBaseline({ values: prefilled, blocks: {} })
       setLoading(false)
       return
     }
@@ -76,6 +99,18 @@ export function EntryEditRoute(): JSX.Element {
           setBlocks({ ...entry.blocks })
           setLocale(entry.locale)
           setTranslationOf(entry.translationOf)
+
+          const loaded: AutosaveSnapshot = { values: entry.values, blocks: entry.blocks }
+          setBaseline(loaded)
+
+          // Offered, never applied on its own: silently replacing what the
+          // server holds with what a tab happened to have is the one way an
+          // autosave can destroy work instead of saving it.
+          const storage = browserAutosaveStorage()
+          if (storage !== null) {
+            const stored = readAutosave(storage, autosaveKey(name, entry.id, entry.locale))
+            setRecovered(isRecoverable(stored, loaded, entry.updatedAt) ? stored : null)
+          }
         }
       })
       .catch((caught: unknown) => {
@@ -99,6 +134,12 @@ export function EntryEditRoute(): JSX.Element {
     setBlocks((current) => ({ ...current, [zone]: value as BlockZones[string] }))
   }
 
+  /** The explicit save is the only thing that writes a version — so it is the only thing that drops the local copy. */
+  function forgetAutosave(): void {
+    const storage = browserAutosaveStorage()
+    if (storage !== null) clearAutosave(storage, autosaveKey(name, id ?? null, locale))
+  }
+
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
@@ -112,6 +153,7 @@ export function EntryEditRoute(): JSX.Element {
           locale,
           ...(translationOf === null ? {} : { translationOf }),
         })
+        forgetAutosave()
         navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`, {
           replace: true,
         })
@@ -119,6 +161,9 @@ export function EntryEditRoute(): JSX.Element {
         const entry = await updateEntry(token, name, id, values, blocks)
         setValues({ ...entry.values })
         setBlocks({ ...entry.blocks })
+        setBaseline({ values: entry.values, blocks: entry.blocks })
+        setRecovered(null)
+        forgetAutosave()
         setSaved(true)
       }
     } catch (caught) {
@@ -148,12 +193,24 @@ export function EntryEditRoute(): JSX.Element {
     }
   }
 
+  const requiredAction = isNew ? 'create' : 'update'
+  const canWrite = collection !== undefined && canPerform(requiredAction, collection, roles)
+
+  // Declared before the early returns below, because a hook cannot be
+  // conditional. `enabled` is what actually turns it off while the entry is
+  // still loading or the viewer may not write.
+  const autosave = useAutosave({
+    enabled: canWrite && !loading,
+    storageKey: autosaveKey(name, id ?? null, locale),
+    snapshot: { values, blocks },
+    baseline,
+  })
+
   if (schema.status === 'loading' || loading) return <p>{t('common.loading')}</p>
   if (schema.status === 'error') {
     return <p role="alert">{t('common.schemaError', { message: schema.message })}</p>
   }
 
-  const requiredAction = isNew ? 'create' : 'update'
   if (collection === undefined || !canPerform('read', collection, roles)) {
     return (
       <section aria-labelledby="entry-heading">
@@ -165,8 +222,6 @@ export function EntryEditRoute(): JSX.Element {
       </section>
     )
   }
-
-  const canWrite = canPerform(requiredAction, collection, roles)
 
   return (
     <section aria-labelledby="entry-heading">
@@ -196,6 +251,31 @@ export function EntryEditRoute(): JSX.Element {
 
       {!canWrite && <p role="alert">{t('entryEdit.readOnly')}</p>}
 
+      {recovered !== null && (
+        <div role="alert" className="entry-form__recovery">
+          <p>{t('entryEdit.autosaveFound', { at: formatTime(recovered.at) })}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setValues({ ...recovered.values })
+              setBlocks({ ...recovered.blocks })
+              setRecovered(null)
+            }}
+          >
+            {t('entryEdit.autosaveRestore')}
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() => {
+              forgetAutosave()
+              setRecovered(null)
+            }}
+          >
+            {t('entryEdit.autosaveDiscard')}
+          </button>
+        </div>
+      )}
+
       <form onSubmit={(event) => void submit(event)}>
         <EntryForm
           collection={collection}
@@ -212,6 +292,14 @@ export function EntryEditRoute(): JSX.Element {
           </p>
         )}
         {saved && <p role="status">{t('entryEdit.saved')}</p>}
+        {autosave.savedAt !== null && !saved && (
+          // Deliberately worded as a local safety net, not as "saved": an
+          // editor who reads "saved" and closes the tab must not discover
+          // later that nothing reached the server.
+          <p className="entry-form__autosave">
+            {t('entryEdit.autosaveKept', { at: formatTime(autosave.savedAt) })}
+          </p>
+        )}
 
         {canWrite && (
           <button type="submit" disabled={saving}>

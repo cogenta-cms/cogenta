@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -111,5 +111,116 @@ describe('creating a new entry', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Modifier : Article' })).toBeDefined(),
     )
+  })
+})
+
+/**
+ * Autosave (L13 task 5). What these prove is as much about what does *not*
+ * happen: an autosave never reaches `PATCH /api/content/...`, so it never
+ * writes a version row, so `history()` keeps meaning exactly what it means
+ * today — every row in it is a save a human asked for.
+ */
+describe('autosaving a draft in progress', () => {
+  const AUTOSAVE_KEY = 'cogenta.autosave.article.entry-1.en'
+
+  function patchCallCount(): number {
+    return vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH').length
+  }
+
+  async function openFirstArticle(): Promise<void> {
+    render(<App />)
+    await goToArticles()
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+  }
+
+  function seedAutosave(at: string, title: string): void {
+    localStorage.setItem(
+      AUTOSAVE_KEY,
+      JSON.stringify({ format: 1, at, values: { title }, blocks: {} }),
+    )
+  }
+
+  it('keeps the draft in this browser on a timer, and sends nothing to the server', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await openFirstArticle()
+
+      fireEvent.change(screen.getByLabelText('title', { exact: false }), {
+        target: { value: 'Half a sentence' },
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000)
+      })
+
+      const stored = localStorage.getItem(AUTOSAVE_KEY)
+      expect(stored).not.toBeNull()
+      expect((JSON.parse(stored as string) as { values: { title: string } }).values.title).toBe(
+        'Half a sentence',
+      )
+      // The whole point: no version was written, because no request was sent.
+      expect(patchCallCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drops the local copy once the entry is really saved', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await openFirstArticle()
+
+      fireEvent.change(screen.getByLabelText('title', { exact: false }), {
+        target: { value: 'Half a sentence' },
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000)
+      })
+      expect(localStorage.getItem(AUTOSAVE_KEY)).not.toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+      await screen.findByRole('status')
+
+      expect(localStorage.getItem(AUTOSAVE_KEY)).toBeNull()
+      expect(patchCallCount()).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('offers a newer local draft back, and applies it only when asked', async () => {
+    // The mock entry was last saved on 2026-02-01.
+    seedAutosave('2026-03-01T12:00:00.000Z', 'Recovered from a crashed tab')
+    await openFirstArticle()
+
+    // Never applied on its own — what the server holds is still what is shown.
+    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+      'First article',
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Les restaurer' }))
+    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+      'Recovered from a crashed tab',
+    )
+  })
+
+  it('forgets a local draft the editor discards', async () => {
+    seedAutosave('2026-03-01T12:00:00.000Z', 'Not wanted')
+    await openFirstArticle()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Les abandonner' }))
+
+    expect(localStorage.getItem(AUTOSAVE_KEY)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Les restaurer' })).toBeNull()
+  })
+
+  it('says nothing about a local draft older than the last real save', async () => {
+    // Before the entry's 2026-02-01 updatedAt: it is already in the entry.
+    seedAutosave('2026-01-15T12:00:00.000Z', 'Stale')
+    await openFirstArticle()
+
+    expect(screen.queryByRole('button', { name: 'Les restaurer' })).toBeNull()
   })
 })

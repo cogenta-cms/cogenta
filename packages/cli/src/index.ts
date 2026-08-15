@@ -38,6 +38,7 @@ Commands
   migrate up       Apply the pending migrations
   migrate down     Revert applied migrations
   users create     Create a user — the first admin account is made this way
+  users reset-password   Send a single-use reset token, or redeem one
   import wordpress <file.xml>   Import a WordPress WXR export, with a report
   generate types   Write TypeScript declarations for the content schema
   skin list        Show the site's active skin
@@ -69,6 +70,9 @@ User options
   --email <email>         The new user's email
   --roles <role,role>     Comma-separated role names
   --admin                 Shorthand for --roles admin
+  --token <token>         reset-password: the token from the mail
+  --password <text>       reset-password: the new password (generated if absent)
+  --mail-dir <path>       Where outgoing mail is written (default .cogenta/mail)
 
 Serve options
   --port <n>              Port to listen on (default 4000)
@@ -119,6 +123,9 @@ export async function run(options: RunOptions): Promise<number> {
         email: { type: 'string' },
         roles: { type: 'string' },
         admin: { type: 'boolean' },
+        token: { type: 'string' },
+        password: { type: 'string' },
+        'mail-dir': { type: 'string' },
         port: { type: 'string' },
         host: { type: 'string' },
         out: { type: 'string' },
@@ -187,6 +194,11 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.email === 'string' ? { email: parsed.values.email } : {}),
       ...(typeof parsed.values.roles === 'string' ? { roles: parsed.values.roles } : {}),
       ...(parsed.values.admin === true ? { admin: true } : {}),
+      ...(typeof parsed.values.token === 'string' ? { token: parsed.values.token } : {}),
+      ...(typeof parsed.values.password === 'string' ? { password: parsed.values.password } : {}),
+      ...(typeof parsed.values['mail-dir'] === 'string'
+        ? { mailDir: parsed.values['mail-dir'] }
+        : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

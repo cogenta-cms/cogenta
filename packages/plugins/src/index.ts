@@ -44,6 +44,15 @@ export {
   detectCapabilitiesNeedingApproval,
   resolveGrantedCapabilities,
 } from './permissions/resolve.js'
+export type {
+  GrantedCapabilityReview,
+  PendingCapabilityReview,
+} from './permissions/review.js'
+export {
+  describePendingApproval,
+  listGrantedCapabilities,
+  revokeCapability,
+} from './permissions/review.js'
 export { ensurePluginTables, PERMISSION_TABLES } from './permissions/tables.js'
 export type { SemverVersion } from './semver.js'
 export { compareVersions, parseVersion, satisfiesRange } from './semver.js'

@@ -241,6 +241,11 @@
     "confirmHighRisk": "I understand and allow this high-risk action",
     "approveAll": "Approve all without reading them one by one",
     "approveReviewed": "Approve the checked permissions",
-    "noCapabilities": "This plugin does not request any particular permission."
+    "noCapabilities": "This plugin does not request any particular permission.",
+    "grantedHeading": "Granted permissions",
+    "noGrants": "This plugin has no active permission right now.",
+    "revoke": "Revoke",
+    "pendingHeading": "New permissions requested",
+    "pendingIntro": "A new version of this plugin requests additional permissions. They will not take effect until you approve them."
   }
 }

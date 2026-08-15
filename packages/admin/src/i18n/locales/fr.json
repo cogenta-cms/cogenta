@@ -241,6 +241,11 @@
     "confirmHighRisk": "Je comprends et j'autorise cette action à risque élevé",
     "approveAll": "Tout autoriser sans les lire un par un",
     "approveReviewed": "Autoriser les permissions cochées",
-    "noCapabilities": "Ce plugin ne demande aucune autorisation particulière."
+    "noCapabilities": "Ce plugin ne demande aucune autorisation particulière.",
+    "grantedHeading": "Autorisations accordées",
+    "noGrants": "Ce plugin n'a aucune autorisation active pour le moment.",
+    "revoke": "Révoquer",
+    "pendingHeading": "Nouvelles autorisations demandées",
+    "pendingIntro": "Une nouvelle version de ce plugin demande des autorisations supplémentaires. Elles ne prendront effet qu'après votre accord."
   }
 }

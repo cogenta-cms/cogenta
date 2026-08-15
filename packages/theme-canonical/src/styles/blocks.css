@@ -544,25 +544,81 @@
 
 /* --- faq ----------------------------------------------------------------- */
 
-.cg-faq__items {
-  border-block-start: 1px solid var(--cg-line);
+.cg-faq {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
 }
 
-.cg-faq__item {
-  border-block-end: 1px solid var(--cg-line);
+.cg-faq__items {
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+  /* Clips the first and last rows to the container's radius, so the list reads
+     as one panel rather than as rows that happen to be stacked. */
+  overflow: hidden;
+}
+
+.cg-faq__item + .cg-faq__item {
+  border-block-start: 1px solid var(--cg-line-soft);
 }
 
 .cg-faq__question {
   display: flex;
   align-items: center;
-  padding-block: var(--cg-s4);
+  gap: var(--cg-s4);
+  padding: var(--cg-s5) var(--cg-s6);
   font-weight: var(--cg-weight-semibold);
   cursor: pointer;
+  /* The marker is replaced below; both properties are needed, and the vendor
+     one still is on WebKit. */
+  list-style: none;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-faq__question::-webkit-details-marker {
+  display: none;
+}
+
+.cg-faq__question:hover {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+/* A chevron drawn from two borders — no icon set, no glyph that depends on a
+   font shipping it. It is a pseudo-element on a `<summary>` whose expanded
+   state the browser already announces, so it stays purely visual. */
+.cg-faq__question::after {
+  content: "";
+  flex: none;
+  margin-inline-start: auto;
+  inline-size: 0.5em;
+  block-size: 0.5em;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: translateY(-0.15em) rotate(45deg);
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-faq__details[open] .cg-faq__question::after {
+  transform: translateY(0.1em) rotate(-135deg);
+}
+
+.cg-faq__details[open] .cg-faq__question {
+  color: var(--cg-accent);
 }
 
 .cg-faq__answer {
-  padding-block-end: var(--cg-s4);
+  padding: 0 var(--cg-s6) var(--cg-s6);
   color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+}
+
+.cg-faq__answer > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-faq__answer > :last-child {
+  margin-block-end: 0;
 }
 
 /* --- stats --------------------------------------------------------------- */

@@ -46,3 +46,5 @@ export {
 } from './query.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
+export type { SearchRouter, SearchRouterOptions } from './search-router.js'
+export { createSearchRouter } from './search-router.js'

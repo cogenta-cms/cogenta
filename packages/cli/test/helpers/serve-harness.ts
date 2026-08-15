@@ -1,0 +1,152 @@
+import { createHmac } from 'node:crypto'
+import { join } from 'node:path'
+import { createLogger } from '@cogenta/core'
+import { runServe } from '../../src/commands/serve.js'
+import { createOutput } from '../../src/output.js'
+
+/**
+ * What every `cogenta serve` end-to-end test needs: a real server on a real
+ * port, and a real signed-in session to talk to it with.
+ *
+ * Extracted here rather than copied because more than one suite needs the
+ * MFA dance — a role that can publish is always MFA-sensitive
+ * (`packages/auth/src/mfa.ts`), so no test that writes content can skip it.
+ */
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+/** Independent RFC 6238 implementation — see packages/auth/test/helpers/totp-code.ts for why. */
+export function codeFor(secret: string, nowSeconds: number): string {
+  const normalised = secret.toUpperCase().replace(/=+$/u, '')
+  let bits = 0
+  let value = 0
+  const bytes: number[] = []
+  for (const char of normalised) {
+    value = (value << 5) | BASE32_ALPHABET.indexOf(char)
+    bits += 5
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff)
+      bits -= 8
+    }
+  }
+  const key = Buffer.from(bytes)
+
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(nowSeconds / 30)))
+  const digest = createHmac('sha1', key).update(counter).digest()
+  const offset = (digest.at(-1) ?? 0) & 0x0f
+  const truncated =
+    ((digest[offset] ?? 0) & 0x7f) * 2 ** 24 +
+    ((digest[offset + 1] ?? 0) & 0xff) * 2 ** 16 +
+    ((digest[offset + 2] ?? 0) & 0xff) * 2 ** 8 +
+    ((digest[offset + 3] ?? 0) & 0xff)
+  return String(truncated % 1_000_000).padStart(6, '0')
+}
+
+/**
+ * Signs in a user whose role can publish, completing the mandatory TOTP
+ * enrolment along the way. Returns the bearer token.
+ */
+export async function loginWithMfaSetup(
+  base: string,
+  email: string,
+  password: string,
+): Promise<string> {
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  const loginBody = (await login.json()) as { data: { status: string; ticket: string } }
+  if (loginBody.data.status !== 'totp_setup_required') {
+    throw new Error(`expected totp_setup_required, got ${loginBody.data.status}`)
+  }
+
+  const setup = await fetch(`${base}/api/auth/totp-setup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ticket: loginBody.data.ticket }),
+  })
+  const setupBody = (await setup.json()) as { data: { secret: string } }
+
+  const confirmed = await fetch(`${base}/api/auth/totp-setup-confirm`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ticket: loginBody.data.ticket,
+      token: codeFor(setupBody.data.secret, Date.now() / 1000),
+    }),
+  })
+  const confirmedBody = (await confirmed.json()) as { data: { session: { token: string } } }
+  return confirmedBody.data.session.token
+}
+
+/** Creates a real user with a real password hash, against the site's own database. */
+export async function createUser(
+  root: string,
+  email: string,
+  password: string,
+  roles: readonly string[],
+): Promise<void> {
+  const { createSqliteHandle } = await import('@cogenta/core')
+  const { createUserStore, createCredentialStore, ensureAuthTables } = await import('@cogenta/auth')
+  const db = await createSqliteHandle({ url: join(root, 'site.db') })
+  await ensureAuthTables(db)
+  const users = createUserStore(db)
+  const credentials = createCredentialStore(db)
+  const user = await users.create({ email, roles })
+  await credentials.setPassword(user.id, password)
+  await db.close()
+}
+
+export interface RunningServer {
+  readonly base: string
+  stop(): Promise<void>
+}
+
+export interface StartServerOptions {
+  readonly readOnly?: boolean
+  /** Collected so a test can assert the server is registered for cleanup. */
+  readonly registry?: AbortController[]
+}
+
+export async function startServer(
+  root: string,
+  options: StartServerOptions = {},
+): Promise<RunningServer> {
+  const controller = new AbortController()
+  options.registry?.push(controller)
+
+  let resolveAddress: (value: { port: number; host: string }) => void
+  const address = new Promise<{ port: number; host: string }>((resolve) => {
+    resolveAddress = resolve
+  })
+
+  const done = runServe({
+    cwd: root,
+    env: { COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret' },
+    logger: createLogger({ level: 'silent' }),
+    out: createOutput(() => undefined, false),
+    stderr: () => undefined,
+    port: 0,
+    signal: controller.signal,
+    onListening: (a) => resolveAddress(a),
+    ...(options.readOnly === undefined ? {} : { readOnly: options.readOnly }),
+  })
+  // If startup fails before ever listening, `address` would hang forever —
+  // race it against the command's own exit so that case fails fast instead.
+  const bound = await Promise.race([
+    address,
+    done.then((code) => {
+      throw new Error(`runServe exited with code ${code} before it started listening`)
+    }),
+  ])
+
+  return {
+    base: `http://${bound.host}:${bound.port}`,
+    stop: async () => {
+      controller.abort()
+      await done
+    },
+  }
+}

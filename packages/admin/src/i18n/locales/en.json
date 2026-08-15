@@ -142,6 +142,12 @@
   },
   "collectionList": {
     "newButton": "New",
+    "searchLabel": "Search",
+    "searchButton": "Search",
+    "clearSearch": "Clear search",
+    "searchResults": "{{count}} result(s)",
+    "noMatches": "Nothing matched that search.",
+    "searchError": "Could not search this collection.",
     "statusFilter": "Status",
     "allStatuses": "All",
     "deleteSelected": "Delete ({{count}})",

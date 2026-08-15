@@ -18,12 +18,14 @@ import {
   createMediaRouter,
   createPermissionLayer,
   createRestRouter,
+  createSearchRouter,
   executeGraphQL,
   type MediaRouter,
   type RestRequest,
   type RestResponse,
   type RestRouter,
   resolveActor,
+  type SearchRouter,
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
@@ -47,13 +49,16 @@ import {
   createContentStore,
   createRedirectStore,
   createSchemaTables,
+  createSearchIndex,
   type RedirectStore,
   type SchemaDocument,
   withReadOnlyStore,
+  withSearchIndexing,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { renderSearchPage } from './search-page.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
 import { loadSkinCss, renderRequestedPage } from './theme-render.js'
 
@@ -142,6 +147,8 @@ interface Site {
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
   readonly auditRouter: AuditRouter
+  /** `GET /api/search` — the full-text index, reachable for the first time (L10 task 3). */
+  readonly searchRouter: SearchRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
@@ -182,38 +189,62 @@ function webauthnConfigFor(site: { readonly name: string; readonly url: string }
   return { relyingPartyName: site.name, relyingPartyId: host, origin: site.url }
 }
 
-async function assembleSite(
-  db: DatabaseHandle,
-  collections: readonly CollectionDefinition[],
-  signingKey: string,
-  site: {
+interface AssembleSiteOptions {
+  readonly db: DatabaseHandle
+  readonly collections: readonly CollectionDefinition[]
+  readonly signingKey: string
+  readonly site: {
     readonly name: string
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
-  },
-  storage: StorageDriver,
-  health: () => Promise<{ readonly database: HealthReport; readonly storage: HealthReport }>,
+  }
+  readonly storage: StorageDriver
+  readonly logger: Logger
+  readonly health: () => Promise<{
+    readonly database: HealthReport
+    readonly storage: HealthReport
+  }>
   /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
-  agents?: AgentsRouterOptions,
+  readonly agents?: AgentsRouterOptions
   /**
    * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
    * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
    * instead of landing — wrapped once here, at the one place both transports'
    * stores are actually constructed, so neither can bypass it.
    */
-  readOnly = false,
+  readonly readOnly?: boolean
   /** `null` when `theme.tokens.json` is absent or invalid — see `loadSkinCss`. */
-  skinCss: string | null = null,
-): Promise<Site> {
+  readonly skinCss?: string | null
+}
+
+async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
+  const { db, collections, site, storage, logger } = options
+  const readOnly = options.readOnly ?? false
   await createSchemaTables(db, collections)
+
+  // Full-text search, connected for the first time (L10 task 3). The index is
+  // derived data and creates its own physical table, so a fresh install can
+  // index its first entry without a migration having run.
+  const searchIndex = await createSearchIndex({ db })
 
   const stores = new Map<string, ContentStore>()
   const storeFor = (collection: CollectionDefinition): ContentStore => {
     const existing = stores.get(collection.name)
     if (existing !== undefined) return existing
     const created = createContentStore({ db, collection })
-    const stored = readOnly ? withReadOnlyStore(created) : created
+    const guarded = readOnly ? withReadOnlyStore(created) : created
+    // Outermost, so a read-only refusal happens *before* anything is indexed:
+    // a write that never landed must not change the index either.
+    const stored = withSearchIndexing(guarded, {
+      collection,
+      index: searchIndex,
+      onError: (error) =>
+        logger.error('search index write failed', {
+          collection: collection.name,
+          error: String(error),
+        }),
+    })
     stores.set(collection.name, stored)
     return stored
   }
@@ -238,7 +269,7 @@ async function assembleSite(
 
   const auth = await createAuthStore({
     db,
-    signingKey,
+    signingKey: options.signingKey,
     collections,
     issuer: site.name,
     webauthn: webauthnConfigFor(site),
@@ -253,7 +284,13 @@ async function assembleSite(
     authRouter: createAuthRouter({ auth }),
     mediaRouter: createMediaRouter({ store: mediaStore, storage }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
-    ...(agents === undefined ? {} : { agentsRouter: createAgentsRouter(agents) }),
+    searchRouter: createSearchRouter({
+      index: searchIndex,
+      collections,
+      permissions,
+      defaultLocale: site.defaultLocale,
+    }),
+    ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
     mediaStore,
     storage,
     graphqlSchema: buildContentSchema({ collections }),
@@ -265,8 +302,8 @@ async function assembleSite(
     redirects,
     collections,
     site,
-    skinCss,
-    health,
+    skinCss: options.skinCss ?? null,
+    health: options.health,
     dispose: async () => {
       await db.close()
     },
@@ -627,6 +664,14 @@ export function createRequestListener(
         return
       }
 
+      // The full-text index, reachable at last (L10 task 3). Its own router
+      // decides which collections this actor may search — never this layer.
+      if (url.pathname === '/api/search') {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.searchRouter.handle(request, context))
+        return
+      }
+
       if (url.pathname.startsWith('/api/audit')) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
@@ -718,6 +763,30 @@ export function createRequestListener(
         // not an empty urlset: an empty chunk would tell a crawler the site
         // has nothing there rather than that the URL is wrong.
         jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No sitemap file at this path.')
+        return
+      }
+
+      // The public search page (L10 task 3): a real form and a real results
+      // list, served through the same permission-checked search router the
+      // API uses. Deliberately a route rather than a contract B block — see
+      // `search-page.ts` for why.
+      if (url.pathname === '/search' && req.method === 'GET') {
+        const html = await renderSearchPage(
+          url.searchParams.get('q') ?? '',
+          {
+            router: site.searchRouter,
+            gateway: site.gateway,
+            collections: site.collections,
+            site: site.site,
+            skinCss: site.skinCss,
+          },
+          context,
+        )
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(html)
         return
       }
 
@@ -829,17 +898,20 @@ export async function runServe(options: ServeOptions): Promise<number> {
     (path) => readFile(path, 'utf8'),
     join(projectRoot, 'theme.tokens.json'),
   )
-  const site = await assembleSite(
-    selection.instance,
+  const site = await assembleSite({
+    db: selection.instance,
     collections,
-    loaded.config.auth.signingKey,
-    loaded.config.site,
-    storageSelection.instance,
-    async () => ({ database: await selection.health(), storage: await storageSelection.health() }),
-    undefined,
-    options.readOnly ?? false,
+    signingKey: loaded.config.auth.signingKey,
+    site: loaded.config.site,
+    storage: storageSelection.instance,
+    logger,
+    health: async () => ({
+      database: await selection.health(),
+      storage: await storageSelection.health(),
+    }),
+    readOnly: options.readOnly ?? false,
     skinCss,
-  )
+  })
 
   const server = createServer(createRequestListener(site, logger))
   const port = options.port ?? DEFAULT_PORT

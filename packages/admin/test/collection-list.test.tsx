@@ -53,6 +53,46 @@ describe('CollectionListRoute', () => {
     expect(screen.getByRole('button', { name: 'Supprimer (1)' })).toBeDefined()
   })
 
+  it('searches the collection and shows only the matching entries (L10 task 3)', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    fireEvent.change(screen.getByLabelText('Rechercher'), { target: { value: 'second' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+
+    await screen.findByRole('heading', { name: '1 résultat(s)' })
+    expect(screen.getByRole('link', { name: 'Second article' })).toBeDefined()
+    expect(screen.queryByText('First article')).toBeNull()
+  })
+
+  it('clearing the search puts the full list back', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    fireEvent.change(screen.getByLabelText('Rechercher'), { target: { value: 'second' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+    await screen.findByRole('heading', { name: '1 résultat(s)' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Effacer la recherche' }))
+    await screen.findByText('First article')
+    expect(screen.queryByRole('heading', { name: /résultat/ })).toBeNull()
+  })
+
+  it('says so plainly when a search matches nothing, rather than showing an empty table', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    fireEvent.change(screen.getByLabelText('Rechercher'), {
+      target: { value: 'nothing-matches-this' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+
+    expect(await screen.findByText('Aucun résultat pour cette recherche.')).toBeDefined()
+  })
+
   it('reports a collection nobody can read as not found', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })

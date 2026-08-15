@@ -26,3 +26,12 @@ export type {
 export { createEnrollmentStore } from './enrollment/store.js'
 export { ensureFleetTables, FLEET_TABLES } from './enrollment/tables.js'
 export { generatePairingToken, hashPairingToken } from './enrollment/tokens.js'
+export type {
+  DriftDirection,
+  DriftEntry,
+  FleetBaseline,
+  InventoryComponent,
+  InventoryComponentKind,
+  SiteInventory,
+} from './inventory/drift.js'
+export { computeFleetBaseline, detectDrift, extractInventory } from './inventory/drift.js'

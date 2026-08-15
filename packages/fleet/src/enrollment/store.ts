@@ -51,6 +51,16 @@ export interface EnrollmentStore {
   revokeSite(siteId: string): Promise<void>
   isRevoked(siteId: string): Promise<boolean>
   getSite(siteId: string): Promise<SiteRegistration | null>
+  /**
+   * Every currently-registered site's metadata (id/name/key/revocation
+   * state) — never anything content- or telemetry-shaped. Needed for real,
+   * fleet-wide operations (inventory/drift detection here; the dashboard and
+   * rollout campaigns later) that must enumerate sites without touching any
+   * per-site telemetry store, which structurally has no cross-site query at
+   * all (`../control/state.js`'s `SiteStateStore`) — this is the one real,
+   * narrow seam where "which sites exist" is legitimately fleet-wide.
+   */
+  listSites(): Promise<readonly SiteRegistration[]>
 }
 
 interface TokenRow {
@@ -147,6 +157,13 @@ export function createEnrollmentStore(
       )
       const row = result.rows[0]
       return row === undefined ? null : toSite(row)
+    },
+
+    async listSites() {
+      const result = await db.query<SiteRow>(
+        sql`select id, name, public_key, registered_at, revoked_at from ${sites} order by registered_at asc`,
+      )
+      return result.rows.map(toSite)
     },
   }
 }

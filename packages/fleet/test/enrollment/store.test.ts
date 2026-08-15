@@ -86,4 +86,20 @@ describe('createEnrollmentStore', () => {
     const store = createEnrollmentStore(db)
     expect(await store.isRevoked('does-not-exist')).toBe(false)
   })
+
+  it('listSites lists every registered site, metadata only — none for an empty fleet', async () => {
+    const db = await testDb()
+    const store = createEnrollmentStore(db)
+    expect(await store.listSites()).toEqual([])
+
+    const tokenA = await store.issuePairingToken('client-a')
+    const a = await store.consumePairingToken(tokenA.token, SITE_PUBLIC_KEY)
+    const tokenB = await store.issuePairingToken('client-b')
+    const b = await store.consumePairingToken(tokenB.token, SITE_PUBLIC_KEY)
+    if (!a.ok || !b.ok) throw new Error('unreachable')
+
+    const sites = await store.listSites()
+    expect(sites.map((site) => site.name).sort()).toEqual(['client-a', 'client-b'])
+    expect(sites.every((site) => site.publicKey === SITE_PUBLIC_KEY)).toBe(true)
+  })
 })

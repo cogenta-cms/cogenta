@@ -21,6 +21,21 @@ import { TABLES } from './tables.js'
 const TOKEN_BYTES = 32
 
 /**
+ * Hex, not base64url — and that is not a stylistic preference.
+ *
+ * base64url's alphabet contains `-`. Roughly one token in sixty-four therefore
+ * *starts* with a dash, and `cogenta users reset-password --token -Xy...` is
+ * then parsed as an unknown option rather than as a value: the command refuses
+ * a perfectly valid token with a usage error, for one person in sixty-four.
+ * That is exactly the kind of defect that never shows up in a test written
+ * once and passes for months. Hex costs 32 characters of length and has no
+ * character that any shell, URL or argument parser treats as special.
+ */
+function encodeToken(bytes: Buffer): string {
+  return bytes.toString('hex')
+}
+
+/**
  * 30 minutes. Long enough to walk to the inbox and back, short enough that a
  * reset link sitting in a mailbox archive is worthless within the hour — a
  * reset token is a full account takeover if it leaks, so it gets a far
@@ -74,7 +89,7 @@ interface ResetRow {
 }
 
 function issueToken(): string {
-  return randomBytes(TOKEN_BYTES).toString('base64url')
+  return encodeToken(randomBytes(TOKEN_BYTES))
 }
 
 function hashToken(token: string): string {

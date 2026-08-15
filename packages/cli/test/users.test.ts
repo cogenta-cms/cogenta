@@ -135,6 +135,11 @@ describe('users reset-password', () => {
     const contents = await readFile(join(directory, files[0] as string), 'utf8')
     const token = /--token (\S+)/.exec(contents)?.[1]
     expect(token).toBeTruthy()
+    // A token that begins with a dash is read by parseArgs as an unknown
+    // option, and the command refuses it with a usage error. This caught a
+    // real one: base64url contains `-`, so one token in sixty-four was
+    // unusable — intermittently, which is the worst way to find out.
+    expect(token).toMatch(/^[0-9a-f]+$/)
     return token as string
   }
 

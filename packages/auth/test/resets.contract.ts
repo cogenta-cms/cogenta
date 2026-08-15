@@ -68,6 +68,20 @@ export function runPasswordResetContract(name: string, create: () => Promise<Res
       })
     })
 
+    /**
+     * Found by a real failing run, not by imagination: base64url contains
+     * `-`, so about one token in sixty-four began with one, and
+     * `--token -Xy...` was then read as an unknown option instead of as a
+     * value. A token has to survive being pasted into a shell.
+     */
+    it('mints a token no shell or argument parser can mistake for an option', async () => {
+      const userId = await someone()
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const issued = await resets.issue(userId)
+        expect(issued.token).toMatch(/^[0-9a-f]+$/)
+      }
+    })
+
     it('refuses the same token a second time', async () => {
       const userId = await someone()
       const issued = await resets.issue(userId)

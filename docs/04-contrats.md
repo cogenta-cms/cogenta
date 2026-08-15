@@ -8,7 +8,8 @@
 
 ## Contrat A — Schéma de contenu
 
-> **Figé en `schema@1.0` le 2026-08-13.** Toute modification incompatible impose une
+> **Figé en `schema@2.0` le 2026-08-16** (ADR-0022 — taxonomies natives et corbeille,
+> les deux en une seule montée majeure). Toute modification incompatible impose une
 > montée de version majeure et une note de migration.
 
 ### Définition d'un type
@@ -70,6 +71,7 @@ entre environnements possible sans réécrire les clés étrangères.
 ```
 id · createdAt · updatedAt · createdBy · updatedBy
 status: draft | scheduled | published | archived
+deletedAt: string | null
 locale · translationOf · version
 provenance: human | assisted | generated
 provenanceDetail: { agent, model, at, prompt? }
@@ -77,6 +79,16 @@ provenanceDetail: { agent, model, at, prompt? }
 
 Le champ `provenance` n'est pas optionnel. Il est requis par le cadre européen sur l'IA
 et doit exister dès la première migration.
+
+**`deletedAt` (`schema@2.0`, ADR-0022) est orthogonal à `status`, jamais une valeur de
+`status`.** Une entrée à la corbeille garde son `status` d'origine — un article publié
+mis à la corbeille reste `published` en mémoire, et `untrash()` ne le fait jamais
+retomber en `draft`. Toute lecture (`read`, `list`, `translations`, `resolveLocale`,
+`history`) filtre `deletedAt is null` par défaut ; seul un appelant qui demande
+explicitement la corbeille la voit. `delete()` écrit `deletedAt` ; `purge()` est le seul
+`DELETE` SQL réel ; `untrash()` annule la mise à la corbeille. Une fenêtre de purge se
+déclare par collection sur le modèle de `versioning.keep` : `trash: { retainDays: 30 }`,
+`false` pour revenir à une suppression dure immédiate.
 
 ### Internationalisation
 
@@ -142,6 +154,42 @@ que sur une relation à un et un champ non requis.
 silencieusement ses articles : une erreur qui nomme ce qui bloque — « 3 articles
 référencent cet auteur » — est un meilleur défaut qu'une cascade irrécupérable.
 
+**Depuis `schema@2.0` (ADR-0022), `restrict` est vérifié en code applicatif au moment
+de la mise à la corbeille, pas seulement par la clé étrangère.** Mettre une entrée à la
+corbeille n'est plus un `DELETE` SQL — la contrainte de base ne peut donc plus rien
+refuser à ce moment-là. `ContentStore.delete()` doit lui-même refuser la mise à la
+corbeille d'une entrée encore référencée par une relation `restrict`, avec le même
+message qu'avant. Ne pas le faire est un défaut de sécurité de la donnée, pas un détail
+d'implémentation.
+
+### Taxonomies (`schema@2.0`, ADR-0022)
+
+Un second objet déclarable de premier niveau, à côté de `defineCollection()` :
+
+```ts
+import { defineTaxonomy, f } from '@cogenta/schema'
+
+export const category = defineTaxonomy({
+  name: 'category',
+  labels: { singular: { fr: 'Catégorie', en: 'Category' } },
+})
+```
+
+Un **terme** de taxonomie porte `id`, `parent` (référence à un autre terme de la même
+taxonomie, ou `null` à la racine), `slug`, `position` et un `labels` **indexé par
+locale**. Un terme n'est **pas** un contenu : il n'a ni `status`, ni `version`, ni
+`translationOf` — « Cuisine » et « Cooking » sont le même concept de classement, pas
+deux contenus liés par ADR-0014 (qui gouverne le contenu, pas les taxonomies ; son
+périmètre reste inchangé).
+
+Un champ `f.taxonomy({ of: 'category', many: true })` référence des termes d'une
+taxonomie déclarée, réutilisable telle quelle entre plusieurs collections.
+
+L'arborescence est stockée en **chemin matérialisé**, maintenu à l'écriture — jamais un
+CTE récursif, dont le support diverge entre Postgres, MySQL/MariaDB et SQLite
+(ADR-0006). « Tout le contenu de ce sous-arbre » se répond par un `like` sur le chemin,
+identique sur les trois dialectes.
+
 ### Zones de blocs
 
 `f.blocks()` ne stocke pas un tableau JSON dans la ligne de contenu. Chaque bloc est une
@@ -172,8 +220,14 @@ migration destructive exige une confirmation explicite et un backup préalable v
 
 ### Versionnement
 
-`schema@1.x` — l'ajout d'un type de champ est mineur. La modification de la signature
-d'un champ existant est majeure.
+L'ajout d'un type de champ est mineur. La modification de la signature d'un champ
+existant est majeure.
+
+`schema@1.0 → 2.0` (ADR-0022, 2026-08-16) : ajout du champ système `deletedAt`
+(orthogonal à `status`), changement de sens de `delete()`/nouvelles méthodes
+`purge()`/`untrash()`, et ajout de `defineTaxonomy()`/`f.taxonomy()`. `status` n'a pas
+changé. Migration réversible ; le `down` supprime `deletedAt` et perd la corbeille —
+sans coût aujourd'hui, le projet n'ayant encore aucun site en production.
 
 ---
 

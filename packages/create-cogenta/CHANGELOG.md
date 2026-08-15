@@ -1,5 +1,60 @@
 # create-cogenta
 
+## 0.1.5
+
+### Patch Changes
+
+- [`89bfa96`](https://github.com/cogenta-cms/cogenta/commit/89bfa960c4f6aa63e8607e8dfeaa25be4ab89576) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix the blog blueprint's home page failing every real query with
+  `QUERY_INVALID`.
+  
+  Its `collectionList` block sorted recent posts by `publishedAt` — a real
+  system field, but nullable (a draft has none) and never part of the real,
+  frozen `SortField` union (`id`/`createdAt`/`updatedAt` only; cursor
+  pagination needs a column that is never null). Every other blueprint
+  already sorted by `createdAt`; blog was the one exception, and nothing
+  exercised its `collectionList` block through the real gateway until
+  `cogenta serve`'s new theme-render fallback did (see the `@cogenta/cli`
+  changeset) — the existing render test built its own query by hand instead
+  of going through the block's real `query()` function, so it never caught
+  this. Now sorts by `createdAt`, same as every other blueprint.
+
+- [`e903fac`](https://github.com/cogenta-cms/cogenta/commit/e903fac9491fadd3ac37399bec7c4f199b244f96) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix `npx create-cogenta`'s own "Next step" instructions being incomplete.
+  Scaffolding writes a real `package.json` with real `@cogenta/*` dependencies
+  but never installs them — a deliberate scope boundary (no network call
+  during scaffold), but the printed next step went straight to
+  `npx cogenta serve` without `npm install` first, so the very first thing a
+  new user typed failed with a confusing `npm error 404 ... 'cogenta@*'`
+  (npx, finding no local `cogenta` binary and no scoped package name, tried to
+  fetch a package literally named `cogenta` from the registry — which has
+  never existed; the real package is `@cogenta/cli`, whose `bin` happens to be
+  named `cogenta`). Found via a real `npx create-cogenta@latest` from the
+  actual npm registry, on a machine with no local install of this repo.
+
+- [`7ff79a2`](https://github.com/cogenta-cms/cogenta/commit/7ff79a260f97c79192553e88e2e7e4d22e0d8965) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The installer's recap now tells you where to actually sign in: "Then open
+  <site-url>/admin and sign in with the admin account above." Previously it
+  only mentioned enrolling a passkey, with no mention of a URL — a real
+  onboarding blocker once `cogenta serve` gained the ability to serve the
+  admin SPA (see `@cogenta/cli`'s own changeset).
+
+- [`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Scaffolding now writes a real, randomly generated `COGENTA_AUTH_SIGNING_KEY`
+  into a `.env` file next to `cogenta.config.mjs` (`randomBytes(32)`, base64),
+  plus a `.gitignore` covering `node_modules/`, `.env` and `.cogenta/`. Paired
+  with `@cogenta/core`'s new `.env` auto-loading (its own changeset), this
+  removes a real onboarding blocker: a brand-new user previously had to find,
+  run and correctly `export` a key-generation command themselves — with no
+  guidance on the Mac/Windows/Linux differences — before `cogenta serve` would
+  even start. `npm create cogenta` now produces a site that runs with zero
+  manual secret-handling steps.
+- Updated dependencies [[`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f), [`7ff79a2`](https://github.com/cogenta-cms/cogenta/commit/7ff79a260f97c79192553e88e2e7e4d22e0d8965), [`cb69cab`](https://github.com/cogenta-cms/cogenta/commit/cb69cab09b89d3cc5b8d15f5887ec93f82e32599), [`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f), [`4c95475`](https://github.com/cogenta-cms/cogenta/commit/4c9547543ec9a4464d8c9a05d1967dd15b7953aa)]:
+  - @cogenta/cli@0.2.0
+  - @cogenta/core@0.2.0
+  - @cogenta/agents@0.1.2
+  - @cogenta/auth@0.1.2
+  - @cogenta/blocks@0.1.2
+  - @cogenta/render@0.1.2
+  - @cogenta/schema@0.1.2
+  - @cogenta/theme-canonical@0.1.2
+
 ## 0.1.0
 
 ### Minor Changes

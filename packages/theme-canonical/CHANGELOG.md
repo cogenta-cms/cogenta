@@ -1,5 +1,12 @@
 # @cogenta/theme-canonical
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@0.1.2
+
 ## 0.1.0
 
 ### Minor Changes

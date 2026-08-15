@@ -1,5 +1,13 @@
 # @cogenta/seo
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [[`fd0a52e`](https://github.com/cogenta-cms/cogenta/commit/fd0a52e155d802b102ac9012b3ed2d650b271c3f), [`4c95475`](https://github.com/cogenta-cms/cogenta/commit/4c9547543ec9a4464d8c9a05d1967dd15b7953aa)]:
+  - @cogenta/core@0.2.0
+  - @cogenta/schema@0.1.2
+
 ## 0.1.0
 
 ### Minor Changes

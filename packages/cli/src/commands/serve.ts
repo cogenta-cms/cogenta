@@ -53,7 +53,8 @@ import {
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
-import { loadSkinCss, renderRequestedPage } from './theme-render.js'
+import { loadThemeCss } from './theme-css.js'
+import { joinStyles, loadSkinCss, renderRequestedPage } from './theme-render.js'
 
 const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
@@ -153,8 +154,8 @@ interface Site {
     readonly locales: readonly string[]
     readonly defaultLocale: string
   }
-  /** `null` when the project has no `theme.tokens.json` — the theme-render fallback serves unstyled HTML rather than refusing. */
-  readonly skinCss: string | null
+  /** The skin's custom properties plus the theme's own stylesheet, minified into one. `null` when neither could be loaded — the theme-render fallback serves unstyled HTML rather than refusing. */
+  readonly styles: string | null
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
   readonly health: () => Promise<{
     readonly database: HealthReport
@@ -190,8 +191,8 @@ async function assembleSite(
    * stores are actually constructed, so neither can bypass it.
    */
   readOnly = false,
-  /** `null` when `theme.tokens.json` is absent or invalid — see `loadSkinCss`. */
-  skinCss: string | null = null,
+  /** `null` when neither the skin nor the theme stylesheet could be loaded — see `joinStyles`. */
+  styles: string | null = null,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -251,7 +252,7 @@ async function assembleSite(
     }),
     collections,
     site,
-    skinCss,
+    styles,
     health,
     dispose: async () => {
       await db.close()
@@ -657,7 +658,7 @@ export function createRequestListener(
             collections: site.collections,
             gateway: site.gateway,
             site: site.site,
-            skinCss: site.skinCss,
+            styles: site.styles,
           },
           context,
         )
@@ -750,9 +751,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
   const storageSelection = await createStorageRegistry({ logger }).select(loaded.config.storage)
-  const skinCss = await loadSkinCss(
-    (path) => readFile(path, 'utf8'),
-    join(projectRoot, 'theme.tokens.json'),
+  const styles = joinStyles(
+    await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),
+    await loadThemeCss({ read: (url) => readFile(url, 'utf8') }),
   )
   const site = await assembleSite(
     selection.instance,
@@ -763,7 +764,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     async () => ({ database: await selection.health(), storage: await storageSelection.health() }),
     undefined,
     options.readOnly ?? false,
-    skinCss,
+    styles,
   )
 
   const server = createServer(createRequestListener(site, logger))

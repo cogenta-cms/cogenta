@@ -1,0 +1,408 @@
+/*
+ * The twelve vocabulary blocks.
+ *
+ * One section per block, in the contract-B order. Nothing here declares a
+ * colour, a size, a radius or a duration of its own: a block composes the
+ * design system from `tokens.css` and nothing else, which is what keeps a skin
+ * swap a whole-theme change rather than a per-block one.
+ */
+
+/* --- hero ---------------------------------------------------------------- */
+
+.cg-hero {
+  display: grid;
+  gap: var(--cg-gap-loose);
+  align-items: center;
+}
+
+@media (min-width: 60rem) {
+  .cg-hero {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cg-hero__eyebrow {
+  margin: 0 0 var(--cg-s3);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-hero__title {
+  margin: 0;
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-hero__subtitle {
+  margin: var(--cg-s5) 0 0;
+  max-inline-size: var(--cg-measure);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  color: var(--cg-ink-muted);
+  text-wrap: pretty;
+}
+
+.cg-hero__media img {
+  inline-size: 100%;
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-elevation-3);
+}
+
+/* --- prose --------------------------------------------------------------- */
+
+.cg-prose {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-prose h2 {
+  margin-block: var(--cg-s12) var(--cg-s3);
+  font-size: var(--cg-text-xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+}
+
+.cg-prose h3 {
+  margin-block: var(--cg-s8) var(--cg-s2);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-prose h4 {
+  margin-block: var(--cg-s6) var(--cg-s2);
+  font-size: var(--cg-text-md);
+}
+
+.cg-prose p,
+.cg-prose ul,
+.cg-prose ol {
+  margin-block: var(--cg-s4);
+}
+
+.cg-prose blockquote {
+  margin-inline: 0;
+  padding-inline-start: var(--cg-s5);
+  border-inline-start: 3px solid var(--cg-accent);
+  color: var(--cg-ink-muted);
+  font-family: var(--cogenta-font-serif);
+}
+
+.cg-prose code {
+  font-family: var(--cogenta-font-mono);
+  font-size: var(--cg-text-sm);
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-sm);
+  padding: 0.15em 0.35em;
+}
+
+.cg-prose__figure {
+  margin-inline: 0;
+}
+
+/* --- mediaFigure --------------------------------------------------------- */
+
+.cg-figure {
+  margin-inline: auto;
+}
+
+.cg-figure[data-align="start"],
+.cg-figure[data-align="end"] {
+  max-inline-size: calc(var(--cg-measure) / 2);
+}
+
+.cg-figure[data-align="start"] {
+  float: inline-start;
+  margin-inline-end: var(--cg-s6);
+}
+
+.cg-figure[data-align="end"] {
+  float: inline-end;
+  margin-inline-start: var(--cg-s6);
+}
+
+.cg-figure[data-align="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-figure__media {
+  inline-size: 100%;
+  aspect-ratio: var(--cg-ratio, auto);
+  border-radius: var(--cg-radius-md);
+}
+
+.cg-figure__caption {
+  margin-block-start: var(--cg-s3);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-figure__credit::before {
+  content: " — ";
+}
+
+/* --- featureGrid --------------------------------------------------------- */
+
+.cg-features__items {
+  display: grid;
+  gap: var(--cg-gap-loose);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.cg-feature__title {
+  margin: var(--cg-s3) 0 var(--cg-s2);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-feature__text {
+  margin: 0;
+  color: var(--cg-ink-muted);
+}
+
+/* --- cta ----------------------------------------------------------------- */
+
+.cg-cta {
+  padding: var(--cg-s12) var(--cg-gutter);
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-lg);
+  text-align: center;
+}
+
+.cg-cta__title {
+  margin: 0;
+  font-size: var(--cg-text-xl);
+}
+
+.cg-cta__text {
+  margin: var(--cg-s4) auto 0;
+  max-inline-size: var(--cg-measure);
+  color: var(--cg-ink-muted);
+}
+
+.cg-cta .cg-actions {
+  justify-content: center;
+}
+
+/* --- gallery ------------------------------------------------------------- */
+
+.cg-gallery__items {
+  display: grid;
+  gap: var(--cg-s3);
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+.cg-gallery[data-layout="masonry"] .cg-gallery__items {
+  display: block;
+  columns: 3 14rem;
+  column-gap: var(--cg-s3);
+}
+
+.cg-gallery[data-layout="masonry"] .cg-gallery__item {
+  break-inside: avoid;
+  margin-block-end: var(--cg-s3);
+}
+
+.cg-gallery[data-layout="carousel"] .cg-gallery__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(16rem, 40%);
+}
+
+.cg-gallery[data-layout="carousel"] .cg-gallery__item {
+  scroll-snap-align: start;
+}
+
+.cg-gallery__item img,
+.cg-collection img {
+  inline-size: 100%;
+  border-radius: var(--cg-radius-md);
+}
+
+/* --- quote --------------------------------------------------------------- */
+
+.cg-quote {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-quote__text {
+  margin: 0;
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-quote__attribution {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s5);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-quote__avatar {
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: 50%;
+}
+
+.cg-quote__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+/* --- faq ----------------------------------------------------------------- */
+
+.cg-faq__items {
+  border-block-start: 1px solid var(--cg-line);
+}
+
+.cg-faq__item {
+  border-block-end: 1px solid var(--cg-line);
+}
+
+.cg-faq__question {
+  display: flex;
+  align-items: center;
+  padding-block: var(--cg-s4);
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+}
+
+.cg-faq__answer {
+  padding-block-end: var(--cg-s4);
+  color: var(--cg-ink-muted);
+}
+
+/* --- stats --------------------------------------------------------------- */
+
+.cg-stats__items {
+  display: grid;
+  gap: var(--cg-gap-loose);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0;
+}
+
+/* Reading order is label then figure; the skin shows the figure first. The
+   markup is what a screen reader follows, so the two must not be conflated. */
+.cg-stat {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--cg-s1);
+}
+
+.cg-stat__value {
+  margin: 0;
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-stat__unit {
+  font-size: var(--cg-text-md);
+  color: var(--cg-ink-muted);
+}
+
+.cg-stat__label {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+/* --- logos --------------------------------------------------------------- */
+
+.cg-logos__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-gap-loose);
+}
+
+.cg-logo__image {
+  block-size: 2.5rem;
+  inline-size: auto;
+  object-fit: contain;
+}
+
+.cg-logo__link {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* --- collectionList ------------------------------------------------------ */
+
+.cg-collection__items {
+  display: grid;
+  gap: var(--cg-gap-loose);
+}
+
+.cg-collection[data-layout="grid"] .cg-collection__items {
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+}
+
+.cg-collection[data-layout="carousel"] .cg-collection__items {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(18rem, 45%);
+}
+
+.cg-entry__title {
+  margin: 0 0 var(--cg-s1);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-entry__date,
+.cg-entry__excerpt {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-collection__empty {
+  color: var(--cg-ink-subtle);
+}
+
+/* --- embed --------------------------------------------------------------- */
+
+.cg-embed {
+  aspect-ratio: var(--cg-ratio, 16 / 9);
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+}
+
+.cg-embed__frame {
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+  border-radius: var(--cg-radius-md);
+}
+
+/* The consent placeholder is a real card, not a grey box: it says what would be
+   loaded and offers a way out to the source. It requests nothing third-party. */
+.cg-embed__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s3);
+  block-size: 100%;
+  padding: var(--cg-s6);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  border: 1px dashed var(--cg-line);
+  border-radius: var(--cg-radius-md);
+  text-align: center;
+}
+
+.cg-embed__notice {
+  margin: 0;
+}
+
+.cg-embed__link {
+  color: var(--cg-accent);
+}

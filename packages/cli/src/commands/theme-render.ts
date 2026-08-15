@@ -5,6 +5,8 @@ import { renderSkin } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type ContentEntry, matchPath } from '@cogenta/schema'
 import {
   query as collectionListQuery,
+  escapeAttribute,
+  escapeText,
   type FetchedEntries,
   type LinkTargetInput,
   type PageContent,
@@ -15,6 +17,7 @@ import {
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
 } from '@cogenta/theme-canonical'
+import { minifyCss } from './theme-css.js'
 
 /**
  * The theme's own `ContentEntry`/`QueryRequest` (`theme-contract.ts`) are a
@@ -88,8 +91,13 @@ export interface ThemeRenderOptions {
     readonly locales: readonly string[]
     readonly defaultLocale: string
   }
-  /** `null` when the project has no `theme.tokens.json` — served unstyled rather than refused. */
-  readonly skinCss: string | null
+  /**
+   * The whole stylesheet: the skin's generated `--cogenta-*` custom properties
+   * followed by the theme's own sheet, already flattened and minified (see
+   * `theme-css.ts`). `null` when neither could be loaded — served unstyled
+   * rather than refused.
+   */
+  readonly styles: string | null
 }
 
 function fieldOfKind(collection: CollectionDefinition, kind: string): string | undefined {
@@ -309,16 +317,27 @@ export async function renderRequestedPage(
   const node = renderPage(pageContent, themeContext, fetchedEntries as FetchedEntries)
   const bodyHtml = serialize(node)
 
+  const siteName = escapeAttribute(options.site.name)
+
+  // The same frame `Base.astro` builds for a real Astro build: a skip link
+  // first, the site name as a header, the content, a footer. Rendering the
+  // `<main>` alone — which this did until the theme's own stylesheet started
+  // being served — left every page with no landmark to skip to and no way back
+  // to the home page.
   return `<!doctype html>
-<html lang="${themeContext.locale}">
+<html lang="${themeContext.locale}" dir="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${pageContent.title} — ${options.site.name}</title>
-${options.skinCss === null ? '' : `<style>${options.skinCss}</style>`}
+<meta name="color-scheme" content="light dark">
+<title>${escapeText(pageContent.title)} — ${escapeText(options.site.name)}</title>
+${options.styles === null ? '' : `<style>${options.styles}</style>`}
 </head>
 <body>
+<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a></div></header>
 ${bodyHtml}
+<footer class="cg-site-footer"><div class="cg-site-footer__inner">${siteName}</div></footer>
 </body>
 </html>
 `
@@ -340,4 +359,20 @@ export async function loadSkinCss(
   } catch {
     return null
   }
+}
+
+/**
+ * The two sheets a page needs, in the only order that works: the skin's
+ * generated custom properties first, then the theme's stylesheet that reads
+ * them. Either half may be missing — a project with no `theme.tokens.json`
+ * still gets the theme's layout, and a theme package that cannot be resolved
+ * still gets the skin's properties — and a page with neither is served
+ * unstyled rather than refused.
+ */
+export function joinStyles(skinCss: string | null, themeCss: string | null): string | null {
+  const sheets = [
+    skinCss === null ? null : minifyCss(skinCss),
+    themeCss === null ? null : minifyCss(themeCss),
+  ].filter((sheet): sheet is string => sheet !== null)
+  return sheets.length === 0 ? null : sheets.join('\n')
 }

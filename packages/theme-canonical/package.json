@@ -18,7 +18,8 @@
     "./blocks/*.astro": "./src/blocks/*.astro",
     "./layouts/*.astro": "./src/layouts/*.astro",
     "./components/*.astro": "./src/components/*.astro",
-    "./styles/theme.css": "./src/styles/theme.css"
+    "./styles/theme.css": "./src/styles/theme.css",
+    "./styles/*.css": "./src/styles/*.css"
   },
   "files": [
     "dist",

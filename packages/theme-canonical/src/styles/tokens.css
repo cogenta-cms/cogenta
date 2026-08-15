@@ -1,0 +1,339 @@
+/*
+ * The canonical theme's design system.
+ *
+ * Contract D fixes a *closed* skin token set — seven colours, five type tokens,
+ * two spacing tokens, three radii, three motion tokens, two shadows — and
+ * refuses any skin that adds one. So this layer adds nothing to the skin: every
+ * value below is *derived* from `--cogenta-*` by composition (`calc`,
+ * `color-mix`, relative colour syntax). A skin swap rewrites the generated
+ * `--cogenta-*` sheet and this whole system follows, with no build step, which
+ * is what contract D's hot swap means in practice.
+ *
+ * Two rules hold everywhere in this file and the two that import it:
+ *
+ * 1. **No colour literal.** Not one hex, `rgb()`, `hsl()` or bare `oklch()`.
+ *    Every colour is either a skin token or a function *of* a skin token, so
+ *    there is no colour on the page a skin cannot change. `theme.css`'s own
+ *    isolation test enforces this on the source.
+ * 2. **No second scale.** The type steps come from `--cogenta-font-size-*` and
+ *    the spacing multiplier from `--cogenta-space-scale`, both emitted by
+ *    `renderSkin` from the same tokens the validator checked. Re-deriving them
+ *    here would let the theme's idea of "large" drift from the skin's.
+ */
+
+:where(:root) {
+  /* Lets the browser paint native controls, scrollbars and form widgets in the
+     right scheme, and is what makes `light-dark()` below resolve at all. */
+  color-scheme: light dark;
+}
+
+/* An explicit choice wins over the OS preference. No script ships with this
+   theme to set it; the attribute is the hook a site (or the admin) can flip. */
+:where(:root[data-theme="dark"]) {
+  color-scheme: dark;
+}
+
+:where(:root[data-theme="light"]) {
+  color-scheme: light;
+}
+
+/* --------------------------------------------------------------------------
+   Space — one multiplier, one unit, a scale of multiples
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  /* `renderSkin` turns the skin's `space.density` word into this number.
+     The fallback keeps the theme usable against a hand-written sheet. */
+  --cg-density: var(--cogenta-space-scale, 1);
+  --cg-unit: calc(var(--cogenta-space-unit) * var(--cg-density));
+
+  --cg-s1: calc(var(--cg-unit) * 1);
+  --cg-s2: calc(var(--cg-unit) * 2);
+  --cg-s3: calc(var(--cg-unit) * 3);
+  --cg-s4: calc(var(--cg-unit) * 4);
+  --cg-s5: calc(var(--cg-unit) * 5);
+  --cg-s6: calc(var(--cg-unit) * 6);
+  --cg-s8: calc(var(--cg-unit) * 8);
+  --cg-s10: calc(var(--cg-unit) * 10);
+  --cg-s12: calc(var(--cg-unit) * 12);
+  --cg-s16: calc(var(--cg-unit) * 16);
+  --cg-s20: calc(var(--cg-unit) * 20);
+  --cg-s24: calc(var(--cg-unit) * 24);
+
+  /* Named steps, so a block says what it means rather than picking a number. */
+  --cg-gutter: var(--cg-s5);
+  --cg-gap-tight: var(--cg-s2);
+  --cg-gap: var(--cg-s4);
+  --cg-gap-loose: var(--cg-s8);
+  --cg-section-y: var(--cg-s16);
+
+  --cg-measure: 68ch;
+  --cg-measure-narrow: 46ch;
+  --cg-page: 76rem;
+  --cg-page-narrow: 52rem;
+}
+
+/* `space.density` is a skin-wide word; these let one region override it — a
+   compact sidebar inside a spacious page. CSS still cannot branch on the
+   *value* of a custom property, so the attribute stays the mechanism. */
+:where([data-density="compact"]) {
+  --cg-density: 0.75;
+}
+
+:where([data-density="comfortable"]) {
+  --cg-density: 1;
+}
+
+:where([data-density="spacious"]) {
+  --cg-density: 1.25;
+}
+
+/* --------------------------------------------------------------------------
+   Type — the skin's scale, named; plus the rhythm the scale does not carry
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  /* Seven steps, computed by `renderSkin` as `baseSize * scale^(n-2)`. The
+     fallbacks matter: a sheet from an older skin renderer would otherwise
+     leave every font size unset. */
+  --cg-text-xs: var(--cogenta-font-size-xs, 0.64rem);
+  --cg-text-sm: var(--cogenta-font-size-sm, 0.8rem);
+  --cg-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1rem));
+  --cg-text-lg: var(--cogenta-font-size-lg, 1.25rem);
+  --cg-text-xl: var(--cogenta-font-size-xl, 1.5625rem);
+  --cg-text-2xl: var(--cogenta-font-size-2xl, 1.9531rem);
+  --cg-text-3xl: var(--cogenta-font-size-3xl, 2.4414rem);
+
+  /* Unitless throughout: a line height inherited as a fixed pixel value is the
+     classic cause of clipped text at 200% zoom (WCAG 1.4.4). */
+  --cg-leading-tight: 1.06;
+  --cg-leading-snug: 1.2;
+  --cg-leading-normal: 1.5;
+  --cg-leading-relaxed: 1.7;
+
+  /* Display type needs negative tracking to stop looking loose; small caps
+     labels need positive. Both are ems, so they follow the font size. */
+  --cg-tracking-tight: -0.022em;
+  --cg-tracking-snug: -0.012em;
+  --cg-tracking-normal: 0em;
+  --cg-tracking-wide: 0.08em;
+
+  --cg-weight-regular: 400;
+  --cg-weight-medium: 500;
+  --cg-weight-semibold: 600;
+  --cg-weight-bold: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Radius — the skin's three, plus the two ends they imply
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-radius-xs: calc(var(--cogenta-radius-sm) / 2);
+  --cg-radius-sm: var(--cogenta-radius-sm);
+  --cg-radius-md: var(--cogenta-radius-md);
+  --cg-radius-lg: var(--cogenta-radius-lg);
+  /* Panels and media want to round harder than a button does. Derived, so a
+     square skin (`radius.lg: 0`) stays square all the way up. */
+  --cg-radius-xl: calc(var(--cogenta-radius-lg) * 1.75);
+  --cg-radius-pill: 999rem;
+}
+
+/* --------------------------------------------------------------------------
+   Motion
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-duration-fast: calc(var(--cogenta-motion-duration) * 0.6);
+  --cg-duration: var(--cogenta-motion-duration);
+  --cg-duration-slow: calc(var(--cogenta-motion-duration) * 2.6);
+  --cg-ease: var(--cogenta-motion-easing);
+}
+
+/* --------------------------------------------------------------------------
+   Colour — one palette per scheme, both derived from the same seven tokens
+   --------------------------------------------------------------------------
+
+   The block below declares the **light** palette in plain terms. The scheme
+   aware values live in the `@supports` block after it, and only there.
+
+   Why the split rather than one `light-dark()` per token: a custom property
+   accepts any token sequence, so a browser that does not know `light-dark()`
+   still stores the declaration and only fails when the value is *used* — at
+   which point the property becomes `unset` and the page loses its colour. A
+   feature query is the only construct that actually falls back here, and it is
+   written with `currentColor` so it needs no colour literal of its own.
+
+   **The dark palette is designed, not inverted.** Five decisions separate it
+   from a mechanical swap of `bg` and `fg`, and each one is the opposite of what
+   inversion produces:
+
+   1. *Elevation runs the other way.* In light, a raised surface is the same
+      paper with a shadow under it. In dark, a shadow on a dark ground conveys
+      nothing, so elevation is expressed as **lightness**: sunken < canvas <
+      surface < raised, each a step up in L. Shadows give way to a hairline
+      ring (`--cg-ring`).
+   2. *The accent is lifted, not kept.* A mid-dark accent that reads well on
+      paper is muddy on ink, so the dark accent is pushed to L 0.74 — brighter
+      than the skin's own accent, which inversion would never do.
+   3. *Therefore the accent's foreground flips to dark.* Light label text on a
+      lifted accent fails contrast; the dark palette derives an ink-dark
+      `accent-fg` from the accent's own hue. This is the clearest single
+      difference from inversion, which would have kept the skin's `accentFg`.
+   4. *Text is never pure light.* Ink is L 0.945 with a trace of the accent's
+      chroma — off-white reduces the halation pure white causes on dark.
+   5. *Borders become light overlays.* A darker line on a dark surface is
+      invisible; the dark border is a step up in lightness, not down.
+
+   The hue and chroma of every dark value come from a skin token, so a skin with
+   an orange accent gets a warm dark palette without touching this file. The
+   *lightness* targets are the theme's — which is exactly the split contract D
+   draws: the skin owns the colours, the theme owns what it does with them.
+
+   Every ratio these values produce is computed for real, from this file, by
+   `test/design-system.test.ts` — in both schemes, against the AA body
+   threshold. None of the numbers above is a comment to be trusted.
+
+   Known limit, recorded in `BLOCKERS.md`: the derivation assumes a light-first
+   skin (`bg` lighter than `fg`), which is what contract D's default and all
+   nine blueprints use. A skin that is already dark would need a second colour
+   group in the contract — a `theme@2.0` bump, not a change this theme can make.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-canvas: var(--cogenta-color-bg);
+  --cg-surface: var(--cogenta-color-bg);
+  --cg-surface-raised: var(--cogenta-color-bg);
+  --cg-surface-sunken: var(--cogenta-color-muted);
+  --cg-surface-tinted: color-mix(in oklab, var(--cogenta-color-accent) 8%, var(--cogenta-color-bg));
+
+  --cg-ink: var(--cogenta-color-fg);
+  --cg-ink-muted: var(--cogenta-color-muted-fg);
+  /* Tertiary: timestamps, credits, the second line of a card. */
+  --cg-ink-subtle: color-mix(in oklab, var(--cogenta-color-muted-fg) 88%, var(--cogenta-color-bg));
+
+  --cg-accent: var(--cogenta-color-accent);
+  --cg-accent-fg: var(--cogenta-color-accent-fg);
+  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 86%, var(--cogenta-color-fg));
+  --cg-accent-soft: color-mix(in oklab, var(--cogenta-color-accent) 10%, var(--cogenta-color-bg));
+  --cg-accent-soft-fg: color-mix(
+    in oklab,
+    var(--cogenta-color-accent) 68%,
+    var(--cogenta-color-fg)
+  );
+
+  --cg-line: var(--cogenta-color-border);
+  --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg));
+  --cg-line-strong: color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-fg));
+
+  /* Overlay ground, for a scrim over media. */
+  --cg-scrim: color-mix(in oklab, var(--cogenta-color-fg) 62%, transparent);
+}
+
+@supports (color: light-dark(currentColor, currentColor)) and
+  (color: oklch(from currentColor l c h)) {
+  :where(:root) {
+    --cg-canvas: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.17 calc(c * 0.7) h)
+    );
+    --cg-surface: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.215 calc(c * 0.62) h)
+    );
+    --cg-surface-raised: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.26 calc(c * 0.55) h)
+    );
+    --cg-surface-sunken: light-dark(
+      var(--cogenta-color-muted),
+      oklch(from var(--cogenta-color-fg) 0.13 calc(c * 0.8) h)
+    );
+    --cg-surface-tinted: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 8%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.255 calc(c * 0.5) h)
+    );
+
+    --cg-ink: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-accent) 0.945 0.012 h)
+    );
+    --cg-ink-muted: light-dark(
+      var(--cogenta-color-muted-fg),
+      oklch(from var(--cogenta-color-accent) 0.78 0.018 h)
+    );
+    --cg-ink-subtle: light-dark(
+      color-mix(in oklab, var(--cogenta-color-muted-fg) 88%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.68 0.016 h)
+    );
+
+    --cg-accent: light-dark(
+      var(--cogenta-color-accent),
+      oklch(from var(--cogenta-color-accent) 0.74 calc(c * 0.85) h)
+    );
+    --cg-accent-fg: light-dark(
+      var(--cogenta-color-accent-fg),
+      oklch(from var(--cogenta-color-accent) 0.18 calc(c * 0.55) h)
+    );
+    --cg-accent-hover: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 86%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.82 calc(c * 0.8) h)
+    );
+    --cg-accent-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 10%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.3 calc(c * 0.5) h)
+    );
+    --cg-accent-soft-fg: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 68%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.9 calc(c * 0.45) h)
+    );
+
+    --cg-line: light-dark(
+      var(--cogenta-color-border),
+      oklch(from var(--cogenta-color-accent) 0.33 calc(c * 0.22) h)
+    );
+    --cg-line-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.26 calc(c * 0.2) h)
+    );
+    --cg-line-strong: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.58 calc(c * 0.25) h)
+    );
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Elevation — a shadow in light, a lighter surface and a ring in dark
+   --------------------------------------------------------------------------
+
+   `light-dark()` takes colours only, so these three cannot use it: a shadow is
+   not a colour. They are the one place in this file where the dark values are
+   written under a media query and repeated for the explicit toggle.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  /* Inset, so it never adds to the box's size and can sit in the same
+     `box-shadow` list as a real drop shadow. */
+  --cg-ring: inset 0 0 0 1px var(--cg-line);
+  --cg-ring-accent: inset 0 0 0 1px var(--cg-accent);
+
+  --cg-elevation-0: none;
+  --cg-elevation-1: var(--cogenta-shadow-sm);
+  --cg-elevation-2: var(--cogenta-shadow-md);
+  --cg-elevation-3: var(--cogenta-shadow-md), var(--cogenta-shadow-sm);
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) {
+    --cg-elevation-1: var(--cg-ring);
+    --cg-elevation-2: var(--cg-ring);
+    --cg-elevation-3: var(--cg-ring), var(--cogenta-shadow-md);
+  }
+}
+
+:where(:root[data-theme="dark"]) {
+  --cg-elevation-1: var(--cg-ring);
+  --cg-elevation-2: var(--cg-ring);
+  --cg-elevation-3: var(--cg-ring), var(--cogenta-shadow-md);
+}

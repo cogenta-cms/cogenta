@@ -1,0 +1,338 @@
+/*
+ * Document, accessibility floor, page frame and the one control the theme
+ * ships (an action link). Everything here reads the design system from
+ * `tokens.css`; nothing here reads a `--cogenta-*` token directly, so a value
+ * that needs changing is changed in one place.
+ */
+
+/* --------------------------------------------------------------------------
+   Document
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-normal);
+  /* Two opt-in font features rather than a font choice: `kern` is what stops
+     display type looking loose, `liga` what stops "fi" breaking apart. Both
+     are no-ops on a font that lacks them. */
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  text-underline-offset: 0.16em;
+  text-decoration-thickness: from-font;
+  -webkit-text-size-adjust: 100%;
+}
+
+::selection {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+img,
+video,
+iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+img {
+  display: block;
+  object-fit: cover;
+}
+
+:where(a) {
+  color: var(--cg-accent);
+  text-decoration-color: color-mix(in oklab, var(--cg-accent) 45%, transparent);
+  transition:
+    color var(--cg-duration-fast) var(--cg-ease),
+    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+}
+
+:where(a:hover) {
+  color: var(--cg-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+:where(hr) {
+  block-size: 1px;
+  border: 0;
+  margin-block: var(--cg-s10);
+  background: var(--cg-line);
+}
+
+/* --------------------------------------------------------------------------
+   Focus, targets, motion — the three that decide whether AA holds
+   -------------------------------------------------------------------------- */
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  /* Two solid pixels against the page, offset so it never sits on the glyphs.
+     `outline`, not `box-shadow`: it survives forced-colors mode. */
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+  border-radius: var(--cg-radius-sm);
+}
+
+/* WCAG 2.2 asks 24x24 minimum (2.5.8); 44x44 is the comfortable target and
+   costs nothing here. Applied to the theme's own controls only — an inline link
+   inside a paragraph is exempt, and padding it would break the text flow. */
+:where(.cg-action, .cg-faq__question, .cg-logo__link) {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+/* The entrance animation the blocks opt into. Scroll-driven, so it plays as a
+   block arrives rather than firing eleven at once on load, and wrapped in a
+   feature query because the starting state is `opacity: 0`: a browser without
+   `animation-timeline` must never be left holding an invisible page. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes cg-rise {
+      from {
+        opacity: 0;
+        transform: translateY(var(--cg-s4));
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .cg-block {
+      animation: cg-rise linear both;
+      animation-timeline: view();
+      /* Fully in by the time the block is a fifth of the way up the viewport;
+         it never animates back out on the way past. */
+      animation-range: entry 0% cover 22%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The `motion.reduced` token says the skin's motion may be removed. Nothing
+     in this theme conveys meaning through movement, so removing all of it is
+     safe — including the smooth scroll of the carousel, which is the one people
+     forget and which triggers vestibular symptoms. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.cg-skip-link {
+  position: absolute;
+  inset-inline-start: var(--cg-s3);
+  inset-block-start: calc(var(--cg-s3) * -8);
+  z-index: 10;
+  padding: var(--cg-s2) var(--cg-s4);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cg-elevation-2);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration: none;
+  /* Moved, never hidden: `display:none` would take it out of the tab order,
+     which is the whole point of a skip link (WCAG 2.4.1). */
+  transition: inset-block-start var(--cg-duration) var(--cg-ease);
+}
+
+.cg-skip-link:focus-visible {
+  inset-block-start: var(--cg-s3);
+}
+
+/* --------------------------------------------------------------------------
+   Page frame
+   -------------------------------------------------------------------------- */
+
+.cg-main {
+  display: flow-root;
+  padding-block-end: var(--cg-section-y);
+}
+
+/* The one measurement every block shares. A block that wants to break out of
+   it says so itself (`.cg-figure[data-align="full"]`), so the default stays
+   one rule instead of eleven. */
+.cg-block {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y);
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-page__title {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s6);
+  padding-inline: var(--cg-gutter);
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 5;
+  padding: var(--cg-s4) var(--cg-gutter);
+  background: color-mix(in oklab, var(--cg-canvas) 82%, transparent);
+  border-block-end: 1px solid var(--cg-line-soft);
+  /* Progressive: a browser without it simply gets the translucent ground. */
+  backdrop-filter: saturate(1.4) blur(12px);
+}
+
+.cg-site-header__inner,
+.cg-site-footer__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-gap);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+}
+
+.cg-site-header__home {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+  font-size: var(--cg-text-lg);
+  letter-spacing: var(--cg-tracking-snug);
+  text-decoration: none;
+  margin-inline-end: auto;
+}
+
+.cg-site-footer {
+  margin-block-start: var(--cg-section-y);
+  padding: var(--cg-s12) var(--cg-gutter);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  border-block-start: 1px solid var(--cg-line-soft);
+  font-size: var(--cg-text-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Actions — the theme's only control
+   -------------------------------------------------------------------------- */
+
+.cg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: var(--cg-s8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s2);
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 0;
+  border-radius: var(--cg-radius-md);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-snug);
+  line-height: var(--cg-leading-snug);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration-fast) var(--cg-ease);
+}
+
+/* `emphasis` stays a data attribute, never a class: it is the editor's
+   semantic intent, and the skin — not the block — decides what it looks like. */
+.cg-action[data-emphasis="primary"] {
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  box-shadow: var(--cg-elevation-1);
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-accent-hover);
+  box-shadow: var(--cg-elevation-2);
+  transform: translateY(-1px);
+}
+
+.cg-action[data-emphasis="secondary"] {
+  background: var(--cg-surface);
+  color: var(--cg-ink);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-action[data-emphasis="secondary"]:hover {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+  box-shadow: var(--cg-ring-accent);
+}
+
+/* The press. Without it a hover lift reads as a bug on touch, where there is
+   no hover to come back from. */
+.cg-action:active {
+  transform: translateY(0);
+  box-shadow: var(--cg-elevation-1);
+}
+
+/* --------------------------------------------------------------------------
+   Shared block furniture
+   -------------------------------------------------------------------------- */
+
+/* Every block that carries a heading uses the same one, so eleven blocks do
+   not drift into eleven title sizes. */
+.cg-features__title,
+.cg-cta__title,
+.cg-faq__title,
+.cg-stats__title,
+.cg-logos__title,
+.cg-collection__title {
+  margin: 0 0 var(--cg-s8);
+  font-size: var(--cg-text-xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-features__items,
+.cg-logos__items,
+.cg-gallery__items,
+.cg-collection__items,
+.cg-faq__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A scroll-snapping row, used by both `gallery` and `collectionList`. The
+   container is focusable and labelled, so it is operable from the keyboard —
+   at zero bytes of JavaScript. */
+.cg-gallery__viewport,
+.cg-collection__viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cg-line-strong) transparent;
+  /* Room for the focus ring and the hover lift, which would otherwise be
+     clipped by the scroll container. */
+  padding-block: var(--cg-s2);
+  margin-block: calc(var(--cg-s2) * -1);
+}

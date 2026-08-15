@@ -57,3 +57,19 @@ export type {
   SiteInventory,
 } from './inventory/drift.js'
 export { computeFleetBaseline, detectDrift, extractInventory } from './inventory/drift.js'
+export type {
+  CampaignRecord,
+  CampaignStatus,
+  CampaignWave,
+  CampaignWaveLabel,
+  RolloutCampaignStore,
+  SiteRolloutRecord,
+  SiteRolloutStatus,
+  StartCampaignInput,
+} from './rollout/campaign.js'
+export {
+  createRolloutCampaignStore,
+  orderSitesForCanary,
+  planWaves,
+} from './rollout/campaign.js'
+export { ensureRolloutTables, ROLLOUT_TABLES } from './rollout/tables.js'

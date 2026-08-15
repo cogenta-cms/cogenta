@@ -236,6 +236,10 @@ export const ERROR_CODES = [
   // Fleet — site-side telemetry emission (L8 task 2)
   'FLEET_TELEMETRY_FORBIDDEN_FIELD',
 
+  // Fleet — rollout campaigns (L8 task 7)
+  'FLEET_CAMPAIGN_NOT_FOUND',
+  'FLEET_CAMPAIGN_STATE_CORRUPT',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

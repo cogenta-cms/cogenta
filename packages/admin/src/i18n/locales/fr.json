@@ -231,5 +231,16 @@
     "passkeySubmit": "Ajouter une clé d’accès",
     "languageHeading": "Langue de l'interface",
     "languageLabel": "Langue"
+  },
+  "pluginPermissions": {
+    "heading": "Autorisations demandées",
+    "intro": "Voici, en langage clair, ce que « {{name}} » pourra faire sur votre site.",
+    "riskLow": "Risque faible",
+    "riskMedium": "Risque modéré",
+    "riskHigh": "Risque élevé — confirmation requise",
+    "confirmHighRisk": "Je comprends et j'autorise cette action à risque élevé",
+    "approveAll": "Tout autoriser sans les lire un par un",
+    "approveReviewed": "Autoriser les permissions cochées",
+    "noCapabilities": "Ce plugin ne demande aucune autorisation particulière."
   }
 }

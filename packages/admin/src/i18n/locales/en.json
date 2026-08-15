@@ -231,5 +231,16 @@
     "passkeySubmit": "Add a passkey",
     "languageHeading": "Interface language",
     "languageLabel": "Language"
+  },
+  "pluginPermissions": {
+    "heading": "Permissions requested",
+    "intro": "Here, in plain language, is what \"{{name}}\" will be able to do on your site.",
+    "riskLow": "Low risk",
+    "riskMedium": "Medium risk",
+    "riskHigh": "High risk — confirmation required",
+    "confirmHighRisk": "I understand and allow this high-risk action",
+    "approveAll": "Approve all without reading them one by one",
+    "approveReviewed": "Approve the checked permissions",
+    "noCapabilities": "This plugin does not request any particular permission."
   }
 }

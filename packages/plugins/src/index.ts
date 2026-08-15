@@ -28,6 +28,11 @@ export {
   PLUGIN_RUNTIMES,
 } from './manifest.js'
 export type {
+  PluginCapabilityDescription,
+  PluginCapabilityRisk,
+} from './permissions/describe.js'
+export { DESCRIBABLE_CAPABILITY_NAMES, describeCapability } from './permissions/describe.js'
+export type {
   PluginDisabledRecord,
   PluginDisableStore,
   PluginViolationReason,

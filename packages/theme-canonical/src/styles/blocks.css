@@ -7,24 +7,58 @@
  * swap a whole-theme change rather than a per-block one.
  */
 
-/* --- hero ---------------------------------------------------------------- */
+/* --- hero ----------------------------------------------------------------
+   The page's first impression, so it is the one block that gets a decorative
+   element of its own: a soft wash of the skin's accent behind the media. It is
+   drawn on a pseudo-element and sized to stay inside the block's own box —
+   a decoration that widens the page produces a horizontal scrollbar, which is
+   the classic way a hero breaks a phone.
+   ------------------------------------------------------------------------- */
 
 .cg-hero {
+  position: relative;
+  /* A stacking context of its own, so `z-index: -1` on the wash puts it behind
+     the hero's content and not behind the page background. */
+  isolation: isolate;
   display: grid;
   gap: var(--cg-gap-loose);
   align-items: center;
+  margin-block-start: var(--cg-s10);
+}
+
+.cg-hero::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: var(--cg-gutter);
+  inline-size: min(30rem, 70%);
+  aspect-ratio: 1;
+  z-index: -1;
+  background: radial-gradient(circle at 60% 40%, var(--cg-accent-soft), transparent 68%);
+  pointer-events: none;
 }
 
 @media (min-width: 60rem) {
   .cg-hero {
-    grid-template-columns: 1fr 1fr;
+    /* Not 1fr 1fr: the copy carries the weight, and an even split makes both
+       halves look accidental. */
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: var(--cg-s16);
   }
 }
 
+/* A badge, not a line of small text: it is the one label above the h1 and it
+   has to look deliberate. */
 .cg-hero__eyebrow {
-  margin: 0 0 var(--cg-s3);
-  color: var(--cg-ink-muted);
-  font-size: var(--cg-text-sm);
+  display: inline-block;
+  margin: 0 0 var(--cg-s5);
+  padding: var(--cg-s1) var(--cg-s3);
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+  border-radius: var(--cg-radius-pill);
+  box-shadow: var(--cg-ring-accent);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
   letter-spacing: var(--cg-tracking-wide);
   text-transform: uppercase;
 }
@@ -35,12 +69,22 @@
   line-height: var(--cg-leading-tight);
   letter-spacing: var(--cg-tracking-tight);
   font-weight: var(--cg-weight-bold);
+  /* Display type wraps into a shape, not into a ragged column. */
   text-wrap: balance;
+}
+
+/* Above 60rem the title is allowed one step larger than the page title — the
+   hero *is* the page title there, and the extra step is what separates a hero
+   from a heading with a picture next to it. */
+@media (min-width: 60rem) {
+  .cg-hero__title {
+    font-size: calc(var(--cg-text-3xl) * 1.15);
+  }
 }
 
 .cg-hero__subtitle {
   margin: var(--cg-s5) 0 0;
-  max-inline-size: var(--cg-measure);
+  max-inline-size: var(--cg-measure-narrow);
   font-size: var(--cg-text-lg);
   line-height: var(--cg-leading-relaxed);
   color: var(--cg-ink-muted);
@@ -49,8 +93,8 @@
 
 .cg-hero__media img {
   inline-size: 100%;
-  border-radius: var(--cg-radius-lg);
-  box-shadow: var(--cg-elevation-3);
+  border-radius: var(--cg-radius-xl);
+  box-shadow: var(--cg-elevation-3), var(--cg-ring);
 }
 
 /* --- prose --------------------------------------------------------------- */

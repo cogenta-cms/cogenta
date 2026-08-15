@@ -47,6 +47,32 @@ export interface CogentaConfigInput {
     /** Prefix for public media URLs. */
     readonly baseUrl?: string
   }
+  /**
+   * HTTP hardening for the server that answers requests (L10 task 6).
+   *
+   * Every field is off or permissive-by-omission rather than on: this section
+   * describes a deployment, and a default that guesses wrong is either a site
+   * nobody can call from their frontend (CORS) or a site nobody can reach at
+   * all (HSTS on a host without HTTPS).
+   */
+  readonly security?: {
+    readonly cors?: {
+      /** Exact origins, or the single value `*`. Empty — the default — means CORS is off. */
+      readonly origins?: readonly string[]
+      readonly methods?: readonly string[]
+      readonly headers?: readonly string[]
+      /** Never valid together with the `*` origin; the config refuses that pair. */
+      readonly credentials?: boolean
+      readonly maxAge?: number
+    }
+    /** `Content-Security-Policy`, verbatim. `false` sends none. */
+    readonly csp?: string | false
+    /** `Strict-Transport-Security` max-age in seconds. `0` — the default — sends none. */
+    readonly hstsMaxAge?: number
+    readonly hstsIncludeSubDomains?: boolean
+    /** How long a public page may be cached, in seconds. */
+    readonly pageMaxAge?: number
+  }
   readonly llm?: {
     readonly provider?: string
     readonly model?: string
@@ -106,6 +132,19 @@ export interface CogentaConfig {
    */
   readonly auth: {
     readonly signingKey: string | undefined
+  }
+  readonly security: {
+    readonly cors: {
+      readonly origins: readonly string[]
+      readonly methods: readonly string[]
+      readonly headers: readonly string[]
+      readonly credentials: boolean
+      readonly maxAge: number
+    }
+    readonly csp: string | false | undefined
+    readonly hstsMaxAge: number
+    readonly hstsIncludeSubDomains: boolean
+    readonly pageMaxAge: number
   }
   /** Absent when no provider is configured. The CMS works without AI (rule R2). */
   readonly llm:

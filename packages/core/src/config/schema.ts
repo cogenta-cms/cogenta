@@ -58,6 +58,57 @@ const llmSchema = z.strictObject({
   baseUrl: nonEmpty.optional(),
 })
 
+/**
+ * CORS, off unless a site names an origin (L10 task 6).
+ *
+ * There is no `enabled` flag on purpose: the list of allowed origins *is* the
+ * switch, so "CORS is on" and "these origins may read it" cannot drift apart.
+ * `'*'` is accepted and refused in the same breath as credentials — a wildcard
+ * with credentials is rejected by every browser, and silently emitting the
+ * pair would look configured while doing nothing.
+ */
+const corsSchema = z
+  .strictObject({
+    /** Exact origins (`https://app.example.com`), or the single value `*`. Empty means CORS is off. */
+    origins: z.array(nonEmpty).default([]),
+    methods: z.array(nonEmpty).default(['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE']),
+    headers: z.array(nonEmpty).default(['content-type', 'authorization']),
+    /** Allows a browser to send cookies and `Authorization`. Never valid with `*`. */
+    credentials: z.boolean().default(false),
+    /** Seconds a browser may cache a preflight. */
+    maxAge: z.number().int().nonnegative().max(86_400).default(600),
+  })
+  .refine((cors) => !(cors.credentials && cors.origins.includes('*')), {
+    error: 'credentials cannot be combined with the "*" origin — every browser refuses that pair',
+    path: ['credentials'],
+  })
+
+const securitySchema = z.strictObject({
+  cors: corsSchema.prefault({}),
+  /**
+   * `Content-Security-Policy`, verbatim.
+   *
+   * A string rather than a builder: a CSP is a deployment decision that
+   * depends on which analytics, fonts and embeds a site actually uses, and a
+   * builder that covers half of them produces a policy nobody can predict
+   * from reading the config. `false` sends no header at all — for the site
+   * that already sets one at its reverse proxy.
+   */
+  csp: z.union([nonEmpty, z.literal(false)]).optional(),
+  /**
+   * `Strict-Transport-Security`, in seconds. `0` disables it.
+   *
+   * Off by default, and that is not timidity: HSTS on a host that is not yet
+   * fully HTTPS locks browsers out of it for `maxAge` seconds with no way to
+   * undo it from the server side. It is the one header a wrong default can
+   * take a site offline with.
+   */
+  hstsMaxAge: z.number().int().nonnegative().max(63_072_000).default(0),
+  hstsIncludeSubDomains: z.boolean().default(true),
+  /** How long a public page may be cached, in seconds. */
+  pageMaxAge: z.number().int().nonnegative().max(86_400).default(60),
+})
+
 const embeddingsSchema = z.strictObject({
   provider: z.enum(EMBEDDINGS_PROVIDERS).default('local'),
   model: nonEmpty.default('all-MiniLM-L6-v2'),
@@ -72,6 +123,7 @@ export const configSchema = z.strictObject({
   cache: cacheSchema.prefault({}),
   queue: queueSchema.prefault({}),
   storage: storageSchema.prefault({}),
+  security: securitySchema.prefault({}),
   llm: llmSchema.optional(),
   embeddings: embeddingsSchema.prefault({}),
 })

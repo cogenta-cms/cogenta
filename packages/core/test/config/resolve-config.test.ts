@@ -297,3 +297,47 @@ describe('resolveConfig — paths are relative to the config file', () => {
     expect(config.database.url).toBe('./site.db')
   })
 })
+
+describe('resolveConfig — security (L10 task 6)', () => {
+  it('leaves CORS off, CSP absent and HSTS at zero when nothing is configured', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    // Every one of these is a deployment decision, and a wrong default is
+    // either a site nobody can call from their frontend or — for HSTS — a
+    // site nobody can reach at all.
+    expect(config.security.cors.origins).toEqual([])
+    expect(config.security.cors.credentials).toBe(false)
+    expect(config.security.csp).toBeUndefined()
+    expect(config.security.hstsMaxAge).toBe(0)
+  })
+
+  it('caches a public page briefly by default, so a publish is visible without a purge', () => {
+    expect(resolveConfig(minimal, noEnv).security.pageMaxAge).toBe(60)
+  })
+
+  it('keeps the methods and headers a headless client needs, without being asked', () => {
+    const config = resolveConfig(
+      { ...minimal, security: { cors: { origins: ['https://app.example.com'] } } },
+      noEnv,
+    )
+
+    expect(config.security.cors.origins).toEqual(['https://app.example.com'])
+    expect(config.security.cors.methods).toContain('PATCH')
+    expect(config.security.cors.headers).toContain('authorization')
+  })
+
+  it('refuses credentials together with the wildcard origin, which no browser accepts', () => {
+    expect(() =>
+      resolveConfig(
+        { ...minimal, security: { cors: { origins: ['*'], credentials: true } } },
+        noEnv,
+      ),
+    ).toThrow(CogentaError)
+  })
+
+  it('refuses an unknown security key rather than ignoring a typo', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, security: { hstsMaxAge: 100, hsts: true } }, noEnv),
+    ).toThrow(CogentaError)
+  })
+})

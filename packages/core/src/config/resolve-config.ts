@@ -148,6 +148,19 @@ export function resolveConfig(
       secretAccessKey: secrets.storageSecretAccessKey,
     }),
     auth: Object.freeze({ signingKey: secrets.authSigningKey }),
+    security: Object.freeze({
+      cors: Object.freeze({
+        origins: Object.freeze([...config.security.cors.origins]),
+        methods: Object.freeze([...config.security.cors.methods]),
+        headers: Object.freeze([...config.security.cors.headers]),
+        credentials: config.security.cors.credentials,
+        maxAge: config.security.cors.maxAge,
+      }),
+      csp: config.security.csp,
+      hstsMaxAge: config.security.hstsMaxAge,
+      hstsIncludeSubDomains: config.security.hstsIncludeSubDomains,
+      pageMaxAge: config.security.pageMaxAge,
+    }),
     llm:
       config.llm === undefined
         ? undefined

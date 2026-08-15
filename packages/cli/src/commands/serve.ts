@@ -61,6 +61,7 @@ import {
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
@@ -181,6 +182,8 @@ interface Site {
   }
   /** `null` when the project has no `theme.tokens.json` — the theme-render fallback serves unstyled HTML rather than refusing. */
   readonly skinCss: string | null
+  /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
+  readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
   readonly health: () => Promise<{
     readonly database: HealthReport
@@ -230,6 +233,8 @@ interface AssembleSiteOptions {
    * variants. Absent, not broken.
    */
   readonly images?: MediaImageProcessor | null
+  /** CORS, security headers and cache-control. */
+  readonly security: SecurityConfig
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -324,6 +329,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     collections,
     site,
     skinCss: options.skinCss ?? null,
+    security: options.security,
     health: options.health,
     dispose: async () => {
       await db.close()
@@ -672,6 +678,11 @@ export function createRequestListener(
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
+
+    // Before anything else, and once: CORS, the security headers and the
+    // cache-control class of this path (L10 task 6). A preflight is answered
+    // here and never reaches a route.
+    if (applySecurity(req, res, url.pathname, site.security)) return
 
     try {
       const actor = await resolveActor(
@@ -1051,6 +1062,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     readOnly: options.readOnly ?? false,
     skinCss,
     images: images?.processor ?? null,
+    security: loaded.config.security,
   })
 
   const server = createServer(createRequestListener(site, logger))

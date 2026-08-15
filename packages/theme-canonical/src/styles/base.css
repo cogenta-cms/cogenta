@@ -157,9 +157,13 @@ img {
    Page frame
    -------------------------------------------------------------------------- */
 
+/* `flow-root`, so the first and last block's own margins stay inside `<main>`
+   instead of collapsing through it and pushing the header and footer around.
+   That also means no padding is needed here: the last block already carries a
+   section's worth of space below itself, and adding more produced a dead band
+   three times too tall between the last block and the footer. */
 .cg-main {
   display: flow-root;
-  padding-block-end: var(--cg-section-y);
 }
 
 /* The one measurement every block shares. A block that wants to break out of
@@ -215,7 +219,6 @@ img {
 }
 
 .cg-site-footer {
-  margin-block-start: var(--cg-section-y);
   padding: var(--cg-s12) var(--cg-gutter);
   background: var(--cg-surface-sunken);
   color: var(--cg-ink-muted);

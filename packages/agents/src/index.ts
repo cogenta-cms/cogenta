@@ -148,6 +148,34 @@ export type {
 export type { SandboxCallResult } from './sandbox/types.js'
 export type { WithSandboxOptions } from './sandbox/with-sandbox.js'
 export { withSandbox, withSandboxForManifest } from './sandbox/with-sandbox.js'
+export type { AnalyseBriefOptions, AnalyseBriefResult } from './site-plan/analyse-brief.js'
+export { analyseBrief } from './site-plan/analyse-brief.js'
+export type {
+  ConstraintKind,
+  ConstraintTopic,
+  DetectConstraintsInput,
+  DetectedConstraint,
+} from './site-plan/constraints.js'
+export { CONSTRAINT_KINDS, CONSTRAINT_TOPICS, detectConstraints } from './site-plan/constraints.js'
+export type { EnforcementResult } from './site-plan/enforce.js'
+export {
+  enforceOnContentModel,
+  enforceOnLanguages,
+  enforceOnPages,
+} from './site-plan/enforce.js'
+export type {
+  BriefContentType,
+  BriefPage,
+  BriefSource,
+  ConstraintViolation,
+  ContentModelProposal,
+  DemoEntry,
+  ProposedCollection,
+  ProposedPage,
+  SiteBrief,
+  SitePlanDraft,
+  SkinCandidate,
+} from './site-plan/types.js'
 export { createFileSkillStore } from './skills/file-store.js'
 export { parseSkillFile } from './skills/frontmatter.js'
 export type { Skill, SkillMetadata, SkillStore } from './skills/types.js'

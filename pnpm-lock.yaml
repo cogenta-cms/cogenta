@@ -290,6 +290,9 @@ importers:
       '@cogenta/render':
         specifier: workspace:*
         version: link:../render
+      '@cogenta/schema':
+        specifier: workspace:*
+        version: link:../schema
       zod:
         specifier: 'catalog:'
         version: 4.4.3

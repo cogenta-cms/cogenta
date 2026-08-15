@@ -4,6 +4,7 @@ import { createLogger, isCogentaError } from '@cogenta/core'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
 import { runGenerate } from './commands/generate.js'
 import { runImport } from './commands/import.js'
+import { runLinks } from './commands/links.js'
 import { runMigrate } from './commands/migrate.js'
 import { runServe } from './commands/serve.js'
 import { runSkin } from './commands/skin.js'
@@ -16,6 +17,8 @@ export type { GenerateOptions, GenerateSubcommand } from './commands/generate.js
 export { runGenerate } from './commands/generate.js'
 export type { ImportOptions, ImportSubcommand } from './commands/import.js'
 export { runImport } from './commands/import.js'
+export type { LinksOptions, LinksSubcommand } from './commands/links.js'
+export { runLinks } from './commands/links.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
 export type { ServeOptions } from './commands/serve.js'
@@ -41,6 +44,7 @@ Commands
   users reset-password   Send a single-use reset token, or redeem one
   import wordpress <file.xml>   Import a WordPress WXR export, with a report
   generate types   Write TypeScript declarations for the content schema
+  links check      Crawl published content and report links that lead nowhere
   skin list        Show the site's active skin
   skin validate <tokens.json>   Check a token file against contract D
   skin apply <tokens.json>      Validate, then make it the active skin
@@ -59,6 +63,7 @@ Options
   --verbose               Send structured driver logs to stderr
   --out <path>            generate types: where to write the declarations
   --description <text>    skin generate: free text describing the site
+  --external              links check: also follow links that leave the site
 
 Migration options
   --to <id>               Stop at this migration, inclusive
@@ -130,6 +135,7 @@ export async function run(options: RunOptions): Promise<number> {
         host: { type: 'string' },
         out: { type: 'string' },
         description: { type: 'string' },
+        external: { type: 'boolean' },
       },
     })
   } catch (error) {
@@ -223,6 +229,18 @@ export async function run(options: RunOptions): Promise<number> {
       env,
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(typeof parsed.values.out === 'string' ? { outFile: parsed.values.out } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'links') {
+    return runLinks({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(parsed.values.external === true ? { external: true } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

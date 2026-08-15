@@ -174,6 +174,13 @@ export type { RenderedTelegramMessage } from './providers/telegram/render.js'
 export { escapeMarkdownV2, renderTelegramMessage } from './providers/telegram/render.js'
 export type { WebhookAdapterOptions, WebhookFetch } from './providers/webhook/adapter.js'
 export { createWebhookAdapter } from './providers/webhook/adapter.js'
+export type {
+  WebhookEventDelivery,
+  WebhookEventEnvelope,
+  WebhookEventSender,
+  WebhookEventSenderOptions,
+} from './providers/webhook/events.js'
+export { createWebhookEventSender } from './providers/webhook/events.js'
 export type { WebhookActionLinkOptions, WebhookPayload } from './providers/webhook/render.js'
 export { renderWebhookPayload } from './providers/webhook/render.js'
 export type {

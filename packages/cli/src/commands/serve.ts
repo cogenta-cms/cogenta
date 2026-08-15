@@ -54,6 +54,7 @@ import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   buildSchemaDocument,
   type CollectionDefinition,
+  type ContentLifecycleEvent,
   type ContentStore,
   createContentStore,
   createRedirectStore,
@@ -61,12 +62,14 @@ import {
   createSearchIndex,
   type RedirectStore,
   type SchemaDocument,
+  withLifecycleEvents,
   withReadOnlyStore,
   withSearchIndexing,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { createContentWebhookEmitter } from './content-webhooks.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
@@ -260,6 +263,11 @@ interface AssembleSiteOptions {
   readonly images?: MediaImageProcessor | null
   /** CORS, security headers and cache-control. */
   readonly security: SecurityConfig
+  /**
+   * Publishes a content lifecycle event to the site's configured outbound
+   * webhooks (L14 task 1). Absent — the default — means the site sends none.
+   */
+  readonly onContentEvent?: ((event: ContentLifecycleEvent) => Promise<void>) | null
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -290,8 +298,25 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           error: String(error),
         }),
     })
-    stores.set(collection.name, stored)
-    return stored
+    // Outermost of all: an event must describe a write that really landed, so
+    // it fires after the read-only guard has had its chance to refuse and
+    // after the index has been brought back in step. A receiver that rebuilt a
+    // page from an event the store then rejected would serve a page that never
+    // existed.
+    const observed =
+      options.onContentEvent == null
+        ? stored
+        : withLifecycleEvents(stored, {
+            collection,
+            emit: options.onContentEvent,
+            onError: (error) =>
+              logger.error('content webhook emit failed', {
+                collection: collection.name,
+                error: String(error),
+              }),
+          })
+    stores.set(collection.name, observed)
+    return observed
   }
   // The gateway (below) reads `stores` directly rather than through
   // `storeFor` — REST's own lazy population left it empty for any
@@ -1212,6 +1237,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
+    // The signed outbound webhook channel, connected to the content lifecycle
+    // for the first time (L14 task 1). `null` when the site configured no
+    // endpoint, or configured one without a signing secret.
+    onContentEvent: createContentWebhookEmitter({
+      webhooks: loaded.config.webhooks,
+      siteUrl: loaded.config.site.url,
+      logger,
+    }).emit,
   })
 
   const server = createServer(createRequestListener(site, logger))

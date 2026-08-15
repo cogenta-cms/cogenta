@@ -109,6 +109,20 @@ const securitySchema = z.strictObject({
   pageMaxAge: z.number().int().nonnegative().max(86_400).default(60),
 })
 
+/**
+ * Outbound content-lifecycle webhooks (L14 task 1).
+ *
+ * Only the destinations live here. The shared signing secret never does: it
+ * comes from `COGENTA_WEBHOOK_SECRET` like every other secret (rule R7), and
+ * with no secret set the site sends nothing at all rather than sending
+ * unsigned requests — an unsigned webhook is an unauthenticated instruction
+ * arriving at somebody else's server.
+ */
+const webhooksSchema = z.strictObject({
+  /** Absolute `http(s)` URLs. Empty — the default — means no webhook is sent. */
+  endpoints: z.array(z.url()).default([]),
+})
+
 const embeddingsSchema = z.strictObject({
   provider: z.enum(EMBEDDINGS_PROVIDERS).default('local'),
   model: nonEmpty.default('all-MiniLM-L6-v2'),
@@ -124,6 +138,7 @@ export const configSchema = z.strictObject({
   queue: queueSchema.prefault({}),
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
+  webhooks: webhooksSchema.prefault({}),
   llm: llmSchema.optional(),
   embeddings: embeddingsSchema.prefault({}),
 })

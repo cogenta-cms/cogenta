@@ -161,6 +161,10 @@ export function resolveConfig(
       hstsIncludeSubDomains: config.security.hstsIncludeSubDomains,
       pageMaxAge: config.security.pageMaxAge,
     }),
+    webhooks: Object.freeze({
+      endpoints: Object.freeze([...config.webhooks.endpoints]),
+      secret: secrets.webhookSecret,
+    }),
     llm:
       config.llm === undefined
         ? undefined

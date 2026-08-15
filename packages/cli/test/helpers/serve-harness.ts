@@ -98,6 +98,13 @@ export interface StartServerOptions {
   readonly readOnly?: boolean
   /** Collected so a test can assert the server is registered for cleanup. */
   readonly registry?: AbortController[]
+  /**
+   * Merged on top of the signing key every server needs. A suite that exercises
+   * an environment-only setting (a webhook secret, a storage credential) sets
+   * it here rather than touching the real `process.env`, which would leak
+   * between test files running in the same worker.
+   */
+  readonly env?: Record<string, string | undefined>
 }
 
 export async function startServer(
@@ -114,7 +121,10 @@ export async function startServer(
 
   const done = runServe({
     cwd: root,
-    env: { COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret' },
+    env: {
+      COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret',
+      ...options.env,
+    },
     logger: createLogger({ level: 'silent' }),
     out: createOutput(() => undefined, false),
     stderr: () => undefined,

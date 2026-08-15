@@ -29,10 +29,24 @@ export function isPublished(entry: ContentEntry, options: IndexableOptions = {})
   // entry legitimately appears in the list.
   if (entry.state !== 'published') return false
 
+  // No publication date at all means the collection never declared a
+  // `publishedAt` field — contract A makes it an ordinary, optional field, and
+  // `ContentStore` returns `null` for every collection that does not have one
+  // (`publishedAtOf`, packages/schema/src/store/store.ts). Treating that as
+  // "not published" made this gate refuse every page of every collection
+  // without the field, which is most of them: found the first time the package
+  // was wired to a real `cogenta serve` (L10 task 1), not by any unit test,
+  // because every fixture happened to set a date by hand.
+  //
+  // `status` is the authority on whether an entry is public; `publishedAt`
+  // only refines it with *when*. With no date there is nothing to refine, and
+  // nothing can have been scheduled either — a future date cannot be stored in
+  // a field the collection does not declare.
+  if (entry.publishedAt === null) return true
+
   // A published status with a future `publishedAt` is a scheduled entry whose
   // job has not run yet, or one that a scheduler pre-flipped. Either way it is
   // not public.
-  if (entry.publishedAt === null) return false
   const at = Date.parse(entry.publishedAt)
   if (Number.isNaN(at)) return false
 

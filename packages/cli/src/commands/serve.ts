@@ -18,12 +18,16 @@ import {
   createMediaRouter,
   createPermissionLayer,
   createRestRouter,
+  createSearchRouter,
   executeGraphQL,
+  type MediaImageProcessor,
   type MediaRouter,
   type RestRequest,
   type RestResponse,
   type RestRouter,
   resolveActor,
+  type SearchRouter,
+  variantKeyFor,
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
@@ -40,6 +44,7 @@ import {
   type MediaStore,
   type StorageDriver,
 } from '@cogenta/core'
+import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   buildSchemaDocument,
   type CollectionDefinition,
@@ -47,13 +52,31 @@ import {
   createContentStore,
   createRedirectStore,
   createSchemaTables,
+  createSearchIndex,
+  type RedirectStore,
   type SchemaDocument,
   withReadOnlyStore,
+  withSearchIndexing,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
-import { loadSkinCss, renderRequestedPage } from './theme-render.js'
+import { applySecurity, type SecurityConfig } from './http-security.js'
+import { selectMediaImageProcessor } from './media-images.js'
+import { renderSearchPage } from './search-page.js'
+import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
+import { DEFAULT_IMAGE_ENDPOINT, loadSkinCss, renderRequestedPage } from './theme-render.js'
+
+/** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
+const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
+
+/** The only `Content-Type` values `/_image` will ever put on the wire. */
+const SERVABLE_IMAGE_TYPES: ReadonlySet<string> = new Set([
+  'image/avif',
+  'image/webp',
+  'image/jpeg',
+  'image/png',
+])
 
 const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
@@ -137,15 +160,27 @@ interface Site {
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
   readonly auditRouter: AuditRouter
+  /** `GET /api/search` — the full-text index, reachable for the first time (L10 task 3). */
+  readonly searchRouter: SearchRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
+  /** `null` when no image driver loaded — `/_image` then serves originals only. */
+  readonly images: MediaImageProcessor | null
   readonly graphqlSchema: GraphQLSchema
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
   readonly schemaDocument: SchemaDocument
+  /**
+   * The redirect table, applied to *every* GET before routing (L10 task 2).
+   *
+   * It was already reachable through `/api/content/-/by-path`, which only the
+   * API's own clients call — a browser asking for a renamed URL never went
+   * near it and got a 404 instead of the 301 the rename created.
+   */
+  readonly redirects: RedirectStore
   readonly collections: readonly CollectionDefinition[]
   readonly site: {
     readonly name: string
@@ -155,6 +190,8 @@ interface Site {
   }
   /** `null` when the project has no `theme.tokens.json` — the theme-render fallback serves unstyled HTML rather than refusing. */
   readonly skinCss: string | null
+  /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
+  readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
   readonly health: () => Promise<{
     readonly database: HealthReport
@@ -169,38 +206,72 @@ function webauthnConfigFor(site: { readonly name: string; readonly url: string }
   return { relyingPartyName: site.name, relyingPartyId: host, origin: site.url }
 }
 
-async function assembleSite(
-  db: DatabaseHandle,
-  collections: readonly CollectionDefinition[],
-  signingKey: string,
-  site: {
+interface AssembleSiteOptions {
+  readonly db: DatabaseHandle
+  readonly collections: readonly CollectionDefinition[]
+  readonly signingKey: string
+  readonly site: {
     readonly name: string
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
-  },
-  storage: StorageDriver,
-  health: () => Promise<{ readonly database: HealthReport; readonly storage: HealthReport }>,
+  }
+  readonly storage: StorageDriver
+  readonly logger: Logger
+  readonly health: () => Promise<{
+    readonly database: HealthReport
+    readonly storage: HealthReport
+  }>
   /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
-  agents?: AgentsRouterOptions,
+  readonly agents?: AgentsRouterOptions
   /**
    * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
    * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
    * instead of landing — wrapped once here, at the one place both transports'
    * stores are actually constructed, so neither can bypass it.
    */
-  readOnly = false,
+  readonly readOnly?: boolean
   /** `null` when `theme.tokens.json` is absent or invalid — see `loadSkinCss`. */
-  skinCss: string | null = null,
-): Promise<Site> {
+  readonly skinCss?: string | null
+  /**
+   * Resizes and re-encodes images at upload (L10 task 5).
+   *
+   * `null` when no image driver loads on this host: uploads still work and
+   * originals are still served, they simply carry no dimensions and no
+   * variants. Absent, not broken.
+   */
+  readonly images?: MediaImageProcessor | null
+  /** CORS, security headers and cache-control. */
+  readonly security: SecurityConfig
+}
+
+async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
+  const { db, collections, site, storage, logger } = options
+  const readOnly = options.readOnly ?? false
   await createSchemaTables(db, collections)
+
+  // Full-text search, connected for the first time (L10 task 3). The index is
+  // derived data and creates its own physical table, so a fresh install can
+  // index its first entry without a migration having run.
+  const searchIndex = await createSearchIndex({ db })
 
   const stores = new Map<string, ContentStore>()
   const storeFor = (collection: CollectionDefinition): ContentStore => {
     const existing = stores.get(collection.name)
     if (existing !== undefined) return existing
     const created = createContentStore({ db, collection })
-    const stored = readOnly ? withReadOnlyStore(created) : created
+    const guarded = readOnly ? withReadOnlyStore(created) : created
+    // Outermost, so a read-only refusal happens *before* anything is indexed:
+    // a write that never landed must not change the index either.
+    const stored = withSearchIndexing(guarded, {
+      collection,
+      index: searchIndex,
+      onError: (error) =>
+        logger.error('search index write failed', {
+          collection: collection.name,
+          error: String(error),
+        }),
+    })
     stores.set(collection.name, stored)
     return stored
   }
@@ -225,7 +296,7 @@ async function assembleSite(
 
   const auth = await createAuthStore({
     db,
-    signingKey,
+    signingKey: options.signingKey,
     collections,
     issuer: site.name,
     webauthn: webauthnConfigFor(site),
@@ -238,21 +309,36 @@ async function assembleSite(
     auth,
     restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({ auth }),
-    mediaRouter: createMediaRouter({ store: mediaStore, storage }),
+    mediaRouter: createMediaRouter({
+      store: mediaStore,
+      storage,
+      ...(options.images === undefined || options.images === null
+        ? {}
+        : { images: options.images }),
+    }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
-    ...(agents === undefined ? {} : { agentsRouter: createAgentsRouter(agents) }),
+    searchRouter: createSearchRouter({
+      index: searchIndex,
+      collections,
+      permissions,
+      defaultLocale: site.defaultLocale,
+    }),
+    ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
     mediaStore,
     storage,
+    images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
     schemaDocument: buildSchemaDocument(collections, {
       locales: site.locales,
       defaultLocale: site.defaultLocale,
     }),
+    redirects,
     collections,
     site,
-    skinCss,
-    health,
+    skinCss: options.skinCss ?? null,
+    security: options.security,
+    health: options.health,
     dispose: async () => {
       await db.close()
     },
@@ -481,6 +567,118 @@ async function serveMediaFile(
 }
 
 /**
+ * `GET /_image?id=…&w=…` — the public delivery endpoint for images.
+ *
+ * **Public on purpose, and only for images.** A `<img src>` in a published
+ * page is fetched by a visitor's browser with no session, so an endpoint the
+ * theme can point at cannot be behind the same authentication as
+ * `/api/media/{id}/file`. Restricting it to `kind === 'image'` is what keeps
+ * that from widening to every uploaded PDF and video: those stay behind the
+ * authenticated route, unchanged.
+ *
+ * It serves the rendition the upload already produced, and falls back to the
+ * original when there is none — an asset uploaded before the pipeline
+ * existed, a width outside the ladder, or a host with no image driver. It
+ * never renders on demand: nothing here decodes an image, so a public URL
+ * cannot be turned into CPU by asking for a size nobody stored.
+ */
+async function serveImageVariant(
+  site: Site,
+  url: URL,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { allow: 'GET' }).end()
+    return
+  }
+
+  const id = url.searchParams.get('id')
+  if (id === null || id === '') {
+    jsonError(res, 400, 'QUERY_INVALID', 'An image request must name the media it wants.')
+    return
+  }
+
+  const asset = await site.mediaStore.get(id)
+  if (asset === null || asset.kind !== 'image') {
+    jsonError(res, 404, 'MEDIA_NOT_FOUND', `No image asset with id "${id}".`)
+    return
+  }
+
+  let key = asset.storageKey
+  // Never the asset's recorded `mimeType` unquestioned. Uploads now record
+  // the sniffed type, but an asset stored before that fix — or by a future
+  // writer that skips the route — could carry `text/html`, and this endpoint
+  // is public, unauthenticated and on the site's own origin. A type that is
+  // not an image serves as an opaque download instead of executing.
+  let contentType = SERVABLE_IMAGE_TYPES.has(asset.mimeType)
+    ? asset.mimeType
+    : 'application/octet-stream'
+
+  const requested = Number(url.searchParams.get('w'))
+  if (
+    site.images !== null &&
+    Number.isInteger(requested) &&
+    requested > 0 &&
+    asset.width !== null &&
+    asset.height !== null
+  ) {
+    const names = site.images.variantNames({ width: asset.width, height: asset.height })
+    const wanted = `${requested}.`
+    const match = names.find((name) => name.startsWith(wanted))
+    if (match !== undefined) {
+      const variantKey = variantKeyFor(id, match)
+      if (await site.storage.exists(variantKey)) {
+        key = variantKey
+        if (match.endsWith('.webp')) contentType = 'image/webp'
+      }
+    }
+  }
+
+  const stream = await site.storage.get(key)
+  res.writeHead(200, {
+    'content-type': contentType,
+    // Long, because the URL names an immutable rendition of an immutable
+    // upload: replacing an image means a new media id, never new bytes under
+    // the same one.
+    'cache-control': 'public, max-age=31536000, immutable',
+  })
+  stream.on('error', () => res.destroy())
+  stream.pipe(res)
+}
+
+/**
+ * Loads the media a theme render references, as `@cogenta/render`'s
+ * `MediaAsset`.
+ *
+ * The two shapes are deliberately different types (ADR-0016: the delivery
+ * plane declares its own wire types rather than importing the engine's), so
+ * this is the one place they are mapped. Only images and videos exist in that
+ * shape at all — a PDF has no `srcset` — so anything else is left out and
+ * `ctx.image()` refuses it clearly.
+ */
+async function loadRenderMedia(
+  site: Site,
+  ids: readonly string[],
+): Promise<ReadonlyMap<string, RenderMediaAsset>> {
+  const found = new Map<string, RenderMediaAsset>()
+  for (const id of new Set(ids)) {
+    const asset = await site.mediaStore.get(id)
+    if (asset === null) continue
+    if (asset.kind !== 'image' && asset.kind !== 'video') continue
+    found.set(id, {
+      id: asset.id,
+      kind: asset.kind,
+      alt: asset.alt,
+      ...(asset.width === null ? {} : { width: asset.width }),
+      ...(asset.height === null ? {} : { height: asset.height }),
+      focal: asset.focal,
+    })
+  }
+  return found
+}
+
+/**
  * Builds the Node request handler from an already-assembled site.
  *
  * All the actual logic — routing, permissions, actor resolution — was already
@@ -495,6 +693,11 @@ export function createRequestListener(
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
+
+    // Before anything else, and once: CORS, the security headers and the
+    // cache-control class of this path (L10 task 6). A preflight is answered
+    // here and never reaches a route.
+    if (applySecurity(req, res, url.pathname, site.security)) return
 
     try {
       const actor = await resolveActor(
@@ -554,6 +757,14 @@ export function createRequestListener(
       // Serving the file itself sits outside `mediaRouter`: its `RestResponse`
       // is JSON-only, and a binary body has no shape to fit into that without
       // widening the transport contract every other route relies on.
+      // The public image endpoint (L10 task 5). Before the `/api/*` block on
+      // purpose: it is not an API route, and it is the one media path a
+      // visitor's browser reaches with no session.
+      if (url.pathname === DEFAULT_IMAGE_ENDPOINT) {
+        await serveImageVariant(site, url, req, res)
+        return
+      }
+
       const fileMatch = /^\/api\/media\/([^/]+)\/file$/u.exec(url.pathname)
       if (fileMatch !== null) {
         await serveMediaFile(site, actor, decodeURIComponent(fileMatch[1] ?? ''), req, res)
@@ -613,6 +824,14 @@ export function createRequestListener(
         return
       }
 
+      // The full-text index, reachable at last (L10 task 3). Its own router
+      // decides which collections this actor may search — never this layer.
+      if (url.pathname === '/api/search') {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.searchRouter.handle(request, context))
+        return
+      }
+
       if (url.pathname.startsWith('/api/audit')) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
@@ -646,6 +865,91 @@ export function createRequestListener(
         return
       }
 
+      // Everything below is the public site rather than the API, so the
+      // redirect table gets its turn first: a page renamed last month must
+      // answer its old URL with the 301 the rename recorded, not a 404 (L10
+      // task 2). Before route matching, so a redirect wins even when some
+      // other entry has since taken the old path — that is what `release()`
+      // is for on the write side.
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        const redirect = await site.redirects.resolve(url.pathname)
+        if (redirect !== null) {
+          res.writeHead(redirect.status, {
+            location: `${redirect.to}${url.search}`,
+            'cache-control': redirect.status === 301 ? 'public, max-age=3600' : 'no-store',
+          })
+          res.end()
+          return
+        }
+      }
+
+      // `robots.txt` and `sitemap.xml`, from the real content (L10 task 2).
+      // Both are built as `ANONYMOUS` inside `collectRoutedResources`,
+      // whoever asked: a crawler and a signed-in editor must get the same
+      // document, or the sitemap advertises URLs the crawler cannot fetch.
+      if (url.pathname === '/robots.txt') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'public, max-age=3600',
+        })
+        res.end(renderRobots(seoSiteFor(site.site)))
+        return
+      }
+
+      if (SITEMAP_PATH.test(url.pathname)) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        const seoSite = seoSiteFor(site.site)
+        const files = buildSitemapFiles(
+          seoSite,
+          await collectRoutedResources(site.collections, site.gateway),
+        )
+        const file = files.find((candidate) => candidate.path === url.pathname)
+        if (file !== undefined) {
+          res.writeHead(200, {
+            'content-type': 'application/xml; charset=utf-8',
+            'cache-control': 'public, max-age=600',
+          })
+          res.end(file.contents)
+          return
+        }
+        // `/sitemap-9.xml` on a site that only needs one file is a real 404,
+        // not an empty urlset: an empty chunk would tell a crawler the site
+        // has nothing there rather than that the URL is wrong.
+        jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No sitemap file at this path.')
+        return
+      }
+
+      // The public search page (L10 task 3): a real form and a real results
+      // list, served through the same permission-checked search router the
+      // API uses. Deliberately a route rather than a contract B block — see
+      // `search-page.ts` for why.
+      if (url.pathname === '/search' && req.method === 'GET') {
+        const html = await renderSearchPage(
+          url.searchParams.get('q') ?? '',
+          {
+            router: site.searchRouter,
+            gateway: site.gateway,
+            collections: site.collections,
+            site: site.site,
+            skinCss: site.skinCss,
+          },
+          context,
+        )
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(html)
+        return
+      }
+
       // Real theme HTML for anything else — see `theme-render.ts`'s own
       // doc comment for what this is and, as importantly, what it isn't
       // (no Astro build, one theme, no image pipeline). GET only: rendering
@@ -658,6 +962,7 @@ export function createRequestListener(
             gateway: site.gateway,
             site: site.site,
             skinCss: site.skinCss,
+            loadMedia: (ids) => loadRenderMedia(site, ids),
           },
           context,
         )
@@ -712,6 +1017,9 @@ export interface ServeOptions {
 const DEFAULT_PORT = 4000
 const DEFAULT_HOST = '127.0.0.1'
 
+/** How long a shutdown waits for open connections before cutting them. */
+const SHUTDOWN_GRACE_MS = 2_000
+
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
  * startup failed — nothing here calls `process.exit` (same convention as
@@ -754,17 +1062,23 @@ export async function runServe(options: ServeOptions): Promise<number> {
     (path) => readFile(path, 'utf8'),
     join(projectRoot, 'theme.tokens.json'),
   )
-  const site = await assembleSite(
-    selection.instance,
+  const images = await selectMediaImageProcessor(logger)
+  const site = await assembleSite({
+    db: selection.instance,
     collections,
-    loaded.config.auth.signingKey,
-    loaded.config.site,
-    storageSelection.instance,
-    async () => ({ database: await selection.health(), storage: await storageSelection.health() }),
-    undefined,
-    options.readOnly ?? false,
+    signingKey: loaded.config.auth.signingKey,
+    site: loaded.config.site,
+    storage: storageSelection.instance,
+    logger,
+    health: async () => ({
+      database: await selection.health(),
+      storage: await storageSelection.health(),
+    }),
+    readOnly: options.readOnly ?? false,
     skinCss,
-  )
+    images: images?.processor ?? null,
+    security: loaded.config.security,
+  })
 
   const server = createServer(createRequestListener(site, logger))
   const port = options.port ?? DEFAULT_PORT
@@ -782,7 +1096,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const boundPort = typeof address === 'object' && address !== null ? address.port : port
   out.ok(`Listening on http://${host}:${boundPort}`)
   out.detail(
-    `${collections.length} collection(s), db driver: ${selection.driver}, storage driver: ${storageSelection.driver}`,
+    `${collections.length} collection(s), db driver: ${selection.driver}, storage driver: ${storageSelection.driver}, image driver: ${images?.driver ?? 'none'}`,
   )
   options.onListening?.({ port: boundPort, host })
 
@@ -797,6 +1111,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))
+    // `close()` alone waits for every open connection to end, and a client
+    // that fetched a large response and never read the body holds one open
+    // indefinitely — a media download is exactly that shape. Without the
+    // grace period, one such client turns Ctrl-C into a hang. Found while
+    // writing the image tests, where a deliberately unread image body kept
+    // the whole process alive.
+    const grace = setTimeout(() => server.closeAllConnections(), SHUTDOWN_GRACE_MS)
+    grace.unref()
   })
   await selection.dispose()
   await storageSelection.dispose()

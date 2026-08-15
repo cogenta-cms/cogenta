@@ -358,6 +358,36 @@ export function installMockFetch(
         })
       }
 
+      // `/api/search` — the same shape `createSearchRouter` returns, including
+      // its refusal for a role that may not read drafts (the server decides
+      // that, never the UI: R4).
+      if (url.includes('/api/search?')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in to search.' } })
+        }
+        const parsed = new URL(url, 'http://localhost')
+        const text = (parsed.searchParams.get('q') ?? '').toLowerCase()
+        const status = parsed.searchParams.get('status')
+        if (status !== null && status !== 'published' && !user.roles.includes('editor')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'You may not search unpublished content.' },
+          })
+        }
+        const hits = MOCK_ENTRIES.filter(
+          (entry) =>
+            (status === null || entry.status === status) &&
+            entry.values.title.toLowerCase().includes(text),
+        ).map((entry) => ({
+          id: entry.id,
+          collection: 'article',
+          locale: entry.locale,
+          status: entry.status,
+          title: entry.values.title,
+          score: 1,
+        }))
+        return json(200, { data: hits, page: { hasMore: false, nextOffset: null } })
+      }
+
       const versionMatch =
         /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview|translations)(?:\?.*)?$/u.exec(
           url,

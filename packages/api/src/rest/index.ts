@@ -33,8 +33,14 @@ export { collectDependencies } from './dependencies.js'
 export { FILTER_PREFIX, parseFilter } from './filter.js'
 export type { RestErrorBody, RestRequest, RestResponse } from './http.js'
 export { errorResponse, jsonResponse, queryError, statusFor } from './http.js'
-export type { MediaRouter, MediaRouterOptions } from './media-router.js'
-export { createMediaRouter } from './media-router.js'
+export type {
+  ImageSize,
+  MediaImageProcessor,
+  MediaRouter,
+  MediaRouterOptions,
+  UploadedImageVariant,
+} from './media-router.js'
+export { createMediaRouter, variantKeyFor } from './media-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
 export type { ListQuery, QueryLimits, ReadQuery } from './query.js'
@@ -46,3 +52,5 @@ export {
 } from './query.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
+export type { SearchRouter, SearchRouterOptions } from './search-router.js'
+export { createSearchRouter } from './search-router.js'

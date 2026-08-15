@@ -9,6 +9,7 @@ import {
   type SortDirection,
   type SortField,
 } from '../api/content-client.js'
+import { type SearchHit, searchContent } from '../api/search-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -52,6 +53,15 @@ export function CollectionListRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // The full-text search (L10 task 3). Two pieces of state, not one: `query`
+  // is what the field holds while somebody types, `submitted` is what the
+  // server was actually asked. Searching on every keystroke would send a
+  // ranked query per character.
+  const [query, setQuery] = useState('')
+  const [submitted, setSubmitted] = useState('')
+  const [hits, setHits] = useState<readonly SearchHit[] | null>(null)
+  const [searching, setSearching] = useState(false)
+
   const cursor = cursorStack[cursorStack.length - 1]
 
   const load = useCallback(async () => {
@@ -78,6 +88,40 @@ export function CollectionListRoute(): JSX.Element {
   useEffect(() => {
     void load()
   }, [load])
+
+  /**
+   * Runs the search, or clears it when the field is empty.
+   *
+   * `status` is passed through so that "search my drafts" is the same
+   * decision as "filter by draft" — and the server refuses it for a role
+   * that may not read drafts, rather than this component guessing.
+   */
+  const runSearch = useCallback(async () => {
+    if (token === null || collection === undefined) return
+    const text = submitted.trim()
+    if (text === '') {
+      setHits(null)
+      return
+    }
+    setSearching(true)
+    setError(null)
+    try {
+      const results = await searchContent(token, text, {
+        collections: [collection.name],
+        ...(status === '' ? {} : { status }),
+      })
+      setHits(results.hits)
+    } catch (caught) {
+      setHits([])
+      setError(caught instanceof ApiError ? caught.message : t('collectionList.searchError'))
+    } finally {
+      setSearching(false)
+    }
+  }, [token, collection, submitted, status, t])
+
+  useEffect(() => {
+    void runSearch()
+  }, [runSearch])
 
   function toggleSort(field: SortField): void {
     setCursorStack([undefined])
@@ -139,6 +183,38 @@ export function CollectionListRoute(): JSX.Element {
       )}
 
       <div className="collection-list__toolbar">
+        {/* `<search>` rather than `role="search"`: the element carries the
+            role implicitly, and one landmark is easier to keep right than a
+            role attribute somebody can drop in a refactor. */}
+        <search>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              setSubmitted(query)
+            }}
+          >
+            <label htmlFor="content-search">{t('collectionList.searchLabel')}</label>
+            <input
+              id="content-search"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <button type="submit">{t('collectionList.searchButton')}</button>
+            {submitted !== '' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('')
+                  setSubmitted('')
+                }}
+              >
+                {t('collectionList.clearSearch')}
+              </button>
+            )}
+          </form>
+        </search>
+
         <label htmlFor="status-filter">{t('collectionList.statusFilter')}</label>
         <select
           id="status-filter"
@@ -164,9 +240,34 @@ export function CollectionListRoute(): JSX.Element {
       </div>
 
       {error !== null && <p role="alert">{error}</p>}
-      {loading && <p>{t('common.loading')}</p>}
+      {searching && <p>{t('common.loading')}</p>}
+      {loading && hits === null && <p>{t('common.loading')}</p>}
 
-      {!loading && error === null && (
+      {hits !== null && !searching && (
+        <section aria-labelledby="search-results-heading">
+          <h2 id="search-results-heading">
+            {t('collectionList.searchResults', { count: hits.length })}
+          </h2>
+          {hits.length === 0 ? (
+            <p>{t('collectionList.noMatches')}</p>
+          ) : (
+            <ul>
+              {hits.map((hit) => (
+                <li key={hit.id}>
+                  <Link
+                    to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(hit.id)}`}
+                  >
+                    {hit.title === '' ? hit.id : hit.title}
+                  </Link>{' '}
+                  <span>{hit.status}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {hits === null && !loading && error === null && (
         <>
           <table>
             <thead>

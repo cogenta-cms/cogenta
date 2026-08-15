@@ -37,9 +37,59 @@ import { single } from './query.js'
  * wire — an acceptable trade for an admin-only upload path.
  */
 
+/** The intrinsic size of an image, in its own pixels. */
+export interface ImageSize {
+  readonly width: number
+  readonly height: number
+}
+
+/** One derived rendition, ready to be written next to the original. */
+export interface UploadedImageVariant {
+  /** Suffix under the asset's variant prefix — `640.webp`. Never a full key. */
+  readonly name: string
+  readonly bytes: Uint8Array
+  readonly contentType: string
+}
+
+/**
+ * Image processing at upload time, injected rather than imported.
+ *
+ * `@cogenta/render` owns the pipeline (sharp or WASM libvips, `planTransform`,
+ * the `srcset` ladder) and this package must not depend on it: a REST
+ * transport has no business pulling a 12 MB WebAssembly dependency into its
+ * tree. So the router takes this interface and `@cogenta/cli` supplies the
+ * implementation built from the real driver registry — the same shape rule
+ * every other driver in the project follows.
+ *
+ * Absent means "no image processing": uploads still work, they simply carry
+ * no dimensions and no variants. Rule R2's shape, applied to images.
+ */
+export interface MediaImageProcessor {
+  /** Intrinsic size, or null when the bytes cannot be read as an image. */
+  probe(bytes: Uint8Array): Promise<ImageSize | null>
+  /** The renditions to store beside the original, for an image of this size. */
+  variants(bytes: Uint8Array, intrinsic: ImageSize): Promise<readonly UploadedImageVariant[]>
+  /**
+   * The names `variants()` would produce for this size.
+   *
+   * Deleting needs it: `StorageDriver` has no `list`, so the only way to
+   * clean up an asset's renditions is to know what they were called. Keeping
+   * it deterministic — a fixed ladder, not a per-upload decision — is what
+   * makes that possible at all.
+   */
+  variantNames(intrinsic: ImageSize): readonly string[]
+}
+
 export interface MediaRouterOptions {
   readonly store: MediaStore
   readonly storage: StorageDriver
+  /**
+   * Generates resized/re-encoded variants at upload time (L10 task 5).
+   *
+   * Absent by default: the pipeline is optional, and an install without it
+   * uploads and serves originals exactly as before.
+   */
+  readonly images?: MediaImageProcessor
   /** Mount point. `/api/media` by default. */
   readonly basePath?: string
 }
@@ -137,11 +187,34 @@ function decodeBase64(data: string): Buffer {
  * (L2-admin.md). Only images are sniffed in this pass; video/audio/file
  * uploads are stored as declared.
  */
-function verifyRealType(kind: MediaKind, bytes: Buffer): void {
-  if (kind !== 'image') return
+/**
+ * The content type an image is stored and served with — derived from the
+ * bytes, never from what the uploader declared.
+ *
+ * Sniffing already decided whether the file *is* an image; trusting
+ * `mimeType` for the response header after that is the hole it left open. An
+ * editor could upload a genuine PNG, declare it `text/html`, and have the
+ * delivery endpoint serve it as a document on the site's own origin —
+ * `X-Content-Type-Options: nosniff` does not help, because the declared type
+ * *is* the executable one. Found by the security review of L10 task 5.
+ */
+const CONTENT_TYPE_BY_FORMAT: Readonly<Record<string, string>> = Object.freeze({
+  avif: 'image/avif',
+  webp: 'image/webp',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+})
+
+/**
+ * Checks an image is really an image, and answers with the content type its
+ * bytes earn. `null` for every other kind, which is stored as declared —
+ * those are never served on a public, unauthenticated route.
+ */
+function verifyRealType(kind: MediaKind, bytes: Buffer): string | null {
+  if (kind !== 'image') return null
 
   const format = sniffImageFormat(bytes)
-  if (format !== null) return
+  if (format !== null) return CONTENT_TYPE_BY_FORMAT[format] ?? 'application/octet-stream'
 
   throw new CogentaError({
     code: 'MEDIA_TYPE_REJECTED',
@@ -152,6 +225,18 @@ function verifyRealType(kind: MediaKind, bytes: Buffer): void {
 
 function storageKeyFor(id: string, filename: string): string {
   return `media/${id}/${sanitiseFilename(filename)}`
+}
+
+/**
+ * Where a derived rendition lives.
+ *
+ * Under the asset's own prefix, in a `variants/` folder of its own, so that
+ * "everything belonging to this asset" stays one path prefix on every storage
+ * driver — and so that a variant name can never collide with the original
+ * filename however the uploader named it.
+ */
+export function variantKeyFor(id: string, name: string): string {
+  return `media/${id}/variants/${sanitiseFilename(name)}`
 }
 
 export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
@@ -176,18 +261,26 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const [id] = segments
 
     if (id === undefined) {
-      if (method === 'GET') return list(request)
+      if (method === 'GET') return list(request, actor)
       if (method === 'POST') return upload(request, actor)
       return methodNotAllowed(['GET', 'POST'])
     }
 
-    if (method === 'GET') return read(id)
+    if (method === 'GET') return read(id, actor)
     if (method === 'PATCH' || method === 'PUT') return update(id, request, actor)
     if (method === 'DELETE') return remove(id, actor)
     return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
   }
 
-  async function list(request: RestRequest): Promise<RestResponse> {
+  async function list(request: RestRequest, actor: Actor): Promise<RestResponse> {
+    // The media library is an admin screen, not a public catalogue. Listing it
+    // anonymously handed out every asset's id, filename and storage key —
+    // including for content nobody has published — and the ids are what a
+    // public delivery endpoint like `/_image` is keyed on, so an open list
+    // turns an unguessable URL into an enumerable one. Found by the security
+    // review of L10 task 5, which introduced that endpoint; the doc comment
+    // at the top of this file had claimed this gate existed since L2.
+    requireActor(actor)
     const kind = single(request.query, 'kind')
     if (kind !== undefined && !(MEDIA_KINDS as readonly string[]).includes(kind)) {
       throw queryError('kind', 'is not a media kind', `Use one of: ${MEDIA_KINDS.join(', ')}.`)
@@ -214,12 +307,39 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     requireActor(actor)
     const input = decode(uploadSchema, request.body)
     const bytes = decodeBase64(input.data)
-    verifyRealType(input.kind, bytes)
+    // For an image this is the type the *bytes* say, not the one the uploader
+    // typed — the asset record and every response built from it use it, so a
+    // disguised type cannot travel back out as a `Content-Type`.
+    const mimeType = verifyRealType(input.kind, bytes) ?? input.mimeType
 
     const id = randomUUID()
     const storageKey = storageKeyFor(id, input.filename)
 
-    await storage.put(storageKey, bytes, { contentType: input.mimeType })
+    await storage.put(storageKey, bytes, { contentType: mimeType })
+
+    // Dimensions and renditions, once, at upload — not on every request
+    // (L10 task 5). A failure here must not lose the upload: the original is
+    // already stored and the asset is what the editor asked for, so a missing
+    // variant degrades to "served at full size", never to "upload refused".
+    const written: string[] = []
+    let intrinsic: ImageSize | null = null
+    if (options.images !== undefined && input.kind === 'image') {
+      try {
+        intrinsic = await options.images.probe(bytes)
+        if (intrinsic !== null) {
+          for (const variant of await options.images.variants(bytes, intrinsic)) {
+            const key = variantKeyFor(id, variant.name)
+            await storage.put(key, Buffer.from(variant.bytes), {
+              contentType: variant.contentType,
+            })
+            written.push(key)
+          }
+        }
+      } catch {
+        for (const key of written) await storage.delete(key).catch(() => undefined)
+        written.length = 0
+      }
+    }
 
     let asset: MediaAsset
     try {
@@ -227,8 +347,9 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         id,
         kind: input.kind,
         filename: input.filename,
-        mimeType: input.mimeType,
+        mimeType,
         size: bytes.length,
+        ...(intrinsic === null ? {} : { width: intrinsic.width, height: intrinsic.height }),
         alt: input.alt ?? '',
         ...(input.decorative === undefined ? {} : { decorative: input.decorative }),
         ...(input.decorativeJustification === undefined
@@ -241,15 +362,19 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     } catch (error) {
       // The asset row is what makes the upload real; if it is refused (an
       // invalid alt-text/decorative combination), the blob must not become
-      // an orphan nothing ever lists or cleans up.
+      // an orphan nothing ever lists or cleans up. Its variants neither.
       await storage.delete(storageKey).catch(() => undefined)
+      for (const key of written) await storage.delete(key).catch(() => undefined)
       throw error
     }
 
     return jsonResponse(201, { data: asset })
   }
 
-  async function read(id: string): Promise<RestResponse> {
+  async function read(id: string, actor: Actor): Promise<RestResponse> {
+    // Same gate as `list`, and for the same reason: the metadata of an asset
+    // (its storage key above all) is not public just because its bytes may be.
+    requireActor(actor)
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
     return jsonResponse(200, { data: asset })
@@ -274,6 +399,18 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
     await storage.delete(asset.storageKey)
+
+    // The renditions go with the original. Their names are recomputed from
+    // the recorded size rather than listed, because `StorageDriver` has no
+    // `list` — which is exactly why `variantNames` exists and why the ladder
+    // is fixed. A variant that was never written deletes as a no-op.
+    if (options.images !== undefined && asset.width !== null && asset.height !== null) {
+      const names = options.images.variantNames({ width: asset.width, height: asset.height })
+      for (const name of names) {
+        await storage.delete(variantKeyFor(id, name)).catch(() => undefined)
+      }
+    }
+
     await store.delete(id)
     return jsonResponse(204, null)
   }

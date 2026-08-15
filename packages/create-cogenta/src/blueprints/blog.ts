@@ -269,7 +269,13 @@ export const BLOG_DEMO_PAGES: readonly BlogDemoPage[] = [
         _version: BLOCK_VERSION,
         title: 'Latest posts',
         collection: 'post',
-        sort: { field: 'publishedAt', direction: 'desc' },
+        // `publishedAt` is nullable (a draft has none) and was never in the
+        // real, frozen `SortField` union (`id`/`createdAt`/`updatedAt` only —
+        // cursor pagination needs a column that is never null). This block
+        // asked for it anyway and nothing exercised the query until
+        // `cogenta serve`'s theme-render fallback did, surfacing a real
+        // QUERY_INVALID on every request for the seeded home page.
+        sort: { field: 'createdAt', direction: 'desc' },
         limit: 10,
         layout: 'list',
       },

@@ -35,7 +35,7 @@ export function renderMediaFigure(block: MediaFigureBlock, ctx: RenderContext): 
           block.caption,
           block.credit === undefined
             ? null
-            : h('span', { class: 'cg-figure__credit' }, block.credit),
+            : h('span', { class: 'cg-figure__credit', 'data-field': 'credit' }, block.credit),
         )
       : null,
   )

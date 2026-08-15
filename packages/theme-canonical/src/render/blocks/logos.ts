@@ -35,7 +35,11 @@ export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement 
     { class: 'cg-block cg-logos', 'data-block': 'logos' },
     block.title === undefined
       ? null
-      : heading(blockHeadingTag('logos') ?? 'h2', { class: 'cg-logos__title' }, block.title),
+      : heading(
+          blockHeadingTag('logos') ?? 'h2',
+          { class: 'cg-logos__title', 'data-field': 'title' },
+          block.title,
+        ),
     h(
       'ul',
       { class: 'cg-logos__items' },

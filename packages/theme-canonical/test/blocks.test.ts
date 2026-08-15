@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderCollectionList } from '../src/render/blocks/collection-list.js'
 import { serialize } from '../src/render/html.js'
-import { renderBlock } from '../src/render/render-block.js'
+import { renderBlock, renderPage } from '../src/render/render-block.js'
 import { ALL_BLOCKS, BLOCKS, ENTRIES, makeContext } from './fixtures.js'
 
 const ctx = makeContext()
@@ -51,5 +51,47 @@ describe('data that reaches the markup', () => {
     const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, []))
     expect(html).toContain('collection.empty')
     expect(html).not.toContain('<ul')
+  })
+})
+
+/**
+ * What a visual page builder needs in order to point at a rendered page and
+ * say "that came from this block" — and the reason the attributes are here
+ * rather than in a builder-only render mode (see `withBlockKey`).
+ */
+describe('the identity a rendered page carries back to its blocks', () => {
+  it('stamps every placed block with the key contract B minted for it', () => {
+    const html = serialize(
+      renderPage({ title: 'Page', blocks: [BLOCKS.hero, BLOCKS.cta] }, ctx, {}),
+    )
+    expect(html).toContain(`data-block-key="${BLOCKS.hero._key}"`)
+    expect(html).toContain(`data-block-key="${BLOCKS.cta._key}"`)
+  })
+
+  it('gives two blocks of the same type two different keys in the markup', () => {
+    const second = { ...BLOCKS.cta, _key: 'cta-second' }
+    const html = serialize(renderPage({ title: 'Page', blocks: [BLOCKS.cta, second] }, ctx, {}))
+    expect(html).toContain(`data-block-key="${BLOCKS.cta._key}"`)
+    expect(html).toContain('data-block-key="cta-second"')
+  })
+
+  it('names the field behind a plain-text element, and only where one element holds the whole value', () => {
+    const hero = serialize(renderBlock(BLOCKS.hero, ctx) ?? { kind: 'text', value: '' })
+    expect(hero).toContain('data-field="title"')
+    expect(hero).toContain('data-field="subtitle"')
+
+    // Rich text is a document, not a string: nothing in `prose` claims to be
+    // an editable text field.
+    const prose = serialize(renderBlock(BLOCKS.prose, ctx) ?? { kind: 'text', value: '' })
+    expect(prose).not.toContain('data-field=')
+  })
+
+  it('adds no attribute to a block whose text lives in repeated list items', () => {
+    // `stats` items are a list: the block's own title is addressable, an
+    // individual figure is not — claiming otherwise would let the builder
+    // write a value it cannot address back.
+    const html = serialize(renderBlock(BLOCKS.stats, ctx) ?? { kind: 'text', value: '' })
+    expect(html.match(/data-field="/gu)).toHaveLength(1)
+    expect(html).toContain('data-field="title"')
   })
 })

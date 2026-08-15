@@ -78,7 +78,7 @@ export function renderCollectionList(
     hasTitle
       ? heading(
           blockHeadingTag('collectionList') ?? 'h2',
-          { class: 'cg-collection__title' },
+          { class: 'cg-collection__title', 'data-field': 'title' },
           block.title ?? '',
         )
       : null,

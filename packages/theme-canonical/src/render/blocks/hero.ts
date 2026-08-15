@@ -20,9 +20,13 @@ export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
     h(
       'div',
       { class: 'cg-hero__body' },
-      block.eyebrow === undefined ? null : h('p', { class: 'cg-hero__eyebrow' }, block.eyebrow),
-      heading(tag, { class: 'cg-hero__title' }, block.title),
-      block.subtitle === undefined ? null : h('p', { class: 'cg-hero__subtitle' }, block.subtitle),
+      block.eyebrow === undefined
+        ? null
+        : h('p', { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' }, block.eyebrow),
+      heading(tag, { class: 'cg-hero__title', 'data-field': 'title' }, block.title),
+      block.subtitle === undefined
+        ? null
+        : h('p', { class: 'cg-hero__subtitle', 'data-field': 'subtitle' }, block.subtitle),
       actionList(ctx, block.actions, ctx.t('hero.actions')),
     ),
     block.media === undefined

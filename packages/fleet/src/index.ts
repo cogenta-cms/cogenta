@@ -12,6 +12,11 @@ export type {
   OpenCveSummary,
   TelemetryPayload,
 } from './agent/types.js'
+export type { IngestResult } from './control/ingest.js'
+export { ingestTelemetry } from './control/ingest.js'
+export type { SiteStateStore, TelemetrySnapshot } from './control/state.js'
+export { createSiteStateStore } from './control/state.js'
+export { CONTROL_TABLES, ensureControlTables } from './control/tables.js'
 export type {
   EnrollmentStore,
   PairingConsumeResult,

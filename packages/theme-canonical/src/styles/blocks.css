@@ -625,34 +625,53 @@
 
 .cg-stats__items {
   display: grid;
-  gap: var(--cg-gap-loose);
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--cg-gap);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   margin: 0;
 }
 
-/* Reading order is label then figure; the skin shows the figure first. The
-   markup is what a screen reader follows, so the two must not be conflated. */
+/* Reading order is label then figure; the stylesheet shows the figure first.
+   The markup is what a screen reader follows, so the two must not be
+   conflated — `column-reverse` reorders the paint, never the `<dl>`. */
 .cg-stat {
   display: flex;
   flex-direction: column-reverse;
-  gap: var(--cg-s1);
+  gap: var(--cg-s2);
+  padding: var(--cg-s6);
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
 }
 
 .cg-stat__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s1);
   margin: 0;
-  font-size: var(--cg-text-2xl);
+  color: var(--cg-accent);
+  font-size: var(--cg-text-3xl);
+  font-weight: var(--cg-weight-bold);
   line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  /* Figures that change between pages must not change width with the digits. */
   font-variant-numeric: tabular-nums;
 }
 
 .cg-stat__unit {
-  font-size: var(--cg-text-md);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-medium);
   color: var(--cg-ink-muted);
+  letter-spacing: var(--cg-tracking-normal);
 }
 
+/* Small caps under a large figure: the label is a caption for the number, and
+   at body size it competes with it. */
 .cg-stat__label {
   color: var(--cg-ink-muted);
-  font-size: var(--cg-text-sm);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
 }
 
 /* --- logos --------------------------------------------------------------- */

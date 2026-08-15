@@ -1,7 +1,7 @@
 import { type FormEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router'
-import { ApiError, type TotpSetup } from '../api/client.js'
+import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import '../styles/auth.css'
 
@@ -9,22 +9,19 @@ interface LocationState {
   readonly from?: { readonly pathname: string }
 }
 
-type Step =
-  | { readonly kind: 'password' }
-  | { readonly kind: 'totp'; readonly ticket: string }
-  | { readonly kind: 'totp-setup'; readonly ticket: string; readonly setup: TotpSetup }
+type Step = { readonly kind: 'password' } | { readonly kind: 'totp'; readonly ticket: string }
 
 /**
  * Passkeys are the spec's primary sign-in method ("passkeys en méthode
  * principale, mot de passe plus TOTP en secours"), with password-then-TOTP
- * as the fallback. Passkey *registration* — adding one to an account — needs
- * a settings surface that does not exist yet and lands with it; login does
- * not need that surface, so it ships now.
+ * as the fallback.
  *
- * A role that needs MFA and has no factor yet does not get turned away on
- * the password path: the password step's ticket doubles as proof it can
- * enrol TOTP right here, `totp-setup`, rather than being locked out until an
- * admin intervenes.
+ * There used to be a third step here: an account whose role required MFA and
+ * had no factor yet was walked through a TOTP enrolment before it could get a
+ * session. ADR-0021 removed it. A correct password is enough for every role,
+ * including `admin`; the second factor is offered from the profile and
+ * recommended by a persistent notice in the admin, and this screen only ever
+ * asks for a code from someone who already chose to enrol one.
  */
 export function LoginRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -71,11 +68,8 @@ export function LoginRoute(): JSX.Element {
       const result = await auth.login(email, password)
       if (result.status === 'session') {
         goToIntendedDestination()
-      } else if (result.status === 'mfa_required') {
-        setStep({ kind: 'totp', ticket: result.ticket })
       } else {
-        const setup = await auth.beginTotpSetup(result.ticket)
-        setStep({ kind: 'totp-setup', ticket: result.ticket, setup })
+        setStep({ kind: 'totp', ticket: result.ticket })
       }
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('login.connectionFailed'))
@@ -97,55 +91,6 @@ export function LoginRoute(): JSX.Element {
     } finally {
       setSubmitting(false)
     }
-  }
-
-  async function submitTotpSetup(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    if (step.kind !== 'totp-setup') return
-    setError(null)
-    setSubmitting(true)
-    try {
-      await auth.confirmTotpSetup(step.ticket, code)
-      goToIntendedDestination()
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('login.incorrectCode'))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  if (step.kind === 'totp-setup') {
-    return (
-      <main className="auth-page">
-        <form className="auth-form" onSubmit={submitTotpSetup} aria-labelledby="totp-setup-heading">
-          <h1 id="totp-setup-heading">{t('login.totpSetupHeading')}</h1>
-          <p>{t('login.totpSetupPrompt')}</p>
-          <p>
-            <strong>{t('login.totpSetupKeyLabel')}</strong> <code>{step.setup.secret}</code>
-          </p>
-          <label htmlFor="totp-setup-code">{t('login.code')}</label>
-          <input
-            id="totp-setup-code"
-            name="totp-setup-code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-          />
-          {error !== null && (
-            <p role="alert" className="auth-form__error">
-              {error}
-            </p>
-          )}
-          <button type="submit" disabled={submitting}>
-            {t('login.confirm')}
-          </button>
-        </form>
-      </main>
-    )
   }
 
   if (step.kind === 'totp') {

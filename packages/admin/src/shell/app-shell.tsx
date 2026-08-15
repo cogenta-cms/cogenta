@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
+import { NoticeBoard } from '../notices/notice-board.js'
 import { NAV_ITEMS } from './nav-items.js'
 import '../styles/shell.css'
 
@@ -49,6 +50,10 @@ export function AppShell(): JSX.Element {
         </ul>
       </nav>
       <main id={MAIN_CONTENT_ID} className="app-shell__content" tabIndex={-1}>
+        {/* Above the routed page, inside the skip link's target: a
+            recommendation follows whoever is signed in from screen to screen,
+            and it never blocks the page it sits above (ADR-0021). */}
+        <NoticeBoard />
         <Outlet />
       </main>
     </div>

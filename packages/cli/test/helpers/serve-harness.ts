@@ -44,8 +44,13 @@ export function codeFor(secret: string, nowSeconds: number): string {
 }
 
 /**
- * Signs in a user whose role can publish, completing the mandatory TOTP
- * enrolment along the way. Returns the bearer token.
+ * Signs in a user whose role can publish. Kept its original name across the
+ * test suites that call it, even though what it does changed: since
+ * ADR-0021, a password alone is enough — MFA is a recommendation the admin
+ * shows, never a setup gate at sign-in (`packages/auth/src/login.ts`'s
+ * `LoginResult` returns `status: 'session'` directly for an account with no
+ * enrolled factor; `mfa_required` only challenges one that already enrolled
+ * one). Returns the bearer token.
  */
 export async function loginWithMfaSetup(
   base: string,
@@ -57,28 +62,13 @@ export async function loginWithMfaSetup(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
-  const loginBody = (await login.json()) as { data: { status: string; ticket: string } }
-  if (loginBody.data.status !== 'totp_setup_required') {
-    throw new Error(`expected totp_setup_required, got ${loginBody.data.status}`)
+  const loginBody = (await login.json()) as {
+    data: { status: string; session?: { token: string } }
   }
-
-  const setup = await fetch(`${base}/api/auth/totp-setup`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ticket: loginBody.data.ticket }),
-  })
-  const setupBody = (await setup.json()) as { data: { secret: string } }
-
-  const confirmed = await fetch(`${base}/api/auth/totp-setup-confirm`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      ticket: loginBody.data.ticket,
-      token: codeFor(setupBody.data.secret, Date.now() / 1000),
-    }),
-  })
-  const confirmedBody = (await confirmed.json()) as { data: { session: { token: string } } }
-  return confirmedBody.data.session.token
+  if (loginBody.data.status !== 'session' || loginBody.data.session === undefined) {
+    throw new Error(`expected session, got ${loginBody.data.status}`)
+  }
+  return loginBody.data.session.token
 }
 
 /** Creates a real user with a real password hash, against the site's own database. */

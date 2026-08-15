@@ -84,11 +84,18 @@ export function installMockFetch(
   options: {
     readonly password?: string
     readonly requireTotp?: boolean
-    readonly requireTotpSetup?: boolean
     /** When set, `/api/schema` reports these as `site.locales` (ADR-0014's translation family switcher only renders with 2+). */
     readonly siteLocales?: readonly string[]
     /** Overrides the signed-in user's roles — `['editor']` by default. */
     readonly roles?: readonly string[]
+    /** What `GET /api/notices` answers with. Empty by default: most screens have nothing to recommend. */
+    readonly notices?: readonly {
+      id: string
+      code: string
+      severity: string
+      dismissible: boolean
+      action?: { code: string; href: string }
+    }[]
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -103,6 +110,47 @@ export function installMockFetch(
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
+  let notices = [...(options.notices ?? [])]
+
+  // Account state, per `installMockFetch()` call: the signed-in user plus
+  // whatever the test creates through the real routes.
+  interface MockAccount {
+    id: string
+    email: string
+    roles: readonly string[]
+    status: 'active' | 'disabled'
+    createdAt: string
+    updatedAt: string
+    mfa: { totp: boolean; passkeys: number }
+  }
+  let accountCounter = 0
+  const accounts: MockAccount[] = [
+    {
+      id: user.id,
+      email: user.email,
+      roles: user.roles,
+      status: 'active',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      mfa: { totp: false, passkeys: 0 },
+    },
+    {
+      id: 'user-2',
+      email: 'bob@example.com',
+      roles: ['viewer'],
+      status: 'active',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      mfa: { totp: true, passkeys: 0 },
+    },
+  ]
+  const userSessions: Record<string, { id: string; lastSeenAt: string; label: string | null }[]> = {
+    [user.id]: [
+      { id: 'session-1', lastSeenAt: '2026-03-01T00:00:00.000Z', label: 'Work laptop' },
+      { id: 'session-2', lastSeenAt: '2026-03-02T00:00:00.000Z', label: null },
+    ],
+    'user-2': [{ id: 'session-3', lastSeenAt: '2026-03-03T00:00:00.000Z', label: 'Phone' }],
+  }
 
   let mediaCounter = 0
   const media: {
@@ -135,9 +183,6 @@ export function installMockFetch(
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect email or password.' },
           })
         }
-        if (options.requireTotpSetup === true) {
-          return json(200, { data: { status: 'totp_setup_required', ticket: 'setup-ticket-1' } })
-        }
         if (options.requireTotp === true) {
           return json(200, {
             data: { status: 'mfa_required', ticket: 'ticket-1', availableFactors: ['totp'] },
@@ -155,22 +200,153 @@ export function installMockFetch(
         return json(200, { data: session() })
       }
 
-      if (url.endsWith('/api/auth/totp-setup') && method === 'POST') {
-        if (body.ticket !== 'setup-ticket-1') {
-          return json(401, { error: { code: 'AUTH_SESSION_INVALID', message: 'Invalid ticket.' } })
+      // Self-service enrolment (ADR-0021): identified by the bearer token, never
+      // by anything in the request body.
+      if (url.endsWith('/api/auth/totp/enrol') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
         return json(200, {
           data: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cogenta:alice@example.com' },
         })
       }
 
-      if (url.endsWith('/api/auth/totp-setup-confirm') && method === 'POST') {
-        if (body.ticket !== 'setup-ticket-1' || body.token !== '123456') {
+      if (url.endsWith('/api/auth/totp/enrol/confirm') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        if (body.token !== '123456') {
           return json(401, {
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect verification code.' },
           })
         }
-        return json(200, { data: session() })
+        return json(200, { data: { enrolled: true } })
+      }
+
+      if (url.endsWith('/api/auth/totp') && method === 'DELETE') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return new Response(null, { status: 204 })
+      }
+
+      const dismissMatch = /\/api\/notices\/([^/?]+)\/dismiss$/u.exec(url)
+      if (dismissMatch !== null && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const id = decodeURIComponent(dismissMatch[1] ?? '')
+        const found = notices.find((notice) => notice.id === id)
+        if (found === undefined) {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such notice.' } })
+        }
+        notices = notices.filter((notice) => notice.id !== id)
+        return new Response(null, { status: 204 })
+      }
+
+      if (url.endsWith('/api/notices') && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return json(200, { data: notices })
+      }
+
+      // `/api/users/*`. The role checks below mirror the real router's, because
+      // an admin screen test whose stub answers 200 to everyone proves nothing
+      // — the real refusals are proved against the real router in
+      // `packages/api/test/rest/users-router.test.ts`.
+      const usersMatch =
+        /\/api\/users(?:\/([^/?]+))?(?:\/([^/?]+))?(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
+      if (usersMatch !== null && url.includes('/api/users')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const [, rawId, sub, sessionId] = usersMatch
+        const isAdmin = user.roles.includes('admin')
+        const forbidden = json(403, {
+          error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
+        })
+        const id = rawId === 'me' ? user.id : rawId
+
+        if (rawId === undefined && method === 'GET') {
+          if (!isAdmin) return forbidden
+          const parsed = new URL(url, 'http://localhost')
+          const role = parsed.searchParams.get('role')
+          return json(200, {
+            data: role === null ? accounts : accounts.filter((a) => a.roles.includes(role)),
+          })
+        }
+
+        if (rawId === undefined && method === 'POST') {
+          if (!isAdmin) return forbidden
+          accountCounter += 1
+          const created: MockAccount = {
+            id: `user-new-${accountCounter}`,
+            email: String(body.email).toLowerCase(),
+            roles: body.roles as readonly string[],
+            status: 'active',
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            mfa: { totp: false, passkeys: 0 },
+          }
+          accounts.push(created)
+          return json(201, { data: { user: created, password: 'generated-password-xyz' } })
+        }
+
+        const account = accounts.find((candidate) => candidate.id === id)
+
+        if (sub === undefined && method === 'GET') {
+          if (id !== user.id && !isAdmin) return forbidden
+          if (account === undefined) {
+            return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
+          }
+          return json(200, { data: account })
+        }
+
+        if (sub === undefined && method === 'PATCH') {
+          if (!isAdmin) return forbidden
+          if (account === undefined) {
+            return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
+          }
+          if (body.roles !== undefined) account.roles = body.roles as readonly string[]
+          if (body.status !== undefined) account.status = body.status as 'active' | 'disabled'
+          return json(200, { data: account })
+        }
+
+        if (sub === 'password' && method === 'POST') {
+          if (id !== user.id) return forbidden
+          if (body.currentPassword !== password) {
+            return json(401, {
+              error: {
+                code: 'AUTH_INVALID_CREDENTIALS',
+                message: 'The current password is not correct.',
+              },
+            })
+          }
+          return json(200, { data: { changed: true } })
+        }
+
+        if (sub === 'sessions' && sessionId === undefined && method === 'GET') {
+          if (id !== user.id && !isAdmin) return forbidden
+          return json(200, {
+            data: (userSessions[id ?? ''] ?? []).map((session) => ({
+              ...session,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              expiresAt: '2030-01-01T00:00:00.000Z',
+            })),
+          })
+        }
+
+        if (sub === 'sessions' && sessionId !== undefined && method === 'DELETE') {
+          if (id !== user.id && !isAdmin) return forbidden
+          const list = userSessions[id ?? ''] ?? []
+          const index = list.findIndex((session) => session.id === sessionId)
+          if (index === -1) {
+            return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such session.' } })
+          }
+          list.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
       }
 
       if (url.endsWith('/api/auth/session') && method === 'GET') {

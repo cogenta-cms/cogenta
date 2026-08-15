@@ -11,7 +11,9 @@ import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
+import { ProfileRoute } from './routes/profile.js'
 import { SettingsRoute } from './routes/settings.js'
+import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { AppShell } from './shell/app-shell.js'
 
@@ -54,6 +56,8 @@ export function App(): JSX.Element {
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />
             <Route path="agents" element={<AgentsRoute />} />
+            <Route path="users" element={<UsersRoute />} />
+            <Route path="profile" element={<ProfileRoute />} />
             <Route path="settings" element={<SettingsRoute />} />
           </Route>
         </Routes>

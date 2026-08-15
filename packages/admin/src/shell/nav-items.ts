@@ -19,5 +19,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/media', labelKey: 'nav.media' },
   { to: '/audit', labelKey: 'nav.audit' },
   { to: '/agents', labelKey: 'nav.agents' },
+  { to: '/users', labelKey: 'nav.users' },
+  { to: '/profile', labelKey: 'nav.profile' },
   { to: '/settings', labelKey: 'nav.settings' },
 ]

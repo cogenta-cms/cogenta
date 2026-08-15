@@ -5,17 +5,15 @@ import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
 
-const startRegistration = vi.fn()
 vi.mock('@simplewebauthn/browser', () => ({
   startAuthentication: vi.fn(),
-  startRegistration: (...args: unknown[]) => startRegistration(...args),
+  startRegistration: vi.fn(),
 }))
 
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
   installMockFetch()
-  startRegistration.mockReset()
 })
 
 afterEach(() => {
@@ -28,41 +26,6 @@ async function goToSettings(): Promise<void> {
   await screen.findByRole('heading', { name: 'Paramètres du compte' })
 }
 
-describe('account settings — passkey registration', () => {
-  it('registers a new passkey the server accepts', async () => {
-    startRegistration.mockResolvedValue({ id: 'mock-new-credential-id' })
-    render(<App />)
-    await goToSettings()
-
-    fireEvent.change(screen.getByLabelText("Nom de l'appareil (facultatif)"), {
-      target: { value: 'Ordinateur portable' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Ajouter une clé d’accès' }))
-
-    expect(await screen.findByRole('status')).toHaveProperty('textContent', "Clé d'accès ajoutée.")
-    expect(startRegistration).toHaveBeenCalledWith({
-      optionsJSON: {
-        challenge: 'register-challenge',
-        rp: { id: 'example.com', name: 'Cogenta' },
-      },
-    })
-  })
-
-  it('reports a passkey the server refuses, without pretending it worked', async () => {
-    startRegistration.mockResolvedValue({ id: 'some-other-credential' })
-    render(<App />)
-    await goToSettings()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Ajouter une clé d’accès' }))
-
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'The passkey response could not be verified.',
-    )
-    expect(screen.queryByRole('status')).toBeNull()
-  })
-})
-
 describe('account settings — interface language', () => {
   it('switches the whole interface to English and persists the choice', async () => {
     render(<App />)
@@ -73,5 +36,20 @@ describe('account settings — interface language', () => {
     expect(await screen.findByRole('heading', { name: 'Account settings' })).toBeDefined()
     expect(screen.getByRole('link', { name: 'Settings' })).toBeDefined()
     expect(localStorage.getItem('cogenta.admin.language')).toBe('en')
+  })
+})
+
+describe('account settings — what moved to the profile', () => {
+  // L11 task 3 moved passkeys next to TOTP, the password and the sessions.
+  // Leaving a dead end here would be worse than the split it replaced.
+  it('no longer registers passkeys, and says where that went', async () => {
+    render(<App />)
+    await goToSettings()
+
+    expect(screen.queryByRole('button', { name: 'Ajouter une clé d’accès' })).toBeNull()
+    const pointer = screen.getByRole('link', {
+      name: /Mot de passe, vérification en deux étapes et sessions actives/u,
+    })
+    expect(pointer.getAttribute('href')).toBe('/profile')
   })
 })

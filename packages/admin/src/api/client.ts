@@ -19,17 +19,18 @@ export interface LoginSession {
   readonly expiresAt: string
 }
 
+/**
+ * Two outcomes, not three. `totp_setup_required` is gone with ADR-0021: nobody
+ * is turned away at sign-in for lacking a second factor, so there is no state in
+ * which the login screen has to run an enrolment ceremony before it can let
+ * someone in. Enrolment moved to the account's own profile.
+ */
 export type LoginResult =
   | { readonly status: 'session'; readonly session: LoginSession; readonly user: SessionUser }
   | {
       readonly status: 'mfa_required'
       readonly ticket: string
       readonly availableFactors: readonly ('totp' | 'webauthn')[]
-    }
-  | {
-      /** This role needs MFA and has no factor set up — enrol one with the ticket. */
-      readonly status: 'totp_setup_required'
-      readonly ticket: string
     }
 
 export interface TotpSetup {
@@ -46,15 +47,27 @@ export function completeTotp(ticket: string, token: string): Promise<LoginResult
   return request('/api/auth/totp', { method: 'POST', body: JSON.stringify({ ticket, token }) })
 }
 
-export function beginTotpSetup(ticket: string): Promise<TotpSetup> {
-  return request('/api/auth/totp-setup', { method: 'POST', body: JSON.stringify({ ticket }) })
+/**
+ * Self-service TOTP, for an account that is already signed in.
+ *
+ * `token` is the session bearer token, and it is the *only* thing that says
+ * which account is being changed — no route takes a user id, so the admin has
+ * no way to ask the server to enrol somebody else even by mistake.
+ */
+export function beginTotpEnrolment(token: string): Promise<TotpSetup> {
+  return request('/api/auth/totp/enrol', { method: 'POST', headers: authHeader(token) })
 }
 
-export function confirmTotpSetup(ticket: string, token: string): Promise<LoginResult> {
-  return request('/api/auth/totp-setup-confirm', {
+export function confirmTotpEnrolment(token: string, code: string): Promise<void> {
+  return request('/api/auth/totp/enrol/confirm', {
     method: 'POST',
-    body: JSON.stringify({ ticket, token }),
+    headers: authHeader(token),
+    body: JSON.stringify({ token: code }),
   })
+}
+
+export function disableTotp(token: string): Promise<void> {
+  return request('/api/auth/totp', { method: 'DELETE', headers: authHeader(token) })
 }
 
 export function currentSession(token: string): Promise<SessionUser> {

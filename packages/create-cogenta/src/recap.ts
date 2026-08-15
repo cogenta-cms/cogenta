@@ -99,7 +99,8 @@ export function printRecap(input: RecapInput, out: Output): void {
   out.line(`cd ${answers.targetDir}`)
   out.line('npm install')
   out.line('npx cogenta serve')
+  out.detail(`Then open ${answers.siteUrl}/admin and sign in with the admin account above.`)
   out.detail(
-    'Sign in with the admin account above and enrol a passkey from the admin UI — that ceremony needs a browser, so it never runs during install.',
+    'A role that can publish, or admin, is asked to set up a second factor (or a passkey) at first sign-in — that ceremony needs a browser, so it never runs during install.',
   )
 }

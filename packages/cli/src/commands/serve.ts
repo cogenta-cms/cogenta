@@ -52,6 +52,7 @@ import {
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
+import { serveAdminAsset } from './admin-assets.js'
 import { loadSkinCss, renderRequestedPage } from './theme-render.js'
 
 const SCHEMA_FILE_CANDIDATES = [
@@ -506,6 +507,26 @@ export function createRequestListener(
         ),
       )
       const context: AccessContext = { actor }
+
+      // The admin SPA's own built shell — never permission-checked here: it
+      // is static HTML/JS, not data. Every real action it takes goes through
+      // the same `/api/*` routes below, which already enforce permissions on
+      // their own. GET only: there is nothing meaningful to POST to a static
+      // file.
+      if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        const asset = await serveAdminAsset(url.pathname)
+        if (asset !== null) {
+          res.writeHead(200, { 'content-type': asset.contentType })
+          res.end(asset.body)
+          return
+        }
+        jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No admin asset matches this path.')
+        return
+      }
 
       if (url.pathname.startsWith('/api/auth/')) {
         const body =

@@ -26,7 +26,7 @@ import { AppShell } from './shell/app-shell.js'
 export function App(): JSX.Element {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
           <Route path="login" element={<LoginRoute />} />
           <Route

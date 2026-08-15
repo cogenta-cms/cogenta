@@ -405,6 +405,9 @@ importers:
         specifier: 'catalog:'
         version: 17.0.2
     devDependencies:
+      '@cogenta/admin':
+        specifier: workspace:*
+        version: link:../admin
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

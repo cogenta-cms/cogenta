@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/agents-builtin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The built-in agents shipped with Cogenta — Security, SEO, Content, Performance.",
   "license": "MPL-2.0",
   "type": "module",

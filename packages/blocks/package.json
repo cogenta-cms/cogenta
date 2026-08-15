@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/blocks",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The semantic block vocabulary every Cogenta theme implements.",
   "license": "MPL-2.0",
   "type": "module",

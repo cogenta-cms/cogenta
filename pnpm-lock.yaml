@@ -383,6 +383,9 @@ importers:
       '@cogenta/auth':
         specifier: workspace:*
         version: link:../auth
+      '@cogenta/blocks':
+        specifier: workspace:*
+        version: link:../blocks
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
@@ -395,6 +398,9 @@ importers:
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema
+      '@cogenta/theme-canonical':
+        specifier: workspace:*
+        version: link:../theme-canonical
       graphql:
         specifier: 'catalog:'
         version: 17.0.2

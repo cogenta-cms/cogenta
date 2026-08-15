@@ -59,6 +59,7 @@ export const ERROR_CODES = [
   'THEME_INVALID',
   'THEME_BLOCK_MISSING',
   'THEME_IMPORT_FORBIDDEN',
+  'THEME_SIGNATURE_INVALID',
 
   // Rendering — the content API a theme reads through (ADR-0016)
   'CONTENT_API_FAILED',

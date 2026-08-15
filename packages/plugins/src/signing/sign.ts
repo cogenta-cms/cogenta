@@ -2,11 +2,20 @@ import { createPrivateKey, sign as cryptoSign } from 'node:crypto'
 import type { PluginManifest } from '../manifest.js'
 
 /**
- * A deterministic, sorted-key JSON rendering of the manifest — the same
- * object with the same fields always canonicalizes identically regardless
- * of the property insertion order `definePlugin`'s caller happened to use.
- * This is what actually gets signed: the manifest's real, complete content
- * (name, version, capabilities, provides, ...), not just its name — a
+ * A deterministic, sorted-key JSON rendering of any signable content — the
+ * same value always canonicalizes identically regardless of the property
+ * insertion order its producer happened to use. Generic over content shape:
+ * a plugin manifest (task 9) and a theme submission (task 12) are both real
+ * consumers, and neither is more "canonical" a use than the other — this is
+ * the one real canonicalization primitive, not one per registry.
+ */
+export function canonicalizeContent(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value))
+}
+
+/**
+ * A plugin manifest's canonical content — what actually gets signed for a
+ * plugin (name, version, capabilities, provides, ...), not just its name: a
  * signature that only covered the name would prove authorship of a label,
  * not of what the plugin is declared to do.
  *
@@ -18,7 +27,7 @@ import type { PluginManifest } from '../manifest.js'
  * whichever future task builds that code-reading path.
  */
 export function canonicalizeManifest(manifest: PluginManifest): string {
-  return JSON.stringify(sortKeysDeep(manifest))
+  return canonicalizeContent(manifest)
 }
 
 function sortKeysDeep(value: unknown): unknown {
@@ -34,20 +43,25 @@ function sortKeysDeep(value: unknown): unknown {
 }
 
 /**
- * Signs a manifest's canonical content with a real Ed25519 private key
- * (base64 PKCS8, `./keys.js`). The publisher-side half of this task's
- * primitive — a real Cogenta installation never runs this, only the
- * verification half (`./verify.js`) matters there, but both sides must be
- * real for the primitive to be provably correct rather than assumed.
+ * Signs any canonicalizable content with a real Ed25519 private key (base64
+ * PKCS8, `./keys.js`). The publisher-side half of this primitive — a real
+ * Cogenta installation never runs this, only the verification half
+ * (`./verify.js`) matters there, but both sides must be real for the
+ * primitive to be provably correct rather than assumed.
  */
-export function signManifest(manifest: PluginManifest, privateKeyBase64: string): string {
+export function signContent(content: unknown, privateKeyBase64: string): string {
   const privateKey = createPrivateKey({
     key: Buffer.from(privateKeyBase64, 'base64'),
     format: 'der',
     type: 'pkcs8',
   })
-  const data = Buffer.from(canonicalizeManifest(manifest), 'utf8')
+  const data = Buffer.from(canonicalizeContent(content), 'utf8')
   // Ed25519 has no separate digest step — `null` is the documented algorithm
   // argument `crypto.sign` expects for it.
   return cryptoSign(null, data, privateKey).toString('base64')
+}
+
+/** Signs a plugin manifest — the task-9 entry point, now a thin wrapper over `signContent`. */
+export function signManifest(manifest: PluginManifest, privateKeyBase64: string): string {
+  return signContent(manifest, privateKeyBase64)
 }

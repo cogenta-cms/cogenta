@@ -71,14 +71,29 @@ export type {
 } from './registries/skins.js'
 export { createSkinGallery } from './registries/skins.js'
 export { ensureRegistryTables, REGISTRY_TABLES } from './registries/tables.js'
+export type {
+  ThemeRegistry,
+  ThemeRegistryEntry,
+  ThemeRegistryOptions,
+  ThemeSubmissionInput,
+  ThemeSubmissionStatus,
+} from './registries/themes.js'
+export { createThemeRegistry } from './registries/themes.js'
 export type { SemverVersion } from './semver.js'
 export { compareVersions, parseVersion, satisfiesRange } from './semver.js'
 export type { SigningKeyPair } from './signing/keys.js'
 export { exportPrivateKey, exportPublicKey, generateSigningKeyPair } from './signing/keys.js'
-export { canonicalizeManifest, signManifest } from './signing/sign.js'
+export {
+  canonicalizeContent,
+  canonicalizeManifest,
+  signContent,
+  signManifest,
+} from './signing/sign.js'
 export {
   readSignatureFile,
   TRUSTED_REGISTRY_PUBLIC_KEYS,
+  verifyContentAgainstTrustedKeys,
+  verifyContentSignature,
   verifyManifestSignature,
   verifyPluginSignature,
 } from './signing/verify.js'

@@ -1,7 +1,7 @@
 import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { PluginManifest } from '../manifest.js'
-import { canonicalizeManifest } from './sign.js'
+import { canonicalizeContent } from './sign.js'
 
 /**
  * Public keys of registries this installation trusts. Empty: no real
@@ -15,15 +15,15 @@ import { canonicalizeManifest } from './sign.js'
 export const TRUSTED_REGISTRY_PUBLIC_KEYS: readonly string[] = []
 
 /**
- * Verifies a base64 Ed25519 signature against a manifest's canonical
- * content and a base64 SPKI public key. Real, standard verification —
+ * Verifies a base64 Ed25519 signature against any canonicalizable content
+ * and a base64 SPKI public key. Real, standard verification —
  * `crypto.verify` returns `false` on any mismatch (wrong key, tampered
  * content, malformed signature bytes) rather than throwing, except for a
  * structurally invalid key/signature, which this function treats the same
  * way: not verified, never an uncaught exception.
  */
-export function verifyManifestSignature(
-  manifest: PluginManifest,
+export function verifyContentSignature(
+  content: unknown,
   signatureBase64: string,
   publicKeyBase64: string,
 ): boolean {
@@ -33,7 +33,7 @@ export function verifyManifestSignature(
       format: 'der',
       type: 'spki',
     })
-    const data = Buffer.from(canonicalizeManifest(manifest), 'utf8')
+    const data = Buffer.from(canonicalizeContent(content), 'utf8')
     const signature = Buffer.from(signatureBase64, 'base64')
     return cryptoVerify(null, data, publicKey, signature)
   } catch {
@@ -41,18 +41,36 @@ export function verifyManifestSignature(
   }
 }
 
+/** Verifies a plugin manifest's signature — the task-9 entry point, now a thin wrapper. */
+export function verifyManifestSignature(
+  manifest: PluginManifest,
+  signatureBase64: string,
+  publicKeyBase64: string,
+): boolean {
+  return verifyContentSignature(manifest, signatureBase64, publicKeyBase64)
+}
+
 /**
  * A signature verifies if it matches ANY trusted key — one registry
  * operator's key rotation, or several trusted registries, both work without
  * this function's caller needing to know which key actually signed.
  */
+export function verifyContentAgainstTrustedKeys(
+  content: unknown,
+  signatureBase64: string | null,
+  trustedPublicKeys: readonly string[],
+): boolean {
+  if (signatureBase64 === null) return false
+  return trustedPublicKeys.some((key) => verifyContentSignature(content, signatureBase64, key))
+}
+
+/** Verifies a plugin manifest against trusted keys — the task-9 entry point, now a thin wrapper. */
 export function verifyPluginSignature(
   manifest: PluginManifest,
   signatureBase64: string | null,
   trustedPublicKeys: readonly string[],
 ): boolean {
-  if (signatureBase64 === null) return false
-  return trustedPublicKeys.some((key) => verifyManifestSignature(manifest, signatureBase64, key))
+  return verifyContentAgainstTrustedKeys(manifest, signatureBase64, trustedPublicKeys)
 }
 
 /**

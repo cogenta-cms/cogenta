@@ -64,6 +64,10 @@ export const ERROR_CODES = [
   // Rendering — the content API a theme reads through (ADR-0016)
   'CONTENT_API_FAILED',
 
+  // Rendering — in-process fallback `cogenta serve` uses until a real Astro
+  // build exists (no image pipeline is wired into that fallback yet)
+  'THEME_IMAGE_UNSUPPORTED',
+
   // Rendering — build targets. A target that cannot honour a declared runtime
   // need refuses the build; it never degrades silently (ADR-0004).
   'BUILD_TARGET_UNKNOWN',

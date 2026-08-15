@@ -192,13 +192,21 @@ export async function createMysqlHandle(options: MysqlHandleOptions): Promise<Da
       // whole thing regardless of how many savepoints were nested inside it,
       // so a partially-applied nested savepoint is never left dangling —
       // `enter` always resets `depth` back to 0 on its way out.
-      const MAX_DEADLOCK_RETRIES = 3
+      //
+      // Jittered backoff, not an immediate retry: several transactions that
+      // deadlocked against each other tend to be released by InnoDB at
+      // close to the same instant, so retrying instantly just re-collides
+      // them in lockstep. A few tens of milliseconds of random spread is
+      // enough to break that up in practice.
+      const MAX_DEADLOCK_RETRIES = 5
       try {
         for (let attempt = 0; ; attempt += 1) {
           try {
             return await enter(run)
           } catch (error) {
             if (!isDeadlock(error) || attempt >= MAX_DEADLOCK_RETRIES) throw error
+            const backoffMs = Math.min(20 * 2 ** attempt, 200) + Math.random() * 20
+            await new Promise((resolve) => setTimeout(resolve, backoffMs))
           }
         }
       } finally {

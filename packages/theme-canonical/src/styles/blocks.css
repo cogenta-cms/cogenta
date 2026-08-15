@@ -256,13 +256,37 @@
 .cg-figure__media {
   inline-size: 100%;
   aspect-ratio: var(--cg-ratio, auto);
-  border-radius: var(--cg-radius-md);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-elevation-2), var(--cg-ring);
 }
 
+/* Full bleed keeps its corners square: a rounded corner against the viewport
+   edge reads as a mistake, not as a radius. */
+.cg-figure[data-align="full"] .cg-figure__media {
+  border-radius: 0;
+}
+
+/* An indented caption with a rule, so it reads as annotation rather than as a
+   stray paragraph that happens to follow a picture. */
 .cg-figure__caption {
-  margin-block-start: var(--cg-s3);
+  margin-block-start: var(--cg-s4);
+  padding-inline-start: var(--cg-s4);
+  border-inline-start: 2px solid var(--cg-line-strong);
   color: var(--cg-ink-subtle);
   font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-normal);
+  text-wrap: pretty;
+}
+
+.cg-figure[data-align="full"] .cg-figure__caption {
+  max-inline-size: var(--cg-measure);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+  border-inline-start: 0;
+}
+
+.cg-figure__credit {
+  color: var(--cg-ink-subtle);
 }
 
 .cg-figure__credit::before {

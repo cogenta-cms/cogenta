@@ -109,6 +109,39 @@ export type {
   RankedId,
 } from './rag/index/types.js'
 export { vectorRank } from './rag/index/vector-rank.js'
+export type {
+  FullTextSearchLike,
+  SemanticHit,
+  SemanticSearch,
+  SemanticSearchOptions,
+  SemanticSearchQuery,
+} from './rag/semantic/search.js'
+export { createSemanticSearch } from './rag/semantic/search.js'
+export type {
+  FileVectorOptions,
+  PgVectorDriverOptions,
+  PgVectorOptions,
+  VectorConfig,
+  VectorFilter,
+  VectorMatch,
+  VectorRecord,
+  VectorRegistryOptions,
+  VectorScope,
+  VectorSearchOptions,
+  VectorStore,
+} from './rag/vector/index.js'
+export {
+  createFileVectorStore,
+  createMemoryVectorStore,
+  createPgVectorStore,
+  createVectorRegistry,
+  fileVectorDriver,
+  matchesFilter,
+  memoryVectorDriver,
+  pgVectorDriver,
+  VECTOR_DEFAULTS,
+  vectorLiteral,
+} from './rag/vector/index.js'
 export type { DiffChangeKind, DiffEntry } from './reversibility/diff.js'
 export { diffValues } from './reversibility/diff.js'
 export { createMemoryReceiptStore } from './reversibility/receipt-store.js'

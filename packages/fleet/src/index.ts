@@ -20,6 +20,17 @@ export type {
   OpenCveSummary,
   TelemetryPayload,
 } from './agent/types.js'
+export type { AlertSender } from './alerts/alerts.js'
+export {
+  detectCampaignHaltedAlert,
+  detectCriticalRiskAlert,
+  detectSiteSilentAlert,
+  dispatchAlert,
+  raiseIfNew,
+} from './alerts/alerts.js'
+export type { AlertConditionStore, AlertConditionType } from './alerts/conditions.js'
+export { createAlertConditionStore } from './alerts/conditions.js'
+export { ALERT_TABLES, ensureAlertTables } from './alerts/tables.js'
 export type {
   CommandQueueStore,
   FleetCommand,

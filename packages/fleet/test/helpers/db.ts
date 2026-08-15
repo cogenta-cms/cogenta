@@ -1,4 +1,5 @@
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
+import { ensureAlertTables } from '../../src/alerts/tables.js'
 import { ensureControlTables } from '../../src/control/tables.js'
 import { ensureFleetTables } from '../../src/enrollment/tables.js'
 import { ensureReportingTables } from '../../src/reporting/tables.js'
@@ -11,5 +12,6 @@ export async function testDb(): Promise<DatabaseHandle> {
   await ensureControlTables(db)
   await ensureRolloutTables(db)
   await ensureReportingTables(db)
+  await ensureAlertTables(db)
   return db
 }

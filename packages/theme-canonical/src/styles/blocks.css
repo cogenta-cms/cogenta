@@ -420,19 +420,43 @@
 
 .cg-gallery__items {
   display: grid;
-  gap: var(--cg-s3);
+  gap: var(--cg-gap-tight);
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+/* The frame, shared by all three layouts: it is what clips the hover zoom
+   below, so the picture can grow without the tile growing with it. */
+.cg-gallery__item {
+  overflow: hidden;
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-gallery__item img {
+  inline-size: 100%;
+  block-size: 100%;
+  transition: transform var(--cg-duration-slow) var(--cg-ease);
+}
+
+.cg-gallery__item:hover img {
+  transform: scale(1.04);
+}
+
+/* A grid of pictures needs one shape, or the rows read as an accident. Masonry
+   is the one layout that opts out, since its whole point is not to. */
+.cg-gallery:not([data-layout="masonry"]) .cg-gallery__item img {
+  aspect-ratio: 4 / 3;
 }
 
 .cg-gallery[data-layout="masonry"] .cg-gallery__items {
   display: block;
   columns: 3 14rem;
-  column-gap: var(--cg-s3);
+  column-gap: var(--cg-gap-tight);
 }
 
 .cg-gallery[data-layout="masonry"] .cg-gallery__item {
   break-inside: avoid;
-  margin-block-end: var(--cg-s3);
+  margin-block-end: var(--cg-gap-tight);
 }
 
 .cg-gallery[data-layout="carousel"] .cg-gallery__items {
@@ -445,7 +469,6 @@
   scroll-snap-align: start;
 }
 
-.cg-gallery__item img,
 .cg-collection img {
   inline-size: 100%;
   border-radius: var(--cg-radius-md);

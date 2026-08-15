@@ -1,4 +1,5 @@
 import { type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import { type ControlPlaneIdentity, generateControlPlaneIdentity } from '../control/identity.js'
 import { FLEET_TABLES } from './tables.js'
 import { generatePairingToken, hashPairingToken } from './tokens.js'
 
@@ -9,6 +10,14 @@ export interface PairingToken {
   /** The real bearer credential — returned once, at issuance, never recoverable afterward (only its hash is stored). */
   readonly token: string
   readonly expiresAt: string
+  /**
+   * The control plane's own real Ed25519 public key (`../control/identity.js`)
+   * — handed to the site at the same moment as the token, so it can verify
+   * every future signed command (task 6) without a second round trip. The
+   * reverse of the site's own public key, which the control plane only
+   * learns later, at consumption (`consumePairingToken`).
+   */
+  readonly controlPlanePublicKey: string
 }
 
 export interface SiteRegistration {
@@ -73,6 +82,8 @@ export interface EnrollmentStore {
    * narrow seam where "which sites exist" is legitimately fleet-wide.
    */
   listSites(): Promise<readonly SiteRegistration[]>
+  /** The control plane's own public key — same value every `PairingToken` already carries, exposed directly for a caller that already has a site and needs to verify a command without re-deriving it from a stored token. */
+  getControlPlanePublicKey(): string
 }
 
 interface TokenRow {
@@ -109,6 +120,7 @@ function toSite(row: SiteRow): SiteRegistration {
 export function createEnrollmentStore(
   db: DatabaseHandle,
   now: () => number = Date.now,
+  controlPlaneIdentity: ControlPlaneIdentity = generateControlPlaneIdentity(),
 ): EnrollmentStore {
   const tokens = identifier(FLEET_TABLES.pairingTokens, db.dialect)
   const sites = identifier(FLEET_TABLES.sites, db.dialect)
@@ -121,7 +133,7 @@ export function createEnrollmentStore(
       await db.query(sql`
         insert into ${tokens} (id, token_hash, site_name, expires_at, consumed_at, site_id, client)
         values (${newId(now)}, ${hashPairingToken(token)}, ${siteName}, ${expiresAt}, ${null}, ${null}, ${client})`)
-      return { token, expiresAt }
+      return { token, expiresAt, controlPlanePublicKey: controlPlaneIdentity.publicKey }
     },
 
     async consumePairingToken(token, sitePublicKey) {
@@ -181,6 +193,10 @@ export function createEnrollmentStore(
         sql`select id, name, public_key, registered_at, revoked_at, client from ${sites} order by registered_at asc`,
       )
       return result.rows.map(toSite)
+    },
+
+    getControlPlanePublicKey() {
+      return controlPlaneIdentity.publicKey
     },
   }
 }

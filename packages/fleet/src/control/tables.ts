@@ -9,6 +9,7 @@ import {
 
 export const CONTROL_TABLES = {
   telemetrySnapshots: 'cogenta_fleet_telemetry_snapshots',
+  commands: 'cogenta_fleet_commands',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -60,5 +61,26 @@ export async function ensureControlTables(db: DatabaseHandle): Promise<void> {
     'cogenta_fleet_telemetry_snapshots_site',
     snapshots,
     sql`(site_id, collected_at)`,
+  )
+
+  // One row per queued command, strictly per-site (`site_id`) — the same
+  // structural per-site scoping as `telemetry_snapshots` above, mirrored for
+  // the opposite direction (control plane → site instead of site → control
+  // plane).
+  const commands = identifier(CONTROL_TABLES.commands, d)
+  await db.query(sql`
+    create table if not exists ${commands} (
+      id ${t255} not null primary key,
+      site_id ${t255} not null,
+      action ${t255} not null,
+      payload_json ${payloadColumn} not null,
+      queued_at ${t255} not null,
+      delivered_at ${t255}
+    )`)
+  await createIndexIfMissing(
+    db,
+    'cogenta_fleet_commands_site',
+    commands,
+    sql`(site_id, delivered_at)`,
   )
 }

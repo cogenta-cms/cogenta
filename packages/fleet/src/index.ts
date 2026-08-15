@@ -1,5 +1,11 @@
 export { assertNoForbiddenFields } from './agent/assert.js'
 export { fingerprintSbom, summarizeAdminAccounts } from './agent/build.js'
+export type {
+  FleetCommandDispatchResult,
+  FleetCommandHandlers,
+  FleetCommandVerification,
+} from './agent/commands.js'
+export { dispatchFleetCommand, verifyFleetCommand } from './agent/commands.js'
 export type { SignedTelemetry } from './agent/sign.js'
 export { signTelemetryPayload, verifyTelemetrySignature } from './agent/sign.js'
 export type {
@@ -12,6 +18,15 @@ export type {
   OpenCveSummary,
   TelemetryPayload,
 } from './agent/types.js'
+export type {
+  CommandQueueStore,
+  FleetCommand,
+  FleetCommandAction,
+  SignedFleetCommand,
+} from './control/commands.js'
+export { createCommandQueueStore, FLEET_COMMAND_ACTIONS } from './control/commands.js'
+export type { ControlPlaneIdentity } from './control/identity.js'
+export { generateControlPlaneIdentity } from './control/identity.js'
 export type { IngestResult } from './control/ingest.js'
 export { ingestTelemetry } from './control/ingest.js'
 export type { FleetFilter, RiskReason, RiskTier, SiteRisk } from './control/risk.js'

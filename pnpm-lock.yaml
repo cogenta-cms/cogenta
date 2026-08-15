@@ -485,6 +485,9 @@ importers:
       '@cogenta/auth':
         specifier: workspace:*
         version: link:../auth
+      '@cogenta/channels':
+        specifier: workspace:*
+        version: link:../channels
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

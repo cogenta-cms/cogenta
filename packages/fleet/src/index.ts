@@ -59,6 +59,11 @@ export type {
   SiteInventory,
 } from './inventory/drift.js'
 export { computeFleetBaseline, detectDrift, extractInventory } from './inventory/drift.js'
+export type { ClientReport, ReportField } from './reporting/report.js'
+export { assembleClientReport, renderClientReport } from './reporting/report.js'
+export type { ReportScheduleStore } from './reporting/schedule.js'
+export { createReportScheduleStore, isReportDue } from './reporting/schedule.js'
+export { ensureReportingTables, REPORTING_TABLES } from './reporting/tables.js'
 export type {
   CampaignRecord,
   CampaignStatus,

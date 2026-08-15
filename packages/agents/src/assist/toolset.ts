@@ -1,6 +1,8 @@
 import type { SiteContext } from '../identity/context.js'
+import type { ImageProviderClient } from '../providers/image/types.js'
 import type { ProviderClient } from '../providers/types.js'
 import type { ToolCost, ToolDefinition } from '../tools/types.js'
+import { createGenerateImageTool } from './images.js'
 import { type AssistRuntime, createAssistRuntime } from './runtime.js'
 import { createWritingTools } from './writing.js'
 
@@ -46,6 +48,12 @@ export interface AssistToolsetOptions {
    * and everything below simply does not exist.
    */
   readonly provider?: ProviderClient
+  /**
+   * The site's configured image vendor, independent of the text one: a site may
+   * have either, both, or neither, and each capability appears or disappears on
+   * its own rather than as a block.
+   */
+  readonly imageProvider?: ImageProviderClient
   readonly site: SiteContext
 }
 
@@ -58,6 +66,7 @@ const LABELS: Readonly<Record<string, { readonly label: string; readonly needs: 
   'assist.titles': { label: 'Titles', needs: [] },
   'assist.tags': { label: 'Tags', needs: [] },
   'assist.alt_text': { label: 'Alt text', needs: [] },
+  'assist.generate_image': { label: 'Generate image', needs: ['prompt'] },
 }
 
 export function describeCapabilities(
@@ -81,15 +90,26 @@ const UNAVAILABLE: AssistToolset = Object.freeze({
 })
 
 export function createAssistToolset(options: AssistToolsetOptions): AssistToolset {
-  if (options.provider === undefined) return UNAVAILABLE
+  const runtime =
+    options.provider === undefined
+      ? undefined
+      : createAssistRuntime({ provider: options.provider, site: options.site })
 
-  const runtime = createAssistRuntime({ provider: options.provider, site: options.site })
-  const tools = createWritingTools(runtime)
+  const tools: ToolDefinition[] = [
+    ...(runtime === undefined ? [] : createWritingTools(runtime)),
+    ...(options.imageProvider === undefined
+      ? []
+      : [createGenerateImageTool(options.imageProvider) as ToolDefinition]),
+  ]
+
+  // Each capability appears on its own: a site with an image vendor but no text
+  // vendor gets the image button and nothing else, rather than all or nothing.
+  if (tools.length === 0) return UNAVAILABLE
 
   return {
     available: true,
     tools,
     capabilities: describeCapabilities(tools),
-    runtime,
+    ...(runtime === undefined ? {} : { runtime }),
   }
 }

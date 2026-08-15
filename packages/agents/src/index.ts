@@ -7,6 +7,8 @@ export type {
   AgentModelPreference,
   AgentTrigger,
 } from './agents/types.js'
+export type { GenerateImageResult } from './assist/images.js'
+export { createGenerateImageTool } from './assist/images.js'
 export type {
   AssistAgent,
   AssistRequest,
@@ -101,6 +103,38 @@ export {
 } from './providers/anthropic.js'
 export type { GoogleClientConfig, GoogleRequestBody } from './providers/google.js'
 export { buildGoogleRequest, createGoogleClient, parseGoogleResponse } from './providers/google.js'
+export type { OpenAiImageClientConfig, OpenAiImageRequestBody } from './providers/image/openai.js'
+export {
+  buildOpenAiImageRequest,
+  createOpenAiImageClient,
+  parseOpenAiImageResponse,
+} from './providers/image/openai.js'
+export type {
+  ImageProviderName,
+  ImageProviderRegistry,
+  ImageProviderRegistryConfig,
+} from './providers/image/registry.js'
+export {
+  createImageProviderRegistry,
+  IMAGE_PROVIDER_NAMES,
+} from './providers/image/registry.js'
+export type {
+  StabilityImageClientConfig,
+  StabilityRequestBody,
+} from './providers/image/stability.js'
+export {
+  buildStabilityRequest,
+  createStabilityImageClient,
+  parseStabilityResponse,
+} from './providers/image/stability.js'
+export type {
+  GeneratedImage,
+  ImageGenerationOptions,
+  ImageProviderClient,
+  ImageRequest,
+  ImageSize,
+} from './providers/image/types.js'
+export { clampCount, IMAGE_DIMENSIONS, IMAGE_SIZES } from './providers/image/types.js'
 export type { OpenAiClientConfig, OpenAiRequestBody } from './providers/openai.js'
 export { buildOpenAiRequest, createOpenAiClient, parseOpenAiResponse } from './providers/openai.js'
 export type { ProviderName, ProviderRegistryConfig } from './providers/registry.js'

@@ -88,6 +88,22 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
 
   AGENT_UNKNOWN: 404,
 
+  // Assistant (L18). `ASSIST_UNAVAILABLE` is a 503 rather than a 404: the route
+  // exists, the site simply configured no provider, and saying so plainly is
+  // what lets a client tell "switched off" from "you got the URL wrong".
+  ASSIST_UNAVAILABLE: 503,
+  // The model answered with something unusable. That is an upstream failure the
+  // caller cannot fix by changing their request.
+  ASSIST_RESPONSE_INVALID: 502,
+  TOOL_UNKNOWN: 404,
+  TOOL_INPUT_INVALID: 400,
+  TOOL_CALL_REJECTED: 403,
+  PROVIDER_UNKNOWN: 503,
+  PROVIDER_REQUEST_FAILED: 502,
+  PROVIDER_RESPONSE_INVALID: 502,
+  PROVIDER_TIMEOUT: 504,
+  PROVIDER_RATE_LIMITED: 429,
+
   // A verified-broken chain is a server-side integrity failure, not
   // something the caller's request could have avoided — the default 500
   // already fits, spelled out so it is not mistaken for an oversight.

@@ -16,6 +16,15 @@ export type {
   TraceStoreLike,
 } from './agents-router.js'
 export { createAgentsRouter } from './agents-router.js'
+export type {
+  AssistantRouter,
+  AssistantRouterOptions,
+  AssistCapabilityLike,
+  AssistToolContextLike,
+  AssistToolLike,
+  AssistToolsetLike,
+} from './assistant-router.js'
+export { createAssistantRouter } from './assistant-router.js'
 export type { AuditRouter, AuditRouterOptions } from './audit-router.js'
 export { createAuditRouter } from './audit-router.js'
 export type { AuthRouter, AuthRouterOptions } from './auth-router.js'

@@ -110,12 +110,21 @@ export async function loadCollections(
  * silently trying the next candidate filename.
  */
 function isModuleNotFound(error: unknown, path: string): boolean {
-  return (
-    error instanceof Error &&
-    'code' in error &&
-    (error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND' &&
-    error.message.includes(pathToFileURL(path).href)
-  )
+  if (
+    !(
+      error instanceof Error &&
+      'code' in error &&
+      (error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND'
+    )
+  ) {
+    return false
+  }
+  // Node's own message embeds the missing specifier either as the file://
+  // URL passed to import(), or — observed on Windows — as the raw OS path.
+  // Matching only the URL form left every Windows run unable to fall
+  // through the candidate list: the first missing extension (typically
+  // `.ts`) surfaced as a hard SCHEMA_INVALID instead of trying the next one.
+  return error.message.includes(pathToFileURL(path).href) || error.message.includes(path)
 }
 
 interface Site {

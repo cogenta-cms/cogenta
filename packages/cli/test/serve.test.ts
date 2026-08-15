@@ -603,3 +603,54 @@ describe('runServe', () => {
     }
   })
 })
+
+describe('the theme stylesheet', () => {
+  it('serves one cacheable sheet, without asking who is reading it', async () => {
+    const server = await startServer(await project())
+    try {
+      const response = await fetch(`${server.base}/_cogenta/styles.css`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('text/css')
+
+      const css = await response.text()
+      // One marker per layer of `theme.css`, so a lost `@import` fails here as
+      // well as in the theme's own tests.
+      expect(css).toContain('--cg-canvas')
+      expect(css).toContain('.cg-skip-link')
+      expect(css).toContain('.cg-hero__title')
+      // The skin's generated custom properties travel in the same sheet.
+      expect(css).toContain('--cogenta-color-accent')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('answers a repeat visit with 304 rather than the whole sheet again', async () => {
+    const server = await startServer(await project())
+    try {
+      const first = await fetch(`${server.base}/_cogenta/styles.css`)
+      const etag = first.headers.get('etag')
+      expect(etag).not.toBeNull()
+      await first.text()
+
+      const second = await fetch(`${server.base}/_cogenta/styles.css`, {
+        headers: { 'if-none-match': etag as string },
+      })
+      expect(second.status).toBe(304)
+      expect(await second.text()).toBe('')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('refuses a method that has no meaning for a stylesheet', async () => {
+    const server = await startServer(await project())
+    try {
+      const response = await fetch(`${server.base}/_cogenta/styles.css`, { method: 'POST' })
+      expect(response.status).toBe(405)
+      expect(response.headers.get('allow')).toBe('GET')
+    } finally {
+      await server.stop()
+    }
+  })
+})

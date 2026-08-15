@@ -53,8 +53,8 @@ import {
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
-import { loadThemeCss } from './theme-css.js'
-import { joinStyles, loadSkinCss, renderRequestedPage } from './theme-render.js'
+import { cssEtag, loadThemeCss } from './theme-css.js'
+import { joinStyles, loadSkinCss, renderRequestedPage, STYLESHEET_PATH } from './theme-render.js'
 
 const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
@@ -526,6 +526,38 @@ export function createRequestListener(
           return
         }
         jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No admin asset matches this path.')
+        return
+      }
+
+      // The theme's stylesheet: public, cacheable, and the same URL every
+      // page links, so a visitor pays for ~26 kB once instead of on every
+      // page. Inlining it in each document would cost that on every
+      // navigation; a `<link>` with a real ETag costs a conditional request
+      // that answers 304. There is nothing to permission-check — the sheet is
+      // derived from the skin's tokens and contains no content.
+      if (url.pathname === STYLESHEET_PATH) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        if (site.styles === null) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This site has no stylesheet.')
+          return
+        }
+        const etag = cssEtag(site.styles)
+        if (req.headers['if-none-match'] === etag) {
+          res.writeHead(304, { etag }).end()
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'text/css; charset=utf-8',
+          etag,
+          // Revalidate every time: a skin swap must show up on the next
+          // request, which is the whole promise of contract D's hot swap. The
+          // ETag makes that revalidation a 304 rather than a re-download.
+          'cache-control': 'public, max-age=0, must-revalidate',
+        })
+        res.end(site.styles)
         return
       }
 

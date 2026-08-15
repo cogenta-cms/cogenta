@@ -115,6 +115,20 @@ export async function inlineImports(entry: URL, options: InlineImportsOptions): 
  * properties alone rather than refusing to serve, the same degradation
  * `loadSkinCss` already chose for a missing `theme.tokens.json`.
  */
+/**
+ * FNV-1a, 32 bits. A cache key, never a security boundary — and deliberately
+ * not `node:crypto`, to match the hash `@cogenta/render` already uses for the
+ * skin sheet's ETag rather than introduce a second convention beside it.
+ */
+export function cssEtag(css: string): string {
+  let value = 0x811c9dc5
+  for (let index = 0; index < css.length; index++) {
+    value ^= css.charCodeAt(index)
+    value = Math.imul(value, 0x01000193) >>> 0
+  }
+  return `"${value.toString(16).padStart(8, '0')}"`
+}
+
 export async function loadThemeCss(options: InlineImportsOptions): Promise<string | null> {
   try {
     const entry = new URL(import.meta.resolve('@cogenta/theme-canonical/styles/theme.css'))

@@ -96,9 +96,19 @@ export interface ThemeRenderOptions {
    * followed by the theme's own sheet, already flattened and minified (see
    * `theme-css.ts`). `null` when neither could be loaded — served unstyled
    * rather than refused.
+   *
+   * The sheet is *linked*, not inlined: only the presence of one is needed
+   * here, so that a site with no stylesheet emits no dead `<link>`.
    */
   readonly styles: string | null
 }
+
+/**
+ * Where the served stylesheet lives. Under `/_cogenta/` for the same reason
+ * `Base.astro` puts the skin there: it is a namespace no collection route can
+ * ever claim, since every route pattern starts from a collection's own path.
+ */
+export const STYLESHEET_PATH = '/_cogenta/styles.css'
 
 function fieldOfKind(collection: CollectionDefinition, kind: string): string | undefined {
   return Object.entries(collection.fields).find(([, field]) => field.kind === kind)?.[0]
@@ -331,7 +341,7 @@ export async function renderRequestedPage(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${escapeText(pageContent.title)} — ${escapeText(options.site.name)}</title>
-${options.styles === null ? '' : `<style>${options.styles}</style>`}
+${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>

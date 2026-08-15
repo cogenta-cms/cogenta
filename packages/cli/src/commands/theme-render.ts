@@ -8,7 +8,13 @@ import {
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
-import { buildPath, type CollectionDefinition, type ContentEntry, matchPath } from '@cogenta/schema'
+import {
+  type BlockZones,
+  buildPath,
+  type CollectionDefinition,
+  type ContentEntry,
+  matchPath,
+} from '@cogenta/schema'
 import type { SeoImage } from '@cogenta/seo'
 import {
   query as collectionListQuery,
@@ -254,8 +260,88 @@ export async function renderRequestedPage(
 ): Promise<string | null> {
   const resolved = await resolveEntry(pathname, options, context)
   if (resolved === null) return null
-  const { collection, entry } = resolved
+  return renderEntryPage(pathname, resolved.collection, resolved.entry, options, context)
+}
 
+/**
+ * An entry that is not what the database holds — the block list an editor has
+ * on screen and has not saved yet.
+ *
+ * `blocks` is the whole zone map, exactly the shape the admin already keeps
+ * and already sends to `PUT /api/content/:collection/:id`; nothing here is a
+ * second, builder-only serialisation of a page.
+ */
+export interface DraftPage {
+  readonly collection: string
+  readonly entryId: string
+  readonly blocks: BlockZones
+  /** Only the typed fields that changed. Absent fields keep the stored value. */
+  readonly values?: Readonly<Record<string, unknown>>
+}
+
+/**
+ * Renders an in-progress draft through the *same* function that renders the
+ * published page — the single reason this export exists.
+ *
+ * The visual page builder (L16 task 1) shows this HTML in an iframe rather
+ * than re-implementing the twelve blocks in React. The whole point of that
+ * choice is that there is no second renderer to drift, so this must not
+ * become one: it reads the stored entry through the same permission-checked
+ * gateway, overlays the unsaved blocks and values on it, and then hands the
+ * result to `renderEntryPage` unchanged. Handed a draft that equals what is
+ * stored, it returns the published page byte for byte — which is exactly what
+ * `theme-render-fidelity.test.ts` asserts.
+ *
+ * `null` means the entry does not exist or this actor may not read it. The
+ * caller turns both into the same 404, and neither says which.
+ */
+export async function renderDraftPage(
+  draft: DraftPage,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<string | null> {
+  const collection = options.collections.find((entry) => entry.name === draft.collection)
+  if (collection === undefined) return null
+
+  const stored = await options.gateway.read(draft.collection, draft.entryId, context)
+  if (stored === null) return null
+
+  const entry: ContentEntry = {
+    ...stored,
+    values: { ...stored.values, ...(draft.values ?? {}) },
+    blocks: draft.blocks,
+  }
+
+  // The path the entry really lives at, built from the same `buildPath` the
+  // public route uses — never a synthetic `/preview/...` URL. A canonical
+  // link, an `og:url` and a `collectionList` link all have to come out of
+  // this render identical to the published page's, and they are all derived
+  // from this one string.
+  const pathname = buildPath(
+    collection,
+    Object.fromEntries(
+      Object.entries(entry.values).filter(
+        (pair): pair is [string, string] => typeof pair[1] === 'string',
+      ),
+    ),
+    entry.locale ?? undefined,
+  )
+
+  return renderEntryPage(pathname, collection, entry, options, context)
+}
+
+/**
+ * The one page renderer. Both `renderRequestedPage` (published) and
+ * `renderDraftPage` (unsaved) end here, having only differed in how they got
+ * hold of an entry.
+ */
+async function renderEntryPage(
+  pathname: string,
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<string> {
   const blocks = toVocabularyBlocks(entry, collection)
 
   // Every entry a `collectionList` block needs is fetched up front — the

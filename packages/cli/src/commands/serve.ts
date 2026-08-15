@@ -23,10 +23,12 @@ import {
   createRestRouter,
   createSearchRouter,
   createUsersRouter,
+  errorResponse,
   executeGraphQL,
   type MediaImageProcessor,
   type MediaRouter,
   type NoticeRouter,
+  type PermissionLayer,
   type RestRequest,
   type RestResponse,
   type RestRouter,
@@ -52,6 +54,7 @@ import {
 } from '@cogenta/core'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
+  type BlockZones,
   buildSchemaDocument,
   type CollectionDefinition,
   type ContentStore,
@@ -76,6 +79,7 @@ import {
   DEFAULT_IMAGE_ENDPOINT,
   joinStyles,
   loadSkinCss,
+  renderDraftPage,
   renderRequestedPage,
   STYLESHEET_PATH,
 } from './theme-render.js'
@@ -188,6 +192,12 @@ interface Site {
   readonly images: MediaImageProcessor | null
   readonly graphqlSchema: GraphQLSchema
   readonly gateway: ReturnType<typeof createContentGateway>
+  /**
+   * The same layer the gateway and the REST service already ask. Held here so
+   * the routes this file serves itself — the page builder's draft render — can
+   * ask the one authority too, rather than re-deciding who may edit (R4).
+   */
+  readonly permissions: PermissionLayer
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
   readonly schemaDocument: SchemaDocument
   /**
@@ -358,6 +368,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
+    permissions,
     schemaDocument: buildSchemaDocument(collections, {
       locales: site.locales,
       defaultLocale: site.defaultLocale,
@@ -996,6 +1007,86 @@ export function createRequestListener(
         const health = await site.health()
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({ data: health }))
+        return
+      }
+
+      // The visual page builder's preview (L16). It renders an *unsaved* block
+      // list through the very function that renders the published page, so the
+      // builder can show the real thing in an iframe instead of a React
+      // approximation of the twelve blocks.
+      //
+      // Three gates, in this order, before any of that happens:
+      //  1. an authenticated actor — an anonymous caller has no editing
+      //     session, so it has no business asking for a render of a page state
+      //     that does not exist yet;
+      //  2. `update` on the collection, asked of the same `PermissionLayer`
+      //     every other write path asks (R4: the route verifies, the renderer
+      //     does not);
+      //  3. `renderDraftPage` reads the stored entry through the same
+      //     permission-checked gateway, and every `collectionList` block on
+      //     the page queries through it too — so a draft cannot be used to
+      //     read content this actor could not already read.
+      if (url.pathname === '/api/builder/render') {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { allow: 'POST' }).end()
+          return
+        }
+        if (actor.id === null) {
+          jsonError(res, 401, 'UNAUTHENTICATED', 'This preview needs a signed-in editor.')
+          return
+        }
+        const body = (await readBody(req)) as
+          | { collection?: unknown; entryId?: unknown; blocks?: unknown; values?: unknown }
+          | undefined
+        const collectionName = typeof body?.collection === 'string' ? body.collection : ''
+        const entryId = typeof body?.entryId === 'string' ? body.entryId : ''
+        const collection = site.collections.find((entry) => entry.name === collectionName)
+        if (collection === undefined || entryId === '') {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No such collection or entry.')
+          return
+        }
+        // `errorResponse` rather than the outer catch: it is what turns a
+        // `CogentaError` into the status its code deserves (403 for
+        // `FORBIDDEN`), and it is already the mapping every `/api/*` router
+        // uses. The outer catch would answer 500 to a refusal.
+        let html: string | null
+        try {
+          site.permissions.assert('update', collection, context)
+          html = await renderDraftPage(
+            {
+              collection: collectionName,
+              entryId,
+              blocks: (body?.blocks ?? {}) as BlockZones,
+              ...(typeof body?.values === 'object' && body.values !== null
+                ? { values: body.values as Record<string, unknown> }
+                : {}),
+            },
+            {
+              collections: site.collections,
+              gateway: site.gateway,
+              site: site.site,
+              styles: site.styles,
+              loadMedia: (ids) => loadRenderMedia(site, ids),
+            },
+            context,
+          )
+        } catch (error) {
+          logger.warn('builder preview refused', {
+            error: isCogentaError(error) ? error.toJSON() : String(error),
+          })
+          writeRestResponse(res, errorResponse(error))
+          return
+        }
+        if (html === null) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No such collection or entry.')
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          // A draft is never cacheable, by anyone, for any length of time.
+          'cache-control': 'no-store',
+        })
+        res.end(JSON.stringify({ data: { html } }))
         return
       }
 

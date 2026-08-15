@@ -151,9 +151,14 @@ pour les Core Web Vitals : zéro requête de police.
 
 ---
 
-## 7. Tâche 6 (passe de contenu sur les neuf blueprints) — non faite, non bloquée
+## 7. Tâche 6 (passe de contenu sur les blueprints) — faite
 
-Seule case de L12 qui n'est ni faite ni bloquée par un contrat. Le lot la classe
-en dernier et elle ne dépend d'aucune décision : c'est de la rédaction de contenu
-de démonstration dans `packages/create-cogenta/src/blueprints/*.ts`. À reprendre
-telle quelle.
+Plus un blocage. Les huit blueprints à pack de contenu ont reçu leur passe
+(`featureGrid` partout, `faq` sur quatre, `quote` sur `magazine`, `stats` sur
+`vitrine`), et un test valide désormais chaque bloc de démonstration contre le
+vrai registre du contrat B. Le neuvième blueprint, `blank`, n'a par définition
+aucun contenu à enrichir.
+
+Reste volontairement en dehors : aucun bloc de démonstration ne référence de
+média, parce que `cogenta serve` n'a pas encore de pipeline d'images (point 5) et
+qu'un site fraîchement scaffoldé doit rendre au premier lancement.

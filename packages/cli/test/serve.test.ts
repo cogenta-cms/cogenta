@@ -654,3 +654,111 @@ describe('the theme stylesheet', () => {
     }
   })
 })
+
+/**
+ * A page with a real block zone, seeded straight into the store the server
+ * reads from, then fetched over HTTP. The point is the seam nothing else
+ * covers: that the document `cogenta serve` writes around `renderPage` is a
+ * whole page — a skip link, a landmark, a link to the stylesheet — and not a
+ * bare `<main>`.
+ */
+async function themedProject(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'cogenta-theme-'))
+  await writeFile(
+    join(root, 'cogenta.config.mjs'),
+    `export default {
+  site: { name: 'Themed site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+}
+`,
+    'utf8',
+  )
+  await writeFile(
+    join(root, 'cogenta.schema.mjs'),
+    `import { defineCollection, f } from '@cogenta/schema'
+
+export default [
+  defineCollection({
+    name: 'page',
+    labels: { singular: 'Page', plural: 'Pages' },
+    routing: { pattern: '/:slug' },
+    fields: {
+      title: f.text({ required: true, max: 200 }),
+      slug: f.slug({ from: 'title', unique: true }),
+      blocks: f.blocks({ required: true }),
+    },
+    indexes: [['slug']],
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  }),
+]
+`,
+    'utf8',
+  )
+  return root
+}
+
+describe('a themed page over HTTP', () => {
+  it('serves a whole document, not just the rendered blocks', async () => {
+    const root = await themedProject()
+    // Seeded before the server starts: `createSchemaTables` runs at assembly,
+    // so the tables have to exist first — which they do, because this handle
+    // creates them through the same code path the server uses.
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const page = defineCollection({
+      name: 'page',
+      labels: { singular: 'Page', plural: 'Pages' },
+      routing: { pattern: '/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+        blocks: f.blocks({ required: true }),
+      },
+      indexes: [['slug']],
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await createSchemaTables(db, [page])
+    await createContentStore({ db, collection: page, defaultLocale: 'en' }).create({
+      status: 'published',
+      createdBy: null,
+      values: { title: 'Home', slug: 'home' },
+      blocks: {
+        blocks: [
+          {
+            key: 'hero',
+            type: 'hero',
+            data: { title: 'Two planes, one site', eyebrow: 'Demo' },
+          },
+        ],
+      },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('text/html')
+
+      const html = await response.text()
+      // The block itself.
+      expect(html).toContain('Two planes, one site')
+      expect(html).toContain('cg-hero__eyebrow')
+      // The document around it — none of which existed before L12.
+      expect(html).toContain(`<link rel="stylesheet" href="/_cogenta/styles.css">`)
+      expect(html).toContain('<meta name="color-scheme" content="light dark">')
+      expect(html).toContain('class="cg-skip-link"')
+      expect(html).toContain('class="cg-site-header"')
+      expect(html).toContain('Themed site')
+      // Still no client JavaScript anywhere on the page.
+      expect(html).not.toMatch(/<script/i)
+    } finally {
+      await server.stop()
+    }
+  })
+})

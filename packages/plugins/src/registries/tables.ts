@@ -11,6 +11,7 @@ export const REGISTRY_TABLES = {
   skins: 'cogenta_skin_gallery',
   skills: 'cogenta_skill_registry',
   themes: 'cogenta_theme_registry',
+  plugins: 'cogenta_plugin_registry',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -115,6 +116,30 @@ export async function ensureRegistryTables(db: DatabaseHandle): Promise<void> {
     db,
     'cogenta_theme_registry_status',
     themes,
+    sql`(status, submitted_at)`,
+  )
+
+  const plugins = identifier(REGISTRY_TABLES.plugins, d)
+  await db.query(sql`
+    create table if not exists ${plugins} (
+      id ${t255} not null primary key,
+      submitter_id ${t255} not null,
+      display_name ${t255} not null,
+      description ${tLong},
+      plugin_name ${t255},
+      plugin_version ${t255},
+      status ${t255} not null,
+      rejection_code ${t255},
+      rejection_reason ${tLong},
+      reviewed_by ${t255},
+      reviewed_at ${t255},
+      submitted_at ${t255} not null
+    )`)
+
+  await createIndexIfMissing(
+    db,
+    'cogenta_plugin_registry_status',
+    plugins,
     sql`(status, submitted_at)`,
   )
 }

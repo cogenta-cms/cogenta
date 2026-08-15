@@ -55,6 +55,16 @@ export {
 } from './permissions/review.js'
 export { ensurePluginTables, PERMISSION_TABLES } from './permissions/tables.js'
 export type {
+  PluginRegistry,
+  PluginRegistryOptions,
+  PluginReviewDecision,
+  PluginReviewResult,
+  PluginSubmissionEntry,
+  PluginSubmissionInput,
+  PluginSubmissionStatus,
+} from './registries/plugins.js'
+export { createPluginRegistry } from './registries/plugins.js'
+export type {
   SkillRegistry,
   SkillReviewDecision,
   SkillReviewResult,

@@ -38,6 +38,15 @@ describe('loadPlugin', () => {
     expect(resolved.manifest.name).toBe('test-plugin')
   })
 
+  it('a local plugin is dev mode — allowed unsigned, no signature checked (L7 task 9)', async () => {
+    await writeFile(join(dir, 'plugin.manifest.mjs'), VALID_MANIFEST, 'utf8')
+
+    const resolved = await loadPlugin(dir)
+
+    expect(resolved.devMode).toBe(true)
+    expect(resolved.signatureVerified).toBe(false)
+  })
+
   it('checks manifest file names in the documented order', async () => {
     // .mjs is last in PLUGIN_MANIFEST_FILE_NAMES — .ts would win if present,
     // so writing only .mjs proves the fallback search, not just the first hit.

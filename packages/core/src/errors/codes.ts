@@ -228,6 +228,10 @@ export const ERROR_CODES = [
   // Plugins — resource limits, kill and disable (L7 task 6)
   'PLUGIN_DISABLED',
 
+  // Plugins — signature and verification (L7 task 9)
+  'PLUGIN_SIGNATURE_MISSING',
+  'PLUGIN_SIGNATURE_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

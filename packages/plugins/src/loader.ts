@@ -4,6 +4,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
 import { definePlugin, type PluginManifest } from './manifest.js'
 import { satisfiesRange } from './semver.js'
+import {
+  readSignatureFile,
+  TRUSTED_REGISTRY_PUBLIC_KEYS,
+  verifyPluginSignature,
+} from './signing/verify.js'
 
 /**
  * Where a resolved plugin came from — structural, not cosmetic: task 9
@@ -35,6 +40,15 @@ export interface ResolvedPlugin {
   readonly manifestPath: string
   /** Whether `manifest.engine` is satisfied by `engineVersion` (`loadPlugin`'s option). */
   readonly engineCompatible: boolean
+  /**
+   * `true` only for a `local` (or, once resolvable, `git`) source: allowed
+   * to run unsigned, "en mode développement" — the real datum a later admin
+   * banner's "avertissement permanent" would render. A `registry` plugin is
+   * never dev mode: it either verified or `loadPlugin` already refused it.
+   */
+  readonly devMode: boolean
+  /** `true` only when a `registry` plugin's signature was checked and matched a trusted key. Always `false` in dev mode — there was nothing to check. */
+  readonly signatureVerified: boolean
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -124,22 +138,76 @@ export interface LoadPluginOptions {
    * yet" rather than a fabricated pass/fail.
    */
   readonly engineVersion?: string
+  /**
+   * Base64 SPKI Ed25519 public keys this call trusts for `registry`-source
+   * signature verification. Defaults to `TRUSTED_REGISTRY_PUBLIC_KEYS`
+   * (`./signing/verify.js`) — empty until a real registry exists, so every
+   * `registry` plugin fails verification by default rather than trusting a
+   * placeholder key.
+   */
+  readonly trustedPublicKeys?: readonly string[]
 }
 
 const NO_REAL_ENGINE_VERSION_YET = '0.0.0'
 
 /**
+ * `source: 'registry'` is where "## Signature" (docs/lots/L7-extensibilite.md)
+ * actually bites: "Une signature invalide bloque, sans possibilité de passer
+ * outre depuis l'interface." There is deliberately no parameter here that
+ * lets a caller force past a missing/invalid signature — the only way past
+ * this function is a real, matching signature, because the override this
+ * shape could otherwise offer is exactly what the lot's own line means by
+ * "sans possibilité de passer outre." `local`/`git` sources skip
+ * verification entirely, by design ("autorisé en mode développement"), and
+ * are reported back as `devMode: true` for a future admin banner to render
+ * as the "avertissement permanent" the lot also asks for.
+ */
+export async function resolveSignatureStatus(
+  source: PluginSource,
+  manifest: PluginManifest,
+  manifestPath: string,
+  trustedPublicKeys: readonly string[],
+): Promise<{ readonly devMode: boolean; readonly signatureVerified: boolean }> {
+  if (source !== 'registry') {
+    return { devMode: true, signatureVerified: false }
+  }
+
+  const signature = await readSignatureFile(manifestPath)
+  if (signature === null) {
+    throw new CogentaError({
+      code: 'PLUGIN_SIGNATURE_MISSING',
+      message: `Plugin "${manifest.name}" has no signature file at ${manifestPath}.sig.`,
+      hint: 'Registry plugins must be signed. Install from a local path for unsigned development use.',
+      details: { pluginName: manifest.name, manifestPath },
+    })
+  }
+
+  const verified = verifyPluginSignature(manifest, signature, trustedPublicKeys)
+  if (!verified) {
+    throw new CogentaError({
+      code: 'PLUGIN_SIGNATURE_INVALID',
+      message: `Plugin "${manifest.name}"'s signature does not match any trusted key.`,
+      hint: 'The package may be tampered with, or its signing key is not (yet) trusted by this installation.',
+      details: { pluginName: manifest.name, manifestPath },
+    })
+  }
+
+  return { devMode: false, signatureVerified: true }
+}
+
+/**
  * Resolves a plugin reference to its package root and source kind, loads
- * and validates its manifest (via `definePlugin`), and reports engine
- * compatibility. Executes no plugin code beyond importing the
- * manifest-declaring module — spawning a worker to run the plugin's actual
- * runtime is task 3, not this one.
+ * and validates its manifest (via `definePlugin`), verifies its signature
+ * when required, and reports engine compatibility. Executes no plugin code
+ * beyond importing the manifest-declaring module — spawning a worker to run
+ * the plugin's actual runtime is task 3, not this one.
  */
 export async function loadPlugin(
   reference: string,
   options: LoadPluginOptions = {},
 ): Promise<ResolvedPlugin> {
   const engineVersion = options.engineVersion ?? NO_REAL_ENGINE_VERSION_YET
+  const trustedPublicKeys = options.trustedPublicKeys ?? TRUSTED_REGISTRY_PUBLIC_KEYS
 
   if (isGitReference(reference)) {
     throw new CogentaError({
@@ -154,6 +222,12 @@ export async function loadPlugin(
   const packageRoot = await resolvePackageRoot(reference, source)
   const manifestPath = await findManifestFile(packageRoot)
   const manifest = await importManifest(manifestPath)
+  const { devMode, signatureVerified } = await resolveSignatureStatus(
+    source,
+    manifest,
+    manifestPath,
+    trustedPublicKeys,
+  )
 
   return {
     manifest,
@@ -161,6 +235,8 @@ export async function loadPlugin(
     packageRoot,
     manifestPath,
     engineCompatible: satisfiesRange(engineVersion, manifest.engine),
+    devMode,
+    signatureVerified,
   }
 }
 

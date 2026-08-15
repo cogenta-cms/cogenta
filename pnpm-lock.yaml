@@ -398,6 +398,9 @@ importers:
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema
+      '@cogenta/seo':
+        specifier: workspace:*
+        version: link:../seo
       '@cogenta/theme-canonical':
         specifier: workspace:*
         version: link:../theme-canonical

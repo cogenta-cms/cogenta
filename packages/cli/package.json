@@ -43,6 +43,7 @@
     "@cogenta/import": "workspace:*",
     "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",
+    "@cogenta/seo": "workspace:*",
     "@cogenta/theme-canonical": "workspace:*",
     "graphql": "catalog:"
   },

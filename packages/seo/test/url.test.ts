@@ -71,8 +71,15 @@ describe('the publication gate', () => {
     expect(isPublished(entry, { now: new Date('2031-01-01') })).toBe(true)
   })
 
-  it('rejects a published entry with no publication date at all', () => {
-    expect(isPublished(makeEntry({ publishedAt: null }))).toBe(false)
+  it('accepts a published entry with no publication date, because its collection declares none', () => {
+    // `publishedAt` is an ordinary contract A field, not a system column: a
+    // collection that does not declare one gets `null` from `ContentStore` on
+    // every entry, published or not. Refusing those made the whole package
+    // emit `noindex` on a real site — found by wiring it to `cogenta serve`
+    // (L10 task 1), never by a fixture, because every fixture set a date.
+    expect(isPublished(makeEntry({ publishedAt: null }))).toBe(true)
+    expect(isPublished(makeEntry({ publishedAt: null, status: 'draft' }))).toBe(false)
+    expect(isPublished(makeEntry({ publishedAt: null, state: 'working' }))).toBe(false)
   })
 
   it('rejects an unparsable date rather than treating it as the epoch', () => {

@@ -47,13 +47,18 @@ import {
   createContentStore,
   createRedirectStore,
   createSchemaTables,
+  type RedirectStore,
   type SchemaDocument,
   withReadOnlyStore,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
 import { loadSkinCss, renderRequestedPage } from './theme-render.js'
+
+/** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
+const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
 
 const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
@@ -146,6 +151,14 @@ interface Site {
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
   readonly schemaDocument: SchemaDocument
+  /**
+   * The redirect table, applied to *every* GET before routing (L10 task 2).
+   *
+   * It was already reachable through `/api/content/-/by-path`, which only the
+   * API's own clients call — a browser asking for a renamed URL never went
+   * near it and got a 404 instead of the 301 the rename created.
+   */
+  readonly redirects: RedirectStore
   readonly collections: readonly CollectionDefinition[]
   readonly site: {
     readonly name: string
@@ -249,6 +262,7 @@ async function assembleSite(
       locales: site.locales,
       defaultLocale: site.defaultLocale,
     }),
+    redirects,
     collections,
     site,
     skinCss,
@@ -643,6 +657,67 @@ export function createRequestListener(
         const health = await site.health()
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({ data: health }))
+        return
+      }
+
+      // Everything below is the public site rather than the API, so the
+      // redirect table gets its turn first: a page renamed last month must
+      // answer its old URL with the 301 the rename recorded, not a 404 (L10
+      // task 2). Before route matching, so a redirect wins even when some
+      // other entry has since taken the old path — that is what `release()`
+      // is for on the write side.
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        const redirect = await site.redirects.resolve(url.pathname)
+        if (redirect !== null) {
+          res.writeHead(redirect.status, {
+            location: `${redirect.to}${url.search}`,
+            'cache-control': redirect.status === 301 ? 'public, max-age=3600' : 'no-store',
+          })
+          res.end()
+          return
+        }
+      }
+
+      // `robots.txt` and `sitemap.xml`, from the real content (L10 task 2).
+      // Both are built as `ANONYMOUS` inside `collectRoutedResources`,
+      // whoever asked: a crawler and a signed-in editor must get the same
+      // document, or the sitemap advertises URLs the crawler cannot fetch.
+      if (url.pathname === '/robots.txt') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'public, max-age=3600',
+        })
+        res.end(renderRobots(seoSiteFor(site.site)))
+        return
+      }
+
+      if (SITEMAP_PATH.test(url.pathname)) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        const seoSite = seoSiteFor(site.site)
+        const files = buildSitemapFiles(
+          seoSite,
+          await collectRoutedResources(site.collections, site.gateway),
+        )
+        const file = files.find((candidate) => candidate.path === url.pathname)
+        if (file !== undefined) {
+          res.writeHead(200, {
+            'content-type': 'application/xml; charset=utf-8',
+            'cache-control': 'public, max-age=600',
+          })
+          res.end(file.contents)
+          return
+        }
+        // `/sitemap-9.xml` on a site that only needs one file is a real 404,
+        // not an empty urlset: an empty chunk would tell a crawler the site
+        // has nothing there rather than that the URL is wrong.
+        jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No sitemap file at this path.')
         return
       }
 

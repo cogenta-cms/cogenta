@@ -3,6 +3,7 @@ import type { VocabularyBlock } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import { renderSkin } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type ContentEntry, matchPath } from '@cogenta/schema'
+import type { SeoImage } from '@cogenta/seo'
 import {
   query as collectionListQuery,
   type FetchedEntries,
@@ -15,6 +16,7 @@ import {
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
 } from '@cogenta/theme-canonical'
+import { alternatesForEntry, renderSeoHead, seoSiteFor } from './seo.js'
 
 /**
  * The theme's own `ContentEntry`/`QueryRequest` (`theme-contract.ts`) are a
@@ -90,6 +92,14 @@ export interface ThemeRenderOptions {
   }
   /** `null` when the project has no `theme.tokens.json` — served unstyled rather than refused. */
   readonly skinCss: string | null
+  /**
+   * Resolves a media id to a publishable image, for `og:image` and JSON-LD.
+   *
+   * Synchronous because `@cogenta/seo`'s `SeoResolvers.media` is: it is asked
+   * from inside a pure tag builder. `serve.ts` pre-loads the assets a render
+   * needs and hands a lookup over that map — see `mediaResolverFor`.
+   */
+  readonly media?: (id: string) => SeoImage | null
 }
 
 function fieldOfKind(collection: CollectionDefinition, kind: string): string | undefined {
@@ -309,12 +319,32 @@ export async function renderRequestedPage(
   const node = renderPage(pageContent, themeContext, fetchedEntries as FetchedEntries)
   const bodyHtml = serialize(node)
 
+  // The head is `@cogenta/seo`'s, not this file's: title, description,
+  // canonical, hreflang, Open Graph, Twitter Card and JSON-LD, all derived
+  // from the real entry and the real collection (L10 task 1). Nothing here
+  // decides what is indexable — `buildMetaTags` asks `isPublished` itself, so
+  // a preview render carries `noindex` without this caller remembering to.
+  const seoSite = seoSiteFor(options.site)
+  const resource = { collection, entry }
+  const alternates = await alternatesForEntry(
+    seoSite,
+    collection,
+    entry,
+    options.gateway,
+    context,
+    options.site.locales,
+  )
+  const head = renderSeoHead(seoSite, resource, {
+    ...(alternates.length === 0 ? {} : { alternates }),
+    ...(options.media === undefined ? {} : { media: options.media }),
+  })
+
   return `<!doctype html>
 <html lang="${themeContext.locale}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${pageContent.title} — ${options.site.name}</title>
+${head}
 ${options.skinCss === null ? '' : `<style>${options.skinCss}</style>`}
 </head>
 <body>

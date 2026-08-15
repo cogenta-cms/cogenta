@@ -724,7 +724,7 @@
 
 .cg-collection__items {
   display: grid;
-  gap: var(--cg-gap-loose);
+  gap: var(--cg-gap);
 }
 
 .cg-collection[data-layout="grid"] .cg-collection__items {
@@ -736,20 +736,92 @@
   grid-auto-columns: minmax(18rem, 45%);
 }
 
-.cg-entry__title {
-  margin: 0 0 var(--cg-s1);
-  font-size: var(--cg-text-md);
-  line-height: var(--cg-leading-snug);
+.cg-collection[data-layout="carousel"] .cg-entry {
+  scroll-snap-align: start;
 }
 
-.cg-entry__date,
+.cg-entry {
+  position: relative;
+  padding: var(--cg-s6);
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-ring);
+  transition:
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-entry:hover {
+  box-shadow: var(--cg-elevation-2), var(--cg-ring-accent);
+  transform: translateY(-2px);
+}
+
+/* Same overlay as `featureGrid`: the card is the hit area, drawn from the one
+   link the markup has, so nothing extra is announced. */
+.cg-entry__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cg-entry__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.cg-entry:hover .cg-entry__link {
+  color: var(--cg-accent);
+}
+
+/* Date first in the paint, title under it: a list of entries is scanned by
+   recency, and the markup still reads title then date. */
+.cg-entry__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.cg-entry__title {
+  order: 2;
+  margin: 0;
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
+}
+
+.cg-entry__date {
+  order: 1;
+  margin-block-end: var(--cg-s2);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
 .cg-entry__excerpt {
+  order: 3;
+  margin: var(--cg-s3) 0 0;
   color: var(--cg-ink-muted);
   font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-relaxed);
+  /* Three lines, so cards in a row keep their heights close whatever the
+     editor wrote. Nothing is lost: the entry's own page carries the full text. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 
 .cg-collection__empty {
+  padding: var(--cg-s8);
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-lg);
   color: var(--cg-ink-subtle);
+  text-align: center;
 }
 
 /* --- embed --------------------------------------------------------------- */

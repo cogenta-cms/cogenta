@@ -1,24 +1,39 @@
 /*
- * Tokens and reset for the admin SPA. Hand-written CSS on purpose — no design
- * system dependency (R9): the admin is one interior application with a small,
- * fixed set of layouts, not a public-facing surface that needs a component
- * library's breadth.
+ * Reset and layout scaffolding for the admin SPA, plus the `--color-*` names
+ * the seven hand-written stylesheets next to this file still use.
  *
- * Contrast and focus visibility are load-bearing from the start (task 16 is
- * only the audit pass, not where accessibility begins), and motion respects
- * prefers-reduced-motion, the same rule the canonical theme's tokens follow.
+ * Those names are no longer where the colours are decided. L11 task 1 moved the
+ * palette to `theme.css`, which is also what Tailwind builds its utilities
+ * from; everything below is an alias onto it, so a screen written before the
+ * design system and a component written after it are the same colour by
+ * construction rather than by two lists that have to be kept in step. Task 5 of
+ * the lot converts those stylesheets, at which point these aliases go with
+ * them.
+ *
+ * `theme.css` must be imported first (see `main.tsx`) — these aliases resolve
+ * against the custom properties it declares.
+ *
+ * The element rules below live in `@layer base` rather than unlayered. That is
+ * not cosmetic: unlayered CSS outranks *every* cascade layer, so an unlayered
+ * `button { font: inherit }` would silently beat the `text-sm font-medium` of a
+ * Tailwind utility on every button in `src/ui/`. Sitting in `base` puts them
+ * below `utilities`, which is the order a component author expects.
+ *
+ * Contrast and focus visibility are load-bearing from the start, and motion
+ * respects prefers-reduced-motion, the same rule the canonical theme's tokens
+ * follow.
  */
 
 :root {
-  --color-bg: #ffffff;
-  --color-surface: #f4f5f7;
-  --color-border: #d7dae0;
-  --color-text: #1a1d23;
-  --color-text-muted: #565c66;
-  --color-primary: #1d4ed8;
-  --color-primary-contrast: #ffffff;
-  --color-danger: #b91c1c;
-  --color-focus-ring: #1d4ed8;
+  --color-bg: var(--background);
+  --color-surface: var(--muted);
+  --color-border: var(--border);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-contrast: var(--primary-foreground);
+  --color-danger: var(--destructive);
+  --color-focus-ring: var(--ring);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -27,60 +42,51 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --radius: 0.375rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #14161a;
-    --color-surface: #1c1f26;
-    --color-border: #33383f;
-    --color-text: #eceef1;
-    --color-text-muted: #9aa1ac;
-    --color-primary: #6fa1ff;
-    --color-primary-contrast: #0b1120;
-    --color-focus-ring: #6fa1ff;
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-bg);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  a {
+    color: var(--color-primary);
+  }
+
+  button {
+    font: inherit;
+  }
+
+  /* One visible focus style everywhere, rather than each component inventing
+     its own — the keyboard-navigation acceptance criterion depends on this
+     never being silently suppressed. */
+  :focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
   }
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  color: var(--color-text);
-  background: var(--color-bg);
-  font-size: 16px;
-  line-height: 1.5;
-}
-
-a {
-  color: var(--color-primary);
-}
-
-button {
-  font: inherit;
-}
-
-/* One visible focus style everywhere, rather than each component inventing
-   its own — the keyboard-navigation acceptance criterion depends on this
-   never being silently suppressed. */
-:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
+/* Left unlayered on purpose: this one must beat everything, including a
+   utility, which is what `!important` inside a layer cannot be relied on to
+   do across layer boundaries. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

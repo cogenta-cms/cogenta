@@ -15,7 +15,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "catalog:",
     "@simplewebauthn/browser": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
     "i18next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -24,9 +27,11 @@
     "slate": "catalog:",
     "slate-dom": "catalog:",
     "slate-history": "catalog:",
-    "slate-react": "catalog:"
+    "slate-react": "catalog:",
+    "tailwind-merge": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",
     "axe-core": "catalog:",
@@ -34,6 +39,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "jsdom": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

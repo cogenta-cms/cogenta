@@ -19,6 +19,13 @@
     "lineWidth": 100,
     "lineEnding": "lf"
   },
+  "css": {
+    // `packages/admin/src/styles/theme.css` declares the admin's design tokens
+    // with Tailwind v4's `@theme` (L11 task 1). Without this, Biome's CSS
+    // parser rejects the file outright ("Tailwind-specific syntax is
+    // disabled") and cannot lint or format it at all.
+    "parser": { "tailwindDirectives": true }
+  },
   "javascript": {
     "formatter": {
       "quoteStyle": "single",

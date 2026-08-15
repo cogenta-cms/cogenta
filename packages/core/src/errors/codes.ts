@@ -247,6 +247,23 @@ export const ERROR_CODES = [
   // Fleet — per-site rollback (L8 task 8)
   'FLEET_ROLLBACK_NO_PRIOR_VERSION',
 
+  // Agents — document text extraction (L19 task 1)
+  'DOCUMENT_FORMAT_UNSUPPORTED',
+  'DOCUMENT_TOO_LARGE',
+  'DOCUMENT_EXTRACTION_FAILED',
+  'DOCUMENT_NO_TEXT_LAYER',
+
+  // Agents — AI-driven site planning (L19 tasks 2, 3, 4, 5)
+  'SITE_BRIEF_RESPONSE_INVALID',
+  'SITE_BRIEF_GENERATION_FAILED',
+  'CONTENT_MODEL_PROPOSAL_INVALID',
+  'SITE_PLAN_CONSTRAINT_VIOLATED',
+  'SITE_PLAN_DECISION_MISSING',
+  'SITE_PLAN_DECISION_UNKNOWN_ITEM',
+  'SITE_PLAN_DRAFT_NOT_FOUND',
+  'SITE_PLAN_NO_PROVIDER',
+  'SKIN_CANDIDATES_INSUFFICIENT',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

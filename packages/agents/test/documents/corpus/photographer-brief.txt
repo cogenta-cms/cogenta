@@ -1,0 +1,12 @@
+Brief site photographe
+
+Je m'appelle Élodie, je suis photographe de mariage à Bordeaux.
+J'ai besoin d'un portfolio, rien de plus. Des galeries par reportage,
+une page « À propos » et un formulaire de contact.
+
+Contraintes :
+- pas de boutique en ligne, je ne vends pas de tirages sur le site
+- pas de commentaires sur les galeries
+- le site doit être bilingue français et anglais
+
+Le ton doit être épuré, très peu de texte, les photos parlent.

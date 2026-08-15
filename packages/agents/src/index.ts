@@ -34,6 +34,22 @@ export type {
   BudgetUsage,
   KillSwitch,
 } from './budget/types.js'
+export type {
+  DocumentFormat,
+  ExtractDocumentInput,
+  ExtractedDocument,
+} from './documents/extract-text.js'
+export {
+  DOCUMENT_FORMATS,
+  extractDocumentText,
+  MAX_DOCUMENT_BYTES,
+  MAX_TEXT_CHARACTERS,
+} from './documents/extract-text.js'
+export type {
+  DocumentExtractInput,
+  DocumentExtractOutput,
+} from './documents/extract-tool.js'
+export { createDocumentExtractTool } from './documents/extract-tool.js'
 export type { EvalThresholdOptions } from './eval/assert-threshold.js'
 export { assertEvalThreshold } from './eval/assert-threshold.js'
 export type { PromptComparisonResult, PromptVersion } from './eval/compare-prompt-versions.js'

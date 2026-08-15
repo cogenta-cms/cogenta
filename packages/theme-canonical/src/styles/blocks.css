@@ -774,20 +774,45 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--cg-s3);
+  gap: var(--cg-s5);
   block-size: 100%;
-  padding: var(--cg-s6);
+  padding: var(--cg-s8);
   background: var(--cg-surface-sunken);
   color: var(--cg-ink-muted);
-  border: 1px dashed var(--cg-line);
-  border-radius: var(--cg-radius-md);
+  /* Dashed, and kept dashed: it is the one place in the theme where the border
+     says "nothing has loaded here yet" rather than "this is a panel". */
+  border: 1px dashed var(--cg-line-strong);
+  border-radius: var(--cg-radius-lg);
   text-align: center;
 }
 
 .cg-embed__notice {
   margin: 0;
+  max-inline-size: var(--cg-measure-narrow);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
 }
 
+/* The way out is an action, not a sentence with a link in it: this card exists
+   because the visitor has to choose, and a choice needs something to press. */
 .cg-embed__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding: var(--cg-s3) var(--cg-s6);
+  background: var(--cg-surface-raised);
   color: var(--cg-accent);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cg-ring-accent);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration: none;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-embed__link:hover {
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
 }

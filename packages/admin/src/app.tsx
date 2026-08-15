@@ -23,10 +23,18 @@ import { AppShell } from './shell/app-shell.js'
  * `SchemaProvider` wraps only the authenticated section — `/login` has no
  * use for `/api/schema`, so it does not pay for fetching it.
  */
+// Vite always trails `BASE_URL` with `/` ("/admin/", or "/" in dev) — but
+// react-router's `basename` match is a literal string prefix, so a request
+// for exactly `/admin` (no trailing slash, the URL a real user actually
+// types or clicks) does not start with "/admin/" and the router silently
+// renders nothing. Stripping the trailing slash makes "/admin" itself match
+// too, while "/admin/collections" still does (it still starts with "/admin").
+const ROUTER_BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 export function App(): JSX.Element {
   return (
     <AuthProvider>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <BrowserRouter basename={ROUTER_BASENAME}>
         <Routes>
           <Route path="login" element={<LoginRoute />} />
           <Route

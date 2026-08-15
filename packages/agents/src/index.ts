@@ -7,6 +7,23 @@ export type {
   AgentModelPreference,
   AgentTrigger,
 } from './agents/types.js'
+export type { ChatSource, ContentChatAnswer, ContentChatOptions } from './assist/chat.js'
+export { createContentChatTool } from './assist/chat.js'
+export type {
+  ClassificationResult,
+  DuplicateReport,
+  DuplicateToolOptions,
+  ModerationVerdict,
+} from './assist/classify.js'
+export {
+  createClassifyTool,
+  createFindDuplicatesTool,
+  createModerateTool,
+  MODERATION_SEVERITIES,
+  RECOMMENDED_ACTIONS,
+} from './assist/classify.js'
+export type { FaqDraft, SchemaDraft, SchemaType } from './assist/faq.js'
+export { createFaqTool, createSchemaOrgTool, SCHEMA_TYPES } from './assist/faq.js'
 export type { GenerateImageResult } from './assist/images.js'
 export { createGenerateImageTool } from './assist/images.js'
 export type {

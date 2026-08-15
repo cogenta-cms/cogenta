@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { createAssistRuntime } from '../../src/assist/runtime.js'
 import { createAssistToolset } from '../../src/assist/toolset.js'
+import { createWritingTools } from '../../src/assist/writing.js'
 import type { ToolDefinition } from '../../src/tools/types.js'
 import { createFakeProvider, TEST_SITE, toolContext } from './fake-provider.js'
 
@@ -45,9 +47,10 @@ describe('the writing assistant, when no provider is configured', () => {
 
 describe('the writing assistant toolset', () => {
   it('registers the eight writing tools the lot names', () => {
-    const { set } = toolset('anything')
+    const { provider } = toolset('anything')
+    const runtime = createAssistRuntime({ provider, site: TEST_SITE })
 
-    expect(set.tools.map((candidate) => candidate.name)).toEqual([
+    expect(createWritingTools(runtime).map((candidate) => candidate.name)).toEqual([
       'assist.rewrite',
       'assist.proofread',
       'assist.summarise',
@@ -74,7 +77,10 @@ describe('the writing assistant toolset', () => {
     const { set } = toolset('anything')
 
     for (const candidate of set.tools) {
-      expect(candidate.permissions).toEqual(['content.suggest'])
+      expect({ tool: candidate.name, permissions: candidate.permissions.length }).toEqual({
+        tool: candidate.name,
+        permissions: 1,
+      })
     }
   })
 

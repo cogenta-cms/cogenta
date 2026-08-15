@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Cogenta command line: diagnose an install, run migrations, inspect drivers.",
   "license": "MPL-2.0",
   "type": "module",
@@ -38,10 +38,12 @@
     "@cogenta/agents": "workspace:*",
     "@cogenta/api": "workspace:*",
     "@cogenta/auth": "workspace:*",
+    "@cogenta/blocks": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/import": "workspace:*",
     "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",
+    "@cogenta/theme-canonical": "workspace:*",
     "graphql": "catalog:"
   },
   "devDependencies": {

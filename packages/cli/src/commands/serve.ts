@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -51,6 +52,7 @@ import {
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
+import { loadSkinCss, renderRequestedPage } from './theme-render.js'
 
 const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
@@ -143,6 +145,15 @@ interface Site {
   readonly gateway: ReturnType<typeof createContentGateway>
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
   readonly schemaDocument: SchemaDocument
+  readonly collections: readonly CollectionDefinition[]
+  readonly site: {
+    readonly name: string
+    readonly url: string
+    readonly locales: readonly string[]
+    readonly defaultLocale: string
+  }
+  /** `null` when the project has no `theme.tokens.json` — the theme-render fallback serves unstyled HTML rather than refusing. */
+  readonly skinCss: string | null
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
   readonly health: () => Promise<{
     readonly database: HealthReport
@@ -178,6 +189,8 @@ async function assembleSite(
    * stores are actually constructed, so neither can bypass it.
    */
   readOnly = false,
+  /** `null` when `theme.tokens.json` is absent or invalid — see `loadSkinCss`. */
+  skinCss: string | null = null,
 ): Promise<Site> {
   await createSchemaTables(db, collections)
 
@@ -190,6 +203,13 @@ async function assembleSite(
     stores.set(collection.name, stored)
     return stored
   }
+  // The gateway (below) reads `stores` directly rather than through
+  // `storeFor` — REST's own lazy population left it empty for any
+  // collection no REST request had touched yet, which the theme-render
+  // fallback (an early GraphQL-gateway caller, not a REST one) hit on its
+  // very first request. Populating eagerly here means both callers see the
+  // same, already-complete map.
+  for (const collection of collections) storeFor(collection)
 
   const redirects = createRedirectStore({ db })
   await redirects.ensureTable()
@@ -228,6 +248,9 @@ async function assembleSite(
       locales: site.locales,
       defaultLocale: site.defaultLocale,
     }),
+    collections,
+    site,
+    skinCss,
     health,
     dispose: async () => {
       await db.close()
@@ -602,6 +625,28 @@ export function createRequestListener(
         return
       }
 
+      // Real theme HTML for anything else — see `theme-render.ts`'s own
+      // doc comment for what this is and, as importantly, what it isn't
+      // (no Astro build, one theme, no image pipeline). GET only: rendering
+      // a page has no meaningful response to any other method.
+      if (req.method === 'GET') {
+        const html = await renderRequestedPage(
+          url.pathname,
+          {
+            collections: site.collections,
+            gateway: site.gateway,
+            site: site.site,
+            skinCss: site.skinCss,
+          },
+          context,
+        )
+        if (html !== null) {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+          res.end(html)
+          return
+        }
+      }
+
       res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({
@@ -684,6 +729,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
   const storageSelection = await createStorageRegistry({ logger }).select(loaded.config.storage)
+  const skinCss = await loadSkinCss(
+    (path) => readFile(path, 'utf8'),
+    join(projectRoot, 'theme.tokens.json'),
+  )
   const site = await assembleSite(
     selection.instance,
     collections,
@@ -693,6 +742,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     async () => ({ database: await selection.health(), storage: await storageSelection.health() }),
     undefined,
     options.readOnly ?? false,
+    skinCss,
   )
 
   const server = createServer(createRequestListener(site, logger))

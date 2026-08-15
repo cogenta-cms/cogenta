@@ -501,6 +501,9 @@ importers:
 
   packages/plugins:
     dependencies:
+      '@cogenta/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

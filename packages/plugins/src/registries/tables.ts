@@ -9,6 +9,7 @@ import {
 
 export const REGISTRY_TABLES = {
   skins: 'cogenta_skin_gallery',
+  skills: 'cogenta_skill_registry',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -26,6 +27,13 @@ function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
  * `reviewed_at` column the way a code-executing registry (plugins, themes)
  * would need: `status` is written once, at submission time, by the gate
  * itself, never by a human afterward.
+ *
+ * A skill submission is the opposite case in the lot's own "## Registres"
+ * table: "Revue de contenu", not automatic validation. `skill_name`/
+ * `skill_version`/`reviewed_by`/`reviewed_at` exist here — absent from the
+ * skins table above — because a skill's gate is a real two-step state
+ * machine (automatic parse pre-check, then a human decision), not a single
+ * automatic verdict.
  */
 export async function ensureRegistryTables(db: DatabaseHandle): Promise<void> {
   const d = db.dialect
@@ -47,6 +55,31 @@ export async function ensureRegistryTables(db: DatabaseHandle): Promise<void> {
     )`)
 
   await createIndexIfMissing(db, 'cogenta_skin_gallery_status', skins, sql`(status, submitted_at)`)
+
+  const skills = identifier(REGISTRY_TABLES.skills, d)
+  await db.query(sql`
+    create table if not exists ${skills} (
+      id ${t255} not null primary key,
+      submitter_id ${t255} not null,
+      display_name ${t255} not null,
+      description ${tLong},
+      raw_content ${tLong} not null,
+      skill_name ${t255},
+      skill_version ${t255},
+      status ${t255} not null,
+      rejection_code ${t255},
+      rejection_reason ${tLong},
+      reviewed_by ${t255},
+      reviewed_at ${t255},
+      submitted_at ${t255} not null
+    )`)
+
+  await createIndexIfMissing(
+    db,
+    'cogenta_skill_registry_status',
+    skills,
+    sql`(status, submitted_at)`,
+  )
 }
 
 async function createIndexIfMissing(

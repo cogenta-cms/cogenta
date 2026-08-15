@@ -1,6 +1,6 @@
 {
   "name": "create-cogenta",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "The Cogenta installer wizard — npm create cogenta.",
   "license": "MPL-2.0",
   "type": "module",

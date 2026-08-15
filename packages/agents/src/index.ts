@@ -7,6 +7,32 @@ export type {
   AgentModelPreference,
   AgentTrigger,
 } from './agents/types.js'
+export type {
+  AssistAgent,
+  AssistRequest,
+  AssistRuntime,
+  AssistRuntimeOptions,
+} from './assist/runtime.js'
+export { createAssistRuntime, extractJson } from './assist/runtime.js'
+export type { Suggestion } from './assist/suggestion.js'
+export { SuggestionSchema, suggestion } from './assist/suggestion.js'
+export type {
+  AssistCapability,
+  AssistToolset,
+  AssistToolsetOptions,
+} from './assist/toolset.js'
+export { createAssistToolset, describeCapabilities } from './assist/toolset.js'
+export {
+  createAltTextTool,
+  createMetaDescriptionTool,
+  createProofreadTool,
+  createRewriteTool,
+  createSummariseTool,
+  createTagsTool,
+  createTitleTool,
+  createTranslateTool,
+  createWritingTools,
+} from './assist/writing.js'
 export type { AuditLogLike, AuditRecordInput } from './audit/types.js'
 export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'

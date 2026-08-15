@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/agents",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The agentic runtime: LLM provider abstraction, tool-calling, execution loop, permissions, memory, budgets, audit.",
   "license": "MPL-2.0",
   "type": "module",

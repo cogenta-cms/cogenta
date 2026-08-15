@@ -125,8 +125,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Check for a changeset
+        # Excludes packages/admin and packages/project-site: both are
+        # private:true, so Changesets always skips them when versioning —
+        # a changeset naming only a private package is never consumed by
+        # `changeset version` and permanently trips changesets/action's
+        # hasChangesets check, blocking every future publish (real incident:
+        # five such orphaned changesets accumulated across L2 and blocked
+        # the very first real npm publish until found and deleted by hand).
         run: |
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -qE '^packages/[^/]+/src/'; then
+          CHANGED_PUBLISHED_SRC=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -E '^packages/[^/]+/src/' \
+            | grep -vE '^packages/(admin|project-site)/src/' || true)
+          if [ -n "$CHANGED_PUBLISHED_SRC" ]; then
             if ! git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -qE '^\.changeset/.*\.md$'; then
               echo "::error::Published package source changed without a changeset. Run \`pnpm changeset\`."
               exit 1

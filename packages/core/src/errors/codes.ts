@@ -247,6 +247,53 @@ export const ERROR_CODES = [
   // Fleet — per-site rollback (L8 task 8)
   'FLEET_ROLLBACK_NO_PRIOR_VERSION',
 
+  // Commerce — money and currency (L15, contract E)
+  'COMMERCE_AMOUNT_INVALID',
+  'COMMERCE_CURRENCY_INVALID',
+  'COMMERCE_CURRENCY_MISMATCH',
+
+  // Commerce — catalogue and stock (L15 task 2)
+  'COMMERCE_PRODUCT_NOT_FOUND',
+  'COMMERCE_VARIANT_NOT_FOUND',
+  'COMMERCE_SKU_TAKEN',
+  'COMMERCE_OUT_OF_STOCK',
+
+  // Commerce — cart and totals (L15 task 3)
+  'COMMERCE_CART_NOT_FOUND',
+  'COMMERCE_CART_CLOSED',
+  'COMMERCE_CART_EMPTY',
+  'COMMERCE_QUANTITY_INVALID',
+
+  // Commerce — orders (L15 task 4)
+  'COMMERCE_ORDER_NOT_FOUND',
+  'COMMERCE_ORDER_TRANSITION_INVALID',
+
+  // Commerce — payment drivers (L15 task 5)
+  'COMMERCE_PAYMENT_NOT_FOUND',
+  'COMMERCE_PAYMENT_FAILED',
+  'COMMERCE_PAYMENT_UNSUPPORTED',
+  'COMMERCE_PAYMENT_SIGNATURE_INVALID',
+  'COMMERCE_REFUND_EXCEEDS_PAYMENT',
+
+  // Commerce — tax and shipping (L15 task 6)
+  'COMMERCE_TAX_RULE_INVALID',
+  'COMMERCE_SHIPPING_METHOD_UNKNOWN',
+  'COMMERCE_SHIPPING_UNAVAILABLE',
+
+  // Commerce — coupons and promotions (L15 task 7)
+  'COMMERCE_COUPON_NOT_FOUND',
+  'COMMERCE_COUPON_INVALID',
+  'COMMERCE_COUPON_EXHAUSTED',
+
+  // Commerce — invoices (L15 task 8)
+  'COMMERCE_INVOICE_NOT_FOUND',
+  'COMMERCE_INVOICE_ALREADY_ISSUED',
+  'COMMERCE_INVOICE_SEQUENCE_CONFLICT',
+
+  // Commerce — subscriptions (L15 task 9)
+  'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+  'COMMERCE_SUBSCRIPTION_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

@@ -54,6 +54,14 @@ export {
   revokeCapability,
 } from './permissions/review.js'
 export { ensurePluginTables, PERMISSION_TABLES } from './permissions/tables.js'
+export type {
+  SkinGallery,
+  SkinGalleryEntry,
+  SkinSubmissionInput,
+  SkinSubmissionStatus,
+} from './registries/skins.js'
+export { createSkinGallery } from './registries/skins.js'
+export { ensureRegistryTables, REGISTRY_TABLES } from './registries/tables.js'
 export type { SemverVersion } from './semver.js'
 export { compareVersions, parseVersion, satisfiesRange } from './semver.js'
 export type { SigningKeyPair } from './signing/keys.js'

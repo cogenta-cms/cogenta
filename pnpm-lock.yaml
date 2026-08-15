@@ -504,6 +504,9 @@ importers:
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
       zod:
         specifier: 'catalog:'
         version: 4.4.3

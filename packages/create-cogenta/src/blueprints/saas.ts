@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  richTextParagraph,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -129,6 +130,32 @@ export const SAAS_DEMO_PAGES: readonly SaasDemoPage[] = [
         layout: 'grid',
       },
       {
+        _key: 'demo-home-why',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'Why teams move here',
+        items: [
+          {
+            _key: 'demo-why-1',
+            icon: 'bolt',
+            title: 'Set up in an afternoon',
+            text: 'Import what you already have, invite the team, and keep working. Nothing to migrate first.',
+          },
+          {
+            _key: 'demo-why-2',
+            icon: 'lock',
+            title: 'Your data stays yours',
+            text: 'A full export in one click, in a format something else can actually read. No lock-in by file format.',
+          },
+          {
+            _key: 'demo-why-3',
+            icon: 'chart',
+            title: 'Priced by what you use',
+            text: 'One plan, billed on active seats. Nobody pays for the colleague who logs in twice a year.',
+          },
+        ],
+      },
+      {
         _key: 'demo-home-cta',
         _type: 'cta',
         _version: BLOCK_VERSION,
@@ -155,6 +182,38 @@ export const SAAS_DEMO_PAGES: readonly SaasDemoPage[] = [
           { _key: 'demo-stat-1', value: '4.8', unit: '/5', label: 'average rating' },
           { _key: 'demo-stat-2', value: '99.9', unit: '%', label: 'uptime' },
           { _key: 'demo-stat-3', value: '2,400+', label: 'teams onboarded' },
+        ],
+      },
+      {
+        _key: 'demo-pricing-faq',
+        _type: 'faq',
+        _version: BLOCK_VERSION,
+        title: 'Questions about billing',
+        items: [
+          {
+            _key: 'demo-pricing-faq-1',
+            question: 'What happens when the trial ends?',
+            answer: richTextParagraph(
+              'demo-pricing-faq-1-a',
+              'The workspace goes read-only rather than being deleted. Everything is still there, and still exportable, whether you subscribe that week or six months later.',
+            ),
+          },
+          {
+            _key: 'demo-pricing-faq-2',
+            question: 'Do you charge for people who barely log in?',
+            answer: richTextParagraph(
+              'demo-pricing-faq-2-a',
+              'No. A seat counts in a month only if it was actually used that month, and the invoice shows which ones did.',
+            ),
+          },
+          {
+            _key: 'demo-pricing-faq-3',
+            question: 'Can we pay by invoice instead of card?',
+            answer: richTextParagraph(
+              'demo-pricing-faq-3-a',
+              'From five seats up, yearly, on thirty-day terms. Below that the card flow costs everyone less than the paperwork would.',
+            ),
+          },
         ],
       },
     ],

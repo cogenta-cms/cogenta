@@ -125,7 +125,11 @@ describe('scaffoldSite — blog blueprint', () => {
       if (home === undefined) throw new Error('unreachable')
       expect(home.status).toBe('published')
       const homeBlocks = home.blocks.blocks
-      expect(homeBlocks?.map((block) => block.type)).toEqual(['hero', 'collectionList'])
+      expect(homeBlocks?.map((block) => block.type)).toEqual([
+        'hero',
+        'collectionList',
+        'featureGrid',
+      ])
     } finally {
       await selection.dispose()
     }

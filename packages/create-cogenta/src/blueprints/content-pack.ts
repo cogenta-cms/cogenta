@@ -1,6 +1,25 @@
-import type { VocabularyBlock } from '@cogenta/blocks'
+import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
 import type { DatabaseHandle } from '@cogenta/core'
 import { type CollectionDefinition, defineCollection, f } from '@cogenta/schema'
+
+/**
+ * One paragraph, as the structured rich-text document contract A stores (never
+ * a string of HTML — rule R3). Shared because a `faq` answer is a rich-text
+ * document too, and five blueprints now seed one: writing the same four nested
+ * literals out by hand in each of them is how a `_key` collision or a missing
+ * `markDefs` gets in.
+ */
+export function richTextParagraph(key: string, text: string): RichTextDocument {
+  return [
+    {
+      _key: key,
+      _type: 'block',
+      style: 'normal',
+      children: [{ _key: `${key}-span`, _type: 'span', text, marks: [] }],
+      markDefs: [],
+    },
+  ]
+}
 
 /**
  * Names, and does not wire, an agent a blueprint recommends.

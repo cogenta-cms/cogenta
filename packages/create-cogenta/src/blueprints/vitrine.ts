@@ -158,6 +158,42 @@ export const VITRINE_DEMO_PAGES: readonly VitrineDemoPage[] = [
         layout: 'grid',
       },
       {
+        _key: 'demo-home-method',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'How a project runs',
+        items: [
+          {
+            _key: 'demo-method-1',
+            icon: 'compass',
+            title: 'We start with the question',
+            text: 'One call about who the site is for and what it has to make happen. No brief template, no discovery deck.',
+          },
+          {
+            _key: 'demo-method-2',
+            icon: 'draft',
+            title: 'You see it before it is built',
+            text: 'A first design on the real content, not on placeholder text — so what you approve is what ships.',
+          },
+          {
+            _key: 'demo-method-3',
+            icon: 'handover',
+            title: 'You keep the keys',
+            text: 'Everything is normal editable content afterwards. No agency retainer to change a phone number.',
+          },
+        ],
+      },
+      {
+        _key: 'demo-home-numbers',
+        _type: 'stats',
+        _version: BLOCK_VERSION,
+        items: [
+          { _key: 'demo-home-stat-1', value: '3', unit: 'weeks', label: 'typical project' },
+          { _key: 'demo-home-stat-2', value: '100', unit: '%', label: 'content you can edit' },
+          { _key: 'demo-home-stat-3', value: '0', label: 'lines of JavaScript shipped' },
+        ],
+      },
+      {
         _key: 'demo-home-cta',
         _type: 'cta',
         _version: BLOCK_VERSION,

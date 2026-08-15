@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  richTextParagraph,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -143,6 +144,32 @@ export const DOCUMENTATION_DEMO_PAGES: readonly DocumentationDemoPage[] = [
         ],
       },
       {
+        _key: 'demo-home-shape',
+        _type: 'featureGrid',
+        _version: BLOCK_VERSION,
+        title: 'How the docs are organised',
+        items: [
+          {
+            _key: 'demo-shape-1',
+            icon: 'path',
+            title: 'Guides, for the first time',
+            text: 'Ordered, opinionated, and written to be read start to finish. One way of doing each thing.',
+          },
+          {
+            _key: 'demo-shape-2',
+            icon: 'list',
+            title: 'Reference, for the tenth time',
+            text: 'Every option and every default, alphabetical, with no narrative to skim past.',
+          },
+          {
+            _key: 'demo-shape-3',
+            icon: 'code',
+            title: 'Examples that run',
+            text: 'Each snippet comes from a file that is executed in CI, so none of them drifts out of date quietly.',
+          },
+        ],
+      },
+      {
         _key: 'demo-home-docs',
         _type: 'collectionList',
         _version: BLOCK_VERSION,
@@ -151,6 +178,30 @@ export const DOCUMENTATION_DEMO_PAGES: readonly DocumentationDemoPage[] = [
         sort: { field: 'createdAt', direction: 'asc' },
         limit: 20,
         layout: 'list',
+      },
+      {
+        _key: 'demo-home-faq',
+        _type: 'faq',
+        _version: BLOCK_VERSION,
+        title: 'Common questions',
+        items: [
+          {
+            _key: 'demo-home-faq-1',
+            question: 'Which version do these docs describe?',
+            answer: richTextParagraph(
+              'demo-home-faq-1-a',
+              'The one currently released. Older versions stay online at their own URLs rather than being rewritten in place, because a link in a two-year-old issue should still explain what the reader saw.',
+            ),
+          },
+          {
+            _key: 'demo-home-faq-2',
+            question: 'Something here is wrong. What do I do?',
+            answer: richTextParagraph(
+              'demo-home-faq-2-a',
+              'Every page is normal editable content in this site, so a correction is a content change and not a code change. That is the whole reason the docs live here.',
+            ),
+          },
+        ],
       },
     ],
   },

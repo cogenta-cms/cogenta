@@ -23,6 +23,12 @@ export interface SerialisedEntry {
   readonly collection: string
   readonly locale: string
   readonly status: string
+  /**
+   * When this entry went to the trash, `null` while it has not (`schema@2.0`,
+   * ADR-0022). Orthogonal to `status`: a trashed article that was published
+   * still reads `published` here, which is what makes restoring it honest.
+   */
+  readonly deletedAt: string | null
   readonly state: EntryState
   readonly version: number
   readonly createdAt: string
@@ -91,6 +97,7 @@ function projectionOf(
     collection: collectionName,
     locale: entry.locale,
     status: entry.status,
+    deletedAt: entry.deletedAt,
     state: entry.state,
     version: entry.version,
     createdAt: entry.createdAt,

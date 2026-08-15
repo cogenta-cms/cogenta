@@ -1,4 +1,10 @@
-import type { CollectionDefinition, ContentStatus, EntryState, SortOrder } from '@cogenta/schema'
+import type {
+  CollectionDefinition,
+  ContentStatus,
+  EntryState,
+  SortOrder,
+  TrashFilter,
+} from '@cogenta/schema'
 import { CONTENT_STATUSES } from '@cogenta/schema'
 import type { Filter } from '../types.js'
 import { parseFilter } from './filter.js'
@@ -19,6 +25,11 @@ export interface ListQuery {
   readonly locale: string | undefined
   readonly requestedState: EntryState
   readonly requestedStatus: ContentStatus | undefined
+  /**
+   * Whether the trash is in scope (`schema@2.0`, ADR-0022). Undefined means
+   * the default the store applies: no.
+   */
+  readonly trashed: TrashFilter | undefined
   readonly depth: number
 }
 
@@ -66,8 +77,29 @@ export function parseListQuery(
     locale: single(query, 'locale'),
     requestedState: parseState(query),
     requestedStatus: parseStatus(query),
+    trashed: parseTrashed(query),
     depth: parseDepth(query, limits),
   }
+}
+
+const TRASH_FILTERS = ['exclude', 'include', 'only'] as const
+
+/**
+ * `?trashed=` — absent means "no trash", which is the whole point of the
+ * default (ADR-0022): a client written before 2.0 never sees a deleted entry
+ * because it never asked.
+ */
+function parseTrashed(query: QueryInput): TrashFilter | undefined {
+  const raw = single(query, 'trashed')
+  if (raw === undefined) return undefined
+  if (!(TRASH_FILTERS as readonly string[]).includes(raw)) {
+    throw queryError(
+      'trashed',
+      'is not one this API understands',
+      `Use one of: ${TRASH_FILTERS.join(', ')}.`,
+    )
+  }
+  return raw as TrashFilter
 }
 
 /** The two parameters every single-entry route understands. */

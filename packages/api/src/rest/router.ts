@@ -30,7 +30,9 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   POST   /{collection}                   create
  *   GET    /{collection}/{id}              read
  *   PATCH  /{collection}/{id}              update
- *   DELETE /{collection}/{id}              delete
+ *   DELETE /{collection}/{id}              move to the trash (schema@2.0)
+ *   POST   /{collection}/{id}/untrash      take it back out
+ *   POST   /{collection}/{id}/purge        delete it for good
  *   POST   /{collection}/{id}/publish      publish
  *   GET    /{collection}/{id}/history      version list
  *   GET    /{collection}/{id}/diff         diff of two versions
@@ -316,6 +318,24 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         return jsonResponse(200, { data: await service.diff(context, name, id, from, to) })
       }
 
+      case 'untrash': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const entry = await service.untrash(context, name, id, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'purge': {
+        // POST rather than DELETE: `DELETE /{collection}/{id}` already means
+        // "put it in the trash", and two verbs on one path with two very
+        // different consequences is how someone destroys content by reflex.
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        await service.purge(context, name, id)
+        return jsonResponse(204, null)
+      }
+
       case 'restore': {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         const version = parseRestoreBody(request.body)
@@ -403,7 +423,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|history|diff|restore|preview|translations}.',
+    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|untrash|purge|history|diff|restore|preview|translations}.',
   })
 }
 

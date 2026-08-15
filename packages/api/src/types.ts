@@ -1,4 +1,4 @@
-import type { CollectionDefinition, ContentAction } from '@cogenta/schema'
+import type { CollectionDefinition, ContentAction, TaxonomyDefinition } from '@cogenta/schema'
 
 /**
  * The seam between the permission layer, REST and GraphQL.
@@ -59,6 +59,24 @@ export interface PermissionLayer {
 
   /** Throws `CogentaError` with `code: 'FORBIDDEN'` when the decision is a refusal. */
   assert(action: ContentAction, collection: CollectionDefinition, context: AccessContext): void
+
+  /**
+   * May this actor act on the **terms** of a taxonomy (`schema@2.0`)?
+   *
+   * A method of its own rather than a widened `can`, for one reason that
+   * matters: a preview token grants reading one *entry* of one collection, and
+   * a site may legitimately have a `category` collection and a `category`
+   * taxonomy. Sharing the code path would let a token minted for the former
+   * unlock the latter. Here there is no preview path at all — the role rules
+   * are the same, the escape hatch is not.
+   */
+  canTerm(
+    action: ContentAction,
+    taxonomy: TaxonomyDefinition,
+    context: AccessContext,
+  ): AccessDecision
+
+  assertTerm(action: ContentAction, taxonomy: TaxonomyDefinition, context: AccessContext): void
 }
 
 /**

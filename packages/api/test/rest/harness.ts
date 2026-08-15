@@ -147,7 +147,10 @@ export async function createHarness(options: { readonly siteUrl?: string } = {})
   const store = (collection: CollectionDefinition): ContentStore => {
     const existing = stores.get(collection.name)
     if (existing !== undefined) return existing
-    const created = createContentStore({ db, collection })
+    // `siblings` is what lets `delete()` enforce `restrict` in application
+    // code now that trashing is an UPDATE (ADR-0022). The real runtime passes
+    // the whole set, so the tests must too.
+    const created = createContentStore({ db, collection, siblings: COLLECTIONS })
     stores.set(collection.name, created)
     return created
   }

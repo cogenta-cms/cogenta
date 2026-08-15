@@ -60,6 +60,24 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // the closest real status (the request is understood, authenticated where
   // needed, and refused on policy, not on the request's shape).
   CONTENT_READ_ONLY: 403,
+  // The trash (`schema@2.0`, ADR-0022). Both are conflicts with the state the
+  // entry is actually in, not malformed requests: the client asked for
+  // something coherent that the current state forbids.
+  CONTENT_REFERENCED: 409,
+  CONTENT_NOT_TRASHED: 409,
+
+  // Taxonomies (`schema@2.0`, ADR-0022)
+  TAXONOMY_UNKNOWN: 404,
+  TAXONOMY_TERM_NOT_FOUND: 404,
+  TAXONOMY_SLUG_TAKEN: 409,
+  TAXONOMY_TERM_HAS_CHILDREN: 409,
+  // These three describe a request that could never be right, whatever the
+  // stored state: a cycle, a tree too deep to store, a parent in a flat
+  // taxonomy.
+  TAXONOMY_CYCLE: 400,
+  TAXONOMY_TOO_DEEP: 400,
+  TAXONOMY_NOT_HIERARCHICAL: 400,
+
   SCHEMA_INVALID: 400,
   BLOCK_UNKNOWN: 400,
   BLOCK_INVALID: 400,

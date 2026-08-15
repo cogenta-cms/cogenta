@@ -21,6 +21,7 @@ import type {
   ContentEntry,
   ContentValues,
   CreateInput,
+  DuplicateInput,
   EntryState,
   ListOptions,
   LocaleResolution,
@@ -61,6 +62,8 @@ export interface ContentStoreOptions {
 
 export interface ContentStore<TValues extends ContentValues = ContentValues> {
   create(input: CreateInput<TValues>): Promise<ContentEntry<TValues>>
+  /** Copies an entry into a new, independent draft. See the implementation for what is deliberately not copied. */
+  duplicate(id: string, input?: DuplicateInput<TValues>): Promise<ContentEntry<TValues>>
   read(id: string, options?: { readonly state?: EntryState }): Promise<ContentEntry<TValues> | null>
   update(id: string, input: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
   delete(id: string): Promise<boolean>
@@ -577,75 +580,207 @@ export function createContentStore<TValues extends ContentValues = ContentValues
 
   // ------------------------------------------------------------------- API
 
+  /**
+   * The whole of `create`, minus the transaction.
+   *
+   * Split out so `duplicate` can read the source and write the copy inside a
+   * single transaction: the free-slug probe it does between the two would
+   * otherwise be a read outside the write's transaction, and a concurrent
+   * insert could take the slug it had just found free.
+   */
+  async function insertEntry(
+    tx: SqlExecutor,
+    input: CreateInput<TValues>,
+  ): Promise<ContentEntry<TValues>> {
+    const id = input.id ?? newId()
+    const status = input.status ?? 'draft'
+    const at = stamp()
+    const author = input.createdBy ?? null
+
+    const normalised = normaliseValues(collection, input.values ?? {}, {
+      partial: false,
+      enforceRequired: status === 'published',
+    })
+    const zones = normaliseBlocks(collection, input.blocks ?? {}, newId)
+    const values = { ...normalised.values }
+
+    if (status === 'published' && collection.fields['publishedAt'] !== undefined) {
+      values['publishedAt'] ??= at
+      normalised.columns['publishedAt'] ??= at
+    }
+
+    const columns = [
+      'id',
+      'created_at',
+      'updated_at',
+      'created_by',
+      'updated_by',
+      'status',
+      'locale',
+      'translation_of',
+      'version',
+      'provenance',
+      'provenance_detail',
+    ]
+    const bound: unknown[] = [
+      id,
+      at,
+      at,
+      author,
+      author,
+      status,
+      input.locale ?? defaultLocale,
+      input.translationOf ?? null,
+      1,
+      input.provenance ?? ('human' satisfies Provenance),
+      input.provenanceDetail === undefined || input.provenanceDetail === null
+        ? null
+        : JSON.stringify(input.provenanceDetail),
+    ]
+
+    for (const [name, value] of Object.entries(normalised.columns)) {
+      columns.push(columnFor(name))
+      bound.push(value)
+    }
+
+    await tx.query(
+      sql`insert into ${entries} (${joinFragments(
+        columns.map((column) => identifier(column, dialect)),
+        ', ',
+      )}) values (${valueList(bound)})`,
+    )
+
+    await writeRelations(tx, id, normalised.relations)
+    await writeBlocks(tx, id, 1, zones)
+    await writeVersion(tx, id, 1, status, { ...values, ...normalised.relations }, author)
+
+    const row = await loadRow(tx, id)
+    if (row === null) throw notFound(collection.name, id)
+    return liveEntry(tx, row)
+  }
+
+  // ------------------------------------------------------------ duplication
+
+  const uniqueFields = Object.entries(collection.fields).filter(
+    ([, field]) => field.unique === true && !isColumnless(field),
+  )
+
+  async function isTaken(
+    tx: SqlExecutor,
+    field: string,
+    locale: string,
+    candidate: string,
+  ): Promise<boolean> {
+    // Uniqueness is per locale, exactly as the index in `tables.ts` declares
+    // it: the same slug in French and in English is the normal case.
+    const found = await tx.query<Row>(
+      sql`select ${identifier('id', dialect)} from ${entries}
+          where ${identifier('locale', dialect)} = ${locale}
+            and ${identifier(columnFor(field), dialect)} = ${candidate}
+          limit ${sqlLimit(1)}`,
+    )
+    return found.rows.length > 0
+  }
+
+  /**
+   * A value for a `unique` field that no row holds yet, derived from the one
+   * being copied: `hello` becomes `hello-copy`, then `hello-copy-2`.
+   *
+   * The unique index stays the enforcement point — this only spares the caller
+   * a raw constraint violation on the single most common shape there is (an
+   * article with a unique slug).
+   */
+  async function freeUniqueValue(
+    tx: SqlExecutor,
+    field: string,
+    locale: string,
+    source: string,
+  ): Promise<string> {
+    for (let attempt = 1; attempt <= 1000; attempt++) {
+      const candidate = attempt === 1 ? `${source}-copy` : `${source}-copy-${attempt}`
+      if (!(await isTaken(tx, field, locale, candidate))) return candidate
+    }
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: `Could not derive a free value for the unique field "${field}".`,
+      hint: 'A thousand copies of this value already exist. Pass an explicit value for the field instead.',
+      details: { collection: collection.name, field },
+    })
+  }
+
   return {
-    create: async (input) =>
+    create: async (input) => db.transaction((tx) => insertEntry(tx, input), { immediate: true }),
+
+    /**
+     * Copies one entry into a new draft.
+     *
+     * Three decisions are worth stating, because each could reasonably have
+     * gone the other way:
+     *
+     * 1. **The copy starts its own translation family** — `translationOf` is
+     *    always null, even when the source is itself a translation. Two rows
+     *    of the same family sharing a locale would make `resolveLocale` pick
+     *    between them arbitrarily (it takes the first match) and would show
+     *    the copy in `translations()` as if it were another language. A copy
+     *    is a new piece of content, not a new language of an old one.
+     * 2. **Blocks get fresh keys.** A `_key` anchors comments and RAG chunks;
+     *    the same key living in two entries would make "which entry does this
+     *    block belong to" answerable only with the entry id alongside it.
+     * 3. **Provenance is carried over, not reset to `human`.** Copying
+     *    generated content does not make it human-written, and pressing
+     *    duplicate must not launder it. Pass `provenance` to override.
+     *
+     * The copy is always a `draft`, its version count restarts at 1 and it
+     * inherits none of the source's history — the source's past is the
+     * source's.
+     */
+    duplicate: async (id, duplicateOptions) =>
       db.transaction(
         async (tx) => {
-          const id = input.id ?? newId()
-          const status = input.status ?? 'draft'
-          const at = stamp()
-          const author = input.createdBy ?? null
-
-          const normalised = normaliseValues(collection, input.values ?? {}, {
-            partial: false,
-            enforceRequired: status === 'published',
-          })
-          const zones = normaliseBlocks(collection, input.blocks ?? {}, newId)
-          const values = { ...normalised.values }
-
-          if (status === 'published' && collection.fields['publishedAt'] !== undefined) {
-            values['publishedAt'] ??= at
-            normalised.columns['publishedAt'] ??= at
-          }
-
-          const columns = [
-            'id',
-            'created_at',
-            'updated_at',
-            'created_by',
-            'updated_by',
-            'status',
-            'locale',
-            'translation_of',
-            'version',
-            'provenance',
-            'provenance_detail',
-          ]
-          const bound: unknown[] = [
-            id,
-            at,
-            at,
-            author,
-            author,
-            status,
-            input.locale ?? defaultLocale,
-            input.translationOf ?? null,
-            1,
-            input.provenance ?? ('human' satisfies Provenance),
-            input.provenanceDetail === undefined || input.provenanceDetail === null
-              ? null
-              : JSON.stringify(input.provenanceDetail),
-          ]
-
-          for (const [name, value] of Object.entries(normalised.columns)) {
-            columns.push(columnFor(name))
-            bound.push(value)
-          }
-
-          await tx.query(
-            sql`insert into ${entries} (${joinFragments(
-              columns.map((column) => identifier(column, dialect)),
-              ', ',
-            )}) values (${valueList(bound)})`,
-          )
-
-          await writeRelations(tx, id, normalised.relations)
-          await writeBlocks(tx, id, 1, zones)
-          await writeVersion(tx, id, 1, status, { ...values, ...normalised.relations }, author)
-
           const row = await loadRow(tx, id)
           if (row === null) throw notFound(collection.name, id)
-          return liveEntry(tx, row)
+
+          // The working state, not the published one: the admin's duplicate
+          // button copies what the editor is looking at.
+          const source = await workingEntry(tx, row)
+          const overrides = duplicateOptions?.values ?? {}
+          const locale = source.locale
+          const values: Record<string, unknown> = { ...source.values }
+
+          // Never carried over: a copy has never been published.
+          if (collection.fields['publishedAt'] !== undefined) values['publishedAt'] = null
+
+          for (const [field] of uniqueFields) {
+            if (Object.hasOwn(overrides, field)) continue
+            const current = values[field]
+            if (current === null || current === undefined || current === '') continue
+            if (typeof current !== 'string') {
+              throw new CogentaError({
+                code: 'CONTENT_INVALID',
+                message: `"${field}" is unique and is not text, so a copy of it cannot be derived.`,
+                hint: 'Pass a value for the field in duplicate()’s values, so the copy has its own.',
+                details: { collection: collection.name, field },
+              })
+            }
+            values[field] = await freeUniqueValue(tx, field, locale, current)
+          }
+
+          const blocks: Record<string, readonly ContentBlock[]> = {}
+          for (const [zone, list] of Object.entries(source.blocks)) {
+            blocks[zone] = list.map((block) => ({ ...block, key: '' }))
+          }
+
+          return insertEntry(tx, {
+            ...(duplicateOptions?.id === undefined ? {} : { id: duplicateOptions.id }),
+            locale,
+            translationOf: null,
+            status: 'draft',
+            createdBy: duplicateOptions?.createdBy ?? null,
+            provenance: duplicateOptions?.provenance ?? source.provenance,
+            provenanceDetail: duplicateOptions?.provenanceDetail ?? source.provenanceDetail,
+            values: { ...values, ...overrides } as Partial<TValues>,
+            blocks,
+          })
         },
         { immediate: true },
       ),

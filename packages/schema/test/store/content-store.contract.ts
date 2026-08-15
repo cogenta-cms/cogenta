@@ -220,6 +220,155 @@ export function runContentStoreContract(
       })
     })
 
+    describe('duplication', () => {
+      it('copies the values, the relations and the blocks into a new draft', async () => {
+        const writer = await authors.create({ values: { name: 'Colette' } })
+        const first = await tags.create({ values: { title: 'roman' } })
+        const source = await articles.create({
+          values: {
+            title: 'Sido',
+            slug: 'sido',
+            rating: 4.5,
+            writer: writer.id,
+            tags: [first.id],
+          },
+          blocks: { zone: [{ key: 'k1', type: 'prose', data: { text: 'A' } }] },
+          status: 'published',
+        })
+
+        const copy = await articles.duplicate(source.id)
+
+        expect(copy.id).not.toBe(source.id)
+        expect(copy.status).toBe('draft')
+        expect(copy.version).toBe(1)
+        expect(copy.values['title']).toBe('Sido')
+        expect(copy.values['rating']).toBe(4.5)
+        expect(copy.values['writer']).toBe(writer.id)
+        expect(copy.values['tags']).toEqual([first.id])
+        expect(copy.blocks['zone']?.[0]?.data).toEqual({ text: 'A' })
+      })
+
+      it('leaves the entry it copied untouched', async () => {
+        const source = await articles.create({ values: { title: 'Sido', slug: 'sido' } })
+        await articles.duplicate(source.id)
+
+        const read = await articles.read(source.id, { state: 'working' })
+        expect(read?.values['slug']).toBe('sido')
+        expect(read?.version).toBe(1)
+      })
+
+      it('gives the copied blocks their own keys, so a key never names two entries', async () => {
+        const source = await articles.create({
+          values: { title: 'Blocs' },
+          blocks: { zone: [{ key: 'k1', type: 'prose', data: { text: 'A' } }] },
+        })
+
+        const copy = await articles.duplicate(source.id)
+        expect(copy.blocks['zone']?.[0]?.key).toBeTruthy()
+        expect(copy.blocks['zone']?.[0]?.key).not.toBe('k1')
+      })
+
+      it('derives a free value for a unique field rather than failing on the index', async () => {
+        const source = await articles.create({ values: { title: 'Sido', slug: 'sido' } })
+
+        const first = await articles.duplicate(source.id)
+        const second = await articles.duplicate(source.id)
+
+        expect(first.values['slug']).toBe('sido-copy')
+        expect(second.values['slug']).toBe('sido-copy-2')
+      })
+
+      it('uses the value the caller gave for a unique field instead of deriving one', async () => {
+        const source = await articles.create({ values: { title: 'Sido', slug: 'sido' } })
+
+        const copy = await articles.duplicate(source.id, {
+          values: { slug: 'sido-2026', title: 'Sido, réédition' },
+        })
+
+        expect(copy.values['slug']).toBe('sido-2026')
+        expect(copy.values['title']).toBe('Sido, réédition')
+      })
+
+      it('starts a new translation family instead of joining the one it was copied from', async () => {
+        const source = await articles.create({ values: { title: 'Sido', slug: 'sido' } })
+        const translated = await articles.create({
+          values: { title: 'Sido', slug: 'sido-en' },
+          locale: 'en',
+          translationOf: source.id,
+        })
+
+        const copy = await articles.duplicate(translated.id)
+
+        expect(copy.translationOf).toBeNull()
+        expect(copy.locale).toBe('en')
+        // The source family is unchanged: the copy is not a third language of it.
+        const family = await articles.translations(source.id)
+        expect(family.map((entry) => entry.id)).not.toContain(copy.id)
+      })
+
+      it('never carries over a publication date', async () => {
+        const source = await articles.create({
+          values: { title: 'Sido', slug: 'sido' },
+          status: 'published',
+        })
+        expect(source.values['publishedAt']).toBeTruthy()
+
+        const copy = await articles.duplicate(source.id)
+        expect(copy.values['publishedAt']).toBeNull()
+        expect(copy.publishedAt).toBeNull()
+      })
+
+      it('starts its own history rather than inheriting the source’s', async () => {
+        const source = await articles.create({ values: { title: 'Sido', slug: 'sido' } })
+        await articles.update(source.id, { values: { title: 'Sido II' } })
+        await articles.update(source.id, { values: { title: 'Sido III' } })
+
+        const copy = await articles.duplicate(source.id)
+
+        expect(await articles.history(copy.id)).toHaveLength(1)
+        expect((await articles.history(source.id)).length).toBeGreaterThan(1)
+      })
+
+      it('copies the draft an editor is looking at, not the published version underneath', async () => {
+        const source = await articles.create({
+          values: { title: 'Publié', slug: 'publie' },
+          status: 'published',
+        })
+        await articles.update(source.id, { values: { title: 'En cours' } })
+
+        const copy = await articles.duplicate(source.id)
+        expect(copy.values['title']).toBe('En cours')
+      })
+
+      it('keeps the provenance of what it copied, so generated content stays generated', async () => {
+        const source = await articles.create({
+          values: { title: 'Écrit par un agent' },
+          provenance: 'generated',
+          provenanceDetail: { agent: 'writer', model: 'test' },
+        })
+
+        const copy = await articles.duplicate(source.id)
+        expect(copy.provenance).toBe('generated')
+        expect(copy.provenanceDetail).toEqual({ agent: 'writer', model: 'test' })
+      })
+
+      it('lets the caller state the provenance of the copy itself', async () => {
+        const source = await articles.create({
+          values: { title: 'Écrit par un agent' },
+          provenance: 'generated',
+        })
+
+        const copy = await articles.duplicate(source.id, { provenance: 'assisted' })
+        expect(copy.provenance).toBe('assisted')
+      })
+
+      it('refuses to copy an entry that is not there', async () => {
+        await expect(
+          articles.duplicate('01930000-0000-7000-8000-0000000000cc'),
+        ).rejects.toMatchObject({ code: 'CONTENT_NOT_FOUND' })
+      })
+    })
+
     describe('block zones', () => {
       it('stores one row per block rather than a JSON array in the content row', async () => {
         const entry = await articles.create({

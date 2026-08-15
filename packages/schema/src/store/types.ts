@@ -53,6 +53,27 @@ export interface CreateInput<TValues extends ContentValues = ContentValues>
   readonly blocks?: BlockZones
 }
 
+/**
+ * What a copy is allowed to differ by.
+ *
+ * Everything not named here is copied from the source: its values, its block
+ * zones, its relations, its locale and its provenance. What is *never* copied
+ * is stated on `ContentStore.duplicate` itself, because it is a decision
+ * rather than an omission.
+ */
+export interface DuplicateInput<TValues extends ContentValues = ContentValues>
+  extends ProvenanceInput {
+  /** Supply one when the copy has to carry an identity chosen elsewhere. */
+  readonly id?: string
+  readonly createdBy?: string | null
+  /**
+   * Applied on top of the copied values. This is how a caller renames the copy
+   * — and the only way to give a `unique` field a value that is not a string,
+   * since one of those cannot be derived automatically.
+   */
+  readonly values?: Partial<TValues>
+}
+
 export interface UpdateInput<TValues extends ContentValues = ContentValues>
   extends ProvenanceInput {
   readonly values?: Partial<TValues>

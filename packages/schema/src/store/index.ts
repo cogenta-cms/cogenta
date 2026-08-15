@@ -48,6 +48,7 @@ export type {
   ContentEntry,
   ContentValues,
   CreateInput,
+  DuplicateInput,
   EntryState,
   ListOptions,
   LocaleFallback,

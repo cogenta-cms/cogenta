@@ -43,6 +43,9 @@ describe('withReadOnlyStore', () => {
     await expect(
       readOnly.update(seeded.id, { values: { title: 'Blocked' } }),
     ).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
+    await expect(readOnly.duplicate(seeded.id)).rejects.toMatchObject({
+      code: 'CONTENT_READ_ONLY',
+    })
     await expect(readOnly.delete(seeded.id)).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
     await expect(readOnly.publish(seeded.id)).rejects.toMatchObject({ code: 'CONTENT_READ_ONLY' })
     await expect(readOnly.unpublish(seeded.id)).rejects.toMatchObject({

@@ -151,18 +151,61 @@ export { withSandbox, withSandboxForManifest } from './sandbox/with-sandbox.js'
 export type { AnalyseBriefOptions, AnalyseBriefResult } from './site-plan/analyse-brief.js'
 export { analyseBrief } from './site-plan/analyse-brief.js'
 export type {
+  ApprovedPlan,
+  PlanDecisions,
+  PlanItem,
+  PlanItemDecision,
+  PlanSection,
+  PlanSectionId,
+} from './site-plan/approval.js'
+export { PLAN_SECTIONS, resolveApprovedPlan, summarisePlan } from './site-plan/approval.js'
+export type {
   ConstraintKind,
   ConstraintTopic,
   DetectConstraintsInput,
   DetectedConstraint,
 } from './site-plan/constraints.js'
 export { CONSTRAINT_KINDS, CONSTRAINT_TOPICS, detectConstraints } from './site-plan/constraints.js'
+export type {
+  ProposeContentModelOptions,
+  ProposeContentModelResult,
+} from './site-plan/content-model.js'
+export { proposeContentModel } from './site-plan/content-model.js'
+export type {
+  DemoContentRejection,
+  ProposeDemoContentOptions,
+  ProposeDemoContentResult,
+} from './site-plan/demo-content.js'
+export { proposeDemoContent } from './site-plan/demo-content.js'
+export type { SitePlanStore, StoredSitePlan } from './site-plan/draft-store.js'
+export {
+  createFileSitePlanStore,
+  createMemorySitePlanStore,
+} from './site-plan/draft-store.js'
 export type { EnforcementResult } from './site-plan/enforce.js'
 export {
   enforceOnContentModel,
   enforceOnLanguages,
   enforceOnPages,
 } from './site-plan/enforce.js'
+export type {
+  PlanStage,
+  ProposeSitePlanOptions,
+  ProposeSitePlanResult,
+} from './site-plan/propose-plan.js'
+export { proposeSitePlan } from './site-plan/propose-plan.js'
+export type {
+  GenerateSkinCandidatesOptions,
+  GenerateSkinCandidatesResult,
+  SkinCandidateFailure,
+  SkinDirection,
+} from './site-plan/skin-candidates.js'
+export {
+  generateSkinCandidates,
+  MAX_SKIN_CANDIDATES,
+  MIN_SKIN_CANDIDATES,
+  SKIN_DIRECTIONS,
+} from './site-plan/skin-candidates.js'
 export type {
   BriefContentType,
   BriefPage,

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/render",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Astro integration, render context and theme installation checks.",
   "license": "MPL-2.0",
   "type": "module",

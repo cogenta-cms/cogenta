@@ -5,6 +5,7 @@ import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
 import { AgentsRoute } from './routes/agents.js'
 import { ApiKeysRoute } from './routes/api-keys.js'
+import { AssistantChatRoute } from './routes/assistant-chat.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
@@ -12,6 +13,7 @@ import { CommerceOrderRoute } from './routes/commerce-order-detail.js'
 import { CommerceOrdersRoute } from './routes/commerce-orders.js'
 import { CommerceProductsRoute } from './routes/commerce-products.js'
 import { DashboardRoute } from './routes/dashboard.js'
+import { DuplicatesRoute } from './routes/duplicates.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
 import { LoginRoute } from './routes/login.js'
@@ -77,6 +79,8 @@ export function App(): JSX.Element {
               <Route path="redirects" element={<RedirectsRoute />} />
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
               <Route path="trash" element={<TrashRoute />} />
+              <Route path="assistant-chat" element={<AssistantChatRoute />} />
+              <Route path="duplicates" element={<DuplicatesRoute />} />
               <Route path="media" element={<MediaRoute />} />
               <Route path="audit" element={<AuditRoute />} />
               <Route path="agents" element={<AgentsRoute />} />

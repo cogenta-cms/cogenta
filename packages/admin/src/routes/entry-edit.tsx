@@ -2,7 +2,7 @@ import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
-import type { BlockZones } from '../api/content-client.js'
+import type { BlockZones, ContentBlock } from '../api/content-client.js'
 import {
   createEntry,
   duplicateEntry,
@@ -13,6 +13,9 @@ import {
   updateEntry,
 } from '../api/content-client.js'
 import { AssistantPanel, type AssistField } from '../assist/assistant-panel.js'
+import { ClassifyPanel } from '../assist/classify-panel.js'
+import { FaqSchemaPanel } from '../assist/faq-schema-panel.js'
+import { ModerationCheck } from '../assist/moderation-check.js'
 import { useAuth } from '../auth/auth-context.js'
 import { PageBuilder } from '../builder/page-builder.js'
 import type { AutosaveRecord, AutosaveSnapshot } from '../collections/autosave.js'
@@ -363,6 +366,42 @@ export function EntryEditRoute(): JSX.Element {
       value: typeof values[fieldName] === 'string' ? (values[fieldName] as string) : '',
     }))
 
+  /**
+   * The whole entry's plain text, for the four assistant tools below that
+   * work on "the content of this entry" rather than on one chosen field:
+   * classification, moderation, FAQ and Schema.org drafting all read this.
+   * Computed directly off `collection.fields` (an array) rather than
+   * `assistFields` above, so a collection with more than one `text` field
+   * still contributes every one of them.
+   */
+  const entryText = collection.fields
+    .filter((field) => field.kind === 'text')
+    .map((field) => (typeof values[field.name] === 'string' ? (values[field.name] as string) : ''))
+    .filter((value) => value !== '')
+    .join('\n\n')
+
+  /**
+   * The multi-value `select` field this collection uses for tags/categories,
+   * when it has one — the vocabulary `assist.classify` chooses from and the
+   * field a suggestion is written into once accepted. A single-value
+   * `select` is left out: accepting a suggestion there means *replacing* the
+   * current choice rather than adding to it, a different interaction this
+   * panel does not offer.
+   */
+  const classifyField = collection.fields.find(
+    (field) => field.kind === 'select' && field.options.many === true,
+  )
+  const classifyVocabulary = (
+    (classifyField?.options.options as readonly { readonly value?: unknown }[] | undefined) ?? []
+  )
+    .map((choice) => choice.value)
+    .filter((value): value is string => typeof value === 'string')
+  const classifyCurrentValue = Array.isArray(values[classifyField?.name ?? ''])
+    ? (values[classifyField?.name ?? ''] as unknown[]).filter(
+        (value): value is string => typeof value === 'string',
+      )
+    : []
+
   return (
     <section aria-labelledby="entry-heading">
       <h1 id="entry-heading">
@@ -573,6 +612,40 @@ export function EntryEditRoute(): JSX.Element {
           locale={locale}
           siteLocales={siteLocales}
           onApply={setFieldValue}
+        />
+      )}
+
+      {/* The five assistant tools L18 shipped with no admin surface at all —
+          each is its own small panel, each checks its own tool's availability
+          and renders nothing when it is not on offer, and none of them ever
+          writes to the entry without an explicit click on its own suggestion. */}
+      {canWrite && token !== null && entryText !== '' && classifyField !== undefined && (
+        <ClassifyPanel
+          token={token}
+          text={entryText}
+          field={{
+            name: classifyField.name,
+            label: classifyField.admin?.label ?? classifyField.name,
+            options: classifyVocabulary,
+          }}
+          currentValue={classifyCurrentValue}
+          onAccept={setFieldValue}
+        />
+      )}
+
+      {canWrite && token !== null && entryText !== '' && (
+        <ModerationCheck token={token} text={entryText} />
+      )}
+
+      {canWrite && token !== null && entryText !== '' && (
+        <FaqSchemaPanel
+          token={token}
+          text={entryText}
+          {...(typeof values.title === 'string' ? { title: values.title } : {})}
+          blockZone={blockZone ?? null}
+          onAcceptFaq={(zone, block: ContentBlock) => {
+            setBlockZone(zone, [...(blocks[zone] ?? []), block])
+          }}
         />
       )}
 

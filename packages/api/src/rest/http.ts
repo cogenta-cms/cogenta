@@ -144,6 +144,23 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // something the caller's request could have avoided — the default 500
   // already fits, spelled out so it is not mistaken for an oversight.
   AUDIT_CHAIN_BROKEN: 500,
+
+  // Marketplace (L17) and the `@cogenta/plugins` verification it reuses.
+  // A missing/invalid signature is the caller's install attempt failing a
+  // real check, not a server fault — 422 (the request was well-formed, the
+  // referenced package just doesn't pass verification), not 500.
+  PLUGIN_SIGNATURE_MISSING: 422,
+  PLUGIN_SIGNATURE_INVALID: 422,
+  PLUGIN_SOURCE_NOT_FOUND: 404,
+  PLUGIN_MANIFEST_INVALID: 422,
+  MARKETPLACE_ITEM_NOT_FOUND: 404,
+  MARKETPLACE_KIND_UNSUPPORTED: 400,
+  MARKETPLACE_ALREADY_INSTALLED: 409,
+  MARKETPLACE_NOT_INSTALLED: 404,
+  // Never a silent apply: the caller must retry with explicit confirmation,
+  // which is a conflict with the item's current pending-permission state,
+  // not a malformed request.
+  MARKETPLACE_UPDATE_REQUIRES_APPROVAL: 409,
 }
 
 export function statusFor(code: ErrorCode): number {

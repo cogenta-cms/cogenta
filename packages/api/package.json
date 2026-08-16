@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@cogenta/agents": "workspace:*",
+    "@cogenta/plugins": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

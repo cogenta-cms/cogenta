@@ -80,6 +80,7 @@ import {
   type CogentaConfig,
   CogentaError,
   createDatabaseMediaStore,
+  createDatabaseQueue,
   createDatabaseRegistry,
   createLogger,
   createStorageRegistry,
@@ -117,12 +118,14 @@ import {
   ensureMenuTables,
   type MenuStore,
   type RedirectStore,
+  registerScheduledPublishing,
   type SchemaDocument,
   type SearchDriver,
   type TaxonomyDefinition,
   type TaxonomyStore,
   withLifecycleEvents,
   withReadOnlyStore,
+  withScheduledPublishEnqueue,
   withSearchIndexing,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
@@ -402,6 +405,13 @@ interface Site {
     readonly database: HealthReport
     readonly storage: HealthReport
   }>
+  /**
+   * Drains one batch of due scheduled-publication jobs. `runServe` calls this
+   * on a `setInterval` for as long as the process runs — see its comment for
+   * why a fixed period is the honest, R1-compliant substitute for a real
+   * worker. Exposed so a test can call it directly instead of waiting.
+   */
+  readonly tickScheduledPublishing: () => Promise<number>
   dispose(): Promise<void>
 }
 
@@ -523,6 +533,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // with a second one over the same table.
   const searchIndex = options.searchIndex ?? (await createSearchIndex({ db }))
 
+  // Scheduled publication (L1's `schedulePublication`/`registerScheduledPublishing`,
+  // written and tested from the start but never wired to anything — the admin
+  // showed "Scheduled" as a read-only badge). The `database` queue driver is
+  // the R1-honest choice: no Redis, no external worker, just a table in the
+  // site's own database, drained by `runServe`'s own `setInterval` tick — see
+  // the comment there for the lateness this trades for not requiring a
+  // persistent process.
+  const scheduledPublishQueue = createDatabaseQueue({ db, logger })
+
   const stores = new Map<string, ContentStore>()
   const storeFor = (collection: CollectionDefinition): ContentStore => {
     const existing = stores.get(collection.name)
@@ -532,9 +551,21 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     // left to refuse at that moment.
     const created = createContentStore({ db, collection, siblings: collections })
     const guarded = readOnly ? withReadOnlyStore(created) : created
+    // Queues the real publish job for a save that lands as `status:
+    // 'scheduled'`. Placed right after the read-only guard so a write that
+    // guard refused never reaches the queue either.
+    const schedulable = withScheduledPublishEnqueue(guarded, {
+      collection,
+      queue: scheduledPublishQueue,
+      onError: (error) =>
+        logger.error('scheduled publish enqueue failed', {
+          collection: collection.name,
+          error: String(error),
+        }),
+    })
     // Outermost, so a read-only refusal happens *before* anything is indexed:
     // a write that never landed must not change the index either.
-    const indexed = withSearchIndexing(guarded, {
+    const indexed = withSearchIndexing(schedulable, {
       collection,
       index: searchIndex,
       onError: (error) =>
@@ -588,6 +619,22 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // very first request. Populating eagerly here means both callers see the
   // same, already-complete map.
   for (const collection of collections) storeFor(collection)
+
+  // The publish half of scheduling: re-reads the entry before acting, so an
+  // entry edited back to `draft` — or already published by hand — before its
+  // hour comes is left alone rather than redone by a job still sitting in
+  // the queue (see `withScheduledPublishEnqueue`, which enqueues again on
+  // every save rather than tracking a previous job id).
+  registerScheduledPublishing(
+    scheduledPublishQueue,
+    async (publication) => {
+      const target = stores.get(publication.collection)
+      if (target === undefined) return
+      const entry = await target.read(publication.entryId, { state: 'working' })
+      if (entry?.status === 'scheduled') await target.publish(publication.entryId)
+    },
+    { logger },
+  )
 
   const redirects = createRedirectStore({ db })
   await redirects.ensureTable()
@@ -826,7 +873,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     styles,
     security: options.security,
     health: options.health,
+    tickScheduledPublishing: () => scheduledPublishQueue.tick(),
     dispose: async () => {
+      await scheduledPublishQueue.close()
       await db.close()
     },
   }
@@ -1761,6 +1810,7 @@ export function createRequestListener(
               site: site.site,
               styles: site.styles,
               loadMedia: (ids) => loadRenderMedia(site, ids),
+              menuRouter: site.menuRouter,
             },
             context,
           )
@@ -1880,6 +1930,7 @@ export function createRequestListener(
           site: site.site,
           styles: site.styles,
           loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+          menuRouter: site.menuRouter,
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
@@ -1962,6 +2013,13 @@ export interface ServeOptions {
    * only the write is held to the decision.
    */
   readonly development?: boolean
+  /**
+   * Overrides `SCHEDULED_PUBLISH_TICK_MS`. Not a CLI flag — an operator has
+   * no reason to change a 60-second cadence, and this exists so a test can
+   * prove the interval really drains the queue without waiting a minute for
+   * it.
+   */
+  readonly scheduledPublishTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -1969,6 +2027,19 @@ const DEFAULT_HOST = '127.0.0.1'
 
 /** How long a shutdown waits for open connections before cutting them. */
 const SHUTDOWN_GRACE_MS = 2_000
+
+/**
+ * How often `runServe` drains due scheduled-publication jobs (R1).
+ *
+ * `cogenta serve` has no persistent worker process beyond itself, so this
+ * `setInterval` *is* the cron a hosted deployment with no worker would
+ * otherwise need to configure by hand. The honest trade this makes: a page
+ * scheduled for 09:00 goes live between 09:00 and 09:01, not exactly on the
+ * hour. If the process is stopped when a publication comes due, nothing is
+ * lost — the job is still in the `database` queue's table — it simply runs
+ * on the first tick after the next start, however late that is.
+ */
+const SCHEDULED_PUBLISH_TICK_MS = 60_000
 
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
@@ -2109,6 +2180,25 @@ export async function runServe(options: ServeOptions): Promise<number> {
   out.detail(assistant.summary)
   options.onListening?.({ port: boundPort, host })
 
+  // Scheduled publication (task 1): a first tick right away catches up on
+  // anything that came due while the process was down, then one every
+  // `SCHEDULED_PUBLISH_TICK_MS` for as long as this server runs. A failed
+  // tick is logged, never fatal — a scheduling hiccup must not take the
+  // whole site down.
+  const runScheduledPublishTick = (): void => {
+    site.tickScheduledPublishing().catch((error: unknown) => {
+      logger.error('scheduled publish tick failed', { error: String(error) })
+    })
+  }
+  runScheduledPublishTick()
+  const scheduledPublishTimer = setInterval(
+    runScheduledPublishTick,
+    options.scheduledPublishTickMs ?? SCHEDULED_PUBLISH_TICK_MS,
+  )
+  // Never keeps the process alive on its own: a `signal`-driven shutdown with
+  // no open connections must still be able to exit.
+  scheduledPublishTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -2117,6 +2207,8 @@ export async function runServe(options: ServeOptions): Promise<number> {
     }
     options.signal.addEventListener('abort', () => resolve(), { once: true })
   })
+
+  clearInterval(scheduledPublishTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

@@ -9,9 +9,11 @@ import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
+import { ForgotPasswordRoute } from './routes/forgot-password.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
 import { ProfileRoute } from './routes/profile.js'
+import { ResetPasswordRoute } from './routes/reset-password.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
 import { TaxonomiesRoute } from './routes/taxonomies.js'
@@ -42,6 +44,8 @@ export function App(): JSX.Element {
       <BrowserRouter basename={ROUTER_BASENAME}>
         <Routes>
           <Route path="login" element={<LoginRoute />} />
+          <Route path="forgot-password" element={<ForgotPasswordRoute />} />
+          <Route path="reset-password" element={<ResetPasswordRoute />} />
           <Route
             element={
               <RequireAuth>

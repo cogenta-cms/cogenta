@@ -43,6 +43,26 @@ export function login(email: string, password: string): Promise<LoginResult> {
   return request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
 }
 
+/**
+ * Always resolves the same way, whether or not `email` names a real
+ * account — the server's response is deliberately identical either way
+ * (`auth-router.ts`'s `forgotPassword`, the rule this UI must not undo by
+ * showing a different message for a caught `ApiError`).
+ */
+export function forgotPassword(email: string): Promise<{ readonly message: string }> {
+  return request('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<{ reset: true }> {
+  return request('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword }),
+  })
+}
+
 export function completeTotp(ticket: string, token: string): Promise<LoginResult> {
   return request('/api/auth/totp', { method: 'POST', body: JSON.stringify({ ticket, token }) })
 }

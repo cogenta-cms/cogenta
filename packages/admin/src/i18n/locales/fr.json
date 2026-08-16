@@ -42,6 +42,12 @@
     "linkUrlLabel": "URL du lien",
     "linkPlaceholder": "https://…"
   },
+  "roles": {
+    "admin": "Administrateur",
+    "editor": "Éditeur",
+    "author": "Auteur",
+    "contributor": "Contributeur"
+  },
   "nav": {
     "dashboard": "Tableau de bord",
     "collections": "Contenus",
@@ -74,7 +80,26 @@
     "verify": "Vérifier",
     "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
     "connectionFailed": "Connexion impossible.",
-    "incorrectCode": "Code incorrect."
+    "incorrectCode": "Code incorrect.",
+    "forgotPassword": "Mot de passe oublié ?"
+  },
+  "forgotPassword": {
+    "heading": "Réinitialiser le mot de passe",
+    "intro": "Saisissez l'adresse e-mail de votre compte. S'il existe, un lien pour choisir un nouveau mot de passe lui sera envoyé.",
+    "submit": "Envoyer le lien de réinitialisation",
+    "sent": "Si un compte existe pour cette adresse, un lien de réinitialisation lui a été envoyé. Il expire dans 30 minutes.",
+    "error": "Impossible d'envoyer la demande.",
+    "backToLogin": "Retour à la connexion"
+  },
+  "resetPassword": {
+    "heading": "Choisir un nouveau mot de passe",
+    "newPassword": "Nouveau mot de passe",
+    "hint": "Au moins 12 caractères. Une phrase de quelques mots ordinaires est à la fois plus longue et plus facile à retenir qu'un mot de passe court avec des symboles.",
+    "submit": "Réinitialiser le mot de passe",
+    "done": "Mot de passe changé. Toutes les sessions existantes ont été déconnectées — reconnectez-vous avec le nouveau mot de passe.",
+    "goToLogin": "Aller à la connexion",
+    "missingToken": "Ce lien n'a pas de jeton. Demandez-en un nouveau depuis l'écran « mot de passe oublié ».",
+    "error": "Impossible de réinitialiser le mot de passe. Le lien a peut-être expiré ou déjà été utilisé."
   },
   "notices": {
     "dismiss": "Masquer cette recommandation",
@@ -305,7 +330,10 @@
     "allRoles": "Tous les rôles",
     "emailColumn": "Adresse e-mail",
     "rolesColumn": "Rôles",
-    "rolesHint": "Un ou plusieurs noms de rôle, séparés par des virgules.",
+    "rolesHint": "Choisissez un ou plusieurs rôles standards, et/ou ajoutez un rôle personnalisé ci-dessous — un site peut avoir ses propres noms de rôle au-delà de ces quatre-là.",
+    "customRoleLabel": "Rôle personnalisé (optionnel)",
+    "customRolePlaceholder": "p. ex. traducteur",
+    "rolesNone": "Choisissez au moins un rôle, standard ou personnalisé.",
     "statusColumn": "État",
     "mfaColumn": "Second facteur",
     "actionsColumn": "Actions",
@@ -337,7 +365,7 @@
     "signedInAs": "Connecté en tant que {{email}} — rôles : {{roles}}.",
     "loadError": "Impossible de charger votre profil.",
     "passwordHeading": "Mot de passe",
-    "passwordIntro": "Changer votre mot de passe exige celui que vous utilisez aujourd'hui. Si vous l'avez oublié, il n'existe pas encore de procédure de réinitialisation.",
+    "passwordIntro": "Changer votre mot de passe exige celui que vous utilisez aujourd'hui. Si vous l'avez oublié, utilisez plutôt le lien « mot de passe oublié » de l'écran de connexion.",
     "currentPassword": "Mot de passe actuel",
     "newPassword": "Nouveau mot de passe",
     "newPasswordHint": "Au moins 12 caractères. Une phrase de quelques mots ordinaires est plus longue et plus facile à retenir qu'un mot court avec des symboles.",

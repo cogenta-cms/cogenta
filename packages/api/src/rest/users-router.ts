@@ -3,6 +3,7 @@ import type { AuthStore, User } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import { assertPasswordPolicy } from './password-policy.js'
 import { single } from './query.js'
 
 /**
@@ -41,14 +42,6 @@ export interface UsersRouter {
 }
 
 const DEFAULT_BASE_PATH = '/api/users'
-
-/**
- * Long enough that scrypt is the attacker's only option, short of a leak.
- * Checked here rather than in `hashPassword`, which refuses only what it cannot
- * hash: a length policy is a product decision, and the CLI's generated
- * passwords are far longer than this anyway.
- */
-const MIN_PASSWORD_LENGTH = 12
 
 /** Base64url, so it is safe to read off a screen and paste back with no escaping. */
 function generatePassword(): string {
@@ -127,15 +120,6 @@ function statusField(value: unknown): User['status'] {
     code: 'QUERY_INVALID',
     message: '"status" must be either "active" or "disabled".',
     hint: 'Accounts are disabled, never deleted — an account that wrote content still has to be nameable.',
-  })
-}
-
-function assertPasswordPolicy(password: string): void {
-  if (password.length >= MIN_PASSWORD_LENGTH) return
-  throw new CogentaError({
-    code: 'AUTH_PASSWORD_INVALID',
-    message: `A password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
-    hint: 'A passphrase of a few ordinary words is both longer and easier to remember than a short one with symbols in it.',
   })
 }
 

@@ -1,6 +1,6 @@
 import { type FormEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Navigate, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import '../styles/auth.css'
@@ -162,6 +162,9 @@ export function LoginRoute(): JSX.Element {
             {t('login.submit')}
           </button>
         </form>
+        <p className="auth-form__divider">
+          <Link to="/forgot-password">{t('login.forgotPassword')}</Link>
+        </p>
       </div>
     </main>
   )

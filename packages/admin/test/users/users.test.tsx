@@ -94,7 +94,12 @@ describe('creating an account', () => {
     fireEvent.change(screen.getByLabelText('Adresse e-mail'), {
       target: { value: 'carol@example.com' },
     })
-    fireEvent.change(screen.getByLabelText('Rôles'), { target: { value: 'editor, reviewer' } })
+    // "Éditeur" is checked by default; a custom role is added on top of it,
+    // the same way "editor, reviewer" combined a standard and an ad hoc role
+    // before the checkbox list existed.
+    fireEvent.change(screen.getByLabelText('Rôle personnalisé (optionnel)'), {
+      target: { value: 'reviewer' },
+    })
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
 
     expect(await screen.findByText('generated-password-xyz')).toBeDefined()
@@ -131,7 +136,13 @@ describe('changing an account', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Changer les rôles de bob@example.com' }))
     const dialog = await screen.findByRole('dialog', { name: 'Rôles de bob@example.com' })
-    fireEvent.change(screen.getByLabelText('Rôles'), { target: { value: 'reviewer' } })
+    // Bob starts with "viewer" (not a standard role, so it appears as its own
+    // checkbox, pre-checked). Uncheck it and add "reviewer" as a custom role,
+    // to land on exactly one role, same as the old free-text field did.
+    fireEvent.click(within(dialog).getByLabelText('viewer'))
+    fireEvent.change(within(dialog).getByLabelText('Rôle personnalisé (optionnel)'), {
+      target: { value: 'reviewer' },
+    })
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
 
     await waitFor(() => {

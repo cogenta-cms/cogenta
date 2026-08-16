@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/cli",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The Cogenta command line: diagnose an install, run migrations, inspect drivers.",
   "license": "MPL-2.0",
   "type": "module",

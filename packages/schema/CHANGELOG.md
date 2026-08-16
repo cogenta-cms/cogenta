@@ -1,5 +1,198 @@
 # @cogenta/schema
 
+## 0.2.0
+
+### Minor Changes
+
+- [`17aa538`](https://github.com/cogenta-cms/cogenta/commit/17aa538e94da132ce1ca48d2213d2b84df231c78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Detect broken links across published content (L14 task 3)
+  
+  `@cogenta/schema` gains `extractLinks` and `checkLinks`, and `@cogenta/cli`
+  gains `cogenta links check` to run them over a real site.
+  
+  The crawl walks every published entry, collects every link it holds — a
+  rich-text `markDefs` href, a contract B action `target`, a plain `url` field —
+  and reports the ones that lead nowhere, telling apart a target that was
+  deleted, one that exists but is not published, a path no route can serve, and
+  a reference to a collection the site does not have. Each distinct target is
+  resolved once however many entries point at it.
+  
+  Two deliberate limits, both documented in the code:
+  
+  - **External URLs are opt-in** (`--external` / `checkExternal`). A HEAD that
+    comes back 403 or 405 is retried as a GET, because plenty of hosts refuse
+    HEAD on pages they serve happily.
+  - **Nothing schedules itself.** Rule R1 guarantees no durable worker, so
+    "periodically" is a cron entry calling the command, not a scheduler
+    pretending to exist inside the site. `cogenta links check` exits 1 when it
+    finds something, so it works as a CI or cron check.
+  
+  Note: the full-text index is not reused for this, as the lot suggested it
+  might be — `search/extract.ts` deliberately strips `href`, `url` and
+  `markDefs` before indexing, so it holds no URL at all.
+
+- [`755201d`](https://github.com/cogenta-cms/cogenta/commit/755201d55fd8c04ba2794a03797696769b59f6cc) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Send a real signed webhook when content is published (L14 task 1)
+  
+  The signed outbound webhook channel has existed since L6 and nothing ever
+  called it. It is now connected to the content lifecycle.
+  
+  - `@cogenta/channels` gains `createWebhookEventSender`, which POSTs a
+    structured `{ event, occurredAt, data }` envelope to every configured
+    endpoint. It reuses `signOutgoingWebhook` and the existing
+    `X-Cogenta-Timestamp` / `X-Cogenta-Signature` headers **verbatim**, so a
+    receiver verifies an event with `verifyIncomingWebhook` exactly as it
+    verifies a message — there is no second signing path. It never throws: a
+    failed delivery comes back as a result to log, so an editor's publish is
+    never lost to somebody else's downtime.
+  - `@cogenta/schema` gains `withLifecycleEvents`, a `ContentStore` decorator in
+    the same shape as `withSearchIndexing`. It emits `content.publish` (from
+    `publish()`, and from `create()` with a published status),
+    `content.unpublish` and `content.delete`, each carrying the entry's
+    identity, status, timestamps and its real route path from `buildPath`.
+    Draft edits emit nothing. The event body never carries the content itself.
+  - `@cogenta/core` gains a `webhooks.endpoints` config section. The signing
+    secret is environment-only (`COGENTA_WEBHOOK_SECRET`, rule R7); endpoints
+    configured without it disable delivery with a startup warning rather than
+    falling back to unsigned requests.
+  - `cogenta serve` wires the two together, outermost of all store decorators so
+    an event only describes a write that really landed.
+  
+  Proven end to end by a suite that publishes over real HTTP and verifies the
+  signature on the bytes a real `node:http` receiver got off the socket.
+
+- [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Breaking: contract A moves to `schema@2.0`** (ADR-0022) — the trash and native
+  taxonomies, in one version bump with one migration.
+  
+  ### `delete()` changed meaning without changing signature
+  
+  `ContentStore.delete()` no longer issues a `DELETE`. It writes the new system
+  field `deletedAt` and leaves every row where it was — versions, blocks, join
+  rows, and the `translation_of` of any translation. Two new methods complete it:
+  
+  - `purge(id)` is the real `DELETE`, i.e. what `delete()` used to do;
+  - `untrash(id)` takes an entry back out, with the status it went in with;
+  - `purgeExpired()` removes what has outlived the collection's `trash.retainDays`.
+  
+  **How to migrate.** Code that called `delete()` to genuinely destroy a row — an
+  import script that cleans up, a test that resets — must now call `purge()`.
+  Nothing will fail loudly if you do not: the call still succeeds and simply
+  leaves the row behind, which is the worst kind of break and the reason it is
+  called out first here. `trash: false` on a collection restores the old
+  behaviour outright.
+  
+  ### Every read now filters the trash by default
+  
+  `read`, `list`, `translations`, `resolveLocale` and `history` exclude trashed
+  entries unless the caller passes `trashed: 'include' | 'only'`. That direction
+  is deliberate: a renderer, a sitemap or a headless client written against 1.0
+  keeps serving live content with no change at all.
+  
+  ### `restrict` is now enforced in application code
+  
+  Trashing is an `UPDATE`, so a foreign key can no longer refuse it. `delete()`
+  checks referring entries itself and names what blocks ("2 entries of
+  \"article\" still reference it"); `purge()` runs the same check so both paths
+  give the same sentence. This needs the sibling collections, so
+  `createContentStore` takes a new optional `siblings` option — **pass it**. Left
+  out, only self-references are checked; nothing is destroyed, since `purge()`
+  still meets the real foreign key, but a trash that should have been refused
+  will be allowed.
+  
+  `withReadOnlyStore` refuses `delete`, `untrash`, `purge` and `purgeExpired`.
+  
+  ### Native taxonomies
+  
+  `defineTaxonomy()` is a second top-level declarable object beside
+  `defineCollection()`, and `f.taxonomy({ of, many })` a new field kind. A term
+  carries `id`, `parent`, `slug`, `position` and `labels` indexed by locale, and
+  deliberately no `status`, `version` or `translationOf`: a classification is not
+  content, so ADR-0014 does not govern it.
+  
+  The tree is stored as a **materialised path** maintained on write, never a
+  recursive CTE: "everything under this term" is one `like` that Postgres,
+  MySQL/MariaDB and SQLite answer identically (ADR-0006). Paths are built from
+  ids, so renaming a term rewrites nothing and only a move pays. Nesting is
+  bounded at 12 levels so the indexed column stays inside InnoDB's key limit.
+  
+  `createTaxonomyStore()` is the term store; `createSchemaTables(db, collections,
+  taxonomies)` and `dropSchemaTables` take the taxonomies as a third argument.
+  
+  ### The migration
+  
+  `schema2Migration({ collections, taxonomies })` adds `deleted_at` to every
+  entry table and creates the terms and join tables. It is marked **destructive**,
+  so the migrator demands an explicit confirmation and a verified backup: its
+  `down` drops `deleted_at` and the terms tables, which permanently discards
+  everything in the trash and every classification — entries sitting in the trash
+  silently become live again with no record they were ever deleted.
+  
+  ### Also
+  
+  `.cogenta/schema.json` reports `schema@2.0`, carries the declared taxonomies and
+  each collection's trash window, and `buildSchemaDocument`/`renderSchemaJson`
+  take the taxonomies. `@cogenta/core` gains the error codes the two features
+  need: `CONTENT_REFERENCED`, `CONTENT_NOT_TRASHED` and the `TAXONOMY_*` family.
+
+- [`b4e7deb`](https://github.com/cogenta-cms/cogenta/commit/b4e7deb11cb56f514da8533ffd9296a809bd45f0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `ContentStore` gains `duplicate(id, input?)`: it copies an entry's values,
+  relations and block zones into a brand-new draft (L13 task 4). No contract A
+  change — it composes `read` and `create`, and duplication is covered by the
+  already-frozen `create` action, so no sixth permission action was invented.
+  
+  Four behaviours are decisions rather than defaults, and each is tested:
+  
+  - **The copy always starts its own translation family** (`translationOf` is
+    null even when the source is itself a translation). Two rows of the same
+    family sharing a locale would make `resolveLocale` choose between them
+    arbitrarily — it returns the first match — and would list the copy in
+    `translations()` as if it were another language.
+  - **A unique field gets a derived, free value** (`sido` → `sido-copy` →
+    `sido-copy-2`), probed inside the same transaction as the insert. Without
+    it the first duplicate of the commonest collection shape there is — an
+    article with a unique slug — would fail on a raw unique-index violation. A
+    unique field that is not text cannot be derived, and refuses with
+    `CONTENT_INVALID` naming the field instead of guessing.
+  - **Copied blocks get fresh `_key`s.** A key anchors comments and RAG chunks;
+    the same key in two entries would make a key alone meaningless as an anchor.
+  - **Provenance is carried over, not reset to `human`.** Duplicating generated
+    content does not make it human-written. Pass `provenance` to say otherwise.
+  
+  `publishedAt` is always cleared, the copy is always a `draft` at version 1
+  with its own empty history, and it copies the **working** state — what the
+  editor is looking at — not the published version underneath.
+  `withReadOnlyStore` refuses `duplicate` like every other mutation.
+
+- [`62c2898`](https://github.com/cogenta-cms/cogenta/commit/62c28982ab130aafdb8b3aed04821b039e9e03ff) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Full-text search is reachable for the first time (L10 task 3). The engine
+  (`packages/schema/src/search/`, one driver per database) has existed and
+  been tested since L1, but nothing anywhere in the repository ever called
+  `index()` and no route ever called `search()` — so every search returned
+  nothing, however the query was written.
+  
+  - **`@cogenta/schema`** gains `withSearchIndexing(store, { collection,
+    index, onError })`, a `ContentStore` decorator in the same shape as
+    `withReadOnlyStore`. Wrapping the store rather than hooking a router is
+    what makes REST and GraphQL both covered by one guard instead of two.
+    Its central safety property: after any mutation the **published** face is
+    read back first and indexed when it exists, so an unpublished edit to a
+    published entry can never be filed under a status a public search reaches.
+    A failing index write never fails the content write — the index is derived
+    data — and surfaces through `onError` rather than silently.
+  - **`@cogenta/api`** gains `createSearchRouter` — `GET /api/search?q=…`,
+    with `collections`, `status`, `locale`, `limit` and `offset`. Naming a
+    collection you may not read is a 403, not a quieter answer; the default
+    scope is the readable collections only, and every hit is filtered against
+    that same set on the way out. `status` other than `published` requires
+    `canReadUnpublished` on every collection in scope.
+  - **`@cogenta/cli`** creates the index at startup, wraps every collection's
+    store with it, mounts `/api/search`, and serves a public `/search?q=…`
+    page with a real form and real links (`noindex`, as a search results page
+    must be). The public page is a **route, not a contract B block**: contract
+    B is frozen and adding a block needs an RFC, which does not belong in a
+    lot whose premise is "wiring only".
+
+### Patch Changes
+
+- Updated dependencies [[`552645e`](https://github.com/cogenta-cms/cogenta/commit/552645e039b8c8c4f5340d065ea2f4a552950815), [`8b561d1`](https://github.com/cogenta-cms/cogenta/commit/8b561d1ba735eb2b42c27725f67faf64e53866e5), [`182ef48`](https://github.com/cogenta-cms/cogenta/commit/182ef48d97e2757e7b1404dc407327f53ed377dd), [`6ad0f3a`](https://github.com/cogenta-cms/cogenta/commit/6ad0f3a495176169fe95f4955dfef30a6af376fd), [`755201d`](https://github.com/cogenta-cms/cogenta/commit/755201d55fd8c04ba2794a03797696769b59f6cc), [`551a06c`](https://github.com/cogenta-cms/cogenta/commit/551a06c2e58bb4119618e5502dfcae4bb024b7d4), [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826), [`ca71b3b`](https://github.com/cogenta-cms/cogenta/commit/ca71b3bbd5d5d7371923d0521444fc94a525de06)]:
+  - @cogenta/core@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes

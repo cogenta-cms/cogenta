@@ -11,6 +11,7 @@ import {
 } from '../api/content-client.js'
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { downloadCsv, toCsv } from '../lib/csv.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
@@ -171,6 +172,38 @@ export function CollectionListRoute(): JSX.Element {
     [collection, roles],
   )
 
+  /**
+   * Exports whatever is currently on screen — the search results when a
+   * search is active, the filtered/sorted list otherwise — never a fresh,
+   * unfiltered fetch. Generated entirely client-side (R9: a CSV this small
+   * needs no dependency) from data the page already loaded.
+   *
+   * A search hit carries no `createdAt`/`updatedAt` (`SearchHit` is a
+   * narrower shape than `Entry`), so those two columns are left blank rather
+   * than invented.
+   */
+  function exportCsv(): void {
+    if (collection === undefined) return
+    const header = [
+      t('collectionList.idColumn'),
+      t('collectionList.titleColumn'),
+      t('collectionList.statusColumn'),
+      t('collectionList.createdColumn'),
+      t('collectionList.updatedColumn'),
+    ]
+    const rows =
+      hits !== null
+        ? hits.map((hit) => [hit.id, hit.title === '' ? hit.id : hit.title, hit.status, '', ''])
+        : items.map((entry) => [
+            entry.id,
+            titleOf(entry),
+            entry.status,
+            entry.createdAt,
+            entry.updatedAt,
+          ])
+    downloadCsv(`${collection.name}.csv`, toCsv([header, ...rows]))
+  }
+
   if (schema.status === 'loading') return <p>{t('common.loading')}</p>
   if (schema.status === 'error') {
     return <p role="alert">{t('common.schemaError', { message: schema.message })}</p>
@@ -268,6 +301,10 @@ export function CollectionListRoute(): JSX.Element {
             )}
           </Field>
         </div>
+
+        <button type="button" onClick={exportCsv}>
+          {t('collectionList.exportCsv')}
+        </button>
 
         {canDelete && selected.size > 0 && (
           <Button variant="destructive" onClick={() => void deleteSelected()}>

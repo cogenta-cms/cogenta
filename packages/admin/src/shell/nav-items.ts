@@ -25,6 +25,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/assistant-chat', labelKey: 'nav.assistantChat' },
   { to: '/duplicates', labelKey: 'nav.duplicates' },
   { to: '/media', labelKey: 'nav.media' },
+  { to: '/import', labelKey: 'nav.import' },
   { to: '/audit', labelKey: 'nav.audit' },
   { to: '/agents', labelKey: 'nav.agents' },
   { to: '/site-plan', labelKey: 'nav.sitePlan' },

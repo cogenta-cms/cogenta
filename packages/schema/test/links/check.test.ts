@@ -9,6 +9,12 @@ import { extractLinks } from '../../src/links/extract.js'
 import type { ContentStore } from '../../src/store/store.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
+import type {
+  BlockZones,
+  ContentBlock,
+  ContentEntry,
+  ContentValues,
+} from '../../src/store/types.js'
 import type { CollectionDefinition } from '../../src/types.js'
 
 /**
@@ -29,49 +35,62 @@ const page: CollectionDefinition = {
   permissions: { read: ['public'] },
 }
 
-function textBlock(key: string, data: Record<string, unknown>) {
-  return { key, type: 'prose', version: '1.0.0', data }
+function textBlock(key: string, data: Record<string, unknown>): ContentBlock {
+  return { key, type: 'prose', data }
+}
+
+/** A fully-typed entry for the two pure `extractLinks` cases, which need no store. */
+function entryOf(values: ContentValues, blocks: BlockZones): ContentEntry {
+  return {
+    id: 'e1',
+    locale: 'en',
+    status: 'published',
+    state: 'published',
+    publishedAt: null,
+    createdAt: '',
+    updatedAt: '',
+    createdBy: null,
+    updatedBy: null,
+    translationOf: null,
+    provenance: 'human',
+    provenanceDetail: null,
+    version: 1,
+    values,
+    blocks,
+  }
 }
 
 describe('extractLinks', () => {
   it('finds a rich-text external link, an internal reference and a plain url field', () => {
-    const links = extractLinks({
-      id: 'e1',
-      locale: 'en',
-      status: 'published',
-      publishedAt: null,
-      createdAt: '',
-      updatedAt: '',
-      createdBy: null,
-      updatedBy: null,
-      version: 1,
-      values: {
-        website: 'ignored — not a url key',
-        url: 'https://example.org/docs',
-        body: [
-          {
-            _key: 'b1',
-            _type: 'block',
-            style: 'normal',
-            children: [{ _key: 's1', _type: 'span', text: 'hi', marks: ['m1'] }],
-            markDefs: [
-              { _key: 'm1', _type: 'link', href: 'https://elsewhere.test/page' },
-              { _key: 'm2', _type: 'internalLink', collection: 'link_page', id: 'other' },
-            ],
-          },
-        ],
-      },
-      blocks: {
-        main: [
-          {
-            key: 'cta',
-            type: 'cta',
-            version: '1.0.0',
-            data: { actions: [{ label: 'Go', target: { href: '/about' } }] },
-          },
-        ],
-      },
-    })
+    const links = extractLinks(
+      entryOf(
+        {
+          website: 'ignored — not a url key',
+          url: 'https://example.org/docs',
+          body: [
+            {
+              _key: 'b1',
+              _type: 'block',
+              style: 'normal',
+              children: [{ _key: 's1', _type: 'span', text: 'hi', marks: ['m1'] }],
+              markDefs: [
+                { _key: 'm1', _type: 'link', href: 'https://elsewhere.test/page' },
+                { _key: 'm2', _type: 'internalLink', collection: 'link_page', id: 'other' },
+              ],
+            },
+          ],
+        },
+        {
+          main: [
+            {
+              key: 'cta',
+              type: 'cta',
+              data: { actions: [{ label: 'Go', target: { href: '/about' } }] },
+            },
+          ],
+        },
+      ),
+    )
 
     expect(links).toEqual([
       { kind: 'url', href: 'https://example.org/docs', at: 'url' },
@@ -87,25 +106,18 @@ describe('extractLinks', () => {
   })
 
   it('reports one link per distinct target, however many times it appears', () => {
-    const links = extractLinks({
-      id: 'e1',
-      locale: 'en',
-      status: 'published',
-      publishedAt: null,
-      createdAt: '',
-      updatedAt: '',
-      createdBy: null,
-      updatedBy: null,
-      version: 1,
-      values: { url: '/repeated' },
-      blocks: {
-        main: [
-          textBlock('a', { href: '/repeated' }),
-          textBlock('b', { href: '/repeated' }),
-          textBlock('c', { href: '/other' }),
-        ],
-      },
-    })
+    const links = extractLinks(
+      entryOf(
+        { url: '/repeated' },
+        {
+          main: [
+            textBlock('a', { href: '/repeated' }),
+            textBlock('b', { href: '/repeated' }),
+            textBlock('c', { href: '/other' }),
+          ],
+        },
+      ),
+    )
 
     expect(links.map((link) => (link.kind === 'url' ? link.href : link.id))).toEqual([
       '/repeated',

@@ -1,232 +1,152 @@
-# Blocages — L13, tranche « duplication / autosave / réinitialisation »
+# BLOCKERS — L14 (sécurité, headless, durcissement production)
 
-Ce fichier ne liste que ce qui est réellement bloqué, pas ce qui est fait.
-
-## 1. Intégration Postgres / MySQL / MariaDB non exécutée (environnement)
-
-**Ce qui manque** : la case « Tests d'intégration sur les trois bases » de la
-définition de terminé, pour les deux surfaces de données ajoutées ici
-(`ContentStore.duplicate` et `PasswordResetStore`).
-
-**Pourquoi** : le moteur Docker de cette machine répond `500 Internal Server
-Error` à tout appel d'API (`docker ps`, `docker compose ... up`), donc
-`pnpm services:up` échoue avant de démarrer quoi que ce soit. Ce n'est pas
-une régression du dépôt : le même constat est déjà consigné dans `CLAUDE.md`
-pour l'intégration `MediaStore`.
-
-```
-unable to get image 'postgres:17-alpine': request returned 500 Internal Server
-Error for API route and version .../v1.51/images/postgres:17-alpine/json
-```
-
-**Ce qui a quand même été fait** : les tests *sont écrits* et rejoués sur les
-quatre dialectes par construction, pas seulement sur SQLite.
-
-- `duplicate()` : les douze tests vivent dans la suite de contrat unique
-  `packages/schema/test/store/content-store.contract.ts`, que
-  `test/integration/content-store.test.ts` exécute déjà contre Postgres, MySQL
-  et MariaDB.
-- `PasswordResetStore` : nouvelle suite de contrat
-  `packages/auth/test/resets.contract.ts`, plus un nouveau
-  `packages/auth/test/integration/resets.test.ts` — c'est le **premier**
-  répertoire `test/integration/` de `@cogenta/auth`, qui n'en avait aucun
-  jusqu'ici alors que `vitest.integration.config.ts` en attendait un.
-
-Les deux fichiers d'intégration sautent **bruyamment** (un `describe.skip`
-nommant la variable d'environnement manquante), jamais silencieusement. Il
-n'y a donc rien à écrire pour lever ce blocage : il suffit de le rejouer sur
-une machine où Docker fonctionne.
-
-```bash
-pnpm services:up
-pnpm -F @cogenta/schema test:integration
-pnpm -F @cogenta/auth   test:integration
-```
-
-Le point le plus sensible à vérifier là-bas est l'unicité d'usage du jeton de
-réinitialisation : elle repose sur `update ... where used_at is null` et sur
-la valeur de `rowsAffected`, et MySQL a historiquement sa propre définition de
-« ligne affectée ».
-
-## 2. Ce qui n'est **pas** un blocage, et pourquoi
-
-- **Taxonomies et corbeille** : non codées, délibérément. Elles dépendent de
-  l'ADR proposée dans `ADR-DRAFT-contrat-A-v2.md`, qui n'est pas actée — le
-  contrat A reste figé en `schema@1.0`. Rien à débloquer côté code tant qu'un
-  humain n'a pas tranché.
-- **Absence de transport SMTP réel** : `cogenta users reset-password` écrit un
-  vrai message dans `.cogenta/mail` via le transport fichier de
-  `@cogenta/channels`, et le dit explicitement dans sa sortie. C'est un manque
-  déjà documenté dans `packages/channels/src/providers/email/transport.ts`, pas
-  un blocage introduit ici.
-- **Absence de route admin de réinitialisation** : le lot L13 demande
-  explicitement « CLI d'abord, puis admin une fois L11 avancé ». Le message
-  envoyé porte donc le jeton et la commande exacte, jamais un lien qui
-  renverrait un 404 aujourd'hui.
+Ce fichier note ce que le lot L14 n'a **pas** construit et pourquoi, plus les
+constats réels rencontrés en chemin qui appartiennent à un autre lot. Il n'y a
+aucun blocage au sens « je ne peux pas avancer » : les quatre tâches du
+périmètre confié (1 à 4) sont faites, testées et commitées.
 
 ---
 
-# BLOCKERS — L12 (thème public)
+## 1. OAuth2 (tâche 6) — délibérément non construit
 
-Ce qui a été rencontré pendant L12 et qui **ne peut pas être décidé par un agent** :
-une montée de contrat figé, une RFC de vocabulaire, ou un accès que je n'ai pas.
-Rien ici n'est « pas eu le temps » — c'est écrit tâche par tâche, avec ce qu'il
-faudrait exactement pour débloquer.
+**Décision : rien n'est construit.** Le lot le dit lui-même — « OAuth2 pour un
+client tiers, **si un vrai besoin headless au-delà des clés API simples se
+confirme** (ne pas construire en spéculatif) » — et AGENTS.md l'interdit une
+seconde fois (« Introduire une abstraction pour un cas hypothétique »).
 
----
+**Ce que dit le code réel**, vérifié avant de trancher :
 
-## 1. [CONTRAT D] Le mode sombre suppose une skin claire
+- Il n'existe **aucune identité machine** dans ce dépôt. `resolveActor`
+  (`packages/api/src/rest/auth-router.ts`) ne connaît qu'une chose : un jeton
+  porteur qui résout vers une **session d'utilisateur humain**. Pas de clé API,
+  pas de client, pas de `scope` — le mot n'apparaît nulle part dans
+  `packages/auth/src` au sens d'une portée d'autorisation.
+- Les clés API sont la tâche 8 du **L13**, et elles ne sont pas encore dans ce
+  worktree (`git log` s'arrête à `eea27be feat(schema):
+  duplicate/autosave/password-reset, contract A v2 draft (L13)`). La ligne
+  « Dépendances » du L14 est explicite : « Dépend de L13 tâche 8 (clés API)
+  pour la partie OAuth2/scopes le cas échéant. »
+- L'autorisation elle-même est entièrement **par rôle** (`permissions:
+  { read, create, update, delete, publish }` du contrat A, figé). Un OAuth2
+  utile suppose des **portées** plus fines qu'un rôle, ou au minimum une
+  traduction portée→rôle. Ni l'une ni l'autre n'existe, et inventer la seconde
+  sans la première produirait un jeton OAuth2 qui n'est qu'un jeton de session
+  avec plus de cérémonie.
 
-**Où** : `packages/theme-canonical/src/styles/tokens.css`, section « Colour ».
+**Ce que coûterait de le faire quand même**, honnêtement : un serveur
+d'autorisation complet — enregistrement de client, écran de consentement,
+`authorization_code` + PKCE, point de jeton, rafraîchissement, révocation,
+métadonnées de découverte — plus le modèle de portées qui n'existe pas. C'est
+un lot à lui seul, pas une tâche, et il serait construit sur une fondation
+(l'identité machine) qui n'est pas encore posée.
 
-**Le fait** : contract D (`theme@1.0`) fige **sept** couleurs — `bg`, `fg`,
-`accent`, `accentFg`, `muted`, `mutedFg`, `border` — et refuse toute skin qui en
-ajoute une. Une palette sombre doit donc être *dérivée* de ces sept. La dérivation
-écrite ici prend le `fg` de la skin comme source de la surface sombre et son
-`accent` comme source de l'encre et des lignes. Elle est correcte, testée en
-contraste AA dans les deux schémas (`test/design-system.test.ts`, quatorze paires),
-et vérifiée dans un vrai navigateur.
+**Ce qui doit être vrai avant de le reprendre**, dans cet ordre :
 
-**La limite** : elle suppose une skin **claire d'abord** (`bg` plus clair que
-`fg`), ce qu'utilisent la skin par défaut et les neuf blueprints. Une skin déjà
-sombre (fond foncé, texte clair) verrait son « mode sombre » rendre un fond clair,
-puisque CSS ne peut pas brancher sur la luminance d'une valeur de token.
+1. L13 tâche 8 livrée : une vraie identité non-humaine, avec sa propre table,
+   sa propre révocation et sa propre trace d'audit.
+2. Un modèle de portée réel, décidé par ADR — soit une extension du contrat A
+   (donc `schema@3.0`), soit une couche d'autorisation à côté.
+3. **Un besoin réel constaté**, pas supposé : un intégrateur tiers qui doit
+   agir *au nom d'un utilisateur du site*. Tant que le seul client headless est
+   le front-end du site lui-même, une clé API par déploiement le sert mieux
+   qu'un flux à trois parties.
 
-**Ce qu'il faudrait** : un second groupe de couleurs dans le contrat D (par
-exemple `colorDark`, optionnel, avec repli sur la dérivation actuelle quand il est
-absent) — donc une montée `theme@2.0` et une ADR. Ce n'est pas contournable côté
-thème : le thème n'a aucun moyen de connaître la luminance d'un token.
-
-**En attendant** : la limite est documentée dans le commentaire de `tokens.css` et
-le rendu est correct pour toutes les skins réellement livrées.
-
----
-
-## 2. [CONTRAT B] Les nouveaux blocs de la tâche 3 sont un changement de vocabulaire
-
-**Ce que demande le lot (tâche 3)** : navigation/header riche (méga-menu), footer
-structuré, témoignages, tarification, timeline, équipe, newsletter, recherche.
-
-**Le fait** : ce ne sont pas des variantes de rendu, ce sont **huit nouveaux types
-de blocs**. Le vocabulaire est fermé et exhaustif — `renderBlock`
-(`src/render/render-block.ts`) est vérifié exhaustif par le compilateur sur
-`VocabularyBlock`, et `theme.config.ts` déclare `implements: VOCABULARY_NAMES`,
-testé égal au vocabulaire de `@cogenta/blocks` (`test/isolation.test.ts`). Ajouter
-un bloc, c'est modifier `@cogenta/blocks`, donc le contrat B (`blocks@1.0`), figé
-depuis le 2026-08-13.
-
-`AGENTS.md` l'interdit d'ailleurs explicitement, deux fois :
-« Ajouter un bloc au vocabulaire sans passer par une RFC » figure dans « Ce qu'il
-ne faut pas faire », et le lot lui-même marque **[CONTRAT B]** ce type de
-changement.
-
-**Ce qu'il faudrait**, dans cet ordre :
-1. une RFC par bloc (ou une RFC groupée) décrivant la forme des **données**, pas
-   du rendu — R3 : un bloc ne stocke jamais de HTML ni de CSS ;
-2. une ADR de montée `blocks@2.0` avec note de migration du contenu déjà saisi ;
-3. seulement ensuite, l'implémentation — qui est alors du travail mécanique, le
-   système de tokens et les onze blocs refaits donnant déjà tous les motifs
-   (carte, panneau, badge, chevron, grille, ruban de défilement).
-
-**Remarque de cadrage** : deux des huit n'ont pas besoin du contrat B et sont
-bloqués ailleurs — la **navigation** et le **footer** ne sont pas des blocs de
-contenu mais des éléments de gabarit (`Base.astro` a déjà des `<slot>` pour eux, et
-`cogenta serve` rend maintenant un header/footer minimal réel) ; les remplir
-suppose un modèle de menu, qui est du contrat A. La **recherche** est branchée sur
-L10 (le moteur plein texte existe, aucune route ne l'expose) et la **newsletter**
-sur L13 pour l'envoi.
+Aucun de ces trois points n'est vrai aujourd'hui.
 
 ---
 
-## 3. [CONTRAT A/B] Les sections réutilisables de la tâche 4
+## 2. Revue de sécurité formelle L10-L13 (tâche 5) — hors de ce worktree
 
-**Ce que demande le lot (tâche 4)** : composer une page à partir de sections
-nommées réutilisables, pas seulement d'une liste plate de blocs.
-
-**Le fait** : « réutilisable » veut dire qu'une page **référence** une section
-stockée ailleurs. C'est une nouvelle forme de donnée (une collection de sections,
-et une référence depuis une zone de blocs), donc contrat A et contrat B, tous deux
-figés. Le rendu, lui, est trivial une fois la donnée définie : `renderPage` prend
-déjà une liste de blocs, et une section n'est qu'une liste de blocs nommée.
-
-**Ce qu'il faudrait** : une ADR qui tranche **où** vit une section — une
-collection système (contrat A) ou un type de bloc « référence de section »
-(contrat B) — avant toute ligne de code. Deviner ce choix en cours de route est
-exactement ce que la règle de gouvernance interdit.
+Explicitement retirée du périmètre confié à cet agent : « un autre processus
+s'en chargera séparément, ne la fais pas toi-même dans ce worktree ». Rien
+n'a été fait de ce côté ici. La case reste ouverte pour le lot.
 
 ---
 
-## 4. Lighthouse CI n'est pas branché
+## 3. Constats réels trouvés en chemin, appartenant à un autre lot
 
-**Ce que demande le lot (tâche 5)** : « Mesure réelle Lighthouse en CI sur au
-moins un blueprint, avec seuil qui fait échouer la build en cas de régression ».
+### 3.1 `ContentStore.unpublish` n'est joignable par aucun transport
 
-**Ce qui manque** : la mesure a besoin (a) d'un Chrome headless dans le runner,
-(b) d'une nouvelle dépendance directe `@lhci/cli` — R9 impose de la justifier
-explicitement, et (c) d'un site réel qui tourne : scaffolder via `create-cogenta`,
-générer une clé de signature, lancer `cogenta serve`, mesurer, arrêter. C'est un
-workflow e2e complet, que je ne peux pas exécuter ici pour le vérifier (pas de
-Chrome dans l'environnement de build). Écrire un workflow CI non exécuté serait
-pire que de ne rien écrire : il passerait vert sans rien mesurer.
+`ContentStore` expose `unpublish(id, { status })` depuis L1, et il fonctionne.
+Mais **aucune route REST ni GraphQL ne l'appelle** :
 
-**Ce qui a été fait à la place, et qui est réel** : le CSS servi est minifié et
-mis en cache avec un ETag ; le thème n'embarque toujours aucun JavaScript client ;
-les images portent déjà `loading="lazy"` (sauf le média du hero, `eager`, parce
-que c'est le LCP par construction), `sizes` et `srcset` dès que le contexte de
-rendu en fournit un ; les animations d'entrée sont derrière `@supports
-(animation-timeline: view())` et `prefers-reduced-motion`, donc elles ne bloquent
-jamais le rendu.
+- `packages/api/src/rest/router.ts` route `publish`, `history`, `translations`,
+  `diff`, `restore` — pas `unpublish`.
+- `update()` du store ne change **jamais** le `status` (voir
+  `packages/schema/src/store/store.ts`), donc un `PATCH { status: 'draft' }` ne
+  dépublie pas non plus.
+
+Conséquence concrète : **une page publiée ne peut pas être retirée du site par
+l'API**. Le seul retrait possible est la suppression (`DELETE`), qui est
+destructive. Ce n'est pas un manque de L14 — c'est une lacune du modèle de
+contenu exposé, donc du L13 (qui touche déjà `status`, la corbeille et le
+workflow éditorial dans son propre périmètre).
+
+Le décorateur `withLifecycleEvents` livré par la tâche 1 **couvre déjà**
+`unpublish()` : le jour où la route existe, l'événement `content.unpublish`
+part sans une ligne de plus. Le test de bout en bout du webhook prouve le
+retrait via `DELETE` (`content.delete`), qui est le seul chemin réellement
+atteignable aujourd'hui.
+
+### 3.2 L'index de recherche ne peut pas servir à la détection de liens
+
+Le lot suggérait de réutiliser « le contenu déjà indexé par la recherche de
+L10 ». Ce n'est pas possible, et ce n'est pas un oubli :
+`packages/schema/src/search/extract.ts` retire délibérément `href`, `url`,
+`src`, `markDefs` et `rel` de `STRUCTURAL_KEYS` avant d'indexer — indexer une
+URL ferait de `https` un terme de recherche et classerait une page selon son
+nombre de liens. **L'index ne contient donc aucune URL.** La tâche 3 fait donc
+le crawl des entrées publiées, qui est le repli que le lot prévoyait lui-même.
+
+### 3.3 `pnpm lint` était déjà rouge avant L14
+
+`packages/api/src/graphql/gateway.ts:8` importe `ContentEntry` sans jamais
+l'utiliser (`lint/correctness/noUnusedImports`). Le fichier n'a été touché par
+aucun commit de L10 à L14 (`git diff --name-only 48d8e83..HEAD` ne le liste
+pas) : la dette est antérieure. **Non corrigé ici**, volontairement — AGENTS.md
+demande « une PR = un sujet », et ce fichier appartient à un lot qu'un autre
+agent peut être en train de modifier en parallèle. C'est un correctif d'une
+ligne pour qui reprend le fichier.
+
+Le reste de la sortie de `pnpm lint` est de niveau `info` (`useLiteralKeys`,
+`noImportantStyles`), pré-existant lui aussi et non bloquant.
+
+### 3.4 Le rate limiter : audité, rien à ajouter
+
+Vérifié avant d'écrire quoi que ce soit, comme demandé. `createRateLimiter` est
+appliqué partout où il y a une surface d'attaque en ligne :
+
+| Chemin | Limité ? | Sujet |
+|---|---|---|
+| `passwordLogin` | oui | l'email essayé |
+| `totpLogin` | oui | `mfa:<userId>` |
+| `confirmTotpEnrolment` | oui | `totp-setup:<userId>` |
+| WebAuthn (login et registration) | **non, à dessein** | aucun secret devinable — le `hint` de l'erreur le dit déjà à l'utilisateur |
+| Redemption d'un jeton de réinitialisation | non | **aucune route HTTP n'existe** (`packages/api/src/rest/users-router.ts` le dit explicitement) — attaque en ligne impossible |
+
+Une seule vraie faiblesse trouvée, et **corrigée dans la tâche 4** : la table
+`cogenta_login_attempts` n'était jamais purgée. `clear(subject)` ne s'exécute
+qu'après une connexion **réussie**, donc un sujet qui n'aboutit jamais — c'est
+exactement le profil d'un script — accumulait des lignes indéfiniment.
+`recentFailures()` purge maintenant ce qui est sorti de la fenêtre.
+
+À surveiller si une route de réinitialisation par HTTP est ajoutée (L13) :
+elle devra passer par le limiteur, sans quoi le point 3.3 cesse d'être vrai.
 
 ---
 
-## 5. Le `srcset` du thème attend le pipeline d'images (L10)
+## 4. Limites assumées de ce qui a été livré
 
-**Le fait** : `src/render/media.ts` émet déjà `srcset`, `sizes`, `width`,
-`height`, `loading` et `decoding` — la moitié « thème » de la tâche 5 est faite
-depuis L3. Ce qu'elle rend dépend entièrement de ce que `ctx.image()` retourne.
-
-Dans `cogenta serve`, `ctx.image()` **lève** aujourd'hui
-`THEME_IMAGE_UNSUPPORTED` (`packages/cli/src/commands/theme-render.ts`) : aucun
-pipeline n'y est câblé. Vérifié : aucun des neuf blueprints ne place de média dans
-un bloc, donc aucun site scaffoldé ne déclenche ce refus — mais une page éditée à
-la main qui ajoute un `hero` avec média fera une 500, pas une image manquante.
-
-**Ce qu'il faudrait** : que L10 branche `packages/render/src/images/` au média
-téléversé et fournisse un `ctx.image()` réel. Le thème n'a alors **rien** à
-changer : le `srcset` s'allume tout seul. Il y a aussi une décision de permissions
-à prendre au passage — la route de fichier média (`/api/media/:id/file`) exige une
-session, donc un visiteur anonyme ne peut pas voir une image ; c'est un choix
-L10/L14, pas un choix de thème.
-
----
-
-## 6. Aucune police ne peut être préchargée dans le contrat D actuel
-
-**Ce que demande le lot (tâche 5)** : « Préchargement des polices,
-`font-display: swap` ».
-
-**Le fait** : contract D donne trois tokens de police (`sans`, `serif`, `mono`) et
-ce sont des **familles**, pas des fichiers. La skin par défaut n'y met que des
-piles système (`ui-sans-serif, system-ui, …`) : rien n'est téléchargé, donc il n'y
-a ni `@font-face` à écrire, ni fichier à précharger, et `font-display` n'a rien
-sur quoi agir. Une skin qui nommerait une police web ne dit nulle part **où** est
-le fichier — le contrat n'a pas de token pour ça.
-
-**Ce qu'il faudrait** : un token de source de police dans le contrat D (donc
-`theme@2.0`, même ADR que le point 1). Tant qu'il n'existe pas, « précharger les
-polices » n'a pas de référent, et le thème est déjà dans le meilleur cas possible
-pour les Core Web Vitals : zéro requête de police.
-
----
-
-## 7. Tâche 6 (passe de contenu sur les blueprints) — faite
-
-Plus un blocage. Les huit blueprints à pack de contenu ont reçu leur passe
-(`featureGrid` partout, `faq` sur quatre, `quote` sur `magazine`, `stats` sur
-`vitrine`), et un test valide désormais chaque bloc de démonstration contre le
-vrai registre du contrat B. Le neuvième blueprint, `blank`, n'a par définition
-aucun contenu à enrichir.
-
-Reste volontairement en dehors : aucun bloc de démonstration ne référence de
-média, parce que `cogenta serve` n'a pas encore de pipeline d'images (point 5) et
-qu'un site fraîchement scaffoldé doit rendre au premier lancement.
+- **Aucune livraison de webhook n'est réessayée.** R1 garantit qu'aucun worker
+  durable n'existe ; une boucle de réessai serait une promesse que le
+  déploiement ne peut pas tenir. Un échec est journalisé de façon structurée,
+  jamais silencieux, et le récepteur qui a besoin d'une garantie
+  « au moins une fois » interroge l'API.
+- **Le crawl de liens ne s'auto-planifie pas.** Même raison. `cogenta links
+  check` sort avec le code 1 quand il trouve quelque chose, donc une entrée
+  cron ou un job CI joue le rôle du « périodique » demandé par le lot.
+- **L'alerte d'activité suspecte est déclenchée par une requête refusée**, pas
+  par un timer — encore la même raison. Elle a donc un angle mort théorique :
+  un site que personne n'attaque plus depuis dix minutes n'émettra pas
+  d'alerte finale. La notice d'admin, elle, est recalculée à chaque chargement
+  de page et couvre ce cas.

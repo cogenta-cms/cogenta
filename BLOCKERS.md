@@ -1,232 +1,96 @@
-# Blocages — L13, tranche « duplication / autosave / réinitialisation »
+# Ce qui attend une décision ou un accès humain — L15 (e-commerce)
 
-Ce fichier ne liste que ce qui est réellement bloqué, pas ce qui est fait.
+Rien ici n'est du travail en attente que j'aurais pu faire et laissé de côté. Ce sont
+des points qui exigent soit une validation humaine, soit un accès que je n'ai pas.
 
-## 1. Intégration Postgres / MySQL / MariaDB non exécutée (environnement)
+## 1. L'ADR-0023 n'est pas actée — **bloquant pour figer le contrat E**
 
-**Ce qui manque** : la case « Tests d'intégration sur les trois bases » de la
-définition de terminé, pour les deux surfaces de données ajoutées ici
-(`ContentStore.duplicate` et `PasswordResetStore`).
+`ADR-DRAFT-commerce.md` (racine du dépôt) propose que le commerce vive dans un
+**contrat E séparé** plutôt que dans une extension du contrat A. Tout le code livré
+suppose cette recommandation.
 
-**Pourquoi** : le moteur Docker de cette machine répond `500 Internal Server
-Error` à tout appel d'API (`docker ps`, `docker compose ... up`), donc
-`pnpm services:up` échoue avant de démarrer quoi que ce soit. Ce n'est pas
-une régression du dépôt : le même constat est déjà consigné dans `CLAUDE.md`
-pour l'intégration `MediaStore`.
+La consigne du lot disait d'insérer l'ADR dans `docs/03-decisions.md`. Je ne l'ai pas
+fait, délibérément : une nouvelle décision d'architecture mérite une validation humaine
+avant d'être actée, et ce fichier est append-only — y écrire une décision qu'un humain
+n'a pas prise la rendrait immodifiable.
 
-```
-unable to get image 'postgres:17-alpine': request returned 500 Internal Server
-Error for API route and version .../v1.51/images/postgres:17-alpine/json
-```
+**Ce qu'il faut faire** : relire le brouillon, puis l'insérer tel quel à la fin de
+`docs/03-decisions.md` (en renumérotant si un autre lot a pris le 0023 entre-temps), ou
+dire pourquoi la recommandation est mauvaise. La section « Contrat E » de
+`docs/04-contrats.md` porte le même avertissement et devra perdre son bandeau
+« Proposé, non figé » au même moment.
 
-**Ce qui a quand même été fait** : les tests *sont écrits* et rejoués sur les
-quatre dialectes par construction, pas seulement sur SQLite.
+**Si l'arbitrage renverse la décision** : ce qui change est le placement des tables et du
+paquet, pas la logique métier. Les stores, les drivers, la fonction de totaux et les
+tests de concurrence sont réutilisables tels quels.
 
-- `duplicate()` : les douze tests vivent dans la suite de contrat unique
-  `packages/schema/test/store/content-store.contract.ts`, que
-  `test/integration/content-store.test.ts` exécute déjà contre Postgres, MySQL
-  et MariaDB.
-- `PasswordResetStore` : nouvelle suite de contrat
-  `packages/auth/test/resets.contract.ts`, plus un nouveau
-  `packages/auth/test/integration/resets.test.ts` — c'est le **premier**
-  répertoire `test/integration/` de `@cogenta/auth`, qui n'en avait aucun
-  jusqu'ici alors que `vitest.integration.config.ts` en attendait un.
+## 2. Le test Stripe contre un vrai bac à sable n'a jamais tourné — **accès manquant**
 
-Les deux fichiers d'intégration sautent **bruyamment** (un `describe.skip`
-nommant la variable d'environnement manquante), jamais silencieusement. Il
-n'y a donc rien à écrire pour lever ce blocage : il suffit de le rejouer sur
-une machine où Docker fonctionne.
+`packages/commerce/test/integration/stripe.test.ts` est écrit et attend
+`COGENTA_TEST_STRIPE_SECRET_KEY`. Sans la variable il se **skippe bruyamment** en la
+nommant, jamais silencieusement.
 
-```bash
-pnpm services:up
-pnpm -F @cogenta/schema test:integration
-pnpm -F @cogenta/auth   test:integration
-```
+Il refuse par ailleurs de tourner contre une clé qui ne commence pas par `sk_test_` :
+une suite de tests capable de déplacer de l'argent réel est une erreur qui attend son
+mauvais jour.
 
-Le point le plus sensible à vérifier là-bas est l'unicité d'usage du jeton de
-réinitialisation : elle repose sur `update ... where used_at is null` et sur
-la valeur de `rowsAffected`, et MySQL a historiquement sa propre définition de
-« ligne affectée ».
+Ce qui est déjà prouvé sans clé : le format de fil, le mapping des sept statuts Stripe,
+et le schéma de signature de webhook — testés contre un vrai serveur `node:http` sur une
+socket réelle (`test/payment-stripe.test.ts`, 30 tests). Ce que seule une vraie clé
+prouve : que Stripe **lui-même** accepte encore les champs envoyés et renvoie encore les
+statuts attendus, c'est-à-dire ce qui casse en silence quand une version d'API bouge.
 
-## 2. Ce qui n'est **pas** un blocage, et pourquoi
+## 3. Postgres / MySQL / MariaDB non exécutés cette session — **Docker indisponible**
 
-- **Taxonomies et corbeille** : non codées, délibérément. Elles dépendent de
-  l'ADR proposée dans `ADR-DRAFT-contrat-A-v2.md`, qui n'est pas actée — le
-  contrat A reste figé en `schema@1.0`. Rien à débloquer côté code tant qu'un
-  humain n'a pas tranché.
-- **Absence de transport SMTP réel** : `cogenta users reset-password` écrit un
-  vrai message dans `.cogenta/mail` via le transport fichier de
-  `@cogenta/channels`, et le dit explicitement dans sa sortie. C'est un manque
-  déjà documenté dans `packages/channels/src/providers/email/transport.ts`, pas
-  un blocage introduit ici.
-- **Absence de route admin de réinitialisation** : le lot L13 demande
-  explicitement « CLI d'abord, puis admin une fois L11 avancé ». Le message
-  envoyé porte donc le jeton et la commande exacte, jamais un lien qui
-  renverrait un 404 aujourd'hui.
+`packages/commerce/test/integration/catalog.test.ts` et `checkout.test.ts` rejouent les
+mêmes suites de contrat que SQLite contre les vrais serveurs. Elles se skippent
+bruyamment en nommant `COGENTA_TEST_POSTGRES_URL` / `COGENTA_TEST_MYSQL_URL` /
+`COGENTA_TEST_MARIADB_URL`.
 
----
+C'est le point le plus important de cette liste, parce que trois affirmations du paquet
+sont **sensibles au dialecte** et qu'aucune n'est vérifiée tant que ces suites n'ont pas
+tourné :
 
-# BLOCKERS — L12 (thème public)
+- la sûreté du stock repose sur `update … where on_hand >= n` qui rapporte
+  `rowsAffected` de la même façon partout — et **MySQL a son propre avis** sur ce que
+  « affecté » veut dire quand une mise à jour trouve une ligne sans la changer
+  (`CLIENT_FOUND_ROWS`). Si ça diffère, la survente est silencieuse.
+- tout montant est un `bigint`, et `pg` rend `int8` sous forme de **chaîne**. Le
+  décodeur `toInt()` existe précisément pour ça, mais il n'a été exercé que contre
+  SQLite.
+- `create index if not exists` n'existe pas sur les MySQL anciens : le schéma lui-même a
+  une branche par dialecte que seul un vrai serveur peut valider.
 
-Ce qui a été rencontré pendant L12 et qui **ne peut pas être décidé par un agent** :
-une montée de contrat figé, une RFC de vocabulaire, ou un accès que je n'ai pas.
-Rien ici n'est « pas eu le temps » — c'est écrit tâche par tâche, avec ce qu'il
-faudrait exactement pour débloquer.
+**À faire** : `pnpm services:up` puis `pnpm -F @cogenta/commerce test:integration`.
 
----
+## 4. Pas d'écrans React pour la boutique — **choix de périmètre, pas un oubli**
 
-## 1. [CONTRAT D] Le mode sombre suppose une skin claire
+Le lot demande « CRUD admin basique » pour les produits. Ce qui est livré est un routeur
+sans transport (`createCommerceAdminRouter`) avec le vocabulaire de permissions du
+contrat E, testé rôle par rôle — c'est-à-dire toute la partie qui porte une décision de
+sécurité.
 
-**Où** : `packages/theme-canonical/src/styles/tokens.css`, section « Colour ».
+Les écrans eux-mêmes ne sont pas écrits : `packages/admin` reçoit son design system dans
+le **L11**, et écrire maintenant des formulaires qui seront refaits dans quelques jours
+coûterait deux fois. Le routeur est prêt à être branché derrière eux.
 
-**Le fait** : contract D (`theme@1.0`) fige **sept** couleurs — `bg`, `fg`,
-`accent`, `accentFg`, `muted`, `mutedFg`, `border` — et refuse toute skin qui en
-ajoute une. Une palette sombre doit donc être *dérivée* de ces sept. La dérivation
-écrite ici prend le `fg` de la skin comme source de la surface sombre et son
-`accent` comme source de l'encre et des lignes. Elle est correcte, testée en
-contraste AA dans les deux schémas (`test/design-system.test.ts`, quatorze paires),
-et vérifiée dans un vrai navigateur.
+Conséquence à connaître : `@cogenta/commerce` n'est branché nulle part aujourd'hui.
+`cogenta serve` ne monte pas le routeur commerce, et rien dans `create-cogenta` ne
+propose une boutique. C'est du câblage, pas de la capacité manquante — mais tant qu'il
+n'est pas fait, la boutique n'est atteignable que par du code appelant.
 
-**La limite** : elle suppose une skin **claire d'abord** (`bg` plus clair que
-`fg`), ce qu'utilisent la skin par défaut et les neuf blueprints. Une skin déjà
-sombre (fond foncé, texte clair) verrait son « mode sombre » rendre un fond clair,
-puisque CSS ne peut pas brancher sur la luminance d'une valeur de token.
+## 5. Pas de blocs de vitrine — **hors périmètre, à confirmer**
 
-**Ce qu'il faudrait** : un second groupe de couleurs dans le contrat D (par
-exemple `colorDark`, optionnel, avec repli sur la dérivation actuelle quand il est
-absent) — donc une montée `theme@2.0` et une ADR. Ce n'est pas contournable côté
-thème : le thème n'a aucun moyen de connaître la luminance d'un token.
+Rien n'affiche un produit sur le site public : pas de bloc `productList`, pas de bloc
+`addToCart`. Le contrat B est figé et `AGENTS.md` exige une RFC pour ajouter un bloc au
+vocabulaire, donc je ne l'ai pas fait de mon propre chef — c'est exactement la règle que
+le L10 a déjà respectée en renonçant à son bloc `search`.
 
-**En attendant** : la limite est documentée dans le commentaire de `tokens.css` et
-le rendu est correct pour toutes les skins réellement livrées.
+**Décision attendue** : soit une RFC pour deux ou trois blocs commerce (et une montée du
+contrat B), soit des pages servies par le routeur comme `/search` l'est aujourd'hui.
 
----
+## 6. `commerce@1.0` n'est délibérément pas figé
 
-## 2. [CONTRAT B] Les nouveaux blocs de la tâche 3 sont un changement de vocabulaire
-
-**Ce que demande le lot (tâche 3)** : navigation/header riche (méga-menu), footer
-structuré, témoignages, tarification, timeline, équipe, newsletter, recherche.
-
-**Le fait** : ce ne sont pas des variantes de rendu, ce sont **huit nouveaux types
-de blocs**. Le vocabulaire est fermé et exhaustif — `renderBlock`
-(`src/render/render-block.ts`) est vérifié exhaustif par le compilateur sur
-`VocabularyBlock`, et `theme.config.ts` déclare `implements: VOCABULARY_NAMES`,
-testé égal au vocabulaire de `@cogenta/blocks` (`test/isolation.test.ts`). Ajouter
-un bloc, c'est modifier `@cogenta/blocks`, donc le contrat B (`blocks@1.0`), figé
-depuis le 2026-08-13.
-
-`AGENTS.md` l'interdit d'ailleurs explicitement, deux fois :
-« Ajouter un bloc au vocabulaire sans passer par une RFC » figure dans « Ce qu'il
-ne faut pas faire », et le lot lui-même marque **[CONTRAT B]** ce type de
-changement.
-
-**Ce qu'il faudrait**, dans cet ordre :
-1. une RFC par bloc (ou une RFC groupée) décrivant la forme des **données**, pas
-   du rendu — R3 : un bloc ne stocke jamais de HTML ni de CSS ;
-2. une ADR de montée `blocks@2.0` avec note de migration du contenu déjà saisi ;
-3. seulement ensuite, l'implémentation — qui est alors du travail mécanique, le
-   système de tokens et les onze blocs refaits donnant déjà tous les motifs
-   (carte, panneau, badge, chevron, grille, ruban de défilement).
-
-**Remarque de cadrage** : deux des huit n'ont pas besoin du contrat B et sont
-bloqués ailleurs — la **navigation** et le **footer** ne sont pas des blocs de
-contenu mais des éléments de gabarit (`Base.astro` a déjà des `<slot>` pour eux, et
-`cogenta serve` rend maintenant un header/footer minimal réel) ; les remplir
-suppose un modèle de menu, qui est du contrat A. La **recherche** est branchée sur
-L10 (le moteur plein texte existe, aucune route ne l'expose) et la **newsletter**
-sur L13 pour l'envoi.
-
----
-
-## 3. [CONTRAT A/B] Les sections réutilisables de la tâche 4
-
-**Ce que demande le lot (tâche 4)** : composer une page à partir de sections
-nommées réutilisables, pas seulement d'une liste plate de blocs.
-
-**Le fait** : « réutilisable » veut dire qu'une page **référence** une section
-stockée ailleurs. C'est une nouvelle forme de donnée (une collection de sections,
-et une référence depuis une zone de blocs), donc contrat A et contrat B, tous deux
-figés. Le rendu, lui, est trivial une fois la donnée définie : `renderPage` prend
-déjà une liste de blocs, et une section n'est qu'une liste de blocs nommée.
-
-**Ce qu'il faudrait** : une ADR qui tranche **où** vit une section — une
-collection système (contrat A) ou un type de bloc « référence de section »
-(contrat B) — avant toute ligne de code. Deviner ce choix en cours de route est
-exactement ce que la règle de gouvernance interdit.
-
----
-
-## 4. Lighthouse CI n'est pas branché
-
-**Ce que demande le lot (tâche 5)** : « Mesure réelle Lighthouse en CI sur au
-moins un blueprint, avec seuil qui fait échouer la build en cas de régression ».
-
-**Ce qui manque** : la mesure a besoin (a) d'un Chrome headless dans le runner,
-(b) d'une nouvelle dépendance directe `@lhci/cli` — R9 impose de la justifier
-explicitement, et (c) d'un site réel qui tourne : scaffolder via `create-cogenta`,
-générer une clé de signature, lancer `cogenta serve`, mesurer, arrêter. C'est un
-workflow e2e complet, que je ne peux pas exécuter ici pour le vérifier (pas de
-Chrome dans l'environnement de build). Écrire un workflow CI non exécuté serait
-pire que de ne rien écrire : il passerait vert sans rien mesurer.
-
-**Ce qui a été fait à la place, et qui est réel** : le CSS servi est minifié et
-mis en cache avec un ETag ; le thème n'embarque toujours aucun JavaScript client ;
-les images portent déjà `loading="lazy"` (sauf le média du hero, `eager`, parce
-que c'est le LCP par construction), `sizes` et `srcset` dès que le contexte de
-rendu en fournit un ; les animations d'entrée sont derrière `@supports
-(animation-timeline: view())` et `prefers-reduced-motion`, donc elles ne bloquent
-jamais le rendu.
-
----
-
-## 5. Le `srcset` du thème attend le pipeline d'images (L10)
-
-**Le fait** : `src/render/media.ts` émet déjà `srcset`, `sizes`, `width`,
-`height`, `loading` et `decoding` — la moitié « thème » de la tâche 5 est faite
-depuis L3. Ce qu'elle rend dépend entièrement de ce que `ctx.image()` retourne.
-
-Dans `cogenta serve`, `ctx.image()` **lève** aujourd'hui
-`THEME_IMAGE_UNSUPPORTED` (`packages/cli/src/commands/theme-render.ts`) : aucun
-pipeline n'y est câblé. Vérifié : aucun des neuf blueprints ne place de média dans
-un bloc, donc aucun site scaffoldé ne déclenche ce refus — mais une page éditée à
-la main qui ajoute un `hero` avec média fera une 500, pas une image manquante.
-
-**Ce qu'il faudrait** : que L10 branche `packages/render/src/images/` au média
-téléversé et fournisse un `ctx.image()` réel. Le thème n'a alors **rien** à
-changer : le `srcset` s'allume tout seul. Il y a aussi une décision de permissions
-à prendre au passage — la route de fichier média (`/api/media/:id/file`) exige une
-session, donc un visiteur anonyme ne peut pas voir une image ; c'est un choix
-L10/L14, pas un choix de thème.
-
----
-
-## 6. Aucune police ne peut être préchargée dans le contrat D actuel
-
-**Ce que demande le lot (tâche 5)** : « Préchargement des polices,
-`font-display: swap` ».
-
-**Le fait** : contract D donne trois tokens de police (`sans`, `serif`, `mono`) et
-ce sont des **familles**, pas des fichiers. La skin par défaut n'y met que des
-piles système (`ui-sans-serif, system-ui, …`) : rien n'est téléchargé, donc il n'y
-a ni `@font-face` à écrire, ni fichier à précharger, et `font-display` n'a rien
-sur quoi agir. Une skin qui nommerait une police web ne dit nulle part **où** est
-le fichier — le contrat n'a pas de token pour ça.
-
-**Ce qu'il faudrait** : un token de source de police dans le contrat D (donc
-`theme@2.0`, même ADR que le point 1). Tant qu'il n'existe pas, « précharger les
-polices » n'a pas de référent, et le thème est déjà dans le meilleur cas possible
-pour les Core Web Vitals : zéro requête de police.
-
----
-
-## 7. Tâche 6 (passe de contenu sur les blueprints) — faite
-
-Plus un blocage. Les huit blueprints à pack de contenu ont reçu leur passe
-(`featureGrid` partout, `faq` sur quatre, `quote` sur `magazine`, `stats` sur
-`vitrine`), et un test valide désormais chaque bloc de démonstration contre le
-vrai registre du contrat B. Le neuvième blueprint, `blank`, n'a par définition
-aucun contenu à enrichir.
-
-Reste volontairement en dehors : aucun bloc de démonstration ne référence de
-média, parce que `cogenta serve` n'a pas encore de pipeline d'images (point 5) et
-qu'un site fraîchement scaffoldé doit rendre au premier lancement.
+Contrairement à A et B, le contrat E ne l'est pas le jour de sa création. C'est un choix
+assumé et écrit dans l'ADR : figer un modèle de commerce jamais confronté à une vraie
+boutique serait figer des devinettes. Les sites très précoces paieront une migration.

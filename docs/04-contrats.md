@@ -626,3 +626,120 @@ l'élément, la raison et les options. Jamais de dégradation silencieuse.
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
+
+---
+
+## Contrat E — Commerce
+
+> **Proposé, non figé.** Ce contrat dépend de l'**ADR-0023**, rédigée mais **pas encore
+> actée** (`ADR-DRAFT-commerce.md` à la racine du dépôt, en attente de validation
+> humaine). Tant que l'ADR n'est pas insérée dans `docs/03-decisions.md`, cette section
+> décrit ce que `@cogenta/commerce` implémente réellement, pas un engagement de
+> stabilité. Il n'est **délibérément pas figé** au moment de sa création : L15 est son
+> premier et seul consommateur, et figer un modèle de commerce jamais confronté à une
+> vraie boutique reproduirait l'erreur que le projet a évitée pour C et D.
+
+### Pourquoi un contrat séparé et pas une extension du contrat A
+
+Trois décisions déjà actées du contrat A rendent une commande impropre à être un
+contenu :
+
+- **ADR-0014** (une entrée par langue) produirait une commande française et une
+  commande anglaise, liées par `translationOf`, chacune avec son cycle de publication.
+- **ADR-0022** vient de rendre tout contenu restaurable depuis la corbeille. Une
+  commande ne se restaure pas : elle s'annule ou se rembourse, et les deux laissent une
+  trace qui reste.
+- Le versionnement avec brouillons n'a aucun sens pour une vente.
+
+À quoi s'ajoutent trois invariants que le contrat A n'a jamais eu à porter : un stock
+qui ne devient jamais négatif sous écriture concurrente, un total cohérent avec ses
+lignes, et un numéro de facture séquentiel non modifiable.
+
+**La fiche produit, elle, reste du contrat A.** Un produit commerce porte
+`contentRef: { collection, entryId } | null`, facultatif dans les deux sens. C'est ce
+lien qui donne au catalogue le texte riche, les blocs, le SEO, les traductions et la
+publication programmée, sans les réimplémenter. Ce n'est pas une clé étrangère SQL : la
+table d'entrées d'une collection est produite par le moteur de migrations du contrat A à
+partir du schéma déclaré par le site, donc le lien est vérifié en code applicatif.
+
+### Objets
+
+```
+Product       handle unique, titre de repli, statut (active | archived), contentRef
+Variant       sku unique, prix, devise, stock, backorder autorisé, poids, catégorie fiscale
+Customer      email unique, nom, lien optionnel vers un compte @cogenta/auth
+Cart          persistant, une devise, lignes, zone de livraison, méthode, coupon
+Order         référence unique, lignes copiées, statut, historique append-only
+Coupon        percentage | fixed | free_shipping, fenêtre, compteur de redemptions
+Payment       driver, identifiant externe, statut, montant ; Refund lié
+Invoice       numéro séquentiel par série, snapshot figé du document
+Subscription  intervalle, prix convenu, cycles idempotents par période
+```
+
+Aucun de ces objets ne porte `status` de contenu, `version`, `translationOf` ni
+`deletedAt`, et aucun ne passe par `ContentStore`.
+
+### Argent
+
+Tout montant est un **entier dans la plus petite unité de sa devise**
+(`amountMinor: number`, `currency: string`, ISO 4217 en majuscules). Jamais de flottant,
+jamais de décimal SQL : SQLite n'a que `REAL`, donc une colonne décimale ne voudrait pas
+dire la même chose sur les trois bases obligatoires (ADR-0006). Tout taux est en
+**points de base** (`2000` = 20 %), pour la même raison — `0,2` n'est pas représentable
+en binaire.
+
+Ordre de calcul d'un total, figé parce que chaque ordre est défendable et un seul est
+conventionnel : sous-total de ligne, puis remise répartie sur les lignes au prorata,
+puis **taxe par ligne après remise**, puis livraison. Taxer avant la remise surestime la
+taxe et est faux dans la plupart des pays européens.
+
+### Statuts de commande
+
+```
+pending   → paid | cancelled
+paid      → shipped | cancelled | refunded
+shipped   → delivered | refunded
+delivered → refunded
+cancelled, refunded : états finaux, rien n'en sort
+```
+
+`pending → shipped` est refusé volontairement : expédier avant paiement est une décision
+qu'un humain prend explicitement, en marquant d'abord la commande payée, pour que la
+raison soit tracée plutôt que sous-entendue.
+
+### Permissions
+
+Le contrat E déclare **son propre vocabulaire**, dans son espace de noms. Les cinq
+actions du contrat A (`read`, `create`, `update`, `delete`, `publish`) sont figées et ne
+s'étendent pas : « rembourser une commande » n'est ni un `update` ni un `publish`.
+
+```
+commerce.read            commerce.catalog.write    commerce.order.write
+commerce.payment.settle  commerce.order.refund     commerce.invoice.issue
+```
+
+`commerce.payment.settle` (l'argent entre) et `commerce.order.refund` (l'argent sort)
+sont séparées à dessein : le remboursement est la seule action qui sort des fonds de
+l'entreprise sans contresignature.
+
+### Driver de paiement
+
+Interface plus au moins deux implémentations, comme cache, queue et storage (R1) :
+Stripe en `optimal`, virement bancaire en `degraded`. Le driver dégradé n'est pas un
+bouchon — beaucoup d'entreprises ne sont payées que par virement ; la différence est
+*qui confirme que l'argent est arrivé*. R2 : sans clé Stripe, la boutique fonctionne de
+bout en bout.
+
+### Facture
+
+Numéro séquentiel par série, dense **en factures émises** et non en commandes vivantes :
+une commande annulée après facturation ne rend jamais son numéro. Le numéro est pris par
+un compare-and-set dans la transaction qui écrit la facture, donc une facture annulée ne
+brûle pas de numéro. Le document est un snapshot figé à l'émission ; le PDF s'en
+regénère à l'identique, sans horloge ni aléa.
+
+### Versionnement
+
+`commerce@1.0` une fois l'ADR-0023 actée. Ajouter un champ optionnel ou un statut de
+paiement est mineur ; modifier le sens d'un statut de commande ou la représentation d'un
+montant est majeur.

@@ -495,26 +495,14 @@ côté ici. La case reste ouverte pour le lot.
 Rien ici n'est du travail en attente que j'aurais pu faire et laissé de côté. Ce sont
 des points qui exigent soit une validation humaine, soit un accès que je n'ai pas.
 
-## 1. L'ADR-0024 n'est pas actée — **bloquant pour figer le contrat E**
+## 1. L'ADR-0024 est actée — **levé**
 
-`ADR-DRAFT-commerce.md` (racine du dépôt) propose que le commerce vive dans un
-**contrat E séparé** plutôt que dans une extension du contrat A. Tout le code livré
-suppose cette recommandation.
-
-La consigne du lot disait d'insérer l'ADR dans `docs/03-decisions.md`. Je ne l'ai pas
-fait, délibérément : une nouvelle décision d'architecture mérite une validation humaine
-avant d'être actée, et ce fichier est append-only — y écrire une décision qu'un humain
-n'a pas prise la rendrait immodifiable. Renuméroté `ADR-0024` : `ADR-0023` a été pris
-entre-temps par L19 (le plan de site validé reste dev-only).
-
-**Ce qu'il faut faire** : relire le brouillon, puis l'insérer tel quel à la fin de
-`docs/03-decisions.md`, ou dire pourquoi la recommandation est mauvaise. La section
-« Contrat E » de `docs/04-contrats.md` porte le même avertissement et devra perdre son
-bandeau « Proposé, non figé » au même moment.
-
-**Si l'arbitrage renverse la décision** : ce qui change est le placement des tables et du
-paquet, pas la logique métier. Les stores, les drivers, la fonction de totaux et les
-tests de concurrence sont réutilisables tels quels.
+ADR-0024 est insérée dans `docs/03-decisions.md`, exactement telle que proposée dans
+`ADR-DRAFT-commerce.md` (supprimé, son contenu est maintenant la décision actée) : le
+commerce vit dans un **contrat E séparé**, jamais dans une extension du contrat A. La
+section « Contrat E » de `docs/04-contrats.md` a perdu son bandeau « Proposé, non
+figé » — elle porte maintenant « Acté (ADR-0024), non figé », puisque le contrat lui-même
+reste délibérément non figé (L15 est son premier et seul consommateur).
 
 ## 2. Le test Stripe contre un vrai bac à sable n'a jamais tourné — **accès manquant**
 

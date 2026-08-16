@@ -670,13 +670,11 @@ l'élément, la raison et les options. Jamais de dégradation silencieuse.
 
 ## Contrat E — Commerce
 
-> **Proposé, non figé.** Ce contrat dépend de l'**ADR-0024**, rédigée mais **pas encore
-> actée** (`ADR-DRAFT-commerce.md` à la racine du dépôt, en attente de validation
-> humaine). Tant que l'ADR n'est pas insérée dans `docs/03-decisions.md`, cette section
-> décrit ce que `@cogenta/commerce` implémente réellement, pas un engagement de
-> stabilité. Il n'est **délibérément pas figé** au moment de sa création : L15 est son
-> premier et seul consommateur, et figer un modèle de commerce jamais confronté à une
-> vraie boutique reproduirait l'erreur que le projet a évitée pour C et D.
+> **Acté (ADR-0024), non figé.** Ce contrat repose sur l'**ADR-0024**, actée dans
+> `docs/03-decisions.md`. Il n'est **délibérément pas figé** au moment de sa création :
+> L15 est son premier et seul consommateur, et figer un modèle de commerce jamais
+> confronté à une vraie boutique reproduirait l'erreur que le projet a évitée pour C et
+> D.
 
 ### Pourquoi un contrat séparé et pas une extension du contrat A
 
@@ -779,6 +777,6 @@ regénère à l'identique, sans horloge ni aléa.
 
 ### Versionnement
 
-`commerce@1.0` une fois l'ADR-0024 actée. Ajouter un champ optionnel ou un statut de
-paiement est mineur ; modifier le sens d'un statut de commande ou la représentation d'un
-montant est majeur.
+`commerce@1.0` (ADR-0024, non figé — voir le bandeau en tête de section). Ajouter un
+champ optionnel ou un statut de paiement est mineur ; modifier le sens d'un statut de
+commande ou la représentation d'un montant est majeur.

@@ -53,6 +53,8 @@ export {
   versionsTable,
 } from './naming.js'
 export { withReadOnlyStore } from './read-only.js'
+export type { ScheduledPublishEnqueueOptions } from './scheduled-publish-enqueue.js'
+export { withScheduledPublishEnqueue } from './scheduled-publish-enqueue.js'
 export type { Schema2MigrationOptions } from './schema-2-migration.js'
 export { schema2Migration } from './schema-2-migration.js'
 export type { SearchIndexingOptions } from './search-indexing.js'

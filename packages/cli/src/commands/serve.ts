@@ -69,10 +69,12 @@ import {
   createCommercePermissions,
   createCouponStore,
   createCustomerStore,
+  createInvoiceStore,
   createManualPaymentGateway,
   createOrderStore,
   createPaymentStore,
   createShippingStore,
+  createSubscriptionStore,
   createTaxStore,
   ensureCommerceTables,
 } from '@cogenta/commerce'
@@ -503,6 +505,13 @@ interface AssembleSiteOptions {
    * must never depend on whether the mail could actually go out.
    */
   readonly onForgotPassword?: ((event: ForgotPasswordEvent) => Promise<void>) | null
+  /**
+   * The seller's legal identity (contract E, ADR-0024). `undefined` — the
+   * default, until a site fills in `billing` in its config — means the
+   * invoice route stays unreachable rather than issuing a document with a
+   * made-up seller address.
+   */
+  readonly billing?: CogentaConfig['billing']
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -720,6 +729,31 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     orders: commerceOrders,
   })
   const commercePermissions = createCommercePermissions()
+  const commerceSubscriptions = createSubscriptionStore(db, {
+    catalog: commerceCatalog,
+    customers: commerceCustomers,
+    orders: commerceOrders,
+    payments: commercePayments,
+  })
+  // Absent until the site fills in `billing` (contract E, ADR-0024): an
+  // invoice with a made-up seller address is worse than no invoicing at all,
+  // so the route stays unreachable rather than issuing one anyway.
+  const billing = options.billing
+  const commerceInvoices =
+    billing === undefined
+      ? undefined
+      : createInvoiceStore(db, {
+          orders: commerceOrders,
+          seller: {
+            address: [billing.legalName, ...billing.address],
+            ...(() => {
+              const footer = [billing.taxId, billing.footer]
+                .filter((part): part is string => part !== undefined)
+                .join(' — ')
+              return footer === '' ? {} : { footer }
+            })(),
+          },
+        })
 
   return {
     db,
@@ -752,6 +786,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       orders: commerceOrders,
       customers: commerceCustomers,
       payments: commercePayments,
+      coupons: commerceCoupons,
+      subscriptions: commerceSubscriptions,
+      ...(commerceInvoices === undefined ? {} : { invoices: commerceInvoices }),
       permissions: commercePermissions,
     }),
     redirectRouter: createRedirectRouter({ store: redirects }),
@@ -1556,6 +1593,14 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toCommerceRequest(req, url, body)
         const response = await site.commerceRouter.handle(request, context.actor)
+        // The one route whose body is not JSON: an invoice PDF. Checked by
+        // shape, not by path — the router already decided what to send, this
+        // layer only has to notice how.
+        if (response.body instanceof Uint8Array) {
+          res.writeHead(response.status, { 'content-type': 'application/pdf' })
+          res.end(Buffer.from(response.body))
+          return
+        }
         res.writeHead(response.status, { 'content-type': 'application/json; charset=utf-8' })
         res.end(response.body === null ? undefined : JSON.stringify(response.body))
         return
@@ -2054,6 +2099,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     images: images?.processor ?? null,
     security: loaded.config.security,
     webhooks: loaded.config.webhooks,
+    billing: loaded.config.billing,
     sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,

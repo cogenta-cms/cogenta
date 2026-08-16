@@ -4,6 +4,7 @@ import {
   archiveProduct,
   createProduct,
   createVariant,
+  deleteVariant,
   listProducts,
   type Product,
   readProduct,
@@ -34,17 +35,17 @@ import {
 
 /**
  * The product list and its create/edit flow — contract E's catalogue
- * (ADR-0024), from the admin, for the first time.
+ * (ADR-0024), from the admin.
  *
  * A product's commercial record (`@cogenta/commerce`) is deliberately kept
  * separate from its editorial face (a contract A entry, via `contentRef`):
- * this screen only ever touches the former. A product is shown here with
- * exactly one variant, which is the MVP this screen fixes on purpose — a
- * variant picker/matrix is real future work, not something to fake with a
- * hidden default that would surprise the next person to open this file.
+ * this screen only ever touches the former. Unlike the earlier MVP, a
+ * product here carries its real model — a list of variants, each with its
+ * own SKU, price, stock and backorder flag — because the backend has never
+ * supported anything less; only this screen used to pretend otherwise.
  */
 export function CommerceProductsRoute(): JSX.Element {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -54,7 +55,9 @@ export function CommerceProductsRoute(): JSX.Element {
   const canRead = roles.length > 0
 
   const [products, setProducts] = useState<readonly Product[]>([])
-  const [variants, setVariants] = useState<Readonly<Record<string, Variant | undefined>>>({})
+  const [variantsByProduct, setVariantsByProduct] = useState<
+    Readonly<Record<string, readonly Variant[]>>
+  >({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -62,15 +65,12 @@ export function CommerceProductsRoute(): JSX.Element {
   const [creating, setCreating] = useState(false)
   const [newHandle, setNewHandle] = useState('')
   const [newTitle, setNewTitle] = useState('')
-  const [newPrice, setNewPrice] = useState('')
-  const [newCurrency, setNewCurrency] = useState('EUR')
-  const [newStock, setNewStock] = useState('0')
 
   const [editing, setEditing] = useState<Product | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editStatus, setEditStatus] = useState<'active' | 'archived'>('active')
-  const [editPrice, setEditPrice] = useState('')
-  const [editStock, setEditStock] = useState('0')
+
+  const [managing, setManaging] = useState<Product | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !canRead) return
@@ -79,17 +79,13 @@ export function CommerceProductsRoute(): JSX.Element {
     try {
       const { products: list } = await listProducts(token)
       setProducts(list)
-      // One extra request per product, to show what a table row actually
-      // needs (price, stock) — the list route only ever returns the
-      // commercial record itself, on purpose (see `router.ts`'s comment on
-      // why stock is its own route).
       const entries = await Promise.all(
         list.map(async (product) => {
-          const { variants: productVariants } = await readProduct(token, product.id)
-          return [product.id, productVariants[0]] as const
+          const { variants } = await readProduct(token, product.id)
+          return [product.id, variants] as const
         }),
       )
-      setVariants(Object.fromEntries(entries))
+      setVariantsByProduct(Object.fromEntries(entries))
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('commerceProducts.loadError'))
     } finally {
@@ -105,30 +101,11 @@ export function CommerceProductsRoute(): JSX.Element {
     event.preventDefault()
     if (token === null) return
     setActionError(null)
-    const priceMinor = majorTextToMinor(newPrice, newCurrency)
-    if (priceMinor === null) {
-      setActionError(t('commerceProducts.priceInvalid'))
-      return
-    }
-    const onHand = Number.parseInt(newStock, 10)
-    if (!Number.isFinite(onHand) || onHand < 0) {
-      setActionError(t('commerceProducts.stockInvalid'))
-      return
-    }
     try {
-      const product = await createProduct(token, { handle: newHandle, title: newTitle })
-      await createVariant(token, product.id, {
-        sku: newHandle,
-        title: newTitle,
-        priceMinor,
-        currency: newCurrency,
-        onHand,
-      })
+      await createProduct(token, { handle: newHandle, title: newTitle })
       setCreating(false)
       setNewHandle('')
       setNewTitle('')
-      setNewPrice('')
-      setNewStock('0')
       await load()
     } catch (caught) {
       setActionError(
@@ -138,41 +115,17 @@ export function CommerceProductsRoute(): JSX.Element {
   }
 
   function openEdit(product: Product): void {
-    const variant = variants[product.id]
     setEditing(product)
     setEditTitle(product.title)
     setEditStatus(product.status)
-    setEditPrice(
-      variant === undefined ? '' : minorToMajorText(variant.priceMinor, variant.currency),
-    )
-    setEditStock(variant === undefined ? '0' : String(variant.onHand))
   }
 
   async function submitEdit(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || editing === null) return
     setActionError(null)
-    const variant = variants[editing.id]
     try {
       await updateProduct(token, editing.id, { title: editTitle, status: editStatus })
-      if (variant !== undefined) {
-        const priceMinor = majorTextToMinor(editPrice, variant.currency)
-        if (priceMinor === null) {
-          setActionError(t('commerceProducts.priceInvalid'))
-          return
-        }
-        const onHand = Number.parseInt(editStock, 10)
-        if (!Number.isFinite(onHand) || onHand < 0) {
-          setActionError(t('commerceProducts.stockInvalid'))
-          return
-        }
-        if (priceMinor !== variant.priceMinor) {
-          await updateVariant(token, variant.id, { priceMinor })
-        }
-        if (onHand !== variant.onHand) {
-          await setStock(token, variant.id, onHand)
-        }
-      }
       setEditing(null)
       await load()
     } catch (caught) {
@@ -232,7 +185,7 @@ export function CommerceProductsRoute(): JSX.Element {
               <TableRow>
                 <TableHeader>{t('commerceProducts.titleColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.handleColumn')}</TableHeader>
-                <TableHeader>{t('commerceProducts.priceColumn')}</TableHeader>
+                <TableHeader>{t('commerceProducts.variantsColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.stockColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.statusColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.actionsColumn')}</TableHeader>
@@ -240,17 +193,16 @@ export function CommerceProductsRoute(): JSX.Element {
             </TableHead>
             <TableBody>
               {products.map((product) => {
-                const variant = variants[product.id]
+                const variants = variantsByProduct[product.id] ?? []
+                const totalStock = variants.reduce((sum, variant) => sum + variant.onHand, 0)
                 return (
                   <TableRow key={product.id}>
                     <TableCell>{product.title}</TableCell>
                     <TableCell>{product.handle}</TableCell>
                     <TableCell>
-                      {variant === undefined
-                        ? t('commerceProducts.noVariant')
-                        : formatMinor(variant.priceMinor, variant.currency, i18n.language)}
+                      {t('commerceProducts.variantCount', { count: variants.length })}
                     </TableCell>
-                    <TableCell>{variant === undefined ? '—' : variant.onHand}</TableCell>
+                    <TableCell>{totalStock}</TableCell>
                     <TableCell>
                       {product.status === 'active'
                         ? t('commerceProducts.active')
@@ -258,6 +210,9 @@ export function CommerceProductsRoute(): JSX.Element {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => setManaging(product)}>
+                          {t('commerceProducts.manageVariants')}
+                        </Button>
                         <Button variant="secondary" size="sm" onClick={() => openEdit(product)}>
                           {t('commerceProducts.edit', { title: product.title })}
                         </Button>
@@ -313,46 +268,7 @@ export function CommerceProductsRoute(): JSX.Element {
               />
             )}
           </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label={t('commerceProducts.priceColumn')}
-              description={t('commerceProducts.priceHint')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  type="text"
-                  inputMode="decimal"
-                  required
-                  value={newPrice}
-                  onChange={(event) => setNewPrice(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label={t('commerceProducts.currencyColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  required
-                  maxLength={3}
-                  value={newCurrency}
-                  onChange={(event) => setNewCurrency(event.target.value.toUpperCase())}
-                />
-              )}
-            </Field>
-          </div>
-          <Field label={t('commerceProducts.stockColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="number"
-                min={0}
-                required
-                value={newStock}
-                onChange={(event) => setNewStock(event.target.value)}
-              />
-            )}
-          </Field>
+          <p className="text-sm">{t('commerceProducts.variantsAfterCreate')}</p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setCreating(false)}>
               {t('common.cancel')}
@@ -393,32 +309,6 @@ export function CommerceProductsRoute(): JSX.Element {
               </Select>
             )}
           </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={t('commerceProducts.priceColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="text"
-                  inputMode="decimal"
-                  disabled={variants[editing?.id ?? ''] === undefined}
-                  value={editPrice}
-                  onChange={(event) => setEditPrice(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label={t('commerceProducts.stockColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="number"
-                  min={0}
-                  disabled={variants[editing?.id ?? ''] === undefined}
-                  value={editStock}
-                  onChange={(event) => setEditStock(event.target.value)}
-                />
-              )}
-            </Field>
-          </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setEditing(null)}>
               {t('common.cancel')}
@@ -427,6 +317,327 @@ export function CommerceProductsRoute(): JSX.Element {
           </div>
         </form>
       </Modal>
+
+      {managing !== null && token !== null && (
+        <VariantsModal
+          product={managing}
+          token={token}
+          variants={variantsByProduct[managing.id] ?? []}
+          onClose={() => setManaging(null)}
+          onChanged={async () => {
+            await load()
+          }}
+        />
+      )}
     </section>
+  )
+}
+
+interface VariantsModalProps {
+  readonly product: Product
+  readonly token: string
+  readonly variants: readonly Variant[]
+  readonly onClose: () => void
+  readonly onChanged: () => Promise<void>
+}
+
+/**
+ * A product's real model: a whole list of variants, each its own SKU, price,
+ * stock and backorder flag. Stock always goes through its own route (never a
+ * field on the edit form) — the same rule the single-variant screen already
+ * followed, now applied per row instead of once.
+ */
+function VariantsModal(props: VariantsModalProps): JSX.Element {
+  const { t, i18n } = useTranslation()
+  const [error, setError] = useState<string | null>(null)
+
+  const [addingSku, setAddingSku] = useState('')
+  const [addingTitle, setAddingTitle] = useState('')
+  const [addingPrice, setAddingPrice] = useState('')
+  const [addingCurrency, setAddingCurrency] = useState('EUR')
+  const [addingStock, setAddingStock] = useState('0')
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editSku, setEditSku] = useState('')
+  const [editTitle, setEditTitle] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editStock, setEditStock] = useState('0')
+  const [editBackorder, setEditBackorder] = useState(false)
+
+  async function submitAdd(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    setError(null)
+    const priceMinor = majorTextToMinor(addingPrice, addingCurrency)
+    if (priceMinor === null) {
+      setError(t('commerceProducts.priceInvalid'))
+      return
+    }
+    const onHand = Number.parseInt(addingStock, 10)
+    if (!Number.isFinite(onHand) || onHand < 0) {
+      setError(t('commerceProducts.stockInvalid'))
+      return
+    }
+    try {
+      await createVariant(props.token, props.product.id, {
+        sku: addingSku,
+        title: addingTitle,
+        priceMinor,
+        currency: addingCurrency,
+        onHand,
+      })
+      setAddingSku('')
+      setAddingTitle('')
+      setAddingPrice('')
+      setAddingStock('0')
+      await props.onChanged()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.createError'))
+    }
+  }
+
+  function openVariantEdit(variant: Variant): void {
+    setEditingId(variant.id)
+    setEditSku(variant.sku)
+    setEditTitle(variant.title)
+    setEditPrice(minorToMajorText(variant.priceMinor, variant.currency))
+    setEditStock(String(variant.onHand))
+    setEditBackorder(variant.allowBackorder)
+  }
+
+  async function submitVariantEdit(event: FormEvent, variant: Variant): Promise<void> {
+    event.preventDefault()
+    setError(null)
+    const priceMinor = majorTextToMinor(editPrice, variant.currency)
+    if (priceMinor === null) {
+      setError(t('commerceProducts.priceInvalid'))
+      return
+    }
+    const onHand = Number.parseInt(editStock, 10)
+    if (!Number.isFinite(onHand) || onHand < 0) {
+      setError(t('commerceProducts.stockInvalid'))
+      return
+    }
+    try {
+      await updateVariant(props.token, variant.id, {
+        sku: editSku,
+        title: editTitle,
+        priceMinor,
+        allowBackorder: editBackorder,
+      })
+      if (onHand !== variant.onHand) {
+        await setStock(props.token, variant.id, onHand)
+      }
+      setEditingId(null)
+      await props.onChanged()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'))
+    }
+  }
+
+  async function removeVariant(variant: Variant): Promise<void> {
+    setError(null)
+    try {
+      await deleteVariant(props.token, variant.id)
+      await props.onChanged()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'))
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose()
+      }}
+      title={t('commerceProducts.variantsHeading', { title: props.product.title })}
+      closeLabel={t('commerceProducts.close')}
+    >
+      <div className="flex flex-col gap-4">
+        {error !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{error}</p>
+          </Notice>
+        )}
+
+        <TableRoot label={t('commerceProducts.variantsHeading', { title: props.product.title })}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>{t('commerceProducts.skuColumn')}</TableHeader>
+                <TableHeader>{t('commerceProducts.variantTitleColumn')}</TableHeader>
+                <TableHeader>{t('commerceProducts.priceColumn')}</TableHeader>
+                <TableHeader>{t('commerceProducts.stockColumn')}</TableHeader>
+                <TableHeader>{t('commerceProducts.actionsColumn')}</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {props.variants.map((variant) =>
+                editingId === variant.id ? (
+                  <TableRow key={variant.id}>
+                    <TableCell colSpan={5}>
+                      <form
+                        onSubmit={(event) => void submitVariantEdit(event, variant)}
+                        className="flex flex-wrap items-end gap-3"
+                      >
+                        <Field label={t('commerceProducts.skuColumn')}>
+                          {(control) => (
+                            <Input
+                              {...control}
+                              required
+                              value={editSku}
+                              onChange={(event) => setEditSku(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                        <Field label={t('commerceProducts.variantTitleColumn')}>
+                          {(control) => (
+                            <Input
+                              {...control}
+                              required
+                              value={editTitle}
+                              onChange={(event) => setEditTitle(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                        <Field label={t('commerceProducts.priceColumn')}>
+                          {(control) => (
+                            <Input
+                              {...control}
+                              type="text"
+                              inputMode="decimal"
+                              value={editPrice}
+                              onChange={(event) => setEditPrice(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                        <Field label={t('commerceProducts.stockColumn')}>
+                          {(control) => (
+                            <Input
+                              {...control}
+                              type="number"
+                              min={0}
+                              value={editStock}
+                              onChange={(event) => setEditStock(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={editBackorder}
+                            onChange={(event) => setEditBackorder(event.target.checked)}
+                          />
+                          {t('commerceProducts.allowBackorder')}
+                        </label>
+                        <div className="flex gap-2">
+                          <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>
+                            {t('common.cancel')}
+                          </Button>
+                          <Button type="submit" size="sm">
+                            {t('commerceProducts.saveButton')}
+                          </Button>
+                        </div>
+                      </form>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow key={variant.id}>
+                    <TableCell>{variant.sku}</TableCell>
+                    <TableCell>{variant.title}</TableCell>
+                    <TableCell>
+                      {formatMinor(variant.priceMinor, variant.currency, i18n.language)}
+                    </TableCell>
+                    <TableCell>{variant.onHand}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => openVariantEdit(variant)}
+                        >
+                          {t('commerceProducts.edit', { title: variant.title })}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void removeVariant(variant)}
+                        >
+                          {t('commerceProducts.removeVariant', { title: variant.title })}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
+              {props.variants.length === 0 && (
+                <TableEmpty colSpan={5}>{t('commerceProducts.noVariant')}</TableEmpty>
+              )}
+            </TableBody>
+          </Table>
+        </TableRoot>
+
+        <form onSubmit={submitAdd} className="flex flex-wrap items-end gap-3 border-t pt-4">
+          <Field label={t('commerceProducts.skuColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={addingSku}
+                onChange={(event) => setAddingSku(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('commerceProducts.variantTitleColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={addingTitle}
+                onChange={(event) => setAddingTitle(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('commerceProducts.priceColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="text"
+                inputMode="decimal"
+                required
+                value={addingPrice}
+                onChange={(event) => setAddingPrice(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('commerceProducts.currencyColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                maxLength={3}
+                value={addingCurrency}
+                onChange={(event) => setAddingCurrency(event.target.value.toUpperCase())}
+              />
+            )}
+          </Field>
+          <Field label={t('commerceProducts.stockColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={0}
+                required
+                value={addingStock}
+                onChange={(event) => setAddingStock(event.target.value)}
+              />
+            )}
+          </Field>
+          <Button type="submit" size="sm">
+            {t('commerceProducts.addVariant')}
+          </Button>
+        </form>
+      </div>
+    </Modal>
   )
 }

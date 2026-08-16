@@ -20,8 +20,9 @@ vocabulary (`commerce.read`, `commerce.catalog.write`, `commerce.order.write`,
 The payment gateway wired in today is the manual/bank-transfer driver only
 (no provider keys required, so a shop is sellable out of the box); a site
 that wants Stripe configures it itself once `@cogenta/commerce`'s driver
-registry grows a way to do so from `cogenta.config`. Invoicing is not mounted
-yet — it needs seller details this file has no source for.
+registry grows a way to do so from `cogenta.config`. Invoicing needed seller
+details this file had no source for — see the follow-up changeset that adds
+`cogenta.config`'s `billing` section and mounts it.
 
 Proven end to end in `packages/cli/test/serve-commerce.test.ts`: a real HTTP
 server, a real SQLite file, a real session — a product and its variant

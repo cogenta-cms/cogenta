@@ -9,9 +9,11 @@ import { AssistantChatRoute } from './routes/assistant-chat.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
+import { CommerceCouponsRoute } from './routes/commerce-coupons.js'
 import { CommerceOrderRoute } from './routes/commerce-order-detail.js'
 import { CommerceOrdersRoute } from './routes/commerce-orders.js'
 import { CommerceProductsRoute } from './routes/commerce-products.js'
+import { CommerceSubscriptionsRoute } from './routes/commerce-subscriptions.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { DuplicatesRoute } from './routes/duplicates.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
@@ -78,6 +80,8 @@ export function App(): JSX.Element {
               <Route path="commerce/products" element={<CommerceProductsRoute />} />
               <Route path="commerce/orders" element={<CommerceOrdersRoute />} />
               <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
+              <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
+              <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
               <Route path="redirects" element={<RedirectsRoute />} />
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
               <Route path="trash" element={<TrashRoute />} />

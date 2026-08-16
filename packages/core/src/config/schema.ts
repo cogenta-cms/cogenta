@@ -173,6 +173,21 @@ const vectorSchema = z.strictObject({
   table: nonEmpty.default('cogenta_vectors'),
 })
 
+/**
+ * Seller details for invoicing (contract E, ADR-0024).
+ *
+ * No defaults at all, unlike every other optional section: a guessed legal
+ * name or a blank address would produce an invoice that looks real and is
+ * not, which is worse than the feature being off. `cogenta serve` only mounts
+ * the invoice router once a site has filled this in.
+ */
+const billingSchema = z.strictObject({
+  legalName: nonEmpty,
+  address: z.array(nonEmpty).min(1),
+  taxId: nonEmpty.optional(),
+  footer: nonEmpty.optional(),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -187,6 +202,7 @@ export const configSchema = z.strictObject({
   embeddings: embeddingsSchema.prefault({}),
   imageGeneration: imageGenerationSchema.optional(),
   vector: vectorSchema.prefault({}),
+  billing: billingSchema.optional(),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

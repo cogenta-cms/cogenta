@@ -39,31 +39,62 @@ function table(): HTMLElement {
 }
 
 describe('the product catalogue', () => {
-  it('creates a product with its variant, price and stock, and lists it', async () => {
+  it('creates a product, then adds several variants to it, each with its own price and stock', async () => {
     render(<App />)
     await goToProducts()
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouveau produit' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Créer un produit' })
+    const createDialog = await screen.findByRole('dialog', { name: 'Créer un produit' })
 
-    fireEvent.change(within(dialog).getByLabelText('Titre'), {
+    fireEvent.change(within(createDialog).getByLabelText('Titre'), {
       target: { value: 'Wool jumper' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Identifiant'), {
+    fireEvent.change(within(createDialog).getByLabelText('Identifiant'), {
       target: { value: 'wool-jumper' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Prix'), { target: { value: '45.00' } })
-    fireEvent.change(within(dialog).getByLabelText('Devise'), { target: { value: 'EUR' } })
-    fireEvent.change(within(dialog).getByLabelText('Stock'), { target: { value: '12' } })
-    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+    fireEvent.submit(createDialog.querySelector('form') as HTMLFormElement)
 
     await waitFor(() => {
       expect(within(table()).getByText('Wool jumper')).toBeDefined()
     })
+    expect(within(table()).getByText('0 variante')).toBeDefined()
+
+    fireEvent.click(within(table()).getByRole('button', { name: 'Gérer les variantes' }))
+    const variantsDialog = await screen.findByRole('dialog', {
+      name: 'Variantes de Wool jumper',
+    })
+
+    fireEvent.change(within(variantsDialog).getByLabelText('SKU'), {
+      target: { value: 'WOOL-JUMPER-M' },
+    })
+    fireEvent.change(within(variantsDialog).getByLabelText('Variante'), {
+      target: { value: 'Medium' },
+    })
+    fireEvent.change(within(variantsDialog).getByLabelText('Prix'), {
+      target: { value: '45.00' },
+    })
+    fireEvent.change(within(variantsDialog).getByLabelText('Devise'), {
+      target: { value: 'EUR' },
+    })
+    fireEvent.change(within(variantsDialog).getByLabelText('Stock'), { target: { value: '12' } })
+    fireEvent.submit(
+      within(variantsDialog)
+        .getByRole('button', { name: 'Ajouter une variante' })
+        .closest('form') as HTMLFormElement,
+    )
+
+    await waitFor(() => {
+      expect(within(variantsDialog).getByText('WOOL-JUMPER-M')).toBeDefined()
+    })
     // The price shown is in major units — what a shopper reads — even though
     // the request that created it sent 4500 minor units (proved by the real
     // e2e test in @cogenta/cli's serve-commerce.test.ts).
-    expect(within(table()).getByText(/45,00/u)).toBeDefined()
+    expect(within(variantsDialog).getByText(/45,00/u)).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+    await waitFor(() => {
+      expect(within(table()).getByText('1 variante')).toBeDefined()
+    })
     expect(within(table()).getByText('12')).toBeDefined()
   })
 
@@ -77,8 +108,6 @@ describe('the product catalogue', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Créer un produit' })
     fireEvent.change(within(dialog).getByLabelText('Titre'), { target: { value: 'X' } })
     fireEvent.change(within(dialog).getByLabelText('Identifiant'), { target: { value: 'x' } })
-    fireEvent.change(within(dialog).getByLabelText('Prix'), { target: { value: '1.00' } })
-    fireEvent.change(within(dialog).getByLabelText('Stock'), { target: { value: '1' } })
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
 
     expect(await screen.findByText(/allowed to do that/u)).toBeDefined()

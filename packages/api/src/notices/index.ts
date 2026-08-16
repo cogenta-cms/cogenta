@@ -10,4 +10,9 @@ export type { MfaRecommendationOptions } from './mfa-recommendation.js'
 export { createMfaRecommendationSource, MFA_RECOMMENDATION_ID } from './mfa-recommendation.js'
 export type { NoticeRouter, NoticeRouterOptions } from './router.js'
 export { createNoticeRouter } from './router.js'
+export type { SuspiciousActivityOptions } from './suspicious-activity.js'
+export {
+  createSuspiciousActivitySource,
+  SUSPICIOUS_ACTIVITY_ID,
+} from './suspicious-activity.js'
 export type { AdminNotice, NoticeContext, NoticeSeverity, NoticeSource } from './types.js'

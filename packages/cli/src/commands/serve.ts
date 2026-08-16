@@ -22,6 +22,7 @@ import {
   createPermissionLayer,
   createRestRouter,
   createSearchRouter,
+  createSuspiciousActivitySource,
   createUsersRouter,
   executeGraphQL,
   type MediaImageProcessor,
@@ -73,6 +74,7 @@ import { createContentWebhookEmitter } from './content-webhooks.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
+import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
 import {
@@ -180,6 +182,8 @@ interface Site {
   readonly searchRouter: SearchRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
+  /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
+  readonly securityAlerts: SecurityAlertWatch | null
   /** Account management from the admin instead of `cogenta users create` on a terminal (L11 task 3). */
   readonly usersRouter: UsersRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
@@ -272,6 +276,16 @@ interface AssembleSiteOptions {
    * webhooks (L14 task 1). Absent — the default — means the site sends none.
    */
   readonly onContentEvent?: ((event: ContentLifecycleEvent) => Promise<void>) | null
+  /**
+   * Delivers a non-content event — today only the suspicious-activity alert of
+   * L14 task 4 — through the same signed channel as `onContentEvent`. The watch
+   * itself is built here, because the rate limiter it reads is constructed
+   * here. Absent means the alert is computed for the admin screen but never
+   * leaves the site.
+   */
+  readonly onSecurityEvent?:
+    | ((event: string, data: Readonly<Record<string, unknown>>) => Promise<void>)
+    | null
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -373,11 +387,27 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       permissions,
       defaultLocale: site.defaultLocale,
     }),
+    securityAlerts:
+      options.onSecurityEvent == null
+        ? null
+        : createSecurityAlertWatch({
+            rateLimit: auth.rateLimit,
+            send: options.onSecurityEvent,
+            siteUrl: site.url,
+            logger,
+          }),
     noticeRouter: createNoticeRouter({
       // One source today, and the seam is the array: a future recommendation
       // (a plugin update waiting, a certificate about to expire) is one more
       // entry here and nothing else anywhere.
-      sources: [createMfaRecommendationSource({ collections, credentials: auth.credentials })],
+      sources: [
+        createMfaRecommendationSource({ collections, credentials: auth.credentials }),
+        // The failed-sign-in table has been written to since L2 and read by
+        // nothing but the limiter's own counter (L14 task 4). One extra source
+        // in this array is the whole wiring — the seam the notice mechanism was
+        // designed around.
+        createSuspiciousActivitySource({ rateLimit: auth.rateLimit }),
+      ],
       dismissals: noticeDismissals,
     }),
     usersRouter: createUsersRouter({ auth }),
@@ -885,6 +915,9 @@ export function createRequestListener(
         const response = await site.authRouter.handle(request)
         writeRestResponse(res, response)
         await recordAuthAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        // A refused sign-in is the only clock a brute-force alert can honestly
+        // have here (L14 task 4) — see `security-alerts.ts` for why not a timer.
+        await site.securityAlerts?.observe(response.status)
         return
       }
 
@@ -1241,6 +1274,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
     await loadThemeCss({ read: (url) => readFile(url, 'utf8') }),
   )
   const images = await selectMediaImageProcessor(logger)
+  // One signed channel for both outbound events — the content lifecycle (task
+  // 1) and the suspicious-activity alert (task 4). One set of endpoints, one
+  // secret, one signing path.
+  const webhooks = createContentWebhookEmitter({
+    webhooks: loaded.config.webhooks,
+    siteUrl: loaded.config.site.url,
+    logger,
+  })
   const site = await assembleSite({
     db: selection.instance,
     collections,
@@ -1259,11 +1300,8 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // The signed outbound webhook channel, connected to the content lifecycle
     // for the first time (L14 task 1). `null` when the site configured no
     // endpoint, or configured one without a signing secret.
-    onContentEvent: createContentWebhookEmitter({
-      webhooks: loaded.config.webhooks,
-      siteUrl: loaded.config.site.url,
-      logger,
-    }).emit,
+    onContentEvent: webhooks.emit,
+    onSecurityEvent: webhooks.send,
   })
 
   const server = createServer(createRequestListener(site, logger))

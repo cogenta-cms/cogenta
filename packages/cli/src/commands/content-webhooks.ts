@@ -24,6 +24,13 @@ export interface ContentWebhookOptions {
 export interface ContentWebhookEmitter {
   /** `null` when the site sends nothing — no endpoint, or no secret. */
   readonly emit: ((event: ContentLifecycleEvent) => Promise<void>) | null
+  /**
+   * The same signed channel, for the events that are not about content — the
+   * suspicious-activity alert of L14 task 4. Deliberately the *same* sender, so
+   * a site configures one set of endpoints and one secret, and there is never a
+   * second signing path to review.
+   */
+  readonly send: ((event: string, data: Readonly<Record<string, unknown>>) => Promise<void>) | null
 }
 
 /**
@@ -37,53 +44,54 @@ export interface ContentWebhookEmitter {
 export function createContentWebhookEmitter(options: ContentWebhookOptions): ContentWebhookEmitter {
   const { endpoints, secret } = options.webhooks
 
-  if (options.sender === undefined && endpoints.length === 0) return { emit: null }
+  if (options.sender === undefined && endpoints.length === 0) return { emit: null, send: null }
 
   if (options.sender === undefined && secret === undefined) {
-    options.logger.warn('content webhooks are configured but disabled', {
+    options.logger.warn('outbound webhooks are configured but disabled', {
       endpoints: endpoints.length,
       reason: 'COGENTA_WEBHOOK_SECRET is not set',
     })
-    return { emit: null }
+    return { emit: null, send: null }
   }
 
   const sender = options.sender ?? createWebhookEventSender({ endpoints, secret: secret ?? '' })
 
+  /**
+   * Structured, and never silent: an outbound side effect that failed is
+   * exactly the thing an operator needs in the log, and there is no retry to
+   * make it right later (rule R1 — this deployment guarantees no durable
+   * worker).
+   */
+  const send = async (event: string, data: Readonly<Record<string, unknown>>): Promise<void> => {
+    for (const result of await sender.send(event, data)) {
+      if (result.delivered) {
+        options.logger.info('webhook delivered', {
+          event,
+          url: result.url,
+          status: result.status,
+        })
+      } else {
+        options.logger.error('webhook delivery failed', {
+          event,
+          url: result.url,
+          status: result.status,
+          error: result.error?.code ?? 'UNKNOWN',
+        })
+      }
+    }
+  }
+
   return {
+    send,
     emit: async (event) => {
       const { path, ...rest } = event
-      const results = await sender.send(event.event, {
+      await send(event.event, {
         ...rest,
         path,
         // An absolute URL costs the receiver one less thing to know. Built from
         // the same `site.url` the canonical tag and the sitemap already use.
         url: path === null ? null : new URL(path, options.siteUrl).toString(),
       })
-
-      // Structured, and never silent: an outbound side effect that failed is
-      // exactly the thing an operator needs in the log, and there is no retry
-      // to make it right later (rule R1 — this deployment guarantees no
-      // durable worker).
-      for (const result of results) {
-        if (result.delivered) {
-          options.logger.info('content webhook delivered', {
-            event: event.event,
-            collection: event.collection,
-            id: event.id,
-            url: result.url,
-            status: result.status,
-          })
-        } else {
-          options.logger.error('content webhook delivery failed', {
-            event: event.event,
-            collection: event.collection,
-            id: event.id,
-            url: result.url,
-            status: result.status,
-            error: result.error?.code ?? 'UNKNOWN',
-          })
-        }
-      }
     },
   }
 }

@@ -38,7 +38,7 @@ export function createMfaRecommendationSource(options: MfaRecommendationOptions)
       // and walked away — sign-in ignores it too (`enrolledFactors` in
       // `@cogenta/auth`), so this account genuinely still has no second factor.
       const totp = await options.credentials.totpSecret(actor.id)
-      if (totp !== null && totp.verified) return []
+      if (totp?.verified) return []
       if ((await options.credentials.webAuthnCredentials(actor.id)).length > 0) return []
 
       const notice: AdminNotice = {

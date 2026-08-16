@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
-import '../styles/auth.css'
+import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 interface LocationState {
   readonly from?: { readonly pathname: string }
@@ -95,74 +95,103 @@ export function LoginRoute(): JSX.Element {
 
   if (step.kind === 'totp') {
     return (
-      <main className="auth-page">
-        <form className="auth-form" onSubmit={submitTotp} aria-labelledby="totp-heading">
-          <h1 id="totp-heading">{t('login.totpHeading')}</h1>
-          <p>{t('login.totpPrompt')}</p>
-          <label htmlFor="totp-code">{t('login.code')}</label>
-          <input
-            id="totp-code"
-            name="totp-code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-          />
-          {error !== null && (
-            <p role="alert" className="auth-form__error">
-              {error}
-            </p>
-          )}
-          <button type="submit" disabled={submitting}>
-            {t('login.verify')}
-          </button>
-        </form>
+      <main className="flex min-h-full items-center justify-center p-6">
+        <Card className="w-full max-w-sm">
+          <CardBody>
+            <form
+              onSubmit={submitTotp}
+              aria-labelledby="totp-heading"
+              className="flex flex-col gap-4"
+            >
+              <div className="flex flex-col gap-1.5">
+                <h1 id="totp-heading" className="m-0 text-xl leading-7 font-semibold">
+                  {t('login.totpHeading')}
+                </h1>
+                <p className="m-0 text-sm text-muted-foreground">{t('login.totpPrompt')}</p>
+              </div>
+              <Field label={t('login.code')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    name="totp-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                  />
+                )}
+              </Field>
+              {error !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{error}</p>
+                </Notice>
+              )}
+              <Button type="submit" disabled={submitting}>
+                {t('login.verify')}
+              </Button>
+            </form>
+          </CardBody>
+        </Card>
       </main>
     )
   }
 
   return (
-    <main className="auth-page">
-      <div className="auth-form">
-        <h1 id="login-heading">{t('login.heading')}</h1>
-        <button type="button" onClick={() => void submitPasskey()} disabled={submitting}>
-          {t('login.passkeyButton')}
-        </button>
-        <p className="auth-form__divider">{t('login.or')}</p>
-        <form onSubmit={submitPassword} aria-labelledby="login-heading">
-          <label htmlFor="email">{t('login.email')}</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <label htmlFor="password">{t('login.password')}</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          {error !== null && (
-            <p role="alert" className="auth-form__error">
-              {error}
-            </p>
-          )}
-          <button type="submit" disabled={submitting}>
-            {t('login.submit')}
-          </button>
-        </form>
-      </div>
+    <main className="flex min-h-full items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <CardBody>
+          <h1 id="login-heading" className="m-0 text-xl leading-7 font-semibold">
+            {t('login.heading')}
+          </h1>
+          <Button variant="secondary" onClick={() => void submitPasskey()} disabled={submitting}>
+            {t('login.passkeyButton')}
+          </Button>
+          <p className="m-0 text-center text-sm text-muted-foreground">{t('login.or')}</p>
+          <form
+            onSubmit={submitPassword}
+            aria-labelledby="login-heading"
+            className="flex flex-col gap-4"
+          >
+            <Field label={t('login.email')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={t('login.password')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              )}
+            </Field>
+            {error !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{error}</p>
+              </Notice>
+            )}
+            <Button type="submit" disabled={submitting}>
+              {t('login.submit')}
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
     </main>
   )
 }

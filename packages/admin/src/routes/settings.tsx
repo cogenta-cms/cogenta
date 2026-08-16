@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, setLanguage } from '../i18n/index.js'
+import { Card, CardBody, CardHeader, CardTitle, Field, Select } from '../ui/index.js'
 
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = { fr: 'Français', en: 'English' }
 
@@ -23,28 +24,45 @@ export function SettingsRoute(): JSX.Element {
   const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
 
   return (
-    <section aria-labelledby="settings-heading">
-      <h1 id="settings-heading">{t('settings.heading')}</h1>
-      {email !== null && <p>{t('settings.signedInAs', { email })}</p>}
+    <section aria-labelledby="settings-heading" className="flex flex-col gap-6">
+      <h1 id="settings-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('settings.heading')}
+      </h1>
+      {email !== null && (
+        <p className="m-0 text-sm text-muted-foreground">{t('settings.signedInAs', { email })}</p>
+      )}
 
-      <section aria-labelledby="settings-language-heading">
-        <h2 id="settings-language-heading">{t('settings.languageHeading')}</h2>
-        <label htmlFor="settings-language">{t('settings.languageLabel')}</label>
-        <select
-          id="settings-language"
-          value={i18n.language}
-          onChange={(event) => setLanguage(event.target.value as SupportedLanguage)}
-        >
-          {SUPPORTED_LANGUAGES.map((language) => (
-            <option key={language} value={language}>
-              {LANGUAGE_NAMES[language]}
-            </option>
-          ))}
-        </select>
-      </section>
+      <Card aria-labelledby="settings-language-heading">
+        <CardHeader>
+          <CardTitle>
+            <h2 id="settings-language-heading">{t('settings.languageHeading')}</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardBody>
+          <div className="max-w-xs">
+            <Field label={t('settings.languageLabel')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={i18n.language}
+                  onChange={(event) => setLanguage(event.target.value as SupportedLanguage)}
+                >
+                  {SUPPORTED_LANGUAGES.map((language) => (
+                    <option key={language} value={language}>
+                      {LANGUAGE_NAMES[language]}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+        </CardBody>
+      </Card>
 
-      <p>
-        <Link to="/profile">{t('settings.securityMoved')}</Link>
+      <p className="m-0 text-sm">
+        <Link to="/profile" className="text-primary underline-offset-2 hover:underline">
+          {t('settings.securityMoved')}
+        </Link>
       </p>
     </section>
   )

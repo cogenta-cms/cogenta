@@ -12,6 +12,22 @@ import {
 } from '../api/agents-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Notice,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 /** L5 task 9: état, autonomie, budget, historique, traces — read from `@cogenta/agents`' registry via `/api/agents`, admin only. */
 export function AgentsRoute(): JSX.Element {
@@ -89,85 +105,104 @@ export function AgentsRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="agents-heading">
-      <h1 id="agents-heading">{t('agents.heading')}</h1>
+    <section aria-labelledby="agents-heading" className="flex flex-col gap-6">
+      <h1 id="agents-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('agents.heading')}
+      </h1>
 
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
+      )}
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">{t('agents.name')}</th>
-              <th scope="col">{t('agents.state')}</th>
-              <th scope="col">{t('agents.autonomy')}</th>
-              <th scope="col">{t('agents.budget')}</th>
-              <th scope="col">{t('agents.actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((agent) => (
-              <tr key={agent.name}>
-                <td>
-                  <button type="button" onClick={() => setSelected(agent.name)}>
-                    {agent.name}
-                  </button>
-                </td>
-                <td>{agent.enabled ? t('agents.enabled') : t('agents.disabled')}</td>
-                <td>{agent.autonomy?.default ?? '—'}</td>
-                <td>
-                  {agent.budget?.tokensPerDay ?? '—'} / {agent.usage?.tokensToday ?? 0}
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    disabled={toggling === agent.name}
-                    onClick={() => void toggle(agent)}
-                  >
-                    {agent.enabled ? t('agents.disable') : t('agents.enable')}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {agents.length === 0 && (
-              <tr>
-                <td colSpan={5}>{t('agents.noAgents')}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <TableRoot label={t('agents.heading')}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>{t('agents.name')}</TableHeader>
+                <TableHeader>{t('agents.state')}</TableHeader>
+                <TableHeader>{t('agents.autonomy')}</TableHeader>
+                <TableHeader>{t('agents.budget')}</TableHeader>
+                <TableHeader>{t('agents.actions')}</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {agents.map((agent) => (
+                <TableRow key={agent.name}>
+                  <TableCell>
+                    <Button variant="ghost" size="sm" onClick={() => setSelected(agent.name)}>
+                      {agent.name}
+                    </Button>
+                  </TableCell>
+                  <TableCell>
+                    {agent.enabled ? t('agents.enabled') : t('agents.disabled')}
+                  </TableCell>
+                  <TableCell>{agent.autonomy?.default ?? '—'}</TableCell>
+                  <TableCell>
+                    {agent.budget?.tokensPerDay ?? '—'} / {agent.usage?.tokensToday ?? 0}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant={agent.enabled ? 'destructive' : 'secondary'}
+                      size="sm"
+                      disabled={toggling === agent.name}
+                      onClick={() => void toggle(agent)}
+                    >
+                      {agent.enabled ? t('agents.disable') : t('agents.enable')}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {agents.length === 0 && <TableEmpty colSpan={5}>{t('agents.noAgents')}</TableEmpty>}
+            </TableBody>
+          </Table>
+        </TableRoot>
       )}
 
       {selected !== null && (
-        <section aria-labelledby="agents-detail-heading">
-          <h2 id="agents-detail-heading">{t('agents.detailHeading', { name: selected })}</h2>
-          {detailLoading && <p>{t('common.loading')}</p>}
+        <Card aria-labelledby="agents-detail-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="agents-detail-heading">{t('agents.detailHeading', { name: selected })}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            {detailLoading && <p>{t('common.loading')}</p>}
 
-          {!detailLoading && (
-            <>
-              <h3>{t('agents.traces')}</h3>
-              <ul>
-                {traces.map((trace) => (
-                  <li key={trace.id}>
-                    {trace.startedAt} — {trace.stopReason}
-                  </li>
-                ))}
-                {traces.length === 0 && <li>{t('agents.noTraces')}</li>}
-              </ul>
+            {!detailLoading && (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.traces')}</h3>
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                    {traces.map((trace) => (
+                      <li key={trace.id}>
+                        {trace.startedAt} — {trace.stopReason}
+                      </li>
+                    ))}
+                    {traces.length === 0 && <li>{t('agents.noTraces')}</li>}
+                  </ul>
+                </div>
 
-              <h3>{t('agents.history')}</h3>
-              <ul>
-                {history.map((entry) => (
-                  <li key={entry.id}>
-                    {entry.at} — {entry.action}
-                  </li>
-                ))}
-                {history.length === 0 && <li>{t('agents.noHistory')}</li>}
-              </ul>
-            </>
-          )}
-        </section>
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.history')}
+                  </h3>
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                    {history.map((entry) => (
+                      <li key={entry.id}>
+                        {entry.at} — {entry.action}
+                      </li>
+                    ))}
+                    {history.length === 0 && <li>{t('agents.noHistory')}</li>}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
     </section>
   )

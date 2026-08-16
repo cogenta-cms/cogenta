@@ -18,6 +18,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/collections', labelKey: 'nav.collections' },
   { to: '/taxonomies', labelKey: 'nav.taxonomies' },
   { to: '/trash', labelKey: 'nav.trash' },
+  { to: '/assistant-chat', labelKey: 'nav.assistantChat' },
+  { to: '/duplicates', labelKey: 'nav.duplicates' },
   { to: '/media', labelKey: 'nav.media' },
   { to: '/audit', labelKey: 'nav.audit' },
   { to: '/agents', labelKey: 'nav.agents' },

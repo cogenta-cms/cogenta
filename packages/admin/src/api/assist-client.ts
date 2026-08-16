@@ -34,18 +34,154 @@ export interface AssistSuggestion {
   readonly applied: false
 }
 
+/** `assist.chat`'s citation — a real retrieved passage, never invented (`packages/agents/src/assist/chat.ts`). */
+export interface ChatSource {
+  readonly collection: string
+  readonly entryId: string
+  readonly title: string
+  readonly excerpt: string
+}
+
+export interface ChatAnswer {
+  readonly answer: string
+  readonly sources: readonly ChatSource[]
+  readonly answeredFromSources: boolean
+  readonly applied: false
+}
+
+export interface ClassificationResult {
+  readonly labels: readonly { readonly label: string; readonly confidence: number }[]
+  /** Labels the model proposed outside the site's vocabulary. Reported, never applied. */
+  readonly rejected: readonly string[]
+  readonly applied: false
+}
+
+export interface DuplicateMatch {
+  readonly collection: string
+  readonly entryId: string
+  readonly excerpt: string
+  readonly similarity: number
+}
+
+export const MODERATION_SEVERITIES = ['none', 'low', 'medium', 'high'] as const
+export type ModerationSeverity = (typeof MODERATION_SEVERITIES)[number]
+
+/** Closed union: nothing this route can return describes a destructive act. */
+export type RecommendedAction = 'none' | 'review'
+
+export interface DuplicateReport {
+  readonly duplicates: readonly DuplicateMatch[]
+  readonly threshold: number
+  readonly recommendedAction: RecommendedAction
+  readonly applied: false
+}
+
+export interface ModerationVerdict {
+  readonly flagged: boolean
+  readonly severity: ModerationSeverity
+  readonly categories: readonly string[]
+  readonly reason: string
+  readonly recommendedAction: RecommendedAction
+  readonly applied: false
+}
+
+export interface FaqDraft {
+  readonly items: readonly { readonly question: string; readonly answer: string }[]
+  readonly status: 'draft'
+  readonly applied: false
+}
+
+export interface SchemaDraft {
+  readonly jsonLd: Readonly<Record<string, unknown>>
+  readonly status: 'draft'
+  readonly applied: false
+}
+
 export function getAssistCapabilities(token: string): Promise<AssistCapabilities> {
   return request('/api/assistant', { headers: authHeader(token) })
 }
 
-export function runAssistTool(
+/**
+ * Generic over the output shape: every assistant tool answers `POST
+ * /api/assistant/run` the same way on the wire (`{tool, input}` in,
+ * `{data: <the tool's own output>}` out), and `@cogenta/api`'s router does not
+ * special-case any one tool. `T` defaults to `AssistSuggestion` so every
+ * existing caller — the writing-tools panel — keeps compiling unchanged.
+ */
+export function runAssistTool<T = AssistSuggestion>(
   token: string,
   tool: string,
   input: Readonly<Record<string, unknown>>,
-): Promise<AssistSuggestion> {
+): Promise<T> {
   return request('/api/assistant/run', {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify({ tool, input }),
   })
+}
+
+export function runChat(
+  token: string,
+  input: {
+    readonly question: string
+    readonly locale: string
+    readonly collections: readonly string[]
+    readonly siteId: string
+    readonly limit?: number
+  },
+): Promise<ChatAnswer> {
+  return runAssistTool<ChatAnswer>(token, 'assist.chat', input)
+}
+
+export function runClassify(
+  token: string,
+  input: {
+    readonly text: string
+    readonly taxonomy: readonly string[]
+    readonly maxLabels?: number
+    readonly locale?: string
+  },
+): Promise<ClassificationResult> {
+  return runAssistTool<ClassificationResult>(token, 'assist.classify', input)
+}
+
+export function runFindDuplicates(
+  token: string,
+  input: {
+    readonly text: string
+    readonly siteId: string
+    readonly locale: string
+    readonly collections: readonly string[]
+    readonly excludeEntryId?: string
+    readonly threshold?: number
+    readonly limit?: number
+  },
+): Promise<DuplicateReport> {
+  return runAssistTool<DuplicateReport>(token, 'assist.find_duplicates', input)
+}
+
+export function runModerate(
+  token: string,
+  input: { readonly text: string; readonly origin?: string; readonly locale?: string },
+): Promise<ModerationVerdict> {
+  return runAssistTool<ModerationVerdict>(token, 'assist.moderate', input)
+}
+
+export function runFaqDraft(
+  token: string,
+  input: { readonly text: string; readonly count?: number; readonly locale?: string },
+): Promise<FaqDraft> {
+  return runAssistTool<FaqDraft>(token, 'assist.faq_draft', input)
+}
+
+export function runSchemaOrgDraft(
+  token: string,
+  input: {
+    readonly text: string
+    readonly type: string
+    readonly title?: string
+    readonly url?: string
+  },
+): Promise<SchemaDraft> {
+  return runAssistTool<SchemaDraft>(token, 'assist.schema_org_draft', input)
 }

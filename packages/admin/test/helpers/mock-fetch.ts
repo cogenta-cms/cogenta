@@ -132,6 +132,24 @@ export function installMockFetch(
     readonly siteLocales?: readonly string[]
     /** Overrides the signed-in user's roles — `['editor']` by default. */
     readonly roles?: readonly string[]
+    /**
+     * `GET /api/assistant`'s answer. Absent means `available: false, tools:
+     * []` — the same "no AI provider configured" a real site with none
+     * answers with, and the state most tests that never touch the assistant
+     * want by default.
+     */
+    readonly assistant?: {
+      readonly available: boolean
+      readonly tools?: readonly {
+        readonly tool: string
+        readonly label: string
+        readonly description: string
+        readonly cost: string
+        readonly needs: readonly string[]
+      }[]
+    }
+    /** `POST /api/assistant/run`'s answer, keyed by tool name — what each test's scripted provider "said". */
+    readonly assistantRun?: Readonly<Record<string, unknown>>
     /** What `GET /api/notices` answers with. Empty by default: most screens have nothing to recommend. */
     readonly notices?: readonly {
       id: string
@@ -1158,6 +1176,24 @@ export function installMockFetch(
         if (action === 'purge') return new Response(null, { status: 204 })
         // Restored with the status it went in with, never demoted to a draft.
         return json(200, { data: { ...found, deletedAt: null } })
+      }
+
+      if (url.endsWith('/api/assistant') && method === 'GET') {
+        const assistant = options.assistant ?? { available: false, tools: [] }
+        return json(200, {
+          data: { available: assistant.available, tools: assistant.tools ?? [] },
+        })
+      }
+
+      if (url.endsWith('/api/assistant/run') && method === 'POST') {
+        const tool = body.tool as string | undefined
+        const answer = tool === undefined ? undefined : options.assistantRun?.[tool]
+        if (answer === undefined) {
+          return json(404, {
+            error: { code: 'TOOL_UNKNOWN', message: `No assistant tool named "${String(tool)}".` },
+          })
+        }
+        return json(200, { data: answer })
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

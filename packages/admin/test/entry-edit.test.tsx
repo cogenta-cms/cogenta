@@ -69,6 +69,86 @@ describe('editing an existing entry', () => {
   })
 })
 
+/**
+ * Status control and publication (the audit's top finding: the API route has
+ * existed since L2, the admin never called it). Role gates are checked
+ * server-side too — `packages/api/test/rest/publish-duplicate.test.ts` — this
+ * file only proves the button does not even render for a role without the
+ * permission, and that it calls the real route for one that has it.
+ */
+describe('status and publication', () => {
+  it('shows the publish button and status selector to an editor, and publishes', async () => {
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    expect(screen.getByText('Brouillon')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Publier' }))
+
+    expect(await screen.findByText('Statut changé en Publié.')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Publier' })).toBeNull()
+  })
+
+  it('moves a published entry back to draft through the status selector', async () => {
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.change(screen.getByLabelText('Statut :'), { target: { value: 'draft' } })
+
+    expect(await screen.findByText('Statut changé en Brouillon.')).toBeDefined()
+  })
+
+  it('hides the publish button and status selector from a role without publish', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['viewer'] })
+
+    window.history.pushState(null, '', '/collections/article/entry-1')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    expect(screen.queryByRole('button', { name: 'Publier' })).toBeNull()
+    // The current status is still visible — just not editable.
+    expect(screen.getByText('Publié')).toBeDefined()
+    expect(screen.queryByLabelText('Statut :')).toBeNull()
+  })
+})
+
+describe('duplicating an entry', () => {
+  it('shows the duplicate button to a role that may create, and opens the new draft', async () => {
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dupliquer' }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/collections/article/entry-1-copy'))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+      'First article',
+    )
+  })
+
+  it('hides the duplicate button from a role without create', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['viewer'] })
+
+    window.history.pushState(null, '', '/collections/article/entry-1')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    expect(screen.queryByRole('button', { name: 'Dupliquer' })).toBeNull()
+  })
+})
+
 describe('multilingual editing', () => {
   it('lists the site locales, and starts a translation seeded from the source entry', async () => {
     localStorage.clear()

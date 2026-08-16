@@ -152,7 +152,21 @@
     "autosaveKept": "Modifications non enregistrées conservées dans ce navigateur à {{at}}. Enregistrez pour créer une version.",
     "autosaveFound": "Des modifications non enregistrées datant de {{at}} ont été retrouvées dans ce navigateur, plus récentes que la dernière version enregistrée.",
     "autosaveRestore": "Les restaurer",
-    "autosaveDiscard": "Les abandonner"
+    "autosaveDiscard": "Les abandonner",
+    "statusLabel": "Statut :",
+    "status": {
+      "draft": "Brouillon",
+      "scheduled": "Programmé",
+      "published": "Publié",
+      "archived": "Archivé"
+    },
+    "statusUnmanaged": "Cette entrée est programmée via l'API. La programmation d'une date de publication n'est pas encore disponible depuis l'admin.",
+    "publishButton": "Publier",
+    "statusChanged": "Statut changé en {{status}}.",
+    "statusError": "Impossible de changer le statut de cette entrée.",
+    "duplicateButton": "Dupliquer",
+    "duplicating": "Duplication…",
+    "duplicateError": "Impossible de dupliquer cette entrée."
   },
   "media": {
     "heading": "Médiathèque",

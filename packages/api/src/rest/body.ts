@@ -1,5 +1,5 @@
 import { CogentaError } from '@cogenta/core'
-import type { CreateInput, UpdateInput } from '@cogenta/schema'
+import type { ContentValues, CreateInput, UpdateInput } from '@cogenta/schema'
 import { CONTENT_STATUSES, PROVENANCE_KINDS } from '@cogenta/schema'
 import { z } from 'zod'
 import type { Actor } from '../types.js'
@@ -52,6 +52,10 @@ const updateSchema = z.object({
 
 const restoreSchema = z.object({ version: z.number().int().min(1) })
 
+const unpublishSchema = z.object({ status: z.enum(['draft', 'archived']).optional() })
+
+const duplicateSchema = z.object({ values: valuesSchema.optional() })
+
 export function parseCreateBody(body: unknown, actor: Actor): CreateInput {
   const parsed = decode(createSchema, body)
 
@@ -86,6 +90,16 @@ export function parseUpdateBody(body: unknown, actor: Actor): UpdateInput {
 
 export function parseRestoreBody(body: unknown): number {
   return decode(restoreSchema, body).version
+}
+
+export function parseUnpublishBody(body: unknown): { readonly status?: 'draft' | 'archived' } {
+  const parsed = decode(unpublishSchema, body)
+  return parsed.status === undefined ? {} : { status: parsed.status }
+}
+
+export function parseDuplicateBody(body: unknown): { readonly values?: ContentValues } {
+  const parsed = decode(duplicateSchema, body)
+  return parsed.values === undefined ? {} : { values: parsed.values }
 }
 
 type ProvenanceDetail = NonNullable<CreateInput['provenanceDetail']>

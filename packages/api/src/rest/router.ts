@@ -5,7 +5,13 @@ import { createPreviewTokens } from '../access/preview-token.js'
 import type { SerialisedEntry } from '../content/index.js'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
-import { parseCreateBody, parseRestoreBody, parseUpdateBody } from './body.js'
+import {
+  parseCreateBody,
+  parseDuplicateBody,
+  parseRestoreBody,
+  parseUnpublishBody,
+  parseUpdateBody,
+} from './body.js'
 import type { ContentService } from './content-service.js'
 import type { DependencySource, ResponseDependencies } from './dependencies.js'
 import { collectDependencies } from './dependencies.js'
@@ -34,6 +40,8 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   POST   /{collection}/{id}/untrash      take it back out
  *   POST   /{collection}/{id}/purge        delete it for good
  *   POST   /{collection}/{id}/publish      publish
+ *   POST   /{collection}/{id}/unpublish    back to draft or archived
+ *   POST   /{collection}/{id}/duplicate    copy into a new draft
  *   GET    /{collection}/{id}/history      version list
  *   GET    /{collection}/{id}/diff         diff of two versions
  *   POST   /{collection}/{id}/restore      restore a version
@@ -301,6 +309,26 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         return jsonResponse(200, { data: entry })
       }
 
+      case 'unpublish': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const input = parseUnpublishBody(request.body)
+        const entry = await service.unpublish(context, name, id, input, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'duplicate': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const input = parseDuplicateBody(request.body)
+        const entry = await service.duplicate(context, name, id, input, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(201, { data: entry })
+      }
+
       case 'history': {
         if (method !== 'GET') return methodNotAllowed(['GET'])
         return jsonResponse(200, { data: await service.history(context, name, id) })
@@ -423,7 +451,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|untrash|purge|history|diff|restore|preview|translations}.',
+    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|unpublish|duplicate|untrash|purge|history|diff|restore|preview|translations}.',
   })
 }
 

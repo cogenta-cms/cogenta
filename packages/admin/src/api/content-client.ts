@@ -273,3 +273,41 @@ export function issuePreview(token: string, collection: string, id: string): Pro
     { method: 'POST', headers: authHeader(token) },
   )
 }
+
+/** Publishes the entry's working state — `POST /{collection}/{id}/publish`. */
+export function publishEntry(token: string, collection: string, id: string): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/publish`,
+    { method: 'POST', headers: authHeader(token) },
+  )
+}
+
+/** Takes a published entry back off its public face, into `draft` or `archived`. */
+export function unpublishEntry(
+  token: string,
+  collection: string,
+  id: string,
+  status: 'draft' | 'archived' = 'draft',
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/unpublish`,
+    { method: 'POST', headers: authHeader(token), body: JSON.stringify({ status }) },
+  )
+}
+
+/** Copies the entry's working state into a new draft — never the published face. */
+export function duplicateEntry(
+  token: string,
+  collection: string,
+  id: string,
+  values?: Readonly<Record<string, unknown>>,
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/duplicate`,
+    {
+      method: 'POST',
+      headers: authHeader(token),
+      ...(values === undefined ? {} : { body: JSON.stringify({ values }) }),
+    },
+  )
+}

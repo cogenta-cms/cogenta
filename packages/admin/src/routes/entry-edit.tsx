@@ -3,7 +3,15 @@ import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
-import { createEntry, getEntry, issuePreview, updateEntry } from '../api/content-client.js'
+import {
+  createEntry,
+  duplicateEntry,
+  getEntry,
+  issuePreview,
+  publishEntry,
+  unpublishEntry,
+  updateEntry,
+} from '../api/content-client.js'
 import { AssistantPanel, type AssistField } from '../assist/assistant-panel.js'
 import { useAuth } from '../auth/auth-context.js'
 import { PageBuilder } from '../builder/page-builder.js'
@@ -20,7 +28,7 @@ import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { useAutosave } from '../collections/use-autosave.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
-import { Button } from '../ui/index.js'
+import { Button, Card, CardBody, Notice, Select } from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
 
@@ -44,6 +52,24 @@ const EMPTY_SNAPSHOT: AutosaveSnapshot = { values: {}, blocks: {} }
 const EDITOR_MODE_STORAGE_KEY = 'cogenta.admin.editorMode'
 
 type EditorMode = 'form' | 'visual'
+
+/**
+ * The statuses this screen can actually move an entry between.
+ *
+ * `scheduled` is a real member of contract A's `ContentStatus`, but nothing in
+ * this product ever writes it — `@cogenta/schema`'s queue-based scheduler
+ * (`src/scheduling/publish.ts`) is written and tested, and never registered by
+ * `cogenta serve`. Offering a date picker that quietly did nothing would be
+ * the same dishonesty the preview link exists to avoid, so an entry that
+ * happens to already be `scheduled` (only reachable today by writing the API
+ * directly) is shown as a read-only badge instead of a fourth option.
+ */
+const MANAGED_STATUSES = ['draft', 'published', 'archived'] as const
+type ManagedStatus = (typeof MANAGED_STATUSES)[number]
+
+function isManagedStatus(status: string): status is ManagedStatus {
+  return (MANAGED_STATUSES as readonly string[]).includes(status)
+}
 
 function storedEditorMode(): EditorMode {
   try {
@@ -98,6 +124,12 @@ export function EntryEditRoute(): JSX.Element {
   /** A newer local draft found on open, waiting for the editor to accept or drop it. */
   const [recovered, setRecovered] = useState<AutosaveRecord | null>(null)
   const [editorMode, setEditorMode] = useState<EditorMode>(storedEditorMode)
+  const [status, setStatus] = useState('draft')
+  const [statusBusy, setStatusBusy] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [duplicating, setDuplicating] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isNew) {
@@ -124,6 +156,7 @@ export function EntryEditRoute(): JSX.Element {
           setBlocks({ ...entry.blocks })
           setLocale(entry.locale)
           setTranslationOf(entry.translationOf)
+          setStatus(entry.status)
 
           const loaded: AutosaveSnapshot = { values: entry.values, blocks: entry.blocks }
           setBaseline(loaded)
@@ -218,6 +251,47 @@ export function EntryEditRoute(): JSX.Element {
     }
   }
 
+  /**
+   * Moves the entry to `next`: `POST .../publish` for `published`, and
+   * `POST .../unpublish` (carrying the target status) for `draft`/`archived`
+   * — the two real routes, never a made-up generic status write.
+   */
+  async function changeStatus(next: ManagedStatus): Promise<void> {
+    if (token === null || id === undefined || next === status) return
+    setStatusBusy(true)
+    setStatusError(null)
+    setStatusMessage(null)
+    try {
+      const entry =
+        next === 'published'
+          ? await publishEntry(token, name, id)
+          : await unpublishEntry(token, name, id, next)
+      setStatus(entry.status)
+      setStatusMessage(
+        t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
+      )
+    } catch (caught) {
+      setStatusError(caught instanceof ApiError ? caught.message : t('entryEdit.statusError'))
+    } finally {
+      setStatusBusy(false)
+    }
+  }
+
+  /** Copies the working state into a new draft, then opens it — never the source. */
+  async function duplicate(): Promise<void> {
+    if (token === null || id === undefined) return
+    setDuplicating(true)
+    setDuplicateError(null)
+    try {
+      const copy = await duplicateEntry(token, name, id)
+      navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(copy.id)}`)
+    } catch (caught) {
+      setDuplicateError(caught instanceof ApiError ? caught.message : t('entryEdit.duplicateError'))
+    } finally {
+      setDuplicating(false)
+    }
+  }
+
   function chooseEditorMode(mode: EditorMode): void {
     setEditorMode(mode)
     try {
@@ -229,6 +303,9 @@ export function EntryEditRoute(): JSX.Element {
 
   const requiredAction = isNew ? 'create' : 'update'
   const canWrite = collection !== undefined && canPerform(requiredAction, collection, roles)
+  const canPublish = collection !== undefined && canPerform('publish', collection, roles)
+  /** Duplicating produces a new entry, so it is gated the same as creating one. */
+  const canDuplicate = collection !== undefined && canPerform('create', collection, roles)
 
   /** The one block zone the builder composes — the first the collection declares. */
   const blockZone = collection?.fields.find((field) => field.kind === 'blocks')?.name
@@ -302,6 +379,80 @@ export function EntryEditRoute(): JSX.Element {
       <p>
         <Link to={`/collections/${encodeURIComponent(name)}`}>{t('entryEdit.backToList')}</Link>
       </p>
+
+      {/* Status and publication — the control the admin never had, even though
+          the API route behind the publish button has existed since L2. Visible
+          and near the top on purpose, not a field buried in the form. */}
+      {!isNew && id !== undefined && (
+        <Card className="entry-form__status">
+          <CardBody className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                {t('entryEdit.statusLabel')}
+              </span>
+              {canPublish && isManagedStatus(status) ? (
+                <Select
+                  aria-label={t('entryEdit.statusLabel')}
+                  value={status}
+                  disabled={statusBusy}
+                  onChange={(event) => void changeStatus(event.target.value as ManagedStatus)}
+                >
+                  {MANAGED_STATUSES.map((option) => (
+                    <option key={option} value={option}>
+                      {t(`entryEdit.status.${option}`)}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <strong>{t(`entryEdit.status.${status}`)}</strong>
+              )}
+            </div>
+
+            {canPublish && status !== 'published' && isManagedStatus(status) && (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={statusBusy}
+                onClick={() => void changeStatus('published')}
+              >
+                {t('entryEdit.publishButton')}
+              </Button>
+            )}
+
+            {canDuplicate && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={duplicating}
+                onClick={() => void duplicate()}
+              >
+                {duplicating ? t('entryEdit.duplicating') : t('entryEdit.duplicateButton')}
+              </Button>
+            )}
+          </CardBody>
+
+          {!isManagedStatus(status) && (
+            <p className="px-4 pb-4 text-xs text-muted-foreground">
+              {t('entryEdit.statusUnmanaged')}
+            </p>
+          )}
+          {statusError !== null && (
+            <Notice tone="danger" live="assertive">
+              {statusError}
+            </Notice>
+          )}
+          {statusMessage !== null && (
+            <Notice tone="success" live="polite">
+              {statusMessage}
+            </Notice>
+          )}
+          {duplicateError !== null && (
+            <Notice tone="danger" live="assertive">
+              {duplicateError}
+            </Notice>
+          )}
+        </Card>
+      )}
 
       {!isNew && id !== undefined && (
         <p>

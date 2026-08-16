@@ -30,6 +30,7 @@ export const MOCK_SCHEMA = {
         create: ['editor'],
         update: ['editor'],
         delete: ['editor'],
+        publish: ['editor'],
       },
       fields: [
         {
@@ -761,11 +762,70 @@ export function installMockFetch(
       }
 
       const versionMatch =
-        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview|translations)(?:\?.*)?$/u.exec(
+        /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview|translations|publish|unpublish|duplicate)(?:\?.*)?$/u.exec(
           url,
         )
       if (versionMatch !== null) {
         const [, collection, id, action] = versionMatch
+
+        // Status control (the admin's own gap this feature fixes). Stateless,
+        // like `restore` below: it answers what the real route would return
+        // for this request, without mutating the shared `MOCK_ENTRIES` fixture
+        // other tests read from.
+        if (collection === 'article' && action === 'publish' && method === 'POST') {
+          const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
+          if (entry === undefined) {
+            return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
+          }
+          const allowed = MOCK_SCHEMA.collections[0]?.permissions.publish ?? []
+          if (!allowed.some((role) => user.roles.includes(role))) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: publish on article.' },
+            })
+          }
+          return json(200, { data: { ...entry, status: 'published' } })
+        }
+
+        if (collection === 'article' && action === 'unpublish' && method === 'POST') {
+          const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
+          if (entry === undefined) {
+            return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
+          }
+          const allowed = MOCK_SCHEMA.collections[0]?.permissions.publish ?? []
+          if (!allowed.some((role) => user.roles.includes(role))) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: publish on article.' },
+            })
+          }
+          const status = body.status === 'archived' ? 'archived' : 'draft'
+          return json(200, { data: { ...entry, status } })
+        }
+
+        // `entry-1` -> `entry-1-copy`. A GET of the copy's id is synthesised
+        // the same way below, so the admin's "open the new draft" navigation
+        // after duplicating has something real to load.
+        if (collection === 'article' && action === 'duplicate' && method === 'POST') {
+          const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
+          if (entry === undefined) {
+            return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
+          }
+          const allowed = MOCK_SCHEMA.collections[0]?.permissions.create ?? []
+          if (!allowed.some((role) => user.roles.includes(role))) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: create on article.' },
+            })
+          }
+          return json(201, {
+            data: {
+              ...entry,
+              id: `${id}-copy`,
+              status: 'draft',
+              version: 1,
+              translationOf: null,
+              values: { ...entry.values, ...(body.values ?? {}) },
+            },
+          })
+        }
 
         if (collection === 'article' && action === 'translations' && method === 'GET') {
           return json(200, { data: MOCK_ENTRIES.filter((candidate) => candidate.id === id) })
@@ -1092,12 +1152,20 @@ export function installMockFetch(
 
         if (collection === 'article' && id !== undefined && method === 'GET') {
           const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
-          if (entry === undefined) {
-            return json(404, {
-              error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
-            })
+          if (entry !== undefined) return json(200, { data: entry })
+
+          // Opening the entry `duplicate` just created above — see there for
+          // why this is synthesised rather than stored.
+          if (id.endsWith('-copy')) {
+            const source = MOCK_ENTRIES.find((candidate) => candidate.id === id.slice(0, -5))
+            if (source !== undefined) {
+              return json(200, { data: { ...source, id, status: 'draft', version: 1 } })
+            }
           }
-          return json(200, { data: entry })
+
+          return json(404, {
+            error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+          })
         }
 
         if (collection === 'article' && id === undefined && method === 'POST') {

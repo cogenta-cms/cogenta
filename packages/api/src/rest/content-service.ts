@@ -5,6 +5,7 @@ import {
   type ContentEntry,
   type ContentStore,
   type CreateInput,
+  type DuplicateInput,
   type EntryState,
   type RouteMatch,
   resolveUrl,
@@ -122,6 +123,33 @@ export interface ContentService {
     name: string,
     id: string,
     input: { readonly publishedBy?: string | null },
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
+  /**
+   * Takes an entry back off the published face, into `draft` or `archived`.
+   *
+   * The direct inverse of `publish`, so it is guarded by the same `publish`
+   * action rather than a sixth verb — contract A's action vocabulary stays
+   * frozen at five, same reasoning as `untrash`/`purge` reusing `delete`.
+   */
+  unpublish(
+    context: AccessContext,
+    name: string,
+    id: string,
+    input: { readonly status?: 'draft' | 'archived' },
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
+  /**
+   * Copies one entry into a new draft (`ContentStore.duplicate`).
+   *
+   * Guarded by `create`: a duplicate is a new entry, not a change to the
+   * source, so whoever may create in this collection may duplicate within it.
+   */
+  duplicate(
+    context: AccessContext,
+    name: string,
+    id: string,
+    input: DuplicateInput,
     options: ReadOptions,
   ): Promise<SerialisedEntry>
   history(context: AccessContext, name: string, id: string): Promise<readonly VersionSummary[]>
@@ -470,6 +498,25 @@ export function createContentService(options: ContentServiceOptions): ContentSer
 
       const entry = await store(target).publish(id, input)
       return serialise(context, target, entry, { state: 'published', depth: readOptions.depth })
+    },
+
+    unpublish: async (context, name, id, input, readOptions) => {
+      const target = collection(name)
+      permissions.assert('publish', target, context)
+
+      const entry = await store(target).unpublish(id, input)
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    duplicate: async (context, name, id, input, readOptions) => {
+      const target = collection(name)
+      permissions.assert('create', target, context)
+
+      const entry = await store(target).duplicate(id, {
+        ...input,
+        createdBy: input.createdBy ?? context.actor.id,
+      })
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
     },
 
     history: async (context, name, id) => {

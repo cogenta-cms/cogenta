@@ -51,6 +51,7 @@ function entryOf(values: ContentValues, blocks: BlockZones): ContentEntry {
     updatedAt: '',
     createdBy: null,
     updatedBy: null,
+    deletedAt: null,
     translationOf: null,
     provenance: 'human',
     provenanceDetail: null,

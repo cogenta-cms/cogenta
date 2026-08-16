@@ -4,6 +4,7 @@ import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
 import { buttonVariants } from '../ui/index.js'
+import { GlobalSearch } from './global-search.js'
 import { NAV_ITEMS } from './nav-items.js'
 
 const MAIN_CONTENT_ID = 'main-content'
@@ -38,10 +39,11 @@ export function AppShell(): JSX.Element {
       >
         {t('shell.skipLink')}
       </a>
-      <header className="col-span-2 flex items-center border-b border-border bg-card px-4 py-3">
+      <header className="col-span-2 flex items-center gap-4 border-b border-border bg-card px-4 py-3">
         <span className="font-sans text-base font-semibold text-foreground">
           {t('shell.brand')}
         </span>
+        {email !== null && <GlobalSearch />}
         {email !== null && (
           <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">
             <span>{email}</span>

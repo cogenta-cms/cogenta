@@ -61,6 +61,16 @@
     "logout": "Se déconnecter",
     "nav": "Navigation principale"
   },
+  "globalSearch": {
+    "label": "Recherche globale",
+    "placeholder": "Rechercher du contenu, des médias, des utilisateurs…",
+    "resultsLabel": "Résultats de recherche",
+    "groups": {
+      "content": "Contenu",
+      "media": "Médias",
+      "users": "Utilisateurs"
+    }
+  },
   "login": {
     "heading": "Connexion à Cogenta",
     "passkeyButton": "Se connecter avec une clé d'accès",

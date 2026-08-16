@@ -292,8 +292,16 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     if (method === 'GET') {
       requireAdmin(actor, 'list the accounts on this site')
       const role = single(request.query, 'role')
+      const q = single(request.query, 'q')
       const all = await auth.users.list()
-      const filtered = role === undefined ? all : all.filter((user) => user.roles.includes(role))
+      const byRole = role === undefined ? all : all.filter((user) => user.roles.includes(role))
+      // No dedicated index for accounts either: a substring match on email,
+      // in memory, over the same list this route already loads in full.
+      const needle = q === undefined ? undefined : q.trim().toLowerCase()
+      const filtered =
+        needle === undefined || needle.length === 0
+          ? byRole
+          : byRole.filter((user) => user.email.toLowerCase().includes(needle))
       const withMfa = await Promise.all(
         filtered.map(async (user) => publicUser(user, await mfaOf(user.id))),
       )

@@ -77,7 +77,7 @@ export function UsersRoute(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      setUsers(await listUsers(token, roleFilter))
+      setUsers(await listUsers(token, { role: roleFilter }))
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('users.loadError'))
     } finally {

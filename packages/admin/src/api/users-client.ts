@@ -38,9 +38,21 @@ export interface CreatedUser {
   readonly password: string
 }
 
-export function listUsers(token: string, role?: string): Promise<readonly AdminUser[]> {
-  const query = role === undefined || role === '' ? '' : `?role=${encodeURIComponent(role)}`
-  return request(`/api/users${query}`, { headers: authHeader(token) })
+export interface ListUsersOptions {
+  readonly role?: string
+  /** Substring match on email — see `users-router.ts`'s `q` handling. */
+  readonly q?: string
+}
+
+export function listUsers(
+  token: string,
+  options: ListUsersOptions = {},
+): Promise<readonly AdminUser[]> {
+  const params = new URLSearchParams()
+  if (options.role !== undefined && options.role !== '') params.set('role', options.role)
+  if (options.q !== undefined && options.q.trim().length > 0) params.set('q', options.q)
+  const query = params.toString()
+  return request(`/api/users${query === '' ? '' : `?${query}`}`, { headers: authHeader(token) })
 }
 
 export function createUser(

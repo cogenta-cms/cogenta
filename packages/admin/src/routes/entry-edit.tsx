@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
 import { createEntry, getEntry, issuePreview, updateEntry } from '../api/content-client.js'
+import { AssistantPanel, type AssistField } from '../assist/assistant-panel.js'
 import { useAuth } from '../auth/auth-context.js'
 import type { AutosaveRecord, AutosaveSnapshot } from '../collections/autosave.js'
 import {
@@ -223,6 +224,23 @@ export function EntryEditRoute(): JSX.Element {
     )
   }
 
+  /**
+   * The plain-text fields the assistant can work on.
+   *
+   * Only `text` — a `richText` value is a portable-text document, not a string,
+   * and handing a suggestion back into one means deciding where in the document
+   * it goes. That is a real piece of work rather than a cast, and doing it badly
+   * would destroy an editor's marks and links, so it is left out on purpose
+   * until it can be done properly.
+   */
+  const assistFields: readonly AssistField[] = Object.entries(collection.fields)
+    .filter(([, field]) => field.kind === 'text')
+    .map(([fieldName, field]) => ({
+      name: fieldName,
+      label: field.admin?.label ?? fieldName,
+      value: typeof values[fieldName] === 'string' ? (values[fieldName] as string) : '',
+    }))
+
   return (
     <section aria-labelledby="entry-heading">
       <h1 id="entry-heading">
@@ -307,6 +325,20 @@ export function EntryEditRoute(): JSX.Element {
           </button>
         )}
       </form>
+
+      {/* L18 task 3. Renders nothing at all on a site with no AI provider, and
+          nothing at all for a viewer who may not write — the assistant exists to
+          help with an edit. Accepting a suggestion fills the form; saving is
+          still the editor's own submit, through the usual permission check. */}
+      {canWrite && token !== null && assistFields.length > 0 && (
+        <AssistantPanel
+          token={token}
+          fields={assistFields}
+          locale={locale}
+          siteLocales={siteLocales}
+          onApply={setFieldValue}
+        />
+      )}
 
       {!isNew && id !== undefined && token !== null && (
         <TranslationSwitcher

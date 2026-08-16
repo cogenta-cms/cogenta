@@ -351,5 +351,18 @@
     "empty": "Aucun site ne correspond à ces filtres.",
     "score": "Score de risque : {{score}}",
     "noClient": "Sans client"
+  },
+  "assist": {
+    "title": "Assistant de rédaction",
+    "fieldLabel": "Quel champ ?",
+    "needsText": "Écrivez d'abord quelque chose — l'assistant travaille sur le texte de cette fiche.",
+    "running": "En cours…",
+    "goalLabel": "Que faut-il changer ?",
+    "goalPlaceholder": "plus court, moins formel, pour un débutant…",
+    "targetLocale": "Traduire vers",
+    "use": "Utiliser",
+    "notApplied": "Rien n'a été modifié. Choisir une suggestion remplit le formulaire ; il reste à enregistrer.",
+    "errorTitle": "L'assistant n'a pas pu répondre",
+    "runError": "L'assistant n'a pas pu répondre. Réessayez."
   }
 }

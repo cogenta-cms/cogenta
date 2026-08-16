@@ -194,5 +194,14 @@ export function resolveConfig(
       path: config.vector.path,
       table: config.vector.table,
     }),
+    billing:
+      config.billing === undefined
+        ? undefined
+        : Object.freeze({
+            legalName: config.billing.legalName,
+            address: Object.freeze([...config.billing.address]),
+            taxId: config.billing.taxId,
+            footer: config.billing.footer,
+          }),
   })
 }

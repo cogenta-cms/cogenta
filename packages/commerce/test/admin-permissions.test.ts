@@ -37,6 +37,7 @@ describe('the shop back office, by role', () => {
       orders: shop.orders,
       customers: shop.customers,
       payments: shop.payments,
+      coupons: shop.coupons,
       invoices: createInvoiceStore(db, {
         orders: shop.orders,
         seller: { address: ['Shop'], footer: 'VAT 1' },

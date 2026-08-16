@@ -1,10 +1,12 @@
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import type { CatalogStore } from '../catalog/store.js'
+import { COUPON_KINDS, type CouponKind, type CouponStore } from '../coupon/store.js'
 import type { CustomerStore } from '../customer/store.js'
 import type { InvoiceStore } from '../invoice/store.js'
 import type { OrderStore } from '../order/store.js'
 import { ORDER_STATUSES, type OrderStatus } from '../order/types.js'
 import type { PaymentStore } from '../payment/store.js'
+import type { SubscriptionStore } from '../subscription/store.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
 import { COMMERCE_ANONYMOUS } from './permissions.js'
 
@@ -29,6 +31,12 @@ export interface CommerceRequest {
 
 export interface CommerceResponse {
   readonly status: number
+  /**
+   * JSON-serialisable for every route but one: `GET /invoices/{id}/pdf`
+   * answers with a `Uint8Array` instead. The transport adapter (`cogenta
+   * serve`) checks for that one shape and sends bytes rather than JSON —
+   * this router does not know or care how its caller transports a response.
+   */
   readonly body: unknown
 }
 
@@ -37,7 +45,10 @@ export interface CommerceAdminRouterOptions {
   readonly orders: OrderStore
   readonly customers: CustomerStore
   readonly payments: PaymentStore
+  readonly coupons: CouponStore
   readonly invoices?: InvoiceStore
+  /** Absent on a site that never wires subscriptions — the routes then answer 404. */
+  readonly subscriptions?: SubscriptionStore
   readonly permissions: CommercePermissionLayer
   readonly basePath?: string
 }
@@ -162,10 +173,10 @@ export function createCommerceAdminRouter(
               status: 200,
               body: {
                 products: await options.catalog.listProducts({
-                  ...(query['status'] === 'active' || query['status'] === 'archived'
-                    ? { status: query['status'] }
+                  ...(query.status === 'active' || query.status === 'archived'
+                    ? { status: query.status }
                     : {}),
-                  ...(query['q'] === undefined ? {} : { search: query['q'] }),
+                  ...(query.q === undefined ? {} : { search: query.q }),
                 }),
               },
             }
@@ -200,10 +211,10 @@ export function createCommerceAdminRouter(
             return {
               status: 200,
               body: await options.catalog.updateProduct(id, {
-                ...(typeof body['handle'] === 'string' ? { handle: body['handle'] } : {}),
-                ...(typeof body['title'] === 'string' ? { title: body['title'] } : {}),
-                ...(body['status'] === 'active' || body['status'] === 'archived'
-                  ? { status: body['status'] }
+                ...(typeof body.handle === 'string' ? { handle: body.handle } : {}),
+                ...(typeof body.title === 'string' ? { title: body.title } : {}),
+                ...(body.status === 'active' || body.status === 'archived'
+                  ? { status: body.status }
                   : {}),
               }),
             }
@@ -228,7 +239,7 @@ export function createCommerceAdminRouter(
                 title: readString(body, 'title'),
                 priceMinor: readInt(body, 'priceMinor'),
                 currency: readString(body, 'currency'),
-                ...(typeof body['onHand'] === 'number' ? { onHand: body['onHand'] } : {}),
+                ...(typeof body.onHand === 'number' ? { onHand: body.onHand } : {}),
               }),
             }
           }
@@ -242,13 +253,19 @@ export function createCommerceAdminRouter(
             return {
               status: 200,
               body: await options.catalog.updateVariant(id, {
-                ...(typeof body['sku'] === 'string' ? { sku: body['sku'] } : {}),
-                ...(typeof body['title'] === 'string' ? { title: body['title'] } : {}),
-                ...(typeof body['priceMinor'] === 'number'
-                  ? { priceMinor: body['priceMinor'] }
+                ...(typeof body.sku === 'string' ? { sku: body.sku } : {}),
+                ...(typeof body.title === 'string' ? { title: body.title } : {}),
+                ...(typeof body.priceMinor === 'number' ? { priceMinor: body.priceMinor } : {}),
+                ...(typeof body.allowBackorder === 'boolean'
+                  ? { allowBackorder: body.allowBackorder }
                   : {}),
               }),
             }
+          }
+          if (method === 'DELETE') {
+            permissions.assert('commerce.catalog.write', actor)
+            await options.catalog.deleteVariant(id)
+            return { status: 204, body: null }
           }
         }
 
@@ -269,7 +286,7 @@ export function createCommerceAdminRouter(
         // ---- orders -------------------------------------------------------
         if (segments[0] === 'orders' && segments.length === 1 && method === 'GET') {
           permissions.assert('commerce.read', actor)
-          const status = request.query?.['status']
+          const status = request.query?.status
           return {
             status: 200,
             body: {
@@ -312,7 +329,7 @@ export function createCommerceAdminRouter(
               status: 200,
               body: await options.orders.transition(segments[1] ?? '', to as OrderStatus, {
                 actorId: actor.id,
-                ...(typeof body['note'] === 'string' ? { note: body['note'] } : {}),
+                ...(typeof body.note === 'string' ? { note: body.note } : {}),
               }),
             }
           }
@@ -330,7 +347,7 @@ export function createCommerceAdminRouter(
               status: 200,
               body: await options.payments.settle(segments[1] ?? '', {
                 actorId: actor.id,
-                ...(typeof body['note'] === 'string' ? { note: body['note'] } : {}),
+                ...(typeof body.note === 'string' ? { note: body.note } : {}),
               }),
             }
           }
@@ -344,7 +361,7 @@ export function createCommerceAdminRouter(
               status: 200,
               body: await options.payments.refund(segments[1] ?? '', readInt(body, 'amountMinor'), {
                 actorId: actor.id,
-                ...(typeof body['reason'] === 'string' ? { reason: body['reason'] } : {}),
+                ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
               }),
             }
           }
@@ -357,14 +374,41 @@ export function createCommerceAdminRouter(
             status: 200,
             body: {
               customers: await options.customers.list({
-                ...(request.query?.['q'] === undefined ? {} : { search: request.query['q'] }),
+                ...(request.query?.q === undefined ? {} : { search: request.query.q }),
               }),
             },
           }
         }
 
         // ---- invoices -----------------------------------------------------
+        // The PDF, checked before the metadata route below since both start
+        // with the same three segments. Its body is the raw bytes, not JSON —
+        // the one response in this router that is not: the Node adapter
+        // (`cogenta serve`) writes it with `application/pdf` when it sees a
+        // `Uint8Array` body instead of serialising it.
+        if (
+          segments[0] === 'orders' &&
+          segments[2] === 'invoice' &&
+          segments[3] === 'pdf' &&
+          segments.length === 4
+        ) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.invoices === undefined) return notFound('invoice')
+            const invoice = await options.invoices.readByOrder(segments[1] ?? '')
+            if (invoice === null) return notFound('invoice')
+            return { status: 200, body: await options.invoices.pdf(invoice.id) }
+          }
+        }
+
         if (segments[0] === 'orders' && segments[2] === 'invoice' && segments.length === 3) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.invoices === undefined) return notFound('invoice')
+            const invoice = await options.invoices.readByOrder(segments[1] ?? '')
+            if (invoice === null) return notFound('invoice')
+            return { status: 200, body: invoice }
+          }
           if (method === 'POST') {
             permissions.assert('commerce.invoice.issue', actor)
             if (options.invoices === undefined) {
@@ -380,9 +424,114 @@ export function createCommerceAdminRouter(
               body: await options.invoices.issue({
                 orderId: segments[1] ?? '',
                 actorId: actor.id,
-                ...(typeof body['series'] === 'string' ? { series: body['series'] } : {}),
+                ...(typeof body.series === 'string' ? { series: body.series } : {}),
               }),
             }
+          }
+        }
+
+        // ---- coupons --------------------------------------------------------
+        if (segments[0] === 'coupons' && segments.length === 1) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: { coupons: await options.coupons.list() } }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const kind = readString(body, 'kind')
+            if (!(COUPON_KINDS as readonly string[]).includes(kind)) {
+              throw new CogentaError({
+                code: 'COMMERCE_COUPON_INVALID',
+                message: `"${kind}" is not a coupon kind.`,
+                hint: `Use one of: ${COUPON_KINDS.join(', ')}.`,
+              })
+            }
+            return {
+              status: 201,
+              body: await options.coupons.create({
+                code: readString(body, 'code'),
+                kind: kind as CouponKind,
+                ...(typeof body.value === 'number' ? { value: body.value } : {}),
+                ...(typeof body.currency === 'string' ? { currency: body.currency } : {}),
+                ...(typeof body.minSubtotalMinor === 'number'
+                  ? { minSubtotalMinor: body.minSubtotalMinor }
+                  : {}),
+                ...(typeof body.startsAt === 'string' ? { startsAt: body.startsAt } : {}),
+                ...(typeof body.endsAt === 'string' ? { endsAt: body.endsAt } : {}),
+                ...(typeof body.maxRedemptions === 'number'
+                  ? { maxRedemptions: body.maxRedemptions }
+                  : {}),
+              }),
+            }
+          }
+        }
+
+        if (segments[0] === 'coupons' && segments[2] === 'deactivate' && segments.length === 3) {
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            await options.coupons.deactivate(segments[1] ?? '')
+            return { status: 204, body: null }
+          }
+        }
+
+        // ---- subscriptions --------------------------------------------------
+        if (segments[0] === 'subscriptions' && segments.length === 1) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const status = request.query?.status
+            return {
+              status: 200,
+              body: {
+                subscriptions: await options.subscriptions.list(
+                  status === 'active' || status === 'paused' || status === 'cancelled'
+                    ? { status }
+                    : {},
+                ),
+              },
+            }
+          }
+        }
+
+        if (
+          segments[0] === 'subscriptions' &&
+          segments.length === 3 &&
+          (segments[2] === 'pause' || segments[2] === 'resume' || segments[2] === 'cancel')
+        ) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.order.write', actor)
+            const id = segments[1] ?? ''
+            const subscriptions = options.subscriptions
+            const action = segments[2]
+            const updated =
+              action === 'pause'
+                ? await subscriptions.pause(id)
+                : action === 'resume'
+                  ? await subscriptions.resume(id)
+                  : await subscriptions.cancel(id)
+            return { status: 200, body: updated }
           }
         }
 
@@ -394,12 +543,18 @@ export function createCommerceAdminRouter(
   }
 }
 
+const NOT_FOUND_CODES: Readonly<Record<string, string>> = {
+  product: 'COMMERCE_PRODUCT_NOT_FOUND',
+  order: 'COMMERCE_ORDER_NOT_FOUND',
+  invoice: 'COMMERCE_INVOICE_NOT_FOUND',
+}
+
 function notFound(what: string): CommerceResponse {
   return {
     status: 404,
     body: {
       error: {
-        code: what === 'product' ? 'COMMERCE_PRODUCT_NOT_FOUND' : 'COMMERCE_ORDER_NOT_FOUND',
+        code: NOT_FOUND_CODES[what] ?? 'COMMERCE_ORDER_NOT_FOUND',
         message: `This ${what} does not exist.`,
       },
     },

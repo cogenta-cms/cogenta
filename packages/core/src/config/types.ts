@@ -115,6 +115,25 @@ export interface CogentaConfigInput {
     readonly path?: string
     readonly table?: string
   }
+  /**
+   * Seller/vendor details a real invoice must carry (contract E, ADR-0024).
+   *
+   * Absent by default, and that is a real state, not an oversight: an invoice
+   * with a made-up seller address is worse than no invoicing feature at all,
+   * so `cogenta serve` only mounts the invoice router once this section is
+   * filled in. Nothing here is a secret (rule R7 does not apply) — a legal
+   * name and a tax id are meant to be printed, not protected.
+   */
+  readonly billing?: {
+    /** Printed as the first, bold line of the seller address block. */
+    readonly legalName: string
+    /** The rest of the address block, one line per string. */
+    readonly address: readonly string[]
+    /** VAT number, company registration — shown alongside the address. */
+    readonly taxId?: string
+    /** Legal footer printed on every invoice page: payment terms, mentions. */
+    readonly footer?: string
+  }
 }
 
 /**
@@ -220,6 +239,15 @@ export interface CogentaConfig {
     readonly path: string
     readonly table: string
   }
+  /** Absent when the site has not entered its seller details. Invoicing stays off until it has (contract E, ADR-0024). */
+  readonly billing:
+    | {
+        readonly legalName: string
+        readonly address: readonly string[]
+        readonly taxId: string | undefined
+        readonly footer: string | undefined
+      }
+    | undefined
 }
 
 /** A read-only view of the process environment. */

@@ -70,14 +70,45 @@ describe('proposing a content model', () => {
     expect(result.pages.map((page) => page.slug)).toEqual(['contact'])
   })
 
-  it('offers the model exactly the field kinds contract A declares, read from the contract', async () => {
+  it('offers the model exactly the field kinds contract A declares, minus taxonomy, which no proposal can ever satisfy', async () => {
     const { client, requests } = scriptedClient([proposalJson()])
 
     await proposeContentModel({ client, model: 'm', brief: brief() })
 
     const prompt = requests[0]?.messages.at(-1)?.content ?? ''
-    for (const kind of FIELD_KINDS) expect(prompt).toContain(`"${kind}"`)
+    for (const kind of FIELD_KINDS) {
+      if (kind === 'taxonomy') continue
+      expect(prompt).toContain(`"${kind}"`)
+    }
+    expect(prompt).not.toContain('"taxonomy"')
     expect(prompt).toContain('This list is closed')
+  })
+
+  it('refuses a proposed "taxonomy" field, because a proposal never declares one with defineTaxonomy', async () => {
+    const { client } = scriptedClient([
+      proposalJson({
+        collections: [
+          {
+            name: 'dish',
+            labels: { singular: 'Dish', plural: 'Dishes' },
+            fields: { category: { kind: 'taxonomy', options: { of: 'menu-sections' } } },
+            permissions: { read: ['public'] },
+            rationale: 'x',
+          },
+        ],
+      }),
+    ])
+
+    const result = await proposeContentModel({
+      client,
+      model: 'm',
+      brief: brief(),
+      maxAttempts: 1,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('taxonomy')
   })
 
   it('rejects an invented field kind through the schema, not through a hand-written check', async () => {

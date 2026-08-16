@@ -179,6 +179,18 @@ function buildField(name: string, spec: FieldSpec): FieldDefinition {
       return f.color(base)
     case 'blocks':
       return f.blocks({ ...base, ...(options as Parameters<typeof f.blocks>[0]) })
+    // A proposal never declares a taxonomy (`defineTaxonomy`) alongside its
+    // collections, so a "taxonomy" field would always name one that does not
+    // exist. `describeFieldKinds` already omits it from what the model is
+    // offered — this is the correction path for a model that proposes it
+    // anyway (hallucination, or a stale memory of an older prompt).
+    case 'taxonomy':
+      throw new CogentaError({
+        code: 'CONTENT_MODEL_PROPOSAL_INVALID',
+        message: `Field "${name}" uses kind "taxonomy", which this proposer does not support.`,
+        hint: 'A site plan cannot declare a taxonomy for this field to reference. Use "select" for a closed set of values, or "relation" if the terms are their own collection.',
+        details: { field: name },
+      })
     default: {
       // `FIELD_KINDS` is a closed set and the Zod enum is built from it, so
       // this is only reachable if contract A grew a kind without this
@@ -254,7 +266,11 @@ function describeFieldKinds(): string {
     color: 'a hex colour',
     blocks: 'a block zone for page composition; options: allow ("*" or a list)',
   }
-  return FIELD_KINDS.map((kind) => `- "${kind}": ${notes[kind] ?? 'no options'}`).join('\n')
+  // "taxonomy" is deliberately withheld: a proposal never declares one with
+  // `defineTaxonomy`, so a field referencing it would always be dangling.
+  return FIELD_KINDS.filter((kind) => kind !== 'taxonomy')
+    .map((kind) => `- "${kind}": ${notes[kind] ?? 'no options'}`)
+    .join('\n')
 }
 
 /**

@@ -43,6 +43,18 @@ export { FILTER_PREFIX, parseFilter } from './filter.js'
 export type { RestErrorBody, RestRequest, RestResponse } from './http.js'
 export { errorResponse, jsonResponse, queryError, statusFor } from './http.js'
 export type {
+  MarketplaceCapabilityDescriptionLike,
+  MarketplaceCatalogEntryLike,
+  MarketplaceCatalogLike,
+  MarketplaceInstallerLike,
+  MarketplaceInstallRecordLike,
+  MarketplacePreviewLike,
+  MarketplaceRouter,
+  MarketplaceRouterOptions,
+  MarketplaceUpdateResultLike,
+} from './marketplace-router.js'
+export { createMarketplaceRouter } from './marketplace-router.js'
+export type {
   ImageSize,
   MediaImageProcessor,
   MediaRouter,

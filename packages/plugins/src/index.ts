@@ -13,7 +13,12 @@ export type {
 } from './host/worker-runner.js'
 export { runIsolated, runIsolatedOrThrow, runPlugin } from './host/worker-runner.js'
 export type { LoadPluginOptions, PluginSource, ResolvedPlugin } from './loader.js'
-export { loadPlugin, PLUGIN_MANIFEST_FILE_NAMES, resolveSignatureStatus } from './loader.js'
+export {
+  loadMarketplacePlugin,
+  loadPlugin,
+  PLUGIN_MANIFEST_FILE_NAMES,
+  resolveSignatureStatus,
+} from './loader.js'
 export type {
   PluginBlockProvision,
   PluginCapabilityName,
@@ -54,6 +59,20 @@ export {
   revokeCapability,
 } from './permissions/review.js'
 export { ensurePluginTables, PERMISSION_TABLES } from './permissions/tables.js'
+export type {
+  MarketplaceCatalog,
+  MarketplaceCatalogEntry,
+  MarketplaceCatalogFilter,
+  MarketplaceChangelogEntry,
+  MarketplaceInstaller,
+  MarketplaceInstallerOptions,
+  MarketplaceInstallRecord,
+  MarketplaceItemKind,
+  MarketplacePreview,
+  MarketplaceUpdateResult,
+} from './registries/marketplace.js'
+export { createMarketplaceCatalog, createMarketplaceInstaller } from './registries/marketplace.js'
+export { ensureMarketplaceTables, MARKETPLACE_TABLES } from './registries/marketplace-tables.js'
 export type {
   PluginRegistry,
   PluginRegistryOptions,

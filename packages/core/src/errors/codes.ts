@@ -335,6 +335,13 @@ export const ERROR_CODES = [
   'ASSIST_UNAVAILABLE',
   'ASSIST_RESPONSE_INVALID',
 
+  // Marketplace — catalog and one-click install (L17)
+  'MARKETPLACE_ITEM_NOT_FOUND',
+  'MARKETPLACE_KIND_UNSUPPORTED',
+  'MARKETPLACE_ALREADY_INSTALLED',
+  'MARKETPLACE_NOT_INSTALLED',
+  'MARKETPLACE_UPDATE_REQUIRES_APPROVAL',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

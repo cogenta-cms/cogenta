@@ -3,8 +3,10 @@ import {
   CACHE_DRIVERS,
   DATABASE_DRIVERS,
   EMBEDDINGS_PROVIDERS,
+  IMAGE_GENERATION_PROVIDERS,
   QUEUE_DRIVERS,
   STORAGE_DRIVERS,
+  VECTOR_DRIVERS,
 } from './types.js'
 
 const nonEmpty = z.string().min(1)
@@ -115,6 +117,34 @@ const embeddingsSchema = z.strictObject({
   dimensions: z.number().int().positive().default(384),
 })
 
+/**
+ * Image generation (L18 task 4).
+ *
+ * No default provider and no default model: unlike a cache, there is no
+ * service-free way to draw a picture, so a site either names a vendor or does
+ * not have the feature. `IMAGE_GENERATION_PROVIDERS` is a closed enum for the
+ * same reason `CACHE_DRIVERS` is — a typo must be an error at startup, not a
+ * `PROVIDER_UNKNOWN` the first time an editor presses the button.
+ */
+const imageGenerationSchema = z.strictObject({
+  provider: z.enum(IMAGE_GENERATION_PROVIDERS),
+  model: nonEmpty,
+  baseUrl: nonEmpty.optional(),
+})
+
+/**
+ * Where embeddings live (L18 tasks 1/5).
+ *
+ * Deliberately carries no `dimensions`: that belongs to `embeddings`, and a
+ * second copy here could drift from it — which is precisely the failure the
+ * vector store refuses at `upsert` time.
+ */
+const vectorSchema = z.strictObject({
+  driver: z.enum(VECTOR_DRIVERS).default('auto'),
+  path: nonEmpty.default('./.cogenta/vectors'),
+  table: nonEmpty.default('cogenta_vectors'),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -126,6 +156,8 @@ export const configSchema = z.strictObject({
   security: securitySchema.prefault({}),
   llm: llmSchema.optional(),
   embeddings: embeddingsSchema.prefault({}),
+  imageGeneration: imageGenerationSchema.optional(),
+  vector: vectorSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

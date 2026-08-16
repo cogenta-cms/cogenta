@@ -7,6 +7,7 @@ import type { Environment } from './types.js'
  */
 export const SECRET_KEYS: ReadonlyMap<string, string> = new Map([
   ['llm.apiKey', 'COGENTA_LLM_API_KEY'],
+  ['imageGeneration.apiKey', 'COGENTA_IMAGE_API_KEY'],
   ['storage.accessKeyId', 'COGENTA_STORAGE_ACCESS_KEY_ID'],
   ['storage.secretAccessKey', 'COGENTA_STORAGE_SECRET_ACCESS_KEY'],
 ])
@@ -125,11 +126,36 @@ export function applyEnv(
     output['embeddings'] = embeddings
   }
 
+  // Same shape as `llm`, and the same rule: the section only comes into
+  // existence if someone asked for one. A site with no image vendor has no
+  // image generation at all, and that is not an error (R2).
+  const imageProvider = read(env, 'COGENTA_IMAGE_PROVIDER')
+  const imageGeneration = section(output, 'imageGeneration')
+  if (
+    imageGeneration !== undefined &&
+    (output['imageGeneration'] !== undefined || imageProvider !== undefined)
+  ) {
+    assign(imageGeneration, 'provider', imageProvider)
+    assign(imageGeneration, 'model', read(env, 'COGENTA_IMAGE_MODEL'))
+    assign(imageGeneration, 'baseUrl', read(env, 'COGENTA_IMAGE_BASE_URL'))
+    output['imageGeneration'] = imageGeneration
+  }
+
+  const vector = section(output, 'vector')
+  if (vector !== undefined) {
+    assign(vector, 'driver', read(env, 'COGENTA_VECTOR_DRIVER'))
+    assign(vector, 'path', read(env, 'COGENTA_VECTOR_PATH'))
+    assign(vector, 'table', read(env, 'COGENTA_VECTOR_TABLE'))
+    output['vector'] = vector
+  }
+
   return output
 }
 
 export interface EnvironmentSecrets {
   readonly llmApiKey: string | undefined
+  /** Separate from `llmApiKey`: the image vendor is chosen independently of the text one. */
+  readonly imageApiKey: string | undefined
   readonly storageAccessKeyId: string | undefined
   readonly storageSecretAccessKey: string | undefined
   /** Signs @cogenta/auth's MFA tickets. Never in the config file — there is no `auth` section to put it in, on purpose. */
@@ -139,6 +165,7 @@ export interface EnvironmentSecrets {
 export function readSecrets(env: Environment): EnvironmentSecrets {
   return {
     llmApiKey: read(env, 'COGENTA_LLM_API_KEY'),
+    imageApiKey: read(env, 'COGENTA_IMAGE_API_KEY'),
     storageAccessKeyId: read(env, 'COGENTA_STORAGE_ACCESS_KEY_ID'),
     storageSecretAccessKey: read(env, 'COGENTA_STORAGE_SECRET_ACCESS_KEY'),
     authSigningKey: read(env, 'COGENTA_AUTH_SIGNING_KEY'),

@@ -78,6 +78,36 @@ describe('the assistant panel on a site with no AI provider', () => {
     expect(screen.queryByText(/assistant/iu)).toBeNull()
   })
 
+  it('renders nothing when the only tool on offer is one it cannot drive', async () => {
+    // This is what a real no-AI site answers: duplicate detection is available
+    // (it needs no model at all), but it wants a site id and a collection scope
+    // this panel has no way to supply. Showing a button that would fail when
+    // pressed is worse than showing nothing.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          available: true,
+          tools: [
+            {
+              tool: 'assist.find_duplicates',
+              label: 'Find duplicates',
+              description: 'Find near-identical entries.',
+              cost: 'low',
+              needs: ['siteId', 'collections'],
+            },
+          ],
+        }),
+      ),
+    )
+
+    const { container } = render(panel())
+
+    await waitFor(() => {
+      expect(container.innerHTML).toBe('')
+    })
+  })
+
   it('renders nothing when the route itself cannot be reached either', async () => {
     vi.stubGlobal(
       'fetch',

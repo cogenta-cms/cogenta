@@ -3,12 +3,18 @@ export const CACHE_DRIVERS = ['auto', 'redis', 'file', 'memory'] as const
 export const QUEUE_DRIVERS = ['auto', 'redis', 'database'] as const
 export const STORAGE_DRIVERS = ['auto', 's3', 'local'] as const
 export const EMBEDDINGS_PROVIDERS = ['local', 'openai'] as const
+/** Image generation vendors (L18 task 4). Never one hardcoded vendor. */
+export const IMAGE_GENERATION_PROVIDERS = ['openai', 'stability'] as const
+/** Where embeddings are kept (L18 tasks 1/5). `auto` lets the registry choose, optimal first. */
+export const VECTOR_DRIVERS = ['auto', 'pgvector', 'file', 'memory'] as const
 
 export type DatabaseDriverName = (typeof DATABASE_DRIVERS)[number]
 export type CacheDriverName = (typeof CACHE_DRIVERS)[number]
 export type QueueDriverName = (typeof QUEUE_DRIVERS)[number]
 export type StorageDriverName = (typeof STORAGE_DRIVERS)[number]
 export type EmbeddingsProvider = (typeof EMBEDDINGS_PROVIDERS)[number]
+export type ImageGenerationProvider = (typeof IMAGE_GENERATION_PROVIDERS)[number]
+export type VectorDriverName = (typeof VECTOR_DRIVERS)[number]
 
 /**
  * What a user writes in `cogenta.config.ts`. Everything but `site` and
@@ -82,6 +88,21 @@ export interface CogentaConfigInput {
     readonly provider?: EmbeddingsProvider
     readonly model?: string
     readonly dimensions?: number
+  }
+  /**
+   * Image generation (L18 task 4). Absent — the default — means the site has no
+   * image vendor and the feature simply does not exist there (R2).
+   */
+  readonly imageGeneration?: {
+    readonly provider?: ImageGenerationProvider
+    readonly model?: string
+    readonly baseUrl?: string
+  }
+  /** Where embeddings are kept (L18 tasks 1/5). Dimensions come from `embeddings`, never repeated here. */
+  readonly vector?: {
+    readonly driver?: VectorDriverName
+    readonly path?: string
+    readonly table?: string
   }
 }
 
@@ -163,6 +184,20 @@ export interface CogentaConfig {
     readonly provider: EmbeddingsProvider
     readonly model: string
     readonly dimensions: number
+  }
+  /** Absent when no image vendor is configured. Independent of `llm`: a site may have either, both or neither. */
+  readonly imageGeneration:
+    | {
+        readonly provider: ImageGenerationProvider
+        readonly model: string
+        readonly baseUrl: string | undefined
+        readonly apiKey: string | undefined
+      }
+    | undefined
+  readonly vector: {
+    readonly driver: VectorDriverName
+    readonly path: string
+    readonly table: string
   }
 }
 

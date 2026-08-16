@@ -657,6 +657,47 @@ export function installMockFetch(
         return json(200, { data: [detail], plannerAvailable: true })
       }
 
+      if (url.includes('/api/import/wordpress') && method === 'POST') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may import content.' },
+          })
+        }
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          filename?: string
+          data?: string
+        }
+        if (body.filename === undefined || body.data === undefined) {
+          return json(400, {
+            error: { code: 'CONTENT_INVALID', message: 'This request names no file.' },
+          })
+        }
+        return json(200, {
+          data: {
+            imported: {
+              posts: 2,
+              pages: 1,
+              categories: 1,
+              tags: 0,
+              media: 0,
+              authors: 1,
+              comments: 0,
+            },
+            redirectsCreated: 1,
+            skipped: [
+              {
+                type: 'post',
+                wpId: '42',
+                title: 'Draft nobody finished',
+                reason: 'Trashed in WordPress; not imported.',
+              },
+            ],
+            unconvertedBlocks: [],
+            warnings: ['Media "old-logo.png" was imported with a synthesised alt text; review it.'],
+          },
+        })
+      }
+
       if (url.includes('/api/agents')) {
         if (!user.roles.includes('admin')) {
           return json(403, {

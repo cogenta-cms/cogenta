@@ -46,6 +46,7 @@
     "dashboard": "Tableau de bord",
     "collections": "Contenus",
     "media": "Médiathèque",
+    "import": "Import",
     "taxonomies": "Taxonomies",
     "trash": "Corbeille",
     "audit": "Journal d'audit",
@@ -179,13 +180,15 @@
     "idColumn": "ID",
     "statusColumn": "Statut",
     "updatedColumn": "Modifié",
+    "createdColumn": "Créé",
     "noContent": "Aucun contenu.",
     "previous": "Précédent",
     "next": "Suivant",
     "notFoundHeading": "Contenu introuvable",
     "notFoundBody": "Cette collection n'existe pas ou vous n'y avez pas accès.",
     "back": "Retour",
-    "loadError": "Impossible de charger les contenus."
+    "loadError": "Impossible de charger les contenus.",
+    "exportCsv": "Exporter en CSV"
   },
   "taxonomies": {
     "heading": "Taxonomies",
@@ -425,6 +428,24 @@
     "saveError": "Vos décisions n'ont pas pu être enregistrées.",
     "applyError": "Le plan n'a pas pu être appliqué.",
     "deleteError": "La proposition n'a pas pu être écartée."
+  },
+  "importWordpress": {
+    "heading": "Importer depuis WordPress",
+    "intro": "Téléversez un fichier « Exporter tout le contenu » de WordPress (Outils → Exporter) pour reprendre ses articles, pages, catégories, étiquettes, médias, auteurs et commentaires.",
+    "adminOnly": "Réservé au rôle « admin » : un import écrit du contenu, des médias et des comptes.",
+    "uploadHeading": "Choisir un fichier",
+    "uploadHelp": "Le fichier WXR que WordPress produit sous Outils → Exporter → Tout le contenu.",
+    "uploadLabel": "Fichier d'export (.xml)",
+    "importing": "Import en cours… cela peut prendre un moment pour un gros export.",
+    "uploadError": "Le fichier n'a pas pu être importé.",
+    "reportHeading": "Rapport d'import",
+    "summary": "Importé : {{posts}} articles, {{pages}} pages, {{categories}} catégories, {{tags}} étiquettes, {{media}} médias, {{authors}} auteurs, {{comments}} commentaires, {{redirects}} redirections.",
+    "skippedHeading_one": "Non importé ({{count}})",
+    "skippedHeading_other": "Non importé ({{count}})",
+    "unconvertedHeading_one": "Contenu non convertible en bloc ({{count}})",
+    "unconvertedHeading_other": "Contenu non convertible en bloc ({{count}})",
+    "warningsHeading_one": "Avertissement",
+    "warningsHeading_other": "Avertissements"
   },
   "builder": {
     "modeLabel": "Mode d'édition",

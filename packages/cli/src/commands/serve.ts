@@ -18,6 +18,7 @@ import {
   createAuthRouter,
   createContentGateway,
   createContentService,
+  createImportRouter,
   createMediaRouter,
   createMfaRecommendationSource,
   createNoticeDismissalStore,
@@ -31,6 +32,7 @@ import {
   createUsersRouter,
   errorResponse,
   executeGraphQL,
+  type ImportRouter,
   type MediaImageProcessor,
   type MediaRouter,
   type NoticeRouter,
@@ -61,6 +63,7 @@ import {
   type MediaStore,
   type StorageDriver,
 } from '@cogenta/core'
+import { importWordPress } from '@cogenta/import'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   type BlockZones,
@@ -286,6 +289,13 @@ interface Site {
    * `SITE_PLAN_NO_PROVIDER` for the routes that would need a model.
    */
   readonly sitePlanRouter?: SitePlanRouter
+  /**
+   * `/api/import` — the admin's counterpart to `cogenta import wordpress` on
+   * a terminal. Always mounted: unlike the site planner it needs no external
+   * provider, only this site's own database and storage, which `assembleSite`
+   * already has in scope.
+   */
+  readonly importRouter: ImportRouter
   /**
    * `/api/assistant` — L18. Always mounted, even on a site with no AI provider:
    * it is the route that *answers* `{available: false}`, which is what lets the
@@ -591,6 +601,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.sitePlans === undefined
       ? {}
       : { sitePlanRouter: createSitePlanRouter(options.sitePlans) }),
+    importRouter: createImportRouter({
+      // `db`/`storage` are the very ones already in scope for the rest of
+      // this function — `@cogenta/import`'s real importer, unchanged, never
+      // reimplemented here (R9: this package gains no dependency on it, only
+      // `@cogenta/cli` does, which already had one for the terminal command).
+      runWordPressImport: (xml) => importWordPress(xml, { db, storage }),
+    }),
     mediaStore,
     storage,
     images: options.images ?? null,
@@ -787,6 +804,38 @@ async function recordMediaAudit(
       actorRoles: actor.roles,
       action,
       ...(entryId === undefined ? {} : { entryId }),
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+/**
+ * One entry per successful `POST /api/import/wordpress` — who ran it and how
+ * much it brought in, the same field the terminal command prints as
+ * `formatConversionReport`'s opening line. Never the document itself: a WXR
+ * export can carry a whole site's content, and the audit log is not a backup.
+ */
+async function recordImportAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (method !== 'POST' || response.status < 200 || response.status >= 300) return
+  if (!pathname.startsWith('/api/import/')) return
+
+  const report = (response.body as { readonly data?: { readonly imported?: unknown } } | null)?.data
+    ?.imported as
+    | { readonly posts?: number; readonly pages?: number; readonly media?: number }
+    | undefined
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'import.wordpress',
+      ...(report === undefined ? {} : { diff: report }),
     })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
@@ -1276,6 +1325,23 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.sitePlanRouter.handle(request, context.actor))
+        return
+      }
+
+      // The admin's WordPress importer. Same defensive order as
+      // `/api/site-plans` just above and for the same reason: this route
+      // invites a multi-megabyte upload by design, so the role is checked
+      // before `readBody` buffers anything at all.
+      if (url.pathname.startsWith('/api/import')) {
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may import content.')
+          return
+        }
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        const response = await site.importRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordImportAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
         return
       }
 

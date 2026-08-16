@@ -46,6 +46,7 @@
     "dashboard": "Dashboard",
     "collections": "Content",
     "media": "Media library",
+    "import": "Import",
     "taxonomies": "Taxonomies",
     "trash": "Trash",
     "audit": "Audit log",
@@ -179,13 +180,15 @@
     "idColumn": "ID",
     "statusColumn": "Status",
     "updatedColumn": "Updated",
+    "createdColumn": "Created",
     "noContent": "No content.",
     "previous": "Previous",
     "next": "Next",
     "notFoundHeading": "Content not found",
     "notFoundBody": "This collection does not exist, or you do not have access to it.",
     "back": "Back",
-    "loadError": "Could not load content."
+    "loadError": "Could not load content.",
+    "exportCsv": "Export CSV"
   },
   "taxonomies": {
     "heading": "Taxonomies",
@@ -425,6 +428,24 @@
     "saveError": "Your decisions could not be saved.",
     "applyError": "The plan could not be applied.",
     "deleteError": "The proposal could not be discarded."
+  },
+  "importWordpress": {
+    "heading": "Import from WordPress",
+    "intro": "Upload a WordPress \"Export All Content\" file (Tools → Export) to bring in its posts, pages, categories, tags, media, authors and comments.",
+    "adminOnly": "Restricted to the \"admin\" role: an import writes content, media and accounts.",
+    "uploadHeading": "Choose a file",
+    "uploadHelp": "The WXR file WordPress produces under Tools → Export → All content.",
+    "uploadLabel": "Export file (.xml)",
+    "importing": "Importing… this can take a moment for a large export.",
+    "uploadError": "The file could not be imported.",
+    "reportHeading": "Import report",
+    "summary": "Imported: {{posts}} posts, {{pages}} pages, {{categories}} categories, {{tags}} tags, {{media}} media files, {{authors}} authors, {{comments}} comments, {{redirects}} redirects.",
+    "skippedHeading_one": "Not imported ({{count}})",
+    "skippedHeading_other": "Not imported ({{count}})",
+    "unconvertedHeading_one": "Content that could not be converted to a block ({{count}})",
+    "unconvertedHeading_other": "Content that could not be converted to a block ({{count}})",
+    "warningsHeading_one": "Warning",
+    "warningsHeading_other": "Warnings"
   },
   "builder": {
     "modeLabel": "Editing mode",

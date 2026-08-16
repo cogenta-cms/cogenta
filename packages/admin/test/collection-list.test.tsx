@@ -93,6 +93,58 @@ describe('CollectionListRoute', () => {
     expect(await screen.findByText('Aucun résultat pour cette recherche.')).toBeDefined()
   })
 
+  it('exports the currently listed entries as a valid, correctly escaped CSV', async () => {
+    let capturedBlob: Blob | null = null
+    // jsdom implements neither method, so this is a real assignment rather
+    // than a spy on an existing one — restored in `finally` so it never
+    // leaks into another test in this file.
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    const createObjectURL = vi.fn((blob: Blob) => {
+      capturedBlob = blob
+      return 'blob:mock-url'
+    })
+    const revokeObjectURL = vi.fn()
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = revokeObjectURL
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    try {
+      render(<App />)
+      await goToArticles()
+      await screen.findByText('First article')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Exporter en CSV' }))
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+
+      // jsdom's `Blob` has no `.text()`, so `FileReader` (which jsdom does
+      // implement fully) is what reads the captured content back out.
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () => reject(reader.error)
+        reader.readAsText(capturedBlob as unknown as Blob)
+      })
+      // Strip the leading UTF-8 BOM `downloadCsv` prepends before parsing.
+      const csv = text.replace(/^﻿/, '')
+      const lines = csv.split('\r\n')
+      expect(lines[0]).toBe('ID,Titre,Statut,Créé,Modifié')
+      expect(lines).toContain(
+        'entry-1,First article,published,2026-01-01T00:00:00.000Z,2026-02-01T00:00:00.000Z',
+      )
+      expect(lines).toContain(
+        'entry-2,Second article,draft,2026-01-02T00:00:00.000Z,2026-01-02T00:00:00.000Z',
+      )
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL
+      URL.revokeObjectURL = originalRevokeObjectURL
+      clickSpy.mockRestore()
+    }
+  })
+
   it('reports a collection nobody can read as not found', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })

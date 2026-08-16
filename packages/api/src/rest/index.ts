@@ -43,6 +43,14 @@ export { FILTER_PREFIX, parseFilter } from './filter.js'
 export type { RestErrorBody, RestRequest, RestResponse } from './http.js'
 export { errorResponse, jsonResponse, queryError, statusFor } from './http.js'
 export type {
+  ImportReportLike,
+  ImportRouter,
+  ImportRouterOptions,
+  ImportSkippedItemLike,
+  ImportUnconvertedBlockLike,
+} from './import-router.js'
+export { createImportRouter } from './import-router.js'
+export type {
   ImageSize,
   MediaImageProcessor,
   MediaRouter,

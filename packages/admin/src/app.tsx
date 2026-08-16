@@ -9,6 +9,7 @@ import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
+import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
 import { ProfileRoute } from './routes/profile.js'
@@ -59,6 +60,7 @@ export function App(): JSX.Element {
             <Route path="taxonomies" element={<TaxonomiesRoute />} />
             <Route path="trash" element={<TrashRoute />} />
             <Route path="media" element={<MediaRoute />} />
+            <Route path="import" element={<ImportRoute />} />
             <Route path="audit" element={<AuditRoute />} />
             <Route path="agents" element={<AgentsRoute />} />
             <Route path="users" element={<UsersRoute />} />

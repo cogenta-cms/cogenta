@@ -194,7 +194,36 @@ function buildField(name: string, spec: FieldSpec): FieldDefinition {
   }
 }
 
+/**
+ * Actions `public` must never hold on a proposed collection.
+ *
+ * `permissions` is entirely the model's own choice (there is nothing in the
+ * brief that names a role), so a hallucinated or prompt-injected proposal
+ * can proposed `create`/`update`/`delete` for `public` — and
+ * `access/permissions.ts` grants every actor, signed in or not, the `public`
+ * role in addition to whatever it actually has. A collection defined that
+ * way lets any anonymous visitor write to it the moment the plan is applied.
+ * `read`/`publish` are left alone: a public-readable collection is an
+ * ordinary and often intended shape (a blog, a catalogue), so those stay a
+ * review decision (see `summarisePlan`'s `detail`), not a refusal.
+ */
+const FORBIDDEN_PUBLIC_ACTIONS = ['create', 'update', 'delete'] as const
+
+function rejectUnsafePublicWrites(spec: CollectionSpec): void {
+  const unsafe = FORBIDDEN_PUBLIC_ACTIONS.filter((action) =>
+    (spec.permissions[action] ?? []).includes('public'),
+  )
+  if (unsafe.length === 0) return
+  throw new CogentaError({
+    code: 'CONTENT_MODEL_PROPOSAL_PERMISSIONS_UNSAFE',
+    message: `Collection "${spec.name}" grants the public role ${unsafe.join(', ')}, which would let any anonymous visitor write to it.`,
+    hint: 'A proposal may never grant create, update or delete to the public role. Remove public from those actions, or drop the collection from the proposal.',
+    details: { collection: spec.name, actions: unsafe },
+  })
+}
+
 function buildCollection(spec: CollectionSpec): CollectionDefinition {
+  rejectUnsafePublicWrites(spec)
   const fields: Record<string, FieldDefinition> = {}
   for (const [name, fieldSpec] of Object.entries(spec.fields)) {
     fields[name] = buildField(name, fieldSpec)

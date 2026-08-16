@@ -135,6 +135,97 @@ describe('proposing a content model', () => {
   })
 })
 
+describe('a proposal that grants the public role a write action', () => {
+  it('is refused before it ever becomes a CollectionDefinition, not merely hidden from review', async () => {
+    const { client } = scriptedClient([
+      proposalJson({
+        collections: [
+          {
+            name: 'dish',
+            labels: { singular: 'Dish', plural: 'Dishes' },
+            fields: { title: { kind: 'text', required: true } },
+            // Hallucinated or prompt-injected: any anonymous visitor could
+            // write to this collection once applied.
+            permissions: { read: ['public'], create: ['public'], delete: ['admin'] },
+            rationale: 'x',
+          },
+        ],
+      }),
+    ])
+
+    const result = await proposeContentModel({
+      client,
+      model: 'm',
+      brief: brief(),
+      maxAttempts: 1,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('public')
+    expect(result.reason).toContain('create')
+  })
+
+  it.each(['create', 'update', 'delete'] as const)(
+    'refuses %s granted to public specifically, not read or publish',
+    async (action) => {
+      const { client } = scriptedClient([
+        proposalJson({
+          collections: [
+            {
+              name: 'dish',
+              labels: { singular: 'Dish', plural: 'Dishes' },
+              fields: { title: { kind: 'text', required: true } },
+              permissions: { read: ['public'], [action]: ['public'] },
+              rationale: 'x',
+            },
+          ],
+        }),
+      ])
+
+      const result = await proposeContentModel({
+        client,
+        model: 'm',
+        brief: brief(),
+        maxAttempts: 1,
+      })
+
+      expect(result.ok).toBe(false)
+    },
+  )
+
+  it('leaves a public read grant alone — that is an ordinary, reviewable shape, not an unsafe one', async () => {
+    const { client } = scriptedClient([proposalJson()]) // read: ['public'] already, no write to public
+
+    const result = await proposeContentModel({ client, model: 'm', brief: brief() })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('feeds the refusal back as the next attempt’s correction, like every other invalid proposal', async () => {
+    const unsafe = proposalJson({
+      collections: [
+        {
+          name: 'dish',
+          labels: { singular: 'Dish', plural: 'Dishes' },
+          fields: { title: { kind: 'text', required: true } },
+          permissions: { read: ['public'], update: ['public'] },
+          rationale: 'x',
+        },
+      ],
+    })
+    const { client, requests } = scriptedClient([unsafe, proposalJson()])
+
+    const result = await proposeContentModel({ client, model: 'm', brief: brief() })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.attempts).toBe(2)
+    const second = requests[1]?.messages.at(-1)?.content ?? ''
+    expect(second.toLowerCase()).toContain('public')
+  })
+})
+
 describe('a proposal that contradicts an explicit constraint', () => {
   it('never reaches the human: the offending collection is removed and reported', async () => {
     const { client } = scriptedClient([

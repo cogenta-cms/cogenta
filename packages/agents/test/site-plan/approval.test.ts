@@ -139,6 +139,44 @@ describe('presenting a plan for review', () => {
 
     expect(model?.items[0]?.detail).toContain('title (text)')
   })
+
+  it('shows the proposed permissions on every collection, not just its fields and rationale', () => {
+    // `permissions` is entirely the model's own choice — nothing in the
+    // brief names a role — so a legitimate but surprising grant has to be
+    // visible here even when it is not the unsafe shape `buildCollection`
+    // already refuses outright.
+    const model = summarisePlan(draft()).find((section) => section.id === 'contentModel')
+
+    expect(model?.items[0]?.detail).toContain('Permissions:')
+    expect(model?.items[0]?.detail).toContain('read: public')
+  })
+
+  it('shows a proposed routing pattern when the collection has one', () => {
+    const withRouting: SitePlanDraft = {
+      ...draft(),
+      contentModel: {
+        collections: [
+          {
+            definition: defineCollection({
+              name: 'dish',
+              labels: { singular: 'Dish', plural: 'Dishes' },
+              routing: { pattern: '/carte/:slug' },
+              fields: {
+                title: f.text({ required: true }),
+                slug: f.slug({ from: 'title' }),
+              },
+              permissions: { read: ['public'] },
+            }),
+            rationale: 'The menu.',
+          },
+        ],
+      },
+    }
+
+    const model = summarisePlan(withRouting).find((section) => section.id === 'contentModel')
+
+    expect(model?.items[0]?.detail).toContain('Routed at /carte/:slug')
+  })
 })
 
 describe('there is no "accept everything"', () => {

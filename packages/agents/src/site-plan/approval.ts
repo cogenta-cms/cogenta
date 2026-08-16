@@ -116,7 +116,11 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
         title: `${collection.definition.labels.plural} (${collection.definition.name})`,
         detail: `${collection.rationale} Fields: ${Object.entries(collection.definition.fields)
           .map(([name, field]) => `${name} (${field.kind})`)
-          .join(', ')}.`,
+          .join(', ')}. Permissions: ${describePermissions(collection.definition.permissions)}.${
+          collection.definition.routing === undefined
+            ? ''
+            : ` Routed at ${collection.definition.routing.pattern}.`
+        }`,
       })),
     },
     {
@@ -159,6 +163,26 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
       })),
     },
   ]
+}
+
+/**
+ * Renders a collection's permissions in plain words, for the review screen.
+ *
+ * `permissions` is entirely the model's own choice — nothing in the brief
+ * names a role — so a legitimate-but-surprising grant (`read: ['public']` on
+ * something that sounds sensitive) is exactly the kind of thing a human
+ * reviewer needs to see before accepting, not just the collections and
+ * fields. `buildCollection` already refuses the unsafe case (`public`
+ * granted `create`/`update`/`delete`) outright; this is the second half of
+ * the fix — what remains after that refusal is still shown, never hidden
+ * inside a rationale sentence that never mentioned it.
+ */
+function describePermissions(permissions: CollectionDefinition['permissions']): string {
+  const entries = Object.entries(permissions).filter(
+    ([, roles]) => roles !== undefined && roles.length > 0,
+  ) as readonly [string, readonly string[]][]
+  if (entries.length === 0) return 'none granted'
+  return entries.map(([action, roles]) => `${action}: ${roles.join(', ')}`).join('; ')
 }
 
 function allItems(sections: readonly PlanSection[]): readonly PlanItem[] {

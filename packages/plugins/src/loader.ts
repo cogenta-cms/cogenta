@@ -240,6 +240,62 @@ export async function loadPlugin(
   }
 }
 
+/**
+ * Resolves and loads a plugin the same way `loadPlugin` does, but treats it
+ * as `registry`-trust **unconditionally**, whatever shape `packageRoot`
+ * has — the marketplace's own stricter promise (L17, "jamais une confiance
+ * implicite parce qu'elle vient du registre officiel") is stronger than
+ * `loadPlugin`'s ordinary rule, which only requires a signature for a
+ * reference that *looks* like a registry package name and lets a local path
+ * run unsigned as "dev mode". A marketplace catalog entry's `reference` is
+ * routinely a local directory (L17's own scoped choice: an embedded/local
+ * catalog, not a real distant registry service, until L13 task 8's API keys
+ * land) — without this function, every marketplace install of a local entry
+ * would silently take the `local`/dev-mode branch and skip verification
+ * entirely, which is exactly the shortcut the lot's own "pièges connus"
+ * section forbids.
+ *
+ * Reuses `findManifestFile`/`importManifest`/`resolveSignatureStatus`
+ * as-is — no re-implementation of manifest loading or signature checking,
+ * only a different, stricter trust classification of the same pipeline.
+ */
+export async function loadMarketplacePlugin(
+  packageRoot: string,
+  options: LoadPluginOptions = {},
+): Promise<ResolvedPlugin> {
+  const engineVersion = options.engineVersion ?? NO_REAL_ENGINE_VERSION_YET
+  const trustedPublicKeys = options.trustedPublicKeys ?? TRUSTED_REGISTRY_PUBLIC_KEYS
+
+  const stats = await stat(packageRoot).catch(() => null)
+  if (stats === null || !stats.isDirectory()) {
+    throw new CogentaError({
+      code: 'PLUGIN_SOURCE_NOT_FOUND',
+      message: `No plugin directory at "${packageRoot}".`,
+      hint: 'Check the marketplace catalog entry’s reference — it must be an existing directory.',
+      details: { reference: packageRoot },
+    })
+  }
+
+  const manifestPath = await findManifestFile(packageRoot)
+  const manifest = await importManifest(manifestPath)
+  const { devMode, signatureVerified } = await resolveSignatureStatus(
+    'registry',
+    manifest,
+    manifestPath,
+    trustedPublicKeys,
+  )
+
+  return {
+    manifest,
+    source: 'registry',
+    packageRoot,
+    manifestPath,
+    engineCompatible: satisfiesRange(engineVersion, manifest.engine),
+    devMode,
+    signatureVerified,
+  }
+}
+
 async function resolvePackageRoot(reference: string, source: PluginSource): Promise<string> {
   if (source === 'local') {
     const stats = await stat(reference).catch(() => null)

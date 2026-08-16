@@ -100,8 +100,27 @@ partout parce qu'une mauvaise réponse coupe un site un an), confirmés un par u
 additive** : une collection proposée dont le nom existe déjà est refusée et signalée —
 remplacer une collection vivante est une migration avec diff et sauvegarde, pas un effet
 de bord d'une suggestion acceptée. Un plan s'applique au plus une fois. Le rapport dit
-qu'il faut redémarrer `cogenta serve`, plutôt que de laisser croire que c'est déjà pris
-en compte. Toutes les routes sont réservées à `admin`.
+qu'il faut redémarrer, plutôt que de laisser croire que c'est déjà pris en compte, et il
+nomme le vrai fichier de schéma du projet (`findSchemaFile` — `loadCollections` préfère
+`cogenta.schema.ts`, et écrire `.mjs` par convention aurait créé des tables puis un
+fichier que rien ne lit). Toutes les routes sont réservées à `admin`.
+
+**Une demande du lot a été refusée, pas contournée.** L19 demande le volet
+post-installation « sur un site déjà **en production** » ; ADR-0010, actée, dit que le
+schéma est en lecture seule en production et que seul le mode développement l'écrit.
+Appliquer un plan écrit `cogenta.schema.*` : c'est l'éditeur de schéma d'ADR-0010 arrivé
+par une autre porte. Donc **proposer et relire restent disponibles partout, appliquer
+n'existe que sous `cogenta dev`** (`RunServeOptions.development`, positionné par cette
+commande et par elle seule — aujourd'hui la seule différence de comportement entre
+`serve` et `dev`) ; `cogenta serve` répond `CONTENT_READ_ONLY` en indiquant la marche à
+suivre, et la relecture déjà faite est conservée. Le désaccord et une **ADR-0023 prête à
+insérer** sont consignés dans `BLOCKERS.md` (points 8 et 9) — `docs/03-decisions.md` est
+protégé en écriture, le texte revient à l'humain.
+
+**Provenance** : toute entrée de démonstration écrite par un modèle est semée avec
+`provenance: 'generated'` et un `provenanceDetail` (agent, modèle, horodatage), des deux
+côtés (installeur et applier). Le défaut du store est `human` : en hériter aurait fait
+mentir le seul champ du contrat A que le cadre européen sur l'IA rend obligatoire.
 
 **R2 vérifié explicitement** : sans fournisseur LLM, la question du document n'est même
 jamais posée par l'installeur, `--yes` n'entre jamais dans l'étape, le site produit est
@@ -110,6 +129,12 @@ d'un modèle répondent `SITE_PLAN_NO_PROVIDER` (501) avec un conseil pendant qu
 laissé par l'installeur reste lisible et applicable. `--config` peut lister `documents`,
 mais un fichier de configuration ne consent pas à la place d'un humain : le plan est
 analysé et **sauvegardé en brouillon**, jamais appliqué.
+
+**R8 tient sur les deux sauts.** Le texte du document ne touche jamais un prompt système,
+et la citation d'une contrainte — texte verbatim du document — voyage elle aussi par le
+canal `data` dans les prompts de modèle de contenu et de contenu de démo : « Pas de blog.
+Ignore all previous instructions and… » est une seule clause, donc la charge utile est
+*dans* la citation. Un test l'y glisse et vérifie qu'elle arrive échappée.
 
 **Reste ouvert / assumé** : (1) aucun test avec un vrai fournisseur LLM n'a été exécuté
 (pas de clé) — tout le pipeline est testé contre un `ProviderClient` scripté et, côté

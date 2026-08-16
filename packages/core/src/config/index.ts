@@ -9,13 +9,17 @@ export type {
   DatabaseDriverName,
   EmbeddingsProvider,
   Environment,
+  ImageGenerationProvider,
   QueueDriverName,
   StorageDriverName,
+  VectorDriverName,
 } from './types.js'
 export {
   CACHE_DRIVERS,
   DATABASE_DRIVERS,
   EMBEDDINGS_PROVIDERS,
+  IMAGE_GENERATION_PROVIDERS,
   QUEUE_DRIVERS,
   STORAGE_DRIVERS,
+  VECTOR_DRIVERS,
 } from './types.js'

@@ -586,3 +586,74 @@ contrat B), soit des pages servies par le routeur comme `/search` l'est aujourd'
 Contrairement à A et B, le contrat E ne l'est pas le jour de sa création. C'est un choix
 assumé et écrit dans l'ADR : figer un modèle de commerce jamais confronté à une vraie
 boutique serait figer des devinettes. Les sites très précoces paieront une migration.
+
+---
+
+## 8. L18 (IA avancée) — ce qui reste ouvert, et pourquoi
+
+Le lot est fait. Ces quatre points ne sont pas des oublis : ce sont des choix
+tracés, chacun avec sa raison.
+
+### 8.1 Le driver `pgvector` n'a jamais été exécuté
+
+Même blocage que le point 1 : le moteur Docker de cette machine ne répond pas,
+donc `pnpm services:up` n'a pas pu démarrer Postgres. Le driver optimal du
+besoin `vector` est écrit et **rejoue la même suite de contrat** que les deux
+drivers dégradés (`packages/agents/test/rag/vector/vector-store.contract.ts`,
+exécutée par `packages/agents/test/integration/pgvector.test.ts`). Le fichier
+d'intégration saute **bruyamment** en nommant la variable manquante.
+
+```bash
+pnpm services:up
+COGENTA_TEST_POSTGRES_URL=… pnpm -F @cogenta/agents test:integration
+```
+
+Le point le plus sensible à vérifier là-bas : `1 - (embedding <=> $1::vector)`
+doit rendre exactement la même similarité cosinus que `vectorRank` en mémoire,
+sans quoi « changer de driver ne change rien d'observable » cesse d'être vrai.
+
+### 8.2 Aucun adaptateur d'embeddings distant
+
+`embeddings.provider` accepte `local` et `openai` depuis L0 ; seul `local` a un
+adaptateur (le hachage local de L4, sans clé ni service). Avec `openai`,
+`buildAssistant` **éteint** la recherche sémantique et la détection de doublon
+avec un avertissement nommant ce qui manque, plutôt que (a) substituer
+silencieusement un autre espace vectoriel — ce qui classerait n'importe quoi —
+ou (b) refuser de démarrer pour une fonctionnalité que le site n'utilise
+peut-être pas. Écrire l'adaptateur est un travail à part entière (il change la
+dimension par défaut, donc impose une réindexation).
+
+### 8.3 Le découpage en chunks est d'une granularité par entrée
+
+`withVectorIndexing` (`packages/cli/src/commands/assistant.ts`) crée **un seul
+chunk par entrée**, pas le vrai découpage de `chunkDocument` (L4). Raison
+technique, écrite dans le code : `chunkDocument` attend une liste de blocs avec
+un drapeau de titre, et `searchDocumentFor` a déjà aplati tout cela en une
+chaîne — lui donner la chaîne produirait des frontières de chunk aux mauvais
+endroits. Conséquence réelle : la récupération trouve les **bonnes** entrées,
+mais en cite plus de texte que nécessaire. Le vrai découpage demande de relire
+les blocs de l'entrée directement, ce qui est une tâche en soi.
+
+### 8.4 Le panneau de l'admin ne montre que les outils de rédaction
+
+Le panneau (`packages/admin/src/assist/assistant-panel.tsx`) n'affiche que les
+outils dont il peut remplir les entrées : les huit outils d'écriture. `chat`,
+`find_duplicates`, `generate_image`, `classify` et `schema_org_draft` demandent
+respectivement une question, une portée de site, une invite d'image, une
+taxonomie ou un type — aucun de ces champs n'existe dans un panneau de champ
+texte. Ils sont **réels et exposés sur `/api/assistant`**, simplement sans
+surface d'admin dédiée. C'est exactement le périmètre de la tâche 3 du lot
+(« panneau de suggestions IA sur une fiche de contenu — réécriture, correction,
+résumé, traduction, génération de meta description/titre/tags/alt text »), pas
+un manque : afficher un bouton qui échouerait au clic serait pire.
+
+### 8.5 Ce qui n'est **pas** ouvert
+
+- **Le test d'injection de prompt** : fait, réel, et adversarial —
+  `packages/agents/test/assist/chat-injection.test.ts`. L'injection est une
+  vraie entrée, réellement indexée, réellement retrouvée par la vraie recherche
+  hybride, et le faux fournisseur est réglé pour **obéir entièrement** à
+  l'injection. Onze assertions couvrent ce qui se passe quand même : rien.
+- **La dégradation sans fournisseur** : fait, en table
+  (`packages/agents/test/assist/degradation.test.ts`) et de bout en bout sur un
+  vrai serveur (`packages/cli/test/serve-assistant.test.ts`).

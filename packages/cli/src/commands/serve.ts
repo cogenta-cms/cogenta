@@ -7,10 +7,13 @@ import {
   type AccessContext,
   type AgentsRouter,
   type AgentsRouterOptions,
+  type AssistantRouter,
+  type AssistToolsetLike,
   type AuditRouter,
   type AuthRouter,
   buildContentSchema,
   createAgentsRouter,
+  createAssistantRouter,
   createAuditRouter,
   createAuthRouter,
   createContentGateway,
@@ -72,6 +75,7 @@ import {
   createTaxonomyStore,
   type RedirectStore,
   type SchemaDocument,
+  type SearchDriver,
   type TaxonomyDefinition,
   type TaxonomyStore,
   withLifecycleEvents,
@@ -81,6 +85,7 @@ import {
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
@@ -240,6 +245,20 @@ function isModuleNotFound(error: unknown, path: string): boolean {
   return error.message.includes(pathToFileURL(path).href) || error.message.includes(path)
 }
 
+/**
+ * What `/api/assistant` answers with when this process built no assistant at
+ * all — a caller that did not ask for one, in a test or an embedding. Exactly
+ * what `createAssistToolset` returns with no provider, restated here so
+ * `assembleSite` need not construct one to say "off".
+ */
+const EMPTY_TOOLSET = Object.freeze({
+  available: false,
+  reason:
+    'No AI provider is configured for this site, so the writing assistant is switched off. Everything else in the CMS works exactly the same.',
+  tools: Object.freeze([]),
+  capabilities: Object.freeze([]),
+})
+
 interface Site {
   readonly db: DatabaseHandle
   readonly auth: AuthStore
@@ -267,6 +286,12 @@ interface Site {
    * `SITE_PLAN_NO_PROVIDER` for the routes that would need a model.
    */
   readonly sitePlanRouter?: SitePlanRouter
+  /**
+   * `/api/assistant` — L18. Always mounted, even on a site with no AI provider:
+   * it is the route that *answers* `{available: false}`, which is what lets the
+   * admin panel disappear instead of erroring.
+   */
+  readonly assistantRouter: AssistantRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -343,6 +368,16 @@ interface AssembleSiteOptions {
   /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
   readonly sitePlans?: SitePlanRouterOptions
   /**
+   * L18's toolset, vector store and semantic search.
+   *
+   * Absent means "this caller did not build one", which is treated exactly like
+   * "no AI provider configured": an empty toolset, a route that says so, and no
+   * vector indexing on the content stores.
+   */
+  readonly assistant?: AssistantAssembly
+  /** The full-text index, when the caller already built one. Created here otherwise. */
+  readonly searchIndex?: SearchDriver
+  /**
    * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
    * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
    * instead of landing — wrapped once here, at the one place both transports'
@@ -390,7 +425,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // Full-text search, connected for the first time (L10 task 3). The index is
   // derived data and creates its own physical table, so a fresh install can
   // index its first entry without a migration having run.
-  const searchIndex = await createSearchIndex({ db })
+  //
+  // Accepted from the caller when there is one: `runServe` builds it before the
+  // assistant so the semantic half can be fused with *this* index rather than
+  // with a second one over the same table.
+  const searchIndex = options.searchIndex ?? (await createSearchIndex({ db }))
 
   const stores = new Map<string, ContentStore>()
   const storeFor = (collection: CollectionDefinition): ContentStore => {
@@ -403,7 +442,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     const guarded = readOnly ? withReadOnlyStore(created) : created
     // Outermost, so a read-only refusal happens *before* anything is indexed:
     // a write that never landed must not change the index either.
-    const stored = withSearchIndexing(guarded, {
+    const indexed = withSearchIndexing(guarded, {
       collection,
       index: searchIndex,
       onError: (error) =>
@@ -412,6 +451,24 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           error: String(error),
         }),
     })
+    // The semantic half, wrapped the same way and for the same reason (L18
+    // task 5): REST and GraphQL are handed the same store instances, so one
+    // wrap covers both and neither can write content the index never hears
+    // about. Absent entirely when no embedder is available.
+    const stored =
+      options.assistant?.vectors === undefined
+        ? indexed
+        : withVectorIndexing(indexed, {
+            collection,
+            siteId: site.url,
+            store: options.assistant.vectors.store,
+            embeddings: options.assistant.vectors.embeddings,
+            onError: (error) =>
+              logger.error('vector index write failed', {
+                collection: collection.name,
+                error: String(error),
+              }),
+          })
     // Outermost of all: an event must describe a write that really landed, so
     // it fires after the read-only guard has had its chance to refuse and
     // after the index has been brought back in step. A receiver that rebuilt a
@@ -523,6 +580,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       dismissals: noticeDismissals,
     }),
     usersRouter: createUsersRouter({ auth }),
+    assistantRouter: createAssistantRouter({
+      toolset: (options.assistant?.toolset ?? EMPTY_TOOLSET) as AssistToolsetLike,
+      collections,
+      permissions,
+      site,
+      logger,
+    }),
     ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
     ...(options.sitePlans === undefined
       ? {}
@@ -1215,6 +1279,16 @@ export function createRequestListener(
         return
       }
 
+      // Always mounted, on every site (L18). On one with no AI provider it is
+      // the route that answers `{available: false}`, which is precisely what
+      // lets the admin panel disappear instead of failing.
+      if (url.pathname.startsWith('/api/assistant')) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.assistantRouter.handle(request, context))
+        return
+      }
+
       if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.agentsRouter.handle(request, context.actor))
@@ -1562,8 +1636,21 @@ export async function runServe(options: ServeOptions): Promise<number> {
     siteUrl: loaded.config.site.url,
     logger,
   })
+  // L18. Never fatal: everything inside degrades to "off" with a log line
+  // rather than stopping the site from serving (R2).
+  const searchIndex = await createSearchIndex({ db: selection.instance })
+  const assistant = await buildAssistant({
+    config: loaded.config,
+    db: selection.instance,
+    logger,
+    // Beside the full-text index, never instead of it: the semantic half is
+    // fused with this one by RRF (L18 task 5).
+    fullText: searchIndex,
+  })
   const site = await assembleSite({
     db: selection.instance,
+    assistant,
+    searchIndex,
     collections,
     taxonomies,
     signingKey: loaded.config.auth.signingKey,
@@ -1615,6 +1702,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   out.detail(
     `${collections.length} collection(s), db driver: ${selection.driver}, storage driver: ${storageSelection.driver}, image driver: ${images?.driver ?? 'none'}`,
   )
+  out.detail(assistant.summary)
   options.onListening?.({ port: boundPort, host })
 
   await new Promise<void>((resolve) => {
@@ -1637,6 +1725,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     const grace = setTimeout(() => server.closeAllConnections(), SHUTDOWN_GRACE_MS)
     grace.unref()
   })
+  await assistant.dispose()
   await selection.dispose()
   await storageSelection.dispose()
   await site.dispose().catch(() => undefined) // selection.dispose() already closed the same handle

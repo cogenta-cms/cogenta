@@ -180,5 +180,19 @@ export function resolveConfig(
       model: config.embeddings.model,
       dimensions: config.embeddings.dimensions,
     }),
+    imageGeneration:
+      config.imageGeneration === undefined
+        ? undefined
+        : Object.freeze({
+            provider: config.imageGeneration.provider,
+            model: config.imageGeneration.model,
+            baseUrl: config.imageGeneration.baseUrl,
+            apiKey: secrets.imageApiKey,
+          }),
+    vector: Object.freeze({
+      driver: config.vector.driver,
+      path: config.vector.path,
+      table: config.vector.table,
+    }),
   })
 }

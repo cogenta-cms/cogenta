@@ -7,6 +7,51 @@ export type {
   AgentModelPreference,
   AgentTrigger,
 } from './agents/types.js'
+export type { ChatSource, ContentChatAnswer, ContentChatOptions } from './assist/chat.js'
+export { createContentChatTool } from './assist/chat.js'
+export type {
+  ClassificationResult,
+  DuplicateReport,
+  DuplicateToolOptions,
+  ModerationVerdict,
+} from './assist/classify.js'
+export {
+  createClassifyTool,
+  createFindDuplicatesTool,
+  createModerateTool,
+  MODERATION_SEVERITIES,
+  RECOMMENDED_ACTIONS,
+} from './assist/classify.js'
+export type { FaqDraft, SchemaDraft, SchemaType } from './assist/faq.js'
+export { createFaqTool, createSchemaOrgTool, SCHEMA_TYPES } from './assist/faq.js'
+export type { GenerateImageResult } from './assist/images.js'
+export { createGenerateImageTool } from './assist/images.js'
+export type {
+  AssistAgent,
+  AssistRequest,
+  AssistRuntime,
+  AssistRuntimeOptions,
+} from './assist/runtime.js'
+export { createAssistRuntime, extractJson } from './assist/runtime.js'
+export type { Suggestion } from './assist/suggestion.js'
+export { SuggestionSchema, suggestion } from './assist/suggestion.js'
+export type {
+  AssistCapability,
+  AssistToolset,
+  AssistToolsetOptions,
+} from './assist/toolset.js'
+export { createAssistToolset, describeCapabilities } from './assist/toolset.js'
+export {
+  createAltTextTool,
+  createMetaDescriptionTool,
+  createProofreadTool,
+  createRewriteTool,
+  createSummariseTool,
+  createTagsTool,
+  createTitleTool,
+  createTranslateTool,
+  createWritingTools,
+} from './assist/writing.js'
 export type { AuditLogLike, AuditRecordInput } from './audit/types.js'
 export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'
@@ -91,6 +136,38 @@ export {
 } from './providers/anthropic.js'
 export type { GoogleClientConfig, GoogleRequestBody } from './providers/google.js'
 export { buildGoogleRequest, createGoogleClient, parseGoogleResponse } from './providers/google.js'
+export type { OpenAiImageClientConfig, OpenAiImageRequestBody } from './providers/image/openai.js'
+export {
+  buildOpenAiImageRequest,
+  createOpenAiImageClient,
+  parseOpenAiImageResponse,
+} from './providers/image/openai.js'
+export type {
+  ImageProviderName,
+  ImageProviderRegistry,
+  ImageProviderRegistryConfig,
+} from './providers/image/registry.js'
+export {
+  createImageProviderRegistry,
+  IMAGE_PROVIDER_NAMES,
+} from './providers/image/registry.js'
+export type {
+  StabilityImageClientConfig,
+  StabilityRequestBody,
+} from './providers/image/stability.js'
+export {
+  buildStabilityRequest,
+  createStabilityImageClient,
+  parseStabilityResponse,
+} from './providers/image/stability.js'
+export type {
+  GeneratedImage,
+  ImageGenerationOptions,
+  ImageProviderClient,
+  ImageRequest,
+  ImageSize,
+} from './providers/image/types.js'
+export { clampCount, IMAGE_DIMENSIONS, IMAGE_SIZES } from './providers/image/types.js'
 export type { OpenAiClientConfig, OpenAiRequestBody } from './providers/openai.js'
 export { buildOpenAiRequest, createOpenAiClient, parseOpenAiResponse } from './providers/openai.js'
 export type { ProviderName, ProviderRegistryConfig } from './providers/registry.js'
@@ -125,6 +202,39 @@ export type {
   RankedId,
 } from './rag/index/types.js'
 export { vectorRank } from './rag/index/vector-rank.js'
+export type {
+  FullTextSearchLike,
+  SemanticHit,
+  SemanticSearch,
+  SemanticSearchOptions,
+  SemanticSearchQuery,
+} from './rag/semantic/search.js'
+export { createSemanticSearch } from './rag/semantic/search.js'
+export type {
+  FileVectorOptions,
+  PgVectorDriverOptions,
+  PgVectorOptions,
+  VectorConfig,
+  VectorFilter,
+  VectorMatch,
+  VectorRecord,
+  VectorRegistryOptions,
+  VectorScope,
+  VectorSearchOptions,
+  VectorStore,
+} from './rag/vector/index.js'
+export {
+  createFileVectorStore,
+  createMemoryVectorStore,
+  createPgVectorStore,
+  createVectorRegistry,
+  fileVectorDriver,
+  matchesFilter,
+  memoryVectorDriver,
+  pgVectorDriver,
+  VECTOR_DEFAULTS,
+  vectorLiteral,
+} from './rag/vector/index.js'
 export type { DiffChangeKind, DiffEntry } from './reversibility/diff.js'
 export { diffValues } from './reversibility/diff.js'
 export { createMemoryReceiptStore } from './reversibility/receipt-store.js'

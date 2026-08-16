@@ -462,5 +462,18 @@
     },
     "detailHeading": "Selected block",
     "detailEmpty": "Select a block in the preview or in the list to edit its fields."
+  },
+  "assist": {
+    "title": "Writing assistant",
+    "fieldLabel": "Which field?",
+    "needsText": "Write something first — the assistant works on the text of this entry.",
+    "running": "Working…",
+    "goalLabel": "What should change?",
+    "goalPlaceholder": "shorter, less formal, for a beginner…",
+    "targetLocale": "Translate into",
+    "use": "Use this",
+    "notApplied": "Nothing has been changed. Choosing a suggestion fills the form; you still have to save.",
+    "errorTitle": "The assistant could not answer",
+    "runError": "The assistant could not answer. Try again."
   }
 }

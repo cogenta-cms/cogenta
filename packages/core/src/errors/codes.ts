@@ -327,6 +327,14 @@ export const ERROR_CODES = [
   'COMMERCE_SUBSCRIPTION_NOT_FOUND',
   'COMMERCE_SUBSCRIPTION_INVALID',
 
+  // Agents — vector store driver (L18 task 1/5)
+  'VECTOR_DIMENSION_MISMATCH',
+  'VECTOR_STORE_FAILED',
+
+  // Agents — writing/assistant tools (L18 tasks 2-8)
+  'ASSIST_UNAVAILABLE',
+  'ASSIST_RESPONSE_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

@@ -32,6 +32,7 @@ import {
   createUsersRouter,
   errorResponse,
   executeGraphQL,
+  type ForgotPasswordEvent,
   type MarketplaceRouter,
   type MediaImageProcessor,
   type MediaRouter,
@@ -94,6 +95,7 @@ import {
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
+import { sendResetMail } from '../reset-mail.js'
 import { serveAdminAsset } from './admin-assets.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
@@ -433,6 +435,13 @@ interface AssembleSiteOptions {
   readonly onSecurityEvent?:
     | ((event: string, data: Readonly<Record<string, unknown>>) => Promise<void>)
     | null
+  /**
+   * Delivers the token `POST /api/auth/forgot-password` issues (L11's
+   * forgot-password screen). Absent means the token is issued and thrown
+   * away unsent — the route's response is identical either way, since it
+   * must never depend on whether the mail could actually go out.
+   */
+  readonly onForgotPassword?: ((event: ForgotPasswordEvent) => Promise<void>) | null
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -573,7 +582,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     db,
     auth,
     restRouter: createRestRouter({ service, siteUrl: site.url }),
-    authRouter: createAuthRouter({ auth }),
+    authRouter: createAuthRouter({
+      auth,
+      ...(options.onForgotPassword == null ? {} : { onForgotPassword: options.onForgotPassword }),
+    }),
     mediaRouter: createMediaRouter({
       store: mediaStore,
       storage,
@@ -1731,6 +1743,21 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // endpoint, or configured one without a signing secret.
     onContentEvent: webhooks.emit,
     onSecurityEvent: webhooks.send,
+    // Same mail this site's `cogenta users reset-password --email` already
+    // sends (`../reset-mail.js`), just pointed at the admin's reset screen
+    // instead of a terminal command — see that file for why the wording is
+    // written once rather than twice.
+    onForgotPassword: ({ user, token, expiresAt }) =>
+      sendResetMail(
+        {
+          mailDir: join(projectRoot, '.cogenta', 'mail'),
+          resetUrl: new URL('/admin/reset-password', loaded.config.site.url).toString(),
+        },
+        loaded.config.site,
+        user.email,
+        token,
+        expiresAt,
+      ).then(() => undefined),
   })
 
   const server = createServer(createRequestListener(site, logger))

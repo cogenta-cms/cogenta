@@ -108,6 +108,8 @@ export const ERROR_CODES = [
   'AUTH_USER_NOT_FOUND',
   'AUTH_ROLE_UNKNOWN',
   'AUDIT_CHAIN_BROKEN',
+  // Auth — self-service password reset over HTTP (L11, forgot-password route)
+  'AUTH_RESET_TOKEN_INVALID',
 
   // Media
   'MEDIA_NOT_FOUND',

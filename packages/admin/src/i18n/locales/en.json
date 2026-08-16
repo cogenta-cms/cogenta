@@ -42,6 +42,12 @@
     "linkUrlLabel": "Link URL",
     "linkPlaceholder": "https://…"
   },
+  "roles": {
+    "admin": "Admin",
+    "editor": "Editor",
+    "author": "Author",
+    "contributor": "Contributor"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "collections": "Content",
@@ -84,7 +90,26 @@
     "verify": "Verify",
     "passkeyRefused": "The passkey was refused or cancelled.",
     "connectionFailed": "Could not sign in.",
-    "incorrectCode": "Incorrect code."
+    "incorrectCode": "Incorrect code.",
+    "forgotPassword": "Forgot your password?"
+  },
+  "forgotPassword": {
+    "heading": "Reset your password",
+    "intro": "Enter the email address of your account. If it exists, we will send it a link to choose a new password.",
+    "submit": "Send the reset link",
+    "sent": "If an account exists for this address, a reset link has been sent to it. It expires in 30 minutes.",
+    "error": "Could not send the request.",
+    "backToLogin": "Back to sign in"
+  },
+  "resetPassword": {
+    "heading": "Choose a new password",
+    "newPassword": "New password",
+    "hint": "At least 12 characters. A phrase of a few ordinary words is both longer and easier to remember than a short one with symbols in it.",
+    "submit": "Reset the password",
+    "done": "Password changed. Every existing session was signed out — sign in again with the new one.",
+    "goToLogin": "Go to sign in",
+    "missingToken": "This link is missing its token. Ask for a new one from the \"forgot password\" screen.",
+    "error": "Could not reset the password. The link may have expired or already been used."
   },
   "notices": {
     "dismiss": "Hide this recommendation",
@@ -336,7 +361,10 @@
     "allRoles": "All roles",
     "emailColumn": "Email address",
     "rolesColumn": "Roles",
-    "rolesHint": "One or more role names, separated by commas.",
+    "rolesHint": "Pick one or more standard roles, and/or add a custom one below — a site can have role names of its own beyond these four.",
+    "customRoleLabel": "Custom role (optional)",
+    "customRolePlaceholder": "e.g. translator",
+    "rolesNone": "Pick at least one role, standard or custom.",
     "statusColumn": "Status",
     "mfaColumn": "Second factor",
     "actionsColumn": "Actions",
@@ -368,7 +396,7 @@
     "signedInAs": "Signed in as {{email}} — roles: {{roles}}.",
     "loadError": "Could not load your profile.",
     "passwordHeading": "Password",
-    "passwordIntro": "Changing your password needs the one you use today. If you have forgotten it, there is no reset procedure yet.",
+    "passwordIntro": "Changing your password needs the one you use today. If you have forgotten it, use the \"forgot password\" link on the sign-in screen instead.",
     "currentPassword": "Current password",
     "newPassword": "New password",
     "newPasswordHint": "At least 12 characters. A phrase of a few ordinary words is both longer and easier to remember than a short one with symbols in it.",

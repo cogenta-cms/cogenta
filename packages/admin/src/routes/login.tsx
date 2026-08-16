@@ -1,6 +1,6 @@
 import { type FormEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Navigate, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
@@ -190,6 +190,11 @@ export function LoginRoute(): JSX.Element {
               {t('login.submit')}
             </Button>
           </form>
+          <p className="m-0 text-center text-sm text-muted-foreground">
+            <Link to="/forgot-password" className="text-primary hover:underline">
+              {t('login.forgotPassword')}
+            </Link>
+          </p>
         </CardBody>
       </Card>
     </main>

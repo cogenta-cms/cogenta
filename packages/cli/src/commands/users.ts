@@ -8,7 +8,6 @@ import {
   createUserStore,
   ensureAuthTables,
 } from '@cogenta/auth'
-import { createEmailAdapter, createFileEmailTransport } from '@cogenta/channels'
 import {
   createDatabaseRegistry,
   createLogger,
@@ -18,6 +17,7 @@ import {
   loadConfig,
 } from '@cogenta/core'
 import type { Output, Writer } from '../output.js'
+import { sendResetMail as sendResetMailShared } from '../reset-mail.js'
 
 export type UsersSubcommand = 'create' | 'reset-password'
 
@@ -109,14 +109,10 @@ async function withDatabase<T>(
 }
 
 /**
- * Sends the reset mail through `@cogenta/channels`, not through a second
- * mailer of this command's own — the email adapter and its transport
- * interface already exist and are the project's one way out.
- *
- * The transport is the file one, because it is the only one that exists: a
- * real SMTP transport is a documented, deliberate gap in that package
- * (`providers/email/transport.ts`). So this writes a real message to a real
- * file and says exactly where, rather than pretending mail left the machine.
+ * The terminal's own wrapper around the shared `sendResetMail` (`../reset-mail.js`),
+ * which is also what `cogenta serve` calls for `POST /api/auth/forgot-password` —
+ * one function decides how the mail is worded, this only resolves *where* it
+ * is written from this command's own `--mail-dir`/`--cwd` options.
  */
 async function sendResetMail(
   options: UsersOptions,
@@ -126,39 +122,7 @@ async function sendResetMail(
   expiresAt: string,
 ): Promise<string> {
   const directory = options.mailDir ?? resolve(options.cwd ?? process.cwd(), '.cogenta', 'mail')
-
-  const adapter = createEmailAdapter({
-    transport: createFileEmailTransport({ directory }),
-  })
-
-  // `report` of the three fixed message levels: `notification` is one line
-  // with nowhere to put a token, and `alert` would stamp "[WARNING]" on the
-  // subject and demand an incident's `expectedAction`/`adminUrl`. None of the
-  // three was designed for transactional mail; a fourth level would change a
-  // closed union every one of the five adapters renders, for one caller.
-  await adapter.send(
-    { id: address },
-    {
-      level: 'report',
-      title: `${site.name} — password reset`,
-      keyFigures: [
-        { label: 'Valid until', value: expiresAt },
-        { label: 'Uses left', value: '1' },
-      ],
-      sections: [
-        {
-          heading: 'Your one-time token',
-          body: token,
-        },
-        {
-          heading: 'How to use it',
-          body: `Run: cogenta users reset-password --token ${token}\n\nThe token works once and expires at ${expiresAt}. If you did not ask for this, ignore this message — the token is useless without it, and asking again replaces it.`,
-        },
-      ],
-    },
-  )
-
-  return directory
+  return sendResetMailShared({ mailDir: directory }, site, address, token, expiresAt)
 }
 
 async function issueReset(options: UsersOptions, logger: Logger): Promise<number> {

@@ -4,6 +4,7 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 import type { Actor } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import { assertPasswordPolicy } from './password-policy.js'
 
 /**
  * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment,
@@ -15,10 +16,32 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
  * the same bearer-token lookup, not two different ones that could disagree.
  */
 
+/** What redeeming a forgotten-password token successfully produced, for `onForgotPassword`. */
+export interface ForgotPasswordEvent {
+  readonly user: User
+  readonly token: string
+  readonly expiresAt: string
+}
+
 export interface AuthRouterOptions {
   readonly auth: AuthStore
   /** Mount point. `/api/auth` by default. */
   readonly basePath?: string
+  /**
+   * Delivers the reset token issued by `POST /api/auth/forgot-password`.
+   *
+   * Absent from this package on purpose: sending mail needs `@cogenta/channels`
+   * and a site's mail directory, neither of which this transport-agnostic
+   * router knows about (R9 — no new dependency here just to send one kind of
+   * mail). `cogenta serve` wires this to the same `sendResetMail` the
+   * `cogenta users reset-password --email` terminal command already uses
+   * (`packages/cli/src/reset-mail.ts`), so the wording is written once.
+   *
+   * Never awaited by the route in a way that could change its response or its
+   * timing in an observable way tied to whether the email existed — see the
+   * route's own comment for the account-enumeration rule this exists to keep.
+   */
+  readonly onForgotPassword?: (event: ForgotPasswordEvent) => Promise<void>
 }
 
 export interface AuthRouter {
@@ -136,6 +159,7 @@ function sessionInvalid(): CogentaError {
 
 export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
   const auth = options.auth
+  const onForgotPassword = options.onForgotPassword
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
 
   return {
@@ -168,6 +192,16 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
       return jsonResponse(200, { data: loginResponseBody(result) })
     }
 
+    if (action === 'forgot-password') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      return forgotPassword(asRecord(request.body))
+    }
+
+    if (action === 'reset-password') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      return resetPassword(asRecord(request.body))
+    }
+
     if (action === 'session') {
       if (method === 'GET') {
         const token = bearerToken(request.headers)
@@ -192,6 +226,91 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     }
 
     throw noRoute()
+  }
+
+  /**
+   * `POST /api/auth/forgot-password` — the whole point of this route is that
+   * its answer must never depend on whether `email` names a real account.
+   *
+   * **The line that must never move**: every branch below returns the exact
+   * same 200 with the exact same body, and the rate limiter is checked and
+   * recorded against the submitted email *before* the account lookup, on the
+   * same subject regardless of whether it turns out to exist — an attacker
+   * probing for valid addresses gets backed off exactly as fast either way
+   * (the same reasoning `loginAttempts` already applies to a wrong password,
+   * see `tables.ts`). Only a real account gets a token issued and mail sent,
+   * and that work happens after the branches have already agreed on what the
+   * response will be, so nothing downstream of it can leak into this response.
+   */
+  async function forgotPassword(body: Record<string, unknown>): Promise<RestResponse> {
+    const email = stringField(body, 'email').trim().toLowerCase()
+    const subject = `forgot-password:${email}`
+
+    await auth.rateLimit.check(subject)
+    await auth.rateLimit.record(subject)
+
+    const user = await auth.users.byEmail(email)
+    if (user !== null && user.status === 'active') {
+      const issued = await auth.resets.issue(user.id)
+      if (onForgotPassword !== undefined) {
+        await onForgotPassword({ user, token: issued.token, expiresAt: issued.expiresAt })
+      }
+    }
+
+    return jsonResponse(200, {
+      data: {
+        message: 'If an account exists for this address, a reset link has been sent to it.',
+      },
+    })
+  }
+
+  /**
+   * `POST /api/auth/reset-password` — redeems a token from the mail
+   * `forgot-password` sent.
+   *
+   * Unlike `forgot-password`, this route's refusal *can* say why (invalid,
+   * expired, already used): the secret here is the token itself, not whether
+   * an email exists, and the token is not guessable — knowing enough to ask
+   * this question at all already proves possession of the mail.
+   */
+  async function resetPassword(body: Record<string, unknown>): Promise<RestResponse> {
+    const token = stringField(body, 'token')
+    const newPassword = stringField(body, 'newPassword')
+    assertPasswordPolicy(newPassword)
+
+    const outcome = await auth.resets.redeem(token)
+    if (outcome.kind !== 'ready') {
+      throw new CogentaError({
+        code: 'AUTH_RESET_TOKEN_INVALID',
+        message:
+          outcome.kind === 'expired'
+            ? 'This reset link has expired.'
+            : outcome.kind === 'used'
+              ? 'This reset link has already been used.'
+              : 'This reset link is not valid.',
+        hint: 'Ask for a new one from the "forgot password" screen.',
+      })
+    }
+
+    const user = await auth.users.byId(outcome.userId)
+    if (user === null) {
+      throw new CogentaError({
+        code: 'AUTH_RESET_TOKEN_INVALID',
+        message: 'The account this link belonged to no longer exists.',
+        hint: 'Ask for a new one from the "forgot password" screen.',
+      })
+    }
+
+    await auth.credentials.setPassword(user.id, newPassword)
+    // Whoever knew the old password may still hold a live session, and a
+    // reset that leaves them signed in has reset nothing — the same reasoning
+    // `cogenta users reset-password --token` already follows.
+    await auth.sessions.revokeAll(user.id)
+    // A successful reset is proof of legitimate access; nothing left over
+    // from a stranger's guessing should still count against this account.
+    await auth.rateLimit.clear(`forgot-password:${user.email.toLowerCase()}`)
+
+    return jsonResponse(200, { data: { reset: true } })
   }
 
   /**
@@ -322,7 +441,8 @@ function noRoute(): CogentaError {
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
     hint:
-      'Auth routes are /api/auth/login, /api/auth/totp, /api/auth/totp/enrol, ' +
+      'Auth routes are /api/auth/login, /api/auth/forgot-password, ' +
+      '/api/auth/reset-password, /api/auth/totp, /api/auth/totp/enrol, ' +
       '/api/auth/totp/enrol/confirm, /api/auth/session, and ' +
       '/api/auth/webauthn/{register|login}/{begin|complete}.',
   })

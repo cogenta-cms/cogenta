@@ -34,6 +34,22 @@ import {
 } from '../ui/index.js'
 
 /**
+ * The four role names every new site is offered, whether or not any account
+ * on it holds them yet.
+ *
+ * This is a **UX convention, not a server constraint** — contract A still
+ * only knows five permission actions (`read`/`create`/`update`/`delete`/
+ * `publish`) per collection, and a role is still, as far as the server is
+ * concerned, an arbitrary string a collection's `permissions` block happens
+ * to name. Nothing here is a vocabulary change or a contract A addition:
+ * `rolesField` in `users-router.ts` still accepts any non-empty string, and a
+ * site can (and does, via the custom-role field below) use names these four
+ * were never meant to describe. They exist only so a fresh site's first admin
+ * is not staring at an empty checkbox list and a blank text field.
+ */
+const STANDARD_ROLES = ['admin', 'editor', 'author', 'contributor'] as const
+
+/**
  * L11 task 3 — the account list, and everything an admin can do to an account
  * from the admin rather than from a terminal.
  *
@@ -41,12 +57,15 @@ import {
  * rendering controls that would 403 (the server refuses either way — this is
  * courtesy, not the check).
  *
- * Two things are deliberately not here. Deleting an account: accounts are
+ * One thing is deliberately not here: deleting an account. Accounts are
  * disabled, never removed, because an account that wrote content still has to
- * be nameable in the audit log. And resetting somebody's password: that needs a
- * delivery channel and a single-use token to be anything but a back door, and
- * it is L13's task — an admin who could set another password could sign in as
- * that person, and every entry afterwards would name the wrong one.
+ * be nameable in the audit log. Resetting somebody's password used to be
+ * absent for the same "needs a delivery channel and a single-use token"
+ * reason — it now exists, but as the self-service `/forgot-password` flow
+ * (`packages/api/src/rest/auth-router.ts`), not as something an admin does to
+ * someone else's account: an admin who could set another password could sign
+ * in as that person, and every audit entry afterwards would name the wrong
+ * one.
  */
 export function UsersRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -63,11 +82,13 @@ export function UsersRoute(): JSX.Element {
 
   const [creating, setCreating] = useState(false)
   const [newEmail, setNewEmail] = useState('')
-  const [newRoles, setNewRoles] = useState('editor')
+  const [newRoleSet, setNewRoleSet] = useState<ReadonlySet<string>>(() => new Set(['editor']))
+  const [newCustomRole, setNewCustomRole] = useState('')
   const [created, setCreated] = useState<CreatedUser | null>(null)
 
   const [editing, setEditing] = useState<AdminUser | null>(null)
-  const [editRoles, setEditRoles] = useState('')
+  const [editRoleSet, setEditRoleSet] = useState<ReadonlySet<string>>(() => new Set())
+  const [editCustomRole, setEditCustomRole] = useState('')
 
   const [sessionsOf, setSessionsOf] = useState<AdminUser | null>(null)
   const [sessions, setSessions] = useState<readonly UserSession[]>([])
@@ -92,6 +113,18 @@ export function UsersRoute(): JSX.Element {
   /** Every role name any account actually holds — the filter offers real values, not a guessed list. */
   const knownRoles = [...new Set(users.flatMap((user) => user.roles))].sort()
 
+  /**
+   * The checkbox list this admin offers: the four standard names, first and
+   * always, followed by whatever else this site's accounts already use that
+   * is not one of them — a role a previous admin typed into the custom field
+   * shows up here as a checkbox too, next time, rather than only ever being
+   * reachable by retyping it.
+   */
+  const offeredRoles = [
+    ...STANDARD_ROLES,
+    ...knownRoles.filter((role) => !(STANDARD_ROLES as readonly string[]).includes(role)),
+  ]
+
   function parseRoles(raw: string): string[] {
     return raw
       .split(',')
@@ -99,19 +132,34 @@ export function UsersRoute(): JSX.Element {
       .filter((role) => role.length > 0)
   }
 
+  function toggleRole(set: ReadonlySet<string>, role: string): Set<string> {
+    const next = new Set(set)
+    if (next.has(role)) next.delete(role)
+    else next.add(role)
+    return next
+  }
+
+  /** Checkboxes plus free-text custom roles, deduplicated into one list. */
+  function combineRoles(set: ReadonlySet<string>, custom: string): string[] {
+    return [...new Set([...set, ...parseRoles(custom)])]
+  }
+
   async function submitCreate(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
     setActionError(null)
+    const roles = combineRoles(newRoleSet, newCustomRole)
+    if (roles.length === 0) {
+      setActionError(t('users.rolesNone'))
+      return
+    }
     try {
-      const result = await createUser(token, {
-        email: newEmail,
-        roles: parseRoles(newRoles),
-      })
+      const result = await createUser(token, { email: newEmail, roles })
       setCreated(result)
       setCreating(false)
       setNewEmail('')
-      setNewRoles('editor')
+      setNewRoleSet(new Set(['editor']))
+      setNewCustomRole('')
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('users.createError'))
@@ -122,8 +170,13 @@ export function UsersRoute(): JSX.Element {
     event.preventDefault()
     if (token === null || editing === null) return
     setActionError(null)
+    const roles = combineRoles(editRoleSet, editCustomRole)
+    if (roles.length === 0) {
+      setActionError(t('users.rolesNone'))
+      return
+    }
     try {
-      await updateUser(token, editing.id, { roles: parseRoles(editRoles) })
+      await updateUser(token, editing.id, { roles })
       setEditing(null)
       await load()
     } catch (caught) {
@@ -260,7 +313,12 @@ export function UsersRoute(): JSX.Element {
                         size="sm"
                         onClick={() => {
                           setEditing(user)
-                          setEditRoles(user.roles.join(', '))
+                          // Every role this account already holds is, by
+                          // construction, in `knownRoles` and therefore in
+                          // `offeredRoles` — nothing here needs the custom
+                          // field pre-filled.
+                          setEditRoleSet(new Set(user.roles))
+                          setEditCustomRole('')
                         }}
                       >
                         {t('users.changeRoles', { email: user.email })}
@@ -307,13 +365,21 @@ export function UsersRoute(): JSX.Element {
               />
             )}
           </Field>
-          <Field label={t('users.rolesColumn')} description={t('users.rolesHint')}>
+          <RoleCheckboxList
+            idPrefix="new-user-role"
+            legend={t('users.rolesColumn')}
+            description={t('users.rolesHint')}
+            roles={offeredRoles}
+            selected={newRoleSet}
+            onToggle={(role) => setNewRoleSet((current) => toggleRole(current, role))}
+          />
+          <Field label={t('users.customRoleLabel')}>
             {(control) => (
               <Input
                 {...control}
-                required
-                value={newRoles}
-                onChange={(event) => setNewRoles(event.target.value)}
+                placeholder={t('users.customRolePlaceholder')}
+                value={newCustomRole}
+                onChange={(event) => setNewCustomRole(event.target.value)}
               />
             )}
           </Field>
@@ -335,13 +401,21 @@ export function UsersRoute(): JSX.Element {
         closeLabel={t('users.close')}
       >
         <form onSubmit={submitRoles} className="flex flex-col gap-4">
-          <Field label={t('users.rolesColumn')} description={t('users.rolesHint')}>
+          <RoleCheckboxList
+            idPrefix="edit-user-role"
+            legend={t('users.rolesColumn')}
+            description={t('users.rolesHint')}
+            roles={offeredRoles}
+            selected={editRoleSet}
+            onToggle={(role) => setEditRoleSet((current) => toggleRole(current, role))}
+          />
+          <Field label={t('users.customRoleLabel')}>
             {(control) => (
               <Input
                 {...control}
-                required
-                value={editRoles}
-                onChange={(event) => setEditRoles(event.target.value)}
+                placeholder={t('users.customRolePlaceholder')}
+                value={editCustomRole}
+                onChange={(event) => setEditCustomRole(event.target.value)}
               />
             )}
           </Field>
@@ -407,5 +481,72 @@ export function SessionList({
         </ul>
       </CardBody>
     </Card>
+  )
+}
+
+/**
+ * A group of role checkboxes — plain `<fieldset>`/`<legend>` and Tailwind
+ * classes lifted from the design system's own control styling
+ * (`ui/field.tsx`'s `CONTROL_CLASSES`), not a seventh `ui/` component: a
+ * checkbox *group* is a different shape from the six the design system
+ * already covers (a single labelled control), and this is its only caller.
+ *
+ * Not built on `Field`: `Field` associates one label with one control via a
+ * single generated id, which fits a text input or a select but not a list of
+ * independently-labelled checkboxes — `<fieldset>`/`<legend>` is the
+ * correct native pairing for a group instead.
+ */
+function RoleCheckboxList({
+  idPrefix,
+  legend,
+  description,
+  roles,
+  selected,
+  onToggle,
+}: {
+  readonly idPrefix: string
+  readonly legend: string
+  readonly description?: string
+  readonly roles: readonly string[]
+  readonly selected: ReadonlySet<string>
+  onToggle(role: string): void
+}): JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <fieldset className="flex flex-col gap-1.5 border-0 p-0 m-0">
+      <legend className="font-sans text-sm leading-5 font-medium text-foreground p-0">
+        {legend}
+      </legend>
+      {description !== undefined && (
+        <p className="m-0 text-xs leading-5 text-muted-foreground">{description}</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {roles.map((role) => {
+          const id = `${idPrefix}-${role}`
+          return (
+            <label
+              key={role}
+              htmlFor={id}
+              className="flex items-center gap-2 font-sans text-sm leading-5 text-foreground"
+            >
+              <input
+                id={id}
+                type="checkbox"
+                checked={selected.has(role)}
+                onChange={() => onToggle(role)}
+                className="h-4 w-4 rounded-sm border border-input accent-primary"
+              />
+              {/* Standard names get a translated label (`roles.<name>`); a
+                  custom role typed into the free-text field and later shown
+                  here as a checkbox has no translation and falls back to its
+                  own raw name — it is a site-specific string, not one this
+                  admin can translate for it. */}
+              {t(`roles.${role}`, { defaultValue: role })}
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
   )
 }

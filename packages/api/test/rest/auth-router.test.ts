@@ -521,6 +521,233 @@ describe('WebAuthn passkeys', () => {
   })
 })
 
+describe('POST /api/auth/forgot-password', () => {
+  it('answers identically for an existing and a non-existing account', async () => {
+    const router = createAuthRouter({ auth })
+    await createLoggedInUser('real@example.com', 'correct horse battery staple')
+
+    const forReal = await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'real@example.com' } }),
+    )
+    const forGhost = await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'ghost@example.com' } }),
+    )
+
+    expect(forReal.status).toBe(forGhost.status)
+    expect(forReal.body).toEqual(forGhost.body)
+    expect(forReal.status).toBe(200)
+  })
+
+  it('issues a real, redeemable token only for the real account, delivered through onForgotPassword', async () => {
+    const delivered: { email: string; token: string }[] = []
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        delivered.push({ email: event.user.email, token: event.token })
+      },
+    })
+    await createLoggedInUser('real@example.com', 'correct horse battery staple')
+
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'real@example.com' } }),
+    )
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'ghost@example.com' } }),
+    )
+
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]?.email).toBe('real@example.com')
+    expect(delivered[0]?.token).toBeTruthy()
+  })
+
+  it('is case-insensitive on the email, so a differently-cased real address is still found', async () => {
+    const delivered: string[] = []
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        delivered.push(event.user.email)
+      },
+    })
+    await createLoggedInUser('mixed@example.com', 'correct horse battery staple')
+
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'MIXED@Example.com' } }),
+    )
+
+    expect(delivered).toEqual(['mixed@example.com'])
+  })
+
+  it('does not issue a token for a disabled account, but still answers the same way', async () => {
+    const delivered: string[] = []
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        delivered.push(event.user.email)
+      },
+    })
+    const user = await createLoggedInUser('disabled@example.com', 'correct horse battery staple')
+    await auth.users.setStatus(user.id, 'disabled')
+
+    const response = await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'disabled@example.com' } }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(delivered).toHaveLength(0)
+  })
+
+  it('rate-limits repeated requests for the same email, whether or not it exists', async () => {
+    const router = createAuthRouter({ auth })
+
+    for (let i = 0; i < 20; i += 1) {
+      await router.handle(
+        request('POST', '/api/auth/forgot-password', {
+          body: { email: 'hammered@example.com' },
+        }),
+      )
+    }
+
+    const response = await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'hammered@example.com' } }),
+    )
+    expect(response.status).toBe(429)
+    expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_RATE_LIMITED')
+  })
+
+  it('refuses a body with no email', async () => {
+    const router = createAuthRouter({ auth })
+    const response = await router.handle(request('POST', '/api/auth/forgot-password', { body: {} }))
+    expect(response.status).toBe(400)
+  })
+})
+
+describe('POST /api/auth/reset-password', () => {
+  it('completes the full loop: request, redeem, sign in with the new password, old one refused', async () => {
+    let issuedToken = ''
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        issuedToken = event.token
+      },
+    })
+    await createLoggedInUser('loop@example.com', 'correct horse battery staple')
+
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'loop@example.com' } }),
+    )
+    expect(issuedToken).toBeTruthy()
+
+    const reset = await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issuedToken, newPassword: 'a brand new long passphrase' },
+      }),
+    )
+    expect(reset.status).toBe(200)
+
+    const oldLogin = await router.handle(
+      request('POST', '/api/auth/login', {
+        body: { email: 'loop@example.com', password: 'correct horse battery staple' },
+      }),
+    )
+    expect(oldLogin.status).toBe(401)
+
+    const newLogin = await router.handle(
+      request('POST', '/api/auth/login', {
+        body: { email: 'loop@example.com', password: 'a brand new long passphrase' },
+      }),
+    )
+    expect(newLogin.status).toBe(200)
+  })
+
+  it('signs out every existing session on a successful reset', async () => {
+    let issuedToken = ''
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        issuedToken = event.token
+      },
+    })
+    const user = await createLoggedInUser('sessions@example.com', 'correct horse battery staple')
+    const session = await auth.sessions.create(user.id)
+    expect(await auth.sessions.resolve(session.token)).not.toBeNull()
+
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'sessions@example.com' } }),
+    )
+    await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issuedToken, newPassword: 'a brand new long passphrase' },
+      }),
+    )
+
+    expect(await auth.sessions.resolve(session.token)).toBeNull()
+  })
+
+  it('refuses a token twice — single use', async () => {
+    let issuedToken = ''
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        issuedToken = event.token
+      },
+    })
+    await createLoggedInUser('once@example.com', 'correct horse battery staple')
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'once@example.com' } }),
+    )
+
+    const first = await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issuedToken, newPassword: 'a brand new long passphrase' },
+      }),
+    )
+    expect(first.status).toBe(200)
+
+    const second = await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issuedToken, newPassword: 'yet another long passphrase' },
+      }),
+    )
+    expect(second.status).toBe(400)
+    expect((second.body as { error: { code: string } }).error.code).toBe('AUTH_RESET_TOKEN_INVALID')
+  })
+
+  it('refuses a token that was never issued', async () => {
+    const router = createAuthRouter({ auth })
+    const response = await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: 'not-a-real-token', newPassword: 'a brand new long passphrase' },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'AUTH_RESET_TOKEN_INVALID',
+    )
+  })
+
+  it('refuses a new password shorter than the policy floor', async () => {
+    let issuedToken = ''
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        issuedToken = event.token
+      },
+    })
+    await createLoggedInUser('short@example.com', 'correct horse battery staple')
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'short@example.com' } }),
+    )
+
+    const response = await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issuedToken, newPassword: 'short' },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_PASSWORD_INVALID')
+  })
+})
+
 describe('unknown routes', () => {
   it('answers 404 for a path this router does not own', async () => {
     const router = createAuthRouter({ auth })

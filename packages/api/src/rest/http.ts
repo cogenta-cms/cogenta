@@ -105,6 +105,12 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AUTH_RESET_TOKEN_INVALID: 400,
   AUTH_ROLE_UNKNOWN: 400,
 
+  // API keys (L13 task 8)
+  API_KEY_INVALID: 401,
+  API_KEY_REVOKED: 401,
+  API_KEY_EXPIRED: 401,
+  API_KEY_NOT_FOUND: 404,
+
   AGENT_UNKNOWN: 404,
 
   // Site plans (L19). A missing draft is a 404; an undecided item and an

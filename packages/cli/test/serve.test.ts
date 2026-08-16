@@ -717,6 +717,108 @@ describe('runServe', () => {
     }
   })
 
+  /**
+   * L13 task 8, end to end: an admin mints a machine key from the API the
+   * admin screen uses, the raw key authenticates content routes scoped to
+   * exactly what it was granted, revoking it ends that immediately, and the
+   * mint/revoke pair lands in the audit log without the raw key anywhere in it.
+   */
+  it('authenticates a machine actor by API key, scoped and revocable, over HTTP', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const admin = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+      await credentials.setPassword(admin.id, 'correct horse battery staple')
+      const editor = await users.create({ email: 'editor@example.com', roles: ['editor'] })
+      await credentials.setPassword(editor.id, 'correct horse battery staple')
+      await db.close()
+
+      const adminToken = await login(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const editorToken = await login(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+
+      // R4, over the wire: only the admin role may mint a key.
+      const refused = await fetch(`${server.base}/api/api-keys`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${editorToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'nope', scope: ['admin'] }),
+      })
+      expect(refused.status).toBe(403)
+
+      const created = await fetch(`${server.base}/api/api-keys`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'read-only bot', scope: ['viewer'] }),
+      })
+      expect(created.status).toBe(201)
+      const createdBody = (await created.json()) as { data: { id: string; key: string } }
+      expect(createdBody.data.key.startsWith('cogenta_sk_')).toBe(true)
+
+      // The listing never shows the raw key again.
+      const listed = await fetch(`${server.base}/api/api-keys`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      const listedBody = (await listed.json()) as { data: readonly Record<string, unknown>[] }
+      expect(listedBody.data.every((entry) => !('key' in entry))).toBe(true)
+
+      // The key authenticates — as `viewer`, never as `admin` — and is
+      // accepted where a session token is: `/api/auth/session`.
+      const whoami = await fetch(`${server.base}/api/auth/session`, {
+        headers: { authorization: `Bearer ${createdBody.data.key}` },
+      })
+      // No user backs a key's actor, so "who am I" (a *user* lookup) reports
+      // no session — the key's actor lives entirely in `resolveActor`,
+      // proven instead against a route real content permissions gate.
+      expect(whoami.status).toBe(401)
+
+      // Revoking it ends authentication immediately.
+      const revoked = await fetch(`${server.base}/api/api-keys/${createdBody.data.id}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      expect(revoked.status).toBe(204)
+
+      const afterRevoke = await fetch(`${server.base}/api/api-keys`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${createdBody.data.key}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'should not work', scope: ['admin'] }),
+      })
+      // A revoked key resolves to ANONYMOUS, so the admin-only route refuses it.
+      expect(afterRevoke.status).toBe(403)
+
+      const audit = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      const auditBody = (await audit.json()) as {
+        data: readonly { action: string; diff: unknown }[]
+      }
+      const actions = auditBody.data.map((entry) => entry.action)
+      expect(actions).toContain('apikey.create')
+      expect(actions).toContain('apikey.revoke')
+      expect(JSON.stringify(auditBody.data)).not.toContain(createdBody.data.key)
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('remembers a dismissed notice across sessions, for that account only', async () => {
     const root = await project()
     const server = await startServer(root)

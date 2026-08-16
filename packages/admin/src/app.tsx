@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
 import { AgentsRoute } from './routes/agents.js'
+import { ApiKeysRoute } from './routes/api-keys.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
@@ -66,6 +67,7 @@ export function App(): JSX.Element {
             <Route path="audit" element={<AuditRoute />} />
             <Route path="agents" element={<AgentsRoute />} />
             <Route path="users" element={<UsersRoute />} />
+            <Route path="api-keys" element={<ApiKeysRoute />} />
             <Route path="profile" element={<ProfileRoute />} />
             <Route path="settings" element={<SettingsRoute />} />
             <Route path="site-plan" element={<SitePlanRoute />} />

@@ -7,12 +7,14 @@ import {
   type AccessContext,
   type AgentsRouter,
   type AgentsRouterOptions,
+  type ApiKeysRouter,
   type AssistantRouter,
   type AssistToolsetLike,
   type AuditRouter,
   type AuthRouter,
   buildContentSchema,
   createAgentsRouter,
+  createApiKeysRouter,
   createAssistantRouter,
   createAuditRouter,
   createAuthRouter,
@@ -290,6 +292,8 @@ interface Site {
   readonly securityAlerts: SecurityAlertWatch | null
   /** Account management from the admin instead of `cogenta users create` on a terminal (L11 task 3). */
   readonly usersRouter: UsersRouter
+  /** `/api/api-keys` — machine-to-machine bearer credentials, admin-only (L13 task 8). */
+  readonly apiKeysRouter: ApiKeysRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
   /**
@@ -633,6 +637,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       dismissals: noticeDismissals,
     }),
     usersRouter: createUsersRouter({ auth }),
+    apiKeysRouter: createApiKeysRouter({ auth }),
     assistantRouter: createAssistantRouter({
       toolset: (options.assistant?.toolset ?? EMPTY_TOOLSET) as AssistToolsetLike,
       collections,
@@ -922,6 +927,48 @@ async function recordUserAudit(
   )?.data?.user
   const subjectId =
     typeof created?.id === 'string' ? created.id : target === 'me' ? actor.id : (target ?? null)
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action,
+      ...(subjectId === null ? {} : { entryId: subjectId }),
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+/**
+ * Who minted or revoked a machine credential, in the same append-only log as
+ * every other account action (L13 task 8). The raw key itself never reaches
+ * this function — `POST`'s response carries it once, but the audit entry
+ * only ever names the key's id, exactly like `recordUserAudit` never logs a
+ * password.
+ */
+async function recordApiKeyAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+
+  const segments = pathname.split('/').filter((segment) => segment.length > 0)
+  // ['api', 'api-keys', <id?>]
+  const target = segments[2]
+
+  const action =
+    method === 'POST' && target === undefined
+      ? 'apikey.create'
+      : method === 'DELETE' && target !== undefined
+        ? 'apikey.revoke'
+        : null
+  if (action === null) return
+
+  const created = (response.body as { readonly data?: { readonly id?: unknown } } | null)?.data
+  const subjectId = typeof created?.id === 'string' ? created.id : (target ?? null)
 
   await site.auth.audit
     .record({
@@ -1318,6 +1365,17 @@ export function createRequestListener(
         const response = await site.usersRouter.handle(request, context.actor)
         writeRestResponse(res, response)
         await recordUserAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        return
+      }
+
+      // Machine-to-machine bearer credentials, admin-only (L13 task 8).
+      if (url.pathname.startsWith('/api/api-keys')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        const response = await site.apiKeysRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordApiKeyAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
         return
       }
 

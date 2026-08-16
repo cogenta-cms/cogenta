@@ -1,5 +1,6 @@
 import type { DatabaseHandle } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
+import { createApiKeyStore } from './api-keys.js'
 import { createAuditLog } from './audit.js'
 import { createCredentialStore } from './credentials.js'
 import { createAuthService } from './login.js'
@@ -31,6 +32,7 @@ export interface AuthStore {
   readonly login: ReturnType<typeof createAuthService>
   /** Self-service "forgot password" tokens (L13's HTTP route, `resets.ts`). */
   readonly resets: ReturnType<typeof createPasswordResetStore>
+  readonly apiKeys: ReturnType<typeof createApiKeyStore>
 }
 
 export async function createAuthStore(options: AuthStoreOptions): Promise<AuthStore> {
@@ -44,6 +46,7 @@ export async function createAuthStore(options: AuthStoreOptions): Promise<AuthSt
     audit: createAuditLog(options.db, now),
     rateLimit: createRateLimiter(options.db, now),
     resets: createPasswordResetStore(options.db, now),
+    apiKeys: createApiKeyStore(options.db, now),
     login: createAuthService({
       db: options.db,
       signingKey: options.signingKey,

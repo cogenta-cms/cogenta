@@ -14,6 +14,7 @@ export const TABLES = {
   loginAttempts: 'cogenta_login_attempts',
   passwordResets: 'cogenta_password_resets',
   auditLog: 'cogenta_audit_log',
+  apiKeys: 'cogenta_api_keys',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -40,6 +41,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   const loginAttempts = identifier(TABLES.loginAttempts, d)
   const passwordResets = identifier(TABLES.passwordResets, d)
   const auditLog = identifier(TABLES.auditLog, d)
+  const apiKeys = identifier(TABLES.apiKeys, d)
   const t512 = textColumn(d, 512)
   const t255 = textColumn(d, 255)
   const t64 = textColumn(d, 64)
@@ -122,6 +124,29 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       diff text,
       hash ${t64} not null,
       previous_hash ${t64}
+    )`)
+
+  await db.query(sql`
+    create table if not exists ${apiKeys} (
+      id ${t64} not null primary key,
+      name ${t255} not null,
+      -- Hashed like a session token (sha256 over a 256-bit random secret):
+      -- unlike a password, this secret is never chosen by a person, so there
+      -- is no low-entropy guess for a slow, memory-hard hash to protect
+      -- against. A leaked table still hands out nothing live.
+      key_hash ${t512} not null unique,
+      -- The first 12 characters of the raw key, stored in the clear so a
+      -- list of keys is recognisable without ever showing the rest again.
+      key_prefix ${t64} not null,
+      -- An open set of role names, exactly like a user's roles (contract A)
+      -- — a key acts as a machine actor scoped to exactly these roles, never
+      -- to more than it was granted.
+      scope text not null,
+      created_by ${t64},
+      created_at ${t64} not null,
+      expires_at ${t64},
+      revoked_at ${t64},
+      last_used_at ${t64}
     )`)
 
   await createIndexIfMissing(db, 'cogenta_credentials_user', credentials, sql`(user_id)`)

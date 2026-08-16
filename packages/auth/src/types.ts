@@ -68,3 +68,36 @@ export interface RecordAuditInput {
   readonly entryId?: string | undefined
   readonly diff?: Readonly<Record<string, unknown>> | undefined
 }
+
+/**
+ * A machine-to-machine bearer credential (L13 task 8).
+ *
+ * A key is scoped to an explicit, open set of role names — exactly like a
+ * user's `roles` — chosen once at creation and never derived from the
+ * account that created it. A key can act with fewer permissions than an
+ * admin has, but never with more than it was granted.
+ */
+export interface ApiKey {
+  readonly id: string
+  readonly name: string
+  /** The first 12 characters of the raw key, safe to show forever. */
+  readonly prefix: string
+  readonly scope: readonly string[]
+  readonly createdBy: string | null
+  readonly createdAt: string
+  readonly expiresAt: string | undefined
+  readonly revokedAt: string | undefined
+  readonly lastUsedAt: string | undefined
+}
+
+export interface CreateApiKeyInput {
+  readonly name: string
+  readonly scope: readonly string[]
+  readonly createdBy: string | null
+  readonly expiresAt?: string | undefined
+}
+
+/** An API key as returned once, at creation — `key` is never stored or shown again. */
+export interface IssuedApiKey extends ApiKey {
+  readonly key: string
+}

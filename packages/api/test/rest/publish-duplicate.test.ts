@@ -79,12 +79,56 @@ describe('unpublish and duplicate', () => {
       expect(dataOf(response)['status']).toBe('archived')
     })
 
-    it('rejects a status outside draft or archived', async () => {
+    it('rejects a status outside draft, archived or scheduled', async () => {
       const response = await harness.router.handle(
         request('POST', '/rest_article/live-a/unpublish', { body: { status: 'published' } }),
         asEditor,
       )
       expect(response.status).toBe(400)
+    })
+
+    /**
+     * Scheduling: an admin sets an existing entry's status to "Programmé"
+     * with a future date. `update()` never touches `status`, so this is the
+     * only route that can do it — `schedulePublication`/
+     * `registerScheduledPublishing` (`@cogenta/schema`) were written and
+     * tested from L1 but never had a write path in front of them.
+     */
+    describe('scheduling', () => {
+      it('moves an entry to scheduled with a future publishedAt', async () => {
+        const publishAt = new Date(Date.now() + 3600_000).toISOString()
+        const response = await harness.router.handle(
+          request('POST', '/rest_article/live-a/unpublish', {
+            body: { status: 'scheduled', publishedAt: publishAt },
+          }),
+          asEditor,
+        )
+        expect(response.status).toBe(200)
+        expect(dataOf(response)['status']).toBe('scheduled')
+        expect(dataOf(response)['publishedAt']).toBe(publishAt)
+
+        // Not public: a scheduled entry has no published face yet.
+        const read = await harness.router.handle(request('GET', '/rest_article/live-a'), asPublic)
+        expect(read.status).toBe(404)
+      })
+
+      it('refuses to schedule without a date', async () => {
+        const response = await harness.router.handle(
+          request('POST', '/rest_article/live-a/unpublish', { body: { status: 'scheduled' } }),
+          asEditor,
+        )
+        expect(response.status).toBe(400)
+      })
+
+      it('refuses an anonymous caller too, like every other unpublish', async () => {
+        const response = await harness.router.handle(
+          request('POST', '/rest_article/live-a/unpublish', {
+            body: { status: 'scheduled', publishedAt: new Date().toISOString() },
+          }),
+          asPublic,
+        )
+        expect(response.status).toBe(403)
+      })
     })
   })
 

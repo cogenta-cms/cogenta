@@ -112,7 +112,17 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   ): Promise<ContentEntry<TValues>>
   unpublish(
     id: string,
-    input?: { readonly status?: 'draft' | 'archived' },
+    input?: {
+      readonly status?: 'draft' | 'archived' | 'scheduled'
+      /**
+       * Required, and only meaningful, when `status` is `'scheduled'`: the
+       * future instant this entry becomes public. A `Date`, an ISO 8601
+       * string, or epoch milliseconds — the same three forms
+       * `schedulePublication` accepts, since this is the write that puts an
+       * entry into the state that function's caller later queues a job for.
+       */
+      readonly publishedAt?: Date | string | number
+    },
   ): Promise<ContentEntry<TValues>>
   history(id: string, options?: TrashOptions): Promise<readonly VersionSummary[]>
   readVersion(id: string, version: number): Promise<ContentEntry<TValues> | null>
@@ -477,6 +487,25 @@ export function createContentStore<TValues extends ContentValues = ContentValues
     } catch {
       return {}
     }
+  }
+
+  /** The three forms `schedulePublication` accepts, turned into the ISO string `publishedAt` is stored as. */
+  function scheduleDateIso(value: Date | string | number, entryId: string): string {
+    const milliseconds =
+      value instanceof Date
+        ? value.getTime()
+        : typeof value === 'number'
+          ? value
+          : Date.parse(value)
+    if (!Number.isFinite(milliseconds)) {
+      throw new CogentaError({
+        code: 'CONTENT_SCHEDULE_INVALID',
+        message: `"${String(value)}" is not a date to schedule "${entryId}" for.`,
+        hint: 'Pass a Date, an ISO 8601 timestamp such as 2026-09-01T09:00:00Z, or epoch milliseconds.',
+        details: { collection: collection.name, entryId },
+      })
+    }
+    return new Date(milliseconds).toISOString()
   }
 
   function publishedAtOf(values: Record<string, unknown>, status: string): string | null {
@@ -1276,7 +1305,39 @@ export function createContentStore<TValues extends ContentValues = ContentValues
           if (row === null) throw notFound(collection.name, id)
 
           const status = unpublishOptions?.status ?? 'draft'
-          await writeLiveColumns(tx, id, {}, { status, updated_at: stamp() })
+
+          if (status === 'scheduled') {
+            // Scheduling has nowhere to put the date on a collection that
+            // never declared `publishedAt` as a field (contract A: it is an
+            // ordinary, optional field, not a system column every collection
+            // gets for free).
+            if (collection.fields['publishedAt'] === undefined) {
+              throw new CogentaError({
+                code: 'CONTENT_SCHEDULE_INVALID',
+                message: `"${collection.name}" has no "publishedAt" field to schedule a publication against.`,
+                hint: 'Declare a `publishedAt` field on this collection before scheduling an entry.',
+                details: { collection: collection.name, entryId: id },
+              })
+            }
+            if (unpublishOptions?.publishedAt === undefined) {
+              throw new CogentaError({
+                code: 'CONTENT_SCHEDULE_INVALID',
+                message: 'A scheduled publication needs a date.',
+                hint: 'Pass `publishedAt` — a Date, an ISO 8601 timestamp, or epoch milliseconds.',
+                details: { collection: collection.name, entryId: id },
+              })
+            }
+            const iso = scheduleDateIso(unpublishOptions.publishedAt, id)
+            const working = await workingEntry(tx, row)
+            const merged = { ...working.values, publishedAt: iso }
+            const normalised = normaliseValues(collection, merged, {
+              partial: false,
+              enforceRequired: false,
+            })
+            await writeLiveColumns(tx, id, normalised.columns, { status, updated_at: stamp() })
+          } else {
+            await writeLiveColumns(tx, id, {}, { status, updated_at: stamp() })
+          }
 
           const after = await loadRow(tx, id)
           if (after === null) throw notFound(collection.name, id)

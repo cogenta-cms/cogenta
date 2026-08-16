@@ -119,6 +119,69 @@ describe('status and publication', () => {
   })
 })
 
+/**
+ * Scheduling (task 1): `@cogenta/schema`'s queue-based scheduler is now
+ * registered by `cogenta serve`, and this is its other half — a real
+ * date/time picker, not a read-only badge, wired to
+ * `POST .../unpublish {status: 'scheduled', publishedAt}` since `update()`
+ * never changes `status`.
+ */
+describe('scheduling a future publication', () => {
+  it('offers a real date/time picker and schedules the entry', async () => {
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    const picker = screen.getByLabelText('Publier le :')
+    expect(picker.getAttribute('type')).toBe('datetime-local')
+
+    fireEvent.change(picker, { target: { value: '2030-01-01T09:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Programmer' }))
+
+    expect(await screen.findByText('Statut changé en Programmé.')).toBeDefined()
+    expect(screen.getByText('Programmé')).toBeDefined()
+    // Rescheduling and cancelling are now on offer, "Programmer" is not.
+    expect(screen.getByRole('button', { name: 'Reprogrammer' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Annuler la programmation' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Programmer' })).toBeNull()
+  })
+
+  it('refuses to schedule with no date chosen', async () => {
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Programmer' }))
+
+    expect(
+      await screen.findByText('Choisissez une date et une heure de publication.'),
+    ).toBeDefined()
+  })
+
+  it('cancels a schedule back to draft', async () => {
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.change(screen.getByLabelText('Publier le :'), {
+      target: { value: '2030-01-01T09:00' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Programmer' }))
+    await screen.findByText('Programmé')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler la programmation' }))
+
+    expect(await screen.findByText('Statut changé en Brouillon.')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Annuler la programmation' })).toBeNull()
+  })
+})
+
 describe('duplicating an entry', () => {
   it('shows the duplicate button to a role that may create, and opens the new draft', async () => {
     render(<App />)
@@ -146,6 +209,57 @@ describe('duplicating an entry', () => {
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     expect(screen.queryByRole('button', { name: 'Dupliquer' })).toBeNull()
+  })
+})
+
+/**
+ * Regression: `assistFields` used to derive each field's name from
+ * `Object.entries(collection.fields)` — correct for an object keyed by field
+ * name, but `collection.fields` is really an array, so `Object.entries` handed
+ * back array-index keys ("0", "1", ...) instead of the real field names. A
+ * collection with more than one plain-text field (the article fixture's
+ * `title` and `summary`, neither with an explicit `admin.label`, so the
+ * fallback is the field's own name either way) showed that as a field picker
+ * offering "0"/"1" instead of "title"/"summary", and picking the second
+ * field found nothing at `values["1"]` — every assist tool stayed disabled
+ * for a field that plainly has text.
+ */
+describe('the writing assistant field picker', () => {
+  it('identifies each assist field by its real name, not by array position', async () => {
+    installMockFetch({
+      assistant: {
+        available: true,
+        tools: [
+          {
+            tool: 'assist.rewrite',
+            label: 'Rewrite',
+            description: 'Rewrite a passage.',
+            cost: 'medium',
+            needs: [],
+          },
+        ],
+      },
+    })
+
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    const picker = await screen.findByLabelText('Quel champ ?')
+    expect(screen.getByRole('option', { name: 'title' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'summary' })).toBeDefined()
+    expect(screen.queryByRole('option', { name: '0' })).toBeNull()
+    expect(screen.queryByRole('option', { name: '1' })).toBeNull()
+
+    fireEvent.change(picker, { target: { value: 'summary' } })
+
+    // The article fixture's `summary` really has text — with the bug, the
+    // field picked under the name "1" read `values["1"]`, which is
+    // `undefined`, so every tool stayed disabled.
+    const rewrite = await screen.findByRole('button', { name: 'Rewrite' })
+    expect((rewrite as HTMLButtonElement).disabled).toBe(false)
   })
 })
 

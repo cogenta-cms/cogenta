@@ -136,7 +136,7 @@ export interface ContentService {
     context: AccessContext,
     name: string,
     id: string,
-    input: { readonly status?: 'draft' | 'archived' },
+    input: { readonly status?: 'draft' | 'archived' | 'scheduled'; readonly publishedAt?: string },
     options: ReadOptions,
   ): Promise<SerialisedEntry>
   /**

@@ -205,10 +205,17 @@
       "published": "Publié",
       "archived": "Archivé"
     },
-    "statusUnmanaged": "Cette entrée est programmée via l'API. La programmation d'une date de publication n'est pas encore disponible depuis l'admin.",
+    "statusUnmanaged": "Cette entrée a un statut que cet écran ne sait pas modifier.",
     "publishButton": "Publier",
     "statusChanged": "Statut changé en {{status}}.",
     "statusError": "Impossible de changer le statut de cette entrée.",
+    "scheduleLabel": "Publier le :",
+    "scheduleButton": "Programmer",
+    "rescheduleButton": "Reprogrammer",
+    "cancelScheduleButton": "Annuler la programmation",
+    "scheduledFor": "Publication programmée pour le {{at}}.",
+    "scheduleDateRequired": "Choisissez une date et une heure de publication.",
+    "scheduleError": "Impossible de programmer la publication de cette entrée.",
     "duplicateButton": "Dupliquer",
     "duplicating": "Duplication…",
     "duplicateError": "Impossible de dupliquer cette entrée."

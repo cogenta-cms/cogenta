@@ -52,7 +52,11 @@ const updateSchema = z.object({
 
 const restoreSchema = z.object({ version: z.number().int().min(1) })
 
-const unpublishSchema = z.object({ status: z.enum(['draft', 'archived']).optional() })
+const unpublishSchema = z.object({
+  status: z.enum(['draft', 'archived', 'scheduled']).optional(),
+  /** Required, and only meaningful, when `status` is `'scheduled'`. */
+  publishedAt: z.string().min(1).optional(),
+})
 
 const duplicateSchema = z.object({ values: valuesSchema.optional() })
 
@@ -92,9 +96,15 @@ export function parseRestoreBody(body: unknown): number {
   return decode(restoreSchema, body).version
 }
 
-export function parseUnpublishBody(body: unknown): { readonly status?: 'draft' | 'archived' } {
+export function parseUnpublishBody(body: unknown): {
+  readonly status?: 'draft' | 'archived' | 'scheduled'
+  readonly publishedAt?: string
+} {
   const parsed = decode(unpublishSchema, body)
-  return parsed.status === undefined ? {} : { status: parsed.status }
+  return {
+    ...(parsed.status === undefined ? {} : { status: parsed.status }),
+    ...(parsed.publishedAt === undefined ? {} : { publishedAt: parsed.publishedAt }),
+  }
 }
 
 export function parseDuplicateBody(body: unknown): { readonly values?: ContentValues } {

@@ -31,7 +31,7 @@ import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { useAutosave } from '../collections/use-autosave.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
-import { Button, Card, CardBody, Notice, Select } from '../ui/index.js'
+import { Button, Card, CardBody, Input, Label, Notice, Select } from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
 
@@ -57,21 +57,37 @@ const EDITOR_MODE_STORAGE_KEY = 'cogenta.admin.editorMode'
 type EditorMode = 'form' | 'visual'
 
 /**
- * The statuses this screen can actually move an entry between.
+ * The statuses the status selector moves an entry directly between.
  *
- * `scheduled` is a real member of contract A's `ContentStatus`, but nothing in
- * this product ever writes it — `@cogenta/schema`'s queue-based scheduler
- * (`src/scheduling/publish.ts`) is written and tested, and never registered by
- * `cogenta serve`. Offering a date picker that quietly did nothing would be
- * the same dishonesty the preview link exists to avoid, so an entry that
- * happens to already be `scheduled` (only reachable today by writing the API
- * directly) is shown as a read-only badge instead of a fourth option.
+ * `scheduled` is a real member of contract A's `ContentStatus`, and — now that
+ * `cogenta serve` actually registers `@cogenta/schema`'s queue-based scheduler
+ * (`src/scheduling/publish.ts`) — a real destination, just not one this plain
+ * selector offers: moving *to* `scheduled` needs a date, which a `<select>`
+ * has nowhere to carry. It gets its own control instead, right below (a real
+ * date/time picker, not free text) — see `SCHEDULABLE_STATUSES` and the
+ * scheduling card in the render below.
  */
 const MANAGED_STATUSES = ['draft', 'published', 'archived'] as const
 type ManagedStatus = (typeof MANAGED_STATUSES)[number]
 
+/** Which statuses may be scheduled from — anything short of already public. */
+const SCHEDULABLE_STATUSES = ['draft', 'archived', 'scheduled'] as const
+type SchedulableStatus = (typeof SCHEDULABLE_STATUSES)[number]
+
 function isManagedStatus(status: string): status is ManagedStatus {
   return (MANAGED_STATUSES as readonly string[]).includes(status)
+}
+
+function isSchedulableStatus(status: string): status is SchedulableStatus {
+  return (SCHEDULABLE_STATUSES as readonly string[]).includes(status)
+}
+
+/** `datetime-local`'s value format, in the browser's own time zone — never UTC, which would silently shift what an editor typed. */
+function toDatetimeLocalValue(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ''
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`
 }
 
 function storedEditorMode(): EditorMode {
@@ -131,6 +147,10 @@ export function EntryEditRoute(): JSX.Element {
   const [statusBusy, setStatusBusy] = useState(false)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  /** The entry's real `publishedAt`, as last confirmed by the server. */
+  const [publishedAt, setPublishedAt] = useState<string | null>(null)
+  /** The `datetime-local` input's own value — only ever sent on "Programmer". */
+  const [scheduleInput, setScheduleInput] = useState('')
   const [duplicating, setDuplicating] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
 
@@ -160,6 +180,10 @@ export function EntryEditRoute(): JSX.Element {
           setLocale(entry.locale)
           setTranslationOf(entry.translationOf)
           setStatus(entry.status)
+          setPublishedAt(entry.publishedAt)
+          setScheduleInput(
+            entry.publishedAt === null ? '' : toDatetimeLocalValue(entry.publishedAt),
+          )
 
           const loaded: AutosaveSnapshot = { values: entry.values, blocks: entry.blocks }
           setBaseline(loaded)
@@ -270,11 +294,45 @@ export function EntryEditRoute(): JSX.Element {
           ? await publishEntry(token, name, id)
           : await unpublishEntry(token, name, id, next)
       setStatus(entry.status)
+      setPublishedAt(entry.publishedAt)
       setStatusMessage(
         t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
       )
     } catch (caught) {
       setStatusError(caught instanceof ApiError ? caught.message : t('entryEdit.statusError'))
+    } finally {
+      setStatusBusy(false)
+    }
+  }
+
+  /**
+   * Schedules — or reschedules — the entry for `scheduleInput`.
+   *
+   * `update()` never changes `status` (contract A keeps that transition to
+   * `publish`/`unpublish`), so this is `POST .../unpublish` with
+   * `status: 'scheduled'`, carrying the real date/time the picker below
+   * collected — never free text, and never applied on typing alone: a real
+   * publication date needs an explicit "Programmer".
+   */
+  async function schedule(): Promise<void> {
+    if (token === null || id === undefined) return
+    if (scheduleInput === '') {
+      setStatusError(t('entryEdit.scheduleDateRequired'))
+      return
+    }
+    const iso = new Date(scheduleInput).toISOString()
+    setStatusBusy(true)
+    setStatusError(null)
+    setStatusMessage(null)
+    try {
+      const entry = await unpublishEntry(token, name, id, 'scheduled', iso)
+      setStatus(entry.status)
+      setPublishedAt(entry.publishedAt)
+      setStatusMessage(
+        t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
+      )
+    } catch (caught) {
+      setStatusError(caught instanceof ApiError ? caught.message : t('entryEdit.scheduleError'))
     } finally {
       setStatusBusy(false)
     }
@@ -309,6 +367,14 @@ export function EntryEditRoute(): JSX.Element {
   const canPublish = collection !== undefined && canPerform('publish', collection, roles)
   /** Duplicating produces a new entry, so it is gated the same as creating one. */
   const canDuplicate = collection !== undefined && canPerform('create', collection, roles)
+  /**
+   * Scheduling needs somewhere to put the date: the store refuses
+   * `unpublish(id, { status: 'scheduled' })` on a collection that never
+   * declared `publishedAt` (an ordinary, optional field of contract A, not a
+   * system column every collection gets for free) — this mirrors that guard
+   * so the control simply is not offered rather than failing when pressed.
+   */
+  const hasScheduling = collection?.fields.some((field) => field.name === 'publishedAt') ?? false
 
   /** The one block zone the builder composes — the first the collection declares. */
   const blockZone = collection?.fields.find((field) => field.kind === 'blocks')?.name
@@ -358,12 +424,12 @@ export function EntryEditRoute(): JSX.Element {
    * would destroy an editor's marks and links, so it is left out on purpose
    * until it can be done properly.
    */
-  const assistFields: readonly AssistField[] = Object.entries(collection.fields)
-    .filter(([, field]) => field.kind === 'text')
-    .map(([fieldName, field]) => ({
-      name: fieldName,
-      label: field.admin?.label ?? fieldName,
-      value: typeof values[fieldName] === 'string' ? (values[fieldName] as string) : '',
+  const assistFields: readonly AssistField[] = collection.fields
+    .filter((field) => field.kind === 'text')
+    .map((field) => ({
+      name: field.name,
+      label: field.admin?.label ?? field.name,
+      value: typeof values[field.name] === 'string' ? (values[field.name] as string) : '',
     }))
 
   /**
@@ -468,9 +534,54 @@ export function EntryEditRoute(): JSX.Element {
                 {duplicating ? t('entryEdit.duplicating') : t('entryEdit.duplicateButton')}
               </Button>
             )}
+
+            {/* Scheduling: `@cogenta/schema`'s queue-based scheduler is now
+                registered by `cogenta serve` (every 60s, plus once at
+                startup), so this really publishes the entry once its date
+                comes — never a no-op control. A real date/time picker, not
+                free text; nothing is sent until "Programmer"/"Reprogrammer"
+                is pressed. */}
+            {canPublish && hasScheduling && isSchedulableStatus(status) && (
+              <div className="flex w-full flex-wrap items-center gap-2">
+                <Label htmlFor="schedule-at">{t('entryEdit.scheduleLabel')}</Label>
+                <Input
+                  id="schedule-at"
+                  type="datetime-local"
+                  value={scheduleInput}
+                  disabled={statusBusy}
+                  onChange={(event) => setScheduleInput(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={statusBusy}
+                  onClick={() => void schedule()}
+                >
+                  {status === 'scheduled'
+                    ? t('entryEdit.rescheduleButton')
+                    : t('entryEdit.scheduleButton')}
+                </Button>
+                {status === 'scheduled' && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={statusBusy}
+                    onClick={() => void changeStatus('draft')}
+                  >
+                    {t('entryEdit.cancelScheduleButton')}
+                  </Button>
+                )}
+              </div>
+            )}
           </CardBody>
 
-          {!isManagedStatus(status) && (
+          {status === 'scheduled' && publishedAt !== null && (
+            <p className="px-4 pb-4 text-xs text-muted-foreground">
+              {t('entryEdit.scheduledFor', { at: new Date(publishedAt).toLocaleString() })}
+            </p>
+          )}
+
+          {!isManagedStatus(status) && status !== 'scheduled' && (
             <p className="px-4 pb-4 text-xs text-muted-foreground">
               {t('entryEdit.statusUnmanaged')}
             </p>

@@ -736,6 +736,47 @@ export function runContentStoreContract(
         expect((await articles.read(entry.id, { state: 'working' }))?.status).toBe('draft')
       })
 
+      /**
+       * `update()` never changes `status` (contract A keeps that transition to
+       * `publish`/`unpublish`), so scheduling an *existing* entry — as opposed
+       * to creating one already `scheduled` — has to go through `unpublish`
+       * too. This is what an admin's "Programmé" status, given a future date,
+       * really calls.
+       */
+      it('schedules an existing entry for a future publication', async () => {
+        const entry = await articles.create({ values: { title: 'Later' } })
+        const publishAt = new Date(clock.getTime() + 3600_000)
+
+        const scheduled = await articles.unpublish(entry.id, {
+          status: 'scheduled',
+          publishedAt: publishAt,
+        })
+
+        expect(scheduled.status).toBe('scheduled')
+        expect(scheduled.publishedAt).toBe(publishAt.toISOString())
+        // Not public yet: a `scheduled` entry is not a `published` one.
+        expect(await articles.read(entry.id)).toBeNull()
+        const working = await articles.read(entry.id, { state: 'working' })
+        expect(working?.status).toBe('scheduled')
+        expect(working?.publishedAt).toBe(publishAt.toISOString())
+      })
+
+      it('refuses to schedule an entry with no date', async () => {
+        const entry = await articles.create({ values: { title: 'No date' } })
+
+        await expect(articles.unpublish(entry.id, { status: 'scheduled' })).rejects.toMatchObject({
+          code: 'CONTENT_SCHEDULE_INVALID',
+        })
+      })
+
+      it('refuses a schedule date it cannot read', async () => {
+        const entry = await articles.create({ values: { title: 'Bad date' } })
+
+        await expect(
+          articles.unpublish(entry.id, { status: 'scheduled', publishedAt: 'next tuesday' }),
+        ).rejects.toMatchObject({ code: 'CONTENT_SCHEDULE_INVALID' })
+      })
+
       it('keeps a history and stops it growing without bound', async () => {
         const entry = await articles.create({ values: { title: 'v1' } })
         await articles.publish(entry.id)

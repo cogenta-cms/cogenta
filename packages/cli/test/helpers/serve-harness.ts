@@ -107,6 +107,8 @@ export interface StartServerOptions {
    * between test files running in the same worker.
    */
   readonly env?: Record<string, string | undefined>
+  /** Overrides the 60s cadence `runServe` drains scheduled-publication jobs on — see `ServeOptions.scheduledPublishTickMs`. */
+  readonly scheduledPublishTickMs?: number
 }
 
 export async function startServer(
@@ -135,6 +137,9 @@ export async function startServer(
     onListening: (a) => resolveAddress(a),
     ...(options.readOnly === undefined ? {} : { readOnly: options.readOnly }),
     ...(options.development === undefined ? {} : { development: options.development }),
+    ...(options.scheduledPublishTickMs === undefined
+      ? {}
+      : { scheduledPublishTickMs: options.scheduledPublishTickMs }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

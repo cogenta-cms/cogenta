@@ -3,6 +3,7 @@ import {
   type ContentGateway,
   collectDependencies,
   type Filter,
+  type MenuRouter,
   type QueryRequest,
 } from '@cogenta/api'
 import type { VocabularyBlock } from '@cogenta/blocks'
@@ -19,6 +20,7 @@ import type { SeoImage } from '@cogenta/seo'
 import {
   query as collectionListQuery,
   escapeAttribute,
+  escapeText,
   type FetchedEntries,
   type LinkTargetInput,
   type PageContent,
@@ -152,6 +154,22 @@ export interface ThemeRenderOptions {
    * than carving out an exception that would itself become a body difference.
    */
   readonly analyticsBeacon?: { readonly referrer?: string | undefined }
+  /**
+   * Wires `GET /api/menus/by-name/{name}` into the render pipeline (audit
+   * follow-up to L13's menu system: the backend, API and admin were complete
+   * and tested, but no menu ever reached the public theme). Called
+   * in-process, through the very same `MenuRouter` `/api/menus/*` is mounted
+   * with — never a second lookup path.
+   *
+   * Convention (undeclared by contract A or D, since navigation is not
+   * content): a menu named `main` renders in the header, one named `footer`
+   * renders in the footer. A site with neither keeps today's empty slots;
+   * one with only `main` gets no footer navigation, and so on.
+   *
+   * Absent means no menu lookup at all — the same empty slots as before this
+   * was wired.
+   */
+  readonly menuRouter?: MenuRouter
 }
 
 /**
@@ -202,6 +220,87 @@ function toVocabularyBlocks(
 function entryTitle(entry: ContentEntry): string {
   const value = entry.values.title
   return typeof value === 'string' && value.trim() !== '' ? value : entry.id
+}
+
+interface ResolvedMenuLink {
+  readonly label: string
+  /** `null` for an `entry` item whose target could not be resolved to a public route — kept in the list with no link, same treatment the admin gives it. */
+  readonly href: string | null
+  readonly openInNewTab: boolean
+}
+
+/**
+ * The body `GET /api/menus/by-name/{name}` answers with — only the fields
+ * this renderer reads. `packages/api/src/rest/menu-router.ts`'s
+ * `serialiseItem`/`menuResponse` own the real, complete shape.
+ */
+interface MenuByNameBody {
+  readonly items?: readonly {
+    readonly label: string
+    readonly kind: string
+    readonly url: string | null
+    readonly openInNewTab: boolean
+    readonly resolvedLabel?: string
+    readonly resolvedRoute?: string | null
+  }[]
+}
+
+/**
+ * Looks a menu up by name, through the exact same `MenuRouter` `/api/menus/*`
+ * is mounted with — an in-process call, `RestRequest` in and `RestResponse`
+ * out, never a second lookup path or a real HTTP round trip to itself.
+ *
+ * `null` for "no menu router wired" and "no menu by that name" alike: both
+ * mean the slot renders empty, exactly as it always has.
+ */
+async function fetchMenuLinks(
+  name: string,
+  locale: string,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<readonly ResolvedMenuLink[] | null> {
+  if (options.menuRouter === undefined) return null
+
+  const response = await options.menuRouter.handle(
+    { method: 'GET', path: `/api/menus/by-name/${encodeURIComponent(name)}`, query: { locale } },
+    context,
+  )
+  if (response.status !== 200) return null
+
+  const body = response.body as { readonly data?: MenuByNameBody } | null
+  const items = body?.data?.items
+  if (!Array.isArray(items)) return null
+
+  return items.map((item) => ({
+    label: item.resolvedLabel ?? item.label,
+    href:
+      item.kind === 'url' ? item.url : item.kind === 'entry' ? (item.resolvedRoute ?? null) : null,
+    openInNewTab: item.openInNewTab,
+  }))
+}
+
+/**
+ * A flat list of links (task 2's documented MVP): every item of the menu, in
+ * the order the store returns them, regardless of `parent`/`depth`. A real
+ * sub-menu render is left for later — the hierarchy is already in the data
+ * (`parent`, `depth`), so nothing here would need to change to add it, only
+ * this function's markup.
+ *
+ * `null`/empty renders nothing: the caller's slot stays exactly as empty as
+ * it was before this was wired, for a site with no menu by that name.
+ */
+function renderMenuLinks(links: readonly ResolvedMenuLink[] | null): string {
+  if (links === null || links.length === 0) return ''
+  const items = links
+    .map((link) => {
+      const label = escapeText(link.label)
+      if (link.href === null) return `<li><span>${label}</span></li>`
+      const href = escapeAttribute(link.href)
+      const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
+      return `<li><a href="${href}"${target}>${label}</a></li>`
+    })
+    .join('')
+  return `<ul class="cg-menu">${items}</ul>`
 }
 
 async function fetchOne(
@@ -540,6 +639,18 @@ async function renderEntryPage(
 
   const siteName = escapeAttribute(options.site.name)
 
+  // The navigation menus (audit follow-up to L13's menu system): `main` in
+  // the header, `footer` in the footer — see `ThemeRenderOptions.menuRouter`
+  // for the convention and why it lives here rather than in contract A/D.
+  // Both are `null`, rendering nothing, on a site with no menu router wired
+  // or no menu by that name — the same empty slots as before this was wired.
+  const [headerMenu, footerMenu] = await Promise.all([
+    fetchMenuLinks('main', themeContext.locale, options, context),
+    fetchMenuLinks('footer', themeContext.locale, options, context),
+  ])
+  const headerNav = renderMenuLinks(headerMenu)
+  const footerNav = renderMenuLinks(footerMenu)
+
   // The same frame `Base.astro` builds for a real Astro build: a skip link
   // first, the site name as a header, the content, a footer. Rendering the
   // `<main>` alone — which this did until the theme's own stylesheet started
@@ -556,9 +667,9 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
-<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a></div></header>
+<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
 ${bodyHtml}
-<footer class="cg-site-footer"><div class="cg-site-footer__inner">${siteName}</div></footer>
+<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}</div></footer>
 ${analyticsBeaconTag(pathname, options.analyticsBeacon)}
 </body>
 </html>

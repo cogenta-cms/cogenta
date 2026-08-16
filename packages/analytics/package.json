@@ -1,7 +1,7 @@
 {
-  "name": "@cogenta/api",
-  "version": "0.1.2",
-  "description": "REST and GraphQL over the content engine, on one permission layer.",
+  "name": "@cogenta/analytics",
+  "version": "0.1.0",
+  "description": "Self-hosted, cookie-free, privacy-respecting page-view analytics.",
   "license": "MPL-2.0",
   "type": "module",
   "sideEffects": false,
@@ -24,7 +24,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cogenta-cms/cogenta.git",
-    "directory": "packages/api"
+    "directory": "packages/analytics"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -33,17 +33,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
-    "@cogenta/analytics": "workspace:*",
-    "@cogenta/auth": "workspace:*",
-    "@cogenta/core": "workspace:*",
-    "@cogenta/schema": "workspace:*",
-    "@cogenta/blocks": "workspace:*",
-    "@simplewebauthn/server": "catalog:",
-    "graphql": "catalog:",
-    "zod": "catalog:"
+    "@cogenta/core": "workspace:*"
   },
   "devDependencies": {
-    "@cogenta/agents": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

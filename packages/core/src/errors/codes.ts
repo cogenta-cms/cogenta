@@ -335,6 +335,9 @@ export const ERROR_CODES = [
   'ASSIST_UNAVAILABLE',
   'ASSIST_RESPONSE_INVALID',
 
+  // Analytics — self-hosted, cookie-free page-view analytics (`@cogenta/analytics`)
+  'ANALYTICS_SALT_UNAVAILABLE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

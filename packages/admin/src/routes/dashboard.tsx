@@ -277,18 +277,12 @@ export function DashboardRoute(): JSX.Element {
         )}
         {isAdmin && analytics !== null && (
           <>
-            <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
-              <li className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {t('analytics.widgetTotal')}
-                </span>
-                <span className="font-mono text-lg">{analytics.totalViews}</span>
+            <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 text-sm sm:grid-cols-2">
+              <li>
+                {t('analytics.widgetTotal')}: {analytics.totalViews}
               </li>
-              <li className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {t('analytics.widgetVisitors')}
-                </span>
-                <span className="font-mono text-lg">{analytics.uniqueVisitors}</span>
+              <li>
+                {t('analytics.widgetVisitors')}: {analytics.uniqueVisitors}
               </li>
             </ul>
             <p className="m-0 text-sm">

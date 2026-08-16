@@ -139,7 +139,21 @@
     "autosaveKept": "Unsaved changes kept in this browser at {{at}}. Save to record a version.",
     "autosaveFound": "Unsaved changes from {{at}} were found in this browser, newer than the last saved version.",
     "autosaveRestore": "Restore them",
-    "autosaveDiscard": "Discard them"
+    "autosaveDiscard": "Discard them",
+    "statusLabel": "Status:",
+    "status": {
+      "draft": "Draft",
+      "scheduled": "Scheduled",
+      "published": "Published",
+      "archived": "Archived"
+    },
+    "statusUnmanaged": "This entry is scheduled by the API. Scheduling a publication date is not available from the admin yet.",
+    "publishButton": "Publish",
+    "statusChanged": "Status changed to {{status}}.",
+    "statusError": "Could not change the status of this entry.",
+    "duplicateButton": "Duplicate",
+    "duplicating": "Duplicating…",
+    "duplicateError": "Could not duplicate this entry."
   },
   "media": {
     "heading": "Media library",

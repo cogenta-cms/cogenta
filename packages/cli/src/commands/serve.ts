@@ -22,6 +22,7 @@ import {
   createPermissionLayer,
   createRestRouter,
   createSearchRouter,
+  createTaxonomyRouter,
   createUsersRouter,
   executeGraphQL,
   type MediaImageProcessor,
@@ -32,6 +33,7 @@ import {
   type RestRouter,
   resolveActor,
   type SearchRouter,
+  type TaxonomyRouter,
   type UsersRouter,
   variantKeyFor,
 } from '@cogenta/api'
@@ -59,8 +61,11 @@ import {
   createRedirectStore,
   createSchemaTables,
   createSearchIndex,
+  createTaxonomyStore,
   type RedirectStore,
   type SchemaDocument,
+  type TaxonomyDefinition,
+  type TaxonomyStore,
   withReadOnlyStore,
   withSearchIndexing,
 } from '@cogenta/schema'
@@ -110,11 +115,31 @@ const SCHEMA_FILE_CANDIDATES = [
 export async function loadCollections(
   projectRoot: string,
 ): Promise<readonly CollectionDefinition[]> {
+  return (await loadSchemaModule(projectRoot)).collections
+}
+
+/** What a project's schema file declares: collections, and since `schema@2.0` taxonomies. */
+export interface LoadedSchema {
+  readonly collections: readonly CollectionDefinition[]
+  readonly taxonomies: readonly TaxonomyDefinition[]
+}
+
+/**
+ * The same file, read for both halves of the content model.
+ *
+ * Taxonomies arrive as a **named** export beside the default one
+ * (`export const taxonomies = [...]`), so every schema file written before
+ * `schema@2.0` keeps loading unchanged and simply declares none.
+ */
+export async function loadSchemaModule(projectRoot: string): Promise<LoadedSchema> {
   for (const candidate of SCHEMA_FILE_CANDIDATES) {
     const path = join(projectRoot, candidate)
-    let module: { default?: unknown }
+    let module: { default?: unknown; taxonomies?: unknown }
     try {
-      module = (await import(pathToFileURL(path).href)) as { default?: unknown }
+      module = (await import(pathToFileURL(path).href)) as {
+        default?: unknown
+        taxonomies?: unknown
+      }
     } catch (error) {
       if (isModuleNotFound(error, path)) continue
       throw new CogentaError({
@@ -133,7 +158,20 @@ export async function loadCollections(
         hint: 'Export the array defineCollection() built, the same one passed to createSchemaTables in tests.',
       })
     }
-    return collections as CollectionDefinition[]
+
+    const taxonomies = module.taxonomies
+    if (taxonomies !== undefined && !Array.isArray(taxonomies)) {
+      throw new CogentaError({
+        code: 'SCHEMA_INVALID',
+        message: `${path} exports "taxonomies", but not as an array.`,
+        hint: 'Export the array defineTaxonomy() built: export const taxonomies = [category].',
+      })
+    }
+
+    return {
+      collections: collections as CollectionDefinition[],
+      taxonomies: (taxonomies ?? []) as TaxonomyDefinition[],
+    }
   }
 
   throw new CogentaError({
@@ -175,6 +213,8 @@ interface Site {
   readonly auditRouter: AuditRouter
   /** `GET /api/search` — the full-text index, reachable for the first time (L10 task 3). */
   readonly searchRouter: SearchRouter
+  /** `/api/taxonomies/*` — terms, mounted apart from content because a taxonomy is not a collection (`schema@2.0`, ADR-0022). */
+  readonly taxonomyRouter: TaxonomyRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Account management from the admin instead of `cogenta users create` on a terminal (L11 task 3). */
@@ -199,6 +239,7 @@ interface Site {
    */
   readonly redirects: RedirectStore
   readonly collections: readonly CollectionDefinition[]
+  readonly taxonomies: readonly TaxonomyDefinition[]
   readonly site: {
     readonly name: string
     readonly url: string
@@ -226,6 +267,8 @@ function webauthnConfigFor(site: { readonly name: string; readonly url: string }
 interface AssembleSiteOptions {
   readonly db: DatabaseHandle
   readonly collections: readonly CollectionDefinition[]
+  /** Declared taxonomies (`schema@2.0`). A site with none passes nothing. */
+  readonly taxonomies?: readonly TaxonomyDefinition[]
   readonly signingKey: string
   readonly site: {
     readonly name: string
@@ -266,7 +309,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const { db, collections, site, storage, logger } = options
   const readOnly = options.readOnly ?? false
   const styles = options.styles ?? null
-  await createSchemaTables(db, collections)
+  const taxonomies = options.taxonomies ?? []
+  // Taxonomies first: a `f.taxonomy()` field carries a real foreign key into
+  // the terms table, which therefore has to exist before the collection does.
+  await createSchemaTables(db, collections, taxonomies)
 
   // Full-text search, connected for the first time (L10 task 3). The index is
   // derived data and creates its own physical table, so a fresh install can
@@ -277,7 +323,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const storeFor = (collection: CollectionDefinition): ContentStore => {
     const existing = stores.get(collection.name)
     if (existing !== undefined) return existing
-    const created = createContentStore({ db, collection })
+    // `siblings` is what lets `delete()` enforce `restrict` in application
+    // code (ADR-0022): trashing is an UPDATE, so the foreign key has nothing
+    // left to refuse at that moment.
+    const created = createContentStore({ db, collection, siblings: collections })
     const guarded = readOnly ? withReadOnlyStore(created) : created
     // Outermost, so a read-only refusal happens *before* anything is indexed:
     // a write that never landed must not change the index either.
@@ -320,6 +369,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     webauthn: webauthnConfigFor(site),
   })
 
+  // One store per taxonomy, made once: a term store holds no state beyond its
+  // table, but re-deriving it per request would re-resolve every identifier.
+  const taxonomyStores = new Map<string, TaxonomyStore>()
+  const taxonomyStoreFor = (taxonomy: TaxonomyDefinition): TaxonomyStore => {
+    const existing = taxonomyStores.get(taxonomy.name)
+    if (existing !== undefined) return existing
+    const created = createTaxonomyStore({ db, taxonomy })
+    taxonomyStores.set(taxonomy.name, created)
+    return created
+  }
+
   const mediaStore = createDatabaseMediaStore({ db })
 
   const noticeDismissals = createNoticeDismissalStore(db)
@@ -338,6 +398,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         : { images: options.images }),
     }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
+    taxonomyRouter: createTaxonomyRouter({
+      taxonomies,
+      permissions,
+      storeFor: (taxonomy) => taxonomyStoreFor(taxonomy),
+    }),
     searchRouter: createSearchRouter({
       index: searchIndex,
       collections,
@@ -358,12 +423,14 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
     gateway: createContentGateway({ collections, stores, permissions }),
-    schemaDocument: buildSchemaDocument(collections, {
-      locales: site.locales,
-      defaultLocale: site.defaultLocale,
-    }),
+    schemaDocument: buildSchemaDocument(
+      collections,
+      { locales: site.locales, defaultLocale: site.defaultLocale },
+      taxonomies,
+    ),
     redirects,
     collections,
+    taxonomies,
     site,
     styles,
     security: options.security,
@@ -932,6 +999,17 @@ export function createRequestListener(
         return
       }
 
+      // Terms live apart from content on purpose: a taxonomy is not a
+      // collection, and a site may legitimately name both the same thing
+      // (ADR-0022). Its router owns its own permission door.
+      if (url.pathname.startsWith('/api/taxonomies')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.taxonomyRouter.handle(request, context))
+        return
+      }
+
       if (url.pathname.startsWith('/api/media')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -1178,8 +1256,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
   }
 
   let collections: readonly CollectionDefinition[]
+  let taxonomies: readonly TaxonomyDefinition[]
   try {
-    collections = await loadCollections(projectRoot)
+    const schema = await loadSchemaModule(projectRoot)
+    collections = schema.collections
+    taxonomies = schema.taxonomies
   } catch (error) {
     if (isCogentaError(error)) {
       stderr(`${error.code}: ${error.message}\n`)
@@ -1200,6 +1281,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const site = await assembleSite({
     db: selection.instance,
     collections,
+    taxonomies,
     signingKey: loaded.config.auth.signingKey,
     site: loaded.config.site,
     storage: storageSelection.instance,

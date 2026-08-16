@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { deflateRawSync } from 'node:zlib'
 import { isCogentaError } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import { extractDocumentText, MAX_TEXT_CHARACTERS } from '../../src/documents/extract-text.js'
@@ -213,6 +214,197 @@ function buildMinimalPdf(content: string): Buffer {
     'latin1',
   )
 }
+
+/**
+ * A minimal ZIP with one deflated entry — just enough for `openZip` to read
+ * it back, mirroring the reader's own understanding of the format. No CRC32
+ * is written (left as 0): `zip.ts` never checks it, so real bytes are not
+ * needed for these adversarial tests to be meaningful.
+ */
+function buildZipWithEntry(name: string, data: Buffer): Buffer {
+  const compressed = deflateRawSync(data)
+  const nameBytes = Buffer.from(name, 'utf8')
+
+  const local = Buffer.alloc(30 + nameBytes.length)
+  local.writeUInt32LE(0x0403_4b50, 0)
+  local.writeUInt16LE(20, 4) // version needed
+  local.writeUInt16LE(0, 6) // flags
+  local.writeUInt16LE(8, 8) // compression: deflate
+  local.writeUInt16LE(0, 10) // mod time
+  local.writeUInt16LE(0, 12) // mod date
+  local.writeUInt32LE(0, 14) // crc32 — unchecked by this reader
+  local.writeUInt32LE(compressed.length, 18)
+  local.writeUInt32LE(data.length, 22)
+  local.writeUInt16LE(nameBytes.length, 26)
+  local.writeUInt16LE(0, 28)
+  nameBytes.copy(local, 30)
+
+  const central = Buffer.alloc(46 + nameBytes.length)
+  central.writeUInt32LE(0x0201_4b50, 0)
+  central.writeUInt16LE(20, 4) // version made by
+  central.writeUInt16LE(20, 6) // version needed
+  central.writeUInt16LE(0, 8) // flags
+  central.writeUInt16LE(8, 10) // compression
+  central.writeUInt16LE(0, 12)
+  central.writeUInt16LE(0, 14)
+  central.writeUInt32LE(0, 16) // crc32
+  central.writeUInt32LE(compressed.length, 20)
+  central.writeUInt32LE(data.length, 24)
+  central.writeUInt16LE(nameBytes.length, 28)
+  central.writeUInt16LE(0, 30)
+  central.writeUInt16LE(0, 32)
+  central.writeUInt16LE(0, 34)
+  central.writeUInt16LE(0, 36)
+  central.writeUInt32LE(0, 38)
+  central.writeUInt32LE(0, 42) // local header offset
+  nameBytes.copy(central, 46)
+
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x0605_4b50, 0)
+  eocd.writeUInt16LE(0, 4)
+  eocd.writeUInt16LE(0, 6)
+  eocd.writeUInt16LE(1, 8) // entries on this disk
+  eocd.writeUInt16LE(1, 10) // total entries
+  eocd.writeUInt32LE(central.length, 12)
+  eocd.writeUInt32LE(local.length + compressed.length, 16) // central dir offset
+  eocd.writeUInt16LE(0, 20)
+
+  return Buffer.concat([local, compressed, central, eocd])
+}
+
+describe('bounding what one DOCX upload can cost', () => {
+  it('reads a document.xml full of unclosed <w:t> tags in linear time', () => {
+    // The lazy `[\s\S]*?` this replaced re-scanned from every earlier
+    // unterminated `<w:t` it had already tried while hunting for a
+    // `</w:t>` that never comes — quadratic in the number of runs. This is
+    // deliberately still repetitive enough to compress well (a real .docx
+    // deflates its XML too), but the point being proven is the parse time,
+    // not the compression ratio.
+    const body = `<w:t>${'A'.repeat(40)}`.repeat(50_000) // ~230 KB of XML, no closing tags at all
+    const xml = `<?xml version="1.0"?><w:document><w:body><w:p>${body}</w:p></w:body></w:document>`
+    const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
+
+    const started = Date.now()
+    // The very first `<w:t>` is unterminated for the rest of the document,
+    // so nothing can be attributed to a known text run and this refuses as
+    // empty — never hangs, and never treats the raw markup as content. The
+    // bounded time is the point of this test, not the outcome of the read.
+    expect(() => extractDocumentText({ filename: 'unclosed.docx', bytes: docx })).toThrowError(
+      expect.objectContaining({ code: 'DOCUMENT_NO_TEXT_LAYER' }),
+    )
+    expect(Date.now() - started).toBeLessThan(1_000)
+  })
+
+  it('keeps the real text that came before a trailing unclosed <w:t>, in linear time', () => {
+    const closed = '<w:p><w:r><w:t>Cahier des charges réel</w:t></w:r></w:p>'
+    const garbage = `<w:t>${'B'.repeat(40)}`.repeat(50_000)
+    const xml = `<?xml version="1.0"?><w:document><w:body>${closed}<w:p>${garbage}</w:p></w:body></w:document>`
+    const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
+
+    const started = Date.now()
+    const result = extractDocumentText({ filename: 'trailing-unclosed.docx', bytes: docx })
+
+    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(result.text).toContain('Cahier des charges réel')
+  })
+
+  it('reads a document.xml with many real, properly closed runs in linear time', () => {
+    // Kept under `MAX_TEXT_CHARACTERS` so `extractDocumentText`'s own
+    // truncation does not remove the last line — this test is about the
+    // reader's own linear behaviour, not the separate character cap.
+    const lineCount = 5_000
+    const body = Array.from(
+      { length: lineCount },
+      (_unused, index) => `<w:p><w:r><w:t>Ligne ${index}</w:t></w:r></w:p>`,
+    ).join('')
+    const xml = `<?xml version="1.0"?><w:document><w:body>${body}</w:body></w:document>`
+    const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
+
+    const started = Date.now()
+    const result = extractDocumentText({ filename: 'many-runs.docx', bytes: docx })
+
+    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(result.text).toContain('Ligne 0')
+    expect(result.text).toContain(`Ligne ${lineCount - 1}`)
+  })
+
+  it('rejects a document.xml that would inflate past the per-entry cap, rather than parsing it', () => {
+    // Highly repetitive XML deflates at a large ratio; this stays a small
+    // upload while decoding to well over the 8 MiB `document.xml` cap.
+    const xml = '<w:t>constraint</w:t>'.repeat(500_000) // ~10.5 MB inflated
+    const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
+
+    expect(() => extractDocumentText({ filename: 'bomb.docx', bytes: docx })).toThrowError(
+      expect.objectContaining({ code: 'DOCUMENT_TOO_LARGE' }),
+    )
+  })
+})
+
+describe('bounding what one PDF upload can cost', () => {
+  it('collects streams from a file that is mostly fake stream/endstream markers, in bounded time', () => {
+    // No real PDF structure at all past the header — thousands of
+    // `stream`/`endstream` pairs with no `<<` dictionary anywhere nearby.
+    // The unbounded `lastIndexOf('<<', keyword)` this replaced would walk
+    // back over the entire growing prefix for every one of them.
+    const junk = 'stream\nendstream\n'.repeat(200_000) // well past MAX_STREAMS
+    const pdf = Buffer.from(`%PDF-1.4\n${junk}`, 'latin1')
+
+    const started = Date.now()
+    expect(() => extractDocumentText({ filename: 'junk.pdf', bytes: pdf })).toThrowError(
+      expect.objectContaining({ code: 'DOCUMENT_NO_TEXT_LAYER' }),
+    )
+    expect(Date.now() - started).toBeLessThan(2_000)
+  })
+
+  it('stops accumulating page text once the character cap is reached, instead of collecting every page first', () => {
+    // Each stream individually stays comfortably under the per-stream
+    // decompression cap, but there are enough of them, each compressible
+    // enough, that accumulating all of them before the final truncation
+    // would hold many times `MAX_TEXT_CHARACTERS` in memory at once.
+    const objects: string[] = []
+    let objectNumber = 6
+    const pageRefs: string[] = []
+    const streamText = `(${'x'.repeat(60_000)})`
+    for (let index = 0; index < 40; index++) {
+      const contentObj = objectNumber++
+      const content = `BT /F1 11 Tf 56 700 Td ${streamText} Tj ET`
+      objects.push(
+        `${contentObj} 0 obj<</Length ${content.length}>>stream\n${content}\nendstream endobj`,
+      )
+      const pageObj = objectNumber++
+      objects.push(
+        `${pageObj} 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents ${contentObj} 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj`,
+      )
+      pageRefs.push(`${pageObj} 0 R`)
+    }
+    const pdf = Buffer.from(
+      [
+        '%PDF-1.4',
+        '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+        `2 0 obj<</Type/Pages/Kids[${pageRefs.join(' ')}]/Count ${pageRefs.length}>>endobj`,
+        '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj',
+        ...objects,
+        'trailer<</Size 100/Root 1 0 R>>',
+        '%%EOF',
+      ].join('\n'),
+      'latin1',
+    )
+
+    const result = extractDocumentText({ filename: 'many-pages.pdf', bytes: pdf })
+
+    // 40 pages of 60 000 characters each is 2 400 000 characters — many
+    // times `MAX_TEXT_CHARACTERS` (200 000) — yet the reader must not have
+    // held anywhere near that much in `pages` before truncating.
+    expect(result.characters).toBe(MAX_TEXT_CHARACTERS)
+    expect(result.truncated).toBe(true)
+    // The distinguishing evidence that this stopped early inside the PDF
+    // reader itself, rather than merely being sliced down afterwards by
+    // `extractDocumentText`'s own cap (which would produce the same
+    // `characters`/`truncated` values either way): the reader's own warning
+    // that it gave up on further pages.
+    expect(result.warnings.join(' ')).toContain('Stopped reading further pages')
+  })
+})
 
 describe('bounding what one upload can cost', () => {
   it('reads a content stream carrying a very long token in linear time', () => {

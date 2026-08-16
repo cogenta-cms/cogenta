@@ -35,26 +35,88 @@ function decodeXmlEntities(value: string): string {
   })
 }
 
-const TOKEN =
-  /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/?>|<w:br\b[^>]*\/?>|<\/w:p>|<\/w:tc>|<\/w:tr>/g
+/**
+ * Whether `xml[at]` starts one of the fixed literal tags this reader looks
+ * for. A plain string comparison, never a regular expression: the previous
+ * implementation matched `<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>` against the
+ * whole document with `matchAll`, and a `</w:t>` that never arrives makes
+ * the lazy `[\s\S]*?` re-scan from every earlier `<w:t` it already tried —
+ * quadratic in the number of unterminated runs. Measured: 400 KB of
+ * unterminated `<w:t>` tags took 21.8 s. A `.docx` is attacker-supplied by
+ * definition here, so that is a denial of service for the price of one
+ * upload.
+ */
+function startsWith(xml: string, tag: string, at: number): boolean {
+  return xml.startsWith(tag, at)
+}
 
+/**
+ * One left-to-right pass over `word/document.xml`, using `indexOf` instead
+ * of a regular expression. Every branch either advances `at` past what it
+ * just consumed or, on an unterminated `<w:t>` (no closing tag anywhere in
+ * the rest of the document), stops altogether rather than re-scanning —
+ * each byte of the document is visited at most once, so the whole function
+ * is linear in the document's length regardless of how many text runs it
+ * contains or how many of them are malformed.
+ */
 function textFromDocumentXml(xml: string): string {
   let out = ''
-  for (const match of xml.matchAll(TOKEN)) {
-    const [whole, captured] = match
-    if (captured !== undefined) {
-      out += decodeXmlEntities(captured)
+  let at = 0
+  const len = xml.length
+
+  while (at < len) {
+    const lt = xml.indexOf('<', at)
+    if (lt === -1) break
+
+    if (startsWith(xml, '<w:tab', lt) || startsWith(xml, '<w:br', lt)) {
+      const tagEnd = xml.indexOf('>', lt)
+      if (tagEnd === -1) break
+      out += startsWith(xml, '<w:tab', lt) ? '\t' : '\n'
+      at = tagEnd + 1
       continue
     }
-    if (whole.startsWith('<w:tab')) out += '\t'
-    else if (whole.startsWith('<w:br')) out += '\n'
-    else if (whole === '</w:tc>') {
-      // A cell always ends with its own `</w:p>`, which has already emitted a
-      // newline; the cell separator replaces it, so a row stays one line.
+    if (startsWith(xml, '</w:p>', lt)) {
+      out += '\n'
+      at = lt + '</w:p>'.length
+      continue
+    }
+    if (startsWith(xml, '</w:tc>', lt)) {
+      // A cell always ends with its own `</w:p>`, which has already emitted
+      // a newline; the cell separator replaces it, so a row stays one line.
       out = `${out.replace(/\n$/, '')}\t`
-    } else if (whole === '</w:tr>') out = `${out.replace(/\t$/, '')}\n`
-    else out += '\n'
+      at = lt + '</w:tc>'.length
+      continue
+    }
+    if (startsWith(xml, '</w:tr>', lt)) {
+      out = `${out.replace(/\t$/, '')}\n`
+      at = lt + '</w:tr>'.length
+      continue
+    }
+    // `<w:t>` or `<w:t ...>` — but not `<w:tab`, which also starts with
+    // `<w:t`, hence the explicit next-character check.
+    const afterPrefix = xml[lt + 4]
+    if (
+      startsWith(xml, '<w:t', lt) &&
+      (afterPrefix === '>' || afterPrefix === ' ' || afterPrefix === '\t' || afterPrefix === '\n')
+    ) {
+      const tagEnd = xml.indexOf('>', lt)
+      if (tagEnd === -1) break
+      const closeAt = xml.indexOf('</w:t>', tagEnd + 1)
+      if (closeAt === -1) {
+        // Unterminated: nothing after this point can be attributed to a
+        // known text run. Stop rather than treat the remainder of the
+        // document as this run's content.
+        break
+      }
+      out += decodeXmlEntities(xml.slice(tagEnd + 1, closeAt))
+      at = closeAt + '</w:t>'.length
+      continue
+    }
+
+    // Not a tag this reader tracks — advance past this `<` and keep going.
+    at = lt + 1
   }
+
   return out
     .split('\n')
     .map((line) => line.replace(/[ \t]+$/, ''))
@@ -68,9 +130,19 @@ export interface DocxExtraction {
   readonly warnings: readonly string[]
 }
 
+/**
+ * A real `word/document.xml`, however long the document, is nowhere near
+ * this: it is prose, not the repetitive markup a decompression bomb needs to
+ * reach a high compression ratio. 8 MiB caps the cost of the linear scan
+ * above regardless of the 200 MiB ceiling `openZip` otherwise allows, since a
+ * highly repetitive XML payload can deflate at several hundred to one — a
+ * few hundred KB compressed easily clears 200 MiB inflated otherwise.
+ */
+const MAX_DOCUMENT_XML_BYTES = 8 * 1024 * 1024
+
 export function extractDocxText(buffer: Buffer): DocxExtraction {
   const archive = openZip(buffer)
-  const main = archive.read('word/document.xml')
+  const main = archive.read('word/document.xml', MAX_DOCUMENT_XML_BYTES)
   if (main === undefined) {
     throw new CogentaError({
       code: 'DOCUMENT_EXTRACTION_FAILED',
@@ -90,7 +162,7 @@ export function extractDocxText(buffer: Buffer): DocxExtraction {
   // from `document.xml` alone.
   const extras: string[] = []
   for (const part of ['word/footnotes.xml', 'word/endnotes.xml']) {
-    const entry = archive.read(part)
+    const entry = archive.read(part, MAX_DOCUMENT_XML_BYTES)
     if (entry === undefined) continue
     const text = textFromDocumentXml(entry.toString('utf8'))
     if (text !== '') extras.push(text)

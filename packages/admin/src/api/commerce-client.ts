@@ -1,4 +1,4 @@
-import { authHeader, requestBody } from './http.js'
+import { API_BASE, ApiError, authHeader, requestBody } from './http.js'
 
 /**
  * `/api/commerce` — contract E's back office (ADR-0024), the admin's own
@@ -100,6 +100,75 @@ export interface OrderEvent {
   readonly note: string | null
 }
 
+export type CouponKind = 'percentage' | 'fixed' | 'free_shipping'
+
+export interface Coupon {
+  readonly code: string
+  readonly kind: CouponKind
+  readonly value: number
+  readonly currency: string | null
+  readonly minSubtotalMinor: number
+  readonly startsAt: string | null
+  readonly endsAt: string | null
+  readonly maxRedemptions: number | null
+  readonly redemptions: number
+  readonly active: boolean
+  readonly createdAt: string
+}
+
+export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
+export type IntervalUnit = 'day' | 'week' | 'month' | 'year'
+
+export interface Subscription {
+  readonly id: string
+  readonly customerId: string
+  readonly variantId: string
+  readonly quantity: number
+  readonly status: SubscriptionStatus
+  readonly intervalUnit: IntervalUnit
+  readonly intervalCount: number
+  readonly priceMinor: number
+  readonly currency: string
+  readonly nextBillingAt: string
+  readonly createdAt: string
+  readonly cancelledAt: string | null
+}
+
+export interface InvoiceDocument {
+  readonly number: string
+  readonly issuedAt: string
+  readonly orderReference: string
+  readonly seller: readonly string[]
+  readonly buyer: readonly string[]
+  readonly currency: string
+  readonly lines: readonly {
+    readonly sku: string
+    readonly title: string
+    readonly quantity: number
+    readonly unitPriceMinor: number
+    readonly taxRateBp: number
+    readonly totalMinor: number
+  }[]
+  readonly subtotalMinor: number
+  readonly discountMinor: number
+  readonly shippingMinor: number
+  readonly taxMinor: number
+  readonly totalMinor: number
+  readonly footer: string | null
+}
+
+export interface Invoice {
+  readonly id: string
+  readonly orderId: string
+  readonly series: string
+  readonly seq: number
+  readonly number: string
+  readonly issuedAt: string
+  readonly currency: string
+  readonly totalMinor: number
+  readonly document: InvoiceDocument
+}
+
 export interface Payment {
   readonly id: string
   readonly orderId: string
@@ -185,7 +254,12 @@ export function createVariant(
 export function updateVariant(
   token: string,
   id: string,
-  changes: { readonly sku?: string; readonly title?: string; readonly priceMinor?: number },
+  changes: {
+    readonly sku?: string
+    readonly title?: string
+    readonly priceMinor?: number
+    readonly allowBackorder?: boolean
+  },
 ): Promise<Variant> {
   return requestBody(`/api/commerce/variants/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -200,6 +274,13 @@ export function setStock(token: string, variantId: string, onHand: number): Prom
     method: 'PUT',
     headers: authHeader(token),
     body: JSON.stringify({ onHand }),
+  })
+}
+
+export async function deleteVariant(token: string, id: string): Promise<void> {
+  await requestBody(`/api/commerce/variants/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
   })
 }
 
@@ -256,4 +337,88 @@ export function refundPayment(
     headers: authHeader(token),
     body: JSON.stringify(reason === undefined ? { amountMinor } : { amountMinor, reason }),
   })
+}
+
+// ---- coupons --------------------------------------------------------------
+
+export function listCoupons(token: string): Promise<{ readonly coupons: readonly Coupon[] }> {
+  return requestBody('/api/commerce/coupons', { headers: authHeader(token) })
+}
+
+export function createCoupon(
+  token: string,
+  input: {
+    readonly code: string
+    readonly kind: CouponKind
+    readonly value?: number
+    readonly currency?: string
+    readonly minSubtotalMinor?: number
+    readonly startsAt?: string
+    readonly endsAt?: string
+    readonly maxRedemptions?: number
+  },
+): Promise<Coupon> {
+  return requestBody('/api/commerce/coupons', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deactivateCoupon(token: string, code: string): Promise<void> {
+  await requestBody(`/api/commerce/coupons/${encodeURIComponent(code)}/deactivate`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+// ---- subscriptions ----------------------------------------------------------
+
+export function listSubscriptions(
+  token: string,
+  status?: SubscriptionStatus,
+): Promise<{ readonly subscriptions: readonly Subscription[] }> {
+  const query = status === undefined ? '' : `?status=${encodeURIComponent(status)}`
+  return requestBody(`/api/commerce/subscriptions${query}`, { headers: authHeader(token) })
+}
+
+export function cancelSubscription(token: string, id: string): Promise<Subscription> {
+  return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+// ---- invoices ---------------------------------------------------------------
+
+export function readInvoice(token: string, orderId: string): Promise<Invoice | null> {
+  return requestBody<Invoice>(`/api/commerce/orders/${encodeURIComponent(orderId)}/invoice`, {
+    headers: authHeader(token),
+  }).catch((error: unknown) => {
+    if (error instanceof ApiError && error.code === 'COMMERCE_INVOICE_NOT_FOUND') return null
+    throw error
+  })
+}
+
+export function issueInvoice(token: string, orderId: string): Promise<Invoice> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(orderId)}/invoice`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+/**
+ * The one commerce response that is not JSON. A plain `fetch`, not
+ * `requestBody`, because the PDF's bytes must never be run through
+ * `response.json()`.
+ */
+export async function fetchInvoicePdf(token: string, orderId: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE}/api/commerce/orders/${encodeURIComponent(orderId)}/invoice/pdf`,
+    { headers: authHeader(token) },
+  )
+  if (!response.ok) {
+    throw new ApiError('COMMERCE_INVOICE_NOT_FOUND', 'This order has no invoice yet.', undefined)
+  }
+  return response.blob()
 }

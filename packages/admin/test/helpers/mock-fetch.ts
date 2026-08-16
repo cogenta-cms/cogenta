@@ -267,10 +267,54 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
   }
+  interface MockCoupon {
+    code: string
+    kind: 'percentage' | 'fixed' | 'free_shipping'
+    value: number
+    currency: string | null
+    minSubtotalMinor: number
+    startsAt: string | null
+    endsAt: string | null
+    maxRedemptions: number | null
+    redemptions: number
+    active: boolean
+    createdAt: string
+  }
+  interface MockSubscription {
+    id: string
+    customerId: string
+    variantId: string
+    quantity: number
+    status: 'active' | 'paused' | 'cancelled'
+    intervalUnit: 'day' | 'week' | 'month' | 'year'
+    intervalCount: number
+    priceMinor: number
+    currency: string
+    nextBillingAt: string
+    createdAt: string
+    cancelledAt: string | null
+  }
   let mockProductCounter = 0
   let mockVariantCounter = 0
   const mockProducts: MockProduct[] = []
   const mockVariants: MockVariant[] = []
+  const mockCoupons: MockCoupon[] = []
+  const mockSubscriptions: MockSubscription[] = [
+    {
+      id: 'subscription-1',
+      customerId: 'customer-1',
+      variantId: 'variant-seed',
+      quantity: 1,
+      status: 'active',
+      intervalUnit: 'month',
+      intervalCount: 1,
+      priceMinor: 1500,
+      currency: 'EUR',
+      nextBillingAt: '2026-04-01T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      cancelledAt: null,
+    },
+  ]
   const mockOrders = [
     {
       id: 'order-1',
@@ -2066,7 +2110,15 @@ export function installMockFetch(
           if (typeof body.priceMinor === 'number') variant.priceMinor = body.priceMinor
           if (typeof body.sku === 'string') variant.sku = body.sku
           if (typeof body.title === 'string') variant.title = body.title
+          if (typeof body.allowBackorder === 'boolean') variant.allowBackorder = body.allowBackorder
           return json(200, variant)
+        }
+        if (segments[0] === 'variants' && segments.length === 2 && method === 'DELETE') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const index = mockVariants.findIndex((candidate) => candidate.id === segments[1])
+          if (index !== -1) mockVariants.splice(index, 1)
+          return new Response(null, { status: 204 })
         }
         if (segments[0] === 'variants' && segments[2] === 'stock' && method === 'PUT') {
           const refused = commerceRefused('commerce.catalog.write')
@@ -2162,6 +2214,84 @@ export function installMockFetch(
           }
           payment.status = 'refunded'
           return json(200, payment)
+        }
+
+        // coupons
+        if (segments[0] === 'coupons' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, { coupons: mockCoupons })
+        }
+        if (segments[0] === 'coupons' && segments.length === 1 && method === 'POST') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const coupon: MockCoupon = {
+            code: String(body.code).toUpperCase(),
+            kind: body.kind as MockCoupon['kind'],
+            value: typeof body.value === 'number' ? body.value : 0,
+            currency: typeof body.currency === 'string' ? body.currency : null,
+            minSubtotalMinor: typeof body.minSubtotalMinor === 'number' ? body.minSubtotalMinor : 0,
+            startsAt: typeof body.startsAt === 'string' ? body.startsAt : null,
+            endsAt: typeof body.endsAt === 'string' ? body.endsAt : null,
+            maxRedemptions: typeof body.maxRedemptions === 'number' ? body.maxRedemptions : null,
+            redemptions: 0,
+            active: true,
+            createdAt: '2026-03-01T00:00:00.000Z',
+          }
+          mockCoupons.push(coupon)
+          return json(201, coupon)
+        }
+        if (segments[0] === 'coupons' && segments[2] === 'deactivate' && method === 'POST') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const coupon = mockCoupons.find((candidate) => candidate.code === segments[1])
+          if (coupon !== undefined) coupon.active = false
+          return new Response(null, { status: 204 })
+        }
+
+        // subscriptions
+        if (segments[0] === 'subscriptions' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const status = parsed.searchParams.get('status')
+          return json(200, {
+            subscriptions:
+              status === null
+                ? mockSubscriptions
+                : mockSubscriptions.filter((s) => s.status === status),
+          })
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'cancel' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.status = 'cancelled'
+          subscription.cancelledAt = '2026-03-02T00:00:00.000Z'
+          return json(200, subscription)
+        }
+
+        // invoices — this mock has no seller configured, so an order is never
+        // invoiced: the screen's "not issued yet" and "not configured" paths
+        // share the same 404, exactly like the real router.
+        if (segments[0] === 'orders' && segments[2] === 'invoice' && segments[3] === 'pdf') {
+          return json(404, {
+            error: { code: 'COMMERCE_INVOICE_NOT_FOUND', message: 'This invoice does not exist.' },
+          })
+        }
+        if (segments[0] === 'orders' && segments[2] === 'invoice' && segments.length === 3) {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(404, {
+            error: { code: 'COMMERCE_INVOICE_NOT_FOUND', message: 'This invoice does not exist.' },
+          })
         }
 
         return json(405, { error: { code: 'INTERNAL', message: 'No such route.' } })

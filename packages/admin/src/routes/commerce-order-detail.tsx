@@ -2,10 +2,14 @@ import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
+  fetchInvoicePdf,
+  type Invoice,
+  issueInvoice,
   type Order,
   type OrderEvent,
   type OrderStatus,
   type Payment,
+  readInvoice,
   readOrder,
   refundPayment,
   settlePayment,
@@ -49,6 +53,7 @@ export function CommerceOrderRoute(): JSX.Element {
   const [order, setOrder] = useState<Order | null>(null)
   const [history, setHistory] = useState<readonly OrderEvent[]>([])
   const [payments, setPayments] = useState<readonly Payment[]>([])
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -62,6 +67,7 @@ export function CommerceOrderRoute(): JSX.Element {
       setOrder(result.order)
       setHistory(result.history)
       setPayments(result.payments)
+      setInvoice(await readInvoice(token, id))
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('commerceOrderDetail.loadError'))
     } finally {
@@ -119,6 +125,36 @@ export function CommerceOrderRoute(): JSX.Element {
     } catch (caught) {
       setActionError(
         caught instanceof ApiError ? caught.message : t('commerceOrderDetail.refundError'),
+      )
+    }
+  }
+
+  async function issue(): Promise<void> {
+    if (token === null) return
+    setActionError(null)
+    try {
+      setInvoice(await issueInvoice(token, id))
+    } catch (caught) {
+      setActionError(
+        caught instanceof ApiError ? caught.message : t('commerceOrderDetail.invoiceError'),
+      )
+    }
+  }
+
+  async function download(): Promise<void> {
+    if (token === null) return
+    setActionError(null)
+    try {
+      const blob = await fetchInvoicePdf(token, id)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${invoice?.number ?? 'invoice'}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (caught) {
+      setActionError(
+        caught instanceof ApiError ? caught.message : t('commerceOrderDetail.invoiceDownloadError'),
       )
     }
   }
@@ -246,6 +282,37 @@ export function CommerceOrderRoute(): JSX.Element {
           </ul>
         </CardBody>
       </Card>
+
+      {order.status !== 'pending' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>{t('commerceOrderDetail.invoiceTitle')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            {invoice === null ? (
+              <div className="flex items-center gap-3">
+                <Button size="sm" onClick={() => void issue()}>
+                  {t('commerceOrderDetail.issueInvoice')}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm">
+                  {t('commerceOrderDetail.invoiceIssued', {
+                    number: invoice.number,
+                    date: new Date(invoice.issuedAt).toLocaleDateString(i18n.language),
+                  })}
+                </span>
+                <Button variant="secondary" size="sm" onClick={() => void download()}>
+                  {t('commerceOrderDetail.downloadInvoice', { number: invoice.number })}
+                </Button>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

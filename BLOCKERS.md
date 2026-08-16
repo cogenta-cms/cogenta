@@ -645,3 +645,36 @@ un manque : afficher un bouton qui échouerait au clic serait pire.
 - **La dégradation sans fournisseur** : fait, en table
   (`packages/agents/test/assist/degradation.test.ts`) et de bout en bout sur un
   vrai serveur (`packages/cli/test/serve-assistant.test.ts`).
+
+## 10. Menus de navigation — le rendu thème n'est pas câblé
+
+Backend (`createMenuStore`/`ensureMenuTables`, `@cogenta/schema`), API
+(`createMenuRouter`, `@cogenta/api`, monté sur `/api/menus/*` par
+`cogenta serve`) et admin (`packages/admin/src/routes/menus.tsx`) sont faits,
+testés et câblés en intégralité — un menu réel se crée, se peuple, se
+réordonne et se supprime par les vraies routes, aujourd'hui.
+
+Ce qui manque : **aucune page publique ne montre encore un menu.**
+`packages/theme-canonical/src/Base.astro` a des slots pour l'en-tête et le
+pied de page, mais rien ne les alimente. Le point d'entrée exact pour le
+brancher :
+
+1. Dans `packages/cli/src/commands/theme-render.ts`, avant l'appel à
+   `renderPage`, résoudre le ou les menus du site via
+   `GET /api/menus/by-name/{name}?locale=` (le même routeur que l'admin
+   utilise, pas un second chemin) et passer le résultat au `RenderContext`.
+2. `@cogenta/theme-canonical` doit accepter ce menu résolu dans son contexte
+   de rendu et le passer aux slots d'en-tête/pied de page de `Base.astro`
+   — probablement un nouveau composant `Nav.astro` consommant `items`
+   (`label`, `resolvedRoute` ou `url`, `openInNewTab`, la profondeur pour
+   l'imbrication).
+3. Décider quel(s) nom(s) de menu un thème s'attend à trouver (`main` pour
+   l'en-tête semble le choix évident ; un pied de page pourrait en vouloir un
+   second) — c'est une convention du thème canonique, pas du contrat D, donc
+   aucune ADR requise pour la poser.
+
+Non fait par manque de temps dans cette session, pas par blocage technique :
+`resolveEntry` du routeur (résolution d'un item `entry` vers un `label`/`route`
+réel) est déjà câblé et testé de bout en bout côté API
+(`packages/api/test/rest/menu-router.test.ts`), il ne reste qu'à consommer la
+même route depuis le rendu de thème.

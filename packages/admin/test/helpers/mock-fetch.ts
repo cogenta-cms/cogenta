@@ -299,6 +299,34 @@ export function installMockFetch(
   ]
   let trash = [MOCK_TRASHED_ENTRY]
 
+  // Menus live per `installMockFetch()` call too, the same way taxonomy terms
+  // do: each test starts empty and changes state only through the routes the
+  // real server exposes. Write is a fixed `admin`/`editor` rule here — unlike
+  // a taxonomy, a menu carries no per-site permission configuration.
+  let menuCounter = 0
+  let itemCounter = 0
+  let menus: {
+    id: string
+    name: string
+    locale: string
+    label: string
+    createdAt: string
+    updatedAt: string
+  }[] = []
+  let menuItems: {
+    id: string
+    menuId: string
+    parent: string | null
+    label: string
+    kind: string
+    targetCollection: string | null
+    targetEntryId: string | null
+    url: string | null
+    position: number
+    depth: number
+    openInNewTab: boolean
+  }[] = []
+
   let mediaCounter = 0
   const media: {
     id: string
@@ -1166,6 +1194,147 @@ export function installMockFetch(
             })
           }
           terms = terms.filter((term) => term.id !== id && term.parent !== id)
+          return new Response(null, { status: 204 })
+        }
+      }
+
+      /**
+       * The menu transport. Write is a fixed `admin`/`editor` rule, refused
+       * the same way the real router refuses it — these role tests are
+       * worthless if the stub says yes to everyone.
+       */
+      const mayWriteMenus = user.roles.includes('admin') || user.roles.includes('editor')
+      const menuItemMatch =
+        /\/api\/menus\/([^/?]+)\/items(?:\/([^/?]+)(?:\/(reorder|move))?)?(?:\?.*)?$/u.exec(url)
+      const menuMatch = /\/api\/menus(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
+
+      if (menuItemMatch !== null) {
+        const [, menuId = '', itemId, action] = menuItemMatch
+
+        if (itemId === undefined && method === 'POST') {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          itemCounter += 1
+          const parent = typeof body.parent === 'string' ? body.parent : null
+          const parentItem = menuItems.find((item) => item.id === parent)
+          const created = {
+            id: `item-${itemCounter}`,
+            menuId,
+            parent,
+            label: body.label,
+            kind: body.kind,
+            targetCollection: body.targetCollection ?? null,
+            targetEntryId: body.targetEntryId ?? null,
+            url: body.url ?? null,
+            position: menuItems.filter((item) => item.menuId === menuId && item.parent === parent)
+              .length,
+            depth: parentItem === undefined ? 0 : parentItem.depth + 1,
+            openInNewTab: body.openInNewTab === true,
+          }
+          menuItems.push(created)
+          return json(201, { data: created })
+        }
+
+        if (itemId !== undefined && action === 'reorder' && method === 'POST') {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          const item = menuItems.find((candidate) => candidate.id === itemId)
+          if (item === undefined) {
+            return json(404, { error: { code: 'MENU_ITEM_NOT_FOUND', message: 'No such item.' } })
+          }
+          const siblings = menuItems
+            .filter(
+              (candidate) => candidate.menuId === item.menuId && candidate.parent === item.parent,
+            )
+            .sort((a, b) => a.position - b.position)
+          const index = siblings.findIndex((candidate) => candidate.id === itemId)
+          const swapIndex = body.direction === 'up' ? index - 1 : index + 1
+          const neighbour = siblings[swapIndex]
+          if (neighbour !== undefined) {
+            const myPosition = item.position
+            item.position = neighbour.position
+            neighbour.position = myPosition
+          }
+          return json(200, { data: item })
+        }
+
+        if (itemId !== undefined && action === undefined && method === 'DELETE') {
+          const parsed = new URL(url, 'http://localhost')
+          const hasChildren = menuItems.some((item) => item.parent === itemId)
+          if (hasChildren && parsed.searchParams.get('cascade') !== 'true') {
+            return json(409, {
+              error: { code: 'MENU_ITEM_INVALID', message: 'This item still has children.' },
+            })
+          }
+          menuItems = menuItems.filter((item) => item.id !== itemId && item.parent !== itemId)
+          return new Response(null, { status: 204 })
+        }
+      } else if (menuMatch !== null) {
+        const [, id] = menuMatch
+
+        if (id === undefined && method === 'GET') {
+          return json(200, { data: menus })
+        }
+
+        if (id === undefined && method === 'POST') {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          menuCounter += 1
+          const created = {
+            id: `menu-${menuCounter}`,
+            name: body.name,
+            locale: body.locale,
+            label: body.label,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+          }
+          menus.push(created)
+          return json(201, { data: created })
+        }
+
+        if (id !== undefined && method === 'GET') {
+          const menu = menus.find((candidate) => candidate.id === id)
+          if (menu === undefined) {
+            return json(404, { error: { code: 'MENU_UNKNOWN', message: 'No such menu.' } })
+          }
+          // Tree order, the same way the real store walks a materialised
+          // path: group by parent, sort each group by `position`, then
+          // depth-first from the roots — never the raw insertion order,
+          // which a reorder must not leave unchanged.
+          const byParent = new Map<string | null, typeof menuItems>()
+          for (const item of menuItems.filter((candidate) => candidate.menuId === id)) {
+            const siblings = byParent.get(item.parent) ?? []
+            siblings.push(item)
+            byParent.set(item.parent, siblings)
+          }
+          for (const siblings of byParent.values()) siblings.sort((a, b) => a.position - b.position)
+          const items: typeof menuItems = []
+          const visit = (parent: string | null): void => {
+            for (const item of byParent.get(parent) ?? []) {
+              items.push(item)
+              visit(item.id)
+            }
+          }
+          visit(null)
+          return json(200, { data: { ...menu, items } })
+        }
+
+        if (id !== undefined && method === 'DELETE') {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          const parsed = new URL(url, 'http://localhost')
+          const hasItems = menuItems.some((item) => item.menuId === id)
+          if (hasItems && parsed.searchParams.get('cascade') !== 'true') {
+            return json(409, {
+              error: { code: 'MENU_ITEM_INVALID', message: 'This menu still has items.' },
+            })
+          }
+          menus = menus.filter((menu) => menu.id !== id)
+          menuItems = menuItems.filter((item) => item.menuId !== id)
           return new Response(null, { status: 204 })
         }
       }

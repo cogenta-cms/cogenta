@@ -22,6 +22,7 @@ import {
   createContentService,
   createMarketplaceRouter,
   createMediaRouter,
+  createMenuRouter,
   createMfaRecommendationSource,
   createNoticeDismissalStore,
   createNoticeRouter,
@@ -38,6 +39,7 @@ import {
   type MarketplaceRouter,
   type MediaImageProcessor,
   type MediaRouter,
+  type MenuRouter,
   type NoticeRouter,
   type PermissionLayer,
   type RestRequest,
@@ -77,15 +79,19 @@ import {
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   type BlockZones,
+  buildPath,
   buildSchemaDocument,
   type CollectionDefinition,
   type ContentLifecycleEvent,
   type ContentStore,
   createContentStore,
+  createMenuStore,
   createRedirectStore,
   createSchemaTables,
   createSearchIndex,
   createTaxonomyStore,
+  ensureMenuTables,
+  type MenuStore,
   type RedirectStore,
   type SchemaDocument,
   type SearchDriver,
@@ -286,6 +292,8 @@ interface Site {
   readonly taxonomyRouter: TaxonomyRouter
   /** `/api/marketplace/*` — L17's local plugin/theme/skin catalog, reusing `@cogenta/plugins`' real Ed25519 verification unchanged. Always mounted; the catalog is empty until a site configures one. */
   readonly marketplaceRouter: MarketplaceRouter
+  /** `/api/menus/*` — navigation menus. Not schema-declared like a taxonomy: created and edited entirely at runtime, so this is always mounted, empty until the admin (or the API) creates the first one. */
+  readonly menuRouter: MenuRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
@@ -582,6 +590,57 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       : { trustedPublicKeys: options.marketplace.trustedPublicKeys }),
   })
 
+  // Menus (navigation). Not schema-declared, so one fixed pair of tables
+  // rather than one per taxonomy — see `menu-tables.ts`.
+  await ensureMenuTables(db)
+  const menuStore: MenuStore = createMenuStore({ db })
+
+  const gateway = createContentGateway({ collections, stores, permissions })
+
+  // Resolves an `entry`-kind menu item to a display label and public route,
+  // through the same permission-checked gateway everything else reads
+  // through. `ANONYMOUS`: a menu is public navigation, so an item is only
+  // ever resolved to what an anonymous visitor could also reach — an
+  // unpublished target resolves to `null` rather than leaking a draft's
+  // title into a public nav response.
+  const resolveMenuEntry = async (
+    collectionName: string,
+    entryId: string,
+  ): Promise<{ readonly label: string; readonly route: string | null } | null> => {
+    const collection = collections.find((candidate) => candidate.name === collectionName)
+    if (collection === undefined) return null
+
+    const entry = await gateway.read(collectionName, entryId, {
+      actor: { id: null, roles: ['public'] },
+    })
+    if (entry === null) return null
+
+    const stringValues = Object.fromEntries(
+      Object.entries(entry.values).filter(
+        (pair): pair is [string, string] => typeof pair[1] === 'string',
+      ),
+    )
+    const label =
+      typeof entry.values['title'] === 'string'
+        ? entry.values['title']
+        : typeof entry.values['name'] === 'string'
+          ? entry.values['name']
+          : entryId
+    let route: string | null = null
+    if (collection.routing !== undefined) {
+      try {
+        route = buildPath(collection, stringValues, entry.locale ?? undefined)
+      } catch {
+        // A route field is missing on this entry (e.g. an empty slug on a
+        // draft). The item still resolves — with a label, no link — rather
+        // than failing the whole menu response over one broken reference.
+        route = null
+      }
+    }
+
+    return { label, route }
+  }
+
   return {
     db,
     auth,
@@ -607,6 +666,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       catalog: marketplaceCatalog,
       installer: marketplaceInstaller,
     }),
+    menuRouter: createMenuRouter({ store: menuStore, resolveEntry: resolveMenuEntry }),
     searchRouter: createSearchRouter({
       index: searchIndex,
       collections,
@@ -653,7 +713,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     storage,
     images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
-    gateway: createContentGateway({ collections, stores, permissions }),
+    gateway,
     permissions,
     schemaDocument: buildSchemaDocument(
       collections,
@@ -1325,6 +1385,17 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.marketplaceRouter.handle(request, context.actor))
+        return
+      }
+
+      // A menu is not schema-declared like a taxonomy, but it gets its own
+      // mount for the same reason: it is not a collection, and its router owns
+      // its own (fixed, not per-site-configurable) permission door.
+      if (url.pathname.startsWith('/api/menus')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.menuRouter.handle(request, context))
         return
       }
 

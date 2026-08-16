@@ -874,3 +874,44 @@ remplacée** : son périmètre est simplement dit explicitement.
 - **Un CTE récursif plutôt qu'un chemin matérialisé.** Écarté sur ADR-0006 : trois
   dialectes obligatoires, trois comportements à tester, pour une requête qu'un
   `like` sur un chemin résout partout de la même façon.
+
+---
+
+## ADR-0023 — Un plan de site validé peut écrire le schéma, en développement seulement
+
+**Statut** : Acté
+
+**Contexte** — L19 (« création de site pilotée par l'IA ») propose un plan de site
+à partir d'un document téléversé (modèle de contenu, gabarits de skin, contenu de
+démo) et l'applique après relecture humaine section par section. Le périmètre du
+lot demandait que ce parcours fonctionne aussi *après coup*, depuis l'admin d'un
+site déjà en production — pas seulement à `npm create cogenta`.
+
+**Décision** — Appliquer un plan de site reste soumis à ADR-0010 sans exception :
+ce n'est possible que sous `cogenta dev`. Sur `cogenta serve`, un plan peut être
+proposé, relu et validé élément par élément, mais jamais appliqué — la route
+répond `CONTENT_READ_ONLY` et indique la marche à suivre (développer sur une copie,
+appliquer, committer le fichier de schéma).
+
+**Justification** — Appliquer un plan est l'éditeur visuel de schéma d'ADR-0010,
+arrivé par une autre porte : mêmes fichiers réécrits (`cogenta.schema.*`), mêmes
+tables créées, même dérive de configuration entre environnements à la clé, même
+risque qu'un thème référence un champ supprimé. Entre un document de lot et une
+décision déjà actée, la décision gagne — se dit et s'écrit, ne se contourne pas.
+
+**Conséquences** — `RunServeOptions` gagne un indicateur `development`, positionné
+par `cogenta dev` et par lui seul ; c'est aujourd'hui la seule différence de
+comportement entre `cogenta serve` et `cogenta dev` sur ce point. Le volet
+post-installation de L19 reste utile mais différé d'une étape : copie de
+développement, `cogenta dev`, commit — exactement le pipeline qu'ADR-0010 assume
+déjà comme conséquence.
+
+**Renoncement assumé** — Un opérateur ne peut pas appliquer un plan directement
+depuis l'admin d'un site en production, alors même que la relecture humaine qui
+précède est déjà unskippable. Ce n'est pas un renoncement à la sécurité du geste,
+seulement à son confort.
+
+**Écarté** — Autoriser l'écriture en production derrière une confirmation
+supplémentaire. Écartée : ADR-0010 ne pose pas une question d'ergonomie mais
+d'intégrité entre environnements, et une confirmation ne recrée pas le fichier
+manquant dans git.

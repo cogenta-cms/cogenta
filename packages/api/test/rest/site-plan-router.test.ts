@@ -221,6 +221,54 @@ describe('proposing a plan from uploaded documents', () => {
     expect(tooMany.status).toBe(400)
   })
 
+  it('refuses an oversized document on the encoded string, before anything decodes it', async () => {
+    let decoded = false
+    const router = createSitePlanRouter({
+      store: memoryStore(),
+      planner: planner({
+        async propose(input) {
+          decoded = input.documents.some(
+            (document) => Buffer.from(document.contentBase64, 'base64').length > 0,
+          )
+          return { ok: true, draft: draft() }
+        },
+      }),
+    })
+
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/site-plans',
+        query: {},
+        body: {
+          documents: [{ filename: 'huge.pdf', contentBase64: 'A'.repeat(29 * 1024 * 1024) }],
+        },
+      },
+      ADMIN,
+    )
+
+    expect(response.status).toBe(413)
+    expect((response.body as { error: { code: string } }).error.code).toBe('DOCUMENT_TOO_LARGE')
+    expect(decoded).toBe(false)
+  })
+
+  it('refuses a batch whose documents are individually small but together are not', async () => {
+    const router = createSitePlanRouter({ store: memoryStore(), planner: planner() })
+    const chunk = { filename: 'part.pdf', contentBase64: 'A'.repeat(25 * 1024 * 1024) }
+
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/site-plans',
+        query: {},
+        body: { documents: [chunk, chunk, chunk] },
+      },
+      ADMIN,
+    )
+
+    expect(response.status).toBe(413)
+  })
+
   it('reports a planning failure as a bad gateway, naming the stage', async () => {
     const router = createSitePlanRouter({
       store: memoryStore(),

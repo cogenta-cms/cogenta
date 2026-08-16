@@ -136,6 +136,16 @@ export interface SitePlanRouter {
 const DEFAULT_BASE_PATH = '/api/site-plans'
 const DEFAULT_MAX_DOCUMENTS = 5
 
+/**
+ * Base64 grows bytes by a third, so this is the encoded form of the 20 MiB
+ * `extractDocumentText` accepts. Checked here, on the string, **before**
+ * anything decodes it: the far side's own limit only fires after a Buffer
+ * that size has already been allocated, and this is the one route in the
+ * API that invites megabyte bodies by design.
+ */
+const MAX_BASE64_PER_DOCUMENT = 28 * 1024 * 1024
+const MAX_BASE64_TOTAL = 60 * 1024 * 1024
+
 function requireAdmin(actor: Actor): void {
   if (actor.roles.includes('admin')) return
   throw new CogentaError({
@@ -197,6 +207,7 @@ function requireDocuments(body: unknown, max: number): readonly UploadedDocument
       hint: `Upload at most ${max} at a time.`,
     })
   }
+  let total = 0
   return documents.map((entry, index) => {
     const document = entry as { filename?: unknown; contentBase64?: unknown }
     if (typeof document.filename !== 'string' || document.filename === '') {
@@ -211,6 +222,22 @@ function requireDocuments(body: unknown, max: number): readonly UploadedDocument
         code: 'CONTENT_INVALID',
         message: `Document "${document.filename}" carries no content.`,
         hint: 'Send the file base64-encoded in `contentBase64`.',
+      })
+    }
+    if (document.contentBase64.length > MAX_BASE64_PER_DOCUMENT) {
+      throw new CogentaError({
+        code: 'DOCUMENT_TOO_LARGE',
+        message: `"${document.filename}" is larger than this route accepts.`,
+        hint: 'Upload a document of 20 MB or less, or paste the sections that describe the site as plain text.',
+        details: { filename: document.filename },
+      })
+    }
+    total += document.contentBase64.length
+    if (total > MAX_BASE64_TOTAL) {
+      throw new CogentaError({
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'These documents are larger, together, than this route accepts.',
+        hint: 'Upload them in smaller batches.',
       })
     }
     return { filename: document.filename, contentBase64: document.contentBase64 }

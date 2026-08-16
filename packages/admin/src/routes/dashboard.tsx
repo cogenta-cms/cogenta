@@ -7,6 +7,7 @@ import { getSiteHealth, type SiteHealth } from '../api/health-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { AuditIcon, ClockIcon, PulseIcon } from '../ui/icons.js'
 
 interface ScheduledItem {
   readonly collection: string
@@ -18,10 +19,21 @@ function titleOf(entry: Entry): string {
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : entry.id
 }
 
+const STATUS_DOT: Record<SiteHealth[keyof SiteHealth]['status'], string> = {
+  ok: 'bg-success',
+  degraded: 'bg-warning',
+  down: 'bg-destructive',
+}
+
 function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth] }): JSX.Element {
   return (
-    <span className={`dashboard__badge dashboard__badge--${report.status}`}>
-      {report.driver} ({report.tier}) — {report.status}
+    <span className="inline-flex items-center gap-2 rounded-sm border border-border bg-card px-2.5 py-1 font-mono text-xs">
+      <span
+        className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[report.status]}`}
+        aria-hidden="true"
+      />
+      {report.driver} <span className="text-muted-foreground">({report.tier})</span> —{' '}
+      {report.status}
     </span>
   )
 }
@@ -32,6 +44,13 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
  * have no data source anywhere in this codebase yet, so they stay empty and
  * explicit rather than showing a fabricated number, the same rule the
  * placeholder this replaces already applied to agent-related widgets.
+ *
+ * The markup below keeps the same plain `<section>`/`<h2>`/`<ul>` shape the
+ * unstyled version used (each widget its own labelled landmark section) —
+ * only classNames and icons were added on top. A `Card`-component rewrite
+ * was tried and reverted: it visually read the same but reproducibly made
+ * `test/notices/notice-board.test.tsx` flaky when run in the same file
+ * batch as this route's own test, and the plain structure below does not.
  */
 export function DashboardRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -121,74 +140,153 @@ export function DashboardRoute(): JSX.Element {
   }, [token, schema, roles, t])
 
   return (
-    <section aria-labelledby="dashboard-heading">
-      <h1 id="dashboard-heading">{t('dashboard.heading')}</h1>
+    <section aria-labelledby="dashboard-heading" className="flex flex-col gap-8">
+      <div className="reveal border-b-2 border-foreground pb-4">
+        <p className="m-0 font-mono text-xs font-medium tracking-[0.2em] text-primary uppercase">
+          {t('shell.brand')}
+        </p>
+        <h1 id="dashboard-heading" className="m-0 text-3xl leading-tight font-bold">
+          {t('dashboard.heading')}
+        </h1>
+      </div>
 
-      <section aria-labelledby="dashboard-health-heading">
-        <h2 id="dashboard-health-heading">{t('dashboard.healthHeading')}</h2>
-        {!isAdmin && <p>{t('dashboard.adminOnly')}</p>}
-        {isAdmin && healthError !== null && <p role="alert">{healthError}</p>}
-        {isAdmin && healthError === null && health === null && <p>{t('common.loading')}</p>}
-        {isAdmin && health !== null && (
-          <ul>
-            <li>
-              {t('dashboard.database')} <HealthBadge report={health.database} />
-            </li>
-            <li>
-              {t('dashboard.storage')} <HealthBadge report={health.storage} />
-            </li>
-          </ul>
-        )}
-      </section>
-
-      <section aria-labelledby="dashboard-activity-heading">
-        <h2 id="dashboard-activity-heading">{t('dashboard.activityHeading')}</h2>
-        {!isAdmin && <p>{t('dashboard.adminOnly')}</p>}
-        {isAdmin && activityError !== null && <p role="alert">{activityError}</p>}
-        {isAdmin && activityError === null && activity.length === 0 && (
-          <p>{t('dashboard.noActivity')}</p>
-        )}
-        {isAdmin && activity.length > 0 && (
-          <ul>
-            {activity.map((entry) => (
-              <li key={entry.id}>
-                {entry.at} — {entry.actorId ?? '—'} — {entry.action}
-                {entry.collection !== null && ` (${entry.collection})`}
+      {/* An asymmetric composition, not six equal cards: system health is the
+          dominant left column (it is the one widget with a real, currently
+          actionable data source), activity is a narrower companion, and
+          scheduled content runs full-width beneath both. */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
+        <section
+          aria-labelledby="dashboard-health-heading"
+          className="reveal reveal-1 flex flex-col gap-4 rounded-lg border-2 border-foreground bg-card p-5 text-card-foreground shadow-card"
+        >
+          <h2 id="dashboard-health-heading" className="m-0 flex items-center gap-2 text-base">
+            <PulseIcon className="size-4 text-primary" />
+            {t('dashboard.healthHeading')}
+          </h2>
+          {!isAdmin && (
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+          )}
+          {isAdmin && healthError !== null && (
+            <p role="alert" className="m-0 text-sm font-medium text-destructive">
+              {healthError}
+            </p>
+          )}
+          {isAdmin && healthError === null && health === null && (
+            <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
+          )}
+          {isAdmin && health !== null && (
+            <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
+              <li className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t('dashboard.database')}
+                </span>
+                <HealthBadge report={health.database} />
               </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              <li className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t('dashboard.storage')}
+                </span>
+                <HealthBadge report={health.storage} />
+              </li>
+            </ul>
+          )}
+        </section>
 
-      <section aria-labelledby="dashboard-scheduled-heading">
-        <h2 id="dashboard-scheduled-heading">{t('dashboard.scheduledHeading')}</h2>
-        {scheduledError !== null && <p role="alert">{scheduledError}</p>}
-        {scheduledError === null && scheduled.length === 0 && <p>{t('dashboard.noScheduled')}</p>}
+        <section
+          aria-labelledby="dashboard-activity-heading"
+          className="reveal reveal-2 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        >
+          <h2 id="dashboard-activity-heading" className="m-0 flex items-center gap-2 text-base">
+            <AuditIcon className="size-4 text-primary" />
+            {t('dashboard.activityHeading')}
+          </h2>
+          {!isAdmin && (
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+          )}
+          {isAdmin && activityError !== null && (
+            <p role="alert" className="m-0 text-sm font-medium text-destructive">
+              {activityError}
+            </p>
+          )}
+          {isAdmin && activityError === null && activity.length === 0 && (
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noActivity')}</p>
+          )}
+          {isAdmin && activity.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+              {activity.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="border-b border-border pb-2.5 text-sm leading-5 last:border-b-0 last:pb-0"
+                >
+                  <span className="font-mono text-xs text-muted-foreground">{entry.at}</span>
+                  <br />
+                  <span className="font-medium">{entry.actorId ?? '—'}</span> — {entry.action}
+                  {entry.collection !== null && (
+                    <span className="text-muted-foreground"> ({entry.collection})</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <section
+        aria-labelledby="dashboard-scheduled-heading"
+        className="reveal reveal-3 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+      >
+        <h2 id="dashboard-scheduled-heading" className="m-0 flex items-center gap-2 text-base">
+          <ClockIcon className="size-4 text-primary" />
+          {t('dashboard.scheduledHeading')}
+        </h2>
+        {scheduledError !== null && (
+          <p role="alert" className="m-0 text-sm font-medium text-destructive">
+            {scheduledError}
+          </p>
+        )}
+        {scheduledError === null && scheduled.length === 0 && (
+          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noScheduled')}</p>
+        )}
         {scheduled.length > 0 && (
-          <ul>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {scheduled.map((item) => (
-              <li key={`${item.collection}:${item.entry.id}`}>
-                {item.collection} — {titleOf(item.entry)}
+              <li
+                key={`${item.collection}:${item.entry.id}`}
+                className="flex items-center gap-2 text-sm"
+              >
+                <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                  {item.collection}
+                </span>
+                {titleOf(item.entry)}
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section aria-labelledby="dashboard-cve-heading">
-        <h2 id="dashboard-cve-heading">{t('dashboard.cveHeading')}</h2>
-        <p>{t('dashboard.cveBody')}</p>
-      </section>
-
-      <section aria-labelledby="dashboard-vitals-heading">
-        <h2 id="dashboard-vitals-heading">{t('dashboard.vitalsHeading')}</h2>
-        <p>{t('dashboard.vitalsBody')}</p>
-      </section>
-
-      <section aria-labelledby="dashboard-backups-heading">
-        <h2 id="dashboard-backups-heading">{t('dashboard.backupsHeading')}</h2>
-        <p>{t('dashboard.backupsBody')}</p>
-      </section>
+      {/* Deliberately quiet: none of these three has a real data source yet
+          (see the module comment above), so they are a muted footnote strip
+          rather than cards claiming equal weight with the widgets above. */}
+      <div className="reveal reveal-4 grid grid-cols-1 gap-4 border-t border-dashed border-border pt-5 text-sm text-muted-foreground sm:grid-cols-3">
+        <section aria-labelledby="dashboard-cve-heading">
+          <h2 id="dashboard-cve-heading" className="m-0 text-xs font-semibold uppercase">
+            {t('dashboard.cveHeading')}
+          </h2>
+          <p className="m-0 mt-1">{t('dashboard.cveBody')}</p>
+        </section>
+        <section aria-labelledby="dashboard-vitals-heading">
+          <h2 id="dashboard-vitals-heading" className="m-0 text-xs font-semibold uppercase">
+            {t('dashboard.vitalsHeading')}
+          </h2>
+          <p className="m-0 mt-1">{t('dashboard.vitalsBody')}</p>
+        </section>
+        <section aria-labelledby="dashboard-backups-heading">
+          <h2 id="dashboard-backups-heading" className="m-0 text-xs font-semibold uppercase">
+            {t('dashboard.backupsHeading')}
+          </h2>
+          <p className="m-0 mt-1">{t('dashboard.backupsBody')}</p>
+        </section>
+      </div>
     </section>
   )
 }

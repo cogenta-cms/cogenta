@@ -2,11 +2,15 @@
  * L11 task 1 — the admin's design tokens, and the Tailwind build that turns
  * them into utilities.
  *
- * The decision (docs/lots/L10-cms-complet.md, L11 "Périmètre") is shadcn/ui on
- * Tailwind, with the components copied into `src/ui/` rather than pulled from a
- * package. This file is the half shadcn calls the theme: one palette, named by
- * role rather than by hue, so a component never hard-codes `#4f46e5` and a
- * later palette change is one edit here.
+ * Direction: technical/editorial. This is a CMS built for developers and
+ * agencies (ADR-0001) — an audience that recognises a stock shadcn/ui theme
+ * on sight. The palette below drops the indigo-on-white default entirely: a
+ * warm, printed-paper light mode and a near-black, signal-lit dark mode, both
+ * built around one deliberate accent (a burnt signal orange) rather than a
+ * gradient. Headings run in IBM Plex Mono — a monospaced, technical display
+ * face — set against IBM Plex Sans for running text and controls: one type
+ * family, two purposes, self-hosted from `public/fonts/` (R1: no runtime
+ * request to Google Fonts).
  *
  * Preflight is deliberately NOT imported. Tailwind's reset would restyle the
  * eight hand-written stylesheets the admin still uses (auth.css, shell.css,
@@ -20,7 +24,7 @@
  *
  * Light is the base and dark is a `prefers-color-scheme` override rather than a
  * `.dark` class, matching what `base.css` already did — the admin has no theme
- * toggle, so a class-based switch would have nothing to set it.
+ * toggle driven by a class, so a class-based switch would have nothing to set it.
  */
 
 @layer theme, base, components, utilities;
@@ -28,87 +32,160 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/*
+ * Self-hosted IBM Plex. Latin subset only — the admin ships in French and
+ * English (i18next), and a subset that also carried Cyrillic/Greek/Vietnamese
+ * glyphs neither locale uses would be dead weight. `Plex Sans` is served as a
+ * single variable-capable file across four static weights (the file Google
+ * Fonts itself serves this way); `Plex Mono` ships one static file per weight.
+ */
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-sans-var.woff2") format("woff2");
+}
+
 :root {
-  /* Surfaces, from furthest back to nearest front. */
-  --background: #f7f8fa;
-  --foreground: #10131a;
-  --card: #ffffff;
-  --card-foreground: #10131a;
-  --muted: #eef0f4;
-  --muted-foreground: #565e6e;
+  /* Surfaces, from furthest back to nearest front. Warm, unbleached paper —
+     not the clinical pure-white of a generic admin theme. */
+  --background: #f2ede2;
+  --foreground: #201a11;
+  --card: #faf7f0;
+  --card-foreground: #201a11;
+  --muted: #e6dfcf;
+  --muted-foreground: #6b6152;
 
   /* Lines and controls. */
-  --border: #e0e3ea;
-  --input: #cbd1db;
-  --ring: #4f46e5;
+  --border: #d8cfb8;
+  --input: #c2b799;
+  --ring: #c23d0a;
 
-  /* Actions. */
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
-  --secondary: #ffffff;
-  --secondary-foreground: #232936;
-  --accent: #eef2ff;
-  --accent-foreground: #312e81;
+  /* Actions. One accent, committed to: burnt signal orange. */
+  --primary: #c23d0a;
+  --primary-foreground: #fff6ec;
+  --secondary: #faf7f0;
+  --secondary-foreground: #201a11;
+  --accent: #ece0c8;
+  --accent-foreground: #5c2c0c;
 
   /* Status. `-surface` is the tinted background a notice sits on;
      the bare token is the solid colour a button or an icon uses. */
-  --destructive: #b91c1c;
-  --destructive-foreground: #ffffff;
-  --destructive-surface: #fef2f2;
-  --success: #15803d;
-  --success-foreground: #ffffff;
-  --success-surface: #f0fdf4;
-  --warning: #a16207;
-  --warning-foreground: #ffffff;
-  --warning-surface: #fffbeb;
-  --info: #1d4ed8;
-  --info-foreground: #ffffff;
-  --info-surface: #eff6ff;
+  --destructive: #a3140a;
+  --destructive-foreground: #fff6ec;
+  --destructive-surface: #f8e6de;
+  --success: #266b3d;
+  --success-foreground: #f4fbf1;
+  --success-surface: #e6f0dd;
+  --warning: #8a5a05;
+  --warning-foreground: #fdf6e6;
+  --warning-surface: #f3e7c9;
+  --info: #295a8a;
+  --info-foreground: #eff6ff;
+  --info-surface: #dfe9f3;
 
-  /* Elevation. Softer and more layered than Tailwind's defaults: an admin
-     surface should read as raised, not as dropped onto the page. */
-  --shadow-card: 0 1px 2px rgb(16 19 26 / 0.04), 0 1px 3px rgb(16 19 26 / 0.06);
-  --shadow-raised: 0 2px 4px rgb(16 19 26 / 0.05), 0 8px 16px -4px rgb(16 19 26 / 0.08);
-  --shadow-overlay: 0 8px 24px -6px rgb(16 19 26 / 0.16), 0 24px 48px -12px rgb(16 19 26 / 0.2);
+  /* Elevation. A printed, layered shadow rather than Tailwind's soft
+     defaults — an admin surface should read as a card set on a desk, with a
+     hard-edged direction to the light. */
+  --shadow-card: 0 1px 0 rgb(32 26 17 / 0.08), 0 3px 8px -2px rgb(32 26 17 / 0.1);
+  --shadow-raised: 0 2px 0 rgb(32 26 17 / 0.1), 0 12px 24px -8px rgb(32 26 17 / 0.18);
+  --shadow-overlay: 0 4px 0 rgb(32 26 17 / 0.14), 0 32px 64px -16px rgb(32 26 17 / 0.32);
+
+  /* A faint paper-grain texture, applied as a background-image by
+     `base.css`. Two tiny radial specks tiled at an odd size read as noise
+     rather than as a repeating pattern. */
+  --grain-opacity: 0.05;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0d1017;
-    --foreground: #e8eaf0;
-    --card: #151a23;
-    --card-foreground: #e8eaf0;
-    --muted: #1b2029;
-    --muted-foreground: #9aa3b2;
+    /* Near-black, not slate — warmed towards the same hue family as light
+       mode's paper, so the accent reads as the same colour in both. */
+    --background: #14100b;
+    --foreground: #f1e9d8;
+    --card: #1c1710;
+    --card-foreground: #f1e9d8;
+    --muted: #241d13;
+    --muted-foreground: #a99a80;
 
-    --border: #272d38;
-    --input: #3a4250;
-    --ring: #818cf8;
+    --border: #362b1a;
+    --input: #4a3b23;
+    --ring: #ff7a3d;
 
-    --primary: #6366f1;
-    --primary-foreground: #ffffff;
-    --secondary: #1b2029;
-    --secondary-foreground: #e8eaf0;
-    --accent: #1e2130;
-    --accent-foreground: #c7d2fe;
+    --primary: #ff7a3d;
+    --primary-foreground: #1c0f04;
+    --secondary: #241d13;
+    --secondary-foreground: #f1e9d8;
+    --accent: #2c2213;
+    --accent-foreground: #ffcda3;
 
-    --destructive: #dc2626;
-    --destructive-foreground: #ffffff;
-    --destructive-surface: #2a1416;
-    --success: #16a34a;
-    --success-foreground: #ffffff;
-    --success-surface: #0f2018;
-    --warning: #ca8a04;
-    --warning-foreground: #1a1405;
-    --warning-surface: #241d0a;
-    --info: #3b82f6;
-    --info-foreground: #ffffff;
-    --info-surface: #101b2e;
+    --destructive: #ff6350;
+    --destructive-foreground: #1c0704;
+    --destructive-surface: #2c1510;
+    --success: #6bc98d;
+    --success-foreground: #07170c;
+    --success-surface: #142016;
+    --warning: #e0ab3f;
+    --warning-foreground: #1f1503;
+    --warning-surface: #26200e;
+    --info: #7fb3e0;
+    --info-foreground: #071420;
+    --info-surface: #14202c;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.3);
-    --shadow-raised: 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 16px -4px rgb(0 0 0 / 0.45);
-    --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.6), 0 24px 48px -12px rgb(0 0 0 / 0.6);
+    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.5), 0 3px 10px -2px rgb(0 0 0 / 0.5);
+    --shadow-raised: 0 2px 0 rgb(0 0 0 / 0.55), 0 16px 32px -8px rgb(0 0 0 / 0.6);
+    --shadow-overlay: 0 4px 0 rgb(0 0 0 / 0.6), 0 40px 80px -16px rgb(0 0 0 / 0.75);
+
+    --grain-opacity: 0.08;
   }
+}
+
+/*
+ * Not `inline`: radius and typography are the same in both colour schemes, and
+ * a plain `@theme` block is the form that also emits the custom property into
+ * `:root` — which `base.css`'s `body { font-family: var(--font-sans) }` reads.
+ */
+@theme {
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+
+  --font-sans: "Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The display face used for headings, the brand mark and anything meant to
+     announce itself — always `--font-mono`'s family, kept as a separate name
+     so intent stays legible at the call site. */
+  --font-display: "Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /*
@@ -151,19 +228,4 @@
   --shadow-card: var(--shadow-card);
   --shadow-raised: var(--shadow-raised);
   --shadow-overlay: var(--shadow-overlay);
-}
-
-/*
- * Not `inline`: radius and typography are the same in both colour schemes, and
- * a plain `@theme` block is the form that also emits the custom property into
- * `:root` — which `base.css`'s `body { font-family: var(--font-sans) }` reads.
- */
-@theme {
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.875rem;
-
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }

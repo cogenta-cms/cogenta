@@ -1,11 +1,12 @@
 .app-shell {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 240px 1fr;
   grid-template-rows: auto 1fr;
   grid-template-areas:
     "topbar topbar"
     "sidebar content";
   min-height: 100%;
+  background: var(--color-bg);
 }
 
 .app-shell__topbar {
@@ -13,12 +14,22 @@
   display: flex;
   align-items: center;
   padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-text);
+  background: var(--card);
 }
 
 .app-shell__brand {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.app-shell__brand-mark {
+  color: var(--color-primary);
 }
 
 .app-shell__account {
@@ -26,27 +37,46 @@
   align-items: center;
   gap: var(--space-3);
   margin-left: auto;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 
-.app-shell__account button {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  color: var(--color-text);
-  border-radius: var(--radius);
-  padding: var(--space-1) var(--space-3);
-  cursor: pointer;
+.app-shell__account-email {
+  font-family: var(--font-mono);
 }
 
-.app-shell__account button:hover {
+.app-shell__logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.app-shell__logout:hover {
   background: var(--color-surface);
+  border-color: var(--color-text);
+}
+
+.app-shell__logout:active {
+  transform: translateY(1px);
 }
 
 .app-shell__sidebar {
   grid-area: sidebar;
-  border-right: 1px solid var(--color-border);
-  padding: var(--space-4) var(--space-2);
+  border-right: 2px solid var(--color-text);
+  background: var(--card);
+  padding: var(--space-6) var(--space-3);
 }
 
 .app-shell__sidebar ul {
@@ -55,29 +85,43 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
 }
 
 .app-shell__sidebar a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
   color: var(--color-text);
   text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    padding-left 150ms ease;
 }
 
 .app-shell__sidebar a:hover {
   background: var(--color-surface);
+  padding-left: calc(var(--space-3) + 3px);
 }
 
 .app-shell__sidebar a.active {
-  background: var(--color-primary);
-  color: var(--color-primary-contrast);
+  background: var(--color-surface);
+  border-left-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 .app-shell__content {
   grid-area: content;
-  padding: var(--space-6);
+  padding: var(--space-8) var(--space-6);
+  max-width: 72rem;
 }
 
 /* Off-screen until focused, then pinned to the top: a sighted keyboard user
@@ -91,7 +135,7 @@
   background: var(--color-primary);
   color: var(--color-primary-contrast);
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   text-decoration: none;
 }
 

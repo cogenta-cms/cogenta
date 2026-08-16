@@ -65,6 +65,28 @@
     background: var(--color-bg);
     font-size: 16px;
     line-height: 1.5;
+    /* A faint two-speck grain, tiled at a size that reads as paper texture
+       rather than a repeating pattern — printed matter, not a flat fill.
+       `rgb(from …)` mixes the grain colour from the current foreground token,
+       so it stays legible against both the light paper and the dark ground. */
+    background-image:
+      radial-gradient(
+        circle at 15% 30%,
+        rgb(from var(--color-text) r g b / var(--grain-opacity, 0.05)) 0.6px,
+        transparent 0.6px
+      ),
+      radial-gradient(
+        circle at 65% 70%,
+        rgb(from var(--color-text) r g b / var(--grain-opacity, 0.05)) 0.6px,
+        transparent 0.6px
+      );
+    background-size:
+      7px 7px,
+      11px 11px;
+    background-position:
+      0 0,
+      3px 5px;
+    color-scheme: light dark;
   }
 
   a {
@@ -75,12 +97,63 @@
     font: inherit;
   }
 
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
   /* One visible focus style everywhere, rather than each component inventing
      its own — the keyboard-navigation acceptance criterion depends on this
      never being silently suppressed. */
   :focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 2px;
+  }
+
+  /* One page-load reveal, reused everywhere something should announce itself
+     rather than simply appear: apply `.reveal` plus a `--reveal-delay` (or use
+     the numbered `.reveal-1`..`.reveal-6` shorthands) to stagger a handful of
+     elements in sequence. `prefers-reduced-motion` above already forces every
+     animation-duration to ~0, so this degrades to "present immediately". */
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .reveal {
+    animation: reveal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--reveal-delay, 0ms);
+  }
+
+  .reveal-1 {
+    --reveal-delay: 40ms;
+  }
+  .reveal-2 {
+    --reveal-delay: 100ms;
+  }
+  .reveal-3 {
+    --reveal-delay: 160ms;
+  }
+  .reveal-4 {
+    --reveal-delay: 220ms;
+  }
+  .reveal-5 {
+    --reveal-delay: 280ms;
+  }
+  .reveal-6 {
+    --reveal-delay: 340ms;
   }
 }
 

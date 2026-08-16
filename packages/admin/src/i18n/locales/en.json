@@ -92,7 +92,10 @@
     }
   },
   "collections": {
-    "heading": "Content"
+    "heading": "Content",
+    "tableLabel": "Collections",
+    "nameColumn": "Collection",
+    "empty": "No collection available."
   },
   "versions": {
     "heading": "Version history",
@@ -145,6 +148,8 @@
     "heading": "Media library",
     "loadError": "Could not load the media library.",
     "empty": "No media.",
+    "uploadHeading": "Upload",
+    "detailCloseLabel": "Close",
     "fileLabel": "File",
     "altLabel": "Alt text",
     "decorativeLabel": "Decorative image (no description needed)",
@@ -163,6 +168,8 @@
     "focalHint": "Click the image to set the focal point."
   },
   "collectionList": {
+    "tableLabel": "Content",
+    "searchResultsTableLabel": "Search results",
     "newButton": "New",
     "searchLabel": "Search",
     "searchButton": "Search",

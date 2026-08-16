@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -22,6 +22,7 @@ import {
   createPermissionLayer,
   createRestRouter,
   createSearchRouter,
+  createSitePlanRouter,
   createUsersRouter,
   executeGraphQL,
   type MediaImageProcessor,
@@ -32,6 +33,8 @@ import {
   type RestRouter,
   resolveActor,
   type SearchRouter,
+  type SitePlanRouter,
+  type SitePlanRouterOptions,
   type UsersRouter,
   variantKeyFor,
 } from '@cogenta/api'
@@ -71,6 +74,7 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
+import { createSitePlanning } from './site-plan.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
 import {
   DEFAULT_IMAGE_ENDPOINT,
@@ -144,6 +148,29 @@ export async function loadCollections(
 }
 
 /**
+ * The schema file this project actually loads, or `undefined` when it has
+ * none.
+ *
+ * Anything that *writes* the schema back has to target this, not a guessed
+ * name: `loadCollections` prefers `cogenta.schema.ts` (the form ADR-0010
+ * calls for — TypeScript in git), so a writer that assumed `.mjs` would
+ * create tables and then write a file nothing reads, leaving an operator
+ * with orphan tables and no collections after the restart it was told to do.
+ */
+export async function findSchemaFile(projectRoot: string): Promise<string | undefined> {
+  for (const candidate of SCHEMA_FILE_CANDIDATES) {
+    const path = join(projectRoot, candidate)
+    try {
+      await stat(path)
+      return path
+    } catch {
+      // Try the next candidate — same order `loadCollections` uses.
+    }
+  }
+  return undefined
+}
+
+/**
  * True only when the candidate file itself does not exist — never for a
  * missing import *inside* it, which must surface as a real error rather than
  * silently trying the next candidate filename.
@@ -181,6 +208,14 @@ interface Site {
   readonly usersRouter: UsersRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
+  /**
+   * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
+   *
+   * Always mounted, even with no LLM provider: the drafts an installer left
+   * behind must still be readable, and the router itself answers
+   * `SITE_PLAN_NO_PROVIDER` for the routes that would need a model.
+   */
+  readonly sitePlanRouter?: SitePlanRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -241,6 +276,8 @@ interface AssembleSiteOptions {
   }>
   /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
   readonly agents?: AgentsRouterOptions
+  /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
+  readonly sitePlans?: SitePlanRouterOptions
   /**
    * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
    * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
@@ -353,6 +390,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }),
     usersRouter: createUsersRouter({ auth }),
     ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
+    ...(options.sitePlans === undefined
+      ? {}
+      : { sitePlanRouter: createSitePlanRouter(options.sitePlans) }),
     mediaStore,
     storage,
     images: options.images ?? null,
@@ -374,9 +414,42 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   }
 }
 
+/**
+ * No route on this server takes a JSON body anywhere near this size — the
+ * one exception, `/api/site-plans`, already caps its base64 document
+ * payloads at 60 MiB total inside `site-plan-router.ts`. This is a ceiling
+ * above that, not a route-specific limit: `readBody` runs for every mutating
+ * request, most of them long before any permission check, so an unbounded
+ * read here was a way for an anonymous caller to make the server buffer an
+ * arbitrarily large body before ever being told no.
+ */
+const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
+
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
+  let total = 0
+  let tooLarge = false
+  for await (const chunk of req) {
+    const buf = chunk as Buffer
+    total += buf.length
+    if (total > MAX_REQUEST_BODY_BYTES) {
+      // Bound memory by not buffering any more chunks, but keep draining the
+      // socket rather than destroying it: a client mid-write over the same
+      // TCP connection this response has to go out on can be reset by an
+      // early `req.destroy()`, which loses the 413 response along with it.
+      // Letting the read finish costs bandwidth, never unbounded memory.
+      tooLarge = true
+      continue
+    }
+    chunks.push(buf)
+  }
+  if (tooLarge) {
+    throw new CogentaError({
+      code: 'REQUEST_BODY_TOO_LARGE',
+      message: `The request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit.`,
+      hint: 'Send a smaller payload.',
+    })
+  }
   if (chunks.length === 0) return undefined
   const text = Buffer.concat(chunks).toString('utf8')
   if (text.trim().length === 0) return undefined
@@ -972,6 +1045,25 @@ export function createRequestListener(
         return
       }
 
+      if (url.pathname.startsWith('/api/site-plans') && site.sitePlanRouter !== undefined) {
+        // `SitePlanRouter` itself refuses every route to a non-admin actor,
+        // but only after `readBody` has already buffered the whole request —
+        // and this route, alone among this server's routes, invites
+        // multi-megabyte bodies by design (uploaded documents). Checking the
+        // role here, before the body is read at all, means an unauthenticated
+        // or non-admin caller is turned away without the server ever reading
+        // what they sent.
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may propose or apply a site plan.')
+          return
+        }
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.sitePlanRouter.handle(request, context.actor))
+        return
+      }
+
       if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.agentsRouter.handle(request, context.actor))
@@ -1117,6 +1209,10 @@ export function createRequestListener(
       logger.error('request failed', {
         error: isCogentaError(error) ? error.toJSON() : String(error),
       })
+      if (isCogentaError(error) && error.code === 'REQUEST_BODY_TOO_LARGE') {
+        jsonError(res, 413, error.code, error.message)
+        return
+      }
       res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({
@@ -1146,6 +1242,18 @@ export interface ServeOptions {
    * decision for whoever deploys a read-only instance, not made here.
    */
   readonly readOnly?: boolean
+  /**
+   * `cogenta dev` sets this; `cogenta serve` does not.
+   *
+   * It gates exactly one thing today: whether an approved site plan may be
+   * **applied** (L19 task 7). ADR-0010 is explicit — "l'éditeur visuel de
+   * schéma écrit ces fichiers, mais uniquement en mode développement. En
+   * production le schéma est en lecture seule" — and applying a plan writes
+   * `cogenta.schema.*` and creates tables, which is exactly that editor by
+   * another name. Proposing and reviewing a plan stay available everywhere;
+   * only the write is held to the decision.
+   */
+  readonly development?: boolean
 }
 
 const DEFAULT_PORT = 4000
@@ -1212,6 +1320,18 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
+    sitePlans: await createSitePlanning({
+      projectRoot,
+      db: selection.instance,
+      collections,
+      config: loaded.config,
+      logger,
+      readOnly: options.readOnly ?? false,
+      // ADR-0010: the schema is writable in development only. `cogenta dev`
+      // says development; `cogenta serve` does not, and a plan can then be
+      // proposed and reviewed but never applied.
+      development: options.development ?? false,
+    }),
   })
 
   const server = createServer(createRequestListener(site, logger))

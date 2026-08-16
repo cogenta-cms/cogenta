@@ -54,5 +54,20 @@ export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
 export type { SearchRouter, SearchRouterOptions } from './search-router.js'
 export { createSearchRouter } from './search-router.js'
+export type {
+  AppliedPlanReport,
+  PlanDecisionsLike,
+  PlanItemLike,
+  PlanSectionLike,
+  SitePlanApplierLike,
+  SitePlanDraftLike,
+  SitePlannerLike,
+  SitePlanRouter,
+  SitePlanRouterOptions,
+  SitePlanStoreLike,
+  StoredSitePlanLike,
+  UploadedDocument,
+} from './site-plan-router.js'
+export { createSitePlanRouter } from './site-plan-router.js'
 export type { UsersRouter, UsersRouterOptions } from './users-router.js'
 export { createUsersRouter } from './users-router.js'

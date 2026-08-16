@@ -110,6 +110,54 @@ export function installMockFetch(
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
+
+  // L19 site plans, stateful per `installMockFetch()` call: decisions merge
+  // across requests and `apply` refuses an incomplete review, exactly as the
+  // real router does. A mock that always said yes would make the screen's
+  // whole reason for existing untestable.
+  const planSections = [
+    {
+      id: 'brief',
+      title: 'What we understood',
+      description: 'A neighbourhood restaurant.',
+      mode: 'each' as const,
+      items: [
+        {
+          id: 'brief:constraint-0',
+          section: 'brief',
+          title: 'No blog',
+          detail: 'Read from brief.md: \u201cPas de blog.\u201d',
+        },
+      ],
+    },
+    {
+      id: 'contentModel',
+      title: 'Content model',
+      description: 'The collections.',
+      mode: 'each' as const,
+      items: [
+        {
+          id: 'contentModel:dish',
+          section: 'contentModel',
+          title: 'Dishes (dish)',
+          detail: 'The menu. Fields: title (text).',
+        },
+      ],
+    },
+    {
+      id: 'skin',
+      title: 'Design',
+      description: 'Pick one of the proposed designs.',
+      mode: 'one-of' as const,
+      items: [
+        { id: 'skin:editorial', section: 'skin', title: 'Warm editorial', detail: 'Warm.' },
+        { id: 'skin:clinical', section: 'skin', title: 'Clean and clinical', detail: 'Cool.' },
+      ],
+    },
+  ]
+  const planDecisions: Record<string, 'accepted' | 'rejected'> = {}
+  let planAppliedAt: string | undefined
+
   let notices = [...(options.notices ?? [])]
 
   // Account state, per `installMockFetch()` call: the signed-in user plus
@@ -459,6 +507,81 @@ export function installMockFetch(
             },
           ],
         })
+      }
+
+      if (url.includes('/api/site-plans')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may propose or apply a site plan.',
+            },
+          })
+        }
+        const detail = {
+          id: 'draft-1',
+          createdAt: '2026-08-16T09:00:00.000Z',
+          activity: 'A neighbourhood restaurant.',
+          summary: 'A small showcase site.',
+          sources: ['brief.md'],
+          decidedCount: Object.keys(planDecisions).length,
+          ...(planAppliedAt === undefined ? {} : { appliedAt: planAppliedAt }),
+          draft: {
+            brief: {
+              activity: 'A neighbourhood restaurant.',
+              summary: 'A small showcase site.',
+              languages: ['fr'],
+              warnings: [],
+            },
+            violations: [
+              {
+                explanation:
+                  'The document rules out blog: \u201cPas de blog.\u201d The proposed \u201cpost\u201d collection was removed from the plan.',
+              },
+            ],
+            warnings: [],
+          },
+          sections: planSections,
+          decisions: { ...planDecisions },
+        }
+
+        if (url.endsWith('/apply')) {
+          const total = planSections.reduce((sum, section) => sum + section.items.length, 0)
+          if (Object.keys(planDecisions).length < total) {
+            return json(400, {
+              error: {
+                code: 'SITE_PLAN_DECISION_MISSING',
+                message: 'Some items of this plan have no decision.',
+                hint: 'Every proposed item must be accepted or rejected explicitly.',
+              },
+            })
+          }
+          planAppliedAt = '2026-08-16T11:00:00.000Z'
+          return json(200, {
+            data: {
+              ...detail,
+              appliedAt: planAppliedAt,
+              report: {
+                added: ['dish'],
+                skipped: [],
+                entriesSeeded: 0,
+                skinApplied: true,
+                followUp: ['Restart `cogenta serve` to pick up the new collections.'],
+              },
+            },
+          })
+        }
+        if (url.endsWith('/decisions')) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            decisions?: Record<string, 'accepted' | 'rejected'>
+          }
+          Object.assign(planDecisions, body.decisions ?? {})
+          return json(200, { data: { id: 'draft-1', decisions: { ...planDecisions } } })
+        }
+        if (/\/api\/site-plans\/[^/?]+$/u.test(url)) {
+          return json(200, { data: detail })
+        }
+        return json(200, { data: [detail], plannerAvailable: true })
       }
 
       if (url.includes('/api/agents')) {

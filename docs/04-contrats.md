@@ -322,6 +322,11 @@ majeur et impose une migration automatique du contenu déjà saisi.
 
 > **Figé en `tools@1.0` le 2026-08-14** (ADR-0020). Modifier la signature d'un outil
 > existant impose une montée de version majeure et une note de migration.
+>
+> **`tools@1.1` le 2026-08-16** (L19 tâche 1) : ajout de la permission
+> `document.extract` à la taxonomie. Aucune signature existante n'est touchée, aucun
+> outil existant ne change — un ajout à une taxonomie ouverte par le bas est mineur,
+> exactement comme l'ajout d'un `ErrorCode`.
 
 ```ts
 defineTool({
@@ -368,7 +373,15 @@ deps.scan · deps.patch
 build.trigger · deploy.trigger
 http.fetch(domains[]) · channel.send(channel)
 agent.delegate · memory.read · memory.write
+document.extract
 ```
+
+`document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
+d'un document fourni par un humain (PDF, DOCX, Markdown, texte brut). L'outil qui la
+porte, `document.extract_text`, ne fait aucune E/S : il reçoit les octets, rend du
+texte, et n'écrit nulle part. Le texte rendu est **de la donnée** (R8), jamais une
+instruction — l'agent qui l'exploite le passe par le canal `data` de
+`assembleContext`, jamais dans un prompt système.
 
 ### Définition d'un agent
 

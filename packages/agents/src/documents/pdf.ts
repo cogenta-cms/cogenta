@@ -106,6 +106,34 @@ function readHexString(data: Buffer, start: number): { bytes: Buffer; next: numb
   return { bytes, next: at + 1 }
 }
 
+/** A real PDF number is a handful of characters; nothing legitimate is near this. */
+const MAX_NUMBER_TOKEN_LENGTH = 64
+
+/**
+ * Whether a bare token is a PDF number, without a regular expression.
+ *
+ * The obvious pattern for this — `/^[-+]?(\d+\.?\d*|\.\d+)$/` — backtracks
+ * quadratically on a long run of digits that fails at the anchor, which is a
+ * denial of service an attacker-supplied content stream can reach for the
+ * price of one very long token. A character scan is linear and cannot, and
+ * the length cap makes the pathological input impossible before that even
+ * matters.
+ */
+function isNumberToken(word: string): boolean {
+  if (word.length === 0 || word.length > MAX_NUMBER_TOKEN_LENGTH) return false
+  let at = word[0] === '-' || word[0] === '+' ? 1 : 0
+  let digits = 0
+  let dots = 0
+  for (; at < word.length; at++) {
+    const char = word[at] as string
+    if (char >= '0' && char <= '9') digits++
+    else if (char === '.') dots++
+    else return false
+    if (dots > 1) return false
+  }
+  return digits > 0
+}
+
 type Token =
   | { readonly kind: 'string'; readonly value: string }
   | { readonly kind: 'number'; readonly value: number }
@@ -188,7 +216,7 @@ function* tokenize(data: Buffer): Generator<Token> {
       at++
       continue
     }
-    if (/^[-+]?(\d+\.?\d*|\.\d+)$/.test(word)) {
+    if (isNumberToken(word)) {
       yield { kind: 'number', value: Number.parseFloat(word) }
       continue
     }

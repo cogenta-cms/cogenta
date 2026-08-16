@@ -215,6 +215,21 @@ function buildMinimalPdf(content: string): Buffer {
 }
 
 describe('bounding what one upload can cost', () => {
+  it('reads a content stream carrying a very long token in linear time', () => {
+    // The pattern this replaced backtracked quadratically here: a long run of
+    // digits that fails the anchor. A minute of CPU for a 200 KB upload is a
+    // denial of service, so the shape of the input matters more than the
+    // wall clock — but the clock is asserted too, generously.
+    const pathological = `BT /F1 11 Tf 56 700 Td ${'9'.repeat(200_000)} (Real text) Tj ET`
+    const pdf = buildMinimalPdf(pathological)
+
+    const started = Date.now()
+    const result = extractDocumentText({ filename: 'slow.pdf', bytes: pdf })
+
+    expect(result.text).toContain('Real text')
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
   it('truncates past the character cap and says so, rather than silently dropping the tail', () => {
     const long = `${'Une exigence répétée. '.repeat(20_000)}CONTRAINTE FINALE`
 

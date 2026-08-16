@@ -6,6 +6,25 @@ import { useAuth } from '../auth/auth-context.js'
 import { canPerformOnTerms } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { TaxonomySummary } from '../schema/types.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Field,
+  Input,
+  Notice,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 /**
  * Taxonomy terms (`schema@2.0`, ADR-0022): list a tree, add to it, remove
@@ -111,97 +130,131 @@ export function TaxonomiesRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="taxonomies-heading">
-      <h1 id="taxonomies-heading">{t('taxonomies.heading')}</h1>
+    <section aria-labelledby="taxonomies-heading" className="flex flex-col gap-6">
+      <h1 id="taxonomies-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('taxonomies.heading')}
+      </h1>
 
       {taxonomies.length === 0 ? (
         <p>{t('taxonomies.none')}</p>
       ) : (
         <>
-          <label htmlFor="taxonomy-name">{t('taxonomies.taxonomy')}</label>{' '}
-          <select
-            id="taxonomy-name"
-            value={current ?? ''}
-            onChange={(event) => setSelectedName(event.target.value)}
-          >
-            {taxonomies.map((taxonomy) => (
-              <option key={taxonomy.name} value={taxonomy.name}>
-                {labelOf(taxonomy, i18n.language)}
-              </option>
-            ))}
-          </select>
-          {error !== null && <p role="alert">{error}</p>}
-          {loading && <p>{t('common.loading')}</p>}
-          {!loading && terms.length === 0 && <p>{t('taxonomies.empty')}</p>}
-          {terms.length > 0 && (
-            <table>
-              <caption>{t('taxonomies.caption')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('taxonomies.term')}</th>
-                  <th scope="col">{t('taxonomies.slug')}</th>
-                  {mayDelete && <th scope="col">{t('taxonomies.actions')}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {terms.map((term) => (
-                  <tr key={term.id}>
-                    {/* The tree comes back in tree order, so indenting by
-                        depth is all it takes to render it. */}
-                    <td style={{ paddingLeft: `${term.depth * 1.5}rem` }}>
-                      {term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug}
-                    </td>
-                    <td>{term.slug}</td>
-                    {mayDelete && (
-                      <td>
-                        <button type="button" onClick={() => void remove(term)}>
-                          {t('taxonomies.delete')}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {mayCreate && (
-            <form onSubmit={(event) => void submit(event)}>
-              <h2>{t('taxonomies.newTerm')}</h2>
-              <label htmlFor="term-label">{t('taxonomies.label')}</label>{' '}
-              <input
-                id="term-label"
-                value={label}
-                required
-                onChange={(event) => setLabel(event.target.value)}
-              />
-              <label htmlFor="term-slug">{t('taxonomies.slug')}</label>{' '}
-              <input
-                id="term-slug"
-                value={slug}
-                required
-                onChange={(event) => setSlug(event.target.value)}
-              />
-              {selected?.hierarchical === true && (
-                <>
-                  <label htmlFor="term-parent">{t('taxonomies.parent')}</label>{' '}
-                  <select
-                    id="term-parent"
-                    value={parent}
-                    onChange={(event) => setParent(event.target.value)}
-                  >
-                    <option value="">{t('taxonomies.noParent')}</option>
-                    {terms.map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {term.slug}
-                      </option>
-                    ))}
-                  </select>
-                </>
+          <div className="max-w-xs">
+            <Field label={t('taxonomies.taxonomy')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={current ?? ''}
+                  onChange={(event) => setSelectedName(event.target.value)}
+                >
+                  {taxonomies.map((taxonomy) => (
+                    <option key={taxonomy.name} value={taxonomy.name}>
+                      {labelOf(taxonomy, i18n.language)}
+                    </option>
+                  ))}
+                </Select>
               )}
-              <button type="submit" disabled={saving}>
-                {t('taxonomies.create')}
-              </button>
-            </form>
+            </Field>
+          </div>
+
+          {error !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{error}</p>
+            </Notice>
+          )}
+          {loading && <p>{t('common.loading')}</p>}
+
+          {!loading && (
+            <TableRoot label={t('taxonomies.caption')}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>{t('taxonomies.term')}</TableHeader>
+                    <TableHeader>{t('taxonomies.slug')}</TableHeader>
+                    {mayDelete && <TableHeader>{t('taxonomies.actions')}</TableHeader>}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {terms.map((term) => (
+                    <TableRow key={term.id}>
+                      {/* The tree comes back in tree order, so indenting by
+                          depth is all it takes to render it. */}
+                      <TableCell style={{ paddingLeft: `${term.depth * 1.5 + 1}rem` }}>
+                        {term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug}
+                      </TableCell>
+                      <TableCell>{term.slug}</TableCell>
+                      {mayDelete && (
+                        <TableCell>
+                          <Button variant="destructive" size="sm" onClick={() => void remove(term)}>
+                            {t('taxonomies.delete')}
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                  {terms.length === 0 && (
+                    <TableEmpty colSpan={mayDelete ? 3 : 2}>{t('taxonomies.empty')}</TableEmpty>
+                  )}
+                </TableBody>
+              </Table>
+            </TableRoot>
+          )}
+
+          {mayCreate && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <h2>{t('taxonomies.newTerm')}</h2>
+                </CardTitle>
+              </CardHeader>
+              <CardBody>
+                <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
+                  <Field label={t('taxonomies.label')}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        value={label}
+                        required
+                        onChange={(event) => setLabel(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('taxonomies.slug')}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        value={slug}
+                        required
+                        onChange={(event) => setSlug(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  {selected?.hierarchical === true && (
+                    <Field label={t('taxonomies.parent')}>
+                      {(control) => (
+                        <Select
+                          {...control}
+                          value={parent}
+                          onChange={(event) => setParent(event.target.value)}
+                        >
+                          <option value="">{t('taxonomies.noParent')}</option>
+                          {terms.map((term) => (
+                            <option key={term.id} value={term.id}>
+                              {term.slug}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </Field>
+                  )}
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={saving}>
+                      {t('taxonomies.create')}
+                    </Button>
+                  </div>
+                </form>
+              </CardBody>
+            </Card>
           )}
         </>
       )}

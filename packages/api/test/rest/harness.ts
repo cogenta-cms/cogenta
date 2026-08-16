@@ -43,6 +43,10 @@ export const ARTICLE: CollectionDefinition = {
     writer: { kind: 'relation', options: { to: 'rest_author', onDelete: 'setNull' } },
     tags: { kind: 'relation', options: { to: 'rest_tag', many: true } },
     zone: { kind: 'blocks', options: { allow: '*' } },
+    // Contract A's ordinary, optional field — declared so the scheduling
+    // tests in `publish-duplicate.test.ts` have somewhere to write a future
+    // publication date.
+    publishedAt: { kind: 'datetime', options: {} },
   },
   permissions: {
     read: ['public'],

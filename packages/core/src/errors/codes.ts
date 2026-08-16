@@ -109,6 +109,12 @@ export const ERROR_CODES = [
   'AUTH_ROLE_UNKNOWN',
   'AUDIT_CHAIN_BROKEN',
 
+  // API keys (L13 task 8: machine-to-machine bearer tokens)
+  'API_KEY_INVALID',
+  'API_KEY_REVOKED',
+  'API_KEY_EXPIRED',
+  'API_KEY_NOT_FOUND',
+
   // Media
   'MEDIA_NOT_FOUND',
   'MEDIA_INVALID',

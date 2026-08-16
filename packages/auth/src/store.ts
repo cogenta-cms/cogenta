@@ -1,5 +1,6 @@
 import type { DatabaseHandle } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
+import { createApiKeyStore } from './api-keys.js'
 import { createAuditLog } from './audit.js'
 import { createCredentialStore } from './credentials.js'
 import { createAuthService } from './login.js'
@@ -28,6 +29,7 @@ export interface AuthStore {
   readonly audit: ReturnType<typeof createAuditLog>
   readonly rateLimit: ReturnType<typeof createRateLimiter>
   readonly login: ReturnType<typeof createAuthService>
+  readonly apiKeys: ReturnType<typeof createApiKeyStore>
 }
 
 export async function createAuthStore(options: AuthStoreOptions): Promise<AuthStore> {
@@ -40,6 +42,7 @@ export async function createAuthStore(options: AuthStoreOptions): Promise<AuthSt
     sessions: createSessionStore(options.db, now),
     audit: createAuditLog(options.db, now),
     rateLimit: createRateLimiter(options.db, now),
+    apiKeys: createApiKeyStore(options.db, now),
     login: createAuthService({
       db: options.db,
       signingKey: options.signingKey,

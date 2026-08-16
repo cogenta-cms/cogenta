@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto'
 import type { AuthStore, LoginResult, User } from '@cogenta/auth'
+import { looksLikeApiKey } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 import type { Actor } from '../types.js'
@@ -43,6 +45,14 @@ function bearerToken(headers: RestRequest['headers']): string | null {
  * were sent at all. Only `/api/auth/session` itself treats "no valid session"
  * as something to report, because that route exists to answer exactly that
  * question.
+ *
+ * Two bearer shapes resolve here, never confused with each other: a session
+ * token (`sessions.resolve`, minted at sign-in for a human) and an API key
+ * (`apiKeys.verify`, minted by an admin for a script — L13 task 8). A key's
+ * `cogenta_sk_` prefix decides which lookup runs; a key never reaches more
+ * than the roles it was explicitly granted, and its actor id is prefixed so
+ * it can never collide with — or be mistaken for — a real user id in the
+ * audit log or a `me` route.
  */
 export async function resolveActor(
   auth: AuthStore,
@@ -51,6 +61,8 @@ export async function resolveActor(
   const token = bearerToken(headers)
   if (token === null) return ANONYMOUS
 
+  if (looksLikeApiKey(token)) return resolveApiKeyActor(auth, token)
+
   const session = await auth.sessions.resolve(token)
   if (session === null) return ANONYMOUS
 
@@ -58,6 +70,34 @@ export async function resolveActor(
   if (user === null || user.status !== 'active') return ANONYMOUS
 
   return { id: user.id, roles: user.roles }
+}
+
+/**
+ * Rate-limited the same way a password guess is: repeatedly retrying one
+ * wrong key is slowed down, keyed on a hash of the attempted key rather than
+ * on any caller-supplied identity, since an unrecognised key has none.
+ * Brute-forcing the 256-bit key space itself is infeasible regardless — this
+ * defends against a leaked-and-retried or misconfigured key hammering the
+ * server, the same failure mode the login rate limit defends against.
+ */
+async function resolveApiKeyActor(auth: AuthStore, token: string): Promise<Actor> {
+  const subject = `apikey:${createHash('sha256').update(token).digest('base64url')}`
+  try {
+    await auth.rateLimit.check(subject)
+  } catch {
+    // Backed off, the same way a missing or invalid token degrades: never an
+    // error out of `resolveActor`, just no actor.
+    return ANONYMOUS
+  }
+
+  const key = await auth.apiKeys.verify(token)
+  if (key === null) {
+    await auth.rateLimit.record(subject)
+    return ANONYMOUS
+  }
+  await auth.rateLimit.clear(subject)
+
+  return { id: `apikey:${key.id}`, roles: key.scope }
 }
 
 function asRecord(body: unknown): Record<string, unknown> {

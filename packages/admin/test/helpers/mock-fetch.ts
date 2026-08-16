@@ -244,6 +244,31 @@ export function installMockFetch(
     'user-2': [{ id: 'session-3', lastSeenAt: '2026-03-03T00:00:00.000Z', label: 'Phone' }],
   }
 
+  let apiKeyCounter = 0
+  const apiKeys: {
+    id: string
+    name: string
+    prefix: string
+    scope: readonly string[]
+    createdBy: string | null
+    createdAt: string
+    expiresAt: string | null
+    revokedAt: string | null
+    lastUsedAt: string | null
+  }[] = [
+    {
+      id: 'key-1',
+      name: 'CI pipeline',
+      prefix: 'cogenta_sk_',
+      scope: ['viewer'],
+      createdBy: user.id,
+      createdAt: '2026-02-01T00:00:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: '2026-03-05T00:00:00.000Z',
+    },
+  ]
+
   // Taxonomy terms and the trash live per `installMockFetch()` call, like
   // the media library above: each test starts from the same fixture and
   // changes it through the same routes the real server exposes.
@@ -370,6 +395,58 @@ export function installMockFetch(
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
         return json(200, { data: notices })
+      }
+
+      // `/api/api-keys/*`. Admin-only, mirroring the real router: the raw
+      // `key` is present only in the `POST` response's body, never in the
+      // list — proving the screen never re-displays it depends on this stub
+      // agreeing with `packages/api/test/rest/api-keys-router.test.ts`.
+      const apiKeysMatch = /\/api\/api-keys(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
+      if (apiKeysMatch !== null && url.includes('/api/api-keys')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const isAdmin = user.roles.includes('admin')
+        const forbidden = json(403, {
+          error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
+        })
+        const [, rawId] = apiKeysMatch
+
+        if (rawId === undefined && method === 'GET') {
+          if (!isAdmin) return forbidden
+          return json(200, { data: apiKeys })
+        }
+
+        if (rawId === undefined && method === 'POST') {
+          if (!isAdmin) return forbidden
+          apiKeyCounter += 1
+          const rawKey = `cogenta_sk_mock-${apiKeyCounter}-not-a-real-secret`
+          const record = {
+            id: `key-new-${apiKeyCounter}`,
+            name: String(body.name),
+            prefix: rawKey.slice(0, 12),
+            scope: body.scope as readonly string[],
+            createdBy: user.id,
+            createdAt: '2026-03-06T00:00:00.000Z',
+            expiresAt: null,
+            revokedAt: null,
+            lastUsedAt: null,
+          }
+          apiKeys.push(record)
+          return json(201, { data: { ...record, key: rawKey } })
+        }
+
+        if (rawId !== undefined && method === 'DELETE') {
+          if (!isAdmin) return forbidden
+          const found = apiKeys.find((candidate) => candidate.id === rawId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'API_KEY_NOT_FOUND', message: 'No API key with that id.' },
+            })
+          }
+          found.revokedAt = '2026-03-06T00:00:00.000Z'
+          return new Response(null, { status: 204 })
+        }
       }
 
       // `/api/users/*`. The role checks below mirror the real router's, because

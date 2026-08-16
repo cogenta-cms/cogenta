@@ -92,7 +92,10 @@
     }
   },
   "collections": {
-    "heading": "Contenus"
+    "heading": "Contenus",
+    "tableLabel": "Collections",
+    "nameColumn": "Collection",
+    "empty": "Aucune collection disponible."
   },
   "versions": {
     "heading": "Historique des versions",
@@ -145,6 +148,8 @@
     "heading": "Médiathèque",
     "loadError": "Impossible de charger la médiathèque.",
     "empty": "Aucun média.",
+    "uploadHeading": "Téléversement",
+    "detailCloseLabel": "Fermer",
     "fileLabel": "Fichier",
     "altLabel": "Texte alternatif",
     "decorativeLabel": "Image décorative (aucune description nécessaire)",
@@ -163,6 +168,8 @@
     "focalHint": "Cliquer sur l’image pour placer le point focal."
   },
   "collectionList": {
+    "tableLabel": "Contenus",
+    "searchResultsTableLabel": "Résultats de recherche",
     "newButton": "Nouveau",
     "searchLabel": "Rechercher",
     "searchButton": "Rechercher",

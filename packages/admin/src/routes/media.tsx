@@ -6,7 +6,7 @@ import { useAuth } from '../auth/auth-context.js'
 import { MediaDetail } from '../media/media-detail.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { UploadForm } from '../media/upload-form.js'
-import '../styles/media.css'
+import { Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '../ui/index.js'
 
 /** L2 task 11: upload, list, focal point, alt-text/decorative — no crop, no variant picker, since the render pipeline already produces those lazily from the original. */
 export function MediaRoute(): JSX.Element {
@@ -42,25 +42,40 @@ export function MediaRoute(): JSX.Element {
   const selected = items.find((item) => item.id === selectedId) ?? null
 
   return (
-    <section aria-labelledby="media-heading">
-      <h1 id="media-heading">{t('media.heading')}</h1>
+    <section aria-labelledby="media-heading" className="flex flex-col gap-6">
+      <h1 id="media-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('media.heading')}
+      </h1>
 
-      <UploadForm
-        token={token}
-        onUploaded={(asset) => setItems((current) => [asset, ...current])}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>{t('media.uploadHeading')}</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardBody>
+          <UploadForm
+            token={token}
+            onUploaded={(asset) => setItems((current) => [asset, ...current])}
+          />
+        </CardBody>
+      </Card>
 
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
+      )}
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && (
-        <ul className="media-grid">
+        <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3 p-0">
           {items.map((asset) => (
             <li key={asset.id}>
               <button
                 type="button"
-                className="media-grid__item"
                 onClick={() => setSelectedId(asset.id)}
+                className="flex w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-border bg-card p-2 text-card-foreground shadow-card transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <MediaThumbnail
                   token={token}
@@ -68,28 +83,40 @@ export function MediaRoute(): JSX.Element {
                   alt={asset.alt}
                   previewable={asset.kind === 'image'}
                 />
-                <span className="media-grid__filename">{asset.filename}</span>
+                <span className="w-full truncate text-xs">{asset.filename}</span>
               </button>
             </li>
           ))}
-          {items.length === 0 && <li>{t('media.empty')}</li>}
+          {items.length === 0 && (
+            <li className="text-sm text-muted-foreground">{t('media.empty')}</li>
+          )}
         </ul>
       )}
 
-      {selected !== null && (
-        <MediaDetail
-          token={token}
-          asset={selected}
-          onChange={(updated) =>
-            setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-          }
-          onDeleted={(id) => {
-            setItems((current) => current.filter((item) => item.id !== id))
-            setSelectedId(null)
-          }}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
+      <Modal
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null)
+        }}
+        title={selected?.filename ?? ''}
+        closeLabel={t('media.detailCloseLabel')}
+      >
+        {selected !== null && (
+          <MediaDetail
+            token={token}
+            asset={selected}
+            onChange={(updated) =>
+              setItems((current) =>
+                current.map((item) => (item.id === updated.id ? updated : item)),
+              )
+            }
+            onDeleted={(id) => {
+              setItems((current) => current.filter((item) => item.id !== id))
+              setSelectedId(null)
+            }}
+          />
+        )}
+      </Modal>
     </section>
   )
 }

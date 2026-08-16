@@ -4,6 +4,17 @@ import { Link } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { readableCollections } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import {
+  Notice,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 /**
  * Every collection the signed-in actor may at least read, and nothing else —
@@ -20,21 +31,44 @@ export function CollectionsRoute(): JSX.Element {
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
 
   return (
-    <section aria-labelledby="collections-heading">
-      <h1 id="collections-heading">{t('collections.heading')}</h1>
+    <section aria-labelledby="collections-heading" className="flex flex-col gap-6">
+      <h1 id="collections-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('collections.heading')}
+      </h1>
 
       {schema.status === 'loading' && <p>{t('common.loading')}</p>}
       {schema.status === 'error' && (
-        <p role="alert">{t('common.schemaError', { message: schema.message })}</p>
+        <Notice tone="danger" live="assertive">
+          <p>{t('common.schemaError', { message: schema.message })}</p>
+        </Notice>
       )}
       {schema.status === 'ready' && (
-        <ul>
-          {readableCollections(schema.schema.collections, roles).map((collection) => (
-            <li key={collection.name}>
-              <Link to={`/collections/${collection.name}`}>{collection.labels.plural}</Link>
-            </li>
-          ))}
-        </ul>
+        <TableRoot label={t('collections.tableLabel')}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>{t('collections.nameColumn')}</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {readableCollections(schema.schema.collections, roles).map((collection) => (
+                <TableRow key={collection.name}>
+                  <TableCell>
+                    <Link
+                      className="font-medium text-primary hover:underline"
+                      to={`/collections/${collection.name}`}
+                    >
+                      {collection.labels.plural}
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {readableCollections(schema.schema.collections, roles).length === 0 && (
+                <TableEmpty colSpan={1}>{t('collections.empty')}</TableEmpty>
+              )}
+            </TableBody>
+          </Table>
+        </TableRoot>
       )}
     </section>
   )

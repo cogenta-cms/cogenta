@@ -7,6 +7,7 @@ import { getSiteHealth, type SiteHealth } from '../api/health-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 
 interface ScheduledItem {
   readonly collection: string
@@ -18,9 +19,18 @@ function titleOf(entry: Entry): string {
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : entry.id
 }
 
+/** Same three tones the rest of the design system uses — colour and text both carry the status. */
+const HEALTH_BADGE_CLASS: Record<SiteHealth['database']['status'], string> = {
+  ok: 'border-success/30 bg-success-surface text-success',
+  degraded: 'border-warning/40 bg-warning-surface text-warning',
+  down: 'border-destructive/30 bg-destructive-surface text-destructive',
+}
+
 function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth] }): JSX.Element {
   return (
-    <span className={`dashboard__badge dashboard__badge--${report.status}`}>
+    <span
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 font-sans text-xs leading-5 font-medium ${HEALTH_BADGE_CLASS[report.status]}`}
+    >
       {report.driver} ({report.tier}) — {report.status}
     </span>
   )
@@ -32,6 +42,9 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
  * have no data source anywhere in this codebase yet, so they stay empty and
  * explicit rather than showing a fabricated number, the same rule the
  * placeholder this replaces already applied to agent-related widgets.
+ *
+ * L11 task 4 — laid out as a grid of `Card` widgets rather than stacked
+ * sections, using the design system built in `../ui/`.
  */
 export function DashboardRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -121,74 +134,134 @@ export function DashboardRoute(): JSX.Element {
   }, [token, schema, roles, t])
 
   return (
-    <section aria-labelledby="dashboard-heading">
-      <h1 id="dashboard-heading">{t('dashboard.heading')}</h1>
+    <section aria-labelledby="dashboard-heading" className="flex flex-col gap-6">
+      <h1 id="dashboard-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('dashboard.heading')}
+      </h1>
 
-      <section aria-labelledby="dashboard-health-heading">
-        <h2 id="dashboard-health-heading">{t('dashboard.healthHeading')}</h2>
-        {!isAdmin && <p>{t('dashboard.adminOnly')}</p>}
-        {isAdmin && healthError !== null && <p role="alert">{healthError}</p>}
-        {isAdmin && healthError === null && health === null && <p>{t('common.loading')}</p>}
-        {isAdmin && health !== null && (
-          <ul>
-            <li>
-              {t('dashboard.database')} <HealthBadge report={health.database} />
-            </li>
-            <li>
-              {t('dashboard.storage')} <HealthBadge report={health.storage} />
-            </li>
-          </ul>
-        )}
-      </section>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card aria-labelledby="dashboard-health-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-health-heading">{t('dashboard.healthHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            {!isAdmin && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+            )}
+            {isAdmin && healthError !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{healthError}</p>
+              </Notice>
+            )}
+            {isAdmin && healthError === null && health === null && (
+              <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
+            )}
+            {isAdmin && health !== null && (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+                <li className="flex flex-wrap items-center gap-2">
+                  {t('dashboard.database')} <HealthBadge report={health.database} />
+                </li>
+                <li className="flex flex-wrap items-center gap-2">
+                  {t('dashboard.storage')} <HealthBadge report={health.storage} />
+                </li>
+              </ul>
+            )}
+          </CardBody>
+        </Card>
 
-      <section aria-labelledby="dashboard-activity-heading">
-        <h2 id="dashboard-activity-heading">{t('dashboard.activityHeading')}</h2>
-        {!isAdmin && <p>{t('dashboard.adminOnly')}</p>}
-        {isAdmin && activityError !== null && <p role="alert">{activityError}</p>}
-        {isAdmin && activityError === null && activity.length === 0 && (
-          <p>{t('dashboard.noActivity')}</p>
-        )}
-        {isAdmin && activity.length > 0 && (
-          <ul>
-            {activity.map((entry) => (
-              <li key={entry.id}>
-                {entry.at} — {entry.actorId ?? '—'} — {entry.action}
-                {entry.collection !== null && ` (${entry.collection})`}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <Card aria-labelledby="dashboard-activity-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-activity-heading">{t('dashboard.activityHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            {!isAdmin && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+            )}
+            {isAdmin && activityError !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{activityError}</p>
+              </Notice>
+            )}
+            {isAdmin && activityError === null && activity.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noActivity')}</p>
+            )}
+            {isAdmin && activity.length > 0 && (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+                {activity.map((entry) => (
+                  <li key={entry.id}>
+                    {entry.at} — {entry.actorId ?? '—'} — {entry.action}
+                    {entry.collection !== null && ` (${entry.collection})`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
 
-      <section aria-labelledby="dashboard-scheduled-heading">
-        <h2 id="dashboard-scheduled-heading">{t('dashboard.scheduledHeading')}</h2>
-        {scheduledError !== null && <p role="alert">{scheduledError}</p>}
-        {scheduledError === null && scheduled.length === 0 && <p>{t('dashboard.noScheduled')}</p>}
-        {scheduled.length > 0 && (
-          <ul>
-            {scheduled.map((item) => (
-              <li key={`${item.collection}:${item.entry.id}`}>
-                {item.collection} — {titleOf(item.entry)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <Card aria-labelledby="dashboard-scheduled-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-scheduled-heading">{t('dashboard.scheduledHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            {scheduledError !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{scheduledError}</p>
+              </Notice>
+            )}
+            {scheduledError === null && scheduled.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noScheduled')}</p>
+            )}
+            {scheduled.length > 0 && (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+                {scheduled.map((item) => (
+                  <li key={`${item.collection}:${item.entry.id}`}>
+                    {item.collection} — {titleOf(item.entry)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
 
-      <section aria-labelledby="dashboard-cve-heading">
-        <h2 id="dashboard-cve-heading">{t('dashboard.cveHeading')}</h2>
-        <p>{t('dashboard.cveBody')}</p>
-      </section>
+        <Card aria-labelledby="dashboard-cve-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-cve-heading">{t('dashboard.cveHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.cveBody')}</p>
+          </CardBody>
+        </Card>
 
-      <section aria-labelledby="dashboard-vitals-heading">
-        <h2 id="dashboard-vitals-heading">{t('dashboard.vitalsHeading')}</h2>
-        <p>{t('dashboard.vitalsBody')}</p>
-      </section>
+        <Card aria-labelledby="dashboard-vitals-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-vitals-heading">{t('dashboard.vitalsHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.vitalsBody')}</p>
+          </CardBody>
+        </Card>
 
-      <section aria-labelledby="dashboard-backups-heading">
-        <h2 id="dashboard-backups-heading">{t('dashboard.backupsHeading')}</h2>
-        <p>{t('dashboard.backupsBody')}</p>
-      </section>
+        <Card aria-labelledby="dashboard-backups-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-backups-heading">{t('dashboard.backupsHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.backupsBody')}</p>
+          </CardBody>
+        </Card>
+      </div>
     </section>
   )
 }

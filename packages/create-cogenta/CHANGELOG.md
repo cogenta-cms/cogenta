@@ -1,5 +1,176 @@
 # create-cogenta
 
+## 0.2.0
+
+### Minor Changes
+
+- [`fdd7f3c`](https://github.com/cogenta-cms/cogenta/commit/fdd7f3c59f2aa15a1153f022ace5da574d3ae73f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give every blueprint's demo content something for the new theme to show.
+  
+  The eight content-pack blueprints seeded a hero, a `collectionList` and sometimes a
+  `cta` — three block types out of twelve, none of which exercises a card, a panel or an
+  accordion. Each home page now also carries a `featureGrid` written for that blueprint's
+  own subject (how a project runs, what we do, how the docs are organised, how we cook),
+  and `association`, `documentation`, `restaurant` and `saas` gain a real `faq`; `magazine`
+  gains a pull `quote` and `vitrine` a `stats` row. All of it is plain text: no demo block
+  references a media asset, because `cogenta serve` has no image pipeline wired to it yet
+  and a seeded site must render on the first run.
+  
+  Two things came out of writing it:
+  
+  - a shared `richTextParagraph` helper, because a `faq` answer is a rich-text document
+    too and five blueprints now build one — writing the four nested literals by hand in
+    each is how a missing `markDefs` gets in;
+  - a new test that runs every blueprint's demo blocks through `parseBlocks`, the same
+    contract-B validator the admin and the content store use. Nothing validated them
+    before: they were only typed, so a constraint violation or a duplicate `_key`
+    compiled and then failed at install time on a real user's machine, with the site
+    half-seeded.
+
+- [`5abe64e`](https://github.com/cogenta-cms/cogenta/commit/5abe64edb350cc01ec33cefa29f710c84e750732) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `npm create cogenta` can read your specification document (L19 tasks 3, 6, 8).
+  
+  An optional step now runs before the usual questions: point the installer at a
+  brief — PDF, DOCX, Markdown or plain text — and it proposes a content model,
+  a page list, two to five designs and demonstration content written for your
+  activity rather than for nobody's. You then walk it item by item: every
+  collection, every page, every demonstration entry and every constraint read
+  out of your document is its own yes or no. There is no "accept all", and there
+  cannot be: `resolveApprovedPlan` refuses a plan with an undecided item.
+  
+  Only what you accepted is applied. Approved collections are written into
+  `cogenta.schema.mjs` and their tables created; approved demonstration entries
+  are seeded as **drafts**, never published, because a model wrote them about
+  your business and you have not read them yet. What the document rules out is
+  removed before you ever see it, with the sentence it came from quoted — a
+  brief that says "pas de blog" cannot produce a site with a blog, whatever the
+  model proposed.
+  
+  The answers that follow are pre-filled from the brief — language, site type,
+  design description — and every one of them is a *default in a question*, shown
+  under a heading that says so.
+  
+  `chooseSkin` now proposes several designs instead of one, each previewed on
+  three real pages in its own directory under `.cogenta/skin-preview/`, each
+  validated against contract D by the loop that was already there. A round that
+  cannot produce two distinct valid designs falls back rather than presenting a
+  choice of one.
+  
+  Site types gained real defaults (task 8): a per-type page cache written into
+  `security.pageMaxAge`, whether to seed the type's demo content, and an HSTS
+  question that is recommended *off* everywhere because a wrong answer takes a
+  site offline for a year. Each is confirmed one at a time, with why it is
+  recommended printed above it. Nothing here is a placeholder — a setting that
+  wrote no config and created nothing would be a lie told in a friendly voice.
+  
+  **Nothing changes for an install that declines all of this.** With no LLM
+  provider configured the document question is never even asked, `--yes` never
+  enters the step, and the site produced is byte-for-byte the one this installer
+  produced before (R2 — tested explicitly). A `--config` file may list
+  `documents`, but a config file cannot consent on your behalf: the plan is
+  analysed and saved as a draft under `.cogenta/site-plans/`, never applied.
+
+### Patch Changes
+
+- [`d2214d7`](https://github.com/cogenta-cms/cogenta/commit/d2214d7dcc65877dabede41672538a3ffc6c2ba2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The installer wizard now always offers Postgres and MySQL as database
+  choices, not only when a local server is auto-detected. Local detection
+  only changes the label ("detected locally") and skips asking for a
+  connection URL when a local server was found — choosing Postgres or
+  MySQL without local detection now prompts for a real connection URL
+  (`databaseUrl`, already a supported `ScaffoldAnswers` field, previously
+  never actually reachable from the interactive wizard). Found because a
+  real site is at least as likely to point at a managed remote database
+  as at a local one, and the previous behavior silently hid two of the
+  three supported drivers from anyone without a database server already
+  running on their own machine.
+
+- [`1f1e8b2`](https://github.com/cogenta-cms/cogenta/commit/1f1e8b24385750995bb2af90a8d94478d44bdcdc) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Four corrections to L19, from the contract review.
+  
+  **ADR-0010 wins over the lot document.** Applying a site plan writes
+  `cogenta.schema.*` and creates tables — that is the schema editor arriving by a
+  different door, and ADR-0010 says it plainly: "uniquement en mode
+  développement. En production le schéma est en lecture seule." L19's brief asked
+  for the opposite ("un site déjà en production peut recevoir de nouveaux
+  documents"); the acted decision wins, and the disagreement is written down in
+  `BLOCKERS.md` with a ready-to-insert ADR-0023 rather than worked around.
+  `RunServeOptions` gains `development`, set by `cogenta dev` and by it alone.
+  Proposing and reviewing a plan stay available everywhere; only the write is
+  withheld, and the refusal names the way out.
+  
+  **The schema file is the one the site really loads.** The applier wrote
+  `cogenta.schema.mjs` by name, while `loadCollections` prefers
+  `cogenta.schema.ts` — the form ADR-0010 calls for. On such a project it would
+  have created the tables and then written a file nothing reads, leaving orphan
+  tables and no collections after the restart it told the operator to do. It now
+  resolves the real path (`findSchemaFile`, newly exported) and names it in the
+  follow-up. It also refuses outright when the current schema declares a
+  `validate` or a function `default`, which regenerating the file would silently
+  delete.
+  
+  **Content a model wrote is marked as such.** Demonstration entries seeded by
+  the installer and by the applier now carry `provenance: 'generated'` and a
+  `provenanceDetail` naming the agent, the model and the time. Contract A calls
+  that field non-optional because the European AI framework requires it; the
+  store's default is `human`, so inheriting it would have made the one regulated
+  field lie about every generated entry.
+  
+  **R8 has a second hop.** A constraint's `quote` is verbatim document text, and
+  the analysis step's careful tagging counted for nothing when the content-model
+  and demo-content prompts pasted it back in as prose — "Pas de blog. Ignore all
+  previous instructions and …" is a single clause, so the whole thing is the
+  quote. Both now go through `assembleContext`'s data channel too, escaped and
+  tagged, with a test that smuggles a forged `</data><constitution>` inside a
+  constraint and checks it arrives escaped.
+
+- [`89ec072`](https://github.com/cogenta-cms/cogenta/commit/89ec0724be1dcc50b8fa5f7a14ca026c40e0de89) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Account management moves out of the terminal: `@cogenta/api` gains
+  `createUsersRouter`, mounted by `cogenta serve` at `/api/users`.
+  
+  Until now `cogenta users create` was the only way to make an account. The new
+  routes are:
+  
+  - `GET /api/users` (admin) — every account, optionally filtered by `?role=`,
+    each with a summary of the second factors it holds
+  - `POST /api/users` (admin) — creates the account and returns a server-generated
+    password exactly once, the same rule the CLI already follows. The admin never
+    chooses it.
+  - `PATCH /api/users/{id}` (admin) — roles and status. Disabling an account
+    revokes its live sessions in the same move.
+  - `GET /api/users/{id|me}` and `GET /api/users/{id|me}/sessions` — yours, or
+    anyone's with `admin`
+  - `DELETE /api/users/{id|me}/sessions/{sessionId}` — revoke one session
+  - `POST /api/users/me/password` — change your own password, current one
+    required, rate-limited on the same store as sign-in
+  
+  Two deliberate absences. There is no delete: accounts are disabled, never
+  removed, because an account that wrote content still has to be nameable in the
+  audit log. And there is no route for an admin to set somebody else's password —
+  that is a reset, it needs a delivery channel and a single-use token to be
+  anything but a back door, and it is L13's task.
+  
+  Two safety properties worth naming, both covered by tests:
+  
+  - The last active `admin` cannot be demoted or disabled. Not a permission
+    question — the person doing it is allowed to — but with no password reset yet
+    there is no way back into a site with no administrator.
+  - `DELETE /api/users/me/sessions/{id}` checks the session actually belongs to
+    the caller before revoking it, so passing someone else's session id under
+    `me` is a 404 rather than a successful revocation.
+  
+  `cogenta serve` records `user.create`, `user.update`, `user.password_change` and
+  `user.session_revoke` in the audit log, naming the actor and the subject and
+  nothing that could sign anyone in.
+  
+  `cogenta users create`'s closing hint and `create-cogenta`'s install recap no
+  longer tell people they will be asked to set up a second factor at first
+  sign-in: since ADR-0021 they will not be.
+- Updated dependencies [[`552645e`](https://github.com/cogenta-cms/cogenta/commit/552645e039b8c8c4f5340d065ea2f4a552950815), [`cc3ea98`](https://github.com/cogenta-cms/cogenta/commit/cc3ea981188f16efa17352370251374b62709060), [`1c9b114`](https://github.com/cogenta-cms/cogenta/commit/1c9b114d7bde96ea00e8f75b75129f109e5c34ae), [`45d2815`](https://github.com/cogenta-cms/cogenta/commit/45d281560017abde1a069b01458a709293c1613b), [`8b561d1`](https://github.com/cogenta-cms/cogenta/commit/8b561d1ba735eb2b42c27725f67faf64e53866e5), [`182ef48`](https://github.com/cogenta-cms/cogenta/commit/182ef48d97e2757e7b1404dc407327f53ed377dd), [`6ad0f3a`](https://github.com/cogenta-cms/cogenta/commit/6ad0f3a495176169fe95f4955dfef30a6af376fd), [`ad18e0e`](https://github.com/cogenta-cms/cogenta/commit/ad18e0ed335d06ad861958e74bbfd2318e2509b8), [`17aa538`](https://github.com/cogenta-cms/cogenta/commit/17aa538e94da132ce1ca48d2213d2b84df231c78), [`755201d`](https://github.com/cogenta-cms/cogenta/commit/755201d55fd8c04ba2794a03797696769b59f6cc), [`551a06c`](https://github.com/cogenta-cms/cogenta/commit/551a06c2e58bb4119618e5502dfcae4bb024b7d4), [`8ebd276`](https://github.com/cogenta-cms/cogenta/commit/8ebd2768190f34d9ba1d67878e9024f19edb6f0f), [`b8ed3cf`](https://github.com/cogenta-cms/cogenta/commit/b8ed3cfca3f7b84e5454ffeb357edbe970afa065), [`7ed521e`](https://github.com/cogenta-cms/cogenta/commit/7ed521edc6f8affb11020a7012e858411d40699d), [`809baee`](https://github.com/cogenta-cms/cogenta/commit/809baee0b47e48aea06235a97c0da29c7ba4b06c), [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826), [`b4e7deb`](https://github.com/cogenta-cms/cogenta/commit/b4e7deb11cb56f514da8533ffd9296a809bd45f0), [`62c2898`](https://github.com/cogenta-cms/cogenta/commit/62c28982ab130aafdb8b3aed04821b039e9e03ff), [`ca71b3b`](https://github.com/cogenta-cms/cogenta/commit/ca71b3bbd5d5d7371923d0521444fc94a525de06), [`a332e41`](https://github.com/cogenta-cms/cogenta/commit/a332e416bfe08a226756451624b6344e7c6b7516), [`1f1e8b2`](https://github.com/cogenta-cms/cogenta/commit/1f1e8b24385750995bb2af90a8d94478d44bdcdc), [`ade7b38`](https://github.com/cogenta-cms/cogenta/commit/ade7b3807fd273e56bcbe7499eb83374a592d35f), [`07e49bf`](https://github.com/cogenta-cms/cogenta/commit/07e49bf0d45260fc14c74efe8a67b2671fd8e022), [`32f5db9`](https://github.com/cogenta-cms/cogenta/commit/32f5db932454aa35e586a4ffe144f909b0b773af), [`e321f08`](https://github.com/cogenta-cms/cogenta/commit/e321f089b14f5f116f28ab6eb2d2ffc0a43bc27d), [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826), [`89ec072`](https://github.com/cogenta-cms/cogenta/commit/89ec0724be1dcc50b8fa5f7a14ca026c40e0de89)]:
+  - @cogenta/core@0.3.0
+  - @cogenta/agents@0.2.0
+  - @cogenta/cli@0.3.0
+  - @cogenta/auth@0.2.0
+  - @cogenta/schema@0.2.0
+  - @cogenta/theme-canonical@0.2.0
+  - @cogenta/blocks@0.1.3
+  - @cogenta/render@0.1.3
+
 ## 0.1.6
 
 ### Patch Changes

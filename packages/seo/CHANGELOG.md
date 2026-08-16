@@ -1,5 +1,35 @@
 # @cogenta/seo
 
+## 0.2.0
+
+### Minor Changes
+
+- [`45d2815`](https://github.com/cogenta-cms/cogenta/commit/45d281560017abde1a069b01458a709293c1613b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `isPublished` no longer refuses an entry whose `publishedAt` is `null`.
+  
+  `publishedAt` is an ordinary contract A field, not a system column:
+  `ContentStore` returns `null` for it on every entry of every collection
+  that does not declare one — which is most of them, including all nine
+  `create-cogenta` blueprints. Treating that as "not published" made the
+  whole package refuse the site it was pointed at: every rendered page got
+  `<meta name="robots" content="noindex, nofollow">`, no canonical, no
+  `hreflang`, and `sitemap.xml` came back as an empty `<urlset/>`.
+  
+  `status` remains the authority on whether an entry is public and `state`
+  on which face is being read — both are still required. A `publishedAt`
+  that exists and is in the future still blocks, so scheduled publication
+  is unaffected, and a collection with no such field cannot have scheduled
+  anything in the first place.
+  
+  Found the first time the package ran against a real `cogenta serve`
+  (L10 task 1) rather than against values; every existing fixture set a
+  date by hand, so no unit test could have caught it.
+
+### Patch Changes
+
+- Updated dependencies [[`552645e`](https://github.com/cogenta-cms/cogenta/commit/552645e039b8c8c4f5340d065ea2f4a552950815), [`8b561d1`](https://github.com/cogenta-cms/cogenta/commit/8b561d1ba735eb2b42c27725f67faf64e53866e5), [`182ef48`](https://github.com/cogenta-cms/cogenta/commit/182ef48d97e2757e7b1404dc407327f53ed377dd), [`6ad0f3a`](https://github.com/cogenta-cms/cogenta/commit/6ad0f3a495176169fe95f4955dfef30a6af376fd), [`17aa538`](https://github.com/cogenta-cms/cogenta/commit/17aa538e94da132ce1ca48d2213d2b84df231c78), [`755201d`](https://github.com/cogenta-cms/cogenta/commit/755201d55fd8c04ba2794a03797696769b59f6cc), [`551a06c`](https://github.com/cogenta-cms/cogenta/commit/551a06c2e58bb4119618e5502dfcae4bb024b7d4), [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826), [`b4e7deb`](https://github.com/cogenta-cms/cogenta/commit/b4e7deb11cb56f514da8533ffd9296a809bd45f0), [`62c2898`](https://github.com/cogenta-cms/cogenta/commit/62c28982ab130aafdb8b3aed04821b039e9e03ff), [`ca71b3b`](https://github.com/cogenta-cms/cogenta/commit/ca71b3bbd5d5d7371923d0521444fc94a525de06)]:
+  - @cogenta/core@0.3.0
+  - @cogenta/schema@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes

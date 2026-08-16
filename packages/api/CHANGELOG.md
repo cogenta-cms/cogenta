@@ -1,5 +1,413 @@
 # @cogenta/api
 
+## 1.0.0
+
+### Major Changes
+
+- [`b8ed3cf`](https://github.com/cogenta-cms/cogenta/commit/b8ed3cfca3f7b84e5454ffeb357edbe970afa065) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Breaking:** `GET /api/media` and `GET /api/media/{id}` now require an
+  authenticated actor, like every other route on that router. They never did,
+  despite the file's own doc comment claiming otherwise since L2 — so an
+  anonymous request returned every asset's id, filename, alt text, storage key
+  and uploader.
+  
+  That gap became a real exfiltration path the moment L10 added a public
+  `/_image?id=…` delivery endpoint: the ids that endpoint is keyed on are
+  unguessable UUIDs, but they were *listable*, so every uploaded image —
+  including the ones attached to nothing published — was downloadable without a
+  session. Found by the security review of this lot.
+  
+  Any client reading the media library must now send its bearer token. The
+  admin already did on every call.
+  
+  Two related fixes in the same area:
+  
+  - An uploaded image is stored with the content type its **bytes** earn, never
+    the one the uploader declared. Sniffing already decided whether the file is
+    an image; repeating the declared type afterwards let a genuine PNG announced
+    as `text/html` be served as a document on the site's own origin, publicly
+    and cached for a year. `/_image` also whitelists the type it puts on the
+    wire, so an asset stored before this fix serves as an opaque download rather
+    than executing.
+  - `cogenta serve` no longer marks a page rendered for a signed-in actor as
+    cacheable by a shared cache. A page render is per-actor — an editor sees the
+    draft at the same URL — and `public, s-maxage=…` is precisely what RFC 9111
+    §3.5 says re-authorises a CDN to store the answer to a request carrying
+    `Authorization`. Anything sent with credentials is now `private, no-store`.
+  - `/sitemap.xml` no longer 500s when the site has a routed collection the
+    `public` role may not read: such a collection is skipped, since it has no
+    public URLs to list.
+
+### Minor Changes
+
+- [`552645e`](https://github.com/cogenta-cms/cogenta/commit/552645e039b8c8c4f5340d065ea2f4a552950815) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Advanced AI (L18): a writing assistant, a `vector` driver, semantic search,
+  RAG chat with citations, classification/duplicate detection/moderation, and
+  FAQ/Schema.org drafting. **Nothing here is on a required path** — a site with
+  no AI provider configured behaves exactly as before, and the whole feature set
+  disappears from the UI rather than failing (R2).
+  
+  - **`@cogenta/agents`** gains the `vector` driver need the architecture
+    document has named since L0 and nothing implemented: `VectorStore` with three
+    drivers behind the existing `createDriverRegistry` — `pgvector` (optimal),
+    `file` (degraded, survives a restart) and `memory` (degraded, always
+    available). One contract suite runs against all three; pgvector's run is an
+    integration test that skips loudly without `COGENTA_TEST_POSTGRES_URL`.
+    Nothing re-implements cosine similarity: L4's `vectorRank` does the ranking
+    everywhere, and all three drivers return the same number.
+  
+    `createSemanticSearch` fuses the vector half with L10's full-text index by
+    RRF — **beside it, never instead of it**: pure vector search misses
+    exact-keyword queries, which is the failure the architecture document warns
+    about at line 190.
+  
+    Fifteen Contract C tools, all `sideEffects: false`, every output carrying
+    `applied: false` as a **literal** so an assistant tool's type cannot say it
+    changed anything (R6). Eight writing tools (rewrite, proofread, summarise,
+    translate, meta description, titles, tags, alt text), `assist.generate_image`
+    behind a two-vendor image provider driver (OpenAI, Stability), `assist.chat`
+    (RAG with citations), `assist.classify`/`assist.find_duplicates`/
+    `assist.moderate`, and `assist.faq_draft`/`assist.schema_org_draft`.
+  
+    Three properties worth knowing:
+    - **Citations come from retrieval, not from the model.** The model names
+      1-based indices into the passages it was shown; this code maps them back to
+      what the retriever returned, and an invented index resolves to nothing. A
+      chat answer can never cite a page that was not retrieved.
+    - **Moderation and duplicate detection can recommend `none` or `review`, and
+      nothing else.** The union has no destructive member, so no answer —
+      however jailbroken — describes a deletion.
+    - **`assist.find_duplicates` needs no AI provider at all.** It embeds with
+      the site's `EmbeddingProvider`, which by default is the local hashing one:
+      no key, no service, no model download.
+  
+  - **`@cogenta/core`** gains an `imageGeneration` config section
+    (`COGENTA_IMAGE_PROVIDER`/`_MODEL`/`_BASE_URL`, key in `COGENTA_IMAGE_API_KEY`
+    and refused in the config file like every other secret), a `vector` section
+    (`driver`/`path`/`table` — dimensions stay on `embeddings`, never duplicated),
+    and the error codes `VECTOR_DIMENSION_MISMATCH`, `VECTOR_STORE_FAILED`,
+    `ASSIST_UNAVAILABLE`, `ASSIST_RESPONSE_INVALID`.
+  
+  - **`@cogenta/api`** gains `createAssistantRouter` — `GET /api/assistant` and
+    `POST /api/assistant/run`. The `GET` answers **200 with
+    `{available: false, tools: []}`** on a site with no provider, which is what
+    lets a client render nothing instead of handling an error. The permission
+    gate is the route's, not the tools' (R4): an actor may use the assistant when
+    they may edit content somewhere, and an anonymous caller is refused before any
+    provider is contacted, so an unauthenticated request can never spend the
+    site's AI budget. The route also refuses any tool declaring a side effect,
+    even though none does.
+  
+  - **`@cogenta/cli`** wires all of it into `cogenta serve`: providers built from
+    the config, the vector store selected through the registry, the content stores
+    wrapped so a publish updates the embedding index the same way it already
+    updates the full-text one, and `/api/assistant` mounted on every site. Every
+    piece degrades to "off" with a log line rather than stopping the site: an
+    unknown provider name, a missing API key, an unavailable vector store and an
+    embeddings provider with no adapter yet are four warnings, not four crashes.
+  
+  **Migration**: none. Every new configuration section is optional, and a site
+  that adds none behaves exactly as it did before.
+
+- [`ad18e0e`](https://github.com/cogenta-cms/cogenta/commit/ad18e0ed335d06ad861958e74bbfd2318e2509b8) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Images are processed at upload and served with a real `srcset` (L10 task 5).
+  `@cogenta/render`'s image pipeline, `srcset.ts` and its two driver tiers
+  (sharp, WebAssembly libvips) had existed since L3 and were called by nothing:
+  an uploaded image recorded no dimensions, produced no renditions, and
+  `ctx.image()` in the rendered page threw `THEME_IMAGE_UNSUPPORTED`.
+  
+  - **`@cogenta/api`** — `createMediaRouter` takes an optional
+    `MediaImageProcessor`. On an image upload it probes the intrinsic size into
+    the asset's existing `width`/`height` columns (no schema change) and writes
+    the renditions beside the original under `media/{id}/variants/`. Deleting
+    the asset deletes them, by recomputing their names — `StorageDriver` has no
+    `list`, which is why the ladder is fixed and `variantNames` exists. The
+    interface is injected rather than imported: a REST transport has no business
+    pulling a 12 MB WebAssembly dependency into its tree.
+  - **`@cogenta/cli`** — builds that processor from the real driver registry and
+    serves the renditions at a new **public** `GET /_image?id=…&w=…`. Public and
+    image-only on purpose: a published page's `<img>` is fetched by a browser
+    with no session, so it cannot sit behind the same gate as
+    `/api/media/{id}/file`, which is unchanged and still covers every other kind.
+    `/_image` never renders on demand — an unstored width falls back to the
+    original — so a public URL cannot be turned into CPU.
+  - The rendered page now carries a real `srcset`, and `og:image` and JSON-LD's
+    `image` come from the same asset, absolute. Which media a page needs is
+    answered by `collectDependencies`, the walk `/api/content` already uses,
+    rather than by a new heuristic over block JSON.
+  
+  Variants are produced at upload rather than lazily because `cogenta serve`
+  has no durable variant cache: a lazy pipeline behind an in-memory store
+  re-decodes every image after every restart, which is the worst answer on the
+  shared hosting R10 names. WebP only, for now, because AVIF's encode cost on
+  the WASM tier — the tier that always exists — would make an upload of a
+  handful of images take minutes.
+  
+  Also fixes a real shutdown hang: `server.close()` waits for every open
+  connection, so one client that fetched a large response and never read the
+  body kept `cogenta serve` alive forever. Shutdown now cuts remaining
+  connections after a short grace period.
+
+- [`8ebd276`](https://github.com/cogenta-cms/cogenta/commit/8ebd2768190f34d9ba1d67878e9024f19edb6f0f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Surface repeated failed sign-ins instead of only slowing them down (L14 task 4)
+  
+  `cogenta_login_attempts` has been written to on every failed sign-in since L2
+  and read by nothing but the rate limiter's own counter. A site being
+  brute-forced knew it and told nobody. It now says so, in two places.
+  
+  - `@cogenta/auth`'s `RateLimiter` gains `recentFailures()`, which groups the
+    attempts still inside the backoff window by subject, worst first. It also
+    **prunes** what has fallen out of the window — a real leak, since `clear()`
+    only runs after a *successful* sign-in, so a subject that never succeeds
+    accumulated rows for ever, which is exactly the case that grows fastest.
+  - `@cogenta/api` gains `createSuspiciousActivitySource`, one more `NoticeSource`
+    in the array `serve.ts` already builds. It shows an admin — and only an
+    admin — how many failures across how many accounts, and is not dismissible
+    because it disappears on its own within the limiter's fifteen-minute window.
+  - `cogenta serve` also sends a `security.suspicious_activity` alert through the
+    signed webhook channel L14 task 1 connected, built with `@cogenta/channels`'s
+    own `buildAlert` — no second notification path and no second signature. At
+    most one alert per five minutes, so a script making hundreds of attempts does
+    not become hundreds of outbound requests.
+  
+  **Counts only, never the accounts.** Neither the notice nor the outbound alert
+  names an email: that would turn an admin screen into an account-enumeration
+  surface, and the numbers are what a decision is made on. Per-subject detail
+  stays in the audit log, behind its own permission.
+  
+  The rate limiter itself was audited before anything was added and needed
+  nothing: password sign-in, TOTP sign-in and TOTP enrolment all go through it,
+  WebAuthn is deliberately exempt (there is no guessable secret), and password
+  reset has no HTTP route at all.
+
+- [`7ed521e`](https://github.com/cogenta-cms/cogenta/commit/7ed521edc6f8affb11020a7012e858411d40699d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - MFA is no longer a gate at sign-in, and the admin gains a generic notices
+  mechanism that recommends it instead (ADR-0021).
+  
+  **Breaking for anyone driving the auth API directly**, although both packages are
+  still pre-1.0 and this is released as a minor:
+  
+  - `LoginResult` has two members, not three. `totp_setup_required` is gone.
+    `passwordLogin` now issues a session for any role that has no second factor
+    enrolled — including `admin` — and challenges only an account that actually
+    enrolled one. Previously a role that could `publish` on any collection, and
+    `admin` unconditionally, was refused a session until it completed a TOTP
+    ceremony, which meant the first admin of a brand-new site could not reach a
+    single screen without an authenticator app to hand.
+  - An unconfirmed TOTP secret no longer counts as a factor. Someone who opened
+    the enrolment screen and walked away used to be challenged for a code their
+    authenticator app had never received, with no way back.
+  - `AuthService.beginTotpSetup(ticket)` / `confirmTotpSetup(ticket, code)` are
+    replaced by `beginTotpEnrolment(userId)`, `confirmTotpEnrolment(userId, code)`
+    and `disableTotp(userId)`. Enrolment is self-service from an existing session
+    rather than a step in the sign-in flow.
+  - `POST /api/auth/totp-setup` and `POST /api/auth/totp-setup-confirm` are
+    replaced by `POST /api/auth/totp/enrol`, `POST /api/auth/totp/enrol/confirm`
+    and `DELETE /api/auth/totp`. All three require a session, and the account they
+    touch is the one the bearer token resolves to — no route takes a user id, so
+    no request shape can enrol or disable a factor on somebody else's account.
+  
+  `requiresMfa()` and `sensitiveRoles()` are unchanged and still exported. They now
+  answer "who is shown the recommendation" instead of "who is blocked".
+  
+  New in `@cogenta/api`: `createNoticeRouter`, `createNoticeDismissalStore` and
+  `createMfaRecommendationSource` — a generic admin-notice mechanism serving
+  `GET /api/notices` and `POST /api/notices/{id}/dismiss`. Notices are per-account,
+  persist until the thing they report is fixed or the person dismisses them, and
+  carry a stable code plus substitutions rather than prose, so the admin translates
+  them. A dismissal is stored server-side (new table `cogenta_notice_dismissals`,
+  created on startup), so the answer follows an account across browsers instead of
+  living in one `localStorage`. Adding a future recommendation is one more
+  `NoticeSource` in an array, with no change to the router, the store or the admin.
+  
+  `cogenta serve` mounts `/api/notices` and registers the MFA recommendation.
+
+- [`62c2898`](https://github.com/cogenta-cms/cogenta/commit/62c28982ab130aafdb8b3aed04821b039e9e03ff) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Full-text search is reachable for the first time (L10 task 3). The engine
+  (`packages/schema/src/search/`, one driver per database) has existed and
+  been tested since L1, but nothing anywhere in the repository ever called
+  `index()` and no route ever called `search()` — so every search returned
+  nothing, however the query was written.
+  
+  - **`@cogenta/schema`** gains `withSearchIndexing(store, { collection,
+    index, onError })`, a `ContentStore` decorator in the same shape as
+    `withReadOnlyStore`. Wrapping the store rather than hooking a router is
+    what makes REST and GraphQL both covered by one guard instead of two.
+    Its central safety property: after any mutation the **published** face is
+    read back first and indexed when it exists, so an unpublished edit to a
+    published entry can never be filed under a status a public search reaches.
+    A failing index write never fails the content write — the index is derived
+    data — and surfaces through `onError` rather than silently.
+  - **`@cogenta/api`** gains `createSearchRouter` — `GET /api/search?q=…`,
+    with `collections`, `status`, `locale`, `limit` and `offset`. Naming a
+    collection you may not read is a 403, not a quieter answer; the default
+    scope is the readable collections only, and every hit is filtered against
+    that same set on the way out. `status` other than `published` requires
+    `canReadUnpublished` on every collection in scope.
+  - **`@cogenta/cli`** creates the index at startup, wraps every collection's
+    store with it, mounts `/api/search`, and serves a public `/search?q=…`
+    page with a real form and real links (`noindex`, as a search results page
+    must be). The public page is a **route, not a contract B block**: contract
+    B is frozen and adding a block needs an RFC, which does not belong in a
+    lot whose premise is "wiring only".
+
+- [`07e49bf`](https://github.com/cogenta-cms/cogenta/commit/07e49bf0d45260fc14c74efe8a67b2671fd8e022) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Document-driven site planning on a site that is already running (L19 tasks 5
+  and 7). `@cogenta/api` gains `createSitePlanRouter` and `cogenta serve` mounts
+  it at `/api/site-plans`; the admin gets a screen on top of it.
+  
+  Upload a brief, read what the agent understood, and decide on it one item at a
+  time — every collection, page, demonstration entry and constraint read out of
+  the document is its own yes or no. The API has no `acceptAll` parameter and the
+  screen has no control that decides more than one item; `apply` calls
+  `resolveApprovedPlan`, which refuses a plan with an undecided item, so there is
+  no path that skips the review even for a caller writing raw HTTP.
+  
+  Applying is **additive**. A proposed collection whose name the site already
+  uses is refused and reported — replacing a live collection is a migration with
+  a diff and a backup, not a side effect of accepting a suggestion. What is
+  applied writes the schema file, creates the new tables and seeds approved
+  demonstration entries as drafts, never published. The report says plainly that
+  `cogenta serve` has to be restarted to see the new collections, rather than
+  implying the change is already live. A plan is applied at most once.
+  
+  Every route is admin-only. On a site with no LLM provider the routes that need
+  a model answer `SITE_PLAN_NO_PROVIDER` (501) with a hint, and the list route
+  reports `plannerAvailable: false` so the screen can explain itself — a plan
+  proposed during installation is still readable and appliable there, which is
+  what makes the installer's "save it for later" path mean something (R2).
+
+- [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Breaking: `DELETE /api/content/{collection}/{id}` now means "move to the
+  trash"**, not "destroy" (`schema@2.0`, ADR-0022). Two routes complete it:
+  
+  - `POST /{collection}/{id}/untrash` — take it back out;
+  - `POST /{collection}/{id}/purge` — destroy it for good.
+  
+  Purge is a POST on its own path rather than a second meaning for `DELETE`,
+  because two verbs on one path with two very different consequences is how
+  someone destroys content by reflex. A client that used `DELETE` to really
+  remove an entry must now follow it with `/purge`.
+  
+  `?trashed=include|only` on a list opens the trash; without it a pre-2.0 client
+  sees exactly what it saw before. All four operations — including *seeing* the
+  trash — require the `delete` permission on the collection: contract A freezes
+  the five actions, so the trash borrows the one that fills it.
+  
+  Serialised entries gain `deletedAt`, orthogonal to `status`: an entry in the
+  trash still reports the status it had, which is what restoring gives back.
+  
+  ### Taxonomy terms over HTTP
+  
+  `createTaxonomyRouter` mounts `/api/taxonomies`:
+  
+  ```
+  GET    /{taxonomy}            the tree, in tree order
+  POST   /{taxonomy}            create a term
+  GET    /{taxonomy}/{id}       one term
+  PATCH  /{taxonomy}/{id}       rename, relabel, reorder
+  DELETE /{taxonomy}/{id}       delete (?cascade=true for the whole branch)
+  POST   /{taxonomy}/{id}/move  re-parent it
+  ```
+  
+  Mounted apart from `/api/content` because a taxonomy is not a collection and a
+  site may legitimately name both the same thing. The materialised path is
+  deliberately **not** serialised — it is a storage decision, and `parent` plus
+  `depth` are what a tree renderer needs.
+  
+  `PermissionLayer` gains `canTerm`/`assertTerm` rather than a widened `can`:
+  same role rules, no preview path. A preview token names a collection and an
+  entry, so with a `category` collection beside a `category` taxonomy, sharing
+  the code path would let a token minted for one unlock the other. Custom
+  `PermissionLayer` implementations must add the two methods.
+  
+  ### In `cogenta serve`
+  
+  A project declares its taxonomies as a named `taxonomies` export beside the
+  default one in `cogenta.schema.*`; a schema file written before 2.0 keeps
+  loading unchanged and declares none. The server creates the terms tables before
+  the collections, mounts `/api/taxonomies`, and passes `siblings` to every
+  content store so `restrict` is still enforced when an entry is trashed.
+
+- [`89ec072`](https://github.com/cogenta-cms/cogenta/commit/89ec0724be1dcc50b8fa5f7a14ca026c40e0de89) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Account management moves out of the terminal: `@cogenta/api` gains
+  `createUsersRouter`, mounted by `cogenta serve` at `/api/users`.
+  
+  Until now `cogenta users create` was the only way to make an account. The new
+  routes are:
+  
+  - `GET /api/users` (admin) — every account, optionally filtered by `?role=`,
+    each with a summary of the second factors it holds
+  - `POST /api/users` (admin) — creates the account and returns a server-generated
+    password exactly once, the same rule the CLI already follows. The admin never
+    chooses it.
+  - `PATCH /api/users/{id}` (admin) — roles and status. Disabling an account
+    revokes its live sessions in the same move.
+  - `GET /api/users/{id|me}` and `GET /api/users/{id|me}/sessions` — yours, or
+    anyone's with `admin`
+  - `DELETE /api/users/{id|me}/sessions/{sessionId}` — revoke one session
+  - `POST /api/users/me/password` — change your own password, current one
+    required, rate-limited on the same store as sign-in
+  
+  Two deliberate absences. There is no delete: accounts are disabled, never
+  removed, because an account that wrote content still has to be nameable in the
+  audit log. And there is no route for an admin to set somebody else's password —
+  that is a reset, it needs a delivery channel and a single-use token to be
+  anything but a back door, and it is L13's task.
+  
+  Two safety properties worth naming, both covered by tests:
+  
+  - The last active `admin` cannot be demoted or disabled. Not a permission
+    question — the person doing it is allowed to — but with no password reset yet
+    there is no way back into a site with no administrator.
+  - `DELETE /api/users/me/sessions/{id}` checks the session actually belongs to
+    the caller before revoking it, so passing someone else's session id under
+    `me` is a 404 rather than a successful revocation.
+  
+  `cogenta serve` records `user.create`, `user.update`, `user.password_change` and
+  `user.session_revoke` in the audit log, naming the actor and the subject and
+  nothing that could sign anyone in.
+  
+  `cogenta users create`'s closing hint and `create-cogenta`'s install recap no
+  longer tell people they will be asked to set up a second factor at first
+  sign-in: since ADR-0021 they will not be.
+
+### Patch Changes
+
+- [`1f1e8b2`](https://github.com/cogenta-cms/cogenta/commit/1f1e8b24385750995bb2af90a8d94478d44bdcdc) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Four corrections to L19, from the contract review.
+  
+  **ADR-0010 wins over the lot document.** Applying a site plan writes
+  `cogenta.schema.*` and creates tables — that is the schema editor arriving by a
+  different door, and ADR-0010 says it plainly: "uniquement en mode
+  développement. En production le schéma est en lecture seule." L19's brief asked
+  for the opposite ("un site déjà en production peut recevoir de nouveaux
+  documents"); the acted decision wins, and the disagreement is written down in
+  `BLOCKERS.md` with a ready-to-insert ADR-0023 rather than worked around.
+  `RunServeOptions` gains `development`, set by `cogenta dev` and by it alone.
+  Proposing and reviewing a plan stay available everywhere; only the write is
+  withheld, and the refusal names the way out.
+  
+  **The schema file is the one the site really loads.** The applier wrote
+  `cogenta.schema.mjs` by name, while `loadCollections` prefers
+  `cogenta.schema.ts` — the form ADR-0010 calls for. On such a project it would
+  have created the tables and then written a file nothing reads, leaving orphan
+  tables and no collections after the restart it told the operator to do. It now
+  resolves the real path (`findSchemaFile`, newly exported) and names it in the
+  follow-up. It also refuses outright when the current schema declares a
+  `validate` or a function `default`, which regenerating the file would silently
+  delete.
+  
+  **Content a model wrote is marked as such.** Demonstration entries seeded by
+  the installer and by the applier now carry `provenance: 'generated'` and a
+  `provenanceDetail` naming the agent, the model and the time. Contract A calls
+  that field non-optional because the European AI framework requires it; the
+  store's default is `human`, so inheriting it would have made the one regulated
+  field lie about every generated entry.
+  
+  **R8 has a second hop.** A constraint's `quote` is verbatim document text, and
+  the analysis step's careful tagging counted for nothing when the content-model
+  and demo-content prompts pasted it back in as prose — "Pas de blog. Ignore all
+  previous instructions and …" is a single clause, so the whole thing is the
+  quote. Both now go through `assembleContext`'s data channel too, escaped and
+  tagged, with a test that smuggles a forged `</data><constitution>` inside a
+  constraint and checks it arrives escaped.
+- Updated dependencies [[`552645e`](https://github.com/cogenta-cms/cogenta/commit/552645e039b8c8c4f5340d065ea2f4a552950815), [`cc3ea98`](https://github.com/cogenta-cms/cogenta/commit/cc3ea981188f16efa17352370251374b62709060), [`8b561d1`](https://github.com/cogenta-cms/cogenta/commit/8b561d1ba735eb2b42c27725f67faf64e53866e5), [`182ef48`](https://github.com/cogenta-cms/cogenta/commit/182ef48d97e2757e7b1404dc407327f53ed377dd), [`6ad0f3a`](https://github.com/cogenta-cms/cogenta/commit/6ad0f3a495176169fe95f4955dfef30a6af376fd), [`17aa538`](https://github.com/cogenta-cms/cogenta/commit/17aa538e94da132ce1ca48d2213d2b84df231c78), [`755201d`](https://github.com/cogenta-cms/cogenta/commit/755201d55fd8c04ba2794a03797696769b59f6cc), [`551a06c`](https://github.com/cogenta-cms/cogenta/commit/551a06c2e58bb4119618e5502dfcae4bb024b7d4), [`8ebd276`](https://github.com/cogenta-cms/cogenta/commit/8ebd2768190f34d9ba1d67878e9024f19edb6f0f), [`7ed521e`](https://github.com/cogenta-cms/cogenta/commit/7ed521edc6f8affb11020a7012e858411d40699d), [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826), [`b4e7deb`](https://github.com/cogenta-cms/cogenta/commit/b4e7deb11cb56f514da8533ffd9296a809bd45f0), [`62c2898`](https://github.com/cogenta-cms/cogenta/commit/62c28982ab130aafdb8b3aed04821b039e9e03ff), [`ca71b3b`](https://github.com/cogenta-cms/cogenta/commit/ca71b3bbd5d5d7371923d0521444fc94a525de06)]:
+  - @cogenta/core@0.3.0
+  - @cogenta/auth@0.2.0
+  - @cogenta/schema@0.2.0
+  - @cogenta/blocks@0.1.3
+
 ## 0.1.2
 
 ### Patch Changes

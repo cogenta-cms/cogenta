@@ -1,5 +1,340 @@
 # @cogenta/core
 
+## 0.3.0
+
+### Minor Changes
+
+- [`552645e`](https://github.com/cogenta-cms/cogenta/commit/552645e039b8c8c4f5340d065ea2f4a552950815) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Advanced AI (L18): a writing assistant, a `vector` driver, semantic search,
+  RAG chat with citations, classification/duplicate detection/moderation, and
+  FAQ/Schema.org drafting. **Nothing here is on a required path** — a site with
+  no AI provider configured behaves exactly as before, and the whole feature set
+  disappears from the UI rather than failing (R2).
+  
+  - **`@cogenta/agents`** gains the `vector` driver need the architecture
+    document has named since L0 and nothing implemented: `VectorStore` with three
+    drivers behind the existing `createDriverRegistry` — `pgvector` (optimal),
+    `file` (degraded, survives a restart) and `memory` (degraded, always
+    available). One contract suite runs against all three; pgvector's run is an
+    integration test that skips loudly without `COGENTA_TEST_POSTGRES_URL`.
+    Nothing re-implements cosine similarity: L4's `vectorRank` does the ranking
+    everywhere, and all three drivers return the same number.
+  
+    `createSemanticSearch` fuses the vector half with L10's full-text index by
+    RRF — **beside it, never instead of it**: pure vector search misses
+    exact-keyword queries, which is the failure the architecture document warns
+    about at line 190.
+  
+    Fifteen Contract C tools, all `sideEffects: false`, every output carrying
+    `applied: false` as a **literal** so an assistant tool's type cannot say it
+    changed anything (R6). Eight writing tools (rewrite, proofread, summarise,
+    translate, meta description, titles, tags, alt text), `assist.generate_image`
+    behind a two-vendor image provider driver (OpenAI, Stability), `assist.chat`
+    (RAG with citations), `assist.classify`/`assist.find_duplicates`/
+    `assist.moderate`, and `assist.faq_draft`/`assist.schema_org_draft`.
+  
+    Three properties worth knowing:
+    - **Citations come from retrieval, not from the model.** The model names
+      1-based indices into the passages it was shown; this code maps them back to
+      what the retriever returned, and an invented index resolves to nothing. A
+      chat answer can never cite a page that was not retrieved.
+    - **Moderation and duplicate detection can recommend `none` or `review`, and
+      nothing else.** The union has no destructive member, so no answer —
+      however jailbroken — describes a deletion.
+    - **`assist.find_duplicates` needs no AI provider at all.** It embeds with
+      the site's `EmbeddingProvider`, which by default is the local hashing one:
+      no key, no service, no model download.
+  
+  - **`@cogenta/core`** gains an `imageGeneration` config section
+    (`COGENTA_IMAGE_PROVIDER`/`_MODEL`/`_BASE_URL`, key in `COGENTA_IMAGE_API_KEY`
+    and refused in the config file like every other secret), a `vector` section
+    (`driver`/`path`/`table` — dimensions stay on `embeddings`, never duplicated),
+    and the error codes `VECTOR_DIMENSION_MISMATCH`, `VECTOR_STORE_FAILED`,
+    `ASSIST_UNAVAILABLE`, `ASSIST_RESPONSE_INVALID`.
+  
+  - **`@cogenta/api`** gains `createAssistantRouter` — `GET /api/assistant` and
+    `POST /api/assistant/run`. The `GET` answers **200 with
+    `{available: false, tools: []}`** on a site with no provider, which is what
+    lets a client render nothing instead of handling an error. The permission
+    gate is the route's, not the tools' (R4): an actor may use the assistant when
+    they may edit content somewhere, and an anonymous caller is refused before any
+    provider is contacted, so an unauthenticated request can never spend the
+    site's AI budget. The route also refuses any tool declaring a side effect,
+    even though none does.
+  
+  - **`@cogenta/cli`** wires all of it into `cogenta serve`: providers built from
+    the config, the vector store selected through the registry, the content stores
+    wrapped so a publish updates the embedding index the same way it already
+    updates the full-text one, and `/api/assistant` mounted on every site. Every
+    piece degrades to "off" with a log line rather than stopping the site: an
+    unknown provider name, a missing API key, an unavailable vector store and an
+    embeddings provider with no adapter yet are four warnings, not four crashes.
+  
+  **Migration**: none. Every new configuration section is optional, and a site
+  that adds none behaves exactly as it did before.
+
+- [`8b561d1`](https://github.com/cogenta-cms/cogenta/commit/8b561d1ba735eb2b42c27725f67faf64e53866e5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - E-commerce (L15), as a new package `@cogenta/commerce` on a **new contract E**
+  rather than an extension of contract A.
+  
+  The decision is proposed in `ADR-DRAFT-commerce.md` at the repo root and is
+  **not yet acted** — it needs a human to accept it before it goes into
+  `docs/03-decisions.md`. The implementation assumes it. In one line: three of
+  contract A's own decisions make an order a bad content entry. ADR-0014 would
+  fork one order per language; ADR-0022 has just made every content entry
+  restorable from the trash, and an order is not; and versioning drafts have no
+  meaning for a sale. The product's *editorial* face stays firmly in contract A
+  through an optional `contentRef`, so a catalogue keeps rich text, blocks, SEO,
+  translations and scheduling for free. Contract A does not move: it stays at
+  `schema@2.0`, and a site that sells nothing never creates a commerce table.
+  
+  **Money is an integer of minor units, everywhere.** The three mandatory
+  dialects do not agree on decimals — SQLite has only `REAL`, a binary float — so
+  a decimal column would mean something subtly different on one of the three
+  supported databases. Rates are basis points for the same reason. Amounts are
+  `bigint` columns, and every read goes through a decoder, because `pg` hands
+  `int8` back as a *string*: a price read as `"1999"` and added to another is
+  `"19991999"`, a bug that would appear only on Postgres and only in production.
+  
+  **Stock cannot go negative.** `takeStock` runs one immediate transaction and
+  lowers each line with `update … set on_hand = on_hand - n where id = ? and
+  on_hand >= n`, reading `rowsAffected` — the same idiom that makes a password
+  reset token single use. Repeated variants in one basket are summed first, or
+  two lines of two would each pass against a stock of three. The concurrency test
+  is a real race against a SQLite *file* with two independent connections
+  (`:memory:` gives two unrelated databases and would prove nothing), and it
+  carries a control that re-implements the naive read-then-write and asserts it
+  *does* oversell.
+  
+  **Placing an order is one transaction**: stock taken, coupon redemption
+  claimed, order and lines written, cart closed, first history event recorded.
+  Any failure and none of it happened.
+  
+  **Payment is interface plus two implementations**, like cache, queue and
+  storage (R1). Stripe is `optimal`, written against the REST API with `fetch`
+  and no `stripe` dependency, with real webhook signature verification
+  (timing-safe, every `v1` candidate, 5-minute freshness window). Bank transfer
+  is `degraded` and is **not a stub** — plenty of businesses are paid that way
+  and nothing else; the difference is who confirms the money arrived. The whole
+  checkout, the whole subscription biller and the whole invoice path are tested
+  end to end with no API key, URL or network configured anywhere (R2).
+  
+  **Invoice numbers are gapless and never reused**, claimed by a compare-and-set
+  inside the transaction that writes the invoice, so a rolled-back invoice does
+  not burn a number and two invoices issued in the same millisecond get
+  consecutive ones. A `count(*) + 1` would hand out duplicates under any
+  concurrency and re-issue a number a deleted row used to hold. The PDF is
+  generated with zero dependencies (R9/R10) and is deterministic: the same
+  invoice regenerated years later is byte-identical, because it renders from a
+  frozen snapshot and never reads a clock.
+  
+  Also: tax rules resolved by specificity rather than insertion order; shipping
+  methods with an optional carrier driver that falls back to the stored rate when
+  the courier's API is down; coupons with three kinds and a redemption count
+  claimed the same way stock is; subscriptions whose month arithmetic puts 31
+  January + 1 month on 28 February rather than 3 March, and which bill through
+  the same orders, payments and invoices as everything else.
+  
+  `@cogenta/core` gains the `COMMERCE_*` error codes (a minor bump: adding a code
+  is additive, and nothing existing changed meaning).
+  
+  **Not in this release**, and deliberately so: no admin React screens (the
+  back office is a transport-free router with its own permission vocabulary,
+  tested by role — the UI belongs with L11's design system), no storefront
+  blocks, and no Stripe integration test against a real sandbox (it is written
+  and skips loudly without `COGENTA_TEST_STRIPE_SECRET_KEY`).
+
+- [`182ef48`](https://github.com/cogenta-cms/cogenta/commit/182ef48d97e2757e7b1404dc407327f53ed377dd) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Document text extraction, as a contract C tool (L19 task 1). `@cogenta/agents`
+  gains `document.extract_text` and the `extractDocumentText` function behind it:
+  PDF, DOCX, Markdown and plain text in, plain text out. Format detection reads
+  the bytes rather than the extension, since a brief emailed as `.pdf` is often
+  really a `.docx`.
+  
+  No new dependency, on purpose (R9/R10). A `.docx` is a ZIP whose
+  `word/document.xml` holds the body, and `node:zlib` already opens it — the
+  ~120 lines of central-directory reading here replace a callback-era unzip
+  library. The PDF reader walks content streams and their text-showing
+  operators (`Tj`, `TJ`, `'`, `"`) instead of pulling in `pdf.js` through
+  `pdf-parse`.
+  
+  It refuses rather than guesses, which is the part that matters downstream: a
+  scan with no text layer is `DOCUMENT_NO_TEXT_LAYER`, an encrypted PDF says so,
+  a legacy binary `.doc` is named as such, and — calibrated against real
+  LaTeX-exported specifications — a PDF whose text layer is subset-font glyph
+  indices is refused too, rather than passing mojibake on to an agent that would
+  happily build a confident, entirely invented site plan from it. Footnotes and
+  endnotes of a `.docx` are appended rather than dropped, and an embedded image
+  produces a warning saying any requirement written inside it was not read.
+  
+  `@cogenta/core` gains the error codes this needs
+  (`DOCUMENT_FORMAT_UNSUPPORTED`, `DOCUMENT_TOO_LARGE`,
+  `DOCUMENT_EXTRACTION_FAILED`, `DOCUMENT_NO_TEXT_LAYER`) plus the ones L19's
+  later tasks use.
+  
+  Contract C moves to `tools@1.1`: the permission taxonomy gains
+  `document.extract`. No existing tool signature changes.
+
+- [`755201d`](https://github.com/cogenta-cms/cogenta/commit/755201d55fd8c04ba2794a03797696769b59f6cc) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Send a real signed webhook when content is published (L14 task 1)
+  
+  The signed outbound webhook channel has existed since L6 and nothing ever
+  called it. It is now connected to the content lifecycle.
+  
+  - `@cogenta/channels` gains `createWebhookEventSender`, which POSTs a
+    structured `{ event, occurredAt, data }` envelope to every configured
+    endpoint. It reuses `signOutgoingWebhook` and the existing
+    `X-Cogenta-Timestamp` / `X-Cogenta-Signature` headers **verbatim**, so a
+    receiver verifies an event with `verifyIncomingWebhook` exactly as it
+    verifies a message — there is no second signing path. It never throws: a
+    failed delivery comes back as a result to log, so an editor's publish is
+    never lost to somebody else's downtime.
+  - `@cogenta/schema` gains `withLifecycleEvents`, a `ContentStore` decorator in
+    the same shape as `withSearchIndexing`. It emits `content.publish` (from
+    `publish()`, and from `create()` with a published status),
+    `content.unpublish` and `content.delete`, each carrying the entry's
+    identity, status, timestamps and its real route path from `buildPath`.
+    Draft edits emit nothing. The event body never carries the content itself.
+  - `@cogenta/core` gains a `webhooks.endpoints` config section. The signing
+    secret is environment-only (`COGENTA_WEBHOOK_SECRET`, rule R7); endpoints
+    configured without it disable delivery with a startup warning rather than
+    falling back to unsigned requests.
+  - `cogenta serve` wires the two together, outermost of all store decorators so
+    an event only describes a write that really landed.
+  
+  Proven end to end by a suite that publishes over real HTTP and verifies the
+  signature on the bytes a real `node:http` receiver got off the socket.
+
+- [`551a06c`](https://github.com/cogenta-cms/cogenta/commit/551a06c2e58bb4119618e5502dfcae4bb024b7d4) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Serve a site's own page for an unmatched URL (L14 task 2)
+  
+  `cogenta serve` answered every unmatched public URL with a bare JSON error.
+  It now renders the site's own 404 page instead, with a real 404 status.
+  
+  The 404 body is an ordinary published entry at `site.notFoundPath` (`/404` by
+  default, overridable in `cogenta.config` or via `COGENTA_SITE_NOT_FOUND_PATH`)
+  — editable in the admin like any other page, and rendered by exactly the same
+  function, through exactly the same permission-checked gateway, as every other
+  page. So a draft 404 page is not shown to the public, and a site that has not
+  written one still gets the plain refusal it got before. The lookup happens at
+  most once per request: the 404 path itself is never re-resolved.
+
+- [`87bae8d`](https://github.com/cogenta-cms/cogenta/commit/87bae8dd4cc08261f3d5ba83947fa2ad77b0b826) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Breaking: contract A moves to `schema@2.0`** (ADR-0022) — the trash and native
+  taxonomies, in one version bump with one migration.
+  
+  ### `delete()` changed meaning without changing signature
+  
+  `ContentStore.delete()` no longer issues a `DELETE`. It writes the new system
+  field `deletedAt` and leaves every row where it was — versions, blocks, join
+  rows, and the `translation_of` of any translation. Two new methods complete it:
+  
+  - `purge(id)` is the real `DELETE`, i.e. what `delete()` used to do;
+  - `untrash(id)` takes an entry back out, with the status it went in with;
+  - `purgeExpired()` removes what has outlived the collection's `trash.retainDays`.
+  
+  **How to migrate.** Code that called `delete()` to genuinely destroy a row — an
+  import script that cleans up, a test that resets — must now call `purge()`.
+  Nothing will fail loudly if you do not: the call still succeeds and simply
+  leaves the row behind, which is the worst kind of break and the reason it is
+  called out first here. `trash: false` on a collection restores the old
+  behaviour outright.
+  
+  ### Every read now filters the trash by default
+  
+  `read`, `list`, `translations`, `resolveLocale` and `history` exclude trashed
+  entries unless the caller passes `trashed: 'include' | 'only'`. That direction
+  is deliberate: a renderer, a sitemap or a headless client written against 1.0
+  keeps serving live content with no change at all.
+  
+  ### `restrict` is now enforced in application code
+  
+  Trashing is an `UPDATE`, so a foreign key can no longer refuse it. `delete()`
+  checks referring entries itself and names what blocks ("2 entries of
+  \"article\" still reference it"); `purge()` runs the same check so both paths
+  give the same sentence. This needs the sibling collections, so
+  `createContentStore` takes a new optional `siblings` option — **pass it**. Left
+  out, only self-references are checked; nothing is destroyed, since `purge()`
+  still meets the real foreign key, but a trash that should have been refused
+  will be allowed.
+  
+  `withReadOnlyStore` refuses `delete`, `untrash`, `purge` and `purgeExpired`.
+  
+  ### Native taxonomies
+  
+  `defineTaxonomy()` is a second top-level declarable object beside
+  `defineCollection()`, and `f.taxonomy({ of, many })` a new field kind. A term
+  carries `id`, `parent`, `slug`, `position` and `labels` indexed by locale, and
+  deliberately no `status`, `version` or `translationOf`: a classification is not
+  content, so ADR-0014 does not govern it.
+  
+  The tree is stored as a **materialised path** maintained on write, never a
+  recursive CTE: "everything under this term" is one `like` that Postgres,
+  MySQL/MariaDB and SQLite answer identically (ADR-0006). Paths are built from
+  ids, so renaming a term rewrites nothing and only a move pays. Nesting is
+  bounded at 12 levels so the indexed column stays inside InnoDB's key limit.
+  
+  `createTaxonomyStore()` is the term store; `createSchemaTables(db, collections,
+  taxonomies)` and `dropSchemaTables` take the taxonomies as a third argument.
+  
+  ### The migration
+  
+  `schema2Migration({ collections, taxonomies })` adds `deleted_at` to every
+  entry table and creates the terms and join tables. It is marked **destructive**,
+  so the migrator demands an explicit confirmation and a verified backup: its
+  `down` drops `deleted_at` and the terms tables, which permanently discards
+  everything in the trash and every classification — entries sitting in the trash
+  silently become live again with no record they were ever deleted.
+  
+  ### Also
+  
+  `.cogenta/schema.json` reports `schema@2.0`, carries the declared taxonomies and
+  each collection's trash window, and `buildSchemaDocument`/`renderSchemaJson`
+  take the taxonomies. `@cogenta/core` gains the error codes the two features
+  need: `CONTENT_REFERENCED`, `CONTENT_NOT_TRASHED` and the `TAXONOMY_*` family.
+
+- [`ca71b3b`](https://github.com/cogenta-cms/cogenta/commit/ca71b3bbd5d5d7371923d0521444fc94a525de06) Thanks [@georgesmomo](https://github.com/georgesmomo)! - CORS, security headers and a coherent cache-control on `cogenta serve`
+  (L10 task 6).
+  
+  `@cogenta/core`'s configuration gains a `security` section:
+  
+  ```ts
+  security: {
+    cors: { origins: ['https://app.example.com'], credentials: false },
+    csp: "default-src 'self'",
+    hstsMaxAge: 31536000,
+    pageMaxAge: 60,
+  }
+  ```
+  
+  Every field is off or permissive-by-omission by default, and that is a
+  decision rather than timidity. CORS is off unless a site names an origin —
+  the origin list *is* the switch, so "CORS is on" and "these origins may read
+  it" cannot drift apart. HSTS is off unless asked and is never sent over plain
+  HTTP: on a host that is not fully HTTPS it locks browsers out for `maxAge`
+  seconds with no server-side undo, and it is the one header a wrong default can
+  take a site offline with. Credentials together with the `*` origin is refused
+  at startup, because every browser refuses that pair and a server that accepted
+  it would look configured while granting nothing.
+  
+  `cogenta serve` applies all of it in one place, before any route runs, so a
+  route added later cannot opt out by forgetting:
+  
+  - `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN` and
+    `Referrer-Policy: strict-origin-when-cross-origin` on every response.
+  - The configured CSP verbatim — a string, not a builder, because a CSP depends
+    on which analytics, fonts and embeds a site actually uses.
+  - CORS with an echoed (never blindly reflected) origin and `Vary: Origin`,
+    plus a real preflight answer.
+  - Cache-control by path class: `no-store` for `/api/*` and for the admin,
+    `public, max-age=0, s-maxage=<pageMaxAge>, must-revalidate` for a public
+    page, and the long immutable value image variants already set for
+    themselves.
+
+### Patch Changes
+
+- [`6ad0f3a`](https://github.com/cogenta-cms/cogenta/commit/6ad0f3a495176169fe95f4955dfef30a6af376fd) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Closes four denial-of-service and permission-escalation gaps a security review found in L19's document-upload pipeline and site-plan review screen, all reachable from a single uploaded file or a proposed content model — no LLM provider required to trigger them.
+  
+  - `.docx` extraction (`packages/agents/src/documents/docx.ts`): the regex scanning `word/document.xml` for `<w:t>…</w:t>` runs backtracked quadratically on unclosed tags (measured 21.8 s for 400 KB). Replaced with a single linear `indexOf`-based scan, and `word/document.xml`/footnotes/endnotes are now capped at 8 MiB each (`zip.ts`'s `read()` gained a per-call `maxBytes`) instead of the shared 200 MiB decompression-bomb ceiling, since a highly repetitive XML payload can deflate at several hundred to one.
+  - PDF stream collection (`packages/agents/src/documents/pdf.ts`): `collectStreams` used an unbounded `lastIndexOf` to find each stream's dictionary, which re-scans the entire prefix of the file for every stream found — a file that is mostly fake `stream`/`endstream` markers with no real PDF structure could cost minutes of CPU with no decompression involved. The search window is now bounded to 2 KiB behind each `stream` keyword, and the number of streams processed is capped at 10 000.
+  - PDF text accumulation (`packages/agents/src/documents/pdf.ts`, `extract-text.ts`): `MAX_TEXT_CHARACTERS` was only enforced after every content stream had already been decoded and joined, so a PDF with many individually-small-enough, highly compressible streams could accumulate many times that budget in memory before truncation ever ran. The reader now stops pulling in further pages once the accumulated text already exceeds the cap, moved to a shared `limits.ts` so both `pdf.ts` and `extract-text.ts` read the same number.
+  - Site plan review (`packages/agents/src/site-plan/content-model.ts`, `approval.ts`): a proposed content model's `permissions` is entirely the model's own choice, so a hallucinated or prompt-injected proposal granting `public` the `create`/`update`/`delete` actions would have let any anonymous visitor write to that collection once the plan was applied. `buildCollection` now refuses such a proposal outright (`CONTENT_MODEL_PROPOSAL_PERMISSIONS_UNSAFE`, fed back as the next attempt's correction like any other invalid proposal); separately, the human review screen (`summarisePlan`) now always shows a collection's proposed permissions and routing pattern, not only its fields and rationale, so a legitimate-but-surprising grant is visible before acceptance.
+  - `cogenta serve` (`packages/cli/src/commands/serve.ts`): `readBody` had no byte limit, and the one route inviting multi-megabyte bodies by design (`/api/site-plans`) only checked the admin role after the body was fully buffered. `readBody` now caps every request body at 64 MiB, rejecting with a new `REQUEST_BODY_TOO_LARGE` error code (HTTP 413); `/api/site-plans` now checks the admin role before reading the body at all, so a non-admin caller — anonymous or not — is turned away before the server reads anything they sent.
+
 ## 0.2.0
 
 ### Minor Changes

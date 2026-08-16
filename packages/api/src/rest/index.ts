@@ -16,6 +16,12 @@ export type {
   TraceStoreLike,
 } from './agents-router.js'
 export { createAgentsRouter } from './agents-router.js'
+export type {
+  AnalyticsRequestContext,
+  AnalyticsRouter,
+  AnalyticsRouterOptions,
+} from './analytics-router.js'
+export { createAnalyticsRouter } from './analytics-router.js'
 export type { ApiKeysRouter, ApiKeysRouterOptions } from './api-keys-router.js'
 export { createApiKeysRouter } from './api-keys-router.js'
 export type {

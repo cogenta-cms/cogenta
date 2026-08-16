@@ -361,6 +361,9 @@ export const ERROR_CODES = [
   'MARKETPLACE_NOT_INSTALLED',
   'MARKETPLACE_UPDATE_REQUIRES_APPROVAL',
 
+  // Analytics — self-hosted, cookie-free page-view analytics (`@cogenta/analytics`)
+  'ANALYTICS_SALT_UNAVAILABLE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

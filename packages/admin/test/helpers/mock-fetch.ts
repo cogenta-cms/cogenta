@@ -165,6 +165,15 @@ export function installMockFetch(
       signed: boolean
       disabledForMissingSecret: boolean
     }
+    /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
+    readonly analyticsSummary?: {
+      readonly totalViews?: number
+      readonly uniqueVisitors?: number
+      readonly topPages?: readonly { path: string; views: number }[]
+      readonly topReferrers?: readonly { domain: string; views: number }[]
+      readonly deviceBreakdown?: readonly { device: string; views: number }[]
+      readonly dailyViews?: readonly { day: string; views: number }[]
+    }
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -643,7 +652,7 @@ export function installMockFetch(
       const url = typeof input === 'string' ? input : input.toString()
       const method = init?.method ?? 'GET'
       const body = init?.body === undefined ? {} : JSON.parse(init.body as string)
-      const auth = (init?.headers as Record<string, string> | undefined)?.['authorization']
+      const auth = (init?.headers as Record<string, string> | undefined)?.authorization
 
       if (url.endsWith('/api/auth/login') && method === 'POST') {
         if (body.password !== password) {
@@ -1097,6 +1106,29 @@ export function installMockFetch(
           data: {
             database: { status: 'degraded', driver: 'sqlite', tier: 'degraded' },
             storage: { status: 'degraded', driver: 'local', tier: 'degraded' },
+          },
+        })
+      }
+
+      if (url.includes('/api/analytics/summary')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may read the analytics summary.',
+            },
+          })
+        }
+        return json(200, {
+          data: {
+            since: '2026-03-01T00:00:00.000Z',
+            until: '2026-03-08T00:00:00.000Z',
+            totalViews: options.analyticsSummary?.totalViews ?? 0,
+            uniqueVisitors: options.analyticsSummary?.uniqueVisitors ?? 0,
+            topPages: options.analyticsSummary?.topPages ?? [],
+            topReferrers: options.analyticsSummary?.topReferrers ?? [],
+            deviceBreakdown: options.analyticsSummary?.deviceBreakdown ?? [],
+            dailyViews: options.analyticsSummary?.dailyViews ?? [],
           },
         })
       }

@@ -1,5 +1,6 @@
 import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { type AnalyticsSummary, getAnalyticsSummary } from '../api/analytics-client.js'
 import { type AuditEntry, listAuditEntries } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
 import { type Entry, listEntries } from '../api/content-client.js'
@@ -8,6 +9,8 @@ import { useAuth } from '../auth/auth-context.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+
+const DASHBOARD_WINDOW_DAYS = 7
 
 interface ScheduledItem {
   readonly collection: string
@@ -64,6 +67,9 @@ export function DashboardRoute(): JSX.Element {
   const [scheduled, setScheduled] = useState<readonly ScheduledItem[]>([])
   const [scheduledError, setScheduledError] = useState<string | null>(null)
 
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null)
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null)
+
   useEffect(() => {
     if (token === null || !isAdmin) return
     let cancelled = false
@@ -94,6 +100,25 @@ export function DashboardRoute(): JSX.Element {
         if (!cancelled) {
           setActivityError(
             caught instanceof ApiError ? caught.message : t('dashboard.activityLoadError'),
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, isAdmin, t])
+
+  useEffect(() => {
+    if (token === null || !isAdmin) return
+    let cancelled = false
+    getAnalyticsSummary(token, DASHBOARD_WINDOW_DAYS)
+      .then((result) => {
+        if (!cancelled) setAnalytics(result)
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setAnalyticsError(
+            caught instanceof ApiError ? caught.message : t('dashboard.analyticsLoadError'),
           )
         }
       })
@@ -168,6 +193,42 @@ export function DashboardRoute(): JSX.Element {
                   {t('dashboard.storage')} <HealthBadge report={health.storage} />
                 </li>
               </ul>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card aria-labelledby="dashboard-analytics-heading" className="hover:shadow-raised">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="dashboard-analytics-heading">{t('analytics.widgetHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            {!isAdmin && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+            )}
+            {isAdmin && analyticsError !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{analyticsError}</p>
+              </Notice>
+            )}
+            {isAdmin && analyticsError === null && analytics === null && (
+              <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
+            )}
+            {isAdmin && analytics !== null && (
+              <>
+                <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+                  <li>
+                    {t('analytics.widgetTotal')}: {analytics.totalViews}
+                  </li>
+                  <li>
+                    {t('analytics.widgetVisitors')}: {analytics.uniqueVisitors}
+                  </li>
+                </ul>
+                <p className="m-0 mt-2 text-sm">
+                  <a href="/analytics">{t('analytics.widgetLink')}</a>
+                </p>
+              </>
             )}
           </CardBody>
         </Card>

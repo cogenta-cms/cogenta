@@ -133,6 +133,25 @@ export interface ThemeRenderOptions {
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, RenderMediaAsset>>
   /** Where image variants are served from. Defaults to `/_image`. */
   readonly imageEndpoint?: string
+  /**
+   * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`, L10
+   * analytics gap). The `Referer` header of *this* request — the theme's own
+   * `<script>`-free policy (see `serve.test.ts`, "no executable client
+   * JavaScript anywhere on the page") rules out reading `document.referrer`
+   * from an inline script, so the referrer this page was reached from is
+   * read server-side, from the request that is rendering it, and baked
+   * straight into a collection `<img>` pixel — no client code needed to
+   * capture it (see `analyticsBeaconTag` below).
+   *
+   * Absent entirely means the beacon is left out of the page altogether.
+   * Callers pass `{}` (no `referrer`) rather than leaving this out when there
+   * is simply no `Referer` header to report — the page builder's draft
+   * preview does that, since its request is a `POST` with no navigation
+   * referrer of its own, and doing so keeps its `<body>` byte-identical to
+   * the published page's (`serve-builder.test.ts`'s fidelity test) rather
+   * than carving out an exception that would itself become a body difference.
+   */
+  readonly analyticsBeacon?: { readonly referrer?: string | undefined }
 }
 
 /**
@@ -181,7 +200,7 @@ function toVocabularyBlocks(
 }
 
 function entryTitle(entry: ContentEntry): string {
-  const value = entry.values['title']
+  const value = entry.values.title
   return typeof value === 'string' && value.trim() !== '' ? value : entry.id
 }
 
@@ -540,9 +559,41 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 <header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a></div></header>
 ${bodyHtml}
 <footer class="cg-site-footer"><div class="cg-site-footer__inner">${siteName}</div></footer>
+${analyticsBeaconTag(pathname, options.analyticsBeacon)}
 </body>
 </html>
 `
+}
+
+/**
+ * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`), L10
+ * analytics gap. An invisible `<img>` pixel rather than any inline
+ * `<script>`: the theme's own policy is **zero executable client
+ * JavaScript** on a rendered page (enforced by `serve.test.ts`), so a script
+ * reading `document.referrer` is not an option here. Everything the pixel's
+ * URL needs — the path being viewed, and the `Referer` header of the request
+ * that is rendering this very page — is already known server-side, so
+ * nothing needs to run in the browser to capture it.
+ *
+ * `undefined` (no `analyticsBeacon` at all) omits the tag entirely — used
+ * for the page builder's draft preview, which must not be counted as a real
+ * visit. `alt=""` and the visually-hidden inline style keep it out of a
+ * screen reader and off the visible page without `display:none`, which some
+ * older ad-blocking heuristics treat as a signal to strip the element (and
+ * losing the pixel loses nothing here — it fails silently either way, R1/R2
+ * spirit: analytics is additive, never load-bearing).
+ */
+function analyticsBeaconTag(
+  pathname: string,
+  beacon: { readonly referrer?: string | undefined } | undefined,
+): string {
+  if (beacon === undefined) return ''
+  const params = new URLSearchParams({ p: pathname })
+  if (beacon.referrer !== undefined && beacon.referrer !== '') {
+    params.set('r', beacon.referrer)
+  }
+  const src = escapeAttribute(`/api/analytics/beacon?${params.toString()}`)
+  return `<img src="${src}" alt="" width="1" height="1" loading="eager" decoding="async" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">`
 }
 
 /**

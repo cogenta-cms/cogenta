@@ -4,9 +4,15 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
+  type AnalyticsStore,
+  createAnalyticsStore,
+  ensureAnalyticsTables,
+} from '@cogenta/analytics'
+import {
   type AccessContext,
   type AgentsRouter,
   type AgentsRouterOptions,
+  type AnalyticsRouter,
   type ApiKeysRouter,
   type AssistantRouter,
   type AssistToolsetLike,
@@ -14,6 +20,7 @@ import {
   type AuthRouter,
   buildContentSchema,
   createAgentsRouter,
+  createAnalyticsRouter,
   createApiKeysRouter,
   createAssistantRouter,
   createAuditRouter,
@@ -314,6 +321,17 @@ interface Site {
   readonly auditRouter: AuditRouter
   /** `GET /api/search` — the full-text index, reachable for the first time (L10 task 3). */
   readonly searchRouter: SearchRouter
+  /**
+   * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`).
+   *
+   * `analyticsStore` is the aggregate/write side used both by `analyticsRouter`
+   * (`/api/analytics/beacon` and `/api/analytics/summary`) and directly by the
+   * admin dashboard widget's server-rendered data. Always mounted — a site
+   * with nobody reading the dashboard still collects nothing more than it
+   * would with the feature switched off (R1/R2 spirit: purely additive).
+   */
+  readonly analyticsStore: AnalyticsStore
+  readonly analyticsRouter: AnalyticsRouter
   /** `/api/taxonomies/*` — terms, mounted apart from content because a taxonomy is not a collection (`schema@2.0`, ADR-0022). */
   readonly taxonomyRouter: TaxonomyRouter
   /** `/api/marketplace/*` — L17's local plugin/theme/skin catalog, reusing `@cogenta/plugins`' real Ed25519 verification unchanged. Always mounted; the catalog is empty until a site configures one. */
@@ -755,6 +773,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           },
         })
 
+  await ensureAnalyticsTables(db)
+  const analyticsStore = createAnalyticsStore(db)
+  const siteHost = new URL(site.url).hostname
+
   return {
     db,
     auth,
@@ -763,6 +785,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       auth,
       ...(options.onForgotPassword == null ? {} : { onForgotPassword: options.onForgotPassword }),
     }),
+    analyticsStore,
+    analyticsRouter: createAnalyticsRouter({ store: analyticsStore, siteHost }),
     mediaRouter: createMediaRouter({
       store: mediaStore,
       storage,
@@ -956,6 +980,19 @@ function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): Comme
     query,
     ...(body === undefined ? {} : { body }),
   }
+}
+
+/**
+ * The connecting socket's address — never trusted as anything more than an
+ * input to the daily session hash (`@cogenta/analytics`'s `hashSession`).
+ * No `x-forwarded-for` handling: trusting a client-supplied header for
+ * anything security- or privacy-relevant needs a configured trusted-proxy
+ * list this server does not have, and a wrong guess here would only ever
+ * make analytics *less* accurate, never leak anything (the header is never
+ * stored, only hashed).
+ */
+function clientIpOf(req: IncomingMessage): string {
+  return req.socket.remoteAddress ?? 'unknown'
 }
 
 function responseId(response: RestResponse): string | undefined {
@@ -1643,6 +1680,18 @@ export function createRequestListener(
         return
       }
 
+      // `/api/analytics/beacon` (public) and `/api/analytics/summary`
+      // (admin-only) — see `@cogenta/analytics` and `analytics-router.ts` for
+      // why both live behind one router with opposite trust models.
+      if (url.pathname.startsWith('/api/analytics')) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(
+          res,
+          await site.analyticsRouter.handle(request, { actor: context.actor, ip: clientIpOf(req) }),
+        )
+        return
+      }
+
       if (url.pathname.startsWith('/api/audit')) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
@@ -1806,6 +1855,14 @@ export function createRequestListener(
               site: site.site,
               styles: site.styles,
               loadMedia: (ids) => loadRenderMedia(site, ids),
+              // Present so the preview's `<body>` stays byte-identical to the
+              // published page's (the property `theme-render-fidelity`
+              // proves) — a POST carries no navigation `Referer` to report,
+              // so this omits `referrer` the same way an ordinary page view
+              // with no referrer does. The preview does still count as a
+              // view; there is no distinct "not a real visit" signal to send
+              // that would not itself become a body difference.
+              analyticsBeacon: {},
             },
             context,
           )
@@ -1925,6 +1982,11 @@ export function createRequestListener(
           site: site.site,
           styles: site.styles,
           loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+          // Self-hosted analytics (`@cogenta/analytics`): the referrer is read
+          // from *this* request's own header, server-side — see
+          // `analyticsBeaconTag` in `theme-render.ts` for why that, rather
+          // than a client script, is how this page's beacon pixel gets it.
+          analyticsBeacon: { referrer: req.headers.referer },
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {

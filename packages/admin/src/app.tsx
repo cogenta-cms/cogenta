@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
 import { AgentsRoute } from './routes/agents.js'
+import { AnalyticsRoute } from './routes/analytics.js'
 import { ApiKeysRoute } from './routes/api-keys.js'
 import { AssistantChatRoute } from './routes/assistant-chat.js'
 import { AuditRoute } from './routes/audit.js'
@@ -90,6 +91,7 @@ export function App(): JSX.Element {
               <Route path="media" element={<MediaRoute />} />
               <Route path="import" element={<ImportRoute />} />
               <Route path="audit" element={<AuditRoute />} />
+              <Route path="analytics" element={<AnalyticsRoute />} />
               <Route path="agents" element={<AgentsRoute />} />
               <Route path="users" element={<UsersRoute />} />
               <Route path="api-keys" element={<ApiKeysRoute />} />

@@ -55,6 +55,22 @@ import {
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
+  type CommerceAdminRouter,
+  type CommerceRequest,
+  createCartStore,
+  createCatalogStore,
+  createCommerceAdminRouter,
+  createCommercePermissions,
+  createCouponStore,
+  createCustomerStore,
+  createManualPaymentGateway,
+  createOrderStore,
+  createPaymentStore,
+  createShippingStore,
+  createTaxStore,
+  ensureCommerceTables,
+} from '@cogenta/commerce'
+import {
   CogentaError,
   createDatabaseMediaStore,
   createDatabaseRegistry,
@@ -294,6 +310,13 @@ interface Site {
   readonly marketplaceRouter: MarketplaceRouter
   /** `/api/menus/*` — navigation menus. Not schema-declared like a taxonomy: created and edited entirely at runtime, so this is always mounted, empty until the admin (or the API) creates the first one. */
   readonly menuRouter: MenuRouter
+  /**
+   * `/api/commerce/*` — contract E's back office (ADR-0024), mounted for the
+   * first time. `@cogenta/commerce`'s tables are only created and this
+   * router is only present once a site actually reaches this point — a site
+   * that never sells anything never pays for it (mirrors the taxonomy story).
+   */
+  readonly commerceRouter: CommerceAdminRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
@@ -641,6 +664,37 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     return { label, route }
   }
 
+  // Contract E (ADR-0024): a whole separate domain, wired the same way the
+  // taxonomy tables are — created idempotently, once, here, so a site that
+  // never sells anything pays nothing beyond a handful of `create table if
+  // not exists` statements it never queries.
+  await ensureCommerceTables(db)
+  const commerceCatalog = createCatalogStore(db)
+  const commerceCustomers = createCustomerStore(db)
+  const commerceTax = createTaxStore(db)
+  const commerceShipping = createShippingStore(db)
+  const commerceCoupons = createCouponStore(db)
+  const commerceCarts = createCartStore(db, {
+    catalog: commerceCatalog,
+    tax: commerceTax,
+    shipping: commerceShipping,
+    coupons: commerceCoupons,
+  })
+  const commerceOrders = createOrderStore(db, {
+    catalog: commerceCatalog,
+    carts: commerceCarts,
+    customers: commerceCustomers,
+    coupons: commerceCoupons,
+  })
+  // The manual/bank-transfer driver: the one payment gateway that needs no
+  // provider keys, so a shop is sellable before anyone configures Stripe
+  // (mirrors R1 — a real degraded implementation, not a stub).
+  const commercePayments = createPaymentStore(db, {
+    gateway: createManualPaymentGateway(),
+    orders: commerceOrders,
+  })
+  const commercePermissions = createCommercePermissions()
+
   return {
     db,
     auth,
@@ -667,6 +721,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       installer: marketplaceInstaller,
     }),
     menuRouter: createMenuRouter({ store: menuStore, resolveEntry: resolveMenuEntry }),
+    commerceRouter: createCommerceAdminRouter({
+      catalog: commerceCatalog,
+      orders: commerceOrders,
+      customers: commerceCustomers,
+      payments: commercePayments,
+      permissions: commercePermissions,
+    }),
     searchRouter: createSearchRouter({
       index: searchIndex,
       collections,
@@ -800,6 +861,24 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
     path: url.pathname,
     query,
     headers,
+    ...(body === undefined ? {} : { body }),
+  }
+}
+
+/**
+ * `CommerceRequest`'s `query` is single-valued (contract E has no route that
+ * takes a repeated key), unlike `RestRequest`'s — so this is its own small
+ * adapter rather than a cast of `toRestRequest`'s output.
+ */
+function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): CommerceRequest {
+  const query: Record<string, string | undefined> = {}
+  for (const key of url.searchParams.keys()) {
+    query[key] = url.searchParams.get(key) ?? undefined
+  }
+  return {
+    method: req.method ?? 'GET',
+    path: url.pathname,
+    query,
     ...(body === undefined ? {} : { body }),
   }
 }
@@ -1396,6 +1475,19 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.menuRouter.handle(request, context))
+        return
+      }
+
+      // Contract E's own back office, gated by its own permission vocabulary
+      // (`commerce.*`, ADR-0024) — never contract A's five actions, which do
+      // not stretch to "refund" or "issue an invoice".
+      if (url.pathname.startsWith('/api/commerce')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toCommerceRequest(req, url, body)
+        const response = await site.commerceRouter.handle(request, context.actor)
+        res.writeHead(response.status, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(response.body === null ? undefined : JSON.stringify(response.body))
         return
       }
 

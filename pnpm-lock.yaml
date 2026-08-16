@@ -431,6 +431,9 @@ importers:
       '@cogenta/channels':
         specifier: workspace:*
         version: link:../channels
+      '@cogenta/commerce':
+        specifier: workspace:*
+        version: link:../commerce
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

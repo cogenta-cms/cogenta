@@ -216,6 +216,96 @@ export function installMockFetch(
     updatedAt: string
     mfa: { totp: boolean; passkeys: number }
   }
+  // Commerce state (contract E, ADR-0024), per `installMockFetch()` call —
+  // one order and one payment pre-seeded so a test can open the order detail
+  // screen without also having to drive a whole checkout through this mock.
+  interface MockProduct {
+    id: string
+    handle: string
+    title: string
+    status: 'active' | 'archived'
+    contentRef: null
+    createdAt: string
+    updatedAt: string
+  }
+  interface MockVariant {
+    id: string
+    productId: string
+    sku: string
+    title: string
+    priceMinor: number
+    currency: string
+    onHand: number
+    allowBackorder: boolean
+    weightGrams: number
+    taxCategory: string
+    position: number
+    createdAt: string
+    updatedAt: string
+  }
+  let mockProductCounter = 0
+  let mockVariantCounter = 0
+  const mockProducts: MockProduct[] = []
+  const mockVariants: MockVariant[] = []
+  const mockOrders = [
+    {
+      id: 'order-1',
+      reference: 'ORD-0001',
+      customerId: null,
+      email: 'shopper@example.com',
+      status: 'pending' as string,
+      currency: 'EUR',
+      subtotalMinor: 4500,
+      discountMinor: 0,
+      shippingMinor: 500,
+      taxMinor: 0,
+      totalMinor: 5000,
+      couponCode: null,
+      placedAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+      lines: [
+        {
+          id: 'line-1',
+          variantId: 'variant-seed',
+          sku: 'WOOL-JUMPER-M',
+          title: 'Wool jumper',
+          quantity: 1,
+          unitPriceMinor: 4500,
+          subtotalMinor: 4500,
+          discountMinor: 0,
+          taxMinor: 0,
+          totalMinor: 4500,
+          position: 0,
+        },
+      ],
+    },
+  ]
+  const mockOrderHistory = [
+    {
+      id: 'event-seed',
+      orderId: 'order-1',
+      at: '2026-03-01T00:00:00.000Z',
+      kind: 'placed' as string,
+      fromStatus: null as string | null,
+      toStatus: 'pending' as string | null,
+      actorId: null as string | null,
+      note: null as string | null,
+    },
+  ]
+  const mockPayments = [
+    {
+      id: 'payment-1',
+      orderId: 'order-1',
+      driver: 'manual',
+      status: 'pending' as string,
+      amountMinor: 5000,
+      currency: 'EUR',
+      instructions: 'Bank transfer to IBAN …',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    },
+  ]
+
   let accountCounter = 0
   const accounts: MockAccount[] = [
     {
@@ -1472,6 +1562,262 @@ export function installMockFetch(
         if (action === 'purge') return new Response(null, { status: 204 })
         // Restored with the status it went in with, never demoted to a draft.
         return json(200, { data: { ...found, deletedAt: null } })
+      }
+
+      // `/api/commerce/*` (contract E, ADR-0024). Unlike every other router
+      // here this one does not wrap its body in `{ data }` — it is
+      // `@cogenta/commerce`'s own transport-free shape, reused verbatim by
+      // `cogenta serve`. The permission map below mirrors
+      // `DEFAULT_COMMERCE_ROLES` in `packages/commerce/src/admin/permissions.ts`
+      // for the same reason the users mock mirrors the real router: a mock
+      // that always says yes would make the screen's refusal-handling
+      // untestable.
+      if (url.includes('/api/commerce')) {
+        const COMMERCE_ROLES: Readonly<Record<string, readonly string[]>> = {
+          admin: [
+            'commerce.read',
+            'commerce.catalog.write',
+            'commerce.order.write',
+            'commerce.payment.settle',
+            'commerce.order.refund',
+            'commerce.invoice.issue',
+          ],
+          editor: ['commerce.read', 'commerce.catalog.write'],
+          shopkeeper: [
+            'commerce.read',
+            'commerce.catalog.write',
+            'commerce.order.write',
+            'commerce.payment.settle',
+            'commerce.invoice.issue',
+          ],
+          viewer: ['commerce.read'],
+        }
+        const hasCommercePermission = (permission: string): boolean =>
+          user.roles.some((role) => (COMMERCE_ROLES[role] ?? []).includes(permission))
+        const commerceRefused = (permission: string): Response | null => {
+          if (auth !== `Bearer ${VALID_TOKEN}`) {
+            return json(401, {
+              error: {
+                code: 'UNAUTHENTICATED',
+                message: 'This part of the shop needs you to be signed in.',
+              },
+            })
+          }
+          if (!hasCommercePermission(permission)) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Your account is not allowed to do that.' },
+            })
+          }
+          return null
+        }
+
+        const parsed = new URL(url, 'http://localhost')
+        const segments = parsed.pathname
+          .replace(/^.*\/api\/commerce\/?/u, '')
+          .split('/')
+          .filter((segment) => segment !== '')
+
+        // products
+        if (segments[0] === 'products' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, { products: mockProducts })
+        }
+        if (segments[0] === 'products' && segments.length === 1 && method === 'POST') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          mockProductCounter += 1
+          const product = {
+            id: `product-${mockProductCounter}`,
+            handle: String(body.handle),
+            title: String(body.title),
+            status: 'active' as const,
+            contentRef: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+          }
+          mockProducts.push(product)
+          return json(201, product)
+        }
+        if (segments[0] === 'products' && segments.length === 2 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const product = mockProducts.find((candidate) => candidate.id === segments[1])
+          if (product === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_PRODUCT_NOT_FOUND',
+                message: 'This product does not exist.',
+              },
+            })
+          }
+          return json(200, {
+            product,
+            variants: mockVariants.filter((variant) => variant.productId === product.id),
+          })
+        }
+        if (segments[0] === 'products' && segments.length === 2 && method === 'PATCH') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const product = mockProducts.find((candidate) => candidate.id === segments[1])
+          if (product === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_PRODUCT_NOT_FOUND',
+                message: 'This product does not exist.',
+              },
+            })
+          }
+          if (typeof body.title === 'string') product.title = body.title
+          if (typeof body.handle === 'string') product.handle = body.handle
+          if (body.status === 'active' || body.status === 'archived') product.status = body.status
+          return json(200, product)
+        }
+        if (segments[0] === 'products' && segments.length === 2 && method === 'DELETE') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const product = mockProducts.find((candidate) => candidate.id === segments[1])
+          if (product !== undefined) product.status = 'archived'
+          return new Response(null, { status: 204 })
+        }
+
+        // variants
+        if (segments[0] === 'products' && segments[2] === 'variants' && method === 'POST') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          mockVariantCounter += 1
+          const variant = {
+            id: `variant-${mockVariantCounter}`,
+            productId: segments[1] ?? '',
+            sku: String(body.sku),
+            title: String(body.title),
+            priceMinor: Number(body.priceMinor),
+            currency: String(body.currency),
+            onHand: typeof body.onHand === 'number' ? body.onHand : 0,
+            allowBackorder: false,
+            weightGrams: 0,
+            taxCategory: 'standard',
+            position: 0,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+          }
+          mockVariants.push(variant)
+          return json(201, variant)
+        }
+        if (segments[0] === 'variants' && segments.length === 2 && method === 'PATCH') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const variant = mockVariants.find((candidate) => candidate.id === segments[1])
+          if (variant === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_VARIANT_NOT_FOUND',
+                message: 'This variant does not exist.',
+              },
+            })
+          }
+          if (typeof body.priceMinor === 'number') variant.priceMinor = body.priceMinor
+          if (typeof body.sku === 'string') variant.sku = body.sku
+          if (typeof body.title === 'string') variant.title = body.title
+          return json(200, variant)
+        }
+        if (segments[0] === 'variants' && segments[2] === 'stock' && method === 'PUT') {
+          const refused = commerceRefused('commerce.catalog.write')
+          if (refused !== null) return refused
+          const variant = mockVariants.find((candidate) => candidate.id === segments[1])
+          if (variant === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_VARIANT_NOT_FOUND',
+                message: 'This variant does not exist.',
+              },
+            })
+          }
+          variant.onHand = Number(body.onHand)
+          return json(200, variant)
+        }
+
+        // orders
+        if (segments[0] === 'orders' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const status = parsed.searchParams.get('status')
+          return json(200, {
+            orders: status === null ? mockOrders : mockOrders.filter((o) => o.status === status),
+          })
+        }
+        if (segments[0] === 'orders' && segments.length === 2 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          return json(200, {
+            order,
+            history: mockOrderHistory.filter((event) => event.orderId === order.id),
+            payments: mockPayments.filter((payment) => payment.orderId === order.id),
+          })
+        }
+        if (segments[0] === 'orders' && segments[2] === 'status' && method === 'PUT') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          const from = order.status
+          order.status = String(body.status)
+          mockOrderHistory.push({
+            id: `event-${mockOrderHistory.length + 1}`,
+            orderId: order.id,
+            at: '2026-03-02T00:00:00.000Z',
+            kind: 'status_changed',
+            fromStatus: from,
+            toStatus: order.status,
+            actorId: user.id,
+            note: typeof body.note === 'string' ? body.note : null,
+          })
+          return json(200, order)
+        }
+
+        // payments
+        if (segments[0] === 'payments' && segments[2] === 'settle' && method === 'POST') {
+          const refused = commerceRefused('commerce.payment.settle')
+          if (refused !== null) return refused
+          const payment = mockPayments.find((candidate) => candidate.id === segments[1])
+          if (payment === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_PAYMENT_NOT_FOUND',
+                message: 'This payment does not exist.',
+              },
+            })
+          }
+          payment.status = 'paid'
+          return json(200, payment)
+        }
+        if (segments[0] === 'payments' && segments[2] === 'refund' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.refund')
+          if (refused !== null) return refused
+          const payment = mockPayments.find((candidate) => candidate.id === segments[1])
+          if (payment === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_PAYMENT_NOT_FOUND',
+                message: 'This payment does not exist.',
+              },
+            })
+          }
+          payment.status = 'refunded'
+          return json(200, payment)
+        }
+
+        return json(405, { error: { code: 'INTERNAL', message: 'No such route.' } })
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

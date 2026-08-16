@@ -42,6 +42,7 @@
     "@cogenta/channels": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/import": "workspace:*",
+    "@cogenta/plugins": "workspace:*",
     "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/seo": "workspace:*",

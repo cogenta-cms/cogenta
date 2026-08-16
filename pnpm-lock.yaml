@@ -437,6 +437,9 @@ importers:
       '@cogenta/import':
         specifier: workspace:*
         version: link:../import
+      '@cogenta/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@cogenta/render':
         specifier: workspace:*
         version: link:../render

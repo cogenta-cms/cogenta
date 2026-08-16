@@ -18,6 +18,7 @@ import {
   createAuthRouter,
   createContentGateway,
   createContentService,
+  createMarketplaceRouter,
   createMediaRouter,
   createMfaRecommendationSource,
   createNoticeDismissalStore,
@@ -31,6 +32,7 @@ import {
   createUsersRouter,
   errorResponse,
   executeGraphQL,
+  type MarketplaceRouter,
   type MediaImageProcessor,
   type MediaRouter,
   type NoticeRouter,
@@ -61,6 +63,14 @@ import {
   type MediaStore,
   type StorageDriver,
 } from '@cogenta/core'
+import {
+  createMarketplaceCatalog,
+  createMarketplaceInstaller,
+  createPluginGrantStore,
+  ensureMarketplaceTables,
+  ensurePluginTables,
+  type MarketplaceCatalogEntry,
+} from '@cogenta/plugins'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   type BlockZones,
@@ -270,6 +280,8 @@ interface Site {
   readonly searchRouter: SearchRouter
   /** `/api/taxonomies/*` — terms, mounted apart from content because a taxonomy is not a collection (`schema@2.0`, ADR-0022). */
   readonly taxonomyRouter: TaxonomyRouter
+  /** `/api/marketplace/*` — L17's local plugin/theme/skin catalog, reusing `@cogenta/plugins`' real Ed25519 verification unchanged. Always mounted; the catalog is empty until a site configures one. */
+  readonly marketplaceRouter: MarketplaceRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
@@ -377,6 +389,16 @@ interface AssembleSiteOptions {
   readonly assistant?: AssistantAssembly
   /** The full-text index, when the caller already built one. Created here otherwise. */
   readonly searchIndex?: SearchDriver
+  /**
+   * L17's local marketplace catalog. Absent means an empty catalog: the
+   * router still mounts and answers, it simply has nothing to list — no
+   * caller today configures a distant registry (L13's API keys, which the
+   * lot names as that dependency, were never built).
+   */
+  readonly marketplace?: {
+    readonly catalog?: readonly MarketplaceCatalogEntry[]
+    readonly trustedPublicKeys?: readonly string[]
+  }
   /**
    * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
    * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
@@ -532,6 +554,21 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const noticeDismissals = createNoticeDismissalStore(db)
   await noticeDismissals.ensureTable()
 
+  // L17: a local/embedded catalog, not a distant service — L13's API keys,
+  // which the lot names as that dependency, were never built. Empty until a
+  // site configures one; a marketplace router that always answers is what
+  // lets the admin screen render instead of guessing whether one exists.
+  await ensurePluginTables(db)
+  await ensureMarketplaceTables(db)
+  const marketplaceGrants = createPluginGrantStore(db)
+  const marketplaceCatalog = createMarketplaceCatalog(options.marketplace?.catalog ?? [])
+  const marketplaceInstaller = createMarketplaceInstaller(db, {
+    grantStore: marketplaceGrants,
+    ...(options.marketplace?.trustedPublicKeys === undefined
+      ? {}
+      : { trustedPublicKeys: options.marketplace.trustedPublicKeys }),
+  })
+
   return {
     db,
     auth,
@@ -549,6 +586,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       taxonomies,
       permissions,
       storeFor: (taxonomy) => taxonomyStoreFor(taxonomy),
+    }),
+    marketplaceRouter: createMarketplaceRouter({
+      catalog: marketplaceCatalog,
+      installer: marketplaceInstaller,
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -1217,6 +1258,14 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.taxonomyRouter.handle(request, context))
+        return
+      }
+
+      if (url.pathname.startsWith('/api/marketplace')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.marketplaceRouter.handle(request, context.actor))
         return
       }
 

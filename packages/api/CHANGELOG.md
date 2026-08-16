@@ -1,5 +1,400 @@
 # @cogenta/api
 
+## 1.1.0
+
+### Minor Changes
+
+- [`fa3d13b`](https://github.com/cogenta-cms/cogenta/commit/fa3d13beb1d7394010dcb77e6bab0efbb07e3f6d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Global search in the admin header (L11 task 4). `GET /api/media` and
+  `GET /api/users` both gain an optional `q` query parameter: a case-insensitive
+  substring match on filename/alt text for media, and on email for accounts.
+  
+  Neither gets a real index — `q` filters in memory over a bounded scan (the
+  most recent 200 assets for media, the full account list for users, which the
+  route already loaded in full). Good enough for the volume an admin media
+  library or account list holds today; a real index is `@cogenta/schema`'s
+  search engine (`GET /api/search`, unchanged here), built for content.
+  
+  Both routes keep the permission check they already had *before* applying the
+  filter: `/api/media` still requires a signed-in actor, `/api/users` still
+  requires the `admin` role. `q` narrows what an already-permitted caller sees,
+  it never widens it (R4).
+  
+  The admin's new global search box (topbar, `packages/admin/src/shell/`) calls
+  `/api/search`, `/api/media` and `/api/users` in parallel — three real calls
+  rather than one aggregated route, since aggregating server-side would still
+  make the same three calls internally for no real benefit.
+
+- [`3b04c56`](https://github.com/cogenta-cms/cogenta/commit/3b04c56ca17291732a1e3f61cfa3b07248708a19) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `unpublish` and `duplicate` REST routes, so the admin's editor can
+  finally offer status control and duplication
+  
+  The audit's top finding on the admin: the content editor had no publication
+  control at all, even though `POST /{collection}/{id}/publish` has existed
+  since L2. Fixing that needed two more routes, both added the same way the
+  existing ones were:
+  
+  - `POST /{collection}/{id}/unpublish` — the direct inverse of `publish`, so
+    it is guarded by the `publish` action rather than a sixth verb (contract A's
+    action vocabulary stays frozen at five, same reasoning `untrash`/`purge`
+    reuse `delete`). Body: `{ status?: 'draft' | 'archived' }`, defaulting to
+    `draft`.
+  - `POST /{collection}/{id}/duplicate` — wires up `ContentStore.duplicate()`
+    (`@cogenta/schema`), which was already written and tested but never called
+    by anything. Guarded by `create`, since a duplicate is a new entry, not a
+    change to the source. Body: `{ values?: {...} }`, applied on top of the
+    copied values (the same override contract `duplicate()` already exposes).
+  
+  Both are tested role by role (refused for a role without the permission,
+  allowed for one with it) in `test/rest/publish-duplicate.test.ts`.
+  
+  `@cogenta/admin`'s entry editor now shows a visible status control
+  (draft/published/archived) and a "Publish" button gated by the `publish`
+  permission, plus a "Duplicate" button gated by `create` — both calling these
+  routes. `@cogenta/admin` is unpublished, so no changeset entry for it.
+  
+  Deliberately not done here: a fourth `scheduled` status in the admin. Contract
+  A already has it, and `@cogenta/schema` has a full queue-based scheduler for
+  it (`src/scheduling/publish.ts`), but nothing registers it in `cogenta serve`
+  — offering a date picker that silently did nothing would be dishonest UI.
+  Wiring the scheduler is separate follow-up work.
+
+- [`d72b40f`](https://github.com/cogenta-cms/cogenta/commit/d72b40f64ab5b98985a22d9daae34796a4638f45) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Self-hosted, cookie-free page-view analytics — the one CMS feature category
+  the audit found completely missing. No third party, no cookie, no personal
+  data ever stored, consistent with R1 (no dure dependency on external
+  infrastructure) and the project's privacy stance.
+  
+  **New package `@cogenta/analytics`.** One table (`cogenta_analytics_events`):
+  timestamp, page path, referring **domain only** (never the full referrer
+  URL), a device category reduced from the User-Agent (`desktop`/`mobile`/
+  `tablet`/`other`, never the raw string), and a **daily-salted session hash**
+  — never an IP address, never a cookie. The salt (`cogenta_analytics_daily_salts`)
+  is minted once per UTC day and rotates every day, so
+  `sha256(salt|ip|device)` for the same real visitor is a *different*, unrelated
+  value on every new day: nothing in the stored data can link two days of the
+  same visitor's traffic, even with full database access, because reproducing
+  yesterday's hash needs yesterday's IP, which was never written down. The IP
+  address and the full User-Agent are used only as transient inputs to that
+  hash and to the device classifier — neither is ever persisted. A dedicated
+  privacy test suite (`test/privacy.test.ts`) inspects the actual stored
+  columns, not just the public types, to prove this. `createAnalyticsStore`
+  aggregates views by day, top pages, top referring domains and device
+  breakdown; a same-session rate limit (60 events/minute) drops abusive
+  traffic silently rather than erroring.
+  
+  **`@cogenta/core`** gains one error code, `ANALYTICS_SALT_UNAVAILABLE`
+  (an internal race-recovery failure, not expected in normal operation).
+  
+  **`@cogenta/api`** gains `createAnalyticsRouter`: `GET /api/analytics/beacon`
+  (public, records one event, always answers `204` even on a malformed or
+  rate-limited request — a public collection endpoint must never break page
+  rendering) and `GET /api/analytics/summary` (`admin`-only, `?days=` window).
+  
+  **`@cogenta/cli`** wires both into `cogenta serve` and injects the collection
+  tag into every rendered page. The tag is an invisible `<img>` pixel, not a
+  `<script>`: the theme's rendered output already carries a hard "zero
+  executable client JavaScript" property (enforced by a `serve.test.ts`
+  assertion), so a script reading `document.referrer` was not an option. The
+  referrer is instead read **server-side**, from the `Referer` header of the
+  request that is rendering the page, and baked straight into the pixel's URL
+  — no client code needed to capture it. The page builder's live-preview
+  render includes the same pixel (rather than omitting it) specifically to
+  keep its `<body>` byte-identical to the published page's, the invariant
+  `theme-render-fidelity` depends on.
+  
+  The admin gains a full `/analytics` dashboard (hand-built SVG bar chart, no
+  charting dependency — R9) and a "views this week" widget on the main
+  dashboard, both `admin`-only like every other traffic-shaped view in the
+  admin.
+
+- [`4eda357`](https://github.com/cogenta-cms/cogenta/commit/4eda35754f55484e12028707e4f54aaaccc188d2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - API keys, wired to the transport (L13 task 8, companion to the
+  `@cogenta/auth` changeset that adds the store).
+  
+  `resolveActor` now recognises two bearer-token shapes instead of one: a
+  session (unchanged) and an API key, told apart by the key's `cogenta_sk_`
+  prefix before any database lookup runs. A key resolves to an actor whose
+  `roles` are exactly its granted `scope` — never more, and never derived from
+  whoever created it — with an id prefixed `apikey:` so it can never collide
+  with, or be mistaken for, a real user id in the audit log or a `me` route.
+  Repeated attempts with an invalid key are rate-limited the same way a wrong
+  password is, keyed on a hash of the attempted key since an unrecognised key
+  carries no other identity to limit by.
+  
+  `@cogenta/api` gains `createApiKeysRouter` — `GET`/`POST /api/api-keys` and
+  `DELETE /api/api-keys/{id}`, admin-only. The raw key is present in exactly
+  one response body, `POST`'s, and never again: `list()` only ever returns the
+  12-character prefix a key was minted with.
+  
+  `@cogenta/cli` mounts the router in `cogenta serve` under `/api/api-keys`
+  and records `apikey.create`/`apikey.revoke` in the audit log, the same
+  transport-boundary pattern `recordUserAudit` already uses — the raw key
+  never reaches the audit entry, only the key's id.
+  
+  **The admin screen for managing keys lands in the same session**
+  (`@cogenta/admin`, unpublished/private, no changeset needed) — a new
+  `/api-keys` route, admin-only, that shows the raw key exactly once in a
+  dismissable notice right after creation and never again afterwards.
+  
+  Compromise taken under time pressure, noted rather than hidden: scope is a
+  flat list of role names rather than a collection-by-collection permission
+  matrix. A key's actor is checked by the same `PermissionLayer` every other
+  actor is, so a key can never do more than the roles it was granted allow —
+  the simplification is in how finely a grant can be sliced, not in whether it
+  is enforced.
+
+- [`03d1327`](https://github.com/cogenta-cms/cogenta/commit/03d13277224c5abd011d15e19c8f9ec67ef40c27) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The other half of password reset (`.changeset/auth-password-reset.md`,
+  L13 task 6): that changeset built the store and the terminal command and
+  said plainly "no admin route can receive a reset click yet". This is that
+  route, and the screen behind it.
+  
+  `@cogenta/auth`'s `AuthStore` gains a `resets` field — the
+  `PasswordResetStore` `createPasswordResetStore` already built, now wired
+  into the object every caller already holds, the same way `rateLimit` and
+  `sessions` are.
+  
+  `@cogenta/api`'s `createAuthRouter` gains two routes. `POST
+  /api/auth/forgot-password` accepts an email and answers with the **exact
+  same response** whether or not an account exists for it — the line this
+  route exists to never cross is account enumeration, and every branch of its
+  handler (an existing account, a disabled one, a non-existent one) returns
+  byte-identical bodies. It rate-limits by the submitted email, before the
+  account lookup, on the same subject either way, the same posture
+  `loginAttempts` already applies to a wrong password. Only a real, active
+  account gets a token issued, delivered through a new optional
+  `onForgotPassword` callback rather than a hard dependency on
+  `@cogenta/channels` (R9) — the router itself never sends mail. `POST
+  /api/auth/reset-password` redeems the token, sets the new password (same
+  12-character floor as the self-service password-change route, now shared
+  from a new `password-policy.ts` instead of duplicated), and revokes every
+  existing session, exactly like `cogenta users reset-password --token`
+  already does. A new error code, `AUTH_RESET_TOKEN_INVALID` (400), names an
+  invalid, expired or already-used token — unlike `forgot-password`, this
+  route's refusal is allowed to say why, since the secret here is the token
+  itself, not whether an email exists.
+  
+  `@cogenta/cli` factors the mail-sending half of `cogenta users
+  reset-password --email` out of `commands/users.ts` into a new shared
+  `reset-mail.ts`, so `cogenta serve` can wire the identical wording (now with
+  an optional link to the admin's reset screen instead of the terminal
+  command) into `onForgotPassword` without a second copy of it. `runServe`
+  passes it to `createAuthRouter` unconditionally: the token is still issued
+  and thrown away unsent when no site's mail is configured to go anywhere
+  useful, since the HTTP response must never depend on whether the mail could
+  be delivered.
+  
+  `@cogenta/admin` (private, no changeset) gains the two screens this needed:
+  "forgot password" on `/forgot-password`, linked from the sign-in screen, and
+  "reset password" on `/reset-password?token=…`, the link the mail sends. Both
+  are public routes, like `/login`. The user-management screen's role editor
+  also moves off a raw comma-separated text field: four standard role names
+  (`admin`/`editor`/`author`/`contributor`) are now offered as checkboxes,
+  alongside any role a site's accounts already use, plus a free-text field for
+  a role of the site's own — a UX convention only, not a contract A change
+  (a role is still an arbitrary string as far as the server and the five
+  permission actions are concerned).
+
+- [`174b521`](https://github.com/cogenta-cms/cogenta/commit/174b521e9bca3b783e06ac8aa3dff6e0ded58aa5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - L17 tasks 1-4: a local/embedded marketplace catalog with one-click install,
+  scoped deliberately without a real remote registry service — L13 task 8 (API
+  keys), which the lot names as the dependency for a distant marketplace, was
+  never built in this repository.
+  
+  `@cogenta/plugins` gains `createMarketplaceCatalog` (an in-memory, searchable,
+  category-filterable directory the caller assembles — not a fetch to any
+  external host) and `createMarketplaceInstaller`, plus `loadMarketplacePlugin`:
+  a stricter sibling of `loadPlugin` that treats every reference as
+  `registry`-trust unconditionally, so a marketplace item never takes the
+  `local`/dev-mode shortcut that would otherwise skip signature verification for
+  a catalog entry that happens to point at a local directory.
+  
+  **The one line the whole task hinges on**: `MarketplaceInstaller.install`
+  always calls `loadMarketplacePlugin`, which always verifies signature against
+  the trusted registry keys — there is no parameter anywhere in this path that
+  can skip that call, and a missing or invalid signature throws before anything
+  is persisted. Only `kind: 'plugin'` installs for now (`MARKETPLACE_KIND_UNSUPPORTED`
+  otherwise) — themes/skins/skills keep using their own existing registries
+  (`createThemeRegistry`/`createSkinGallery`/`createSkillRegistry`).
+  
+  `MarketplaceInstaller.update` re-verifies the signature of the new reference,
+  computes newly-declared capabilities against the plugin's existing grants
+  (`detectCapabilitiesNeedingApproval`, unchanged from L7), and refuses
+  (`MARKETPLACE_UPDATE_REQUIRES_APPROVAL`) unless the caller explicitly passes
+  `confirmPendingPermissions: true` — and even then, no capability is
+  auto-granted; `PluginGrantStore.grant` stays a separate, explicit step.
+  
+  `@cogenta/api` gains `createMarketplaceRouter` (`/api/marketplace/items`,
+  admin-only, structurally typed against `@cogenta/plugins` rather than
+  depending on it at runtime) with list/detail/install/update/uninstall routes.
+  The detail route reuses `describeCapability` (L7 task 7) so a plugin's
+  requested capabilities read in plain language, the same sentences the
+  existing permission-review screen already renders.
+  
+  `@cogenta/core` gains the error codes this needs:
+  `MARKETPLACE_ITEM_NOT_FOUND`, `MARKETPLACE_KIND_UNSUPPORTED`,
+  `MARKETPLACE_ALREADY_INSTALLED`, `MARKETPLACE_NOT_INSTALLED`,
+  `MARKETPLACE_UPDATE_REQUIRES_APPROVAL` — and `PLUGIN_SIGNATURE_MISSING`/
+  `PLUGIN_SIGNATURE_INVALID`/`PLUGIN_SOURCE_NOT_FOUND`/`PLUGIN_MANIFEST_INVALID`
+  (existing L7 codes, never before mapped to an HTTP status because no REST
+  route threw them until now) gain entries in `statusFor` (422/404/422).
+  
+  **Not done, by explicit scope cut under a hard deadline**: `cogenta serve`
+  does not yet mount this router, so the catalog/installer above are complete,
+  independently tested, and ready to wire, but not yet reachable over HTTP from
+  a running site — the same honest gap the codebase already tolerates elsewhere
+  (`cogenta build`/`deploy`/`theme`, L9 task 9) rather than a stub. Bundled
+  updates across multiple items and the commercial (paid extension) track named
+  in the lot doc are both out of scope for this pass.
+
+- [`029da6b`](https://github.com/cogenta-cms/cogenta/commit/029da6b238ad438b77375e389de57d83fb7f3a4e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Navigation menus, missing entirely until now — no backend, no admin, no theme wiring — and
+  a P0 gap for a CMS meant to compete with WordPress/Strapi/Drupal.
+  
+  `@cogenta/schema` gains `createMenuStore`/`ensureMenuTables`: a menu is a named tree of
+  items (`entry` — a link to a real collection entry, `url` — an external link, or
+  `submenu-placeholder` — a heading with no target of its own), structurally close to a
+  taxonomy term tree (materialised path, reusing `taxonomy-path.ts`'s helpers as-is) but
+  **not** a `TaxonomyStore`: a menu is created and edited entirely at runtime from the admin,
+  never declared in a site's schema module, so it gets one fixed pair of tables
+  (`cogenta_menus`/`cogenta_menu_items`) rather than one table per declared name. A menu
+  belongs to a locale the same way a localised collection does (ADR-0014) — two menus named
+  `main` can coexist, one per locale, never one row trying to carry both. New error codes:
+  `MENU_UNKNOWN`, `MENU_NAME_TAKEN`, `MENU_ITEM_NOT_FOUND`, `MENU_ITEM_INVALID`,
+  `MENU_CYCLE`.
+  
+  **One real bug found and fixed while building this**: a materialised path is id-based, so
+  two siblings' paths diverge at their own id — sorting a listing by `path asc, position asc`
+  (`taxonomy-store.ts`'s own pattern) therefore sorts siblings by *creation order*, never by
+  `position`, silently defeating any "move up/down" a caller might build on top of it. The
+  menu store walks the tree in application code instead (group by parent, sort each group by
+  `position`, depth-first from the roots) — cheap for something the size of a navigation
+  menu, and it is what makes `reorderItem` (swap with the sibling before/after) actually work.
+  
+  `@cogenta/api` gains `createMenuRouter`: `GET /api/menus` and `GET /api/menus/{id}` are
+  public (a menu serves the public theme's navigation, same as a published entry); every
+  write requires `admin` or `editor` — a fixed rule, not a per-site permission
+  configuration, since a menu is neither a collection nor a taxonomy and giving it a third
+  `PermissionLayer` method for one rule that never varies would be new surface for nothing.
+  `GET /api/menus/by-name/{name}?locale=` resolves a menu the way a theme will want to
+  (refusing ambiguity across locales without `?locale=`, rather than guessing). An `entry`
+  item is optionally resolved to a display label and public route via an injected
+  `resolveEntry` callback, kept out of the router itself so it stays decoupled from content
+  resolution.
+  
+  `cogenta serve` mounts `/api/menus/*`, resolving `entry` items through the same
+  permission-checked `ContentGateway` and `buildPath` the theme renderer uses, as `ANONYMOUS`
+  (a menu is public navigation — an item never resolves to more than an anonymous visitor
+  could see). The admin gains a `/menus` screen (menu selector, item list with up/down
+  reorder buttons and delete, add-item form for a URL or a collection+entry), kept plain like
+  `taxonomies.tsx` — L11 owns how the admin looks; every action goes through the real API and
+  write controls only render for `admin`/`editor` (the server refuses the rest regardless,
+  R4).
+  
+  **What is not done, and why**: theme rendering (a public page actually showing a menu) is
+  out of scope for this change — see `BLOCKERS.md` for the exact point to wire it in
+  (`packages/theme-canonical/src/Base.astro`'s header/footer slots, fed by
+  `GET /api/menus/by-name/{name}`). Nothing here touches contract A or B: a menu is
+  deliberately not content and not a block.
+
+- [`b37e51c`](https://github.com/cogenta-cms/cogenta/commit/b37e51cea79fc8d3070d5c741a8415192985d9ff) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give the redirect table, HTTP security and outbound webhooks a real admin
+  screen (audit follow-up to L10 tasks 2/6 and L14 task 1)
+  
+  Three backend pieces existed and were fully wired into `cogenta serve` with
+  no way to reach them from a browser.
+  
+  - `@cogenta/core` gains the `REDIRECT_UNKNOWN` error code, for a `DELETE` on a
+    redirect that does not exist.
+  - `@cogenta/api` gains `createRedirectRouter` (`GET`/`POST`/`DELETE
+    /api/redirects`) and `createOpsStatusRouter` (`GET /api/security-status`,
+    `GET /api/webhooks-status`). Both are admin-only on every method, including
+    `GET`: a redirect table and a site's CORS/CSP/HSTS configuration are
+    routing and hardening decisions, not content, so neither has a reader role
+    the way a taxonomy or a menu does. Loop and self-redirect refusal is
+    entirely `RedirectStore`'s own job (`CONTENT_REDIRECT_LOOP`,
+    `CONTENT_ROUTE_INVALID`), surfaced here as a proper 409/400 instead of a
+    500.
+  - `cogenta serve` mounts all three at `/api/redirects`, `/api/security-status`
+    and `/api/webhooks-status`, and `@cogenta/admin` gains three screens:
+    `/redirects` (full CRUD) and `/ops-settings` (`security` and `webhooks`,
+    **read-only**).
+  
+  The security and webhooks screens are read-only by design, not by omission.
+  Both settings live in the site's `cogenta.config.mjs` — versioned in git,
+  deployed with the code that depends on it (a CSP that allows a script host
+  has to travel with the deploy that added the script). Letting the admin edit
+  them would create a second source of truth that disagrees with the file the
+  moment either one changes without the other, which is a bigger architecture
+  change than this audit's scope. The screens instead mirror exactly what the
+  running process is enforcing on every request.
+  
+  No delivery history is shown for webhooks: none is persisted anywhere today
+  (`WebhookEventSender.send` only ever returns a per-call result to log). The
+  screen says so rather than inventing one.
+
+- [`3c73e58`](https://github.com/cogenta-cms/cogenta/commit/3c73e58ff0a54782a58ef1bf2d70e84819ff8944) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Scheduled publication, written and tested since L1 (`@cogenta/schema`'s
+  `schedulePublication`/`registerScheduledPublishing`, a `QueueDriver`-based mechanism with
+  a real degraded `database` driver) but never wired to anything: an editor could set an
+  entry to "Scheduled" with a future date and nothing would ever happen — the admin showed
+  it as a read-only badge, honest about the gap rather than lying about it.
+  
+  **The missing link was the write path, not the queue.** `ContentStore.update()` never
+  changes `status` (contract A keeps that transition to `publish`/`unpublish`), so there was
+  no way to move an *existing* entry into `scheduled` at all — only `create({status:
+  'scheduled', ...})` worked. `unpublish()` now also accepts `status: 'scheduled'` with a
+  required `publishedAt` (a `Date`, an ISO string, or epoch milliseconds), writing it as an
+  ordinary value of the collection's own `publishedAt` field the same way `publish()`
+  already does. A collection that never declared `publishedAt` refuses with
+  `CONTENT_SCHEDULE_INVALID` rather than accepting a schedule with nowhere to put the date.
+  
+  `@cogenta/schema` gains `withScheduledPublishEnqueue`, a `ContentStore` decorator in the
+  same family as `withSearchIndexing`/`withLifecycleEvents`: wrapping `create`/`update`/
+  `unpublish`/`restore`, it calls `schedulePublication` whenever the result is
+  `status: 'scheduled'`. It re-enqueues on every save rather than tracking a previous job
+  id — safe, because the handler re-reads the entry before publishing and skips anything no
+  longer `scheduled` (an edit back to `draft`, or a manual publish that already happened).
+  
+  `@cogenta/api`'s `POST /{collection}/{id}/unpublish` accepts
+  `{"status": "scheduled", "publishedAt": "…"}` alongside the existing `draft`/`archived`.
+  
+  `cogenta serve` creates a `database`-backed `QueueDriver` per site (R1: no external
+  worker, no Redis — a table in the site's own database, drained in-process) and registers
+  the publish handler once, at `assembleSite`. `runServe` drains it on a `setInterval` —
+  once immediately at startup to catch up on anything overdue, then every 60 seconds for as
+  long as the process runs. The trade this makes, and the one worth knowing: a page
+  scheduled for 09:00 goes live between 09:00 and 09:01, and if the process is down when
+  09:00 comes, nothing is lost — the job is still in the table — it simply runs late, on
+  the first tick after the next start.
+  
+  Not a CLI flag: `ServeOptions.scheduledPublishTickMs` overrides the cadence for tests
+  only (proving the loop really drains the queue without waiting a real minute for it); an
+  operator has no reason to touch it.
+  
+  The admin's status control gains a real `datetime-local` picker (never free text),
+  offered whenever the collection declares `publishedAt`: "Programmer"/"Reprogrammer" call
+  the new `unpublish` shape, and "Annuler la programmation" moves a scheduled entry back to
+  draft.
+
+- [`71e1dcd`](https://github.com/cogenta-cms/cogenta/commit/71e1dcd3f8204dca3b05cfd8558e7cf39aedc9e8) Thanks [@georgesmomo](https://github.com/georgesmomo)! - WordPress import from the admin, not only `cogenta import wordpress` on a
+  terminal. `@cogenta/api` gains `createImportRouter` (`POST
+  /api/import/wordpress`), and `cogenta serve` mounts it — admin-only, checked
+  before the (potentially multi-megabyte) upload body is even read, the same
+  defensive order `/api/site-plans` already uses for the same reason.
+  
+  The import logic itself is not duplicated: the router takes an injected
+  `runWordPressImport` function, and `cogenta serve` wires it to
+  `@cogenta/import`'s real `importWordPress`, unchanged — `@cogenta/api` gains
+  no new dependency, the same shape rule `MediaRouterOptions.images` already
+  follows. A successful import is recorded in the audit log
+  (`import.wordpress`) with the counts, never the document itself.
+  
+  The admin gets a screen at `/import`: choose a WordPress "Export All Content"
+  file, and see the same report `cogenta import wordpress` already prints — what
+  was imported, what was skipped, and what could not be converted to a block.
+
+### Patch Changes
+
+- Updated dependencies [[`d72b40f`](https://github.com/cogenta-cms/cogenta/commit/d72b40f64ab5b98985a22d9daae34796a4638f45), [`4eda357`](https://github.com/cogenta-cms/cogenta/commit/4eda35754f55484e12028707e4f54aaaccc188d2), [`206b4cd`](https://github.com/cogenta-cms/cogenta/commit/206b4cd12df7d3a2a5831029b5f0ef726e7fd84d), [`03d1327`](https://github.com/cogenta-cms/cogenta/commit/03d13277224c5abd011d15e19c8f9ec67ef40c27), [`174b521`](https://github.com/cogenta-cms/cogenta/commit/174b521e9bca3b783e06ac8aa3dff6e0ded58aa5), [`029da6b`](https://github.com/cogenta-cms/cogenta/commit/029da6b238ad438b77375e389de57d83fb7f3a4e), [`b37e51c`](https://github.com/cogenta-cms/cogenta/commit/b37e51cea79fc8d3070d5c741a8415192985d9ff), [`3c73e58`](https://github.com/cogenta-cms/cogenta/commit/3c73e58ff0a54782a58ef1bf2d70e84819ff8944)]:
+  - @cogenta/analytics@0.2.0
+  - @cogenta/core@0.4.0
+  - @cogenta/auth@0.3.0
+  - @cogenta/schema@0.3.0
+  - @cogenta/blocks@0.1.4
+
 ## 1.0.0
 
 ### Major Changes

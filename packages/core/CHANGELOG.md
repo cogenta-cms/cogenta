@@ -1,5 +1,274 @@
 # @cogenta/core
 
+## 0.4.0
+
+### Minor Changes
+
+- [`d72b40f`](https://github.com/cogenta-cms/cogenta/commit/d72b40f64ab5b98985a22d9daae34796a4638f45) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Self-hosted, cookie-free page-view analytics — the one CMS feature category
+  the audit found completely missing. No third party, no cookie, no personal
+  data ever stored, consistent with R1 (no dure dependency on external
+  infrastructure) and the project's privacy stance.
+  
+  **New package `@cogenta/analytics`.** One table (`cogenta_analytics_events`):
+  timestamp, page path, referring **domain only** (never the full referrer
+  URL), a device category reduced from the User-Agent (`desktop`/`mobile`/
+  `tablet`/`other`, never the raw string), and a **daily-salted session hash**
+  — never an IP address, never a cookie. The salt (`cogenta_analytics_daily_salts`)
+  is minted once per UTC day and rotates every day, so
+  `sha256(salt|ip|device)` for the same real visitor is a *different*, unrelated
+  value on every new day: nothing in the stored data can link two days of the
+  same visitor's traffic, even with full database access, because reproducing
+  yesterday's hash needs yesterday's IP, which was never written down. The IP
+  address and the full User-Agent are used only as transient inputs to that
+  hash and to the device classifier — neither is ever persisted. A dedicated
+  privacy test suite (`test/privacy.test.ts`) inspects the actual stored
+  columns, not just the public types, to prove this. `createAnalyticsStore`
+  aggregates views by day, top pages, top referring domains and device
+  breakdown; a same-session rate limit (60 events/minute) drops abusive
+  traffic silently rather than erroring.
+  
+  **`@cogenta/core`** gains one error code, `ANALYTICS_SALT_UNAVAILABLE`
+  (an internal race-recovery failure, not expected in normal operation).
+  
+  **`@cogenta/api`** gains `createAnalyticsRouter`: `GET /api/analytics/beacon`
+  (public, records one event, always answers `204` even on a malformed or
+  rate-limited request — a public collection endpoint must never break page
+  rendering) and `GET /api/analytics/summary` (`admin`-only, `?days=` window).
+  
+  **`@cogenta/cli`** wires both into `cogenta serve` and injects the collection
+  tag into every rendered page. The tag is an invisible `<img>` pixel, not a
+  `<script>`: the theme's rendered output already carries a hard "zero
+  executable client JavaScript" property (enforced by a `serve.test.ts`
+  assertion), so a script reading `document.referrer` was not an option. The
+  referrer is instead read **server-side**, from the `Referer` header of the
+  request that is rendering the page, and baked straight into the pixel's URL
+  — no client code needed to capture it. The page builder's live-preview
+  render includes the same pixel (rather than omitting it) specifically to
+  keep its `<body>` byte-identical to the published page's, the invariant
+  `theme-render-fidelity` depends on.
+  
+  The admin gains a full `/analytics` dashboard (hand-built SVG bar chart, no
+  charting dependency — R9) and a "views this week" widget on the main
+  dashboard, both `admin`-only like every other traffic-shaped view in the
+  admin.
+
+- [`4eda357`](https://github.com/cogenta-cms/cogenta/commit/4eda35754f55484e12028707e4f54aaaccc188d2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - API keys — machine-to-machine authentication, absent until now (L13 task 8).
+  A script or integration had no way to authenticate against the REST/GraphQL
+  API short of signing in as a human account and keeping its session alive.
+  
+  `@cogenta/core` gains four error codes: `API_KEY_INVALID`, `API_KEY_REVOKED`,
+  `API_KEY_EXPIRED`, `API_KEY_NOT_FOUND`.
+  
+  `@cogenta/auth` gains `createApiKeyStore`, backed by a new
+  `cogenta_api_keys` table that `ensureAuthTables` creates like the others. A
+  key is `cogenta_sk_` followed by 256 bits of randomness, generated once,
+  returned once, and never stored — only its SHA-256 hash is, looked up by
+  that hash exactly the way `sessions.ts` looks up a session token. It is
+  hashed fast rather than with scrypt on purpose: scrypt's cost defends a
+  low-entropy, human-chosen secret against guessing, and a generated key has
+  no such weakness to defend — the same reasoning that already applies to a
+  session token.
+  
+  A key carries an explicit `scope`: an open set of role names, exactly like a
+  user's `roles`, chosen once at creation and never derived from the account
+  that minted it. `AuthStore` gains `apiKeys` alongside `users`/`sessions`.
+  
+  This changeset lands the store only. `@cogenta/api`'s `resolveActor` and the
+  `/api/api-keys` admin router that mint and revoke keys land in a companion
+  changeset for `@cogenta/api`/`@cogenta/cli`/`@cogenta/admin`.
+
+- [`206b4cd`](https://github.com/cogenta-cms/cogenta/commit/206b4cd12df7d3a2a5831029b5f0ef726e7fd84d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Completes the admin surface of contract E (ADR-0024) beyond its MVP: multiple
+  variants per product, coupons, invoices and subscriptions are now all
+  reachable from a real HTTP admin, not just the backend that already carried
+  them.
+  
+  `@cogenta/commerce`'s `createCommerceAdminRouter` gains: `DELETE
+  /variants/{id}` (a product's variant list was previously append-only from the
+  admin's point of view); `GET`/`POST /coupons` and `POST
+  /coupons/{code}/deactivate`; `GET`/`POST /subscriptions` and the
+  `pause`/`resume`/`cancel` actions (absent when the caller does not wire a
+  `SubscriptionStore` — a site with no `commerceSubscriptions` store answers
+  404, never a crash); and `GET /orders/{id}/invoice` plus `GET
+  /orders/{id}/invoice/pdf`, the read side of an invoice-issuing route that
+  existed but could previously only be written to, never read back. The PDF
+  route answers with a raw `Uint8Array` body — the one response in this router
+  that is not JSON — and the Node transport (`cogenta serve`) now checks for
+  that shape before deciding whether to `JSON.stringify` or stream bytes with
+  `content-type: application/pdf`.
+  
+  `@cogenta/core` gains an optional `billing` config section (legal name,
+  address, tax id, footer) — nothing here is a secret, rule R7 does not apply,
+  a legal name is meant to be printed. Its absence is a real, first-class state:
+  `cogenta serve` only builds an `InvoiceStore` and only accepts `POST
+  /orders/{id}/invoice` once a site has filled this in, because an invoice with
+  a made-up seller address is worse than no invoicing feature at all.
+  
+  `@cogenta/cli` wires `createSubscriptionStore` and the conditional
+  `createInvoiceStore` into `assembleSite`, passes `coupons`/`subscriptions`/
+  `invoices` into the admin router (previously only `catalog`/`orders`/
+  `customers`/`payments` were threaded through, silently dropping the coupon
+  store `cogenta serve` already built), and adds the PDF passthrough above.
+  
+  The admin (`@cogenta/admin`, private, no changeset) gets the screens this
+  backend work makes possible: a real variant list per product (add, edit,
+  remove, price and stock each independently, `commerce.catalog.write`-gated)
+  replacing the one-variant-per-product MVP; `/commerce/coupons` (create by
+  code/kind/value/validity window/redemption limit, deactivate); `/commerce/
+  subscriptions` (list by status, cancel — creation is deliberately absent,
+  since a subscription is created at checkout, not from the back office); and
+  an "issue invoice" / download-PDF pair on the order detail screen. All money
+  is entered and displayed through the existing `commerce/money.ts` conversion
+  at the edges — every request on the wire still carries `priceMinor`, never a
+  float.
+  
+  Proven end to end in `packages/cli/test/serve-commerce.test.ts`, against a
+  real HTTP server and a real SQLite file: a second variant added and removed
+  through the router; a coupon created, listed and deactivated, and refused for
+  a role with only `commerce.read`; a paid order invoiced, the invoice read
+  back by the same route the admin polls, and its PDF downloaded and checked
+  for the format's own magic bytes (`%PDF-`) rather than merely a 200 status; a
+  site with no `billing` configured answering `COMMERCE_INVOICE_NOT_FOUND`
+  instead of issuing a document with a fabricated seller address; and a
+  subscription seeded the way checkout would seed one, listed and cancelled
+  through the real admin API.
+
+- [`03d1327`](https://github.com/cogenta-cms/cogenta/commit/03d13277224c5abd011d15e19c8f9ec67ef40c27) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The other half of password reset (`.changeset/auth-password-reset.md`,
+  L13 task 6): that changeset built the store and the terminal command and
+  said plainly "no admin route can receive a reset click yet". This is that
+  route, and the screen behind it.
+  
+  `@cogenta/auth`'s `AuthStore` gains a `resets` field — the
+  `PasswordResetStore` `createPasswordResetStore` already built, now wired
+  into the object every caller already holds, the same way `rateLimit` and
+  `sessions` are.
+  
+  `@cogenta/api`'s `createAuthRouter` gains two routes. `POST
+  /api/auth/forgot-password` accepts an email and answers with the **exact
+  same response** whether or not an account exists for it — the line this
+  route exists to never cross is account enumeration, and every branch of its
+  handler (an existing account, a disabled one, a non-existent one) returns
+  byte-identical bodies. It rate-limits by the submitted email, before the
+  account lookup, on the same subject either way, the same posture
+  `loginAttempts` already applies to a wrong password. Only a real, active
+  account gets a token issued, delivered through a new optional
+  `onForgotPassword` callback rather than a hard dependency on
+  `@cogenta/channels` (R9) — the router itself never sends mail. `POST
+  /api/auth/reset-password` redeems the token, sets the new password (same
+  12-character floor as the self-service password-change route, now shared
+  from a new `password-policy.ts` instead of duplicated), and revokes every
+  existing session, exactly like `cogenta users reset-password --token`
+  already does. A new error code, `AUTH_RESET_TOKEN_INVALID` (400), names an
+  invalid, expired or already-used token — unlike `forgot-password`, this
+  route's refusal is allowed to say why, since the secret here is the token
+  itself, not whether an email exists.
+  
+  `@cogenta/cli` factors the mail-sending half of `cogenta users
+  reset-password --email` out of `commands/users.ts` into a new shared
+  `reset-mail.ts`, so `cogenta serve` can wire the identical wording (now with
+  an optional link to the admin's reset screen instead of the terminal
+  command) into `onForgotPassword` without a second copy of it. `runServe`
+  passes it to `createAuthRouter` unconditionally: the token is still issued
+  and thrown away unsent when no site's mail is configured to go anywhere
+  useful, since the HTTP response must never depend on whether the mail could
+  be delivered.
+  
+  `@cogenta/admin` (private, no changeset) gains the two screens this needed:
+  "forgot password" on `/forgot-password`, linked from the sign-in screen, and
+  "reset password" on `/reset-password?token=…`, the link the mail sends. Both
+  are public routes, like `/login`. The user-management screen's role editor
+  also moves off a raw comma-separated text field: four standard role names
+  (`admin`/`editor`/`author`/`contributor`) are now offered as checkboxes,
+  alongside any role a site's accounts already use, plus a free-text field for
+  a role of the site's own — a UX convention only, not a contract A change
+  (a role is still an arbitrary string as far as the server and the five
+  permission actions are concerned).
+
+- [`174b521`](https://github.com/cogenta-cms/cogenta/commit/174b521e9bca3b783e06ac8aa3dff6e0ded58aa5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - L17 tasks 1-4: a local/embedded marketplace catalog with one-click install,
+  scoped deliberately without a real remote registry service — L13 task 8 (API
+  keys), which the lot names as the dependency for a distant marketplace, was
+  never built in this repository.
+  
+  `@cogenta/plugins` gains `createMarketplaceCatalog` (an in-memory, searchable,
+  category-filterable directory the caller assembles — not a fetch to any
+  external host) and `createMarketplaceInstaller`, plus `loadMarketplacePlugin`:
+  a stricter sibling of `loadPlugin` that treats every reference as
+  `registry`-trust unconditionally, so a marketplace item never takes the
+  `local`/dev-mode shortcut that would otherwise skip signature verification for
+  a catalog entry that happens to point at a local directory.
+  
+  **The one line the whole task hinges on**: `MarketplaceInstaller.install`
+  always calls `loadMarketplacePlugin`, which always verifies signature against
+  the trusted registry keys — there is no parameter anywhere in this path that
+  can skip that call, and a missing or invalid signature throws before anything
+  is persisted. Only `kind: 'plugin'` installs for now (`MARKETPLACE_KIND_UNSUPPORTED`
+  otherwise) — themes/skins/skills keep using their own existing registries
+  (`createThemeRegistry`/`createSkinGallery`/`createSkillRegistry`).
+  
+  `MarketplaceInstaller.update` re-verifies the signature of the new reference,
+  computes newly-declared capabilities against the plugin's existing grants
+  (`detectCapabilitiesNeedingApproval`, unchanged from L7), and refuses
+  (`MARKETPLACE_UPDATE_REQUIRES_APPROVAL`) unless the caller explicitly passes
+  `confirmPendingPermissions: true` — and even then, no capability is
+  auto-granted; `PluginGrantStore.grant` stays a separate, explicit step.
+  
+  `@cogenta/api` gains `createMarketplaceRouter` (`/api/marketplace/items`,
+  admin-only, structurally typed against `@cogenta/plugins` rather than
+  depending on it at runtime) with list/detail/install/update/uninstall routes.
+  The detail route reuses `describeCapability` (L7 task 7) so a plugin's
+  requested capabilities read in plain language, the same sentences the
+  existing permission-review screen already renders.
+  
+  `@cogenta/core` gains the error codes this needs:
+  `MARKETPLACE_ITEM_NOT_FOUND`, `MARKETPLACE_KIND_UNSUPPORTED`,
+  `MARKETPLACE_ALREADY_INSTALLED`, `MARKETPLACE_NOT_INSTALLED`,
+  `MARKETPLACE_UPDATE_REQUIRES_APPROVAL` — and `PLUGIN_SIGNATURE_MISSING`/
+  `PLUGIN_SIGNATURE_INVALID`/`PLUGIN_SOURCE_NOT_FOUND`/`PLUGIN_MANIFEST_INVALID`
+  (existing L7 codes, never before mapped to an HTTP status because no REST
+  route threw them until now) gain entries in `statusFor` (422/404/422).
+  
+  **Not done, by explicit scope cut under a hard deadline**: `cogenta serve`
+  does not yet mount this router, so the catalog/installer above are complete,
+  independently tested, and ready to wire, but not yet reachable over HTTP from
+  a running site — the same honest gap the codebase already tolerates elsewhere
+  (`cogenta build`/`deploy`/`theme`, L9 task 9) rather than a stub. Bundled
+  updates across multiple items and the commercial (paid extension) track named
+  in the lot doc are both out of scope for this pass.
+
+- [`b37e51c`](https://github.com/cogenta-cms/cogenta/commit/b37e51cea79fc8d3070d5c741a8415192985d9ff) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give the redirect table, HTTP security and outbound webhooks a real admin
+  screen (audit follow-up to L10 tasks 2/6 and L14 task 1)
+  
+  Three backend pieces existed and were fully wired into `cogenta serve` with
+  no way to reach them from a browser.
+  
+  - `@cogenta/core` gains the `REDIRECT_UNKNOWN` error code, for a `DELETE` on a
+    redirect that does not exist.
+  - `@cogenta/api` gains `createRedirectRouter` (`GET`/`POST`/`DELETE
+    /api/redirects`) and `createOpsStatusRouter` (`GET /api/security-status`,
+    `GET /api/webhooks-status`). Both are admin-only on every method, including
+    `GET`: a redirect table and a site's CORS/CSP/HSTS configuration are
+    routing and hardening decisions, not content, so neither has a reader role
+    the way a taxonomy or a menu does. Loop and self-redirect refusal is
+    entirely `RedirectStore`'s own job (`CONTENT_REDIRECT_LOOP`,
+    `CONTENT_ROUTE_INVALID`), surfaced here as a proper 409/400 instead of a
+    500.
+  - `cogenta serve` mounts all three at `/api/redirects`, `/api/security-status`
+    and `/api/webhooks-status`, and `@cogenta/admin` gains three screens:
+    `/redirects` (full CRUD) and `/ops-settings` (`security` and `webhooks`,
+    **read-only**).
+  
+  The security and webhooks screens are read-only by design, not by omission.
+  Both settings live in the site's `cogenta.config.mjs` — versioned in git,
+  deployed with the code that depends on it (a CSP that allows a script host
+  has to travel with the deploy that added the script). Letting the admin edit
+  them would create a second source of truth that disagrees with the file the
+  moment either one changes without the other, which is a bigger architecture
+  change than this audit's scope. The screens instead mirror exactly what the
+  running process is enforcing on every request.
+  
+  No delivery history is shown for webhooks: none is persisted anywhere today
+  (`WebhookEventSender.send` only ever returns a per-call result to log). The
+  screen says so rather than inventing one.
+
 ## 0.3.0
 
 ### Minor Changes

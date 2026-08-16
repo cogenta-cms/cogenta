@@ -1,5 +1,91 @@
 # @cogenta/auth
 
+## 0.3.0
+
+### Minor Changes
+
+- [`4eda357`](https://github.com/cogenta-cms/cogenta/commit/4eda35754f55484e12028707e4f54aaaccc188d2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - API keys — machine-to-machine authentication, absent until now (L13 task 8).
+  A script or integration had no way to authenticate against the REST/GraphQL
+  API short of signing in as a human account and keeping its session alive.
+  
+  `@cogenta/core` gains four error codes: `API_KEY_INVALID`, `API_KEY_REVOKED`,
+  `API_KEY_EXPIRED`, `API_KEY_NOT_FOUND`.
+  
+  `@cogenta/auth` gains `createApiKeyStore`, backed by a new
+  `cogenta_api_keys` table that `ensureAuthTables` creates like the others. A
+  key is `cogenta_sk_` followed by 256 bits of randomness, generated once,
+  returned once, and never stored — only its SHA-256 hash is, looked up by
+  that hash exactly the way `sessions.ts` looks up a session token. It is
+  hashed fast rather than with scrypt on purpose: scrypt's cost defends a
+  low-entropy, human-chosen secret against guessing, and a generated key has
+  no such weakness to defend — the same reasoning that already applies to a
+  session token.
+  
+  A key carries an explicit `scope`: an open set of role names, exactly like a
+  user's `roles`, chosen once at creation and never derived from the account
+  that minted it. `AuthStore` gains `apiKeys` alongside `users`/`sessions`.
+  
+  This changeset lands the store only. `@cogenta/api`'s `resolveActor` and the
+  `/api/api-keys` admin router that mint and revoke keys land in a companion
+  changeset for `@cogenta/api`/`@cogenta/cli`/`@cogenta/admin`.
+
+- [`03d1327`](https://github.com/cogenta-cms/cogenta/commit/03d13277224c5abd011d15e19c8f9ec67ef40c27) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The other half of password reset (`.changeset/auth-password-reset.md`,
+  L13 task 6): that changeset built the store and the terminal command and
+  said plainly "no admin route can receive a reset click yet". This is that
+  route, and the screen behind it.
+  
+  `@cogenta/auth`'s `AuthStore` gains a `resets` field — the
+  `PasswordResetStore` `createPasswordResetStore` already built, now wired
+  into the object every caller already holds, the same way `rateLimit` and
+  `sessions` are.
+  
+  `@cogenta/api`'s `createAuthRouter` gains two routes. `POST
+  /api/auth/forgot-password` accepts an email and answers with the **exact
+  same response** whether or not an account exists for it — the line this
+  route exists to never cross is account enumeration, and every branch of its
+  handler (an existing account, a disabled one, a non-existent one) returns
+  byte-identical bodies. It rate-limits by the submitted email, before the
+  account lookup, on the same subject either way, the same posture
+  `loginAttempts` already applies to a wrong password. Only a real, active
+  account gets a token issued, delivered through a new optional
+  `onForgotPassword` callback rather than a hard dependency on
+  `@cogenta/channels` (R9) — the router itself never sends mail. `POST
+  /api/auth/reset-password` redeems the token, sets the new password (same
+  12-character floor as the self-service password-change route, now shared
+  from a new `password-policy.ts` instead of duplicated), and revokes every
+  existing session, exactly like `cogenta users reset-password --token`
+  already does. A new error code, `AUTH_RESET_TOKEN_INVALID` (400), names an
+  invalid, expired or already-used token — unlike `forgot-password`, this
+  route's refusal is allowed to say why, since the secret here is the token
+  itself, not whether an email exists.
+  
+  `@cogenta/cli` factors the mail-sending half of `cogenta users
+  reset-password --email` out of `commands/users.ts` into a new shared
+  `reset-mail.ts`, so `cogenta serve` can wire the identical wording (now with
+  an optional link to the admin's reset screen instead of the terminal
+  command) into `onForgotPassword` without a second copy of it. `runServe`
+  passes it to `createAuthRouter` unconditionally: the token is still issued
+  and thrown away unsent when no site's mail is configured to go anywhere
+  useful, since the HTTP response must never depend on whether the mail could
+  be delivered.
+  
+  `@cogenta/admin` (private, no changeset) gains the two screens this needed:
+  "forgot password" on `/forgot-password`, linked from the sign-in screen, and
+  "reset password" on `/reset-password?token=…`, the link the mail sends. Both
+  are public routes, like `/login`. The user-management screen's role editor
+  also moves off a raw comma-separated text field: four standard role names
+  (`admin`/`editor`/`author`/`contributor`) are now offered as checkboxes,
+  alongside any role a site's accounts already use, plus a free-text field for
+  a role of the site's own — a UX convention only, not a contract A change
+  (a role is still an arbitrary string as far as the server and the five
+  permission actions are concerned).
+
+### Patch Changes
+
+- Updated dependencies [[`d72b40f`](https://github.com/cogenta-cms/cogenta/commit/d72b40f64ab5b98985a22d9daae34796a4638f45), [`4eda357`](https://github.com/cogenta-cms/cogenta/commit/4eda35754f55484e12028707e4f54aaaccc188d2), [`206b4cd`](https://github.com/cogenta-cms/cogenta/commit/206b4cd12df7d3a2a5831029b5f0ef726e7fd84d), [`03d1327`](https://github.com/cogenta-cms/cogenta/commit/03d13277224c5abd011d15e19c8f9ec67ef40c27), [`174b521`](https://github.com/cogenta-cms/cogenta/commit/174b521e9bca3b783e06ac8aa3dff6e0ded58aa5), [`029da6b`](https://github.com/cogenta-cms/cogenta/commit/029da6b238ad438b77375e389de57d83fb7f3a4e), [`b37e51c`](https://github.com/cogenta-cms/cogenta/commit/b37e51cea79fc8d3070d5c741a8415192985d9ff), [`3c73e58`](https://github.com/cogenta-cms/cogenta/commit/3c73e58ff0a54782a58ef1bf2d70e84819ff8944)]:
+  - @cogenta/core@0.4.0
+  - @cogenta/schema@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/plugins",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Plugin manifest schema, loader, worker isolation and permission model.",
   "license": "MPL-2.0",
   "type": "module",

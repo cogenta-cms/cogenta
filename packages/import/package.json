@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/import",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Importers that bring content from another CMS into Cogenta, starting with WordPress WXR.",
   "license": "MPL-2.0",
   "type": "module",

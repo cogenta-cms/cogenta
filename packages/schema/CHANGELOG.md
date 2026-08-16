@@ -1,5 +1,106 @@
 # @cogenta/schema
 
+## 0.3.0
+
+### Minor Changes
+
+- [`029da6b`](https://github.com/cogenta-cms/cogenta/commit/029da6b238ad438b77375e389de57d83fb7f3a4e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Navigation menus, missing entirely until now — no backend, no admin, no theme wiring — and
+  a P0 gap for a CMS meant to compete with WordPress/Strapi/Drupal.
+  
+  `@cogenta/schema` gains `createMenuStore`/`ensureMenuTables`: a menu is a named tree of
+  items (`entry` — a link to a real collection entry, `url` — an external link, or
+  `submenu-placeholder` — a heading with no target of its own), structurally close to a
+  taxonomy term tree (materialised path, reusing `taxonomy-path.ts`'s helpers as-is) but
+  **not** a `TaxonomyStore`: a menu is created and edited entirely at runtime from the admin,
+  never declared in a site's schema module, so it gets one fixed pair of tables
+  (`cogenta_menus`/`cogenta_menu_items`) rather than one table per declared name. A menu
+  belongs to a locale the same way a localised collection does (ADR-0014) — two menus named
+  `main` can coexist, one per locale, never one row trying to carry both. New error codes:
+  `MENU_UNKNOWN`, `MENU_NAME_TAKEN`, `MENU_ITEM_NOT_FOUND`, `MENU_ITEM_INVALID`,
+  `MENU_CYCLE`.
+  
+  **One real bug found and fixed while building this**: a materialised path is id-based, so
+  two siblings' paths diverge at their own id — sorting a listing by `path asc, position asc`
+  (`taxonomy-store.ts`'s own pattern) therefore sorts siblings by *creation order*, never by
+  `position`, silently defeating any "move up/down" a caller might build on top of it. The
+  menu store walks the tree in application code instead (group by parent, sort each group by
+  `position`, depth-first from the roots) — cheap for something the size of a navigation
+  menu, and it is what makes `reorderItem` (swap with the sibling before/after) actually work.
+  
+  `@cogenta/api` gains `createMenuRouter`: `GET /api/menus` and `GET /api/menus/{id}` are
+  public (a menu serves the public theme's navigation, same as a published entry); every
+  write requires `admin` or `editor` — a fixed rule, not a per-site permission
+  configuration, since a menu is neither a collection nor a taxonomy and giving it a third
+  `PermissionLayer` method for one rule that never varies would be new surface for nothing.
+  `GET /api/menus/by-name/{name}?locale=` resolves a menu the way a theme will want to
+  (refusing ambiguity across locales without `?locale=`, rather than guessing). An `entry`
+  item is optionally resolved to a display label and public route via an injected
+  `resolveEntry` callback, kept out of the router itself so it stays decoupled from content
+  resolution.
+  
+  `cogenta serve` mounts `/api/menus/*`, resolving `entry` items through the same
+  permission-checked `ContentGateway` and `buildPath` the theme renderer uses, as `ANONYMOUS`
+  (a menu is public navigation — an item never resolves to more than an anonymous visitor
+  could see). The admin gains a `/menus` screen (menu selector, item list with up/down
+  reorder buttons and delete, add-item form for a URL or a collection+entry), kept plain like
+  `taxonomies.tsx` — L11 owns how the admin looks; every action goes through the real API and
+  write controls only render for `admin`/`editor` (the server refuses the rest regardless,
+  R4).
+  
+  **What is not done, and why**: theme rendering (a public page actually showing a menu) is
+  out of scope for this change — see `BLOCKERS.md` for the exact point to wire it in
+  (`packages/theme-canonical/src/Base.astro`'s header/footer slots, fed by
+  `GET /api/menus/by-name/{name}`). Nothing here touches contract A or B: a menu is
+  deliberately not content and not a block.
+
+- [`3c73e58`](https://github.com/cogenta-cms/cogenta/commit/3c73e58ff0a54782a58ef1bf2d70e84819ff8944) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Scheduled publication, written and tested since L1 (`@cogenta/schema`'s
+  `schedulePublication`/`registerScheduledPublishing`, a `QueueDriver`-based mechanism with
+  a real degraded `database` driver) but never wired to anything: an editor could set an
+  entry to "Scheduled" with a future date and nothing would ever happen — the admin showed
+  it as a read-only badge, honest about the gap rather than lying about it.
+  
+  **The missing link was the write path, not the queue.** `ContentStore.update()` never
+  changes `status` (contract A keeps that transition to `publish`/`unpublish`), so there was
+  no way to move an *existing* entry into `scheduled` at all — only `create({status:
+  'scheduled', ...})` worked. `unpublish()` now also accepts `status: 'scheduled'` with a
+  required `publishedAt` (a `Date`, an ISO string, or epoch milliseconds), writing it as an
+  ordinary value of the collection's own `publishedAt` field the same way `publish()`
+  already does. A collection that never declared `publishedAt` refuses with
+  `CONTENT_SCHEDULE_INVALID` rather than accepting a schedule with nowhere to put the date.
+  
+  `@cogenta/schema` gains `withScheduledPublishEnqueue`, a `ContentStore` decorator in the
+  same family as `withSearchIndexing`/`withLifecycleEvents`: wrapping `create`/`update`/
+  `unpublish`/`restore`, it calls `schedulePublication` whenever the result is
+  `status: 'scheduled'`. It re-enqueues on every save rather than tracking a previous job
+  id — safe, because the handler re-reads the entry before publishing and skips anything no
+  longer `scheduled` (an edit back to `draft`, or a manual publish that already happened).
+  
+  `@cogenta/api`'s `POST /{collection}/{id}/unpublish` accepts
+  `{"status": "scheduled", "publishedAt": "…"}` alongside the existing `draft`/`archived`.
+  
+  `cogenta serve` creates a `database`-backed `QueueDriver` per site (R1: no external
+  worker, no Redis — a table in the site's own database, drained in-process) and registers
+  the publish handler once, at `assembleSite`. `runServe` drains it on a `setInterval` —
+  once immediately at startup to catch up on anything overdue, then every 60 seconds for as
+  long as the process runs. The trade this makes, and the one worth knowing: a page
+  scheduled for 09:00 goes live between 09:00 and 09:01, and if the process is down when
+  09:00 comes, nothing is lost — the job is still in the table — it simply runs late, on
+  the first tick after the next start.
+  
+  Not a CLI flag: `ServeOptions.scheduledPublishTickMs` overrides the cadence for tests
+  only (proving the loop really drains the queue without waiting a real minute for it); an
+  operator has no reason to touch it.
+  
+  The admin's status control gains a real `datetime-local` picker (never free text),
+  offered whenever the collection declares `publishedAt`: "Programmer"/"Reprogrammer" call
+  the new `unpublish` shape, and "Annuler la programmation" moves a scheduled entry back to
+  draft.
+
+### Patch Changes
+
+- Updated dependencies [[`d72b40f`](https://github.com/cogenta-cms/cogenta/commit/d72b40f64ab5b98985a22d9daae34796a4638f45), [`4eda357`](https://github.com/cogenta-cms/cogenta/commit/4eda35754f55484e12028707e4f54aaaccc188d2), [`206b4cd`](https://github.com/cogenta-cms/cogenta/commit/206b4cd12df7d3a2a5831029b5f0ef726e7fd84d), [`03d1327`](https://github.com/cogenta-cms/cogenta/commit/03d13277224c5abd011d15e19c8f9ec67ef40c27), [`174b521`](https://github.com/cogenta-cms/cogenta/commit/174b521e9bca3b783e06ac8aa3dff6e0ded58aa5), [`b37e51c`](https://github.com/cogenta-cms/cogenta/commit/b37e51cea79fc8d3070d5c741a8415192985d9ff)]:
+  - @cogenta/core@0.4.0
+
 ## 0.2.0
 
 ### Minor Changes

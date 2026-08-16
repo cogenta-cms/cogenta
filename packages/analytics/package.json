@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/analytics",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Self-hosted, cookie-free, privacy-respecting page-view analytics.",
   "license": "MPL-2.0",
   "type": "module",

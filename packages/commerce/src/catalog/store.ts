@@ -143,9 +143,14 @@ function assertHandle(handle: string): string {
   const value = handle.trim().toLowerCase()
   if (!HANDLE_PATTERN.test(value) || value.length > 200) {
     throw new CogentaError({
-      code: 'COMMERCE_PRODUCT_NOT_FOUND',
-      message: `"${handle}" is not a usable product handle.`,
+      code: 'COMMERCE_PRODUCT_INVALID',
+      // The offending value goes in `details`, never in the message: the
+      // message is what a route serialises back to whoever sent it, and
+      // echoing a caller's string into a response is how reflected content
+      // gets somewhere it was never meant to be.
+      message: 'That is not a usable product handle.',
       hint: 'Use lower-case letters, digits and single hyphens, like "wool-scarf".',
+      details: { handle },
     })
   }
   return value

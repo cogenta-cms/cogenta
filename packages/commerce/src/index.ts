@@ -1,4 +1,23 @@
 export type {
+  CommerceActor,
+  CommercePermission,
+  CommercePermissionLayer,
+  CommercePermissionOptions,
+} from './admin/permissions.js'
+export {
+  COMMERCE_ANONYMOUS,
+  COMMERCE_PERMISSIONS,
+  createCommercePermissions,
+  DEFAULT_COMMERCE_ROLES,
+} from './admin/permissions.js'
+export type {
+  CommerceAdminRouter,
+  CommerceAdminRouterOptions,
+  CommerceRequest,
+  CommerceResponse,
+} from './admin/router.js'
+export { createCommerceAdminRouter } from './admin/router.js'
+export type {
   Cart,
   CartLine,
   CartStatus,
@@ -40,6 +59,17 @@ export {
 } from './coupon/store.js'
 export type { Customer, CustomerStore } from './customer/store.js'
 export { createCustomerStore, normaliseEmail } from './customer/store.js'
+export type { PdfInvoiceDocument, PdfLine } from './invoice/pdf.js'
+export { renderInvoicePdf } from './invoice/pdf.js'
+export type {
+  Invoice,
+  InvoiceDocument,
+  InvoiceStore,
+  InvoiceStoreDependencies,
+  IssueInvoiceInput,
+  SellerDetails,
+} from './invoice/store.js'
+export { createInvoiceStore, formatInvoiceNumber, pdfDocumentFor } from './invoice/store.js'
 export type { Money } from './money.js'
 export {
   applyBasisPoints,
@@ -72,6 +102,11 @@ export {
   manualPaymentDriver,
   transferReference,
 } from './payment/manual.js'
+export type { PaymentRegistryOptions } from './payment/registry.js'
+export { createPaymentRegistry } from './payment/registry.js'
+export type { PaymentStore, PaymentStoreDependencies } from './payment/store.js'
+export { createPaymentStore } from './payment/store.js'
+export { stripePaymentDriver } from './payment/stripe.js'
 export type {
   DriverRefundRequest,
   DriverRefundResult,
@@ -97,6 +132,22 @@ export type {
   ShippingStoreOptions,
 } from './shipping/store.js'
 export { createShippingStore, SHIPPING_KINDS, storedRate } from './shipping/store.js'
+export type {
+  BillingRunResult,
+  CreateSubscriptionInput,
+  IntervalUnit,
+  Subscription,
+  SubscriptionCycle,
+  SubscriptionStatus,
+  SubscriptionStore,
+  SubscriptionStoreDependencies,
+} from './subscription/store.js'
+export {
+  advancePeriod,
+  createSubscriptionStore,
+  INTERVAL_UNITS,
+  SUBSCRIPTION_STATUSES,
+} from './subscription/store.js'
 export { ensureCommerceTables, TABLES } from './tables.js'
 export type {
   CreateTaxRuleInput,

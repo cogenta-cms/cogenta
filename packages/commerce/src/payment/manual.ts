@@ -6,7 +6,6 @@ import type {
   PaymentConfig,
   PaymentDriver,
   PaymentGateway,
-  StartedPayment,
   StartPaymentRequest,
 } from './types.js'
 

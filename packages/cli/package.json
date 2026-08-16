@@ -40,6 +40,7 @@
     "@cogenta/auth": "workspace:*",
     "@cogenta/blocks": "workspace:*",
     "@cogenta/channels": "workspace:*",
+    "@cogenta/commerce": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/import": "workspace:*",
     "@cogenta/render": "workspace:*",

@@ -21,7 +21,8 @@ import { cn } from './cn.js'
  */
 
 const noticeVariants = cva(
-  'flex gap-3 rounded-lg border px-4 py-3 font-sans text-sm leading-5 shadow-card',
+  'flex gap-3 rounded-lg border px-4 py-3 font-sans text-sm leading-5 shadow-card ' +
+    '[animation:cg-admin-notice-in_220ms_ease-out]',
   {
     variants: {
       tone: {

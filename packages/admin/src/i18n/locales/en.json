@@ -67,7 +67,14 @@
     "skipLink": "Skip to main content",
     "brand": "Cogenta",
     "logout": "Sign out",
-    "nav": "Main navigation"
+    "nav": "Main navigation",
+    "footer": "Cogenta admin"
+  },
+  "theme": {
+    "toggleLabel": "Colour theme: {{mode}}. Activate to switch.",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
   },
   "globalSearch": {
     "label": "Global search",

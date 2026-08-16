@@ -23,6 +23,7 @@ import { TrashRoute } from './routes/trash.js'
 import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { AppShell } from './shell/app-shell.js'
+import { ThemeProvider } from './theme/theme-context.js'
 
 /**
  * Routing skeleton for L2 task 1, now with task 2's password/session guard:
@@ -42,40 +43,42 @@ const ROUTER_BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 export function App(): JSX.Element {
   return (
-    <AuthProvider>
-      <BrowserRouter basename={ROUTER_BASENAME}>
-        <Routes>
-          <Route path="login" element={<LoginRoute />} />
-          <Route path="forgot-password" element={<ForgotPasswordRoute />} />
-          <Route path="reset-password" element={<ResetPasswordRoute />} />
-          <Route
-            element={
-              <RequireAuth>
-                <SchemaProvider>
-                  <AppShell />
-                </SchemaProvider>
-              </RequireAuth>
-            }
-          >
-            <Route index element={<DashboardRoute />} />
-            <Route path="collections" element={<CollectionsRoute />} />
-            <Route path="collections/:name" element={<CollectionListRoute />} />
-            <Route path="collections/:name/new" element={<EntryEditRoute />} />
-            <Route path="collections/:name/:id" element={<EntryEditRoute />} />
-            <Route path="taxonomies" element={<TaxonomiesRoute />} />
-            <Route path="menus" element={<MenusRoute />} />
-            <Route path="trash" element={<TrashRoute />} />
-            <Route path="media" element={<MediaRoute />} />
-            <Route path="audit" element={<AuditRoute />} />
-            <Route path="agents" element={<AgentsRoute />} />
-            <Route path="users" element={<UsersRoute />} />
-            <Route path="api-keys" element={<ApiKeysRoute />} />
-            <Route path="profile" element={<ProfileRoute />} />
-            <Route path="settings" element={<SettingsRoute />} />
-            <Route path="site-plan" element={<SitePlanRoute />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter basename={ROUTER_BASENAME}>
+          <Routes>
+            <Route path="login" element={<LoginRoute />} />
+            <Route path="forgot-password" element={<ForgotPasswordRoute />} />
+            <Route path="reset-password" element={<ResetPasswordRoute />} />
+            <Route
+              element={
+                <RequireAuth>
+                  <SchemaProvider>
+                    <AppShell />
+                  </SchemaProvider>
+                </RequireAuth>
+              }
+            >
+              <Route index element={<DashboardRoute />} />
+              <Route path="collections" element={<CollectionsRoute />} />
+              <Route path="collections/:name" element={<CollectionListRoute />} />
+              <Route path="collections/:name/new" element={<EntryEditRoute />} />
+              <Route path="collections/:name/:id" element={<EntryEditRoute />} />
+              <Route path="taxonomies" element={<TaxonomiesRoute />} />
+              <Route path="menus" element={<MenusRoute />} />
+              <Route path="trash" element={<TrashRoute />} />
+              <Route path="media" element={<MediaRoute />} />
+              <Route path="audit" element={<AuditRoute />} />
+              <Route path="agents" element={<AgentsRoute />} />
+              <Route path="users" element={<UsersRoute />} />
+              <Route path="api-keys" element={<ApiKeysRoute />} />
+              <Route path="profile" element={<ProfileRoute />} />
+              <Route path="settings" element={<SettingsRoute />} />
+              <Route path="site-plan" element={<SitePlanRoute />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

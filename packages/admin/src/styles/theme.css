@@ -19,9 +19,16 @@
  * that a component in `src/ui/` must state its own reset (a bare `<button>`
  * still arrives with a border and a grey background); each one does.
  *
- * Light is the base and dark is a `prefers-color-scheme` override rather than a
- * `.dark` class, matching what `base.css` already did — the admin has no theme
- * toggle, so a class-based switch would have nothing to set it.
+ * Light is the base. Dark is reached two ways, and both stay in force: a
+ * `prefers-color-scheme` override for whoever never touches the toggle
+ * (`theme-context.tsx`'s `"system"`, the default), and a `data-theme="dark"` /
+ * `data-theme="light"` attribute on `<html>` for whoever picks explicitly. The
+ * attribute always wins — the media query below is guarded with
+ * `:root:not([data-theme="light"])` so an explicit light override beats a dark
+ * system preference, and a dedicated `:root[data-theme="dark"]` block below it
+ * wins the other direction. Never a `.dark` class: mixing a class-based switch
+ * with the still-present `prefers-color-scheme` block would race the two
+ * mechanisms against each other instead of composing them.
  */
 
 @layer theme, base, components, utilities;
@@ -30,6 +37,8 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 
 :root {
+  color-scheme: light;
+
   /* Surfaces, from furthest back to nearest front. */
   --background: #f7f8fa;
   --foreground: #10131a;
@@ -73,8 +82,16 @@
   --shadow-overlay: 0 8px 24px -6px rgb(16 19 26 / 0.16), 0 24px 48px -12px rgb(16 19 26 / 0.2);
 }
 
+/*
+ * The system-preference route to dark: guarded so an explicit
+ * `data-theme="light"` (someone on a dark system who picked light anyway)
+ * beats it, matching how `:root[data-theme="dark"]` below beats a light
+ * system preference the other way.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
     --background: #0d1017;
     --foreground: #e8eaf0;
     --card: #151a23;
@@ -110,6 +127,52 @@
     --shadow-raised: 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 16px -4px rgb(0 0 0 / 0.45);
     --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.6), 0 24px 48px -12px rgb(0 0 0 / 0.6);
   }
+}
+
+/*
+ * The explicit-override route to dark, `theme-context.tsx`'s `setMode('dark')`.
+ * Same values as the media-query block above, kept as a second block rather
+ * than folded together: this one must win regardless of the system
+ * preference, which only a plain attribute selector (no media query gate)
+ * guarantees.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0d1017;
+  --foreground: #e8eaf0;
+  --card: #151a23;
+  --card-foreground: #e8eaf0;
+  --muted: #1b2029;
+  --muted-foreground: #9aa3b2;
+
+  --border: #272d38;
+  --input: #3a4250;
+  --ring: #818cf8;
+
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: #1b2029;
+  --secondary-foreground: #e8eaf0;
+  --accent: #1e2130;
+  --accent-foreground: #c7d2fe;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --destructive-surface: #2a1416;
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --success-surface: #0f2018;
+  --warning: #ca8a04;
+  --warning-foreground: #1a1405;
+  --warning-surface: #241d0a;
+  --info: #3b82f6;
+  --info-foreground: #ffffff;
+  --info-surface: #101b2e;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-raised: 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 16px -4px rgb(0 0 0 / 0.45);
+  --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.6), 0 24px 48px -12px rgb(0 0 0 / 0.6);
 }
 
 /*
@@ -167,4 +230,66 @@
 
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/*
+ * Entrance/exit keyframes for the two design-system components that open and
+ * close rather than just sitting on the page (`Modal`, `Notice`). Plain CSS
+ * rather than a `tailwindcss-animate`-style plugin (R9 — one glyph's worth of
+ * motion does not justify a dependency), driven off Radix's own
+ * `data-state="open"|"closed"` attribute on `Modal`'s overlay and content.
+ *
+ * `base.css`'s unlayered `prefers-reduced-motion: reduce` rule already
+ * collapses every `animation-duration` on the page to near-zero, these
+ * keyframes included — nothing here needs its own reduced-motion guard.
+ */
+@keyframes cg-admin-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cg-admin-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes cg-admin-modal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes cg-admin-modal-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
+@keyframes cg-admin-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.375rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

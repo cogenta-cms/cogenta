@@ -43,8 +43,9 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
  * explicit rather than showing a fabricated number, the same rule the
  * placeholder this replaces already applied to agent-related widgets.
  *
- * L11 task 4 — laid out as a grid of `Card` widgets rather than stacked
- * sections, using the design system built in `../ui/`.
+ * Laid out as a grid of `Card` widgets, using the design system in `../ui/` —
+ * a purely visual change from the previous hand-styled sections; every fetch,
+ * every condition and every piece of state below is untouched.
  */
 export function DashboardRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -140,7 +141,7 @@ export function DashboardRoute(): JSX.Element {
       </h1>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card aria-labelledby="dashboard-health-heading">
+        <Card aria-labelledby="dashboard-health-heading" className="hover:shadow-raised">
           <CardHeader>
             <CardTitle>
               <h2 id="dashboard-health-heading">{t('dashboard.healthHeading')}</h2>
@@ -171,7 +172,7 @@ export function DashboardRoute(): JSX.Element {
           </CardBody>
         </Card>
 
-        <Card aria-labelledby="dashboard-activity-heading">
+        <Card aria-labelledby="dashboard-activity-heading" className="hover:shadow-raised">
           <CardHeader>
             <CardTitle>
               <h2 id="dashboard-activity-heading">{t('dashboard.activityHeading')}</h2>
@@ -202,7 +203,7 @@ export function DashboardRoute(): JSX.Element {
           </CardBody>
         </Card>
 
-        <Card aria-labelledby="dashboard-scheduled-heading">
+        <Card aria-labelledby="dashboard-scheduled-heading" className="hover:shadow-raised">
           <CardHeader>
             <CardTitle>
               <h2 id="dashboard-scheduled-heading">{t('dashboard.scheduledHeading')}</h2>
@@ -229,7 +230,7 @@ export function DashboardRoute(): JSX.Element {
           </CardBody>
         </Card>
 
-        <Card aria-labelledby="dashboard-cve-heading">
+        <Card aria-labelledby="dashboard-cve-heading" className="hover:shadow-raised">
           <CardHeader>
             <CardTitle>
               <h2 id="dashboard-cve-heading">{t('dashboard.cveHeading')}</h2>
@@ -240,7 +241,7 @@ export function DashboardRoute(): JSX.Element {
           </CardBody>
         </Card>
 
-        <Card aria-labelledby="dashboard-vitals-heading">
+        <Card aria-labelledby="dashboard-vitals-heading" className="hover:shadow-raised">
           <CardHeader>
             <CardTitle>
               <h2 id="dashboard-vitals-heading">{t('dashboard.vitalsHeading')}</h2>
@@ -251,7 +252,7 @@ export function DashboardRoute(): JSX.Element {
           </CardBody>
         </Card>
 
-        <Card aria-labelledby="dashboard-backups-heading">
+        <Card aria-labelledby="dashboard-backups-heading" className="hover:shadow-raised">
           <CardHeader>
             <CardTitle>
               <h2 id="dashboard-backups-heading">{t('dashboard.backupsHeading')}</h2>

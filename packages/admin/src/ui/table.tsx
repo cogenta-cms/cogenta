@@ -74,7 +74,10 @@ export function TableRow({
 }: HTMLAttributes<HTMLTableRowElement>): JSX.Element {
   return (
     <tr
-      className={cn('border-b border-border last:border-b-0 hover:bg-accent/60', className)}
+      className={cn(
+        'border-b border-border transition-colors duration-150 ease-out last:border-b-0 hover:bg-accent/60',
+        className,
+      )}
       {...props}
     />
   )

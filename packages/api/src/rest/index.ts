@@ -50,6 +50,8 @@ export type {
   UploadedImageVariant,
 } from './media-router.js'
 export { createMediaRouter, variantKeyFor } from './media-router.js'
+export type { MenuRouter, MenuRouterOptions } from './menu-router.js'
+export { createMenuRouter } from './menu-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
 export type { ListQuery, QueryLimits, ReadQuery } from './query.js'

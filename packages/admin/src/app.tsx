@@ -11,6 +11,7 @@ import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
+import { MenusRoute } from './routes/menus.js'
 import { ProfileRoute } from './routes/profile.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
@@ -57,6 +58,7 @@ export function App(): JSX.Element {
             <Route path="collections/:name/new" element={<EntryEditRoute />} />
             <Route path="collections/:name/:id" element={<EntryEditRoute />} />
             <Route path="taxonomies" element={<TaxonomiesRoute />} />
+            <Route path="menus" element={<MenusRoute />} />
             <Route path="trash" element={<TrashRoute />} />
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />

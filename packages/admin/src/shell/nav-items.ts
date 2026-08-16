@@ -17,6 +17,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', labelKey: 'nav.dashboard' },
   { to: '/collections', labelKey: 'nav.collections' },
   { to: '/taxonomies', labelKey: 'nav.taxonomies' },
+  { to: '/menus', labelKey: 'nav.menus' },
   { to: '/trash', labelKey: 'nav.trash' },
   { to: '/media', labelKey: 'nav.media' },
   { to: '/audit', labelKey: 'nav.audit' },

@@ -27,6 +27,20 @@ export type {
   LifecycleEventsOptions,
 } from './lifecycle-events.js'
 export { withLifecycleEvents } from './lifecycle-events.js'
+export type {
+  CreateMenuInput,
+  CreateMenuItemInput,
+  ListMenusOptions,
+  Menu,
+  MenuItem,
+  MenuItemKind,
+  MenuStore,
+  MenuStoreOptions,
+  UpdateMenuInput,
+  UpdateMenuItemInput,
+} from './menu-store.js'
+export { createMenuStore, MAX_MENU_DEPTH } from './menu-store.js'
+export { ensureMenuTables, MENU_ITEM_PATH_LENGTH, MENU_TABLES } from './menu-tables.js'
 export {
   blocksTable,
   columnFor,

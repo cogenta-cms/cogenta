@@ -414,9 +414,42 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   }
 }
 
+/**
+ * No route on this server takes a JSON body anywhere near this size — the
+ * one exception, `/api/site-plans`, already caps its base64 document
+ * payloads at 60 MiB total inside `site-plan-router.ts`. This is a ceiling
+ * above that, not a route-specific limit: `readBody` runs for every mutating
+ * request, most of them long before any permission check, so an unbounded
+ * read here was a way for an anonymous caller to make the server buffer an
+ * arbitrarily large body before ever being told no.
+ */
+const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
+
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
+  let total = 0
+  let tooLarge = false
+  for await (const chunk of req) {
+    const buf = chunk as Buffer
+    total += buf.length
+    if (total > MAX_REQUEST_BODY_BYTES) {
+      // Bound memory by not buffering any more chunks, but keep draining the
+      // socket rather than destroying it: a client mid-write over the same
+      // TCP connection this response has to go out on can be reset by an
+      // early `req.destroy()`, which loses the 413 response along with it.
+      // Letting the read finish costs bandwidth, never unbounded memory.
+      tooLarge = true
+      continue
+    }
+    chunks.push(buf)
+  }
+  if (tooLarge) {
+    throw new CogentaError({
+      code: 'REQUEST_BODY_TOO_LARGE',
+      message: `The request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit.`,
+      hint: 'Send a smaller payload.',
+    })
+  }
   if (chunks.length === 0) return undefined
   const text = Buffer.concat(chunks).toString('utf8')
   if (text.trim().length === 0) return undefined
@@ -1013,6 +1046,17 @@ export function createRequestListener(
       }
 
       if (url.pathname.startsWith('/api/site-plans') && site.sitePlanRouter !== undefined) {
+        // `SitePlanRouter` itself refuses every route to a non-admin actor,
+        // but only after `readBody` has already buffered the whole request —
+        // and this route, alone among this server's routes, invites
+        // multi-megabyte bodies by design (uploaded documents). Checking the
+        // role here, before the body is read at all, means an unauthenticated
+        // or non-admin caller is turned away without the server ever reading
+        // what they sent.
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may propose or apply a site plan.')
+          return
+        }
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
@@ -1165,6 +1209,10 @@ export function createRequestListener(
       logger.error('request failed', {
         error: isCogentaError(error) ? error.toJSON() : String(error),
       })
+      if (isCogentaError(error) && error.code === 'REQUEST_BODY_TOO_LARGE') {
+        jsonError(res, 413, error.code, error.message)
+        return
+      }
       res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({

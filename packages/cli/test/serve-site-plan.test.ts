@@ -445,4 +445,51 @@ describe('a site plan waiting on a live site', () => {
     }
     await server.stop()
   }, 60_000)
+
+  it('turns away a non-admin POST before reading its body, not only before acting on it', async () => {
+    // This route alone invites megabyte bodies by design (uploaded
+    // documents), and `SitePlanRouter` itself only checks the role after the
+    // whole request has already been buffered. The role is checked again
+    // one layer up, before that buffering starts — proven here by a body
+    // that is not even valid JSON: if the server tried to parse it before
+    // rejecting, this would fail with `QUERY_INVALID`/500, not 403.
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'editor@example.com', 'correct-horse-battery', ['editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'editor@example.com',
+      'correct-horse-battery',
+    )
+
+    const response = await fetch(`${server.base}/api/site-plans`, {
+      method: 'POST',
+      headers: auth(token),
+      body: 'this is not json',
+    })
+
+    expect(response.status).toBe(403)
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe('FORBIDDEN')
+    await server.stop()
+  }, 60_000)
+
+  it('rejects an oversized request body with 413, rather than buffering it in full', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+
+    // One byte past the 64 MiB ceiling `readBody` enforces for every route.
+    const oversized = Buffer.alloc(64 * 1024 * 1024 + 1, 0x61)
+    const response = await fetch(`${server.base}/api/site-plans`, {
+      method: 'POST',
+      headers: auth(token),
+      body: oversized,
+    })
+
+    expect(response.status).toBe(413)
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      'REQUEST_BODY_TOO_LARGE',
+    )
+    await server.stop()
+  }, 60_000)
 })

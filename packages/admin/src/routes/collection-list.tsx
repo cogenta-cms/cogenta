@@ -14,7 +14,22 @@ import { useAuth } from '../auth/auth-context.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
-import '../styles/collection-list.css'
+import {
+  Button,
+  buttonVariants,
+  Field,
+  Input,
+  Notice,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 const STATUSES = ['draft', 'scheduled', 'published', 'archived'] as const
 
@@ -162,27 +177,37 @@ export function CollectionListRoute(): JSX.Element {
   }
   if (collection === undefined || !canPerform('read', collection, roles)) {
     return (
-      <section aria-labelledby="collection-heading">
-        <h1 id="collection-heading">{t('collectionList.notFoundHeading')}</h1>
+      <section aria-labelledby="collection-heading" className="flex flex-col gap-4">
+        <h1 id="collection-heading" className="m-0 text-xl leading-7 font-semibold">
+          {t('collectionList.notFoundHeading')}
+        </h1>
         <p>
           {t('collectionList.notFoundBody')}{' '}
-          <Link to="/collections">{t('collectionList.back')}</Link>
+          <Link className="text-primary hover:underline" to="/collections">
+            {t('collectionList.back')}
+          </Link>
         </p>
       </section>
     )
   }
 
   return (
-    <section aria-labelledby="collection-heading">
-      <h1 id="collection-heading">{collection.labels.plural}</h1>
+    <section aria-labelledby="collection-heading" className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 id="collection-heading" className="m-0 text-xl leading-7 font-semibold">
+          {collection.labels.plural}
+        </h1>
+        {canCreate && (
+          <Link
+            to={`/collections/${encodeURIComponent(name)}/new`}
+            className={buttonVariants({ variant: 'primary' })}
+          >
+            {t('collectionList.newButton')}
+          </Link>
+        )}
+      </div>
 
-      {canCreate && (
-        <Link to={`/collections/${encodeURIComponent(name)}/new`}>
-          {t('collectionList.newButton')}
-        </Link>
-      )}
-
-      <div className="collection-list__toolbar">
+      <div className="flex flex-wrap items-end gap-4">
         {/* `<search>` rather than `role="search"`: the element carries the
             role implicitly, and one landmark is easier to keep right than a
             role attribute somebody can drop in a refactor. */}
@@ -192,151 +217,185 @@ export function CollectionListRoute(): JSX.Element {
               event.preventDefault()
               setSubmitted(query)
             }}
+            className="flex flex-wrap items-end gap-2"
           >
-            <label htmlFor="content-search">{t('collectionList.searchLabel')}</label>
-            <input
-              id="content-search"
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <button type="submit">{t('collectionList.searchButton')}</button>
+            <Field label={t('collectionList.searchLabel')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              )}
+            </Field>
+            <Button type="submit" variant="secondary">
+              {t('collectionList.searchButton')}
+            </Button>
             {submitted !== '' && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => {
                   setQuery('')
                   setSubmitted('')
                 }}
               >
                 {t('collectionList.clearSearch')}
-              </button>
+              </Button>
             )}
           </form>
         </search>
 
-        <label htmlFor="status-filter">{t('collectionList.statusFilter')}</label>
-        <select
-          id="status-filter"
-          value={status}
-          onChange={(event) => {
-            setCursorStack([undefined])
-            setStatus(event.target.value)
-          }}
-        >
-          <option value="">{t('collectionList.allStatuses')}</option>
-          {STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        <div className="max-w-xs">
+          <Field label={t('collectionList.statusFilter')}>
+            {(control) => (
+              <Select
+                {...control}
+                value={status}
+                onChange={(event) => {
+                  setCursorStack([undefined])
+                  setStatus(event.target.value)
+                }}
+              >
+                <option value="">{t('collectionList.allStatuses')}</option>
+                {STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        </div>
 
         {canDelete && selected.size > 0 && (
-          <button type="button" onClick={() => void deleteSelected()}>
+          <Button variant="destructive" onClick={() => void deleteSelected()}>
             {t('collectionList.deleteSelected', { count: selected.size })}
-          </button>
+          </Button>
         )}
       </div>
 
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
+      )}
       {searching && <p>{t('common.loading')}</p>}
       {loading && hits === null && <p>{t('common.loading')}</p>}
 
       {hits !== null && !searching && (
-        <section aria-labelledby="search-results-heading">
-          <h2 id="search-results-heading">
+        <section aria-labelledby="search-results-heading" className="flex flex-col gap-3">
+          <h2 id="search-results-heading" className="m-0 text-base leading-6 font-semibold">
             {t('collectionList.searchResults', { count: hits.length })}
           </h2>
           {hits.length === 0 ? (
             <p>{t('collectionList.noMatches')}</p>
           ) : (
-            <ul>
-              {hits.map((hit) => (
-                <li key={hit.id}>
-                  <Link
-                    to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(hit.id)}`}
-                  >
-                    {hit.title === '' ? hit.id : hit.title}
-                  </Link>{' '}
-                  <span>{hit.status}</span>
-                </li>
-              ))}
-            </ul>
+            <TableRoot label={t('collectionList.searchResultsTableLabel')}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>{t('collectionList.titleColumn')}</TableHeader>
+                    <TableHeader>{t('collectionList.statusColumn')}</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {hits.map((hit) => (
+                    <TableRow key={hit.id}>
+                      <TableCell>
+                        <Link
+                          className="font-medium text-primary hover:underline"
+                          to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(hit.id)}`}
+                        >
+                          {hit.title === '' ? hit.id : hit.title}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{hit.status}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableRoot>
           )}
         </section>
       )}
 
       {hits === null && !loading && error === null && (
         <>
-          <table>
-            <thead>
-              <tr>
-                {canDelete && <th scope="col" aria-label={t('collectionList.selectionColumn')} />}
-                <th scope="col">{t('collectionList.titleColumn')}</th>
-                <SortableHeader
-                  field="id"
-                  label={t('collectionList.idColumn')}
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <th scope="col">{t('collectionList.statusColumn')}</th>
-                <SortableHeader
-                  field="updatedAt"
-                  label={t('collectionList.updatedColumn')}
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((entry) => (
-                <tr key={entry.id}>
-                  {canDelete && (
-                    <td>
-                      <input
-                        type="checkbox"
-                        aria-label={t('collectionList.selectRow', { title: titleOf(entry) })}
-                        checked={selected.has(entry.id)}
-                        onChange={() => toggleSelected(entry.id)}
-                      />
-                    </td>
-                  )}
-                  <td>
-                    <Link
-                      to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`}
-                    >
-                      {titleOf(entry)}
-                    </Link>
-                  </td>
-                  <td>{entry.id}</td>
-                  <td>{entry.status}</td>
-                  <td>{entry.updatedAt}</td>
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td colSpan={canDelete ? 5 : 4}>{t('collectionList.noContent')}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <TableRoot label={t('collectionList.tableLabel')}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  {canDelete && <TableHeader aria-label={t('collectionList.selectionColumn')} />}
+                  <TableHeader>{t('collectionList.titleColumn')}</TableHeader>
+                  <SortableHeader
+                    field="id"
+                    label={t('collectionList.idColumn')}
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                  <TableHeader>{t('collectionList.statusColumn')}</TableHeader>
+                  <SortableHeader
+                    field="updatedAt"
+                    label={t('collectionList.updatedColumn')}
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {items.map((entry) => (
+                  <TableRow key={entry.id}>
+                    {canDelete && (
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          aria-label={t('collectionList.selectRow', { title: titleOf(entry) })}
+                          checked={selected.has(entry.id)}
+                          onChange={() => toggleSelected(entry.id)}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <Link
+                        className="font-medium text-primary hover:underline"
+                        to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`}
+                      >
+                        {titleOf(entry)}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{entry.id}</TableCell>
+                    <TableCell>{entry.status}</TableCell>
+                    <TableCell>{entry.updatedAt}</TableCell>
+                  </TableRow>
+                ))}
+                {items.length === 0 && (
+                  <TableEmpty colSpan={canDelete ? 5 : 4}>
+                    {t('collectionList.noContent')}
+                  </TableEmpty>
+                )}
+              </TableBody>
+            </Table>
+          </TableRoot>
 
-          <div className="collection-list__pagination">
-            <button
+          <div className="flex gap-2">
+            <Button
               type="button"
+              variant="secondary"
               disabled={cursorStack.length <= 1}
               onClick={() => setCursorStack((s) => s.slice(0, -1))}
             >
               {t('collectionList.previous')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               disabled={!hasMore || nextCursor === null}
               onClick={() => setCursorStack((s) => [...s, nextCursor ?? undefined])}
             >
               {t('collectionList.next')}
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -357,14 +416,17 @@ function SortableHeader({
 }): JSX.Element {
   const active = sort.field === field
   return (
-    <th
-      scope="col"
+    <TableHeader
       aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <button type="button" onClick={() => onSort(field)}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex cursor-pointer appearance-none items-center gap-1 border-none bg-transparent p-0 font-inherit font-semibold text-inherit"
+      >
         {label}
         {active && (sort.direction === 'asc' ? ' ▲' : ' ▼')}
       </button>
-    </th>
+    </TableHeader>
   )
 }

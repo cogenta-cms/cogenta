@@ -9,9 +9,10 @@
  * later palette change is one edit here.
  *
  * Preflight is deliberately NOT imported. Tailwind's reset would restyle the
- * eight hand-written stylesheets the admin still uses (auth.css, shell.css,
- * collection-list.css, entry-form.css, fields.css, media.css,
- * version-history.css), which task 5 of this lot converts and this task does
+ * hand-written stylesheets the admin still uses for its un-converted screens
+ * (auth.css, shell.css, entry-form.css, fields.css, media.css,
+ * version-history.css — collection-list.css is gone, migrated to the design
+ * system), which task 5 of this lot converts and this task does
  * not — turning it on now would leave every un-converted screen visually broken
  * between the two tasks. Importing `theme.css` + `utilities.css` without
  * `preflight.css` is Tailwind v4's own documented way to opt out. The cost is

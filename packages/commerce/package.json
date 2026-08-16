@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/commerce",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Contract E: products, carts, orders, payments, tax, shipping, coupons, invoices and subscriptions.",
   "license": "MPL-2.0",
   "type": "module",

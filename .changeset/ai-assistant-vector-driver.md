@@ -25,7 +25,7 @@ disappears from the UI rather than failing (R2).
   exact-keyword queries, which is the failure the architecture document warns
   about at line 190.
 
-  Fourteen Contract C tools, all `sideEffects: false`, every output carrying
+  Fifteen Contract C tools, all `sideEffects: false`, every output carrying
   `applied: false` as a **literal** so an assistant tool's type cannot say it
   changed anything (R6). Eight writing tools (rewrite, proofread, summarise,
   translate, meta description, titles, tags, alt text), `assist.generate_image`

@@ -1,14 +1,43 @@
-import type { JSX } from 'react'
+import type { ComponentType, CSSProperties, JSX } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
-import { buttonVariants } from '../ui/index.js'
+import {
+  AgentsIcon,
+  AuditIcon,
+  CollectionsIcon,
+  DashboardIcon,
+  type IconProps,
+  LogoutIcon,
+  MediaIcon,
+  ProfileIcon,
+  SettingsIcon,
+  SitePlanIcon,
+  TaxonomiesIcon,
+  TrashIcon,
+  UsersIcon,
+} from '../ui/icons.js'
 import { GlobalSearch } from './global-search.js'
 import { NAV_ITEMS } from './nav-items.js'
+import '../styles/shell.css'
 import { ThemeToggle } from './theme-toggle.js'
 
 const MAIN_CONTENT_ID = 'main-content'
+
+const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
+  '/': DashboardIcon,
+  '/collections': CollectionsIcon,
+  '/taxonomies': TaxonomiesIcon,
+  '/trash': TrashIcon,
+  '/media': MediaIcon,
+  '/audit': AuditIcon,
+  '/agents': AgentsIcon,
+  '/site-plan': SitePlanIcon,
+  '/users': UsersIcon,
+  '/profile': ProfileIcon,
+  '/settings': SettingsIcon,
+}
 
 /**
  * The layout every route renders inside: a skip link, a header, a sidebar of
@@ -19,9 +48,10 @@ const MAIN_CONTENT_ID = 'main-content'
  * whole sidebar before reaching page content on every single navigation is
  * the kind of failure that only shows up when someone actually tries it.
  *
- * Built on the same Tailwind utilities as `src/ui/` rather than a
- * hand-written stylesheet, so the shell and its routed content read as one
- * visual language instead of two.
+ * The chrome (topbar, sidebar, footer) is styled by `../styles/shell.css` —
+ * a hand-written stylesheet rather than Tailwind utilities, matching the
+ * technical/editorial redesign's asymmetric grid-template-areas layout.
+ * Routed content underneath still reads the same Tailwind design tokens.
  */
 export function AppShell(): JSX.Element {
   const { t } = useTranslation()
@@ -29,68 +59,65 @@ export function AppShell(): JSX.Element {
   const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
 
   return (
-    <div className="grid min-h-full grid-cols-[220px_1fr] grid-rows-[auto_1fr_auto]">
-      <a
-        className="absolute -top-10 left-2 z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground no-underline transition-[top] duration-150 ease-out focus:top-2"
-        href={`#${MAIN_CONTENT_ID}`}
-      >
+    <div className="app-shell">
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
         {t('shell.skipLink')}
       </a>
-      <header className="col-span-2 flex items-center gap-4 border-b border-border bg-card px-4 py-3 shadow-sm">
-        <span className="font-sans text-base font-semibold tracking-tight text-foreground">
+      <header className="app-shell__topbar">
+        <span className="app-shell__brand">
+          <span className="app-shell__brand-mark" aria-hidden="true">
+            {'//'}
+          </span>
           {t('shell.brand')}
         </span>
         {email !== null && <GlobalSearch />}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="app-shell__account">
           <ThemeToggle />
           {email !== null && (
-            <div className="flex items-center gap-3 border-l border-border pl-3 text-sm text-muted-foreground">
-              <span className="max-w-[16ch] truncate">{email}</span>
+            <>
+              <span className="app-shell__account-email">{email}</span>
               <button
                 type="button"
+                className="app-shell__logout"
                 onClick={() => void auth.logout()}
-                className={buttonVariants({ variant: 'secondary', size: 'sm' })}
               >
+                <LogoutIcon className="size-3.5" />
                 {t('shell.logout')}
               </button>
-            </div>
+            </>
           )}
         </div>
       </header>
-      <nav
-        className="flex flex-col border-r border-border bg-background px-2 py-4"
-        aria-label={t('shell.nav')}
-      >
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) =>
-                  `block rounded-md px-3 py-2 text-sm font-medium no-underline transition-colors duration-150 ease-out ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-                  }`
+      <nav className="app-shell__sidebar" aria-label={t('shell.nav')}>
+        <ul>
+          {NAV_ITEMS.map((item, index) => {
+            const Icon = NAV_ICONS[item.to] ?? DashboardIcon
+            return (
+              <li
+                key={item.to}
+                className="reveal"
+                style={
+                  { '--reveal-delay': `${Math.min(index, 8) * 30}ms` } as CSSProperties &
+                    Record<'--reveal-delay', string>
                 }
               >
-                {t(item.labelKey)}
-              </NavLink>
-            </li>
-          ))}
+                <NavLink to={item.to} end={item.to === '/'}>
+                  <Icon className="size-4 shrink-0" />
+                  <span>{t(item.labelKey)}</span>
+                </NavLink>
+              </li>
+            )
+          })}
         </ul>
       </nav>
-      <main id={MAIN_CONTENT_ID} className="bg-background p-6" tabIndex={-1}>
+      <main id={MAIN_CONTENT_ID} className="app-shell__content" tabIndex={-1}>
         {/* Above the routed page, inside the skip link's target: a
             recommendation follows whoever is signed in from screen to screen,
             and it never blocks the page it sits above (ADR-0021). */}
         <NoticeBoard />
         <Outlet />
       </main>
-      <footer className="col-span-2 border-t border-border bg-card px-4 py-2 text-center font-sans text-xs text-muted-foreground">
-        {t('shell.footer')}
-      </footer>
+      <footer className="app-shell__footer">{t('shell.footer')}</footer>
     </div>
   )
 }

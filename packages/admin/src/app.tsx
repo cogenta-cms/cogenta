@@ -18,6 +18,7 @@ import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
 import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
+import { MarketplaceRoute } from './routes/marketplace.js'
 import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
@@ -91,6 +92,7 @@ export function App(): JSX.Element {
               <Route path="profile" element={<ProfileRoute />} />
               <Route path="settings" element={<SettingsRoute />} />
               <Route path="site-plan" element={<SitePlanRoute />} />
+              <Route path="marketplace" element={<MarketplaceRoute />} />
             </Route>
           </Routes>
         </BrowserRouter>

@@ -37,6 +37,7 @@ export {
 } from './generate-schema-json.js'
 export { interfaceName, renderTypeDeclarations } from './generate-types.js'
 export { isUuidV7, newId, timestampOf } from './id.js'
+export * from './links/index.js'
 export type {
   RichTextBlock,
   RichTextDecorator,

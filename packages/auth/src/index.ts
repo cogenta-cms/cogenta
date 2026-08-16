@@ -16,8 +16,8 @@ export type { AuthService, AuthServiceOptions, LoginResult } from './login.js'
 export { createAuthService } from './login.js'
 export { requiresMfa, sensitiveRoles } from './mfa.js'
 export { hashPassword, verifyPassword } from './password.js'
-export type { RateLimiter } from './rate-limit.js'
-export { createRateLimiter } from './rate-limit.js'
+export type { LoginAttemptSummary, RateLimiter } from './rate-limit.js'
+export { createRateLimiter, LOGIN_ATTEMPT_WINDOW_MS } from './rate-limit.js'
 export type {
   IssuedPasswordReset,
   PasswordResetOutcome,

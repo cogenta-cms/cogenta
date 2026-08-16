@@ -83,6 +83,11 @@
         "title": "Activez la vérification en deux étapes",
         "body": "Ce compte peut publier ou administrer le site. Un second facteur (application d'authentification ou clé d'accès) le protège si son mot de passe fuite. Rien ne vous y oblige : cette recommandation reste affichée tant qu'elle n'est pas suivie ou masquée.",
         "action": "Configurer maintenant"
+      },
+      "suspicious-activity": {
+        "title": "Tentatives de connexion échouées répétées",
+        "body": "{{attempts}} tentatives de connexion ont échoué sur {{subjects}} compte(s) au cours des 15 dernières minutes. Elles sont déjà ralenties. Consultez le journal d'audit et vérifiez que les comptes concernés ont un mot de passe solide et un second facteur. Ce message disparaît de lui-même dès que les tentatives cessent.",
+        "action": "Ouvrir le journal d'audit"
       }
     }
   },

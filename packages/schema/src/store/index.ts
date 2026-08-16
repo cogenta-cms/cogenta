@@ -21,6 +21,12 @@ export type { Cursor } from './cursor.js'
 export { decodeCursor, encodeCursor } from './cursor.js'
 export type { BlockChange, ChangeKind, ContentDiff, FieldChange } from './diff.js'
 export { deepEqual, diffBlocks, diffBlockZones, diffContent, diffValues } from './diff.js'
+export type {
+  ContentLifecycleEvent,
+  ContentLifecycleEventName,
+  LifecycleEventsOptions,
+} from './lifecycle-events.js'
+export { withLifecycleEvents } from './lifecycle-events.js'
 export {
   blocksTable,
   columnFor,

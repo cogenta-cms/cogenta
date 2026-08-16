@@ -9,6 +9,7 @@ export const SECRET_KEYS: ReadonlyMap<string, string> = new Map([
   ['llm.apiKey', 'COGENTA_LLM_API_KEY'],
   ['storage.accessKeyId', 'COGENTA_STORAGE_ACCESS_KEY_ID'],
   ['storage.secretAccessKey', 'COGENTA_STORAGE_SECRET_ACCESS_KEY'],
+  ['webhooks.secret', 'COGENTA_WEBHOOK_SECRET'],
 ])
 
 /** First variable that is set and not empty. An empty variable means "unset". */
@@ -58,6 +59,7 @@ export function applyEnv(
     assign(site, 'name', read(env, 'COGENTA_SITE_NAME'))
     assign(site, 'url', read(env, 'COGENTA_SITE_URL'))
     assign(site, 'defaultLocale', read(env, 'COGENTA_SITE_DEFAULT_LOCALE'))
+    assign(site, 'notFoundPath', read(env, 'COGENTA_SITE_NOT_FOUND_PATH'))
 
     const locales = read(env, 'COGENTA_SITE_LOCALES')
     if (locales !== undefined) {
@@ -104,6 +106,18 @@ export function applyEnv(
     output['storage'] = storage
   }
 
+  const webhooks = section(output, 'webhooks')
+  if (webhooks !== undefined) {
+    const endpoints = read(env, 'COGENTA_WEBHOOK_ENDPOINTS')
+    if (endpoints !== undefined) {
+      webhooks['endpoints'] = endpoints
+        .split(',')
+        .map((endpoint) => endpoint.trim())
+        .filter((endpoint) => endpoint !== '')
+    }
+    output['webhooks'] = webhooks
+  }
+
   // The LLM section only comes into existence if someone asked for one: with no
   // provider configured, everything works except the agents (rule R2).
   const llmProvider = read(env, 'COGENTA_LLM_PROVIDER')
@@ -134,6 +148,8 @@ export interface EnvironmentSecrets {
   readonly storageSecretAccessKey: string | undefined
   /** Signs @cogenta/auth's MFA tickets. Never in the config file — there is no `auth` section to put it in, on purpose. */
   readonly authSigningKey: string | undefined
+  /** Signs outbound content-lifecycle webhooks. Shared with every configured endpoint. */
+  readonly webhookSecret: string | undefined
 }
 
 export function readSecrets(env: Environment): EnvironmentSecrets {
@@ -142,6 +158,7 @@ export function readSecrets(env: Environment): EnvironmentSecrets {
     storageAccessKeyId: read(env, 'COGENTA_STORAGE_ACCESS_KEY_ID'),
     storageSecretAccessKey: read(env, 'COGENTA_STORAGE_SECRET_ACCESS_KEY'),
     authSigningKey: read(env, 'COGENTA_AUTH_SIGNING_KEY'),
+    webhookSecret: read(env, 'COGENTA_WEBHOOK_SECRET'),
   }
 }
 

@@ -83,6 +83,11 @@
         "title": "Turn on two-factor verification",
         "body": "This account can publish or administer the site. A second factor (an authenticator app or a passkey) protects it if its password ever leaks. Nothing forces you to: this recommendation stays until it is followed or hidden.",
         "action": "Set it up now"
+      },
+      "suspicious-activity": {
+        "title": "Repeated failed sign-in attempts",
+        "body": "{{attempts}} sign-in attempts failed across {{subjects}} account(s) in the last 15 minutes. They are already being slowed down. Check the audit log, and make sure the accounts involved have strong passwords and a second factor. This disappears on its own once the attempts stop.",
+        "action": "Open the audit log"
       }
     }
   },

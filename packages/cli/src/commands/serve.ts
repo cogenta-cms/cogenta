@@ -23,6 +23,7 @@ import {
   createRestRouter,
   createSearchRouter,
   createSitePlanRouter,
+  createSuspiciousActivitySource,
   createTaxonomyRouter,
   createUsersRouter,
   executeGraphQL,
@@ -59,6 +60,7 @@ import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   buildSchemaDocument,
   type CollectionDefinition,
+  type ContentLifecycleEvent,
   type ContentStore,
   createContentStore,
   createRedirectStore,
@@ -69,15 +71,18 @@ import {
   type SchemaDocument,
   type TaxonomyDefinition,
   type TaxonomyStore,
+  withLifecycleEvents,
   withReadOnlyStore,
   withSearchIndexing,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
 import type { Output, Writer } from '../output.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { createContentWebhookEmitter } from './content-webhooks.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
+import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
 import { createSitePlanning } from './site-plan.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
@@ -244,6 +249,8 @@ interface Site {
   readonly taxonomyRouter: TaxonomyRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
+  /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
+  readonly securityAlerts: SecurityAlertWatch | null
   /** Account management from the admin instead of `cogenta users create` on a terminal (L11 task 3). */
   readonly usersRouter: UsersRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
@@ -280,6 +287,8 @@ interface Site {
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
+    /** Which page answers an unmatched URL (L14 task 2). `/404` by default. */
+    readonly notFoundPath: string
   }
   /** The skin's custom properties plus the theme's own stylesheet, minified into one. `null` when neither could be loaded — the theme-render fallback serves unstyled HTML rather than refusing. */
   readonly styles: string | null
@@ -310,6 +319,8 @@ interface AssembleSiteOptions {
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
+    /** Which page answers an unmatched URL (L14 task 2). `/404` by default. */
+    readonly notFoundPath: string
   }
   readonly storage: StorageDriver
   readonly logger: Logger
@@ -340,6 +351,21 @@ interface AssembleSiteOptions {
   readonly images?: MediaImageProcessor | null
   /** CORS, security headers and cache-control. */
   readonly security: SecurityConfig
+  /**
+   * Publishes a content lifecycle event to the site's configured outbound
+   * webhooks (L14 task 1). Absent — the default — means the site sends none.
+   */
+  readonly onContentEvent?: ((event: ContentLifecycleEvent) => Promise<void>) | null
+  /**
+   * Delivers a non-content event — today only the suspicious-activity alert of
+   * L14 task 4 — through the same signed channel as `onContentEvent`. The watch
+   * itself is built here, because the rate limiter it reads is constructed
+   * here. Absent means the alert is computed for the admin screen but never
+   * leaves the site.
+   */
+  readonly onSecurityEvent?:
+    | ((event: string, data: Readonly<Record<string, unknown>>) => Promise<void>)
+    | null
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -376,8 +402,25 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           error: String(error),
         }),
     })
-    stores.set(collection.name, stored)
-    return stored
+    // Outermost of all: an event must describe a write that really landed, so
+    // it fires after the read-only guard has had its chance to refuse and
+    // after the index has been brought back in step. A receiver that rebuilt a
+    // page from an event the store then rejected would serve a page that never
+    // existed.
+    const observed =
+      options.onContentEvent == null
+        ? stored
+        : withLifecycleEvents(stored, {
+            collection,
+            emit: options.onContentEvent,
+            onError: (error) =>
+              logger.error('content webhook emit failed', {
+                collection: collection.name,
+                error: String(error),
+              }),
+          })
+    stores.set(collection.name, observed)
+    return observed
   }
   // The gateway (below) reads `stores` directly rather than through
   // `storeFor` — REST's own lazy population left it empty for any
@@ -446,11 +489,27 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       permissions,
       defaultLocale: site.defaultLocale,
     }),
+    securityAlerts:
+      options.onSecurityEvent == null
+        ? null
+        : createSecurityAlertWatch({
+            rateLimit: auth.rateLimit,
+            send: options.onSecurityEvent,
+            siteUrl: site.url,
+            logger,
+          }),
     noticeRouter: createNoticeRouter({
       // One source today, and the seam is the array: a future recommendation
       // (a plugin update waiting, a certificate about to expire) is one more
       // entry here and nothing else anywhere.
-      sources: [createMfaRecommendationSource({ collections, credentials: auth.credentials })],
+      sources: [
+        createMfaRecommendationSource({ collections, credentials: auth.credentials }),
+        // The failed-sign-in table has been written to since L2 and read by
+        // nothing but the limiter's own counter (L14 task 4). One extra source
+        // in this array is the whole wiring — the seam the notice mechanism was
+        // designed around.
+        createSuspiciousActivitySource({ rateLimit: auth.rateLimit }),
+      ],
       dismissals: noticeDismissals,
     }),
     usersRouter: createUsersRouter({ auth }),
@@ -996,6 +1055,9 @@ export function createRequestListener(
         const response = await site.authRouter.handle(request)
         writeRestResponse(res, response)
         await recordAuthAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        // A refused sign-in is the only clock a brute-force alert can honestly
+        // have here (L14 task 4) — see `security-alerts.ts` for why not a timer.
+        await site.securityAlerts?.observe(response.status)
         return
       }
 
@@ -1259,21 +1321,36 @@ export function createRequestListener(
       // (no Astro build, one theme, no image pipeline). GET only: rendering
       // a page has no meaningful response to any other method.
       if (req.method === 'GET') {
-        const html = await renderRequestedPage(
-          url.pathname,
-          {
-            collections: site.collections,
-            gateway: site.gateway,
-            site: site.site,
-            styles: site.styles,
-            loadMedia: (ids) => loadRenderMedia(site, ids),
-          },
-          context,
-        )
+        const renderOptions = {
+          collections: site.collections,
+          gateway: site.gateway,
+          site: site.site,
+          styles: site.styles,
+          loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+        }
+        const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
           res.end(html)
           return
+        }
+
+        // The site's own 404 page (L14 task 2). It is an ordinary entry at
+        // `site.notFoundPath`, rendered by exactly the same function and
+        // through exactly the same permission-checked gateway as any other
+        // page — a custom 404 that could show content the visitor may not read
+        // would be a hole, not a feature.
+        //
+        // The guard matters: without it, a site whose 404 page is missing (or
+        // whose `notFoundPath` is itself unroutable) would ask for it again
+        // for every unmatched URL forever. One extra lookup, never two.
+        if (url.pathname !== site.site.notFoundPath) {
+          const notFound = await renderRequestedPage(site.site.notFoundPath, renderOptions, context)
+          if (notFound !== null) {
+            res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' })
+            res.end(notFound)
+            return
+          }
         }
       }
 
@@ -1386,6 +1463,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
     await loadThemeCss({ read: (url) => readFile(url, 'utf8') }),
   )
   const images = await selectMediaImageProcessor(logger)
+  // One signed channel for both outbound events — the content lifecycle (task
+  // 1) and the suspicious-activity alert (task 4). One set of endpoints, one
+  // secret, one signing path.
+  const webhooks = createContentWebhookEmitter({
+    webhooks: loaded.config.webhooks,
+    siteUrl: loaded.config.site.url,
+    logger,
+  })
   const site = await assembleSite({
     db: selection.instance,
     collections,
@@ -1414,6 +1499,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
       // proposed and reviewed but never applied.
       development: options.development ?? false,
     }),
+    // The signed outbound webhook channel, connected to the content lifecycle
+    // for the first time (L14 task 1). `null` when the site configured no
+    // endpoint, or configured one without a signing secret.
+    onContentEvent: webhooks.emit,
+    onSecurityEvent: webhooks.send,
   })
 
   const server = createServer(createRequestListener(site, logger))

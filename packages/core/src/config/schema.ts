@@ -18,6 +18,20 @@ const siteSchema = z
     url: z.url(),
     locales: z.array(nonEmpty).min(1).default(['en']),
     defaultLocale: nonEmpty.default('en'),
+    /**
+     * Which page answers a URL that matches nothing (L14 task 2).
+     *
+     * A path, not a template name: the "custom 404" a site really wants is a
+     * page its editors wrote — with the site's own blocks, links and wording —
+     * and this codebase already has exactly one way to turn a path into a
+     * rendered page. So the 404 body is a real entry, editable in the admin
+     * like any other, and a site that has not written one still gets the plain
+     * refusal it got before.
+     */
+    notFoundPath: z
+      .string()
+      .startsWith('/', { error: 'notFoundPath must be a site-relative path starting with "/"' })
+      .default('/404'),
   })
   .refine((site) => site.locales.includes(site.defaultLocale), {
     error: 'defaultLocale must be one of the configured locales',
@@ -109,6 +123,20 @@ const securitySchema = z.strictObject({
   pageMaxAge: z.number().int().nonnegative().max(86_400).default(60),
 })
 
+/**
+ * Outbound content-lifecycle webhooks (L14 task 1).
+ *
+ * Only the destinations live here. The shared signing secret never does: it
+ * comes from `COGENTA_WEBHOOK_SECRET` like every other secret (rule R7), and
+ * with no secret set the site sends nothing at all rather than sending
+ * unsigned requests — an unsigned webhook is an unauthenticated instruction
+ * arriving at somebody else's server.
+ */
+const webhooksSchema = z.strictObject({
+  /** Absolute `http(s)` URLs. Empty — the default — means no webhook is sent. */
+  endpoints: z.array(z.url()).default([]),
+})
+
 const embeddingsSchema = z.strictObject({
   provider: z.enum(EMBEDDINGS_PROVIDERS).default('local'),
   model: nonEmpty.default('all-MiniLM-L6-v2'),
@@ -124,6 +152,7 @@ export const configSchema = z.strictObject({
   queue: queueSchema.prefault({}),
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
+  webhooks: webhooksSchema.prefault({}),
   llm: llmSchema.optional(),
   embeddings: embeddingsSchema.prefault({}),
 })

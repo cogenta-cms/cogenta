@@ -21,6 +21,8 @@ export interface CogentaConfigInput {
     readonly url: string
     readonly locales?: readonly string[]
     readonly defaultLocale?: string
+    /** Which page answers an unmatched URL. `/404` by default; absent content falls back to a plain refusal. */
+    readonly notFoundPath?: string
   }
   readonly database: {
     /** Inferred from the URL scheme when absent. */
@@ -73,6 +75,15 @@ export interface CogentaConfigInput {
     /** How long a public page may be cached, in seconds. */
     readonly pageMaxAge?: number
   }
+  /**
+   * Where a content-lifecycle webhook is sent (L14 task 1).
+   *
+   * There is no `secret` field, on purpose: the signing secret comes from
+   * `COGENTA_WEBHOOK_SECRET` only (rule R7), and without it nothing is sent.
+   */
+  readonly webhooks?: {
+    readonly endpoints?: readonly string[]
+  }
   readonly llm?: {
     readonly provider?: string
     readonly model?: string
@@ -99,6 +110,7 @@ export interface CogentaConfig {
     readonly url: string
     readonly locales: readonly string[]
     readonly defaultLocale: string
+    readonly notFoundPath: string
   }
   readonly database: {
     readonly driver: DatabaseDriverName
@@ -145,6 +157,15 @@ export interface CogentaConfig {
     readonly hstsMaxAge: number
     readonly hstsIncludeSubDomains: boolean
     readonly pageMaxAge: number
+  }
+  /**
+   * `secret` is `undefined` until `COGENTA_WEBHOOK_SECRET` is set. Whoever
+   * wires the sender refuses to send with either half missing — an unsigned
+   * webhook, or a signed one with nowhere to go, are both worse than silence.
+   */
+  readonly webhooks: {
+    readonly endpoints: readonly string[]
+    readonly secret: string | undefined
   }
   /** Absent when no provider is configured. The CMS works without AI (rule R2). */
   readonly llm:

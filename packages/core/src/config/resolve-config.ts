@@ -123,6 +123,7 @@ export function resolveConfig(
       url: config.site.url,
       locales: Object.freeze([...config.site.locales]),
       defaultLocale: config.site.defaultLocale,
+      notFoundPath: config.site.notFoundPath,
     }),
     database: Object.freeze({
       driver,
@@ -160,6 +161,10 @@ export function resolveConfig(
       hstsMaxAge: config.security.hstsMaxAge,
       hstsIncludeSubDomains: config.security.hstsIncludeSubDomains,
       pageMaxAge: config.security.pageMaxAge,
+    }),
+    webhooks: Object.freeze({
+      endpoints: Object.freeze([...config.webhooks.endpoints]),
+      secret: secrets.webhookSecret,
     }),
     llm:
       config.llm === undefined

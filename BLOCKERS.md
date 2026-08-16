@@ -1,4 +1,4 @@
-# Blocages — L13, tranche « duplication / autosave / réinitialisation »
+# BLOCKERS — L13/L10 (résumé courant)
 
 Ce fichier ne liste que ce qui est réellement bloqué, pas ce qui est fait.
 
@@ -153,77 +153,133 @@ ceux où les dialectes divergent réellement :
 
 # BLOCKERS — L12 (thème public)
 
-Ce qui a été rencontré pendant L12 et qui **ne peut pas être décidé par un agent** :
-une montée de contrat figé, une RFC de vocabulaire, ou un accès que je n'ai pas.
-Rien ici n'est « pas eu le temps » — c'est écrit tâche par tâche, avec ce qu'il
-faudrait exactement pour débloquer.
+**Décision : rien n'est construit.** Le lot le dit lui-même — « OAuth2 pour un
+client tiers, **si un vrai besoin headless au-delà des clés API simples se
+confirme** (ne pas construire en spéculatif) » — et AGENTS.md l'interdit une
+seconde fois (« Introduire une abstraction pour un cas hypothétique »).
+
+**Ce que dit le code réel**, vérifié avant de trancher :
+
+- Il n'existe **aucune identité machine** dans ce dépôt. `resolveActor`
+  (`packages/api/src/rest/auth-router.ts`) ne connaît qu'une chose : un jeton
+  porteur qui résout vers une **session d'utilisateur humain**. Pas de clé API,
+  pas de client, pas de `scope` — le mot n'apparaît nulle part dans
+  `packages/auth/src` au sens d'une portée d'autorisation.
+- Les clés API sont la tâche 8 du **L13**, et elles ne sont pas encore dans ce
+  worktree (`git log` s'arrête à `eea27be feat(schema):
+  duplicate/autosave/password-reset, contract A v2 draft (L13)`). La ligne
+  « Dépendances » du L14 est explicite : « Dépend de L13 tâche 8 (clés API)
+  pour la partie OAuth2/scopes le cas échéant. »
+- L'autorisation elle-même est entièrement **par rôle** (`permissions:
+  { read, create, update, delete, publish }` du contrat A, figé). Un OAuth2
+  utile suppose des **portées** plus fines qu'un rôle, ou au minimum une
+  traduction portée→rôle. Ni l'une ni l'autre n'existe, et inventer la seconde
+  sans la première produirait un jeton OAuth2 qui n'est qu'un jeton de session
+  avec plus de cérémonie.
+
+**Ce que coûterait de le faire quand même**, honnêtement : un serveur
+d'autorisation complet — enregistrement de client, écran de consentement,
+`authorization_code` + PKCE, point de jeton, rafraîchissement, révocation,
+métadonnées de découverte — plus le modèle de portées qui n'existe pas. C'est
+un lot à lui seul, pas une tâche, et il serait construit sur une fondation
+(l'identité machine) qui n'est pas encore posée.
+
+**Ce qui doit être vrai avant de le reprendre**, dans cet ordre :
+
+1. L13 tâche 8 livrée : une vraie identité non-humaine, avec sa propre table,
+   sa propre révocation et sa propre trace d'audit.
+2. Un modèle de portée réel, décidé par ADR — soit une extension du contrat A
+   (donc `schema@3.0`), soit une couche d'autorisation à côté.
+3. **Un besoin réel constaté**, pas supposé : un intégrateur tiers qui doit
+   agir *au nom d'un utilisateur du site*. Tant que le seul client headless est
+   le front-end du site lui-même, une clé API par déploiement le sert mieux
+   qu'un flux à trois parties.
+
+Aucun de ces trois points n'est vrai aujourd'hui.
 
 ---
 
-## 1. [CONTRAT D] Le mode sombre suppose une skin claire
+## 2. Revue de sécurité formelle L10-L13 (tâche 5) — hors de ce worktree
 
-**Où** : `packages/theme-canonical/src/styles/tokens.css`, section « Colour ».
-
-**Le fait** : contract D (`theme@1.0`) fige **sept** couleurs — `bg`, `fg`,
-`accent`, `accentFg`, `muted`, `mutedFg`, `border` — et refuse toute skin qui en
-ajoute une. Une palette sombre doit donc être *dérivée* de ces sept. La dérivation
-écrite ici prend le `fg` de la skin comme source de la surface sombre et son
-`accent` comme source de l'encre et des lignes. Elle est correcte, testée en
-contraste AA dans les deux schémas (`test/design-system.test.ts`, quatorze paires),
-et vérifiée dans un vrai navigateur.
-
-**La limite** : elle suppose une skin **claire d'abord** (`bg` plus clair que
-`fg`), ce qu'utilisent la skin par défaut et les neuf blueprints. Une skin déjà
-sombre (fond foncé, texte clair) verrait son « mode sombre » rendre un fond clair,
-puisque CSS ne peut pas brancher sur la luminance d'une valeur de token.
-
-**Ce qu'il faudrait** : un second groupe de couleurs dans le contrat D (par
-exemple `colorDark`, optionnel, avec repli sur la dérivation actuelle quand il est
-absent) — donc une montée `theme@2.0` et une ADR. Ce n'est pas contournable côté
-thème : le thème n'a aucun moyen de connaître la luminance d'un token.
-
-**En attendant** : la limite est documentée dans le commentaire de `tokens.css` et
-le rendu est correct pour toutes les skins réellement livrées.
+Explicitement retirée du périmètre confié à cet agent : « un autre processus
+s'en chargera séparément, ne la fais pas toi-même dans ce worktree ». Rien
+n'a été fait de ce côté ici. La case reste ouverte pour le lot.
 
 ---
 
-## 2. [CONTRAT B] Les nouveaux blocs de la tâche 3 sont un changement de vocabulaire
+## 3. Constats réels trouvés en chemin, appartenant à un autre lot
 
-**Ce que demande le lot (tâche 3)** : navigation/header riche (méga-menu), footer
-structuré, témoignages, tarification, timeline, équipe, newsletter, recherche.
+### 3.1 `ContentStore.unpublish` n'est joignable par aucun transport
 
-**Le fait** : ce ne sont pas des variantes de rendu, ce sont **huit nouveaux types
-de blocs**. Le vocabulaire est fermé et exhaustif — `renderBlock`
-(`src/render/render-block.ts`) est vérifié exhaustif par le compilateur sur
-`VocabularyBlock`, et `theme.config.ts` déclare `implements: VOCABULARY_NAMES`,
-testé égal au vocabulaire de `@cogenta/blocks` (`test/isolation.test.ts`). Ajouter
-un bloc, c'est modifier `@cogenta/blocks`, donc le contrat B (`blocks@1.0`), figé
-depuis le 2026-08-13.
+`ContentStore` expose `unpublish(id, { status })` depuis L1, et il fonctionne.
+Mais **aucune route REST ni GraphQL ne l'appelle** :
 
-`AGENTS.md` l'interdit d'ailleurs explicitement, deux fois :
-« Ajouter un bloc au vocabulaire sans passer par une RFC » figure dans « Ce qu'il
-ne faut pas faire », et le lot lui-même marque **[CONTRAT B]** ce type de
-changement.
+- `packages/api/src/rest/router.ts` route `publish`, `history`, `translations`,
+  `diff`, `restore` — pas `unpublish`.
+- `update()` du store ne change **jamais** le `status` (voir
+  `packages/schema/src/store/store.ts`), donc un `PATCH { status: 'draft' }` ne
+  dépublie pas non plus.
 
-**Ce qu'il faudrait**, dans cet ordre :
-1. une RFC par bloc (ou une RFC groupée) décrivant la forme des **données**, pas
-   du rendu — R3 : un bloc ne stocke jamais de HTML ni de CSS ;
-2. une ADR de montée `blocks@2.0` avec note de migration du contenu déjà saisi ;
-3. seulement ensuite, l'implémentation — qui est alors du travail mécanique, le
-   système de tokens et les onze blocs refaits donnant déjà tous les motifs
-   (carte, panneau, badge, chevron, grille, ruban de défilement).
+Conséquence concrète : **une page publiée ne peut pas être retirée du site par
+l'API**. Le seul retrait possible est la suppression (`DELETE`), qui est
+destructive. Ce n'est pas un manque de L14 — c'est une lacune du modèle de
+contenu exposé, donc du L13 (qui touche déjà `status`, la corbeille et le
+workflow éditorial dans son propre périmètre).
 
-**Remarque de cadrage** : deux des huit n'ont pas besoin du contrat B et sont
-bloqués ailleurs — la **navigation** et le **footer** ne sont pas des blocs de
-contenu mais des éléments de gabarit (`Base.astro` a déjà des `<slot>` pour eux, et
-`cogenta serve` rend maintenant un header/footer minimal réel) ; les remplir
-suppose un modèle de menu, qui est du contrat A. La **recherche** est branchée sur
-L10 (le moteur plein texte existe, aucune route ne l'expose) et la **newsletter**
-sur L13 pour l'envoi.
+Le décorateur `withLifecycleEvents` livré par la tâche 1 **couvre déjà**
+`unpublish()` : le jour où la route existe, l'événement `content.unpublish`
+part sans une ligne de plus. Le test de bout en bout du webhook prouve le
+retrait via `DELETE` (`content.delete`), qui est le seul chemin réellement
+atteignable aujourd'hui.
+
+### 3.2 L'index de recherche ne peut pas servir à la détection de liens
+
+Le lot suggérait de réutiliser « le contenu déjà indexé par la recherche de
+L10 ». Ce n'est pas possible, et ce n'est pas un oubli :
+`packages/schema/src/search/extract.ts` retire délibérément `href`, `url`,
+`src`, `markDefs` et `rel` de `STRUCTURAL_KEYS` avant d'indexer — indexer une
+URL ferait de `https` un terme de recherche et classerait une page selon son
+nombre de liens. **L'index ne contient donc aucune URL.** La tâche 3 fait donc
+le crawl des entrées publiées, qui est le repli que le lot prévoyait lui-même.
+
+### 3.3 `pnpm lint` était déjà rouge avant L14
+
+`packages/api/src/graphql/gateway.ts:8` importe `ContentEntry` sans jamais
+l'utiliser (`lint/correctness/noUnusedImports`). Le fichier n'a été touché par
+aucun commit de L10 à L14 (`git diff --name-only 48d8e83..HEAD` ne le liste
+pas) : la dette est antérieure. **Non corrigé ici**, volontairement — AGENTS.md
+demande « une PR = un sujet », et ce fichier appartient à un lot qu'un autre
+agent peut être en train de modifier en parallèle. C'est un correctif d'une
+ligne pour qui reprend le fichier.
+
+Le reste de la sortie de `pnpm lint` est de niveau `info` (`useLiteralKeys`,
+`noImportantStyles`), pré-existant lui aussi et non bloquant.
+
+### 3.4 Le rate limiter : audité, rien à ajouter
+
+Vérifié avant d'écrire quoi que ce soit, comme demandé. `createRateLimiter` est
+appliqué partout où il y a une surface d'attaque en ligne :
+
+| Chemin | Limité ? | Sujet |
+|---|---|---|
+| `passwordLogin` | oui | l'email essayé |
+| `totpLogin` | oui | `mfa:<userId>` |
+| `confirmTotpEnrolment` | oui | `totp-setup:<userId>` |
+| WebAuthn (login et registration) | **non, à dessein** | aucun secret devinable — le `hint` de l'erreur le dit déjà à l'utilisateur |
+| Redemption d'un jeton de réinitialisation | non | **aucune route HTTP n'existe** (`packages/api/src/rest/users-router.ts` le dit explicitement) — attaque en ligne impossible |
+
+Une seule vraie faiblesse trouvée, et **corrigée dans la tâche 4** : la table
+`cogenta_login_attempts` n'était jamais purgée. `clear(subject)` ne s'exécute
+qu'après une connexion **réussie**, donc un sujet qui n'aboutit jamais — c'est
+exactement le profil d'un script — accumulait des lignes indéfiniment.
+`recentFailures()` purge maintenant ce qui est sorti de la fenêtre.
+
+À surveiller si une route de réinitialisation par HTTP est ajoutée (L13) :
+elle devra passer par le limiteur, sans quoi le point 3.3 cesse d'être vrai.
 
 ---
 
-## 3. [CONTRAT A/B] Les sections réutilisables de la tâche 4
+## 4. Limites assumées de ce qui a été livré
 
 **Ce que demande le lot (tâche 4)** : composer une page à partir de sections
 nommées réutilisables, pas seulement d'une liste plate de blocs.
@@ -351,44 +407,9 @@ attendre — ne pas contourner. » Donc :
   `packages/cli/test/serve-site-plan.test.ts`, « refuses to apply on
   `cogenta serve`, because ADR-0010 keeps the schema read-only in production ».
 
-**Ce qu'il faut pour débloquer** : une décision humaine, sous forme d'ADR. Le
-texte ci-dessous est prêt à insérer dans `docs/03-decisions.md` (fichier
-protégé en écriture, append-only — je ne peux pas l'y mettre moi-même). Il
-**ne remplace pas** ADR-0010, il en nomme une exception étroite.
-
-```markdown
-## ADR-0023 — Un plan de site validé peut écrire le schéma, en développement seulement
-
-**Statut** : Proposée
-
-**Décision** — L19 (« création de site pilotée par l'IA ») applique un plan de
-site en réécrivant `cogenta.schema.*` et en créant les tables correspondantes.
-Cette écriture est soumise à ADR-0010 sans exception : elle n'est possible que
-sous `cogenta dev`. Sur `cogenta serve`, un plan peut être proposé, relu et
-validé élément par élément, mais jamais appliqué — la route répond
-`CONTENT_READ_ONLY` et indique la marche à suivre.
-
-**Justification** — Appliquer un plan est l'éditeur visuel de schéma d'ADR-0010,
-arrivé par une autre porte : mêmes fichiers écrits, même dérive de configuration
-entre environnements à la clé, même risque qu'un thème référence un champ
-supprimé. Le périmètre de L19 demandait le contraire (« un site déjà en
-production peut recevoir de nouveaux documents ») ; entre un document de lot et
-une décision actée, la décision gagne.
-
-**Renoncement assumé** — Le volet post-installation de L19 est utile mais pas
-immédiat : il faut une copie de développement, un `cogenta dev`, et un commit.
-C'est exactement le pipeline de déploiement qu'ADR-0010 assume déjà comme
-« conséquence ».
-
-**Alternative écartée** — Autoriser l'écriture en production derrière une
-confirmation supplémentaire. Écartée : ADR-0010 ne pose pas une question
-d'ergonomie mais d'intégrité entre environnements, et une confirmation ne
-recrée pas le fichier manquant dans git.
-
-**Conséquence** — `RunServeOptions` gagne `development`, positionné par
-`cogenta dev` et par lui seul. C'est aujourd'hui la seule différence de
-comportement entre `cogenta serve` et `cogenta dev`.
-```
+**Levé** : ADR-0023 est actée dans `docs/03-decisions.md`, exactement telle que
+proposée ci-dessus — appliquer un plan reste soumis à ADR-0010 sans exception,
+`cogenta serve` refuse, `cogenta dev` seul l'autorise.
 
 ## 9. Aucune exécution contre un vrai fournisseur LLM
 
@@ -407,3 +428,62 @@ brut de façon déterministe et **imposées** après coup (`enforceOn*`), les
 gabarits passent par la validation contrat D existante, les collections par le
 vrai `defineCollection`, et les entrées de démo par `collectionInputSchema`. Un
 modèle qui répond mal produit un refus nommé, pas un site faux.
+
+---
+
+# BLOCKERS — L14 (sécurité, headless, durcissement production)
+
+Ce qui suit note ce que le lot L14 n'a **pas** construit et pourquoi, plus les
+constats réels rencontrés en chemin qui appartiennent à un autre lot. Il n'y a
+aucun blocage au sens « je ne peux pas avancer » : les quatre tâches du
+périmètre confié (1 à 4) sont faites, testées et commitées.
+
+## L14.1 OAuth2 (tâche 6) — délibérément non construit
+
+**Décision : rien n'est construit.** Le lot le dit lui-même — « OAuth2 pour un
+client tiers, **si un vrai besoin headless au-delà des clés API simples se
+confirme** (ne pas construire en spéculatif) » — et AGENTS.md l'interdit une
+seconde fois (« Introduire une abstraction pour un cas hypothétique »).
+
+**Ce que dit le code réel**, vérifié avant de trancher :
+
+- Il n'existe **aucune identité machine** dans ce dépôt. `resolveActor`
+  (`packages/api/src/rest/auth-router.ts`) ne connaît qu'une chose : un jeton
+  porteur qui résout vers une **session d'utilisateur humain**. Pas de clé API,
+  pas de client, pas de `scope` — le mot n'apparaît nulle part dans
+  `packages/auth/src` au sens d'une portée d'autorisation.
+- Les clés API sont la tâche 8 du **L13**, pas encore livrées quand ce
+  worktree a démarré. La ligne « Dépendances » du L14 est explicite : « Dépend
+  de L13 tâche 8 (clés API) pour la partie OAuth2/scopes le cas échéant. »
+- L'autorisation elle-même est entièrement **par rôle** (`permissions:
+  { read, create, update, delete, publish }` du contrat A, figé). Un OAuth2
+  utile suppose des **portées** plus fines qu'un rôle, ou au minimum une
+  traduction portée→rôle. Ni l'une ni l'autre n'existe, et inventer la seconde
+  sans la première produirait un jeton OAuth2 qui n'est qu'un jeton de session
+  avec plus de cérémonie.
+
+**Ce qui doit être vrai avant de le reprendre**, dans cet ordre : une vraie
+identité non-humaine (clés API, table propre, révocation, audit) ; un modèle
+de portée réel décidé par ADR ; un besoin réel constaté, pas supposé. Aucun
+des trois n'est vrai aujourd'hui.
+
+## L14.2 Revue de sécurité formelle L10-L13 (tâche 5) — hors de ce worktree
+
+Explicitement retirée du périmètre confié à cet agent. Rien n'a été fait de ce
+côté ici. La case reste ouverte pour le lot.
+
+## L14.3 Limites assumées de ce qui a été livré
+
+- **Aucune livraison de webhook n'est réessayée.** R1 garantit qu'aucun worker
+  durable n'existe ; une boucle de réessai serait une promesse que le
+  déploiement ne peut pas tenir. Un échec est journalisé de façon structurée,
+  jamais silencieux, et le récepteur qui a besoin d'une garantie
+  « au moins une fois » interroge l'API.
+- **Le crawl de liens ne s'auto-planifie pas.** Même raison. `cogenta links
+  check` sort avec le code 1 quand il trouve quelque chose, donc une entrée
+  cron ou un job CI joue le rôle du « périodique » demandé par le lot.
+- **L'alerte d'activité suspecte est déclenchée par une requête refusée**, pas
+  par un timer — encore la même raison. Elle a donc un angle mort théorique :
+  un site que personne n'attaque plus depuis dix minutes n'émettra pas
+  d'alerte finale. La notice d'admin, elle, est recalculée à chaque chargement
+  de page et couvre ce cas.

@@ -589,6 +589,32 @@ acteur `public`). Le jeton ne couvre que l'entrée qu'il nomme — toute autre e
 même avec un jeton valide, répond comme si le jeton n'existait pas (même 404 qu'un
 inconnu, jamais un 403 qui confirmerait l'existence de l'entrée).
 
+**Le rendu d'un brouillon non enregistré** — `POST /api/builder/render` (L16) rend une
+liste de blocs que l'éditeur a à l'écran et n'a pas encore sauvegardée :
+
+```json
+{ "collection": "page", "entryId": "…", "blocks": { "body": [ … ] }, "values": { … } }
+```
+
+et répond `{ "html": "…" }`. Trois portes, dans cet ordre : un acteur authentifié
+(jamais anonyme), `update` sur la collection vérifié par la même `PermissionLayer` que
+toute écriture (R4), puis la lecture de l'entrée stockée à travers le même
+`ContentGateway` que le reste — un brouillon ne peut donc pas servir à lire ce que
+l'acteur ne pouvait pas déjà lire.
+
+Le HTML rendu est celui de la vraie page : la route passe par la même et unique
+fonction de rendu que la page publiée, jamais par un second moteur. La seule différence
+est voulue et vérifiée par test — un aperçu lit la face `working` de l'entrée, donc il
+porte `noindex, nofollow` et pas de lien canonique. Le corps du document, lui, est
+identique octet pour octet.
+
+**Deux attributs portés par tout rendu de page** (`@cogenta/theme-canonical`) rendent
+cette correspondance exploitable : `data-block-key` porte la clé contrat B du bloc
+placé, et `data-field` nomme le champ texte simple dont un élément porte la valeur
+entière. Ils sont émis à chaque rendu, jamais seulement en mode aperçu — un aperçu
+assemblé autrement que la page publiée est exactement la divergence que le constructeur
+visuel existe pour empêcher.
+
 ### Tokens de skin
 
 L'ensemble est **fermé et complet** : un skin qui omet un token est refusé. C'est la

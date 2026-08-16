@@ -18,7 +18,9 @@
     "blocksMoveDown": "Move block {{position}} down",
     "blocksRemove": "Remove block {{position}}",
     "blocksUnrecognized": "This block type (\"{{type}}\") is not recognised by this admin — its data is kept but cannot be edited here.",
-    "blocksAddLabel": "Add a block"
+    "blocksAddLabel": "Add a block",
+    "taxonomyEmpty": "No terms available in \"{{taxonomy}}\".",
+    "taxonomyNone": "— none —"
   },
   "richText": {
     "internalLinkTitle": "Internal link: {{path}}",
@@ -44,6 +46,8 @@
     "dashboard": "Dashboard",
     "collections": "Content",
     "media": "Media library",
+    "taxonomies": "Taxonomies",
+    "trash": "Trash",
     "audit": "Audit log",
     "agents": "Agents",
     "users": "Users",
@@ -176,6 +180,42 @@
     "notFoundBody": "This collection does not exist, or you do not have access to it.",
     "back": "Back",
     "loadError": "Could not load content."
+  },
+  "taxonomies": {
+    "heading": "Taxonomies",
+    "none": "This site declares no taxonomy you may read.",
+    "taxonomy": "Taxonomy",
+    "caption": "Terms, parents before children",
+    "empty": "No terms yet.",
+    "term": "Term",
+    "slug": "Slug",
+    "label": "Label",
+    "parent": "Parent",
+    "noParent": "— none (root) —",
+    "actions": "Actions",
+    "newTerm": "New term",
+    "create": "Add the term",
+    "delete": "Delete",
+    "loadError": "Could not load the terms.",
+    "createError": "The term could not be created.",
+    "deleteError": "The term could not be deleted."
+  },
+  "trash": {
+    "heading": "Trash",
+    "noCollections": "No collection you may delete from has a trash.",
+    "collection": "Collection",
+    "caption": "Deleted entries, still recoverable",
+    "empty": "The trash is empty.",
+    "entry": "Entry",
+    "status": "Status when deleted",
+    "deletedAt": "Deleted at",
+    "actions": "Actions",
+    "restore": "Restore",
+    "purge": "Delete for good",
+    "purgeConfirm": "Delete this entry for good? This cannot be undone.",
+    "loadError": "Could not load the trash.",
+    "restoreError": "The entry could not be restored.",
+    "purgeError": "The entry could not be deleted."
   },
   "audit": {
     "heading": "Audit log",

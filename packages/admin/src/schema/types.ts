@@ -29,6 +29,7 @@ export const FIELD_KINDS = [
   'geo',
   'color',
   'blocks',
+  'taxonomy',
 ] as const
 
 export type FieldKind = (typeof FIELD_KINDS)[number]
@@ -65,6 +66,23 @@ export interface CollectionSummary {
   readonly permissions: CollectionPermissions
   readonly fields: readonly SchemaField[]
   readonly routing?: CollectionRouting
+  /**
+   * The trash window, or `false` when this collection deletes outright
+   * (`schema@2.0`, ADR-0022). Optional here rather than required: a server
+   * older than 2.0 does not send it, and the admin must still start.
+   */
+  readonly trash?: { readonly retainDays: number } | false
+}
+
+/** A taxonomy as `/api/schema` describes it (`schema@2.0`, ADR-0022). */
+export interface TaxonomySummary {
+  readonly name: string
+  readonly labels: {
+    readonly singular: Readonly<Record<string, string>>
+    readonly plural?: Readonly<Record<string, string>>
+  }
+  readonly hierarchical: boolean
+  readonly permissions: CollectionPermissions
 }
 
 export interface SchemaSite {
@@ -75,6 +93,8 @@ export interface SchemaSite {
 export interface SchemaDocument {
   readonly contract: string
   readonly collections: readonly CollectionSummary[]
+  /** Absent from a pre-2.0 server; treated as "no taxonomies" rather than as an error. */
+  readonly taxonomies?: readonly TaxonomySummary[]
   /** Absent when the server has no locales configured beyond the default (or is too old to send it). */
   readonly site?: SchemaSite
 }

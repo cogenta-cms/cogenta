@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defineCollection } from '../src/define-collection.js'
+import { defineTaxonomy } from '../src/define-taxonomy.js'
 import { f } from '../src/fields.js'
 import {
   buildSchemaDocument,
@@ -55,7 +56,61 @@ function fieldNamed(name: string): SchemaDocumentField {
 describe('buildSchemaDocument', () => {
   it('states which version of the contract it describes', () => {
     expect(document.contract).toBe(SCHEMA_DOCUMENT_CONTRACT)
-    expect(SCHEMA_DOCUMENT_CONTRACT).toBe('schema@1.0')
+    expect(SCHEMA_DOCUMENT_CONTRACT).toBe('schema@2.0')
+  })
+
+  it('tells the admin whether a collection has a trash, and for how long', () => {
+    // Spelled out even when the author never typed it: the admin renders the
+    // window, and a missing key would make it re-derive the contract default.
+    expect(document.collections.every((entry) => entry.trash !== undefined)).toBe(true)
+    expect(document.collections.find((entry) => entry.name === 'author')?.trash).toEqual({
+      retainDays: 30,
+    })
+
+    const ephemeral = buildSchemaDocument([
+      defineCollection({
+        name: 'ephemeral',
+        labels: { singular: 'Ephemeral', plural: 'Ephemerals' },
+        trash: false,
+        fields: { title: f.text() },
+        permissions: { read: ['public'] },
+      }),
+    ])
+    expect(ephemeral.collections[0]?.trash).toBe(false)
+  })
+
+  it('describes the declared taxonomies, and none when a site has none', () => {
+    expect(document.taxonomies).toEqual([])
+
+    const withTaxonomy = buildSchemaDocument([author], undefined, [
+      defineTaxonomy({
+        name: 'category',
+        labels: { singular: { fr: 'Catégorie', en: 'Category' } },
+        permissions: { read: ['public'], create: ['editor'] },
+      }),
+    ])
+
+    // A term has no fields at all: id, parent, slug, position and labels, and
+    // nothing else (ADR-0022). The document says nothing more than that.
+    expect(withTaxonomy.taxonomies).toEqual([
+      {
+        name: 'category',
+        labels: { singular: { fr: 'Catégorie', en: 'Category' } },
+        hierarchical: true,
+        permissions: { read: ['public'], create: ['editor'] },
+      },
+    ])
+  })
+
+  it('refuses to describe a taxonomy field pointing at a taxonomy nobody declares', () => {
+    const classified = defineCollection({
+      name: 'classified',
+      labels: { singular: 'Classified', plural: 'Classifieds' },
+      fields: { title: f.text(), topics: f.taxonomy({ of: 'nowhere' }) },
+      permissions: { read: ['public'] },
+    })
+
+    expect(() => buildSchemaDocument([classified])).toThrow(/which no taxonomy defines/)
   })
 
   it('describes the system fields once, not once per collection', () => {
@@ -181,7 +236,7 @@ describe('renderSchemaJson', () => {
     const text = renderSchemaJson([article, author])
 
     expect(text.endsWith('}\n')).toBe(true)
-    expect(text.split('\n')[1]).toBe('  "contract": "schema@1.0",')
+    expect(text.split('\n')[1]).toBe('  "contract": "schema@2.0",')
   })
 
   it('survives the round-trip it exists for', () => {

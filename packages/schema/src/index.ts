@@ -28,6 +28,7 @@ export type {
   SchemaDocumentAdmin,
   SchemaDocumentCollection,
   SchemaDocumentField,
+  SchemaDocumentTaxonomy,
 } from './generate-schema-json.js'
 export {
   buildSchemaDocument,

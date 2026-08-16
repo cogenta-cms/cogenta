@@ -15,6 +15,7 @@ import { RelationField } from './relation-field.js'
 import { RichTextField } from './rich-text-field.js'
 import { SelectField } from './select-field.js'
 import { SlugField } from './slug-field.js'
+import { TaxonomyField } from './taxonomy-field.js'
 import { TextField } from './text-field.js'
 
 export interface FieldInputProps {
@@ -58,6 +59,8 @@ export function FieldInput(props: FieldInputProps): JSX.Element {
       return <MediaField {...props} value={props.value as string | null} />
     case 'relation':
       return <RelationField {...props} />
+    case 'taxonomy':
+      return <TaxonomyField {...props} />
     case 'blocks':
       return <BlocksField {...props} value={props.value as readonly ContentBlock[] | undefined} />
   }

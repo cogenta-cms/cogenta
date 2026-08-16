@@ -181,6 +181,69 @@ describe('GET /api/media and /api/media/{id}', () => {
     )
     expect(response.status).toBe(404)
   })
+
+  it('filters by a substring of the filename or alt text with `q`, case-insensitively', async () => {
+    await router.handle(
+      {
+        method: 'POST',
+        path: '/api/media',
+        query: {},
+        body: {
+          kind: 'image',
+          filename: 'cathedral-sunrise.png',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+          alt: 'A cathedral at sunrise',
+        },
+      },
+      EDITOR,
+    )
+    await router.handle(
+      {
+        method: 'POST',
+        path: '/api/media',
+        query: {},
+        body: {
+          kind: 'image',
+          filename: 'harbor.png',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+          alt: 'A quiet harbor at dusk',
+        },
+      },
+      EDITOR,
+    )
+
+    const byFilename = await router.handle(
+      { method: 'GET', path: '/api/media', query: { q: 'CATHEDRAL' } },
+      EDITOR,
+    )
+    const filenameHits = (byFilename.body as { data: { filename: string }[] }).data
+    expect(filenameHits).toHaveLength(1)
+    expect(filenameHits[0]?.filename).toBe('cathedral-sunrise.png')
+
+    const byAlt = await router.handle(
+      { method: 'GET', path: '/api/media', query: { q: 'dusk' } },
+      EDITOR,
+    )
+    const altHits = (byAlt.body as { data: { filename: string }[] }).data
+    expect(altHits).toHaveLength(1)
+    expect(altHits[0]?.filename).toBe('harbor.png')
+
+    const noMatch = await router.handle(
+      { method: 'GET', path: '/api/media', query: { q: 'nonexistent' } },
+      EDITOR,
+    )
+    expect((noMatch.body as { data: unknown[] }).data).toHaveLength(0)
+  })
+
+  it('refuses an anonymous `q` search the same way it refuses every other list', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/media', query: { q: 'anything' } },
+      ANONYMOUS,
+    )
+    expect(response.status).toBe(401)
+  })
 })
 
 describe('PATCH /api/media/{id}', () => {

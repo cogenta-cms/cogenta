@@ -105,6 +105,11 @@ const DEFAULT_BASE_PATH = '/api/media'
 // request body is never the resource exhaustion vector.
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 
+// How many of the most recent assets `q` scans in memory. `MediaStore.list`
+// has no substring filter of its own; this bounds the cost of one without a
+// migration, at the price of never finding an old asset outside this window.
+const MEDIA_SEARCH_SCAN_LIMIT = 200
+
 const focalSchema = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })
 
 const uploadSchema = z.object({
@@ -291,6 +296,29 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
       throw queryError('limit', 'is not a page size', 'Pass a whole number of 1 or more.')
     }
     const cursor = single(request.query, 'after')
+    const q = single(request.query, 'q')
+
+    // No dedicated index for media: `q` is a substring match on filename and
+    // alt text, applied in memory over a bounded scan from the store. Good
+    // enough for the volume an admin media library holds today (the header
+    // search this route feeds); a real index is `@cogenta/schema`'s search
+    // engine, built for content, not for a handful of asset fields.
+    if (q !== undefined && q.trim().length > 0) {
+      const needle = q.trim().toLowerCase()
+      const scanned = await store.list({
+        ...(kind === undefined ? {} : { kind: kind as MediaKind }),
+        limit: MEDIA_SEARCH_SCAN_LIMIT,
+      })
+      const matches = scanned.items.filter(
+        (asset) =>
+          asset.filename.toLowerCase().includes(needle) || asset.alt.toLowerCase().includes(needle),
+      )
+      const pageSize = limit ?? matches.length
+      return jsonResponse(200, {
+        data: matches.slice(0, pageSize),
+        page: { hasMore: false, nextCursor: null },
+      })
+    }
 
     const page = await store.list({
       ...(kind === undefined ? {} : { kind: kind as MediaKind }),

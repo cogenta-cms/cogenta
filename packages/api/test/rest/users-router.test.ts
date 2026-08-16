@@ -192,6 +192,28 @@ describe('GET /api/users', () => {
     )
     expect(JSON.stringify(response.body)).not.toContain('scrypt$')
   })
+
+  it('filters by a substring of the email with `q`, case-insensitively', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    await makeUser('cathy@example.com', ['editor'])
+    await makeUser('harbor-team@example.com', ['editor'])
+
+    const response = await router().handle(
+      withQuery('GET', '/api/users', { q: 'CATHY' }),
+      actorFor(admin.id, ['admin']),
+    )
+    const users = dataOf<{ email: string }[]>(response)
+    expect(users.map((user) => user.email)).toEqual(['cathy@example.com'])
+  })
+
+  it('refuses a non-admin `q` search the same way it refuses every other list', async () => {
+    const editor = await makeUser('ed@example.com', ['editor'])
+    const response = await router().handle(
+      withQuery('GET', '/api/users', { q: 'anything' }),
+      actorFor(editor.id, ['editor']),
+    )
+    expect(response.status).toBe(403)
+  })
 })
 
 describe('POST /api/users', () => {

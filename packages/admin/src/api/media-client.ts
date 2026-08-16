@@ -40,6 +40,8 @@ export interface ListMediaOptions {
   readonly kind?: MediaKind
   readonly cursor?: string
   readonly limit?: number
+  /** Substring match on filename and alt text — see `media-router.ts`'s `q` handling. */
+  readonly q?: string
 }
 
 export interface UploadMediaInput {
@@ -99,6 +101,7 @@ export async function listMedia(token: string, options: ListMediaOptions = {}): 
   if (options.kind !== undefined) params.set('kind', options.kind)
   if (options.cursor !== undefined) params.set('after', options.cursor)
   if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.q !== undefined && options.q.trim().length > 0) params.set('q', options.q)
   const query = params.toString()
 
   const body = await requestBody<{

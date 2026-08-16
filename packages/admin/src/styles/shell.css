@@ -21,6 +21,10 @@
   font-weight: 600;
 }
 
+.app-shell__search {
+  margin-left: var(--space-4);
+}
+
 .app-shell__account {
   display: flex;
   align-items: center;

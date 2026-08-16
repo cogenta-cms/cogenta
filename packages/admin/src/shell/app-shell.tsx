@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
+import { GlobalSearch } from './global-search.js'
 import { NAV_ITEMS } from './nav-items.js'
 import '../styles/shell.css'
 
@@ -29,6 +30,7 @@ export function AppShell(): JSX.Element {
       </a>
       <header className="app-shell__topbar">
         <span className="app-shell__brand">{t('shell.brand')}</span>
+        {email !== null && <GlobalSearch />}
         {email !== null && (
           <div className="app-shell__account">
             <span>{email}</span>

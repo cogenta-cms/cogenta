@@ -61,6 +61,16 @@
     "logout": "Sign out",
     "nav": "Main navigation"
   },
+  "globalSearch": {
+    "label": "Global search",
+    "placeholder": "Search content, media, users…",
+    "resultsLabel": "Search results",
+    "groups": {
+      "content": "Content",
+      "media": "Media",
+      "users": "Users"
+    }
+  },
   "login": {
     "heading": "Sign in to Cogenta",
     "passkeyButton": "Sign in with a passkey",

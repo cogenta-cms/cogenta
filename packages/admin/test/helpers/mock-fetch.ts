@@ -41,6 +41,18 @@ export const MOCK_SCHEMA = {
           hasCustomValidation: false,
           options: {},
         },
+        // A block zone, so the entry editor can offer both of its modes
+        // (L16): without one there is nothing to compose visually and the
+        // switch correctly does not appear at all.
+        {
+          name: 'body',
+          kind: 'blocks',
+          required: false,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: { allow: '*' },
+        },
       ],
     },
     {
@@ -79,7 +91,11 @@ export const MOCK_ENTRIES = [
     translationOf: null,
     deletedAt: null,
     values: { title: 'First article' },
-    blocks: {},
+    // The zone exists and is empty. Seeding a block here instead would put a
+    // second field called `title` — the hero's — on every screen that renders
+    // this entry, which is a fixture deciding what five unrelated tests can
+    // query for. A builder test that wants a block adds one.
+    blocks: { body: [] },
   },
   {
     id: 'entry-2',
@@ -1015,6 +1031,33 @@ export function installMockFetch(
           terms = terms.filter((term) => term.id !== id && term.parent !== id)
           return new Response(null, { status: 204 })
         }
+      }
+
+      // The page builder's preview (L16). It answers with a document shaped
+      // exactly like the one `@cogenta/theme-canonical` serialises — one
+      // element per block, carrying the `data-block-key` the builder maps
+      // clicks back through. Whether the real renderer produces the real page
+      // is proven against a real server in `packages/cli/test/serve-builder.test.ts`;
+      // what matters here is that the admin sends the block list and shows
+      // what it is handed.
+      if (url.endsWith('/api/builder/render') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'This preview needs a signed-in editor.' },
+          })
+        }
+        const zone = (body.blocks?.body ?? []) as { key: string; type: string }[]
+        const sections = zone
+          .map(
+            (block) =>
+              `<section class="cg-block" data-block="${block.type}" data-block-key="${block.key}"></section>`,
+          )
+          .join('')
+        return json(200, {
+          data: {
+            html: `<!doctype html><html lang="en"><head><title>Preview</title></head><body><main class="cg-main" id="cg-main">${sections}</main></body></html>`,
+          },
+        })
       }
 
       const contentMatch = /\/api\/content\/([^/?]+)(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)

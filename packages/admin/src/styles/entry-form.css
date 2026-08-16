@@ -8,6 +8,16 @@
   opacity: 0.8;
 }
 
+/* The form / visual-builder switch (L16). A `fieldset` with no chrome of its
+   own: the grouping is for assistive technology, not a visible box. */
+.entry-form__modes {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
 .entry-form__recovery {
   border: 1px solid var(--color-border);
   border-radius: 0.25rem;

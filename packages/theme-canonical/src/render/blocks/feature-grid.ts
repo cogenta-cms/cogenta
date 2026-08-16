@@ -41,7 +41,7 @@ export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): 
     hasTitle
       ? heading(
           blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'cg-features__title' },
+          { class: 'cg-features__title', 'data-field': 'title' },
           block.title ?? '',
         )
       : null,

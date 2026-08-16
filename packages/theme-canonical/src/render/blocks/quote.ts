@@ -18,7 +18,7 @@ export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement 
   return h(
     'figure',
     { class: 'cg-block cg-quote', 'data-block': 'quote' },
-    h('blockquote', { class: 'cg-quote__text' }, h('p', {}, block.text)),
+    h('blockquote', { class: 'cg-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
     hasAttribution
       ? h(
           'figcaption',
@@ -31,8 +31,10 @@ export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement 
               }),
           block.author === undefined
             ? null
-            : h('span', { class: 'cg-quote__author' }, block.author),
-          block.role === undefined ? null : h('span', { class: 'cg-quote__role' }, block.role),
+            : h('span', { class: 'cg-quote__author', 'data-field': 'author' }, block.author),
+          block.role === undefined
+            ? null
+            : h('span', { class: 'cg-quote__role', 'data-field': 'role' }, block.role),
         )
       : null,
   )

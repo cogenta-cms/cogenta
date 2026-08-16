@@ -425,5 +425,42 @@
     "saveError": "Your decisions could not be saved.",
     "applyError": "The plan could not be applied.",
     "deleteError": "The proposal could not be discarded."
+  },
+  "builder": {
+    "modeLabel": "Editing mode",
+    "modeForm": "Form",
+    "modeVisual": "Visual builder",
+    "unavailableNew": "The visual builder needs an entry that has been saved: the preview renders the real page, and this one does not exist yet. Save once, then come back here.",
+    "noZone": "This collection has no blocks field, so there is nothing to compose visually.",
+    "historyLabel": "Undo and redo",
+    "undo": "Undo",
+    "redo": "Redo",
+    "viewportLabel": "Preview width",
+    "viewport": {
+      "desktop": "Desktop",
+      "tablet": "Tablet",
+      "mobile": "Mobile"
+    },
+    "chromeHide": "Hide editing marks",
+    "chromeShow": "Show editing marks",
+    "previewTitle": "Page preview",
+    "previewLoading": "Rendering…",
+    "previewError": "The preview could not be rendered.",
+    "outlineHeading": "Blocks on this page",
+    "outlineEmpty": "No blocks yet. Add one from the panel below.",
+    "pickerHeading": "Add a block",
+    "searchLabel": "Search blocks",
+    "searchPlaceholder": "hero, quote, gallery…",
+    "searchEmpty": "No block matches “{{query}}”.",
+    "categoriesLabel": "Block categories",
+    "categoryAll": "All",
+    "category": {
+      "highlight": "Highlight",
+      "text": "Text",
+      "media": "Media",
+      "listing": "Listings"
+    },
+    "detailHeading": "Selected block",
+    "detailEmpty": "Select a block in the preview or in the list to edit its fields."
   }
 }

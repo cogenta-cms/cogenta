@@ -425,5 +425,42 @@
     "saveError": "Vos décisions n'ont pas pu être enregistrées.",
     "applyError": "Le plan n'a pas pu être appliqué.",
     "deleteError": "La proposition n'a pas pu être écartée."
+  },
+  "builder": {
+    "modeLabel": "Mode d'édition",
+    "modeForm": "Formulaire",
+    "modeVisual": "Composition visuelle",
+    "unavailableNew": "La composition visuelle demande une entrée déjà enregistrée : l'aperçu rend la vraie page, qui n'existe pas encore. Enregistrez une première fois, puis revenez ici.",
+    "noZone": "Cette collection n'a pas de champ de blocs : il n'y a rien à composer visuellement.",
+    "historyLabel": "Annuler et rétablir",
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "viewportLabel": "Largeur d'aperçu",
+    "viewport": {
+      "desktop": "Ordinateur",
+      "tablet": "Tablette",
+      "mobile": "Mobile"
+    },
+    "chromeHide": "Masquer les repères",
+    "chromeShow": "Afficher les repères",
+    "previewTitle": "Aperçu de la page",
+    "previewLoading": "Rendu en cours…",
+    "previewError": "L'aperçu n'a pas pu être rendu.",
+    "outlineHeading": "Blocs de la page",
+    "outlineEmpty": "Aucun bloc. Ajoutez-en un depuis le panneau ci-dessous.",
+    "pickerHeading": "Ajouter un bloc",
+    "searchLabel": "Rechercher un bloc",
+    "searchPlaceholder": "héros, citation, galerie…",
+    "searchEmpty": "Aucun bloc ne correspond à « {{query}} ».",
+    "categoriesLabel": "Catégories de blocs",
+    "categoryAll": "Tous",
+    "category": {
+      "highlight": "Mise en avant",
+      "text": "Texte",
+      "media": "Média",
+      "listing": "Listes"
+    },
+    "detailHeading": "Bloc sélectionné",
+    "detailEmpty": "Sélectionnez un bloc dans l'aperçu ou dans la liste pour modifier ses champs."
   }
 }

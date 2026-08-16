@@ -35,7 +35,11 @@ export function renderStats(block: StatsBlock, _ctx: RenderContext): HtmlElement
     { class: 'cg-block cg-stats', 'data-block': 'stats' },
     block.title === undefined
       ? null
-      : heading(blockHeadingTag('stats') ?? 'h2', { class: 'cg-stats__title' }, block.title),
+      : heading(
+          blockHeadingTag('stats') ?? 'h2',
+          { class: 'cg-stats__title', 'data-field': 'title' },
+          block.title,
+        ),
     h('dl', { class: 'cg-stats__items' }, block.items.map(renderItem)),
   )
 }

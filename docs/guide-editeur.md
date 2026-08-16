@@ -113,6 +113,43 @@ Chaque bloc ne contient que des informations structurées — jamais de code ni 
 en forme libre. C'est ce qui permet à un même bloc de s'afficher correctement quel que
 soit l'habillage visuel du site.
 
+### Deux façons de composer une page
+
+Au-dessus du formulaire, un sélecteur propose **Formulaire** ou **Composition
+visuelle**. Le choix est mémorisé par navigateur ; les deux modifient exactement le
+même contenu et le même bouton « Enregistrer ».
+
+- **Formulaire** — chaque bloc est une carte avec ses champs. C'est le seul mode qui
+  donne accès à tout : une image à choisir dans la médiathèque, une liste d'éléments,
+  un texte riche.
+- **Composition visuelle** — la page telle qu'elle sera réellement publiée, dans un
+  cadre au milieu de l'écran. Ce n'est pas une imitation : c'est le site lui-même qui
+  la fabrique, avec le même moteur et le même habillage que pour un visiteur. Ce que
+  vous voyez est ce qui sera publié.
+
+Dans la composition visuelle :
+
+- **Déplacer un bloc** : le faire glisser dans la page, ou utiliser les flèches ↑ ↓ de
+  la liste « Blocs de la page » à gauche. Les flèches font exactement la même chose
+  que le glisser-déposer — rien dans cet écran ne s'obtient uniquement à la souris.
+- **Ajouter un bloc** : le faire glisser depuis « Ajouter un bloc » à l'endroit voulu,
+  ou cliquer dessus pour l'ajouter à la fin. Le panneau se filtre par recherche et par
+  catégorie.
+- **Corriger un texte** : double-cliquer dessus directement dans la page, taper, puis
+  cliquer ailleurs (ou appuyer sur Entrée). `Échap` abandonne la correction. Seuls les
+  textes simples se modifient ainsi ; un texte riche ou une liste se modifient dans le
+  panneau de droite, qui affiche les champs du bloc sélectionné.
+- **Annuler / Rétablir** : les boutons de la barre, ou `Ctrl+Z` et `Ctrl+Maj+Z`
+  (`⌘` sur Mac).
+- **Vérifier l'affichage sur mobile** : les boutons Ordinateur / Tablette / Mobile
+  changent réellement la largeur de la page, ils ne la réduisent pas en image.
+- **Masquer les repères** enlève les encadrés d'édition, pour voir la page exactement
+  comme un visiteur la verra.
+
+La composition visuelle n'est proposée qu'une fois l'entrée enregistrée au moins une
+fois : tant qu'elle n'existe pas, il n'y a pas de page réelle à afficher, et l'écran le
+dit plutôt que d'inventer un aperçu.
+
 ## Médias
 
 L'écran « Médias » centralise les images et fichiers du site.

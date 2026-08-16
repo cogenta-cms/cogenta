@@ -5,6 +5,7 @@ import { ApiError } from '../api/client.js'
 import type { BlockZones } from '../api/content-client.js'
 import { createEntry, getEntry, issuePreview, updateEntry } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { PageBuilder } from '../builder/page-builder.js'
 import type { AutosaveRecord, AutosaveSnapshot } from '../collections/autosave.js'
 import {
   autosaveKey,
@@ -18,6 +19,7 @@ import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { useAutosave } from '../collections/use-autosave.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { Button } from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
 
@@ -29,6 +31,27 @@ interface NewTranslationState {
 }
 
 const EMPTY_SNAPSHOT: AutosaveSnapshot = { values: {}, blocks: {} }
+
+/**
+ * Which editor the person last chose (L16).
+ *
+ * The two are not a migration from one to the other: the form is the only way
+ * to reach a media reference, a list of items or a rich-text document, and the
+ * builder is the only way to see the page. Whichever someone used last is the
+ * one they get next time, per browser, never per entry.
+ */
+const EDITOR_MODE_STORAGE_KEY = 'cogenta.admin.editorMode'
+
+type EditorMode = 'form' | 'visual'
+
+function storedEditorMode(): EditorMode {
+  try {
+    return localStorage.getItem(EDITOR_MODE_STORAGE_KEY) === 'visual' ? 'visual' : 'form'
+  } catch {
+    // A browser with storage denied still gets an editor, just not a memory.
+    return 'form'
+  }
+}
 
 /** Just the clock time: the autosave being reported is always minutes old, never days. */
 function formatTime(iso: string): string {
@@ -73,6 +96,7 @@ export function EntryEditRoute(): JSX.Element {
   const [baseline, setBaseline] = useState<AutosaveSnapshot>(EMPTY_SNAPSHOT)
   /** A newer local draft found on open, waiting for the editor to accept or drop it. */
   const [recovered, setRecovered] = useState<AutosaveRecord | null>(null)
+  const [editorMode, setEditorMode] = useState<EditorMode>(storedEditorMode)
 
   useEffect(() => {
     if (isNew) {
@@ -193,8 +217,29 @@ export function EntryEditRoute(): JSX.Element {
     }
   }
 
+  function chooseEditorMode(mode: EditorMode): void {
+    setEditorMode(mode)
+    try {
+      localStorage.setItem(EDITOR_MODE_STORAGE_KEY, mode)
+    } catch {
+      // Storage denied: the choice still applies to this screen.
+    }
+  }
+
   const requiredAction = isNew ? 'create' : 'update'
   const canWrite = collection !== undefined && canPerform(requiredAction, collection, roles)
+
+  /** The one block zone the builder composes — the first the collection declares. */
+  const blockZone = collection?.fields.find((field) => field.kind === 'blocks')?.name
+  /**
+   * The builder previews the *real* page, which a never-saved entry does not
+   * have: there is no entry to render and no path to render it at. Rather than
+   * inventing a preview for a page that does not exist — the one thing this
+   * whole lot exists to avoid — the mode says so and the form stays.
+   */
+  const visualBuilding = editorMode === 'visual' && blockZone !== undefined && isNew
+  const builderZone =
+    editorMode === 'visual' && blockZone !== undefined && !isNew ? blockZone : null
 
   // Declared before the early returns below, because a hook cannot be
   // conditional. `enabled` is what actually turns it off while the entry is
@@ -276,6 +321,29 @@ export function EntryEditRoute(): JSX.Element {
         </div>
       )}
 
+      {blockZone !== undefined && (
+        <fieldset aria-label={t('builder.modeLabel')} className="entry-form__modes">
+          <Button
+            size="sm"
+            variant={editorMode === 'form' ? 'primary' : 'ghost'}
+            aria-pressed={editorMode === 'form'}
+            onClick={() => chooseEditorMode('form')}
+          >
+            {t('builder.modeForm')}
+          </Button>
+          <Button
+            size="sm"
+            variant={editorMode === 'visual' ? 'primary' : 'ghost'}
+            aria-pressed={editorMode === 'visual'}
+            onClick={() => chooseEditorMode('visual')}
+          >
+            {t('builder.modeVisual')}
+          </Button>
+        </fieldset>
+      )}
+
+      {visualBuilding && <p role="note">{t('builder.unavailableNew')}</p>}
+
       <form onSubmit={(event) => void submit(event)}>
         <EntryForm
           collection={collection}
@@ -284,7 +352,24 @@ export function EntryEditRoute(): JSX.Element {
           onChange={setFieldValue}
           onBlocksChange={setBlockZone}
           disabled={!canWrite}
+          {...(builderZone === null ? {} : { skipFields: new Set([builderZone]) })}
         />
+
+        {builderZone !== null && token !== null && id !== undefined && (
+          // The builder is inside the form on purpose: its edits are the same
+          // `blocks` state the form's own save button writes, so there is one
+          // save, one autosave and one version — never a second, quieter way
+          // for content to reach the database.
+          <PageBuilder
+            token={token}
+            collection={name}
+            entryId={id}
+            zone={builderZone}
+            blocks={blocks[builderZone] ?? []}
+            onBlocksChange={(next) => setBlockZone(builderZone, next)}
+            disabled={!canWrite}
+          />
+        )}
 
         {error !== null && (
           <p role="alert" className="entry-form__error">

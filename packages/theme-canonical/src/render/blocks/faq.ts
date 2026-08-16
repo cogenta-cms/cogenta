@@ -32,7 +32,11 @@ export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
     { class: 'cg-block cg-faq', 'data-block': 'faq' },
     block.title === undefined
       ? null
-      : heading(blockHeadingTag('faq') ?? 'h2', { class: 'cg-faq__title' }, block.title),
+      : heading(
+          blockHeadingTag('faq') ?? 'h2',
+          { class: 'cg-faq__title', 'data-field': 'title' },
+          block.title,
+        ),
     h(
       'ul',
       { class: 'cg-faq__items' },

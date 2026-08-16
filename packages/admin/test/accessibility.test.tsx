@@ -79,6 +79,29 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     await expectNoSeriousA11yViolations(document.body)
   })
 
+  it('visual page builder, with a block placed and selected', async () => {
+    // The builder is the one screen of this admin whose primary affordance —
+    // dragging — no assistive technology can use, so it is the one that most
+    // needs this: every move it offers also exists as a named button, and
+    // this is where that claim is checked rather than asserted.
+    installMockFetch()
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
+    await screen.findByText('Articles')
+    fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+    await screen.findByText('First article')
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Composition visuelle' }))
+    await screen.findByTitle('Aperçu de la page')
+    fireEvent.click(screen.getByRole('button', { name: /^Héros/u }))
+
+    await expectNoSeriousA11yViolations(document.body, { exclude: ['iframe'] })
+  })
+
   it('media library, populated', async () => {
     installMockFetch()
     render(<App />)

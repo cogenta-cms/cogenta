@@ -256,6 +256,9 @@ export async function run(options: RunOptions): Promise<number> {
       out,
       stderr,
       env,
+      // ADR-0010: the schema is writable in development only. This is the
+      // one place the two commands differ in more than name.
+      development: command === 'dev',
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(port === undefined ? {} : { port }),
       ...(typeof parsed.values.host === 'string' ? { host: parsed.values.host } : {}),

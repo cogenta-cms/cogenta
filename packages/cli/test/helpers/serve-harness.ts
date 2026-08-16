@@ -96,6 +96,8 @@ export interface RunningServer {
 
 export interface StartServerOptions {
   readonly readOnly?: boolean
+  /** `cogenta dev` rather than `cogenta serve` — the only thing that lets a site plan be applied (ADR-0010). */
+  readonly development?: boolean
   /** Collected so a test can assert the server is registered for cleanup. */
   readonly registry?: AbortController[]
 }
@@ -122,6 +124,7 @@ export async function startServer(
     signal: controller.signal,
     onListening: (a) => resolveAddress(a),
     ...(options.readOnly === undefined ? {} : { readOnly: options.readOnly }),
+    ...(options.development === undefined ? {} : { development: options.development }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

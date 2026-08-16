@@ -142,9 +142,11 @@ correction ; une question posée coûte une journée d'attente.
 changer d'avis, écrire une **nouvelle** ADR et marquer l'ancienne
 `Remplacée par ADR-XXXX`, sans supprimer son texte.
 
-`docs/04-contrats.md` est versionné en semver. **A (`schema@1.0`) et B (`blocks@1.0`)
-sont figés** depuis le 2026-08-13 : les modifier impose une montée de version majeure et
-une note de migration du contenu déjà saisi. C et D ne sont pas encore figés.
+`docs/04-contrats.md` est versionné en semver. **Les quatre contrats sont figés** : A et
+B depuis le 2026-08-13, C (ADR-0020) et D depuis le 2026-08-14 — les modifier impose une
+montée de version majeure et une note de migration du contenu déjà saisi. Ajouter *par le
+bas* à une taxonomie ouverte reste mineur (A est passé en `schema@2.0` le 2026-08-16 par
+ADR-0022 ; C en `tools@1.1` le même jour, pour la permission `document.extract`).
 
 Ces règles s'appliquent par discipline, plus par un hook.
 

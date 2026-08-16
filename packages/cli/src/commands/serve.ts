@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -145,6 +145,29 @@ export async function loadCollections(
     message: `No schema file found next to the configuration (looked for ${SCHEMA_FILE_CANDIDATES.join(', ')}).`,
     hint: 'Create cogenta.schema.ts, default-exporting the array of collections defineCollection() built.',
   })
+}
+
+/**
+ * The schema file this project actually loads, or `undefined` when it has
+ * none.
+ *
+ * Anything that *writes* the schema back has to target this, not a guessed
+ * name: `loadCollections` prefers `cogenta.schema.ts` (the form ADR-0010
+ * calls for — TypeScript in git), so a writer that assumed `.mjs` would
+ * create tables and then write a file nothing reads, leaving an operator
+ * with orphan tables and no collections after the restart it was told to do.
+ */
+export async function findSchemaFile(projectRoot: string): Promise<string | undefined> {
+  for (const candidate of SCHEMA_FILE_CANDIDATES) {
+    const path = join(projectRoot, candidate)
+    try {
+      await stat(path)
+      return path
+    } catch {
+      // Try the next candidate — same order `loadCollections` uses.
+    }
+  }
+  return undefined
 }
 
 /**
@@ -1171,6 +1194,18 @@ export interface ServeOptions {
    * decision for whoever deploys a read-only instance, not made here.
    */
   readonly readOnly?: boolean
+  /**
+   * `cogenta dev` sets this; `cogenta serve` does not.
+   *
+   * It gates exactly one thing today: whether an approved site plan may be
+   * **applied** (L19 task 7). ADR-0010 is explicit — "l'éditeur visuel de
+   * schéma écrit ces fichiers, mais uniquement en mode développement. En
+   * production le schéma est en lecture seule" — and applying a plan writes
+   * `cogenta.schema.*` and creates tables, which is exactly that editor by
+   * another name. Proposing and reviewing a plan stay available everywhere;
+   * only the write is held to the decision.
+   */
+  readonly development?: boolean
 }
 
 const DEFAULT_PORT = 4000
@@ -1237,13 +1272,17 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
-    sitePlans: createSitePlanning({
+    sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,
       collections,
       config: loaded.config,
       logger,
       readOnly: options.readOnly ?? false,
+      // ADR-0010: the schema is writable in development only. `cogenta dev`
+      // says development; `cogenta serve` does not, and a plan can then be
+      // proposed and reviewed but never applied.
+      development: options.development ?? false,
     }),
   })
 

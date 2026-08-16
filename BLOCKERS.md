@@ -230,3 +230,95 @@ aucun contenu à enrichir.
 Reste volontairement en dehors : aucun bloc de démonstration ne référence de
 média, parce que `cogenta serve` n'a pas encore de pipeline d'images (point 5) et
 qu'un site fraîchement scaffoldé doit rendre au premier lancement.
+
+---
+
+# Blocages — L19, « création de site pilotée par l'IA »
+
+## 8. Appliquer un plan sur un site **en production** : refusé, ADR requise
+
+**Le conflit.** `docs/lots/L10-cms-complet.md`, section L19, demande
+explicitement le volet post-installation : « un site déjà **en production** peut
+recevoir de nouveaux documents à tout moment […] et l'agent propose une
+évolution du modèle de contenu / des pages / du design ».
+
+ADR-0010, actée, dit le contraire, mot pour mot : « L'éditeur visuel de schéma
+écrit ces fichiers, mais **uniquement en mode développement**. En production le
+schéma est en lecture seule. »
+
+Appliquer un plan de site écrit `cogenta.schema.*` et crée des tables. C'est
+l'éditeur de schéma, arrivé par une autre porte. La décision s'y applique sans
+adaptation.
+
+**Ce qui a été fait, plutôt que de contourner.** AGENTS.md est sans ambiguïté :
+« Ne jamais rediscuter une décision actée. Si elle semble mauvaise, le dire et
+attendre — ne pas contourner. » Donc :
+
+- Proposer et relire un plan restent disponibles **partout**, y compris en
+  production : c'est de la lecture et de l'écriture dans `.cogenta/site-plans/`,
+  pas dans le schéma.
+- **Appliquer** n'est possible que sous `cogenta dev`. `cogenta serve` ne
+  construit aucun applier ; la route répond `CONTENT_READ_ONLY` avec le chemin
+  de sortie réel (« lancez `cogenta dev` sur une copie de développement,
+  appliquez-y, committez le fichier de schéma »). La relecture déjà faite est
+  conservée, pas perdue.
+- Un test le prouve dans les deux sens :
+  `packages/cli/test/serve-site-plan.test.ts`, « refuses to apply on
+  `cogenta serve`, because ADR-0010 keeps the schema read-only in production ».
+
+**Ce qu'il faut pour débloquer** : une décision humaine, sous forme d'ADR. Le
+texte ci-dessous est prêt à insérer dans `docs/03-decisions.md` (fichier
+protégé en écriture, append-only — je ne peux pas l'y mettre moi-même). Il
+**ne remplace pas** ADR-0010, il en nomme une exception étroite.
+
+```markdown
+## ADR-0023 — Un plan de site validé peut écrire le schéma, en développement seulement
+
+**Statut** : Proposée
+
+**Décision** — L19 (« création de site pilotée par l'IA ») applique un plan de
+site en réécrivant `cogenta.schema.*` et en créant les tables correspondantes.
+Cette écriture est soumise à ADR-0010 sans exception : elle n'est possible que
+sous `cogenta dev`. Sur `cogenta serve`, un plan peut être proposé, relu et
+validé élément par élément, mais jamais appliqué — la route répond
+`CONTENT_READ_ONLY` et indique la marche à suivre.
+
+**Justification** — Appliquer un plan est l'éditeur visuel de schéma d'ADR-0010,
+arrivé par une autre porte : mêmes fichiers écrits, même dérive de configuration
+entre environnements à la clé, même risque qu'un thème référence un champ
+supprimé. Le périmètre de L19 demandait le contraire (« un site déjà en
+production peut recevoir de nouveaux documents ») ; entre un document de lot et
+une décision actée, la décision gagne.
+
+**Renoncement assumé** — Le volet post-installation de L19 est utile mais pas
+immédiat : il faut une copie de développement, un `cogenta dev`, et un commit.
+C'est exactement le pipeline de déploiement qu'ADR-0010 assume déjà comme
+« conséquence ».
+
+**Alternative écartée** — Autoriser l'écriture en production derrière une
+confirmation supplémentaire. Écartée : ADR-0010 ne pose pas une question
+d'ergonomie mais d'intégrité entre environnements, et une confirmation ne
+recrée pas le fichier manquant dans git.
+
+**Conséquence** — `RunServeOptions` gagne `development`, positionné par
+`cogenta dev` et par lui seul. C'est aujourd'hui la seule différence de
+comportement entre `cogenta serve` et `cogenta dev`.
+```
+
+## 9. Aucune exécution contre un vrai fournisseur LLM
+
+**Ce qui manque** : tout le pipeline L19 (analyse de brief, modèle de contenu,
+gabarits, contenu de démo) est testé contre un `ProviderClient` scripté, et
+côté installeur contre le vrai `fetchImpl` de `llm-setup.ts`. Le câblage est
+donc prouvé de bout en bout ; la **qualité réelle** des sorties d'un modèle ne
+l'est pas.
+
+**Pourquoi** : aucune clé API dans cet environnement — c'est un accès humain,
+pas du travail en attente (même statut que la case cPanel de L9).
+
+**Ce qui limite la casse en attendant** : rien dans ce lot ne fait confiance au
+modèle sur le point qui compte. Les contraintes explicites sont lues du texte
+brut de façon déterministe et **imposées** après coup (`enforceOn*`), les
+gabarits passent par la validation contrat D existante, les collections par le
+vrai `defineCollection`, et les entrées de démo par `collectionInputSchema`. Un
+modèle qui répond mal produit un refus nommé, pas un site faux.

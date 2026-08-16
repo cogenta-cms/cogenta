@@ -332,6 +332,7 @@ export async function scaffoldSite(
         entries: answers.approvedDemoContent ?? [],
         defaultLocale: answers.defaultLocale,
         adminId: admin?.id ?? null,
+        ...(answers.llm === undefined ? {} : { model: answers.llm.model }),
       })
     } finally {
       await selection.dispose()
@@ -369,6 +370,8 @@ async function seedApprovedEntries(input: {
   readonly entries: readonly DemoEntry[]
   readonly defaultLocale: string
   readonly adminId: string | null
+  /** Named in the provenance of every entry seeded here. */
+  readonly model?: string
 }): Promise<number> {
   if (input.entries.length === 0) return 0
   const stores = new Map(
@@ -389,6 +392,15 @@ async function seedApprovedEntries(input: {
     await store.create({
       status: 'draft',
       createdBy: input.adminId,
+      // `generated`, not the `human` default: contract A calls `provenance`
+      // non-optional because the European AI framework requires it, and this
+      // entry was written by a model about somebody's business.
+      provenance: 'generated',
+      provenanceDetail: {
+        agent: 'site-planner',
+        ...(input.model === undefined ? {} : { model: input.model }),
+        at: new Date().toISOString(),
+      },
       values: entry.values,
     })
     seeded++

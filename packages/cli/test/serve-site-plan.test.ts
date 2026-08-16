@@ -195,7 +195,7 @@ describe('a site plan waiting on a live site', () => {
 
   it('refuses to apply until every item has been decided', async () => {
     const root = await project()
-    const server = await startServer(root, { registry: activeServers })
+    const server = await startServer(root, { registry: activeServers, development: true })
     const token = await adminSession(root, server.base)
 
     // One item decided out of several.
@@ -223,7 +223,7 @@ describe('a site plan waiting on a live site', () => {
 
   it('applies a fully reviewed plan to the real schema file and the real database', async () => {
     const root = await project()
-    const server = await startServer(root, { registry: activeServers })
+    const server = await startServer(root, { registry: activeServers, development: true })
     const token = await adminSession(root, server.base)
 
     const sections = (
@@ -302,7 +302,7 @@ describe('a site plan waiting on a live site', () => {
 
   it('refuses to redefine a collection the site already has, and says why', async () => {
     const root = await project({ proposed: [PROPOSED_PAGE, PROPOSED_DISH] })
-    const server = await startServer(root, { registry: activeServers })
+    const server = await startServer(root, { registry: activeServers, development: true })
     const token = await adminSession(root, server.base)
 
     await fetch(`${server.base}/api/site-plans/draft-1/decisions`, {
@@ -339,6 +339,92 @@ describe('a site plan waiting on a live site', () => {
     const schema = await readFile(join(root, 'cogenta.schema.mjs'), 'utf8')
     expect(schema).toContain('"slug"')
     expect(schema).not.toContain('"headline"')
+    await server.stop()
+  }, 60_000)
+
+  it('refuses to apply on `cogenta serve`, because ADR-0010 keeps the schema read-only in production', async () => {
+    const root = await project()
+    // No `development: true` — this is `cogenta serve`, the production shape.
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+
+    await fetch(`${server.base}/api/site-plans/draft-1/decisions`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({
+        decisions: {
+          'brief:locales': 'accepted',
+          'brief:constraint-0': 'accepted',
+          'contentModel:dish': 'accepted',
+          'pages:contact': 'accepted',
+          'skin:clinical': 'accepted',
+          'demoContent:0': 'accepted',
+        },
+      }),
+    })
+    const response = await fetch(`${server.base}/api/site-plans/draft-1/apply`, {
+      method: 'POST',
+      headers: auth(token),
+    })
+
+    expect(response.status).toBe(403)
+    const error = (await response.json()) as { error: { code: string; hint?: string } }
+    expect(error.error.code).toBe('CONTENT_READ_ONLY')
+    expect(error.error.hint).toContain('cogenta dev')
+
+    // Reviewing is still possible, and the decisions really were kept —
+    // refusing to apply is not refusing to work.
+    const detail = (await (
+      await fetch(`${server.base}/api/site-plans/draft-1`, { headers: auth(token) })
+    ).json()) as { data: { decisions: Record<string, string> } }
+    expect(detail.data.decisions['contentModel:dish']).toBe('accepted')
+
+    // And nothing was written.
+    const schema = await readFile(join(root, 'cogenta.schema.mjs'), 'utf8')
+    expect(schema).not.toContain('"name": "dish"')
+    await server.stop()
+  }, 60_000)
+
+  it('writes the schema file the site really loads, not a guessed filename', async () => {
+    const root = await project()
+    // A project following ADR-0010: TypeScript in git, which is also the
+    // candidate `loadCollections` tries first.
+    await writeFile(
+      join(root, 'cogenta.schema.ts'),
+      `export default ${JSON.stringify(COLLECTIONS, null, 2)}
+`,
+      'utf8',
+    )
+    const server = await startServer(root, { registry: activeServers, development: true })
+    const token = await adminSession(root, server.base)
+
+    await fetch(`${server.base}/api/site-plans/draft-1/decisions`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({
+        decisions: {
+          'brief:locales': 'accepted',
+          'brief:constraint-0': 'accepted',
+          'contentModel:dish': 'accepted',
+          'pages:contact': 'rejected',
+          'skin:clinical': 'rejected',
+          'demoContent:0': 'rejected',
+        },
+      }),
+    })
+    const response = await fetch(`${server.base}/api/site-plans/draft-1/apply`, {
+      method: 'POST',
+      headers: auth(token),
+    })
+    expect(response.status).toBe(200)
+
+    // The `.ts` gained the collection…
+    expect(await readFile(join(root, 'cogenta.schema.ts'), 'utf8')).toContain('"name": "dish"')
+    // …and the `.mjs` nobody loads was left alone.
+    expect(await readFile(join(root, 'cogenta.schema.mjs'), 'utf8')).not.toContain('"name": "dish"')
+    const report = ((await response.json()) as { data: { report: { followUp: string[] } } }).data
+      .report
+    expect(report.followUp.join(' ')).toContain('cogenta.schema.ts')
     await server.stop()
   }, 60_000)
 

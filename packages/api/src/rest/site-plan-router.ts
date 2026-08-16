@@ -121,7 +121,12 @@ export interface SitePlanRouterOptions {
    * failure and never a broken screen.
    */
   readonly planner?: SitePlannerLike
-  /** Absent on a read-only instance: plans can still be proposed and reviewed, but not applied. */
+  /**
+   * Absent whenever this instance may not write the schema — a read-only
+   * deployment, or (ADR-0010) any instance that is not running in
+   * development. Plans can still be proposed and reviewed there; only the
+   * write is withheld.
+   */
   readonly applier?: SitePlanApplierLike
   readonly basePath?: string
   readonly now?: () => Date
@@ -382,7 +387,7 @@ export function createSitePlanRouter(options: SitePlanRouterOptions): SitePlanRo
             throw new CogentaError({
               code: 'CONTENT_READ_ONLY',
               message: 'This instance cannot apply a site plan.',
-              hint: 'It is running read-only. Review the plan here, and apply it from an instance that can write.',
+              hint: 'Applying one rewrites the content schema, which ADR-0010 allows in development only — run `cogenta dev` on a development copy, apply it there, and commit the schema file. The review you have done here is saved.',
             })
           }
           const stored = await options.store.get(id)

@@ -21,6 +21,7 @@ import type {
 } from '@cogenta/api'
 import { type CogentaConfig, CogentaError, type DatabaseHandle, type Logger } from '@cogenta/core'
 import { type CollectionDefinition, createContentStore, createSchemaTables } from '@cogenta/schema'
+import { findSchemaFile } from './serve.js'
 
 /**
  * L19 task 7 — the same document-driven planning the installer offers, on a
@@ -42,7 +43,6 @@ import { type CollectionDefinition, createContentStore, createSchemaTables } fro
  *   pretending the change is live.
  */
 
-const SCHEMA_FILE = 'cogenta.schema.mjs'
 const PLAN_DIRECTORY = join('.cogenta', 'site-plans')
 
 function providerClient(
@@ -90,6 +90,47 @@ export interface SitePlanApplierOptions {
   readonly collections: readonly CollectionDefinition[]
   readonly defaultLocale: string
   readonly logger: Logger
+  /**
+   * The schema file this project really loads, resolved by `findSchemaFile`.
+   *
+   * Passed in rather than guessed: `loadCollections` prefers
+   * `cogenta.schema.ts`, and writing `.mjs` on a project that has a `.ts`
+   * would create the tables and then write a file nothing reads.
+   */
+  readonly schemaPath: string
+  /** Named in the provenance of anything this writes. */
+  readonly model?: string
+}
+
+/**
+ * Refuses to rewrite a schema whose current contents would not survive the
+ * round trip.
+ *
+ * The file is regenerated with `JSON.stringify`, and contract A's
+ * `validate?: (value: unknown) => true | string` is a **function** — it
+ * would vanish from every existing field without a word. Losing a
+ * validator silently is worse than refusing to add a collection, so this
+ * refuses, and names the field so the operator can add the collection by
+ * hand instead.
+ */
+function assertSerialisableSchema(
+  collections: readonly CollectionDefinition[],
+  schemaPath: string,
+): void {
+  const lost: string[] = []
+  for (const collection of collections) {
+    for (const [name, field] of Object.entries(collection.fields)) {
+      if (typeof field.validate === 'function') lost.push(`${collection.name}.${name}.validate`)
+      if (typeof field.default === 'function') lost.push(`${collection.name}.${name}.default`)
+    }
+  }
+  if (lost.length === 0) return
+  throw new CogentaError({
+    code: 'SCHEMA_INVALID',
+    message: `${schemaPath} declares ${lost.length} value(s) that cannot be written back: ${lost.join(', ')}.`,
+    hint: 'Applying a plan regenerates the schema file, and a function does not survive that. Add the accepted collections to the file by hand — the plan lists exactly what they are.',
+    details: { schemaPath, lost },
+  })
 }
 
 /**
@@ -98,7 +139,8 @@ export interface SitePlanApplierOptions {
  * The schema file is rewritten from the live collections plus the accepted
  * new ones rather than patched: it is generated data (`create-cogenta` writes
  * the same shape), and regenerating it is the only edit that cannot leave a
- * half-applied file behind.
+ * half-applied file behind — which is also why it refuses outright when the
+ * current file holds something a regeneration would drop.
  */
 export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlanApplierLike {
   return {
@@ -107,6 +149,8 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         input.draft as SitePlanDraft,
         input.decisions,
       )
+
+      assertSerialisableSchema(options.collections, options.schemaPath)
 
       const taken = new Set(options.collections.map((collection) => collection.name))
       const added: CollectionDefinition[] = []
@@ -129,13 +173,13 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
       if (added.length > 0) {
         const all = [...options.collections, ...added]
         await writeFile(
-          join(options.projectRoot, SCHEMA_FILE),
+          options.schemaPath,
           `export default ${JSON.stringify(all, null, 2)}\n`,
           'utf8',
         )
         await createSchemaTables(options.db, added)
         followUp.push(
-          'Restart `cogenta serve`: the running process loaded its collections at start-up and does not see the new ones yet.',
+          `${options.schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), then restart: the running process loaded its collections at start-up and does not see the new ones yet.`,
         )
       }
 
@@ -155,10 +199,20 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
           const store = stores.get(entry.collection)
           if (store === undefined) continue
           // Drafts, never published: a model wrote this about somebody's
-          // business and nobody has read it yet.
+          // business and nobody has read it yet. And marked `generated`,
+          // which contract A calls non-optional because the European AI
+          // framework requires it — the default is `human`, and letting
+          // model-written content inherit it would be the one field in the
+          // contract that lies.
           await store.create({
             status: 'draft',
             createdBy: input.actorId,
+            provenance: 'generated',
+            provenanceDetail: {
+              agent: 'site-planner',
+              ...(options.model === undefined ? {} : { model: options.model }),
+              at: new Date().toISOString(),
+            },
             values: entry.values,
           })
           entriesSeeded++
@@ -206,6 +260,19 @@ export interface SitePlanningOptions {
   readonly logger: Logger
   /** A read-only instance can propose and review, never apply. */
   readonly readOnly?: boolean
+  /**
+   * `cogenta dev`. Without it, no applier is built at all.
+   *
+   * ADR-0010, verbatim: "L'éditeur visuel de schéma écrit ces fichiers, mais
+   * **uniquement en mode développement**. En production le schéma est en
+   * lecture seule." Applying a site plan writes `cogenta.schema.*` and
+   * creates tables — that *is* the schema editor, arriving by a different
+   * door, and the decision applies to it unchanged. L19's own brief asks for
+   * this to work on "un site déjà en production"; that half of the brief is
+   * refused here rather than quietly delivered, and the disagreement is
+   * written down in `BLOCKERS.md` for a human to settle with an ADR.
+   */
+  readonly development?: boolean
 }
 
 /**
@@ -215,9 +282,12 @@ export interface SitePlanningOptions {
  * the admin even on a site with no provider configured — that is the whole
  * point of the installer's deferred path. The planner is present only when a
  * provider and a key really are configured (R2), and the router says so to
- * the client rather than failing at it.
+ * the client rather than failing at it. The applier is present only in
+ * development (ADR-0010).
  */
-export function createSitePlanning(options: SitePlanningOptions): SitePlanRouterOptions {
+export async function createSitePlanning(
+  options: SitePlanningOptions,
+): Promise<SitePlanRouterOptions> {
   const store = createFileSitePlanStore(join(options.projectRoot, PLAN_DIRECTORY))
   const llm = options.config.llm
   const apiKey = llm?.apiKey
@@ -235,12 +305,20 @@ export function createSitePlanning(options: SitePlanningOptions): SitePlanRouter
     })
   }
 
+  // No applier outside development, and none when the schema file cannot be
+  // found — writing a guessed filename would create tables the site never
+  // loads.
+  const schemaPath =
+    options.development === true && options.readOnly !== true
+      ? await findSchemaFile(options.projectRoot)
+      : undefined
+
   return {
     store,
     ...(client === undefined || llm === undefined
       ? {}
       : { planner: createPlanner(client, llm.model, options.config.site.name) }),
-    ...(options.readOnly === true
+    ...(schemaPath === undefined
       ? {}
       : {
           applier: createSitePlanApplier({
@@ -249,9 +327,11 @@ export function createSitePlanning(options: SitePlanningOptions): SitePlanRouter
             collections: options.collections,
             defaultLocale: options.config.site.defaultLocale,
             logger: options.logger,
+            schemaPath,
+            ...(llm === undefined ? {} : { model: llm.model }),
           }),
         }),
   }
 }
 
-export { PLAN_DIRECTORY, SCHEMA_FILE }
+export { PLAN_DIRECTORY }

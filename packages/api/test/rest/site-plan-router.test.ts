@@ -377,7 +377,7 @@ describe('applying an approved plan', () => {
     expect(second.status).toBe(409)
   })
 
-  it('refuses to apply at all on a read-only instance, and says why', async () => {
+  it('refuses to apply at all where the schema may not be written, and says how to proceed', async () => {
     const store = memoryStore()
     await store.save(draft())
     const router = createSitePlanRouter({ store, planner: planner() })
@@ -388,7 +388,9 @@ describe('applying an approved plan', () => {
     )
 
     expect(response.status).toBe(403)
-    expect((response.body as { error: { hint?: string } }).error.hint).toContain('read-only')
+    // ADR-0010: the schema is writable in development only. The hint has
+    // to name the way out, not just the refusal.
+    expect((response.body as { error: { hint?: string } }).error.hint).toContain('cogenta dev')
   })
 
   it('passes an applier refusal straight through, rather than swallowing it', async () => {

@@ -350,6 +350,9 @@ importers:
       '@cogenta/agents':
         specifier: workspace:*
         version: link:../agents
+      '@cogenta/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

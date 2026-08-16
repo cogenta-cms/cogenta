@@ -15,6 +15,14 @@ export interface WizardAnswers {
   /** Free text (sector, mood, audience, brand colours) driving AI skin generation (L9 task 7). Empty or absent: generation is skipped, the default skin is used. */
   readonly siteDescription?: string
   readonly adminEmail: string
+  /**
+   * Specification documents to read before anything else (L19 task 6).
+   * Absent — which is the default everywhere, including `--yes` — and the
+   * installer behaves exactly as it did before L19 existed (R2).
+   */
+  readonly documentPaths?: readonly string[]
+  /** Answers to L19 task 8's per-site-type recommendations, by setting id. Unanswered ids fall back to the recommendation. */
+  readonly blueprintSettings?: Readonly<Record<string, boolean>>
 }
 
 export function defaultAnswers(targetDir: string, siteName: string): WizardAnswers {

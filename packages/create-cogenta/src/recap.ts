@@ -3,6 +3,7 @@ import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import type { ResolvedBlueprint } from './blueprints/registry.js'
 import type { EnvironmentReport } from './environment.js'
 import type { ValidateKeyResult } from './llm-setup.js'
+import type { PlanFlowOutcome } from './plan-flow.js'
 import type { ScaffoldResult } from './scaffold.js'
 import type { SkinOutcome } from './skin-flow.js'
 import type { WizardAnswers } from './types.js'
@@ -15,11 +16,14 @@ export interface RecapInput {
   readonly scaffold: ScaffoldResult
   /** Present only when generation was attempted (L9 task 7) — absent means it was never offered (no LLM, no description). */
   readonly skinOutcome?: SkinOutcome
+  /** Present only when a specification document was read (L19). Absent means the step was never entered. */
+  readonly plan?: PlanFlowOutcome
 }
 
 /** Step 10: "ce qui est actif, ce qui est dégradé et pourquoi, prochaine étape." Every degraded item names why, never just that it is degraded. */
 export function printRecap(input: RecapInput, out: Output): void {
-  const { answers, environment, resolvedBlueprint, keyValidation, scaffold, skinOutcome } = input
+  const { answers, environment, resolvedBlueprint, keyValidation, scaffold, skinOutcome, plan } =
+    input
 
   out.heading('Your site')
   out.ok(`${answers.siteName} — ${answers.siteUrl}`)
@@ -78,6 +82,35 @@ export function printRecap(input: RecapInput, out: Output): void {
     out.detail(
       'Not enabled — no site runs a live agent scheduler yet. Recorded in .cogenta/recommended-agents.json for when one exists.',
     )
+  }
+
+  if (plan !== undefined) {
+    out.heading('Your document')
+    if (plan.kind === 'failed') {
+      out.bad(`No plan could be produced (${plan.stage}): ${plan.reason}`)
+      out.detail(
+        'The site was created from your answers alone. Nothing was applied from the document.',
+      )
+    } else if (plan.kind === 'deferred') {
+      out.warn('A plan was proposed but nobody reviewed it, so nothing from it was applied.')
+      if (scaffold.sitePlanPath !== undefined) out.detail(`Saved at ${scaffold.sitePlanPath}`)
+      out.detail(
+        'Open the admin and review it there — it applies only once you accept it, item by item.',
+      )
+    } else {
+      out.ok(
+        `${scaffold.approvedCollectionNames.length} collection(s) you approved were added${scaffold.approvedCollectionNames.length === 0 ? '' : `: ${scaffold.approvedCollectionNames.join(', ')}`}.`,
+      )
+      if (scaffold.approvedEntriesSeeded > 0) {
+        out.detail(
+          `${scaffold.approvedEntriesSeeded} demonstration entr${scaffold.approvedEntriesSeeded === 1 ? 'y was' : 'ies were'} created as drafts, never published — read them before you publish them.`,
+        )
+      }
+      if (plan.approved.rejected.length > 0) {
+        out.detail(`You refused: ${plan.approved.rejected.join(', ')}.`)
+      }
+      for (const violation of plan.draft.violations) out.detail(violation.explanation)
+    }
   }
 
   out.heading('Admin account')

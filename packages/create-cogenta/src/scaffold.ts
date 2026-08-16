@@ -2,11 +2,22 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  createFileSitePlanStore,
+  type DemoEntry,
+  type PlanDecisions,
+  type SitePlanDraft,
+} from '@cogenta/agents'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createOutput, runMigrate, runUsers } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
-import { type CollectionDefinition, createSchemaTables } from '@cogenta/schema'
+import {
+  type CollectionDefinition,
+  createContentStore,
+  createSchemaTables,
+  validateCollectionSet,
+} from '@cogenta/schema'
 import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 
@@ -23,6 +34,29 @@ export interface ScaffoldAnswers {
   readonly blueprintId?: string
   /** Already generated and validated by `chooseSkin` (L9 task 7). Absent: the theme's default `tokens.json` is copied, exactly as before this option existed. */
   readonly skinTokens?: SkinTokens
+  /** Every locale the site is set up with. Defaults to `[defaultLocale]` — the behaviour before L19. */
+  readonly locales?: readonly string[]
+  /** L19 task 8's confirmed per-site-type defaults. Absent: `@cogenta/core`'s own defaults apply, unchanged. */
+  readonly security?: { readonly pageMaxAge: number; readonly hstsMaxAge: number }
+  /** `false` skips the blueprint's demo content. Defaults to `true` — the behaviour before L19. */
+  readonly seedDemoContent?: boolean
+  /**
+   * Collections a human approved item by item from a document-driven plan
+   * (L19). Written into `cogenta.schema.mjs` alongside the blueprint's own,
+   * and their tables created. Never the whole proposal — only what
+   * `resolveApprovedPlan` returned.
+   */
+  readonly approvedCollections?: readonly CollectionDefinition[]
+  /** Demonstration entries approved one at a time, seeded into `approvedCollections`. */
+  readonly approvedDemoContent?: readonly DemoEntry[]
+  /**
+   * A proposal to keep on disk for later review. Written to
+   * `.cogenta/site-plans/`, never applied by this function — this is how a
+   * non-interactive run leaves a plan waiting for a human rather than
+   * publishing one behind their back (L19, "jamais une publication
+   * automatique").
+   */
+  readonly sitePlan?: { readonly draft: SitePlanDraft; readonly decisions?: PlanDecisions }
 }
 
 export interface ScaffoldResult {
@@ -38,6 +72,12 @@ export interface ScaffoldResult {
   readonly schemaPath: string
   /** Present only when a blueprint wrote `theme.tokens.json` — says whether the AI-generated skin was used or the theme's default was copied. */
   readonly skinSource?: 'generated' | 'default'
+  /** Names of the collections that came from an approved document-driven plan, in the order written. */
+  readonly approvedCollectionNames: readonly string[]
+  /** How many approved demonstration entries were actually seeded. */
+  readonly approvedEntriesSeeded: number
+  /** Where an unreviewed proposal was left waiting, when one was. */
+  readonly sitePlanPath?: string
 }
 
 function capture(): { readonly write: (text: string) => void; text(): string } {
@@ -66,11 +106,21 @@ function configFileContents(answers: ScaffoldAnswers): string {
       ? ''
       : `  llm: { provider: ${JSON.stringify(answers.llm.provider)}, model: ${JSON.stringify(answers.llm.model)} },\n`
 
+  // Written only when the human confirmed L19 task 8's per-site-type
+  // recommendations. Absent, `@cogenta/core`'s own defaults apply, and a
+  // config file generated before L19 is unchanged byte for byte.
+  const securityBlock =
+    answers.security === undefined
+      ? ''
+      : `  security: { pageMaxAge: ${answers.security.pageMaxAge}, hstsMaxAge: ${answers.security.hstsMaxAge} },\n`
+
+  const locales = answers.locales ?? [answers.defaultLocale]
+
   return `export default {
   site: {
     name: ${JSON.stringify(answers.siteName)},
     url: ${JSON.stringify(answers.siteUrl)},
-    locales: [${JSON.stringify(answers.defaultLocale)}],
+    locales: ${JSON.stringify(locales)},
     defaultLocale: ${JSON.stringify(answers.defaultLocale)},
   },
   database: {
@@ -79,8 +129,33 @@ function configFileContents(answers: ScaffoldAnswers): string {
   },
   cache: { path: ${JSON.stringify(join(answers.targetDir, '.cogenta', 'cache'))} },
   storage: { path: ${JSON.stringify(join(answers.targetDir, '.cogenta', 'media'))} },
-${llmBlock}}
+${llmBlock}${securityBlock}}
 `
+}
+
+/**
+ * The blueprint's collections plus whatever a human approved from a
+ * document-driven plan, with a name collision resolved in the blueprint's
+ * favour.
+ *
+ * That direction is deliberate: the blueprint's `page` collection is seeded
+ * with real demo pages by `seedDemoContent`, and replacing its definition
+ * with a proposed one of the same name would leave those rows referring to
+ * fields that no longer exist. The dropped proposal is reported, not
+ * silently discarded.
+ */
+function mergeCollections(
+  fromBlueprint: readonly CollectionDefinition[],
+  approved: readonly CollectionDefinition[],
+): {
+  readonly all: readonly CollectionDefinition[]
+  readonly added: readonly CollectionDefinition[]
+} {
+  const taken = new Set(fromBlueprint.map((collection) => collection.name))
+  const added = approved.filter((collection) => !taken.has(collection.name))
+  const all = [...fromBlueprint, ...added]
+  if (added.length > 0) validateCollectionSet(all)
+  return { all, added }
 }
 
 function schemaFileContents(collections: readonly CollectionDefinition[]): string {
@@ -176,21 +251,42 @@ export async function scaffoldSite(
   // unconditionally is what makes "npm create cogenta" with every default
   // answer produce a site `cogenta serve` can actually start.
   const schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
-  await writeFile(schemaPath, schemaFileContents(pack?.collections ?? []), 'utf8')
+  const merged = mergeCollections(pack?.collections ?? [], answers.approvedCollections ?? [])
+  await writeFile(schemaPath, schemaFileContents(merged.all), 'utf8')
   let skinSource: 'generated' | 'default' | undefined
 
-  if (pack !== undefined) {
+  // A plan the human approved brings its own skin, whatever blueprint was
+  // picked — including `blank`, which has no content pack and therefore
+  // never wrote a `theme.tokens.json` before.
+  const writesTheme = pack !== undefined || answers.approvedCollections !== undefined
+
+  if (writesTheme) {
     skinSource = answers.skinTokens === undefined ? 'default' : 'generated'
     const tokensJson =
       answers.skinTokens === undefined
         ? await canonicalTokensJson()
         : `${JSON.stringify(answers.skinTokens, null, 2)}\n`
     await writeFile(join(answers.targetDir, 'theme.tokens.json'), tokensJson, 'utf8')
-    await writeFile(
-      join(answers.targetDir, '.cogenta', 'recommended-agents.json'),
-      `${JSON.stringify(pack.recommendedAgents, null, 2)}\n`,
-      'utf8',
-    )
+    if (pack !== undefined) {
+      await writeFile(
+        join(answers.targetDir, '.cogenta', 'recommended-agents.json'),
+        `${JSON.stringify(pack.recommendedAgents, null, 2)}\n`,
+        'utf8',
+      )
+    }
+  }
+
+  // A proposal nobody reviewed is written down, never acted on. This is the
+  // only thing a non-interactive run does with a document-driven plan.
+  let sitePlanPath: string | undefined
+  if (answers.sitePlan !== undefined) {
+    const directory = join(answers.targetDir, '.cogenta', 'site-plans')
+    const store = createFileSitePlanStore(directory)
+    await store.save(answers.sitePlan.draft)
+    if (answers.sitePlan.decisions !== undefined) {
+      await store.recordDecisions(answers.sitePlan.draft.id, answers.sitePlan.decisions)
+    }
+    sitePlanPath = join(directory, `${answers.sitePlan.draft.id}.plan.json`)
   }
 
   const migrateCapture = capture()
@@ -215,17 +311,28 @@ export async function scaffoldSite(
     stderr: usersStderr.write,
   })
 
-  if (pack !== undefined && migrateExitCode === 0 && usersExitCode === 0) {
+  let approvedEntriesSeeded = 0
+  const needsDatabaseWork = merged.all.length > 0
+  if (needsDatabaseWork && migrateExitCode === 0 && usersExitCode === 0) {
     const logger = createLogger({ level: 'silent' })
     const selection = await createDatabaseRegistry({ logger }).select({
       driver: answers.databaseDriver,
       url: databaseUrlFor(answers),
     })
     try {
-      await createSchemaTables(selection.instance, pack.collections)
+      await createSchemaTables(selection.instance, merged.all)
       await ensureAuthTables(selection.instance)
       const admin = await createUserStore(selection.instance).byEmail(answers.adminEmail)
-      await pack.seedDemoContent(selection.instance, answers.defaultLocale, admin?.id ?? null)
+      if (pack !== undefined && (answers.seedDemoContent ?? true)) {
+        await pack.seedDemoContent(selection.instance, answers.defaultLocale, admin?.id ?? null)
+      }
+      approvedEntriesSeeded = await seedApprovedEntries({
+        db: selection.instance,
+        collections: merged.added,
+        entries: answers.approvedDemoContent ?? [],
+        defaultLocale: answers.defaultLocale,
+        adminId: admin?.id ?? null,
+      })
     } finally {
       await selection.dispose()
     }
@@ -241,5 +348,50 @@ export async function scaffoldSite(
     fellBackToBlank,
     schemaPath,
     ...(skinSource === undefined ? {} : { skinSource }),
+    approvedCollectionNames: merged.added.map((collection) => collection.name),
+    approvedEntriesSeeded,
+    ...(sitePlanPath === undefined ? {} : { sitePlanPath }),
   }
+}
+
+/**
+ * Seeds the demonstration entries a human approved, one at a time, through
+ * the real `ContentStore` — the same path the blueprints' own seeders take.
+ *
+ * Entries are created as drafts, not published. A blueprint's demo content
+ * is written by this repository and vouched for; this is written by a model
+ * about somebody's business, and putting it live on a public site before its
+ * owner has read it is precisely the automatic application R6 forbids.
+ */
+async function seedApprovedEntries(input: {
+  readonly db: Parameters<typeof createSchemaTables>[0]
+  readonly collections: readonly CollectionDefinition[]
+  readonly entries: readonly DemoEntry[]
+  readonly defaultLocale: string
+  readonly adminId: string | null
+}): Promise<number> {
+  if (input.entries.length === 0) return 0
+  const stores = new Map(
+    input.collections.map((collection) => [
+      collection.name,
+      createContentStore({
+        db: input.db,
+        collection,
+        defaultLocale: input.defaultLocale,
+      }),
+    ]),
+  )
+
+  let seeded = 0
+  for (const entry of input.entries) {
+    const store = stores.get(entry.collection)
+    if (store === undefined) continue
+    await store.create({
+      status: 'draft',
+      createdBy: input.adminId,
+      values: entry.values,
+    })
+    seeded++
+  }
+  return seeded
 }

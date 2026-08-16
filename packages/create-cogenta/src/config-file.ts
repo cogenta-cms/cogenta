@@ -101,5 +101,27 @@ export async function loadConfigFile(path: string, targetDir: string): Promise<W
     ...(optionalString(root.adminEmail, 'adminEmail') === undefined
       ? {}
       : { adminEmail: optionalString(root.adminEmail, 'adminEmail') as string }),
+    ...(documentPaths(root.documents).length === 0
+      ? {}
+      : { documentPaths: documentPaths(root.documents) }),
   }
+}
+
+/**
+ * `"documents": ["brief.pdf"]` — L19's document step in a non-interactive
+ * install.
+ *
+ * What it does here is deliberately less than what it does interactively:
+ * the plan is proposed and **saved as a draft**, never applied. A config
+ * file cannot consent on a human's behalf, and the lot says so directly —
+ * "soit l'étape de document est simplement absente du flux non interactif,
+ * soit elle produit un brouillon qui attend d'être validé au premier
+ * lancement de l'admin, jamais une publication automatique."
+ */
+function documentPaths(value: unknown): readonly string[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    throw new ConfigFileError('"documents" must be an array of file paths.')
+  }
+  return value.map((entry, index) => requireString(entry, `documents[${index}]`))
 }

@@ -20,6 +20,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/menus', labelKey: 'nav.menus' },
   { to: '/commerce/products', labelKey: 'nav.commerceProducts' },
   { to: '/commerce/orders', labelKey: 'nav.commerceOrders' },
+  { to: '/redirects', labelKey: 'nav.redirects' },
   { to: '/trash', labelKey: 'nav.trash' },
   { to: '/media', labelKey: 'nav.media' },
   { to: '/audit', labelKey: 'nav.audit' },
@@ -29,4 +30,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/api-keys', labelKey: 'nav.apiKeys' },
   { to: '/profile', labelKey: 'nav.profile' },
   { to: '/settings', labelKey: 'nav.settings' },
+  { to: '/ops-settings', labelKey: 'nav.opsSettings' },
 ]

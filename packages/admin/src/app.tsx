@@ -17,7 +17,9 @@ import { ForgotPasswordRoute } from './routes/forgot-password.js'
 import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
+import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
+import { RedirectsRoute } from './routes/redirects.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
@@ -72,6 +74,8 @@ export function App(): JSX.Element {
               <Route path="commerce/products" element={<CommerceProductsRoute />} />
               <Route path="commerce/orders" element={<CommerceOrdersRoute />} />
               <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
+              <Route path="redirects" element={<RedirectsRoute />} />
+              <Route path="ops-settings" element={<OpsSettingsRoute />} />
               <Route path="trash" element={<TrashRoute />} />
               <Route path="media" element={<MediaRoute />} />
               <Route path="audit" element={<AuditRoute />} />

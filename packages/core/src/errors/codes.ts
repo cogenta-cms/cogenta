@@ -36,6 +36,10 @@ export const ERROR_CODES = [
   'CONTENT_SLUG_TAKEN',
   'CONTENT_ROUTE_INVALID',
   'CONTENT_REDIRECT_LOOP',
+  // The admin's redirect screen (audit follow-up to L10 task 2: the store and
+  // its wiring into every public GET existed, but nothing ever let an editor
+  // create or remove a row from a browser).
+  'REDIRECT_UNKNOWN',
   'CONTENT_SCHEDULE_INVALID',
   'CONTENT_READ_ONLY',
   // Trash (`schema@2.0`, ADR-0022). `restrict` is no longer enforced only by

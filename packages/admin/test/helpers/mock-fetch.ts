@@ -141,6 +141,12 @@ export function installMockFetch(
       dismissible: boolean
       action?: { code: string; href: string }
     }[]
+    /** What `GET /api/webhooks-status` answers with — no endpoint configured by default. */
+    readonly webhooksStatus?: {
+      endpoints: readonly string[]
+      signed: boolean
+      disabledForMissingSecret: boolean
+    }
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -415,6 +421,20 @@ export function installMockFetch(
     position: number
     depth: number
     openInNewTab: boolean
+  }[] = []
+
+  // The redirect table, admin-only on every method — see `redirects.tsx`.
+  let redirectCounter = 0
+  let redirects: {
+    id: string
+    from: string
+    to: string
+    status: 301 | 302
+    collection: null
+    entryId: null
+    locale: null
+    reason: 'manual'
+    createdAt: number
   }[] = []
 
   let mediaCounter = 0
@@ -1818,6 +1838,101 @@ export function installMockFetch(
         }
 
         return json(405, { error: { code: 'INTERNAL', message: 'No such route.' } })
+      }
+
+      // `/api/redirects` — admin-only on every method, like the real router.
+      if (url.includes('/api/redirects')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Access denied: redirects are admin-only.' },
+          })
+        }
+
+        if (method === 'GET') {
+          return json(200, { data: redirects })
+        }
+
+        if (method === 'POST') {
+          if (typeof body.from !== 'string' || typeof body.to !== 'string') {
+            return json(400, {
+              error: {
+                code: 'CONTENT_ROUTE_INVALID',
+                message: 'A redirect needs "from" and "to".',
+              },
+            })
+          }
+          if (body.from === body.to) {
+            return json(409, {
+              error: {
+                code: 'CONTENT_REDIRECT_LOOP',
+                message: 'A path cannot redirect to itself.',
+              },
+            })
+          }
+          redirectCounter += 1
+          const created = {
+            id: `redirect-${redirectCounter}`,
+            from: body.from,
+            to: body.to,
+            status: (body.status === 302 ? 302 : 301) as 301 | 302,
+            collection: null,
+            entryId: null,
+            locale: null,
+            reason: 'manual' as const,
+            createdAt: Date.parse('2026-03-01T00:00:00.000Z'),
+          }
+          redirects.push(created)
+          return json(201, { data: created })
+        }
+
+        if (method === 'DELETE') {
+          const parsed = new URL(url, 'http://localhost')
+          const from = parsed.searchParams.get('from')
+          const before = redirects.length
+          redirects = redirects.filter((redirect) => redirect.from !== from)
+          if (redirects.length === before) {
+            return json(404, {
+              error: { code: 'REDIRECT_UNKNOWN', message: `No redirect leaves "${from}".` },
+            })
+          }
+          return new Response(null, { status: 204 })
+        }
+      }
+
+      // `GET /api/security-status` and `GET /api/webhooks-status` — read-only
+      // mirrors of the config file, admin-only.
+      if (url.endsWith('/api/security-status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, {
+          data: {
+            cors: {
+              enabled: false,
+              origins: [],
+              methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+              headers: ['content-type', 'authorization'],
+              credentials: false,
+              maxAge: 600,
+            },
+            csp: null,
+            hsts: { enabled: false, maxAge: 0, includeSubDomains: false },
+            pageMaxAge: 60,
+          },
+        })
+      }
+
+      if (url.endsWith('/api/webhooks-status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, {
+          data: options.webhooksStatus ?? {
+            endpoints: [],
+            signed: false,
+            disabledForMissingSecret: false,
+          },
+        })
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

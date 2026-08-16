@@ -55,6 +55,12 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   CONTENT_SLUG_INVALID: 400,
   CONTENT_SLUG_TAKEN: 409,
   CONTENT_SCHEDULE_INVALID: 400,
+  // Redirects (admin screen over `RedirectStore`). A loop or a self-redirect
+  // is a conflict with the table's own rows, not a malformed request; an
+  // unknown "from" is a plain 404.
+  CONTENT_ROUTE_INVALID: 400,
+  CONTENT_REDIRECT_LOOP: 409,
+  REDIRECT_UNKNOWN: 404,
   // Not FORBIDDEN (403 for "you may never do this"): a read-only instance
   // refuses a write an actor is otherwise permitted to make — 403 is still
   // the closest real status (the request is understood, authenticated where

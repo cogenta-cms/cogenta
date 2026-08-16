@@ -825,7 +825,7 @@ export function installMockFetch(
       const taxonomyMatch =
         /\/api\/taxonomies\/([^/?]+)(?:\/([^/?]+))?(?:\/(move))?(?:\?.*)?$/u.exec(url)
       if (taxonomyMatch !== null) {
-        const [, taxonomy, id] = taxonomyMatch
+        const [, taxonomy = '', id] = taxonomyMatch
         const declared = MOCK_SCHEMA.taxonomies.find((entry) => entry.name === taxonomy)
         if (declared === undefined) {
           return json(404, {

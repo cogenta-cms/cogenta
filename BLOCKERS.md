@@ -50,10 +50,10 @@ la valeur de `rowsAffected`, et MySQL a historiquement sa propre définition de
 
 ## 2. Ce qui n'est **pas** un blocage, et pourquoi
 
-- **Taxonomies et corbeille** : non codées, délibérément. Elles dépendent de
-  l'ADR proposée dans `ADR-DRAFT-contrat-A-v2.md`, qui n'est pas actée — le
-  contrat A reste figé en `schema@1.0`. Rien à débloquer côté code tant qu'un
-  humain n'a pas tranché.
+- ~~**Taxonomies et corbeille** : non codées, délibérément.~~ **Levé** :
+  ADR-0022 est actée, le contrat A est figé en `schema@2.0`, et les deux
+  fonctionnalités sont implémentées (voir la section « Corbeille et taxonomies »
+  plus bas pour ce qui reste réellement non vérifié).
 - **Absence de transport SMTP réel** : `cogenta users reset-password` écrit un
   vrai message dans `.cogenta/mail` via le transport fichier de
   `@cogenta/channels`, et le dit explicitement dans sa sortie. C'est un manque
@@ -63,6 +63,91 @@ la valeur de `rowsAffected`, et MySQL a historiquement sa propre définition de
   explicitement « CLI d'abord, puis admin une fois L11 avancé ». Le message
   envoyé porte donc le jeton et la commande exacte, jamais un lien qui
   renverrait un 404 aujourd'hui.
+
+---
+
+# Blocages — Corbeille et taxonomies (`schema@2.0`, ADR-0022)
+
+Un seul blocage réel, et c'est le même que le point 1 ci-dessus : **aucun test
+d'intégration n'a pu être exécuté sur Postgres, MySQL ou MariaDB depuis cette
+machine.** Le reste de cette section dit exactement ce qui a tourné et ce qui
+n'a pas tourné, pour que personne n'ait à le deviner.
+
+## Ce qui a réellement tourné
+
+**SQLite uniquement**, mais sur toute la surface :
+
+| Suite | Résultat |
+|---|---|
+| `packages/schema` (dont les nouvelles suites de contrat corbeille, taxonomies et migration) | 435/435 |
+| `packages/api` (dont `trash-router` et `taxonomy-router`, permissions par rôle) | 403/403 |
+| `packages/admin` (dont `trash` et `taxonomies`) | 191/191 |
+| `packages/cli` (dont le test de bout en bout sur un vrai serveur HTTP) | 140/140 |
+
+## Ce qui n'a **pas** tourné, et pourquoi
+
+Le moteur Docker de cette machine répond `500 Internal Server Error` à tout
+appel d'API, donc `pnpm services:up` échoue avant de démarrer un conteneur.
+
+```
+request returned 500 Internal Server Error for API route and version
+http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.52/info
+```
+
+Les trois dialectes manquants sont donc **écrits mais non exécutés**. Deux
+nouveaux fichiers d'intégration les attendent, et sautent bruyamment (un
+`describe.skip` nommant la variable d'environnement absente) plutôt que de
+passer au vert sans rien faire :
+
+- `packages/schema/test/integration/taxonomy-store.test.ts`
+- `packages/schema/test/integration/schema-2-migration.test.ts`
+
+Les tests eux-mêmes vivent dans les suites de contrat uniques
+(`test/store/taxonomy-store.contract.ts`, `test/store/schema-2-migration.contract.ts`,
+et les nouveaux cas ajoutés à `content-store.contract.ts`), donc rien n'est à
+écrire pour lever ce blocage : il suffit de le rejouer là où Docker marche.
+
+```bash
+pnpm services:up
+pnpm -F @cogenta/schema test:integration
+```
+
+**Les deux points les plus sensibles à vérifier là-bas**, parce que ce sont
+ceux où les dialectes divergent réellement :
+
+1. **Le chemin matérialisé.** Toute sa justification (ADR-0022, ADR-0006) est
+   qu'un `like` sur un chemin se comporte identiquement sur les trois moteurs
+   là où un CTE récursif ne le fait pas. Tant que
+   `taxonomy-store.test.ts` n'a pas tourné sur les trois, c'est une intention
+   de conception, pas un fait vérifié. À surveiller en particulier : la
+   collation par défaut de MySQL est insensible à la casse, ce qui ne change
+   rien pour des UUID minuscules mais rendrait un `like` sur des slugs
+   trompeur si quelqu'un changeait la composition du chemin.
+2. **La migration.** MySQL committe le DDL implicitement : une migration qui
+   échoue à mi-parcours y laisse le schéma entre deux états sans rollback. Le
+   migrateur le dit fort plutôt que de faire semblant, mais savoir si *cette*
+   migration passe en un seul coup sur un vrai MySQL est un fait que seul un
+   vrai MySQL établit. Le `down` est aussi le cas où SQLite est le plus
+   contraignant (`drop column` refuse une colonne couverte par un index, d'où
+   l'ordre de suppression) — et celui-là, au moins, a bien tourné.
+
+## Ce qui n'est **pas** un blocage, et pourquoi
+
+- **`siblings` est optionnel sur `createContentStore`.** Sans lui, seules les
+  auto-références sont vérifiées au moment de la mise à la corbeille. Ce n'est
+  pas un trou silencieux laissé ouvert par facilité : le rendre obligatoire
+  cassait une quarantaine d'appelants dont la plupart n'ont aucune relation
+  `restrict`, et la dégradation est bornée — rien n'est détruit, puisque
+  `purge()` rencontre toujours la vraie clé étrangère. `cogenta serve` passe
+  l'ensemble complet.
+- **L'isolation par site n'a pas de nouveau test.** Les taxonomies vivent dans
+  la base du site, comme le contenu ; il n'y a pas de nouvelle frontière
+  inter-sites à prouver.
+- **Pas de test e2e Playwright sur les deux écrans d'admin.** Ils sont testés
+  au niveau composant contre un stub HTTP qui applique les mêmes règles de
+  rôle que le vrai serveur, et le chemin serveur est prouvé de bout en bout
+  par `packages/cli/test/serve-taxonomies-trash.test.ts` contre un vrai
+  serveur. L11 reprendra ces écrans pour de bon.
 
 ---
 

@@ -87,6 +87,10 @@ export function makeEntry(overrides: EntryOverrides = {}): ContentEntry {
     createdBy: null,
     updatedBy: null,
     status,
+    // `schema@2.0`: never in the trash here. A trashed entry has no business
+    // in a sitemap or a canonical tag at all — the store filters it out long
+    // before SEO sees it (ADR-0022).
+    deletedAt: null,
     locale: overrides.locale ?? 'en',
     translationOf: overrides.translationOf ?? null,
     version: 1,

@@ -22,7 +22,9 @@ import {
   createMfaRecommendationSource,
   createNoticeDismissalStore,
   createNoticeRouter,
+  createOpsStatusRouter,
   createPermissionLayer,
+  createRedirectRouter,
   createRestRouter,
   createSearchRouter,
   createSitePlanRouter,
@@ -34,7 +36,9 @@ import {
   type MediaImageProcessor,
   type MediaRouter,
   type NoticeRouter,
+  type OpsStatusRouter,
   type PermissionLayer,
+  type RedirectRouter,
   type RestRequest,
   type RestResponse,
   type RestRouter,
@@ -48,6 +52,7 @@ import {
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import {
+  type CogentaConfig,
   CogentaError,
   createDatabaseMediaStore,
   createDatabaseRegistry,
@@ -270,6 +275,10 @@ interface Site {
   readonly searchRouter: SearchRouter
   /** `/api/taxonomies/*` — terms, mounted apart from content because a taxonomy is not a collection (`schema@2.0`, ADR-0022). */
   readonly taxonomyRouter: TaxonomyRouter
+  /** `/api/redirects` — admin-only management of the redirect table `cogenta serve` already applies to every public GET (audit follow-up to L10 task 2). */
+  readonly redirectRouter: RedirectRouter
+  /** `GET /api/security-status` and `GET /api/webhooks-status` — read-only mirrors of the site's configuration file, admin-only (audit follow-up to L10 task 6 / L14 task 1). */
+  readonly opsStatusRouter: OpsStatusRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
@@ -396,6 +405,13 @@ interface AssembleSiteOptions {
   readonly images?: MediaImageProcessor | null
   /** CORS, security headers and cache-control. */
   readonly security: SecurityConfig
+  /**
+   * The site's outbound webhook configuration, read-only mirrored at
+   * `GET /api/webhooks-status` (audit follow-up to L14 task 1). Distinct from
+   * `onContentEvent` below: this is the *configuration*, that is the sender
+   * built from it.
+   */
+  readonly webhooks: CogentaConfig['webhooks']
   /**
    * Publishes a content lifecycle event to the site's configured outbound
    * webhooks (L14 task 1). Absent — the default — means the site sends none.
@@ -549,6 +565,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       taxonomies,
       permissions,
       storeFor: (taxonomy) => taxonomyStoreFor(taxonomy),
+    }),
+    redirectRouter: createRedirectRouter({ store: redirects }),
+    opsStatusRouter: createOpsStatusRouter({
+      security: options.security,
+      webhooks: options.webhooks,
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -1230,6 +1251,25 @@ export function createRequestListener(
         return
       }
 
+      // The admin screen the redirect table never had: creating and removing
+      // a rule from a browser instead of the database directly (audit
+      // follow-up to L10 task 2). Admin-only, checked by the router itself.
+      if (url.pathname === '/api/redirects') {
+        const body = req.method === 'POST' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.redirectRouter.handle(request, context))
+        return
+      }
+
+      // Read-only mirrors of `security`/`webhooks` from the config file (audit
+      // follow-up to L10 task 6 / L14 task 1) — see `ops-status-router.ts` for
+      // why editing them here would be the wrong architecture.
+      if (url.pathname === '/api/security-status' || url.pathname === '/api/webhooks-status') {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.opsStatusRouter.handle(request, context))
+        return
+      }
+
       // The full-text index, reachable at last (L10 task 3). Its own router
       // decides which collections this actor may search — never this layer.
       if (url.pathname === '/api/search') {
@@ -1665,6 +1705,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
+    webhooks: loaded.config.webhooks,
     sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,

@@ -21,6 +21,7 @@ export const SYSTEM_FIELD_NAMES = [
   'createdBy',
   'updatedBy',
   'status',
+  'deletedAt',
   'locale',
   'translationOf',
   'version',
@@ -51,6 +52,8 @@ export const systemFieldsSchema = z.object({
   createdBy: z.string().min(1).nullable(),
   updatedBy: z.string().min(1).nullable(),
   status: z.enum(CONTENT_STATUSES),
+  /** Contract A § "Champs système" (`schema@2.0`): orthogonal to `status`. */
+  deletedAt: z.iso.datetime({ offset: true }).nullable(),
   /** Contract A § i18n: one entry per locale (ADR-0014). */
   locale: z.string().min(1),
   /** The source entry of a translation family, or `null` on the source itself. */
@@ -77,6 +80,7 @@ export const SYSTEM_FIELD_DESCRIPTORS: readonly SystemFieldDescriptor[] = [
   { name: 'createdBy', type: 'id', nullable: true, readOnly: true },
   { name: 'updatedBy', type: 'id', nullable: true, readOnly: true },
   { name: 'status', type: 'enum', nullable: false, readOnly: true, values: CONTENT_STATUSES },
+  { name: 'deletedAt', type: 'datetime', nullable: true, readOnly: true },
   { name: 'locale', type: 'string', nullable: false, readOnly: true },
   { name: 'translationOf', type: 'id', nullable: true, readOnly: true },
   { name: 'version', type: 'number', nullable: false, readOnly: true },

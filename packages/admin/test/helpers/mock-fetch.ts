@@ -10,11 +10,21 @@ export const USER: MockUser = { id: 'user-1', email: 'alice@example.com', roles:
 export const VALID_TOKEN = 'valid-test-token'
 
 export const MOCK_SCHEMA = {
-  contract: 'schema@1.0',
+  contract: 'schema@2.0',
+  taxonomies: [
+    {
+      name: 'topic',
+      labels: { singular: { fr: 'Sujet', en: 'Topic' } },
+      hierarchical: true,
+      // `delete` is admin-only on purpose: it is what the role tests turn on.
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    },
+  ],
   collections: [
     {
       name: 'article',
       labels: { singular: 'Article', plural: 'Articles' },
+      trash: { retainDays: 30 },
       permissions: {
         read: ['public'],
         create: ['editor'],
@@ -42,6 +52,22 @@ export const MOCK_SCHEMA = {
   ],
 }
 
+/** One entry sitting in the trash, for the screen that exists to show it. */
+export const MOCK_TRASHED_ENTRY = {
+  id: 'entry-trashed',
+  status: 'published',
+  // Orthogonal to `status` (ADR-0022): it was published when it was thrown
+  // away, and restoring it must give that back.
+  deletedAt: '2026-03-01T00:00:00.000Z',
+  version: 3,
+  createdAt: '2026-01-03T00:00:00.000Z',
+  updatedAt: '2026-03-01T00:00:00.000Z',
+  locale: 'en',
+  translationOf: null,
+  values: { title: 'Thrown away' },
+  blocks: {},
+}
+
 export const MOCK_ENTRIES = [
   {
     id: 'entry-1',
@@ -51,6 +77,7 @@ export const MOCK_ENTRIES = [
     updatedAt: '2026-02-01T00:00:00.000Z',
     locale: 'en',
     translationOf: null,
+    deletedAt: null,
     values: { title: 'First article' },
     blocks: {},
   },
@@ -62,6 +89,7 @@ export const MOCK_ENTRIES = [
     updatedAt: '2026-01-02T00:00:00.000Z',
     locale: 'en',
     translationOf: null,
+    deletedAt: null,
     values: { title: 'Second article' },
     blocks: {},
   },
@@ -199,6 +227,35 @@ export function installMockFetch(
     ],
     'user-2': [{ id: 'session-3', lastSeenAt: '2026-03-03T00:00:00.000Z', label: 'Phone' }],
   }
+
+  // Taxonomy terms and the trash live per `installMockFetch()` call, like
+  // the media library above: each test starts from the same fixture and
+  // changes it through the same routes the real server exposes.
+  let termCounter = 0
+  let terms: {
+    id: string
+    taxonomy: string
+    parent: string | null
+    slug: string
+    labels: Readonly<Record<string, string>>
+    position: number
+    depth: number
+    createdAt: string
+    updatedAt: string
+  }[] = [
+    {
+      id: 'term-existing',
+      taxonomy: 'topic',
+      parent: null,
+      slug: 'cuisine',
+      labels: { fr: 'Cuisine', en: 'Cooking' },
+      position: 0,
+      depth: 0,
+      createdAt: '2026-02-01T00:00:00.000Z',
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    },
+  ]
+  let trash = [MOCK_TRASHED_ENTRY]
 
   let mediaCounter = 0
   const media: {
@@ -883,12 +940,105 @@ export function installMockFetch(
         }
       }
 
+      /**
+       * The taxonomy transport (`schema@2.0`, ADR-0022), refusing by the same
+       * rules the real router applies — the point of these role tests is
+       * worthless if the stub says yes to everyone.
+       */
+      const taxonomyMatch =
+        /\/api\/taxonomies\/([^/?]+)(?:\/([^/?]+))?(?:\/(move))?(?:\?.*)?$/u.exec(url)
+      if (taxonomyMatch !== null) {
+        const [, taxonomy = '', id] = taxonomyMatch
+        const declared = MOCK_SCHEMA.taxonomies.find((entry) => entry.name === taxonomy)
+        if (declared === undefined) {
+          return json(404, {
+            error: { code: 'TAXONOMY_UNKNOWN', message: 'No such taxonomy.' },
+          })
+        }
+
+        const action =
+          method === 'GET'
+            ? 'read'
+            : method === 'POST'
+              ? 'create'
+              : method === 'DELETE'
+                ? 'delete'
+                : 'update'
+        const allowed: readonly string[] =
+          (declared.permissions as Record<string, readonly string[]>)[action] ?? []
+        const held = [...user.roles, 'public']
+        if (!allowed.some((role) => held.includes(role))) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: `Access denied: ${action} on ${taxonomy}.` },
+          })
+        }
+
+        if (id === undefined && method === 'GET') {
+          return json(200, { data: terms })
+        }
+
+        if (id === undefined && method === 'POST') {
+          if (terms.some((term) => term.slug === body.slug)) {
+            return json(409, {
+              error: { code: 'TAXONOMY_SLUG_TAKEN', message: 'That slug is taken.' },
+            })
+          }
+          termCounter += 1
+          const parent = typeof body.parent === 'string' ? body.parent : null
+          const parentTerm = terms.find((term) => term.id === parent)
+          const created = {
+            id: `term-${termCounter}`,
+            taxonomy,
+            parent,
+            slug: body.slug,
+            labels: body.labels,
+            position: terms.length,
+            depth: parentTerm === undefined ? 0 : parentTerm.depth + 1,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+          }
+          terms.push(created)
+          return json(201, { data: created })
+        }
+
+        if (id !== undefined && method === 'DELETE') {
+          const parsed = new URL(url, 'http://localhost')
+          const hasChildren = terms.some((term) => term.parent === id)
+          if (hasChildren && parsed.searchParams.get('cascade') !== 'true') {
+            return json(409, {
+              error: {
+                code: 'TAXONOMY_TERM_HAS_CHILDREN',
+                message: 'This term still has descendant terms.',
+              },
+            })
+          }
+          terms = terms.filter((term) => term.id !== id && term.parent !== id)
+          return new Response(null, { status: 204 })
+        }
+      }
+
       const contentMatch = /\/api\/content\/([^/?]+)(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
       if (contentMatch !== null) {
         const [, collection, id] = contentMatch
 
         if (collection === 'article' && id === undefined && method === 'GET') {
           const parsed = new URL(url, 'http://localhost')
+          const trashed = parsed.searchParams.get('trashed')
+
+          // Seeing the trash needs `delete`, exactly as the API requires
+          // (ADR-0022 keeps the five actions frozen; the trash borrows the
+          // one that fills it).
+          if (trashed !== null && trashed !== 'exclude') {
+            const allowed = MOCK_SCHEMA.collections[0]?.permissions.delete ?? []
+            if (!allowed.some((role) => user.roles.includes(role))) {
+              return json(403, {
+                error: { code: 'FORBIDDEN', message: 'Access denied: delete on article.' },
+              })
+            }
+            const items = trashed === 'only' ? trash : [...MOCK_ENTRIES, ...trash]
+            return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+          }
+
           const statusFilter = parsed.searchParams.get('status')
           const items =
             statusFilter === null
@@ -941,6 +1091,30 @@ export function installMockFetch(
         if (collection === 'article' && id !== undefined && method === 'DELETE') {
           return new Response(null, { status: 204 })
         }
+      }
+
+      // The two trash routes. Both `delete`, both refusing an actor without
+      // it — and `purge` is a POST on its own path rather than a second
+      // meaning for DELETE, which is exactly what the client sends.
+      const trashActionMatch = /\/api\/content\/([^/?]+)\/([^/?]+)\/(untrash|purge)$/u.exec(url)
+      if (trashActionMatch !== null && method === 'POST') {
+        const [, , entryId, action] = trashActionMatch
+        const allowed = MOCK_SCHEMA.collections[0]?.permissions.delete ?? []
+        if (!allowed.some((role) => user.roles.includes(role))) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Access denied: delete on article.' },
+          })
+        }
+
+        const found = trash.find((entry) => entry.id === entryId)
+        if (found === undefined) {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
+        }
+        trash = trash.filter((entry) => entry.id !== entryId)
+
+        if (action === 'purge') return new Response(null, { status: 204 })
+        // Restored with the status it went in with, never demoted to a draft.
+        return json(200, { data: { ...found, deletedAt: null } })
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

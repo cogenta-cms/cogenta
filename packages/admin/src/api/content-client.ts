@@ -20,6 +20,13 @@ export type BlockZones = Readonly<Record<string, readonly ContentBlock[]>>
 export interface Entry {
   readonly id: string
   readonly status: string
+  /**
+   * When this entry went to the trash, `null` while it has not (`schema@2.0`,
+   * ADR-0022). Orthogonal to `status`: an entry in the trash still reports the
+   * status it had, which is what the trash screen shows and what restoring
+   * gives back.
+   */
+  readonly deletedAt: string | null
   readonly version: number
   readonly createdAt: string
   readonly updatedAt: string
@@ -39,11 +46,15 @@ export interface EntryPage {
 export type SortField = 'id' | 'createdAt' | 'updatedAt'
 export type SortDirection = 'asc' | 'desc'
 
+/** Whether a list reaches into the trash. Absent means no (`schema@2.0`). */
+export type TrashFilter = 'exclude' | 'include' | 'only'
+
 export interface ListOptions {
   readonly sort?: { readonly field: SortField; readonly direction: SortDirection }
   readonly status?: string
   readonly after?: string
   readonly limit?: number
+  readonly trashed?: TrashFilter
 }
 
 function searchParamsFor(options: ListOptions): URLSearchParams {
@@ -59,6 +70,7 @@ function searchParamsFor(options: ListOptions): URLSearchParams {
   if (options.status !== undefined) params.set('status', options.status)
   if (options.after !== undefined) params.set('after', options.after)
   if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.trashed !== undefined) params.set('trashed', options.trashed)
   return params
 }
 
@@ -77,9 +89,32 @@ export async function listEntries(
   return { items: body.data, hasMore: body.page.hasMore, nextCursor: body.page.nextCursor }
 }
 
+/** Moves the entry to the trash — or deletes it outright when the collection declares `trash: false`. */
 export async function deleteEntry(token: string, collection: string, id: string): Promise<void> {
   await request(`/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+/** Takes an entry back out of the trash, with the status it went in with. */
+export function untrashEntry(token: string, collection: string, id: string): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/untrash`,
+    { method: 'POST', headers: authHeader(token) },
+  )
+}
+
+/**
+ * The real delete: nothing is kept, and nothing comes back.
+ *
+ * Its own route rather than a second meaning for `DELETE` — the API made that
+ * choice deliberately (ADR-0022), and the client mirrors it so that a slip of
+ * the finger here cannot destroy anything either.
+ */
+export async function purgeEntry(token: string, collection: string, id: string): Promise<void> {
+  await request(`/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/purge`, {
+    method: 'POST',
     headers: authHeader(token),
   })
 }

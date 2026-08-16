@@ -7,7 +7,12 @@ import {
   type SqlFragment,
   sql,
 } from '@cogenta/core'
-import type { CollectionDefinition, FieldDefinition, OnDelete } from '../types.js'
+import type {
+  CollectionDefinition,
+  FieldDefinition,
+  OnDelete,
+  TaxonomyDefinition,
+} from '../types.js'
 import {
   columnTypeFor,
   integerColumn,
@@ -26,8 +31,10 @@ import {
   indexName,
   isSystemColumn,
   relationTable,
+  taxonomyTable,
   versionsTable,
 } from './naming.js'
+import { TAXONOMY_PATH_LENGTH } from './taxonomy-path.js'
 
 /**
  * The physical shape of a collection.
@@ -51,12 +58,43 @@ export interface RelationTarget {
   readonly to: string
   readonly onDelete: OnDelete
   readonly many: boolean
+  /**
+   * What `to` names: another collection, or a taxonomy (`schema@2.0`).
+   *
+   * The two are stored the same way — a column for the to-one case, a join
+   * table for the to-many one — but they point at different tables, and a
+   * taxonomy is not content.
+   */
+  readonly kind: 'relation' | 'taxonomy'
 }
 
 export function relationsOf(collection: CollectionDefinition): RelationTarget[] {
   const relations: RelationTarget[] = []
 
   for (const [name, field] of Object.entries(collection.fields)) {
+    if (field.kind === 'taxonomy') {
+      const of = field.options['of']
+      if (typeof of !== 'string' || of.length === 0) {
+        throw new CogentaError({
+          code: 'CONFIG_INVALID',
+          message: `The taxonomy field "${name}" of "${collection.name}" names no taxonomy.`,
+          hint: "Give it one: f.taxonomy({ of: 'category' }).",
+          details: { collection: collection.name, field: name },
+        })
+      }
+      // Removing a term un-classifies the content that carried it; it never
+      // deletes that content, and it never refuses the removal either. A
+      // classification is an opinion about an entry, not part of it.
+      relations.push({
+        field: name,
+        to: of,
+        onDelete: 'cascade',
+        many: field.options['many'] !== false,
+        kind: 'taxonomy',
+      })
+      continue
+    }
+
     if (field.kind !== 'relation') continue
 
     const to = field.options['to']
@@ -81,10 +119,18 @@ export function relationsOf(collection: CollectionDefinition): RelationTarget[] 
       })
     }
 
-    relations.push({ field: name, to, onDelete, many })
+    relations.push({ field: name, to, onDelete, many, kind: 'relation' })
   }
 
   return relations
+}
+
+/** The table a relation target points at: entries, or taxonomy terms. */
+function targetTable(relation: RelationTarget, dialect: DatabaseDialect): SqlFragment {
+  return identifier(
+    relation.kind === 'taxonomy' ? taxonomyTable(relation.to) : entriesTable(relation.to),
+    dialect,
+  )
 }
 
 /** Rejects a schema whose fields would collide with the engine's own columns. */
@@ -121,6 +167,9 @@ function systemColumns(dialect: DatabaseDialect): SqlFragment[] {
     sql`${identifier('created_by', dialect)} ${textColumn(dialect, 64)}`,
     sql`${identifier('updated_by', dialect)} ${textColumn(dialect, 64)}`,
     sql`${identifier('status', dialect)} ${textColumn(dialect, 16)} not null`,
+    // Nullable, and orthogonal to `status` (ADR-0022): an entry in the trash
+    // keeps the status it had, so restoring it cannot silently demote it.
+    sql`${identifier('deleted_at', dialect)} ${timestampColumn(dialect)}`,
     sql`${identifier('locale', dialect)} ${textColumn(dialect, 16)} not null`,
     sql`${identifier('translation_of', dialect)} ${uuidColumn(dialect)}`,
     sql`${identifier('version', dialect)} ${integerColumn()} not null`,
@@ -152,7 +201,7 @@ function entriesDdl(collection: CollectionDefinition, dialect: DatabaseDialect):
     parts.push(
       sql`constraint ${identifier(indexName(entriesTable(collection.name), `${columnFor(relation.field)}_fk`), dialect)}
           foreign key (${identifier(columnFor(relation.field), dialect)})
-          references ${identifier(entriesTable(relation.to), dialect)} (${identifier('id', dialect)})
+          references ${targetTable(relation, dialect)} (${identifier('id', dialect)})
           ${onDeleteClause(relation.onDelete)}`,
     )
   }
@@ -220,9 +269,57 @@ function joinDdl(
       on delete cascade,
     constraint ${identifier(indexName(relationTable(collection.name, relation.field), 'target_fk'), dialect)}
       foreign key (${identifier('target_id', dialect)})
-      references ${identifier(entriesTable(relation.to), dialect)} (${identifier('id', dialect)})
+      references ${targetTable(relation, dialect)} (${identifier('id', dialect)})
       ${onDeleteClause(relation.onDelete)}
   )`
+}
+
+/**
+ * The terms of one taxonomy (`schema@2.0`, ADR-0022).
+ *
+ * One table per taxonomy rather than one shared table with a `taxonomy`
+ * column: the foreign key of a `f.taxonomy({ of: 'category' })` field then
+ * *means* "a category", enforced by the database, instead of meaning "any term
+ * of any taxonomy, and we promise to filter".
+ *
+ * `path` is the materialised path — `/<ancestor>/…/<self>/`, ids rather than
+ * slugs so that renaming a term rewrites nothing. "Everything under this term"
+ * is `path like '<its path>%'`, which Postgres, MySQL/MariaDB and SQLite all
+ * answer the same way; a recursive CTE would not (ADR-0006).
+ */
+function taxonomyDdl(taxonomy: TaxonomyDefinition, dialect: DatabaseDialect): SqlFragment {
+  const table = identifier(taxonomyTable(taxonomy.name), dialect)
+
+  return sql`create table if not exists ${table} (
+    ${identifier('id', dialect)} ${uuidColumn(dialect)} not null primary key,
+    ${identifier('parent_id', dialect)} ${uuidColumn(dialect)},
+    ${identifier('slug', dialect)} ${textColumn(dialect, 255)} not null,
+    ${identifier('labels', dialect)} ${jsonColumn()} not null,
+    ${identifier('position', dialect)} ${integerColumn()} not null,
+    ${identifier('path', dialect)} ${textColumn(dialect, TAXONOMY_PATH_LENGTH)} not null,
+    ${identifier('created_at', dialect)} ${timestampColumn(dialect)} not null,
+    ${identifier('updated_at', dialect)} ${timestampColumn(dialect)} not null,
+    constraint ${identifier(indexName(taxonomyTable(taxonomy.name), 'parent_fk'), dialect)}
+      foreign key (${identifier('parent_id', dialect)})
+      references ${table} (${identifier('id', dialect)}) on delete cascade
+  )`
+}
+
+function taxonomyIndexes(taxonomy: TaxonomyDefinition, dialect: DatabaseDialect): SqlFragment[] {
+  const name = taxonomyTable(taxonomy.name)
+  const table = identifier(name, dialect)
+
+  return [
+    // A slug is unique across the taxonomy, not per parent: it is what a URL
+    // carries, and two "cuisine" under two parents would make /category/cuisine
+    // ambiguous.
+    sql`create unique index ${identifier(indexName(name, 'slug_unique'), dialect)}
+        on ${table} (${identifier('slug', dialect)})`,
+    sql`create index ${identifier(indexName(name, 'path'), dialect)}
+        on ${table} (${identifier('path', dialect)})`,
+    sql`create index ${identifier(indexName(name, 'parent'), dialect)}
+        on ${table} (${identifier('parent_id', dialect)}, ${identifier('position', dialect)})`,
+  ]
 }
 
 const DIRECTIONS = new Set(['asc', 'desc'])
@@ -245,6 +342,10 @@ function indexStatements(
         on ${table} (${identifier('locale', dialect)}, ${identifier('status', dialect)})`,
     sql`create index ${identifier(indexName(name, 'translation'), dialect)}
         on ${table} (${identifier('translation_of', dialect)})`,
+    // Every read filters on `deleted_at is null` now (ADR-0022), so this is on
+    // the hot path of the whole product, not only of the trash screen.
+    sql`create index ${identifier(indexName(name, 'trash'), dialect)}
+        on ${table} (${identifier('deleted_at', dialect)})`,
   ]
 
   for (const [field, definition] of Object.entries(collection.fields)) {
@@ -305,11 +406,23 @@ async function createOne(executor: SqlExecutor, collection: CollectionDefinition
  * because SQLite has no `alter table add constraint` at all. That makes the
  * order matter, hence the sort — and makes a cycle between two collections
  * something to report rather than to half-create.
+ *
+ * Taxonomies are created **before** any collection, for the same reason: a
+ * `f.taxonomy({ of: 'category' })` field carries a real foreign key to the
+ * terms table, which therefore has to exist first.
  */
 export async function createSchemaTables(
   db: DatabaseHandle,
   collections: readonly CollectionDefinition[],
+  taxonomies: readonly TaxonomyDefinition[] = [],
 ): Promise<void> {
+  for (const taxonomy of taxonomies) {
+    await db.query(taxonomyDdl(taxonomy, db.dialect))
+    for (const statement of taxonomyIndexes(taxonomy, db.dialect)) {
+      await db.query(statement).catch(() => undefined)
+    }
+  }
+
   for (const collection of orderByDependency(collections)) {
     await createOne(db, collection)
   }
@@ -355,6 +468,7 @@ export function orderByDependency(
 export async function dropSchemaTables(
   db: DatabaseHandle,
   collections: readonly CollectionDefinition[],
+  taxonomies: readonly TaxonomyDefinition[] = [],
 ): Promise<void> {
   const dialect = db.dialect
 
@@ -368,5 +482,10 @@ export async function dropSchemaTables(
     await db.query(sql`drop table if exists ${identifier(blocksTable(collection.name), dialect)}`)
     await db.query(sql`drop table if exists ${identifier(versionsTable(collection.name), dialect)}`)
     await db.query(sql`drop table if exists ${identifier(entriesTable(collection.name), dialect)}`)
+  }
+
+  // Terms last: a collection's join table holds a foreign key into them.
+  for (const taxonomy of taxonomies) {
+    await db.query(sql`drop table if exists ${identifier(taxonomyTable(taxonomy.name), dialect)}`)
   }
 }

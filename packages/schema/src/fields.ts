@@ -85,6 +85,12 @@ export interface SelectFieldOptions extends BaseFieldOptions {
   readonly many?: boolean
 }
 
+export interface TaxonomyFieldOptions extends BaseFieldOptions {
+  /** Name of the taxonomy declared with `defineTaxonomy()`. */
+  readonly of: string
+  readonly many?: boolean
+}
+
 export interface BlocksFieldOptions extends BaseFieldOptions {
   /** `'*'` allows the whole vocabulary; a list restricts it. */
   readonly allow?: '*' | readonly string[]
@@ -173,6 +179,21 @@ export const f = {
   /** Hex notation, `#rgb`, `#rrggbb` or `#rrggbbaa`. */
   color(options: BaseFieldOptions = {}) {
     return field('color', options, {})
+  },
+
+  /**
+   * Terms of a declared taxonomy (`schema@2.0`, ADR-0022).
+   *
+   * `many: true` by default, unlike `relation`: the reason taxonomies exist at
+   * all is that the same term is reused across collections and an entry
+   * usually carries several. A single-valued taxonomy is the exception, and
+   * says so.
+   */
+  taxonomy(options: TaxonomyFieldOptions) {
+    return field('taxonomy', options, {
+      of: options.of,
+      many: options.many ?? true,
+    })
   },
 
   blocks(options: BlocksFieldOptions = {}) {

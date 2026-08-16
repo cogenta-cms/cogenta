@@ -137,7 +137,10 @@ export function normaliseValues(
     if (!provided && options.partial) continue
 
     const raw = provided ? input[name] : definition.default
-    const many = definition.kind === 'relation' && definition.options['many'] === true
+    // A `taxonomy` field is joined exactly like a `relation` (ADR-0022): a
+    // to-many one lives in a join table and holds an ordered list of ids.
+    const joined = definition.kind === 'relation' || definition.kind === 'taxonomy'
+    const many = joined && definition.options['many'] === true
 
     if (raw === undefined || raw === null) {
       if (definition.required === true && options.enforceRequired) {

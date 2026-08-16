@@ -18,7 +18,9 @@
     "blocksMoveDown": "Descendre le bloc {{position}}",
     "blocksRemove": "Retirer le bloc {{position}}",
     "blocksUnrecognized": "Ce type de bloc (« {{type}} ») n'est pas reconnu par cet admin — ses données sont conservées mais ne peuvent pas être éditées ici.",
-    "blocksAddLabel": "Ajouter un bloc"
+    "blocksAddLabel": "Ajouter un bloc",
+    "taxonomyEmpty": "Aucun terme disponible dans « {{taxonomy}} ».",
+    "taxonomyNone": "— aucun —"
   },
   "richText": {
     "internalLinkTitle": "Lien interne : {{path}}",
@@ -44,6 +46,8 @@
     "dashboard": "Tableau de bord",
     "collections": "Contenus",
     "media": "Médiathèque",
+    "taxonomies": "Taxonomies",
+    "trash": "Corbeille",
     "audit": "Journal d'audit",
     "agents": "Agents",
     "users": "Utilisateurs",
@@ -177,6 +181,42 @@
     "notFoundBody": "Cette collection n'existe pas ou vous n'y avez pas accès.",
     "back": "Retour",
     "loadError": "Impossible de charger les contenus."
+  },
+  "taxonomies": {
+    "heading": "Taxonomies",
+    "none": "Ce site ne déclare aucune taxonomie que vous puissiez lire.",
+    "taxonomy": "Taxonomie",
+    "caption": "Termes, les parents avant leurs enfants",
+    "empty": "Aucun terme pour l'instant.",
+    "term": "Terme",
+    "slug": "Slug",
+    "label": "Libellé",
+    "parent": "Parent",
+    "noParent": "— aucun (racine) —",
+    "actions": "Actions",
+    "newTerm": "Nouveau terme",
+    "create": "Ajouter le terme",
+    "delete": "Supprimer",
+    "loadError": "Impossible de charger les termes.",
+    "createError": "Le terme n'a pas pu être créé.",
+    "deleteError": "Le terme n'a pas pu être supprimé."
+  },
+  "trash": {
+    "heading": "Corbeille",
+    "noCollections": "Aucune collection que vous puissiez supprimer n'a de corbeille.",
+    "collection": "Collection",
+    "caption": "Entrées supprimées, encore récupérables",
+    "empty": "La corbeille est vide.",
+    "entry": "Entrée",
+    "status": "Statut à la suppression",
+    "deletedAt": "Supprimée le",
+    "actions": "Actions",
+    "restore": "Restaurer",
+    "purge": "Supprimer définitivement",
+    "purgeConfirm": "Supprimer définitivement cette entrée ? C'est irréversible.",
+    "loadError": "Impossible de charger la corbeille.",
+    "restoreError": "L'entrée n'a pas pu être restaurée.",
+    "purgeError": "L'entrée n'a pas pu être supprimée."
   },
   "audit": {
     "heading": "Journal d'audit",

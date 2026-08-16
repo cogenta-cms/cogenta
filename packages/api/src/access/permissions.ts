@@ -1,5 +1,5 @@
 import { CogentaError } from '@cogenta/core'
-import type { CollectionDefinition, ContentAction } from '@cogenta/schema'
+import type { CollectionDefinition, ContentAction, TaxonomyDefinition } from '@cogenta/schema'
 import type { AccessContext, AccessDecision, PermissionLayer, PreviewGrant } from '../types.js'
 
 /**
@@ -161,22 +161,72 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     }
   }
 
+  /**
+   * The same role rules for a taxonomy's terms, minus the preview escape
+   * hatch (`schema@2.0`, ADR-0022).
+   *
+   * A preview token names a collection and an entry. A site may have a
+   * `category` collection *and* a `category` taxonomy, so honouring the grant
+   * here would let a token minted for one unlock the other. Terms have no
+   * preview links at all, so there is nothing to lose by refusing outright.
+   */
+  function canTerm(
+    action: ContentAction,
+    taxonomy: TaxonomyDefinition,
+    context: AccessContext,
+  ): AccessDecision {
+    const allowedRoles = taxonomy.permissions[action] ?? []
+    if (allowedRoles.length === 0) {
+      return {
+        allowed: false,
+        reason: `taxonomy "${taxonomy.name}" grants "${action}" to no role`,
+      }
+    }
+
+    const held = heldRoles(context)
+    for (const role of allowedRoles) {
+      if (held.has(role)) return { allowed: true }
+    }
+
+    return {
+      allowed: false,
+      reason: `"${action}" on the "${taxonomy.name}" taxonomy requires one of: ${allowedRoles.join(', ')}`,
+    }
+  }
+
+  function refuse(
+    decision: AccessDecision,
+    context: AccessContext,
+    details: Record<string, unknown>,
+  ): void {
+    if (decision.allowed) return
+    throw new CogentaError({
+      code: 'FORBIDDEN',
+      message: `Access denied: ${decision.reason}.`,
+      hint:
+        context.actor.id === null
+          ? 'Sign in with an account that holds one of those roles, or request a preview link.'
+          : 'Ask an administrator to grant your account one of those roles.',
+      // Role names and collection names are configuration, not personal data,
+      // and no token or identifier of the actor is copied here (R7).
+      details: { ...details, roles: context.actor.roles },
+    })
+  }
+
   return {
     can,
     canReadUnpublished,
+    canTerm,
     assert: (action, collection, context): void => {
-      const decision = can(action, collection, context)
-      if (decision.allowed) return
-      throw new CogentaError({
-        code: 'FORBIDDEN',
-        message: `Access denied: ${decision.reason}.`,
-        hint:
-          context.actor.id === null
-            ? 'Sign in with an account that holds one of those roles, or request a preview link.'
-            : 'Ask an administrator to grant your account one of those roles.',
-        // Role names and collection names are configuration, not personal data,
-        // and no token or identifier of the actor is copied here (R7).
-        details: { action, collection: collection.name, roles: context.actor.roles },
+      refuse(can(action, collection, context), context, {
+        action,
+        collection: collection.name,
+      })
+    },
+    assertTerm: (action, taxonomy, context): void => {
+      refuse(canTerm(action, taxonomy, context), context, {
+        action,
+        taxonomy: taxonomy.name,
       })
     },
   }

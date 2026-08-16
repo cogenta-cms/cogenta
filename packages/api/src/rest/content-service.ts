@@ -106,7 +106,17 @@ export interface ContentService {
     input: UpdateInput,
     options: ReadOptions,
   ): Promise<SerialisedEntry>
+  /** Moves an entry to the trash (`schema@2.0`), or deletes it outright when the collection declares `trash: false`. */
   remove(context: AccessContext, name: string, id: string): Promise<void>
+  /** Takes an entry back out of the trash, with the status it went in with. */
+  untrash(
+    context: AccessContext,
+    name: string,
+    id: string,
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
+  /** The real delete: nothing is kept, and nothing comes back. */
+  purge(context: AccessContext, name: string, id: string): Promise<void>
   publish(
     context: AccessContext,
     name: string,
@@ -290,6 +300,15 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       const target = collection(name)
       permissions.assert('read', target, context)
 
+      // Reaching into the trash needs `delete` on top of `read` (ADR-0022
+      // keeps the five actions frozen, so the trash borrows the action that
+      // put things there). It is also, by definition, unpublished content —
+      // hence the working-state gate as well.
+      if (query.trashed !== undefined && query.trashed !== 'exclude') {
+        permissions.assert('delete', target, context)
+        stateFor(target, context, 'working')
+      }
+
       const state = stateFor(target, context, query.requestedState)
       // A status other than `published` is a request for unpublished rows by
       // another name, and the store would honour it as written. The permission
@@ -317,6 +336,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
             limit: SCAN_BATCH,
             sort: query.sort,
             ...(query.locale === undefined ? {} : { locale: query.locale }),
+            ...(query.trashed === undefined ? {} : { trashed: query.trashed }),
             ...(query.requestedStatus === undefined ? {} : { status: query.requestedStatus }),
             ...(cursor === undefined ? {} : { cursor }),
           }),
@@ -417,6 +437,30 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       permissions.assert('delete', target, context)
 
       const removed = await store(target).delete(id)
+      if (!removed) throw notFound()
+    },
+
+    /**
+     * Takes an entry back out of the trash (`schema@2.0`, ADR-0022).
+     *
+     * Guarded by `delete`, not `update`: the action vocabulary of contract A
+     * is frozen at five, and un-deleting is the inverse of the action that
+     * created the state — whoever may throw a thing away may take it back.
+     */
+    untrash: async (context, name, id, readOptions) => {
+      const target = collection(name)
+      permissions.assert('delete', target, context)
+
+      const entry = await store(target).untrash(id)
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    /** The real delete. Also `delete`: purging is deleting, not a sixth verb. */
+    purge: async (context, name, id) => {
+      const target = collection(name)
+      permissions.assert('delete', target, context)
+
+      const removed = await store(target).purge(id)
       if (!removed) throw notFound()
     },
 

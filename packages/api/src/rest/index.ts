@@ -69,5 +69,7 @@ export type {
   UploadedDocument,
 } from './site-plan-router.js'
 export { createSitePlanRouter } from './site-plan-router.js'
+export type { TaxonomyRouter, TaxonomyRouterOptions } from './taxonomy-router.js'
+export { createTaxonomyRouter } from './taxonomy-router.js'
 export type { UsersRouter, UsersRouterOptions } from './users-router.js'
 export { createUsersRouter } from './users-router.js'

@@ -1,4 +1,4 @@
-import type { CollectionSummary, ContentAction } from './types.js'
+import type { CollectionSummary, ContentAction, TaxonomySummary } from './types.js'
 
 /** Every actor holds this — a collection readable by `public` is readable by everyone. */
 const PUBLIC_ROLE = 'public'
@@ -23,6 +23,25 @@ export function canPerform(
   roles: readonly string[],
 ): boolean {
   const allowedRoles = collection.permissions[action] ?? []
+  if (allowedRoles.length === 0) return false
+  if (allowedRoles.includes(PUBLIC_ROLE)) return true
+  return roles.some((role) => allowedRoles.includes(role))
+}
+
+/**
+ * The same decision for a taxonomy's terms (`schema@2.0`, ADR-0022).
+ *
+ * A separate function rather than a widened one, mirroring the split
+ * `@cogenta/api`'s `canTerm` makes for a reason that matters there: a site may
+ * have a `category` collection and a `category` taxonomy, and the two must
+ * never be asked one question.
+ */
+export function canPerformOnTerms(
+  action: ContentAction,
+  taxonomy: TaxonomySummary,
+  roles: readonly string[],
+): boolean {
+  const allowedRoles = taxonomy.permissions[action] ?? []
   if (allowedRoles.length === 0) return false
   if (allowedRoles.includes(PUBLIC_ROLE)) return true
   return roles.some((role) => allowedRoles.includes(role))

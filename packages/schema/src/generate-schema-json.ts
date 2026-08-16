@@ -1,12 +1,15 @@
 import { validateCollectionSet } from './define-collection.js'
+import { validateTaxonomySet } from './define-taxonomy.js'
 import { SYSTEM_FIELD_DESCRIPTORS, type SystemFieldDescriptor } from './system-fields.js'
-import type {
-  CollectionDefinition,
-  CollectionPermissions,
-  CollectionRouting,
-  CollectionVersioning,
-  FieldDefinition,
-  FieldKind,
+import {
+  type CollectionDefinition,
+  type CollectionPermissions,
+  type CollectionRouting,
+  type CollectionVersioning,
+  DEFAULT_TRASH_RETAIN_DAYS,
+  type FieldDefinition,
+  type FieldKind,
+  type TaxonomyDefinition,
 } from './types.js'
 import type { JsonValue } from './validation.js'
 
@@ -20,7 +23,7 @@ import type { JsonValue } from './validation.js'
  * one exists does.
  */
 
-export const SCHEMA_DOCUMENT_CONTRACT = 'schema@1.0'
+export const SCHEMA_DOCUMENT_CONTRACT = 'schema@2.0'
 
 export interface SchemaDocumentField {
   readonly name: string
@@ -50,6 +53,27 @@ export interface SchemaDocumentCollection {
   readonly indexes: readonly (readonly string[])[]
   readonly permissions: CollectionPermissions
   readonly fields: readonly SchemaDocumentField[]
+  /**
+   * Whether this collection has a trash, and for how long (`schema@2.0`).
+   * `false` means `delete()` is an immediate hard delete.
+   */
+  readonly trash: { readonly retainDays: number } | false
+}
+
+/**
+ * A taxonomy, as the admin needs to see it (`schema@2.0`, ADR-0022).
+ *
+ * No fields: a term is id, parent, slug, position and locale-indexed labels,
+ * and nothing else. Anything richer is content, and content is a collection.
+ */
+export interface SchemaDocumentTaxonomy {
+  readonly name: string
+  readonly labels: {
+    readonly singular: Readonly<Record<string, string>>
+    readonly plural?: Readonly<Record<string, string>>
+  }
+  readonly hierarchical: boolean
+  readonly permissions: CollectionPermissions
 }
 
 export interface SchemaDocumentSite {
@@ -61,6 +85,8 @@ export interface SchemaDocument {
   readonly contract: typeof SCHEMA_DOCUMENT_CONTRACT
   readonly systemFields: readonly SystemFieldDescriptor[]
   readonly collections: readonly SchemaDocumentCollection[]
+  /** The declared taxonomies (`schema@2.0`). Empty when a site declares none. */
+  readonly taxonomies: readonly SchemaDocumentTaxonomy[]
   /** Absent for the build-time `.cogenta/schema.json` (no config in scope there) — present when a live server serves `/api/schema`. */
   readonly site?: SchemaDocumentSite
 }
@@ -70,22 +96,43 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 export function buildSchemaDocument(
   collections: readonly CollectionDefinition[],
   site?: SchemaDocumentSite,
+  taxonomies: readonly TaxonomyDefinition[] = [],
 ): SchemaDocument {
   validateCollectionSet(collections)
+  // Cross-checked here rather than trusted: a `f.taxonomy({ of: 'topic' })`
+  // pointing at a taxonomy nobody declares would render an admin screen with
+  // no way to fill it in.
+  validateTaxonomySet(taxonomies, collections)
 
   const sorted = [...collections].sort((left, right) => (left.name < right.name ? -1 : 1))
+  const sortedTaxonomies = [...taxonomies].sort((left, right) => (left.name < right.name ? -1 : 1))
 
   return {
     contract: SCHEMA_DOCUMENT_CONTRACT,
     systemFields: SYSTEM_FIELD_DESCRIPTORS,
     collections: sorted.map(describeCollection),
+    taxonomies: sortedTaxonomies.map(describeTaxonomy),
     ...(site === undefined ? {} : { site }),
   }
 }
 
 /** Trailing newline: the file is written to disk and read by humans in diffs. */
-export function renderSchemaJson(collections: readonly CollectionDefinition[]): string {
-  return `${JSON.stringify(buildSchemaDocument(collections), null, 2)}\n`
+export function renderSchemaJson(
+  collections: readonly CollectionDefinition[],
+  taxonomies: readonly TaxonomyDefinition[] = [],
+): string {
+  return `${JSON.stringify(buildSchemaDocument(collections, undefined, taxonomies), null, 2)}\n`
+}
+
+function describeTaxonomy(taxonomy: TaxonomyDefinition): SchemaDocumentTaxonomy {
+  return {
+    name: taxonomy.name,
+    labels: taxonomy.labels,
+    // Spelled out rather than left absent, like every other flag here: the
+    // admin renders it, and a missing key would make it re-derive the default.
+    hierarchical: taxonomy.hierarchical !== false,
+    permissions: taxonomy.permissions,
+  }
 }
 
 function describeCollection(collection: CollectionDefinition): SchemaDocumentCollection {
@@ -95,6 +142,10 @@ function describeCollection(collection: CollectionDefinition): SchemaDocumentCol
     indexes: collection.indexes ?? [],
     permissions: collection.permissions,
     fields: Object.entries(collection.fields).map(([name, field]) => describeField(name, field)),
+    trash:
+      collection.trash === false
+        ? false
+        : { retainDays: collection.trash?.retainDays ?? DEFAULT_TRASH_RETAIN_DAYS },
   }
   if (collection.routing !== undefined) described.routing = collection.routing
   if (collection.versioning !== undefined) described.versioning = collection.versioning

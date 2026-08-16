@@ -206,6 +206,7 @@ function baseTypeOf(field: FieldDefinition): string {
       return 'boolean'
     case 'media':
     case 'relation':
+    case 'taxonomy':
       return field.options.many === true ? 'readonly CogentaId[]' : 'CogentaId'
     case 'select': {
       const union = selectUnion(field)

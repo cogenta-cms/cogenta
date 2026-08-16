@@ -38,6 +38,19 @@ export const ERROR_CODES = [
   'CONTENT_REDIRECT_LOOP',
   'CONTENT_SCHEDULE_INVALID',
   'CONTENT_READ_ONLY',
+  // Trash (`schema@2.0`, ADR-0022). `restrict` is no longer enforced only by
+  // the foreign key: trashing is not a DELETE, so the database cannot refuse.
+  'CONTENT_REFERENCED',
+  'CONTENT_NOT_TRASHED',
+
+  // Taxonomies (`schema@2.0`, ADR-0022)
+  'TAXONOMY_UNKNOWN',
+  'TAXONOMY_TERM_NOT_FOUND',
+  'TAXONOMY_SLUG_TAKEN',
+  'TAXONOMY_CYCLE',
+  'TAXONOMY_TOO_DEEP',
+  'TAXONOMY_NOT_HIERARCHICAL',
+  'TAXONOMY_TERM_HAS_CHILDREN',
 
   // Blocks
   'BLOCK_UNKNOWN',

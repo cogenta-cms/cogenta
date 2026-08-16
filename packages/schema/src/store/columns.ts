@@ -54,8 +54,10 @@ export function integerColumn(): SqlFragment {
 export function isColumnless(field: FieldDefinition): boolean {
   if (field.kind === 'blocks') return true
   // A to-many relation lives in a join table, with a real foreign key on both
-  // sides (contract A). Only a to-one relation is a column.
-  return field.kind === 'relation' && field.options['many'] === true
+  // sides (contract A). Only a to-one relation is a column. A taxonomy field
+  // works the same way, its join table pointing at the terms table instead.
+  const joined = field.kind === 'relation' || field.kind === 'taxonomy'
+  return joined && field.options['many'] === true
 }
 
 export function columnTypeFor(field: FieldDefinition, dialect: DatabaseDialect): SqlFragment {
@@ -86,6 +88,7 @@ export function columnTypeFor(field: FieldDefinition, dialect: DatabaseDialect):
       // table must not refuse to be created because it is not installed yet.
       return textColumn(dialect, 36)
     case 'relation':
+    case 'taxonomy':
       return uuidColumn(dialect)
     case 'richText':
     case 'json':

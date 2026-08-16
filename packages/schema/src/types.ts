@@ -5,11 +5,17 @@
  * `@cogenta/api`: it declares what a field and a collection *are*, so the three
  * packages can be built against the same shapes rather than against each other.
  *
- * It implements contract A, frozen at `schema@1.0` on 2026-08-13. Every
- * departure from the contract text is a bug in this file, not a liberty.
+ * It implements contract A, frozen at `schema@2.0` on 2026-08-16 (ADR-0022).
+ * Every departure from the contract text is a bug in this file, not a liberty.
  */
 
-/** Contract A, "Types de champ (v1)". Closed set: adding one is a minor version. */
+/**
+ * Contract A, "Types de champ". Closed set: adding one is a minor version.
+ *
+ * `taxonomy` joined the set in `schema@2.0` (ADR-0022) alongside
+ * `defineTaxonomy()`. It is not a `relation` with a different target: a
+ * relation points at a collection, and a taxonomy term is not content.
+ */
 export const FIELD_KINDS = [
   'text',
   'richText',
@@ -25,6 +31,7 @@ export const FIELD_KINDS = [
   'geo',
   'color',
   'blocks',
+  'taxonomy',
 ] as const
 
 export type FieldKind = (typeof FIELD_KINDS)[number]
@@ -89,6 +96,21 @@ export interface CollectionVersioning {
   readonly keep?: number
 }
 
+/**
+ * The purge window of a collection's trash (`schema@2.0`, ADR-0022).
+ *
+ * Declared on the model of `versioning.keep`: a bound, not a promise of
+ * forever. `trash: false` on the collection restores the pre-2.0 behaviour —
+ * `delete()` is an immediate hard delete, with nothing kept.
+ */
+export interface CollectionTrash {
+  /** Days a trashed entry is kept before `purgeExpired()` may remove it. */
+  readonly retainDays: number
+}
+
+/** Days a trashed entry is kept when the collection says nothing. */
+export const DEFAULT_TRASH_RETAIN_DAYS = 30
+
 export type CollectionPermissions = Readonly<Partial<Record<ContentAction, readonly string[]>>>
 
 export interface CollectionDefinition {
@@ -96,9 +118,64 @@ export interface CollectionDefinition {
   readonly labels: { readonly singular: string; readonly plural: string }
   readonly routing?: CollectionRouting
   readonly versioning?: CollectionVersioning
+  /**
+   * Trash window. Absent means the default window; `false` means no trash at
+   * all, so `delete()` is the hard delete `purge()` performs.
+   */
+  readonly trash?: CollectionTrash | false
   readonly fields: Readonly<Record<string, FieldDefinition>>
   readonly indexes?: readonly (readonly string[])[]
   readonly permissions: CollectionPermissions
+}
+
+/**
+ * A taxonomy, contract A § "Taxonomies" (`schema@2.0`, ADR-0022).
+ *
+ * A second top-level declarable object, beside `defineCollection()`. Its terms
+ * are **not content**: no `status`, no `version`, no `translationOf`. "Cuisine"
+ * and "Cooking" are one concept of classification, not two contents in a
+ * translation family — which is why labels are indexed by locale rather than
+ * split across rows the way ADR-0014 splits content.
+ */
+export interface TaxonomyDefinition {
+  readonly name: string
+  /** Indexed by locale, exactly like a term's own labels. */
+  readonly labels: {
+    readonly singular: Readonly<Record<string, string>>
+    readonly plural?: Readonly<Record<string, string>>
+  }
+  /**
+   * Whether terms may be nested. A flat taxonomy (tags) refuses a parent
+   * outright rather than allowing a tree nobody renders.
+   */
+  readonly hierarchical?: boolean
+  /**
+   * Who may do what to the **terms**. The action vocabulary is the frozen one
+   * of contract A; `publish` has no meaning on a term and is refused.
+   */
+  readonly permissions: CollectionPermissions
+}
+
+/**
+ * One term of a taxonomy.
+ *
+ * `path` is the materialised path (ADR-0022): the ids of every ancestor and of
+ * the term itself, slash-separated and slash-terminated, so "everything under
+ * this term" is a `like` the three dialects answer identically — never a
+ * recursive CTE, whose support diverges (ADR-0006).
+ */
+export interface TaxonomyTerm {
+  readonly id: string
+  readonly taxonomy: string
+  readonly parent: string | null
+  readonly slug: string
+  readonly labels: Readonly<Record<string, string>>
+  readonly position: number
+  readonly path: string
+  /** 0 at the root. Derived from `path`, never stored twice by hand. */
+  readonly depth: number
+  readonly createdAt: string
+  readonly updatedAt: string
 }
 
 /**
@@ -113,6 +190,16 @@ export interface SystemFields {
   readonly createdBy: string | null
   readonly updatedBy: string | null
   readonly status: ContentStatus
+  /**
+   * When this entry went to the trash, `null` while it has not (`schema@2.0`,
+   * ADR-0022).
+   *
+   * **Orthogonal to `status`, never a value of it.** A published article in the
+   * trash is still `published`, so `untrash()` gives back what was taken rather
+   * than quietly demoting it to a draft — and every `switch` on `ContentStatus`
+   * in the repository stays exhaustive.
+   */
+  readonly deletedAt: string | null
   readonly locale: string
   readonly translationOf: string | null
   readonly version: number

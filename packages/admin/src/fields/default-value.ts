@@ -24,5 +24,9 @@ export function defaultValueFor(kind: FieldKind): unknown {
     case 'relation':
     case 'blocks':
       return null
+    case 'taxonomy':
+      // To-many by default (`schema@2.0`), and a join table's empty case is
+      // `[]`, never null — the same rule the store applies.
+      return []
   }
 }

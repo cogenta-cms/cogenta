@@ -4,18 +4,21 @@ import { ApiError } from '../api/client.js'
 import { deleteMedia, type MediaAsset, updateMedia } from '../api/media-client.js'
 import { FocalPointEditor } from './focal-point-editor.js'
 
+/**
+ * The chrome around this panel — a heading naming the asset and a way to
+ * close it — is now the caller's `Modal` (`routes/media.tsx`): this stays
+ * the content of that dialog, not a dialog of its own.
+ */
 export function MediaDetail({
   token,
   asset,
   onChange,
   onDeleted,
-  onClose,
 }: {
   readonly token: string
   readonly asset: MediaAsset
   onChange(asset: MediaAsset): void
   onDeleted(id: string): void
-  onClose(): void
 }): JSX.Element {
   const { t } = useTranslation()
   const altId = useId()
@@ -60,12 +63,7 @@ export function MediaDetail({
   }
 
   return (
-    <section aria-labelledby="media-detail-heading" className="media-detail">
-      <h2 id="media-detail-heading">{asset.filename}</h2>
-      <button type="button" onClick={onClose}>
-        {t('media.closeButton')}
-      </button>
-
+    <div className="media-detail">
       {asset.kind === 'image' && (
         <FocalPointEditor
           token={token}
@@ -127,6 +125,6 @@ export function MediaDetail({
       <button type="button" disabled={deleting} onClick={() => void remove()}>
         {deleting ? t('media.deleting') : t('media.deleteButton')}
       </button>
-    </section>
+    </div>
   )
 }

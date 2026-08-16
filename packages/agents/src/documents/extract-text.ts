@@ -1,5 +1,6 @@
 import { CogentaError } from '@cogenta/core'
 import { extractDocxText } from './docx.js'
+import { MAX_DOCUMENT_BYTES, MAX_TEXT_CHARACTERS } from './limits.js'
 import { extractPdfText } from './pdf.js'
 
 /**
@@ -21,10 +22,10 @@ import { extractPdfText } from './pdf.js'
 export const DOCUMENT_FORMATS = ['pdf', 'docx', 'markdown', 'text'] as const
 export type DocumentFormat = (typeof DOCUMENT_FORMATS)[number]
 
-/** 20 MiB — a specification document that exceeds this is a scan, and a scan has no text layer anyway. */
-export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
-/** Roughly 50k tokens: enough for a long brief, bounded so one upload cannot exhaust a model budget on its own. */
-export const MAX_TEXT_CHARACTERS = 200_000
+// Re-exported for existing callers/tests — the values now live in
+// `limits.ts` so `pdf.ts` can share them without an import cycle back to
+// this module.
+export { MAX_DOCUMENT_BYTES, MAX_TEXT_CHARACTERS }
 
 export interface ExtractDocumentInput {
   readonly filename: string

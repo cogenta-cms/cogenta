@@ -1,5 +1,6 @@
 import { inflateSync } from 'node:zlib'
 import { CogentaError } from '@cogenta/core'
+import { MAX_TEXT_CHARACTERS } from './limits.js'
 
 /**
  * Text-layer extraction from a PDF, with no dependency (R9/R10 — `pdf-parse`
@@ -335,11 +336,59 @@ interface RawStream {
   readonly data: Buffer
 }
 
+/**
+ * A real stream's `<< ... >>` dictionary sits immediately before its
+ * `stream` keyword — a handful of entries, at most a few hundred bytes.
+ * Bounding how far the search for it looks back keeps a single search
+ * O(window) instead of O(offset-into-file) — `String.lastIndexOf` has no
+ * "look back no further than N" parameter of its own, so the window is
+ * enforced by scanning forward within it instead (see
+ * `lastMatchWithinWindow`).
+ */
+const DICTIONARY_SEARCH_WINDOW = 2048
+
+/**
+ * The last occurrence of `needle` within `[windowStart, before)`, at a cost
+ * bounded by the window's size regardless of how far into the file `before`
+ * is.
+ *
+ * `haystack.lastIndexOf(needle, before)` looks like it would do this — its
+ * second argument reads like a starting offset — but it still walks
+ * backward from `before` over the *entire* rest of the string looking for a
+ * match, unbounded. Scanning forward with `indexOf` from `windowStart`
+ * instead has the same problem in the other direction when the needle never
+ * occurs in the window at all: `indexOf` does not stop at `before`, it
+ * keeps searching to the end of the whole haystack. `slice` is what
+ * actually bounds the work — V8 (and every other engine) represents a
+ * substring as a view over the original backing storage rather than a
+ * fresh copy, so carving out `[windowStart, before)` is O(window), not
+ * O(haystack), and every subsequent operation on it is too.
+ */
+function lastMatchWithinWindow(
+  haystack: string,
+  needle: string,
+  before: number,
+  windowStart: number,
+): number {
+  const window = haystack.slice(windowStart, before)
+  const at = window.lastIndexOf(needle)
+  return at === -1 ? -1 : windowStart + at
+}
+
+/**
+ * A legitimate PDF has, at most, a few thousand objects. Refusing to walk
+ * past this many `stream`/`endstream` pairs bounds the total work
+ * `collectStreams` can be made to do by a file that is mostly repeated
+ * `stream\nendstream\n` markers and nothing else — no real PDF structure,
+ * no decompression, just the keyword search itself.
+ */
+const MAX_STREAMS = 10_000
+
 function collectStreams(buffer: Buffer): readonly RawStream[] {
   const streams: RawStream[] = []
   const haystack = buffer.toString('latin1')
   let searchFrom = 0
-  for (;;) {
+  while (streams.length < MAX_STREAMS) {
     const keyword = haystack.indexOf('stream', searchFrom)
     if (keyword === -1) break
     // `endstream` also contains "stream"; skip those matches.
@@ -352,7 +401,8 @@ function collectStreams(buffer: Buffer): readonly RawStream[] {
     if (haystack[dataStart] === '\n') dataStart++
     const end = haystack.indexOf('endstream', dataStart)
     if (end === -1) break
-    const dictStart = haystack.lastIndexOf('<<', keyword)
+    const windowStart = Math.max(0, keyword - DICTIONARY_SEARCH_WINDOW)
+    const dictStart = lastMatchWithinWindow(haystack, '<<', keyword, windowStart)
     streams.push({
       dictionary: dictStart === -1 ? '' : haystack.slice(dictStart, keyword),
       data: buffer.subarray(dataStart, end),
@@ -403,7 +453,23 @@ export function extractPdfText(buffer: Buffer): PdfExtraction {
   const warnings: string[] = []
   const pages: string[] = []
   let skipped = 0
+  let accumulated = 0
+  // `MAX_TEXT_CHARACTERS` is `extractDocumentText`'s final cap, checked only
+  // after every format reader has already built its whole result string.
+  // Enforcing the same budget here, inside the loop, is what stops a PDF
+  // whose individual streams each stay under the per-stream decompression
+  // cap but are numerous and highly compressible from accumulating many
+  // times that budget in memory before the final truncation ever runs — the
+  // truncation itself still happens downstream, unchanged; this only stops
+  // reading further pages once there is already more than enough text to
+  // fill it.
   for (const stream of collectStreams(buffer)) {
+    if (accumulated > MAX_TEXT_CHARACTERS) {
+      warnings.push(
+        'Stopped reading further pages after the text-length cap was reached; the document has more content than was extracted.',
+      )
+      break
+    }
     if (/\/Type\s*\/(?:XObject|Metadata|ObjStm|XRef)\b/.test(stream.dictionary)) continue
     const decoded = decodeStream(stream)
     if (decoded === undefined) {
@@ -413,7 +479,10 @@ export function extractPdfText(buffer: Buffer): PdfExtraction {
     // A content stream is the only thing with text-showing operators in it.
     if (!/\b(?:Tj|TJ)\b/.test(decoded.toString('latin1'))) continue
     const text = textFromContentStream(decoded)
-    if (text.trim() !== '') pages.push(text)
+    if (text.trim() !== '') {
+      pages.push(text)
+      accumulated += text.length
+    }
   }
 
   if (pages.length === 0) {

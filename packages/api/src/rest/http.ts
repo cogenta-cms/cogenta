@@ -88,6 +88,24 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
 
   AGENT_UNKNOWN: 404,
 
+  // Site plans (L19). A missing draft is a 404; an undecided item and an
+  // unknown decision id are both the caller's fault (400); "no provider
+  // configured" is 501 rather than 500 — nothing is broken, this instance
+  // simply does not offer the capability (R2).
+  SITE_PLAN_DRAFT_NOT_FOUND: 404,
+  SITE_PLAN_DECISION_MISSING: 400,
+  SITE_PLAN_DECISION_UNKNOWN_ITEM: 400,
+  SITE_PLAN_CONSTRAINT_VIOLATED: 400,
+  SITE_PLAN_NO_PROVIDER: 501,
+  SITE_BRIEF_GENERATION_FAILED: 502,
+  SITE_BRIEF_RESPONSE_INVALID: 502,
+  CONTENT_MODEL_PROPOSAL_INVALID: 502,
+  SKIN_CANDIDATES_INSUFFICIENT: 502,
+  DOCUMENT_FORMAT_UNSUPPORTED: 400,
+  DOCUMENT_TOO_LARGE: 413,
+  DOCUMENT_EXTRACTION_FAILED: 400,
+  DOCUMENT_NO_TEXT_LAYER: 400,
+
   // A verified-broken chain is a server-side integrity failure, not
   // something the caller's request could have avoided — the default 500
   // already fits, spelled out so it is not mistaken for an oversight.

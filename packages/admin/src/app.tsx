@@ -13,6 +13,7 @@ import { LoginRoute } from './routes/login.js'
 import { MediaRoute } from './routes/media.js'
 import { ProfileRoute } from './routes/profile.js'
 import { SettingsRoute } from './routes/settings.js'
+import { SitePlanRoute } from './routes/site-plan.js'
 import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { AppShell } from './shell/app-shell.js'
@@ -59,6 +60,7 @@ export function App(): JSX.Element {
             <Route path="users" element={<UsersRoute />} />
             <Route path="profile" element={<ProfileRoute />} />
             <Route path="settings" element={<SettingsRoute />} />
+            <Route path="site-plan" element={<SitePlanRoute />} />
           </Route>
         </Routes>
       </BrowserRouter>

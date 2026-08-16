@@ -48,7 +48,8 @@
     "agents": "Agents",
     "users": "Users",
     "profile": "My profile",
-    "settings": "Settings"
+    "settings": "Settings",
+    "sitePlan": "Site plan"
   },
   "shell": {
     "skipLink": "Skip to main content",
@@ -351,5 +352,33 @@
     "empty": "No site matches these filters.",
     "score": "Risk score: {{score}}",
     "noClient": "No client"
+  },
+  "sitePlan": {
+    "heading": "Site plan",
+    "intro": "Upload a specification and an agent proposes a content model, pages, designs and starter content. Nothing is applied until you have judged every item.",
+    "adminOnly": "Restricted to the \"admin\" role: a site plan changes the shape of the site.",
+    "noProvider": "No LLM provider is configured, so a new document cannot be analysed here. Plans proposed elsewhere can still be reviewed and applied. Everything else in this admin works without a provider.",
+    "uploadHeading": "Read a document",
+    "uploadHelp": "PDF, DOCX, Markdown or plain text. A brief, a cahier des charges, a specification.",
+    "uploadLabel": "Choose document(s)",
+    "draftsHeading": "Proposals",
+    "noDrafts": "No proposal is waiting.",
+    "discard": "Discard",
+    "appliedOn": "Applied on {{at}}",
+    "reviewHeading": "Review, item by item",
+    "sectionEmpty": "Nothing proposed in this section.",
+    "keep": "Keep",
+    "drop": "Drop",
+    "allDecided": "Every item has been decided. You can apply this plan.",
+    "remaining_one": "{{count}} item still to decide.",
+    "remaining_other": "{{count}} items still to decide.",
+    "saveProgress": "Save progress",
+    "apply": "Apply what I accepted",
+    "appliedSummary": "Applied: {{added}} collection(s) added, {{entries}} demonstration entries created as drafts.",
+    "loadError": "The proposals could not be loaded.",
+    "proposeError": "The document could not be turned into a plan.",
+    "saveError": "Your decisions could not be saved.",
+    "applyError": "The plan could not be applied.",
+    "deleteError": "The proposal could not be discarded."
   }
 }

@@ -22,6 +22,7 @@ import {
   createPermissionLayer,
   createRestRouter,
   createSearchRouter,
+  createSitePlanRouter,
   createUsersRouter,
   executeGraphQL,
   type MediaImageProcessor,
@@ -32,6 +33,8 @@ import {
   type RestRouter,
   resolveActor,
   type SearchRouter,
+  type SitePlanRouter,
+  type SitePlanRouterOptions,
   type UsersRouter,
   variantKeyFor,
 } from '@cogenta/api'
@@ -71,6 +74,7 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { renderSearchPage } from './search-page.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
+import { createSitePlanning } from './site-plan.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
 import {
   DEFAULT_IMAGE_ENDPOINT,
@@ -181,6 +185,14 @@ interface Site {
   readonly usersRouter: UsersRouter
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
+  /**
+   * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
+   *
+   * Always mounted, even with no LLM provider: the drafts an installer left
+   * behind must still be readable, and the router itself answers
+   * `SITE_PLAN_NO_PROVIDER` for the routes that would need a model.
+   */
+  readonly sitePlanRouter?: SitePlanRouter
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -241,6 +253,8 @@ interface AssembleSiteOptions {
   }>
   /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
   readonly agents?: AgentsRouterOptions
+  /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
+  readonly sitePlans?: SitePlanRouterOptions
   /**
    * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Every
    * write REST or GraphQL could attempt refuses with `CONTENT_READ_ONLY`
@@ -353,6 +367,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }),
     usersRouter: createUsersRouter({ auth }),
     ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
+    ...(options.sitePlans === undefined
+      ? {}
+      : { sitePlanRouter: createSitePlanRouter(options.sitePlans) }),
     mediaStore,
     storage,
     images: options.images ?? null,
@@ -972,6 +989,14 @@ export function createRequestListener(
         return
       }
 
+      if (url.pathname.startsWith('/api/site-plans') && site.sitePlanRouter !== undefined) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.sitePlanRouter.handle(request, context.actor))
+        return
+      }
+
       if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.agentsRouter.handle(request, context.actor))
@@ -1212,6 +1237,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
+    sitePlans: createSitePlanning({
+      projectRoot,
+      db: selection.instance,
+      collections,
+      config: loaded.config,
+      logger,
+      readOnly: options.readOnly ?? false,
+    }),
   })
 
   const server = createServer(createRequestListener(site, logger))

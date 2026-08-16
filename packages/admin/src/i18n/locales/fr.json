@@ -48,7 +48,8 @@
     "agents": "Agents",
     "users": "Utilisateurs",
     "profile": "Mon profil",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "sitePlan": "Plan du site"
   },
   "shell": {
     "skipLink": "Aller au contenu principal",
@@ -351,5 +352,33 @@
     "empty": "Aucun site ne correspond à ces filtres.",
     "score": "Score de risque : {{score}}",
     "noClient": "Sans client"
+  },
+  "sitePlan": {
+    "heading": "Plan du site",
+    "intro": "Téléversez un cahier des charges et un agent propose un modèle de contenu, des pages, des gabarits et du contenu de départ. Rien n'est appliqué tant que vous n'avez pas jugé chaque élément.",
+    "adminOnly": "Réservé au rôle « admin » : un plan de site change la structure du site.",
+    "noProvider": "Aucun fournisseur LLM n'est configuré : un nouveau document ne peut pas être analysé ici. Les plans proposés ailleurs restent consultables et applicables. Tout le reste de cette administration fonctionne sans fournisseur.",
+    "uploadHeading": "Lire un document",
+    "uploadHelp": "PDF, DOCX, Markdown ou texte brut. Un brief, un cahier des charges, une spécification.",
+    "uploadLabel": "Choisir le ou les documents",
+    "draftsHeading": "Propositions",
+    "noDrafts": "Aucune proposition en attente.",
+    "discard": "Écarter",
+    "appliedOn": "Appliqué le {{at}}",
+    "reviewHeading": "Relecture, élément par élément",
+    "sectionEmpty": "Rien de proposé dans cette section.",
+    "keep": "Garder",
+    "drop": "Retirer",
+    "allDecided": "Tous les éléments sont tranchés. Vous pouvez appliquer ce plan.",
+    "remaining_one": "{{count}} élément reste à trancher.",
+    "remaining_other": "{{count}} éléments restent à trancher.",
+    "saveProgress": "Enregistrer l'avancement",
+    "apply": "Appliquer ce que j'ai accepté",
+    "appliedSummary": "Appliqué : {{added}} collection(s) ajoutée(s), {{entries}} entrée(s) de démonstration créée(s) en brouillon.",
+    "loadError": "Les propositions n'ont pas pu être chargées.",
+    "proposeError": "Le document n'a pas pu être transformé en plan.",
+    "saveError": "Vos décisions n'ont pas pu être enregistrées.",
+    "applyError": "Le plan n'a pas pu être appliqué.",
+    "deleteError": "La proposition n'a pas pu être écartée."
   }
 }

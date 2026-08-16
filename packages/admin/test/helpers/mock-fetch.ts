@@ -270,6 +270,127 @@ export function installMockFetch(
     },
   ]
 
+  // The marketplace catalog (L17). A static, fixed set of entries — the real
+  // catalog is caller-assembled (`createMarketplaceCatalog`), so what matters
+  // here is the transport, not a realistic directory. Three entries cover
+  // the three things the admin screen has to get right: a normal install
+  // whose signature verifies, one whose signature does **not** (the
+  // never-silent-failure requirement), and one already installed whose next
+  // version widens its capabilities (the never-silent-permission-widening
+  // requirement).
+  const MARKETPLACE_CAPABILITY_INFO: Record<
+    string,
+    { sentence: string; riskLevel: 'low' | 'medium' | 'high'; category: string }
+  > = {
+    'content.read': { sentence: 'Read your content.', riskLevel: 'low', category: 'content' },
+    'content.publish': {
+      sentence: 'Publish or unpublish content on your behalf.',
+      riskLevel: 'high',
+      category: 'content',
+    },
+  }
+  function marketplaceCapabilities(capabilities: readonly string[]) {
+    return capabilities.map((capability) => ({
+      capability,
+      ...(MARKETPLACE_CAPABILITY_INFO[capability] ?? {
+        sentence: capability,
+        riskLevel: 'medium' as const,
+        category: 'other',
+      }),
+    }))
+  }
+  const MARKETPLACE_CATALOG = [
+    {
+      id: 'seo-helper',
+      kind: 'plugin' as const,
+      displayName: 'SEO Helper',
+      description: 'Suggests meta descriptions for your pages.',
+      category: 'SEO',
+      screenshots: ['https://example.test/seo-helper.png'],
+      changelog: [{ version: '1.0.0', notes: 'First release.' }],
+      capabilities: ['content.read'],
+      signatureVerified: true,
+      signatureInvalid: false,
+      installFails: false,
+    },
+    {
+      id: 'forged-plugin',
+      kind: 'plugin' as const,
+      displayName: 'Forged Plugin',
+      description: 'A plugin whose signature never verifies.',
+      category: 'Misc',
+      screenshots: [],
+      changelog: [],
+      capabilities: ['content.read'],
+      signatureVerified: false,
+      signatureInvalid: true,
+      installFails: true,
+    },
+    {
+      // The preview looks fine (no `error`), but the install call itself
+      // still refuses — a bad-signature response the admin UI only ever
+      // learns about from clicking "install", not from the fiche détaillée.
+      // This is what proves `confirmInstall`'s own failure path, not just
+      // the pre-emptive `detail.error` block that `forged-plugin` exercises.
+      id: 'flaky-signature-plugin',
+      kind: 'plugin' as const,
+      displayName: 'Flaky Signature Plugin',
+      description: 'Looks fine until you actually install it.',
+      category: 'Misc',
+      screenshots: [],
+      changelog: [{ version: '1.0.0', notes: 'First release.' }],
+      capabilities: ['content.read'],
+      signatureVerified: true,
+      signatureInvalid: false,
+      installFails: true,
+    },
+    {
+      id: 'widening-plugin',
+      kind: 'plugin' as const,
+      displayName: 'Widening Plugin',
+      description: 'Its latest version requests a new, wider permission.',
+      category: 'Misc',
+      screenshots: [],
+      changelog: [{ version: '2.0.0', notes: 'Adds publishing.' }],
+      capabilities: ['content.read', 'content.publish'],
+      signatureVerified: true,
+      signatureInvalid: false,
+      installFails: false,
+    },
+  ]
+  interface MarketplaceInstallRow {
+    itemId: string
+    kind: string
+    displayName: string
+    reference: string
+    pluginName: string | null
+    pluginVersion: string | null
+    signatureVerified: boolean
+    installedBy: string | null
+    installedAt: string
+    updatedAt: string
+  }
+  const marketplaceInstalls = new Map<string, MarketplaceInstallRow>([
+    // Pre-installed at the *previous* version, so the first `update` call in
+    // a test is the one that discovers the widened capability, exactly as
+    // the real installer's `detectCapabilitiesNeedingApproval` would.
+    [
+      'widening-plugin',
+      {
+        itemId: 'widening-plugin',
+        kind: 'plugin',
+        displayName: 'Widening Plugin',
+        reference: 'mock://widening-plugin',
+        pluginName: 'widening-plugin',
+        pluginVersion: '1.0.0',
+        signatureVerified: true,
+        installedBy: user.id,
+        installedAt: '2026-02-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      },
+    ],
+  ])
+
   // Taxonomy terms and the trash live per `installMockFetch()` call, like
   // the media library above: each test starts from the same fixture and
   // changes it through the same routes the real server exposes.
@@ -475,6 +596,153 @@ export function installMockFetch(
           }
           found.revokedAt = '2026-03-06T00:00:00.000Z'
           return new Response(null, { status: 204 })
+        }
+      }
+
+      // `/api/marketplace/*` (L17). Admin-only, mirroring
+      // `packages/api/src/rest/marketplace-router.ts`: a signature refusal on
+      // install is a real 422 with `PLUGIN_SIGNATURE_INVALID`, and an update
+      // that would widen capabilities is a real 409 with
+      // `MARKETPLACE_UPDATE_REQUIRES_APPROVAL` until `confirmPendingPermissions`
+      // is sent — the two refusals this admin screen exists to never hide.
+      const marketplaceMatch =
+        /\/api\/marketplace\/items(?:\/([^/?]+))?(?:\/(install|update|uninstall))?(?:\?.*)?$/u.exec(
+          url,
+        )
+      if (marketplaceMatch !== null && url.includes('/api/marketplace')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may browse or install marketplace items.',
+            },
+          })
+        }
+        const [, rawId, action] = marketplaceMatch
+
+        if (rawId === undefined && method === 'GET') {
+          const parsed = new URL(url, 'http://localhost')
+          const kindFilter = parsed.searchParams.get('kind')
+          const query = (parsed.searchParams.get('q') ?? '').toLowerCase()
+          const filtered = MARKETPLACE_CATALOG.filter(
+            (entry) =>
+              (kindFilter === null || entry.kind === kindFilter) &&
+              (query === '' ||
+                entry.displayName.toLowerCase().includes(query) ||
+                entry.description.toLowerCase().includes(query) ||
+                entry.category.toLowerCase().includes(query)),
+          )
+          return json(200, {
+            data: filtered.map((entry) => {
+              const installed = marketplaceInstalls.get(entry.id) ?? null
+              return {
+                id: entry.id,
+                kind: entry.kind,
+                displayName: entry.displayName,
+                description: entry.description,
+                category: entry.category,
+                screenshots: entry.screenshots,
+                changelog: entry.changelog,
+                installed: installed !== null,
+                installedVersion: installed?.pluginVersion ?? null,
+              }
+            }),
+          })
+        }
+
+        const entry = MARKETPLACE_CATALOG.find((candidate) => candidate.id === rawId)
+        if (entry === undefined) {
+          return json(404, {
+            error: { code: 'MARKETPLACE_ITEM_NOT_FOUND', message: 'No such marketplace item.' },
+          })
+        }
+        const installed = marketplaceInstalls.get(entry.id) ?? null
+
+        if (action === undefined && method === 'GET') {
+          return json(200, {
+            data: {
+              id: entry.id,
+              kind: entry.kind,
+              displayName: entry.displayName,
+              description: entry.description,
+              category: entry.category,
+              screenshots: entry.screenshots,
+              changelog: entry.changelog,
+              installed: installed !== null,
+              installedVersion: installed?.pluginVersion ?? null,
+              supported: true,
+              signatureVerified: entry.signatureVerified,
+              capabilities: marketplaceCapabilities(entry.capabilities),
+              error: entry.signatureInvalid
+                ? {
+                    code: 'PLUGIN_SIGNATURE_INVALID',
+                    message: 'The plugin signature does not match a trusted key.',
+                  }
+                : null,
+            },
+          })
+        }
+
+        if (action === 'install' && method === 'POST') {
+          if (entry.installFails) {
+            return json(422, {
+              error: {
+                code: 'PLUGIN_SIGNATURE_INVALID',
+                message: 'The plugin signature does not match a trusted key.',
+              },
+            })
+          }
+          const timestamp = '2026-03-06T00:00:00.000Z'
+          const record: MarketplaceInstallRow = {
+            itemId: entry.id,
+            kind: entry.kind,
+            displayName: entry.displayName,
+            reference: `mock://${entry.id}`,
+            pluginName: entry.id,
+            pluginVersion: entry.changelog.at(-1)?.version ?? '1.0.0',
+            signatureVerified: entry.signatureVerified,
+            installedBy: user.id,
+            installedAt: timestamp,
+            updatedAt: timestamp,
+          }
+          marketplaceInstalls.set(entry.id, record)
+          return json(201, { data: record })
+        }
+
+        if (action === 'update' && method === 'POST') {
+          if (installed === null) {
+            return json(404, {
+              error: { code: 'MARKETPLACE_NOT_INSTALLED', message: 'Not installed.' },
+            })
+          }
+          if (body.confirmPendingPermissions !== true) {
+            return json(409, {
+              error: {
+                code: 'MARKETPLACE_UPDATE_REQUIRES_APPROVAL',
+                message: `Updating "${entry.displayName}" would request new permissions.`,
+                hint: 'Review the new permissions and retry with confirmPendingPermissions: true.',
+              },
+            })
+          }
+          const timestamp = '2026-03-06T00:00:00.000Z'
+          const updated: MarketplaceInstallRow = {
+            ...installed,
+            pluginVersion: entry.changelog.at(-1)?.version ?? installed.pluginVersion,
+            signatureVerified: entry.signatureVerified,
+            updatedAt: timestamp,
+          }
+          marketplaceInstalls.set(entry.id, updated)
+          return json(200, {
+            data: { record: updated, pendingApproval: marketplaceCapabilities(entry.capabilities) },
+          })
+        }
+
+        if (action === 'uninstall' && (method === 'POST' || method === 'DELETE')) {
+          marketplaceInstalls.delete(entry.id)
+          return json(200, { data: { id: entry.id, uninstalled: true } })
         }
       }
 

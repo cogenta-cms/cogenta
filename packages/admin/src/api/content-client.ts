@@ -33,6 +33,12 @@ export interface Entry {
   readonly locale: string
   /** The source entry's id, when this one is a translation of it (ADR-0014). */
   readonly translationOf: string | null
+  /**
+   * When this entry went — or is due to go — public. `null` while it never
+   * has and none is scheduled. Set for a `status: 'scheduled'` entry to the
+   * future instant it becomes public.
+   */
+  readonly publishedAt: string | null
   readonly values: Readonly<Record<string, unknown>>
   readonly blocks: BlockZones
 }
@@ -282,16 +288,26 @@ export function publishEntry(token: string, collection: string, id: string): Pro
   )
 }
 
-/** Takes a published entry back off its public face, into `draft` or `archived`. */
+/**
+ * Takes an entry off its public face, into `draft`, `archived` — or
+ * `scheduled`, which needs the future `publishedAt` (ISO 8601) the entry is
+ * to go public at. `update()` never changes `status`; this is the one route
+ * that does.
+ */
 export function unpublishEntry(
   token: string,
   collection: string,
   id: string,
-  status: 'draft' | 'archived' = 'draft',
+  status: 'draft' | 'archived' | 'scheduled' = 'draft',
+  publishedAt?: string,
 ): Promise<Entry> {
   return request(
     `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/unpublish`,
-    { method: 'POST', headers: authHeader(token), body: JSON.stringify({ status }) },
+    {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ status, ...(publishedAt === undefined ? {} : { publishedAt }) }),
+    },
   )
 }
 

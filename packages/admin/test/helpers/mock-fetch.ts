@@ -42,6 +42,31 @@ export const MOCK_SCHEMA = {
           hasCustomValidation: false,
           options: {},
         },
+        // A second plain-text field, deliberately not first — this is what a
+        // regression on `assistFields` indexing by array position rather than
+        // by field name would get wrong (`packages/admin/test/entry-edit.test.tsx`,
+        // "identifies each assist field by its real name").
+        {
+          name: 'summary',
+          kind: 'text',
+          required: false,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: {},
+        },
+        // Contract A's ordinary, optional field — declared so the scheduling
+        // control has somewhere real to write a future publication date
+        // (`packages/admin/test/entry-edit.test.tsx`, "scheduling a future publication").
+        {
+          name: 'publishedAt',
+          kind: 'datetime',
+          required: false,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: {},
+        },
         // A block zone, so the entry editor can offer both of its modes
         // (L16): without one there is nothing to compose visually and the
         // switch correctly does not appear at all.
@@ -91,7 +116,8 @@ export const MOCK_ENTRIES = [
     locale: 'en',
     translationOf: null,
     deletedAt: null,
-    values: { title: 'First article' },
+    publishedAt: '2026-02-01T00:00:00.000Z',
+    values: { title: 'First article', summary: 'A summary worth reading' },
     // The zone exists and is empty. Seeding a block here instead would put a
     // second field called `title` — the hero's — on every screen that renders
     // this entry, which is a fixture deciding what five unrelated tests can
@@ -107,6 +133,7 @@ export const MOCK_ENTRIES = [
     locale: 'en',
     translationOf: null,
     deletedAt: null,
+    publishedAt: null,
     values: { title: 'Second article' },
     blocks: {},
   },
@@ -1339,8 +1366,21 @@ export function installMockFetch(
               error: { code: 'FORBIDDEN', message: 'Access denied: publish on article.' },
             })
           }
+          if (body.status === 'scheduled') {
+            if (typeof body.publishedAt !== 'string' || body.publishedAt.length === 0) {
+              return json(400, {
+                error: {
+                  code: 'CONTENT_SCHEDULE_INVALID',
+                  message: 'A scheduled publication needs a date.',
+                },
+              })
+            }
+            return json(200, {
+              data: { ...entry, status: 'scheduled', publishedAt: body.publishedAt },
+            })
+          }
           const status = body.status === 'archived' ? 'archived' : 'draft'
-          return json(200, { data: { ...entry, status } })
+          return json(200, { data: { ...entry, status, publishedAt: null } })
         }
 
         // `entry-1` -> `entry-1-copy`. A GET of the copy's id is synthesised

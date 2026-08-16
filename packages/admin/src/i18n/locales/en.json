@@ -202,10 +202,17 @@
       "published": "Published",
       "archived": "Archived"
     },
-    "statusUnmanaged": "This entry is scheduled by the API. Scheduling a publication date is not available from the admin yet.",
+    "statusUnmanaged": "This entry has a status this screen does not know how to change.",
     "publishButton": "Publish",
     "statusChanged": "Status changed to {{status}}.",
     "statusError": "Could not change the status of this entry.",
+    "scheduleLabel": "Publish on:",
+    "scheduleButton": "Schedule",
+    "rescheduleButton": "Reschedule",
+    "cancelScheduleButton": "Cancel the schedule",
+    "scheduledFor": "Publication scheduled for {{at}}.",
+    "scheduleDateRequired": "Choose a publication date and time.",
+    "scheduleError": "Could not schedule the publication of this entry.",
     "duplicateButton": "Duplicate",
     "duplicating": "Duplicating…",
     "duplicateError": "Could not duplicate this entry."

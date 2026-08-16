@@ -7,6 +7,9 @@ import { AgentsRoute } from './routes/agents.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
+import { CommerceOrderRoute } from './routes/commerce-order-detail.js'
+import { CommerceOrdersRoute } from './routes/commerce-orders.js'
+import { CommerceProductsRoute } from './routes/commerce-products.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { LoginRoute } from './routes/login.js'
@@ -57,6 +60,9 @@ export function App(): JSX.Element {
             <Route path="collections/:name/new" element={<EntryEditRoute />} />
             <Route path="collections/:name/:id" element={<EntryEditRoute />} />
             <Route path="taxonomies" element={<TaxonomiesRoute />} />
+            <Route path="commerce/products" element={<CommerceProductsRoute />} />
+            <Route path="commerce/orders" element={<CommerceOrdersRoute />} />
+            <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
             <Route path="trash" element={<TrashRoute />} />
             <Route path="media" element={<MediaRoute />} />
             <Route path="audit" element={<AuditRoute />} />

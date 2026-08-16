@@ -16,7 +16,8 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLElement>): JSX.
   return (
     <section
       className={cn(
-        'flex flex-col rounded-lg border border-border bg-card text-card-foreground shadow-card',
+        'flex flex-col rounded-lg border border-border bg-card text-card-foreground shadow-card ' +
+          'transition-shadow duration-200 ease-out',
         className,
       )}
       {...props}

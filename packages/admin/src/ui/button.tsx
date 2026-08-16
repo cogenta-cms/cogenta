@@ -18,8 +18,9 @@ import { cn } from './cn.js'
 export const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 appearance-none cursor-pointer select-none ' +
     'whitespace-nowrap rounded-md border font-sans font-medium leading-none ' +
-    'transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ' +
-    'focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60 disabled:cursor-default',
+    'transition-all duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+    'focus-visible:outline-ring active:scale-[0.97] ' +
+    'disabled:pointer-events-none disabled:opacity-60 disabled:cursor-default disabled:active:scale-100',
   {
     variants: {
       variant: {

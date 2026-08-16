@@ -198,6 +198,30 @@ describe('a recurring subscription with no payment gateway', () => {
     expect(orders.map((order) => order.totalMinor)).toEqual([2200, 2200])
   })
 
+  it('reports a period already billed, and still raises a genuine failure', async () => {
+    const { variantId, customerId } = await seed()
+    const subscription = await subscriptions.create({
+      customerId,
+      variantId,
+      intervalUnit: 'month',
+    })
+    await subscriptions.runBilling()
+
+    // The same period claimed twice: the unique period key collides, and that
+    // is the correct outcome rather than an error.
+    clock = Date.parse('2026-02-15T10:00:01.000Z')
+    await subscriptions.runBilling()
+    const rewound = await subscriptions.cycles(subscription.id)
+    expect(rewound).toHaveLength(2)
+
+    // A genuinely broken database must not be reported as "already billed":
+    // a biller that says it succeeded while charging nobody is the worst
+    // failure this file could have.
+    await db.query({ parts: ['drop table "cogenta_commerce_order_lines"'], values: [] })
+    clock = Date.parse('2026-03-15T10:00:01.000Z')
+    await expect(subscriptions.runBilling()).rejects.toThrowError()
+  })
+
   it('refuses an interval nobody meant to type', async () => {
     const { variantId, customerId } = await seed()
     await expect(

@@ -336,9 +336,19 @@ export function createSubscriptionStore(
           where id = ${subscription.id}`)
         return { skipped: error.reason }
       }
-      // A unique-key collision on period_key: somebody else billed this
-      // period between the query and here. Not an error — the correct outcome.
-      return { skipped: 'This period was already billed.' }
+      // Everything else is either a unique-key collision on `period_key` —
+      // somebody else billed this period between the query and here, which is
+      // the correct outcome and not an error — or a genuine failure.
+      //
+      // Told apart by asking, rather than assumed. A blanket "already billed"
+      // would turn a broken database into a silent no-op, and a biller that
+      // reports success while charging nobody is the worst possible failure
+      // mode for this file.
+      const claimed = await db.query<{ id: unknown }>(
+        sql`select id from ${cycles} where period_key = ${periodKey}`,
+      )
+      if (claimed.rows.length > 0) return { skipped: 'This period was already billed.' }
+      throw error
     }
   }
 

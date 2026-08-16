@@ -6,6 +6,20 @@ import { useAuth } from '../auth/auth-context.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
+import {
+  Button,
+  Field,
+  Notice,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 /**
  * The trash (`schema@2.0`, ADR-0022): what has been deleted, and the two
@@ -104,67 +118,85 @@ export function TrashRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="trash-heading">
-      <h1 id="trash-heading">{t('trash.heading')}</h1>
+    <section aria-labelledby="trash-heading" className="flex flex-col gap-6">
+      <h1 id="trash-heading" className="m-0 text-xl leading-7 font-semibold">
+        {t('trash.heading')}
+      </h1>
 
       {collections.length === 0 ? (
         <p>{t('trash.noCollections')}</p>
       ) : (
         <>
-          <label htmlFor="trash-collection">{t('trash.collection')}</label>{' '}
-          <select
-            id="trash-collection"
-            value={current ?? ''}
-            onChange={(event) => setSelected(event.target.value)}
-          >
-            {collections.map((collection) => (
-              <option key={collection.name} value={collection.name}>
-                {collection.labels.plural}
-              </option>
-            ))}
-          </select>
-          {error !== null && <p role="alert">{error}</p>}
+          <div className="max-w-xs">
+            <Field label={t('trash.collection')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={current ?? ''}
+                  onChange={(event) => setSelected(event.target.value)}
+                >
+                  {collections.map((collection) => (
+                    <option key={collection.name} value={collection.name}>
+                      {collection.labels.plural}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+
+          {error !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{error}</p>
+            </Notice>
+          )}
           {loading && <p>{t('common.loading')}</p>}
-          {!loading && entries.length === 0 && <p>{t('trash.empty')}</p>}
-          {entries.length > 0 && (
-            <table>
-              <caption>{t('trash.caption')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('trash.entry')}</th>
-                  <th scope="col">{t('trash.status')}</th>
-                  <th scope="col">{t('trash.deletedAt')}</th>
-                  <th scope="col">{t('trash.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{titleOf(entry)}</td>
-                    {/* The status it had when it was thrown away, and the one
-                        restoring gives back: deletedAt is orthogonal. */}
-                    <td>{entry.status}</td>
-                    <td>{entry.deletedAt ?? '—'}</td>
-                    <td>
-                      <button
-                        type="button"
-                        disabled={busy === entry.id}
-                        onClick={() => void restore(entry.id)}
-                      >
-                        {t('trash.restore')}
-                      </button>{' '}
-                      <button
-                        type="button"
-                        disabled={busy === entry.id}
-                        onClick={() => void destroy(entry.id)}
-                      >
-                        {t('trash.purge')}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          {!loading && (
+            <TableRoot label={t('trash.caption')}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>{t('trash.entry')}</TableHeader>
+                    <TableHeader>{t('trash.status')}</TableHeader>
+                    <TableHeader>{t('trash.deletedAt')}</TableHeader>
+                    <TableHeader>{t('trash.actions')}</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {entries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>{titleOf(entry)}</TableCell>
+                      {/* The status it had when it was thrown away, and the one
+                          restoring gives back: deletedAt is orthogonal. */}
+                      <TableCell>{entry.status}</TableCell>
+                      <TableCell>{entry.deletedAt ?? '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={busy === entry.id}
+                            onClick={() => void restore(entry.id)}
+                          >
+                            {t('trash.restore')}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={busy === entry.id}
+                            onClick={() => void destroy(entry.id)}
+                          >
+                            {t('trash.purge')}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {entries.length === 0 && <TableEmpty colSpan={4}>{t('trash.empty')}</TableEmpty>}
+                </TableBody>
+              </Table>
+            </TableRoot>
           )}
         </>
       )}

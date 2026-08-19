@@ -9,6 +9,7 @@ import {
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import {
+  CONTENT_STATUSES,
   type CollectionDefinition,
   type ContentStatus,
   DEFAULT_TRASH_RETAIN_DAYS,
@@ -106,6 +107,18 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   /** Purges what has sat in the trash longer than `trash.retainDays`. */
   purgeExpired(): Promise<PurgeReport>
   list(options?: ListOptions): Promise<Page<ContentEntry<TValues>>>
+  /**
+   * How many live (non-trashed) rows this collection holds, grouped by
+   * `status` (fiche 01 "Liste de contenu", task 4).
+   *
+   * A real `GROUP BY status` rather than a client-side count of one page —
+   * the whole reason the fiche argues for this method to exist at all: a
+   * page-local count is wrong the moment there is a second page. Every
+   * status of contract A's closed set is always a key of the result, `0`
+   * when the collection holds none, so a caller never has to guess whether
+   * an absent key means zero or "not computed".
+   */
+  countByStatus(): Promise<Readonly<Record<ContentStatus, number>>>
   publish(
     id: string,
     input?: { readonly publishedBy?: string | null },
@@ -1246,6 +1259,28 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         hasMore,
         nextCursor: hasMore && last !== undefined ? cursorFor(last, order) : null,
       }
+    },
+
+    countByStatus: async () => {
+      const result = Object.fromEntries(CONTENT_STATUSES.map((status) => [status, 0])) as Record<
+        ContentStatus,
+        number
+      >
+
+      const found = await db.query<Row>(
+        sql`select ${identifier('status', dialect)} as status, count(*) as n from ${entries}
+            where ${deletedAt} is null
+            group by ${identifier('status', dialect)}`,
+      )
+
+      for (const row of found.rows) {
+        const status = text(row['status']) as ContentStatus
+        const raw = row['n']
+        const n = typeof raw === 'number' ? raw : Number(raw)
+        if (status in result && Number.isFinite(n)) result[status] = n
+      }
+
+      return result
     },
 
     publish: async (id, publishOptions) =>

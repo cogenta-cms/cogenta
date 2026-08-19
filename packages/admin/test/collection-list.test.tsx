@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -31,15 +31,37 @@ describe('CollectionListRoute', () => {
     expect(screen.getByText('Second article')).toBeDefined()
   })
 
-  it('filters by status', async () => {
+  it('filters by status, through the status tabs (fiche 01 task 4)', async () => {
     render(<App />)
     await goToArticles()
     await screen.findByText('First article')
 
-    fireEvent.change(screen.getByLabelText('Statut'), { target: { value: 'draft' } })
+    // entry-1 is published, entry-2 is a draft — the tab's own count says so.
+    fireEvent.click(screen.getByRole('button', { name: 'Brouillons (1)' }))
 
     await waitFor(() => expect(screen.queryByText('First article')).toBeNull())
     expect(screen.getByText('Second article')).toBeDefined()
+    // Reflected in the URL, so the filtered list is shareable (task 5).
+    expect(window.location.search).toContain('status=draft')
+  })
+
+  it('marks the active status tab with aria-current, and shows every real count', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    const all = await screen.findByRole('button', { name: 'Tous (2)' })
+    expect(all.getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Brouillons (1)' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Publiés (1)' })).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Brouillons (1)' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Brouillons (1)' }).getAttribute('aria-current'),
+      ).toBe('true'),
+    )
+    expect(all.getAttribute('aria-current')).toBeNull()
   })
 
   it('shows a bulk delete action only once a row is selected, for a role that may delete', async () => {
@@ -155,5 +177,100 @@ describe('CollectionListRoute', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
     await screen.findByRole('heading', { name: 'Contenus' })
     expect(screen.queryByText('Secret memos')).toBeNull()
+  })
+
+  it('hides every row action a viewer role may not perform, keeping only Voir (fiche 01 task 2)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['viewer'] })
+
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    // `article` grants publish/create/update/delete to `editor` only.
+    expect(screen.queryByRole('button', { name: 'Publier' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Dépublier' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Corbeille' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Dupliquer' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Modifier' })).toBeNull()
+    // `read` is granted to `public`, so a viewer still sees the entry itself.
+    expect(screen.getAllByRole('button', { name: 'Voir' }).length).toBeGreaterThan(0)
+    // No `delete` means no selection column either (the column-picker's own
+    // checkboxes, unrelated to delete, are deliberately not excluded here).
+    expect(screen.queryByRole('checkbox', { name: /Sélectionner/ })).toBeNull()
+  })
+
+  it('publishes an entry from its row action, without opening it (fiche 01 task 2)', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('Second article')
+
+    const realFetch = globalThis.fetch
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (init?.method === 'POST') calls.push(url)
+        return realFetch(input, init)
+      }),
+    )
+
+    const row = screen.getByText('Second article').closest('tr')
+    if (row === null) throw new Error('expected a table row')
+    fireEvent.click(within(row).getByRole('button', { name: 'Publier' }))
+
+    // The real route, hit directly from the row — never a navigation to the
+    // entry screen first.
+    await waitFor(() => expect(calls.some((url) => url.includes('/entry-2/publish'))).toBe(true))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('runs a bulk action across a selection, reporting exactly which row failed and why (fiche 01 task 3)', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    const realFetch = globalThis.fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/entry-2/publish')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: { code: 'FORBIDDEN', message: 'Access denied: publish on article.' },
+              }),
+              { status: 403, headers: { 'content-type': 'application/json' } },
+            ),
+          )
+        }
+        return realFetch(input, init)
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner First article' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner Second article' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Publier (2)' }))
+
+    await screen.findByText('1 sur 2 ont réussi.')
+    expect(screen.getByText('Second article : Access denied: publish on article.')).toBeDefined()
+  })
+
+  it('persists a chosen extra column to localStorage, keyed by the collection (fiche 01 task 6)', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    fireEvent.click(screen.getByText('Colonnes'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'summary' }))
+
+    expect(await screen.findByText('A summary worth reading')).toBeDefined()
+    const saved = JSON.parse(localStorage.getItem('cogenta.tablePrefs.article') ?? '{}') as {
+      columns?: readonly string[]
+    }
+    expect(saved.columns).toEqual(['summary'])
   })
 })

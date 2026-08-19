@@ -172,6 +172,25 @@ describe('searchDocumentFor', () => {
     )
   })
 
+  it('prefers a field named "name" over one declared earlier, when there is no "title" (fiche 01 task 1)', () => {
+    const collectionWithName: CollectionDefinition = {
+      name: 'extract_product',
+      labels: { singular: 'Product', plural: 'Products' },
+      fields: {
+        internalCode: { kind: 'text', options: {} },
+        name: { kind: 'text', options: {} },
+      },
+      permissions: { read: ['public'] },
+    }
+
+    const document = searchDocumentFor(
+      collectionWithName,
+      entry({ values: { internalCode: 'SKU-001', name: 'Wool jumper' } }),
+    )
+
+    expect(document.title).toBe('Wool jumper')
+  })
+
   it('accepts an entry with nothing indexable rather than refusing it', () => {
     const document = searchDocumentFor(collection, entry())
 

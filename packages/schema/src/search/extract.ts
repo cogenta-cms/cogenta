@@ -135,14 +135,20 @@ function extractZones(zones: BlockZones): string {
 /**
  * The field whose value labels a result.
  *
- * `title` by name when the collection has one — contract A's own example uses
- * it — and the first declared `text` field otherwise, which is what an editor
- * sees at the top of the form.
+ * Fiche 01 ("Liste de contenu"), task 1: the same priority order
+ * `packages/admin/src/lib/entry-title.ts` uses for every other screen that
+ * names an entry, so a title reads the same in the collection list, the
+ * trash and here. A declared `text` field named `title`, `name` or `label`
+ * — in that priority order — and the first declared `text` field
+ * otherwise, which is what an editor sees at the top of the form.
  */
+const TITLE_FIELD_PRIORITY = ['title', 'name', 'label'] as const
+
 function titleOf(collection: CollectionDefinition, entry: ContentEntry): string {
-  const named = collection.fields['title']
-  if (named?.kind === 'text') {
-    const value = entry.values['title']
+  for (const name of TITLE_FIELD_PRIORITY) {
+    const field = collection.fields[name]
+    if (field?.kind !== 'text') continue
+    const value = entry.values[name]
     if (typeof value === 'string' && value.length > 0) return condense(value)
   }
 

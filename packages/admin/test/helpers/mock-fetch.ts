@@ -139,6 +139,28 @@ export const MOCK_ENTRIES = [
   },
 ]
 
+/**
+ * `?counts=1` (fiche 01 "Liste de contenu", task 4) for the `article` mock
+ * fixture — a status-by-status tally of `MOCK_ENTRIES`, trash excluded
+ * (ADR-0022's default), narrowed to `published` only for a role with no
+ * authoring permission on the collection. Mirrors
+ * `ContentService.counts`'s own rule: a role that may not read drafts must
+ * not learn how many exist.
+ */
+function articleCounts(rolesHeld: readonly string[]): Readonly<Partial<Record<string, number>>> {
+  const all: Record<string, number> = { draft: 0, scheduled: 0, published: 0, archived: 0 }
+  for (const entry of MOCK_ENTRIES) {
+    if (entry.status in all) all[entry.status] = (all[entry.status] ?? 0) + 1
+  }
+  const permissions = MOCK_SCHEMA.collections[0]?.permissions as Readonly<
+    Record<string, readonly string[]>
+  >
+  const canReadUnpublished = (['create', 'update', 'delete', 'publish'] as const).some((action) =>
+    (permissions[action] ?? []).some((role) => rolesHeld.includes(role)),
+  )
+  return canReadUnpublished ? all : { published: all['published'] }
+}
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -1926,6 +1948,8 @@ export function installMockFetch(
         if (collection === 'article' && id === undefined && method === 'GET') {
           const parsed = new URL(url, 'http://localhost')
           const trashed = parsed.searchParams.get('trashed')
+          const wantsCounts = parsed.searchParams.get('counts') === '1'
+          const counts = wantsCounts ? { counts: articleCounts(user.roles) } : {}
 
           // Seeing the trash needs `delete`, exactly as the API requires
           // (ADR-0022 keeps the five actions frozen; the trash borrows the
@@ -1938,7 +1962,7 @@ export function installMockFetch(
               })
             }
             const items = trashed === 'only' ? trash : [...MOCK_ENTRIES, ...trash]
-            return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+            return json(200, { data: items, page: { hasMore: false, nextCursor: null }, ...counts })
           }
 
           const statusFilter = parsed.searchParams.get('status')
@@ -1946,7 +1970,7 @@ export function installMockFetch(
             statusFilter === null
               ? MOCK_ENTRIES
               : MOCK_ENTRIES.filter((entry) => entry.status === statusFilter)
-          return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+          return json(200, { data: items, page: { hasMore: false, nextCursor: null }, ...counts })
         }
 
         if (collection === 'article' && id !== undefined && method === 'GET') {

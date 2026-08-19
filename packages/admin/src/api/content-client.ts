@@ -47,6 +47,14 @@ export interface EntryPage {
   readonly items: readonly Entry[]
   readonly hasMore: boolean
   readonly nextCursor: string | null
+  /**
+   * How many live entries this collection holds, by status — present only
+   * when `counts: true` was asked for (fiche 01 "Liste de contenu", task 4).
+   * A status a role may not read (a viewer's drafts, say) is simply absent
+   * from this record rather than reported as `0`: the server never sends a
+   * number it would be a leak to answer.
+   */
+  readonly counts?: Readonly<Partial<Record<string, number>>>
 }
 
 export type SortField = 'id' | 'createdAt' | 'updatedAt'
@@ -55,12 +63,34 @@ export type SortDirection = 'asc' | 'desc'
 /** Whether a list reaches into the trash. Absent means no (`schema@2.0`). */
 export type TrashFilter = 'exclude' | 'include' | 'only'
 
+/**
+ * A taxonomy field's value as a list filter (fiche 01 task 5).
+ *
+ * `many` picks the operator: `contains` for a to-many taxonomy field (its
+ * value is an array of term ids, and `eq` would compare the whole array
+ * against one id and never match), `eq` for a single-valued one.
+ */
+export interface TermFilter {
+  readonly field: string
+  readonly termId: string
+  readonly many: boolean
+}
+
 export interface ListOptions {
   readonly sort?: { readonly field: SortField; readonly direction: SortDirection }
   readonly status?: string
   readonly after?: string
   readonly limit?: number
   readonly trashed?: TrashFilter
+  /** Restricts the list to one locale of the translation family (fiche 01 task 5). */
+  readonly locale?: string
+  /** `updatedAt >=` this ISO instant (fiche 01 task 5). */
+  readonly updatedFrom?: string
+  /** `updatedAt <=` this ISO instant (fiche 01 task 5). */
+  readonly updatedTo?: string
+  readonly termFilter?: TermFilter
+  /** Adds `counts` (by status) to the response, alongside the page (fiche 01 task 4). */
+  readonly counts?: boolean
 }
 
 function searchParamsFor(options: ListOptions): URLSearchParams {
@@ -77,6 +107,14 @@ function searchParamsFor(options: ListOptions): URLSearchParams {
   if (options.after !== undefined) params.set('after', options.after)
   if (options.limit !== undefined) params.set('limit', String(options.limit))
   if (options.trashed !== undefined) params.set('trashed', options.trashed)
+  if (options.locale !== undefined) params.set('locale', options.locale)
+  if (options.updatedFrom !== undefined) params.set('filter.updatedAt.gte', options.updatedFrom)
+  if (options.updatedTo !== undefined) params.set('filter.updatedAt.lte', options.updatedTo)
+  if (options.termFilter !== undefined) {
+    const operator = options.termFilter.many ? 'contains' : 'eq'
+    params.set(`filter.${options.termFilter.field}.${operator}`, options.termFilter.termId)
+  }
+  if (options.counts === true) params.set('counts', '1')
   return params
 }
 
@@ -89,10 +127,16 @@ export async function listEntries(
   const body = await requestBody<{
     readonly data: readonly Entry[]
     readonly page: { readonly hasMore: boolean; readonly nextCursor: string | null }
+    readonly counts?: Readonly<Partial<Record<string, number>>>
   }>(`/api/content/${encodeURIComponent(collection)}${query === '' ? '' : `?${query}`}`, {
     headers: authHeader(token),
   })
-  return { items: body.data, hasMore: body.page.hasMore, nextCursor: body.page.nextCursor }
+  return {
+    items: body.data,
+    hasMore: body.page.hasMore,
+    nextCursor: body.page.nextCursor,
+    ...(body.counts === undefined ? {} : { counts: body.counts }),
+  }
 }
 
 /** Moves the entry to the trash — or deletes it outright when the collection declares `trash: false`. */

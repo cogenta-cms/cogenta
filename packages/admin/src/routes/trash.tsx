@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { type Entry, listEntries, purgeEntry, untrashEntry } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { titleOf } from '../lib/entry-title.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
@@ -56,6 +57,7 @@ export function TrashRoute(): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null)
 
   const current = selected ?? collections[0]?.name ?? null
+  const currentCollection = collections.find((collection) => collection.name === current)
 
   const load = useCallback(async () => {
     if (token === null || current === null) return
@@ -166,7 +168,7 @@ export function TrashRoute(): JSX.Element {
                 <TableBody>
                   {entries.map((entry) => (
                     <TableRow key={entry.id}>
-                      <TableCell>{titleOf(entry)}</TableCell>
+                      <TableCell>{titleOf(entry, currentCollection)}</TableCell>
                       {/* The status it had when it was thrown away, and the one
                           restoring gives back: deletedAt is orthogonal. */}
                       <TableCell>{entry.status}</TableCell>
@@ -202,16 +204,4 @@ export function TrashRoute(): JSX.Element {
       )}
     </section>
   )
-}
-
-/**
- * Something recognisable to a human, without knowing the collection: the
- * first text-ish value, falling back to the id.
- */
-function titleOf(entry: Entry): string {
-  for (const key of ['title', 'name', 'slug']) {
-    const value = entry.values[key]
-    if (typeof value === 'string' && value !== '') return value
-  }
-  return entry.id
 }

@@ -11,7 +11,12 @@ export function DateField({
   disabled,
 }: FieldProps<string>): JSX.Element {
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper
+      id={id}
+      field={field}
+      value={value}
+      onReset={() => onChange(field.default as string)}
+    >
       <input
         id={id}
         type="date"

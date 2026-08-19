@@ -31,6 +31,7 @@
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
+    "@cogenta/blocks": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",

@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { type JSX, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
@@ -8,37 +8,155 @@ interface SelectChoice {
   readonly label?: string
 }
 
-export function SelectField({
+/** Options short enough that a search box would only add a step, not save one. */
+const SEARCH_THRESHOLD = 10
+
+function labelFor(choice: SelectChoice): string {
+  return choice.label ?? choice.value
+}
+
+/**
+ * `many: true` (task 4): a checkbox group, not a custom `aria-multiselectable`
+ * listbox — the WAI-ARIA Authoring Practices' own recommendation for "choose
+ * zero or more from a list" is a checkbox group precisely because it is
+ * keyboard- and screen-reader-correct for free, where a hand-rolled listbox
+ * would need its own arrow-key and typeahead handling to reach the same bar.
+ * Chosen values also show as removable tokens above the list, so reviewing
+ * a long selection does not mean scrolling the whole options list to find
+ * the checked ones.
+ */
+function ManySelectField({
   id,
   field,
   value,
   onChange,
   disabled,
-}: FieldProps<string>): JSX.Element {
+  options,
+}: FieldProps<readonly string[]> & { readonly options: readonly SelectChoice[] }): JSX.Element {
   const { t } = useTranslation()
+  const searchId = useId()
+  const [query, setQuery] = useState('')
+
+  const chosen = new Set(value)
+  const showSearch = options.length > SEARCH_THRESHOLD
+  const visible =
+    showSearch && query.trim() !== ''
+      ? options.filter((choice) =>
+          labelFor(choice).toLowerCase().includes(query.trim().toLowerCase()),
+        )
+      : options
+
+  function toggle(optionValue: string): void {
+    onChange(
+      chosen.has(optionValue) ? value.filter((v) => v !== optionValue) : [...value, optionValue],
+    )
+  }
+
+  return (
+    <div className="field__select-many">
+      {value.length > 0 && (
+        <ul className="field__select-tokens" aria-label={t('fields.selectChosenLabel')}>
+          {value.map((optionValue) => {
+            const choice = options.find((candidate) => candidate.value === optionValue)
+            return (
+              <li key={optionValue} className="field__select-token">
+                <span>{choice === undefined ? optionValue : labelFor(choice)}</span>
+                {!disabled && (
+                  <button
+                    type="button"
+                    aria-label={t('fields.selectRemoveToken', {
+                      label: choice === undefined ? optionValue : labelFor(choice),
+                    })}
+                    onClick={() => toggle(optionValue)}
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {showSearch && (
+        <div>
+          <label htmlFor={searchId} className="field__select-search-label">
+            {t('fields.selectSearchLabel')}
+          </label>
+          <input
+            id={searchId}
+            type="search"
+            value={query}
+            disabled={disabled}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      )}
+
+      <fieldset className="field__select-options" aria-label={field.admin?.label ?? field.name}>
+        {visible.length === 0 ? (
+          <p className="field__placeholder">{t('fields.selectNoMatches')}</p>
+        ) : (
+          visible.map((choice) => (
+            <label key={choice.value} className="field__select-option">
+              <input
+                type="checkbox"
+                id={`${id}-${choice.value}`}
+                checked={chosen.has(choice.value)}
+                disabled={disabled}
+                onChange={() => toggle(choice.value)}
+              />
+              {labelFor(choice)}
+            </label>
+          ))
+        )}
+      </fieldset>
+    </div>
+  )
+}
+
+export function SelectField({
+  id,
+  field,
+  value,
+  onChange,
+  disabled = false,
+}: FieldProps<string | readonly string[]>): JSX.Element {
   const options = field.options as {
     readonly options: readonly SelectChoice[]
     readonly many?: boolean
   }
 
-  // `many: true` is a real option this package will need (task 7 or later);
-  // a single `<select>` cannot represent it, so it is refused rather than
-  // silently edited wrong.
   if (options.many === true) {
+    const manyValue = Array.isArray(value) ? value : []
     return (
       <FieldWrapper id={id} field={field}>
-        <p role="alert">{t('fields.selectMultiNotSupported')}</p>
+        <ManySelectField
+          id={id}
+          field={field}
+          value={manyValue}
+          onChange={onChange}
+          disabled={disabled}
+          options={options.options}
+        />
       </FieldWrapper>
     )
   }
 
+  const singleValue = typeof value === 'string' ? value : ''
+
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper
+      id={id}
+      field={field}
+      value={singleValue}
+      onReset={() => onChange(field.default as string)}
+    >
       <select
         id={id}
         required={field.required}
         disabled={disabled}
-        value={value}
+        value={singleValue}
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="" disabled hidden>
@@ -46,7 +164,7 @@ export function SelectField({
         </option>
         {options.options.map((choice) => (
           <option key={choice.value} value={choice.value}>
-            {choice.label ?? choice.value}
+            {labelFor(choice)}
           </option>
         ))}
       </select>

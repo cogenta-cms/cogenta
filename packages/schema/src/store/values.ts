@@ -14,6 +14,22 @@ import type { BlockZones, ContentBlock, ContentValues } from './types.js'
 
 const JSON_KINDS = new Set(['richText', 'json', 'geo'])
 
+/**
+ * `media`/`select` with `many: true`: several values, but — unlike a to-many
+ * `relation` or `taxonomy` field — nothing on the other end that a foreign
+ * key could point at (a media asset lives in its own subsystem, a select
+ * choice references nothing at all). So the ordered array is JSON-encoded
+ * straight into its own column, the same trick `richText`/`json`/`geo`
+ * already use, rather than a join table `relationsOf` has no reason to build
+ * for either kind.
+ */
+function isJsonEncodedArray(definition: FieldDefinition): boolean {
+  return (
+    (definition.kind === 'media' || definition.kind === 'select') &&
+    definition.options['many'] === true
+  )
+}
+
 function invalid(message: string, hint: string, details: Record<string, unknown>): CogentaError {
   return new CogentaError({ code: 'CONTENT_INVALID', message, hint, details })
 }
@@ -24,6 +40,17 @@ export function encodeFieldValue(
   value: unknown,
 ): unknown {
   if (value === undefined || value === null) return null
+
+  if (isJsonEncodedArray(definition)) {
+    if (!Array.isArray(value)) {
+      throw invalid(
+        `"${field}" holds several values, so it expects an array.`,
+        'Pass an array — of media ids for a media field, of choice values for a select field.',
+        { field, kind: definition.kind },
+      )
+    }
+    return JSON.stringify(value)
+  }
 
   if (JSON_KINDS.has(definition.kind)) return JSON.stringify(value)
 
@@ -65,7 +92,7 @@ export function encodeFieldValue(
 export function decodeFieldValue(definition: FieldDefinition, raw: unknown): unknown {
   if (raw === undefined || raw === null) return null
 
-  if (JSON_KINDS.has(definition.kind)) {
+  if (JSON_KINDS.has(definition.kind) || isJsonEncodedArray(definition)) {
     if (typeof raw !== 'string') return raw
     try {
       return JSON.parse(raw)
@@ -152,6 +179,13 @@ export function normaliseValues(
       }
       if (many) {
         relations[name] = []
+        values[name] = []
+      } else if (isJsonEncodedArray(definition)) {
+        // Same rule as a joined to-many field's empty case (ADR-0022): `[]`,
+        // never `null` — a `media`/`select` field with `many: true` has no
+        // join table to be absent from, but it is still "several values",
+        // and "zero of them" is not the same state as "unset".
+        columns[name] = encodeFieldValue(name, definition, [])
         values[name] = []
       } else {
         columns[name] = null

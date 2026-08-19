@@ -1,0 +1,112 @@
+.entry-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.entry-picker__empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #666);
+  font-style: italic;
+}
+
+.entry-picker__selected {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+}
+
+.entry-picker__token {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-bg, #fff);
+}
+
+.entry-picker__token-title {
+  flex: 1 1 auto;
+  font-size: 0.875rem;
+}
+
+.entry-picker__token-actions {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.entry-picker__badge {
+  display: inline-block;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  background: var(--color-surface-muted, #eee);
+  color: var(--color-text-muted, #555);
+}
+
+.entry-picker__badge--trashed {
+  background: var(--color-danger-surface, #fdecea);
+  color: var(--color-danger, #b3261e);
+}
+
+.entry-picker__notice {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-danger, #b3261e);
+}
+
+.entry-picker__change {
+  margin-top: -0.25rem;
+}
+
+.entry-picker__browse {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.entry-picker__search-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.entry-picker__results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.entry-picker__result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-bg, #fff);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.entry-picker__result--picked {
+  opacity: 0.6;
+  cursor: default;
+}

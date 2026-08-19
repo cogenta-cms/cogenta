@@ -71,7 +71,10 @@ export function columnTypeFor(field: FieldDefinition, dialect: DatabaseDialect):
     case 'slug':
       return textColumn(dialect, 255)
     case 'select':
-      return textColumn(dialect, 255)
+      // `many: true` holds several choices as an ordered JSON array (values.ts)
+      // rather than a join table: a choice references nothing, so there is no
+      // foreign key a join table would exist to enforce.
+      return field.options['many'] === true ? jsonColumn() : textColumn(dialect, 255)
     case 'color':
       return textColumn(dialect, 32)
     case 'number':
@@ -86,7 +89,10 @@ export function columnTypeFor(field: FieldDefinition, dialect: DatabaseDialect):
     case 'media':
       // No foreign key: the media library is its own subsystem and a content
       // table must not refuse to be created because it is not installed yet.
-      return textColumn(dialect, 36)
+      // `many: true` follows `select`'s lead just above, for the same reason —
+      // an ordered JSON array of ids, never a join table, since there is no
+      // foreign key on either side to justify one.
+      return field.options['many'] === true ? jsonColumn() : textColumn(dialect, 36)
     case 'relation':
     case 'taxonomy':
       return uuidColumn(dialect)

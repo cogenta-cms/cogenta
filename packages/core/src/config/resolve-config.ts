@@ -138,6 +138,7 @@ export function resolveConfig(
       path: againstConfigFile(config.cache.path, baseDir),
     }),
     queue: Object.freeze({ driver: config.queue.driver, url: config.queue.url }),
+    rateLimit: Object.freeze({ driver: config.rateLimit.driver, url: config.rateLimit.url }),
     storage: Object.freeze({
       driver: config.storage.driver,
       bucket: config.storage.bucket,

@@ -124,6 +124,15 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   API_KEY_REVOKED: 401,
   API_KEY_EXPIRED: 401,
   API_KEY_NOT_FOUND: 404,
+  // API keys — lifecycle and request quota (fiche 20). A key that is
+  // revoked or expired cannot be rotated: the id names something real, so a
+  // 409 (conflict with its current state) fits better than a 404.
+  API_KEY_ROTATION_INVALID: 409,
+  // The key authenticated successfully; it is simply over its quota for this
+  // window. `createRequestListener` (cogenta serve) is what actually turns
+  // this into `Retry-After`/`RateLimit-*` headers, since `errorResponse`
+  // deliberately never serialises `details` onto the wire.
+  API_KEY_RATE_LIMITED: 429,
 
   AGENT_UNKNOWN: 404,
 

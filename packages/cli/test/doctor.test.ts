@@ -46,6 +46,7 @@ describe('doctor — a machine with no Redis, no Docker and no S3', () => {
       'database:sqlite',
       'cache:file',
       'storage:local',
+      'rateLimit:memory',
     ])
     expect(report.checks.every((check) => check.tier === 'degraded')).toBe(true)
 

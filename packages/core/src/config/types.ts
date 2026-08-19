@@ -1,6 +1,8 @@
 export const DATABASE_DRIVERS = ['postgres', 'mysql', 'sqlite'] as const
 export const CACHE_DRIVERS = ['auto', 'redis', 'file', 'memory'] as const
 export const QUEUE_DRIVERS = ['auto', 'redis', 'database'] as const
+/** Per-API-key request quota (fiche 20 task 3). `auto` prefers Redis, falling back to the in-process counter (R1). */
+export const RATE_LIMIT_DRIVERS = ['auto', 'redis', 'memory'] as const
 export const STORAGE_DRIVERS = ['auto', 's3', 'local'] as const
 export const EMBEDDINGS_PROVIDERS = ['local', 'openai'] as const
 /** Image generation vendors (L18 task 4). Never one hardcoded vendor. */
@@ -11,6 +13,7 @@ export const VECTOR_DRIVERS = ['auto', 'pgvector', 'file', 'memory'] as const
 export type DatabaseDriverName = (typeof DATABASE_DRIVERS)[number]
 export type CacheDriverName = (typeof CACHE_DRIVERS)[number]
 export type QueueDriverName = (typeof QUEUE_DRIVERS)[number]
+export type RateLimitDriverName = (typeof RATE_LIMIT_DRIVERS)[number]
 export type StorageDriverName = (typeof STORAGE_DRIVERS)[number]
 export type EmbeddingsProvider = (typeof EMBEDDINGS_PROVIDERS)[number]
 export type ImageGenerationProvider = (typeof IMAGE_GENERATION_PROVIDERS)[number]
@@ -44,6 +47,15 @@ export interface CogentaConfigInput {
   }
   readonly queue?: {
     readonly driver?: QueueDriverName
+    readonly url?: string
+  }
+  /**
+   * Per-API-key request quota (fiche 20 task 3, R1). `auto` — the default —
+   * prefers Redis when one is configured and falls back to an in-process
+   * counter otherwise, so the limiter works on a site with no Redis at all.
+   */
+  readonly rateLimit?: {
+    readonly driver?: RateLimitDriverName
     readonly url?: string
   }
   readonly storage?: {
@@ -176,6 +188,10 @@ export interface CogentaConfig {
   }
   readonly queue: {
     readonly driver: QueueDriverName
+    readonly url: string | undefined
+  }
+  readonly rateLimit: {
+    readonly driver: RateLimitDriverName
     readonly url: string | undefined
   }
   readonly storage: {

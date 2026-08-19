@@ -88,6 +88,15 @@ export interface ApiKey {
   readonly expiresAt: string | undefined
   readonly revokedAt: string | undefined
   readonly lastUsedAt: string | undefined
+  /** Requests per minute this key may make (fiche 20 task 3). Always a real number — `DEFAULT_RATE_LIMIT_PER_MINUTE` when none was chosen. */
+  readonly rateLimitPerMinute: number
+  /**
+   * The id of the key that replaced this one, once rotated (fiche 20 task 2).
+   * `undefined` for a key that has never been rotated, or that *is* the
+   * result of a rotation. `expiresAt` is what actually ends this key's grace
+   * window; this field only names what it was superseded by.
+   */
+  readonly supersededBy: string | undefined
 }
 
 export interface CreateApiKeyInput {
@@ -95,9 +104,29 @@ export interface CreateApiKeyInput {
   readonly scope: readonly string[]
   readonly createdBy: string | null
   readonly expiresAt?: string | undefined
+  /** Omit for `DEFAULT_RATE_LIMIT_PER_MINUTE`. */
+  readonly rateLimitPerMinute?: number | undefined
 }
 
 /** An API key as returned once, at creation — `key` is never stored or shown again. */
 export interface IssuedApiKey extends ApiKey {
   readonly key: string
+}
+
+/**
+ * "Faire tourner cette clé" (fiche 20 task 2): a fresh key with the same name,
+ * scope and quota as the one it replaces, and the replaced key kept valid
+ * for a chosen grace window rather than dying mid-flight.
+ */
+export interface ApiKeyRotationResult {
+  /** The new key, raw value included exactly once — same rule as `create`. */
+  readonly issued: IssuedApiKey
+  /** The old key, now expiring at the end of its grace window. */
+  readonly previous: ApiKey
+}
+
+/** Aggregated call counts for one key (fiche 20 task 4) — never a line per call. */
+export interface ApiKeyUsage {
+  readonly last7Days: number
+  readonly last30Days: number
 }

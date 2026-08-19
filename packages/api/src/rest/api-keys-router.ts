@@ -1,22 +1,28 @@
-import type { AuthStore } from '@cogenta/auth'
+import type { ApiKeyUsage, AuthStore } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 
 /**
- * `/api/api-keys` — L13 task 8, machine-to-machine bearer credentials.
+ * `/api/api-keys` — L13 task 8, machine-to-machine bearer credentials; expiry
+ * defaults, rotation, quota and usage added by fiche 20.
  *
  * Admin-only, no self-service: a key is a grant one person makes for a
  * script or integration, not something the script itself ever manages. The
- * raw key is returned exactly once, in the response to `POST`, and never
- * again — the list route only ever shows the prefix stored alongside the
- * hash (`ApiKeyStore.list`).
+ * raw key is returned exactly once, in the response to `POST` and to
+ * `POST .../rotate`, and never again — every other route, `publicKey`
+ * included, has no path that can produce a `key` field. This is the one
+ * property in the whole fiche that must never regress: read `publicKey`
+ * below before adding a field, and never widen its input type to something
+ * that could carry `key`.
  */
 
 export interface ApiKeysRouterOptions {
   readonly auth: AuthStore
   /** Mount point. `/api/api-keys` by default. */
   readonly basePath?: string
+  /** Injected so the 90-day default expiry is deterministic in tests. */
+  readonly now?: () => number
 }
 
 export interface ApiKeysRouter {
@@ -24,6 +30,17 @@ export interface ApiKeysRouter {
 }
 
 const DEFAULT_BASE_PATH = '/api/api-keys'
+
+/**
+ * "Par défaut : 90 jours" (fiche 20 task 1) — a breaking change from the
+ * previous default of "never", called out in this package's changeset. A
+ * key that never expires is still available: pass `neverExpires: true`.
+ */
+const DEFAULT_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000
+
+/** The three presets the admin offers for a rotation's grace window, plus the ceiling any value is clamped to. */
+const MAX_GRACE_HOURS = 24 * 7
+const DEFAULT_GRACE_HOURS = 24
 
 function requireAdmin(actor: Actor, what: string): void {
   if (actor.roles.includes('admin')) return
@@ -77,15 +94,82 @@ function scopeField(body: Record<string, unknown>): readonly string[] {
   return scope
 }
 
-function expiresAtField(body: Record<string, unknown>): string | undefined {
+function explicitExpiresAtField(body: Record<string, unknown>): string | undefined {
   const value = body['expiresAt']
   if (value === undefined || value === null) return undefined
   if (typeof value !== 'string' || Number.isNaN(new Date(value).getTime())) {
     throw new CogentaError({
       code: 'QUERY_INVALID',
-      message:
-        '"expiresAt" must be an ISO 8601 timestamp, or omitted for a key that never expires.',
-      hint: 'Send an ISO date string, e.g. "2027-01-01T00:00:00.000Z".',
+      message: '"expiresAt" must be an ISO 8601 timestamp, or omitted to use the default.',
+      hint: 'Send an ISO date string, e.g. "2027-01-01T00:00:00.000Z", or set "neverExpires" instead.',
+    })
+  }
+  return value
+}
+
+function neverExpiresField(body: Record<string, unknown>): boolean {
+  const value = body['neverExpires']
+  if (value === undefined) return false
+  if (typeof value !== 'boolean') {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: '"neverExpires" must be a boolean.',
+      hint: 'Send true to mint a key with no expiry, or omit it to use the default.',
+    })
+  }
+  return value
+}
+
+/**
+ * `expiresAt` chosen explicitly wins; failing that, `neverExpires: true`
+ * means exactly what it says; failing that, the 90-day default applies.
+ * Sending both a concrete date and `neverExpires: true` is a contradiction
+ * the caller must resolve, not a silent pick between them.
+ */
+function resolveExpiry(body: Record<string, unknown>, now: () => number): string | undefined {
+  const explicit = explicitExpiresAtField(body)
+  const never = neverExpiresField(body)
+
+  if (explicit !== undefined && never) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: '"expiresAt" and "neverExpires" cannot both be set.',
+      hint: 'Choose one: a concrete expiry date, or no expiry at all.',
+    })
+  }
+  if (explicit !== undefined) return explicit
+  if (never) return undefined
+  return new Date(now() + DEFAULT_EXPIRY_MS).toISOString()
+}
+
+function rateLimitPerMinuteField(body: Record<string, unknown>): number | undefined {
+  const value = body['rateLimitPerMinute']
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: '"rateLimitPerMinute" must be a positive integer, or omitted for the default quota.',
+      hint: 'Requests per minute this key may make — a generous but real number, not "unlimited".',
+    })
+  }
+  return value
+}
+
+function graceHoursField(body: Record<string, unknown>): number {
+  const value = body['graceHours']
+  if (value === undefined) return DEFAULT_GRACE_HOURS
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: '"graceHours" must be a positive integer, or omitted for the default.',
+      hint: `Send a whole number of hours, up to ${MAX_GRACE_HOURS} (7 days).`,
+    })
+  }
+  if (value > MAX_GRACE_HOURS) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: `"graceHours" cannot exceed ${MAX_GRACE_HOURS} (7 days).`,
+      hint: 'A rotation grace window is meant to be short — a bounded, visible overlap, not a second permanent key.',
     })
   }
   return value
@@ -101,6 +185,8 @@ function publicKey(key: {
   readonly expiresAt: string | undefined
   readonly revokedAt: string | undefined
   readonly lastUsedAt: string | undefined
+  readonly rateLimitPerMinute: number
+  readonly supersededBy: string | undefined
 }): Record<string, unknown> {
   return {
     id: key.id,
@@ -112,7 +198,13 @@ function publicKey(key: {
     expiresAt: key.expiresAt ?? null,
     revokedAt: key.revokedAt ?? null,
     lastUsedAt: key.lastUsedAt ?? null,
+    rateLimitPerMinute: key.rateLimitPerMinute,
+    supersededBy: key.supersededBy ?? null,
   }
+}
+
+function publicUsage(usage: ApiKeyUsage): Record<string, unknown> {
+  return { last7Days: usage.last7Days, last30Days: usage.last30Days }
 }
 
 function normalise(path: string): string {
@@ -148,7 +240,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'API key routes are /api/api-keys and /api/api-keys/{id}.',
+    hint: 'API key routes are /api/api-keys, /api/api-keys/{id} and /api/api-keys/{id}/rotate.',
   })
 }
 
@@ -163,6 +255,7 @@ function keyNotFound(): CogentaError {
 export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRouter {
   const { auth } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
+  const now = options.now ?? Date.now
 
   return {
     handle: async (request, actor) => {
@@ -174,6 +267,9 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         if (segments.length === 0) return await collectionRoute(request, actor, method)
         if (segments.length === 1) {
           return await keyRoute(actor, segments[0] as string, method)
+        }
+        if (segments.length === 2 && segments[1] === 'rotate') {
+          return await rotateRoute(request, actor, segments[0] as string, method)
         }
         throw noRoute()
       } catch (error) {
@@ -190,7 +286,13 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     if (method === 'GET') {
       requireAdmin(actor, 'list API keys')
       const keys = await auth.apiKeys.list()
-      return jsonResponse(200, { data: keys.map(publicKey) })
+      const data = await Promise.all(
+        keys.map(async (key) => ({
+          ...publicKey(key),
+          usage: publicUsage(await auth.apiKeys.usage(key.id)),
+        })),
+      )
+      return jsonResponse(200, { data })
     }
 
     if (method === 'POST') {
@@ -198,13 +300,15 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
       const body = asRecord(request.body)
       const name = stringField(body, 'name')
       const scope = scopeField(body)
-      const expiresAt = expiresAtField(body)
+      const expiresAt = resolveExpiry(body, now)
+      const rateLimitPerMinute = rateLimitPerMinuteField(body)
 
       const issued = await auth.apiKeys.create({
         name,
         scope,
         createdBy: actor.id,
         ...(expiresAt === undefined ? {} : { expiresAt }),
+        ...(rateLimitPerMinute === undefined ? {} : { rateLimitPerMinute }),
       })
 
       // The only response, ever, that carries the raw key. `key` is absent
@@ -219,10 +323,41 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     if (method !== 'DELETE') return methodNotAllowed(['DELETE'])
     requireAdmin(actor, 'revoke an API key')
 
-    const existing = (await auth.apiKeys.list()).find((key) => key.id === id)
-    if (existing === undefined) throw keyNotFound()
+    const existing = await auth.apiKeys.getById(id)
+    if (existing === null) throw keyNotFound()
 
     await auth.apiKeys.revoke(id)
     return { status: 204, body: null, headers: {} }
+  }
+
+  /**
+   * "Faire tourner cette clé" (fiche 20 task 2). The response carries the new
+   * key's raw value once, exactly like `POST /api/api-keys` does, alongside
+   * the previous key's public record now that it is on a grace window — the
+   * admin screen needs both to show "en sursis jusqu'à …" without a second
+   * round trip.
+   */
+  async function rotateRoute(
+    request: RestRequest,
+    actor: Actor,
+    id: string,
+    method: string,
+  ): Promise<RestResponse> {
+    if (method !== 'POST') return methodNotAllowed(['POST'])
+    requireAdmin(actor, 'rotate an API key')
+
+    const body = asRecord(request.body ?? {})
+    const graceHours = graceHoursField(body)
+
+    const { issued, previous } = await auth.apiKeys.rotate(id, {
+      graceMs: graceHours * 60 * 60 * 1000,
+    })
+
+    return jsonResponse(201, {
+      data: {
+        issued: { ...publicKey(issued), key: issued.key },
+        previous: publicKey(previous),
+      },
+    })
   }
 }

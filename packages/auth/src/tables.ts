@@ -15,6 +15,8 @@ export const TABLES = {
   passwordResets: 'cogenta_password_resets',
   auditLog: 'cogenta_audit_log',
   apiKeys: 'cogenta_api_keys',
+  /** Aggregated per-day call counts (fiche 20 task 4) — never a line-per-call log. */
+  apiKeyUsage: 'cogenta_api_key_usage',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -42,6 +44,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   const passwordResets = identifier(TABLES.passwordResets, d)
   const auditLog = identifier(TABLES.auditLog, d)
   const apiKeys = identifier(TABLES.apiKeys, d)
+  const apiKeyUsage = identifier(TABLES.apiKeyUsage, d)
   const t512 = textColumn(d, 512)
   const t255 = textColumn(d, 255)
   const t64 = textColumn(d, 64)
@@ -146,7 +149,37 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       created_at ${t64} not null,
       expires_at ${t64},
       revoked_at ${t64},
-      last_used_at ${t64}
+      last_used_at ${t64},
+      -- Requests per minute this key may make (fiche 20 task 3). Nullable so
+      -- a row written before this column existed still parses: fromRow()
+      -- treats null as "the default quota", the same courtesy expires_at
+      -- already gets for "never".
+      rate_limit_per_minute integer,
+      -- Set when this key was replaced by a rotation (fiche 20 task 2): the
+      -- id of the new key. expires_at is what actually ends this key's
+      -- grace window — this column only makes that window visible as
+      -- "superseded", rather than indistinguishable from an ordinary expiry.
+      superseded_by ${t64}
+    )`)
+
+  // Both columns above are additive for a database that already had this
+  // table before fiche 20: `create table if not exists` never touches an
+  // existing table, so an upgrade needs its own statement. There is no
+  // portable "add column if not exists" (the same reason indexes below use
+  // catch-and-ignore) — the failure this swallows is exactly "already there".
+  await addColumnIfMissing(db, apiKeys, 'rate_limit_per_minute', sql`integer`)
+  await addColumnIfMissing(db, apiKeys, 'superseded_by', sql`${t64}`)
+
+  await db.query(sql`
+    create table if not exists ${apiKeyUsage} (
+      id ${t64} not null primary key,
+      key_id ${t64} not null,
+      -- One row per key per UTC calendar day, incremented on every
+      -- successful verification. Aggregated by construction — a line per
+      -- call would be an absurd volume for a key doing hundreds of requests
+      -- a minute (fiche 20 task 4).
+      day ${textColumn(d, 10)} not null,
+      count integer not null
     )`)
 
   await createIndexIfMissing(db, 'cogenta_credentials_user', credentials, sql`(user_id)`)
@@ -158,6 +191,23 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
     sql`(subject, at)`,
   )
   await createIndexIfMissing(db, 'cogenta_password_resets_user', passwordResets, sql`(user_id)`)
+  await createUniqueIndexIfMissing(
+    db,
+    'cogenta_api_key_usage_key_day',
+    apiKeyUsage,
+    sql`(key_id, day)`,
+  )
+}
+
+async function addColumnIfMissing(
+  db: DatabaseHandle,
+  table: SqlFragment,
+  column: string,
+  type: SqlFragment,
+): Promise<void> {
+  await db
+    .query(sql`alter table ${table} add column ${identifier(column, db.dialect)} ${type}`)
+    .catch(() => undefined) // already there — no portable "add column if not exists"
 }
 
 async function createIndexIfMissing(
@@ -168,5 +218,16 @@ async function createIndexIfMissing(
 ): Promise<void> {
   await db
     .query(sql`create index ${identifier(name, db.dialect)} on ${table} ${columns}`)
+    .catch(() => undefined) // already there — no portable "if not exists" for indexes
+}
+
+async function createUniqueIndexIfMissing(
+  db: DatabaseHandle,
+  name: string,
+  table: SqlFragment,
+  columns: SqlFragment,
+): Promise<void> {
+  await db
+    .query(sql`create unique index ${identifier(name, db.dialect)} on ${table} ${columns}`)
     .catch(() => undefined) // already there — no portable "if not exists" for indexes
 }

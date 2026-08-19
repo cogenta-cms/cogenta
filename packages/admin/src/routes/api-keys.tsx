@@ -1,20 +1,26 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   type AdminApiKey,
   type CreatedApiKey,
   createApiKey,
   listApiKeys,
+  type RotatedApiKey,
   revokeApiKey,
+  rotateApiKey,
 } from '../api/api-keys-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { canPerform } from '../schema/permissions.js'
+import { useSchema } from '../schema/schema-context.js'
+import type { CollectionSummary } from '../schema/types.js'
 import {
   Button,
   Field,
   Input,
   Modal,
   Notice,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -27,24 +33,75 @@ import {
 
 /**
  * L13 task 8 — machine-to-machine bearer credentials, managed from the admin
- * instead of never existing at all.
+ * instead of never existing at all. Expiry defaults, rotation, the per-key
+ * request quota and usage/hygiene added by fiche 20.
  *
  * `admin` only, same courtesy-plus-server-check split as `UsersRoute`: this
  * screen hides what a non-admin cannot do, but the 403 the router produces is
  * what actually stops them (R4).
  *
  * The one rule that shapes every line below: the raw key is a value this
- * component holds **only** in `created`, set once by `submitCreate` from the
- * server's own creation response, and cleared the moment its notice is
- * dismissed. `listApiKeys` never returns it — the list only ever renders a
- * `prefix` — so there is no code path here that could show it twice.
+ * component holds **only** in `created` and `rotated.issued`, set once by
+ * `submitCreate`/`confirmRotate` from the server's own response, and cleared
+ * the moment its notice is dismissed. `listApiKeys` never returns it — the
+ * list only ever renders a `prefix` — so there is no code path here that
+ * could show it twice. Read this comment again before adding a field to the
+ * list row: it must never widen to something that could carry `key`.
  */
+
+const WRITE_ACTIONS = ['create', 'update', 'delete', 'publish'] as const
+const ALL_ACTIONS = ['read', ...WRITE_ACTIONS] as const
+const EXPIRY_CHOICES = ['30d', '90d', '1y', 'never'] as const
+type ExpiryChoice = (typeof EXPIRY_CHOICES)[number]
+const GRACE_CHOICES = [1, 24, 24 * 7] as const
+type GraceHours = (typeof GRACE_CHOICES)[number]
+const UNUSED_WARNING_DAYS = 90
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function expiryFieldsFor(choice: ExpiryChoice): { expiresAt?: string; neverExpires?: boolean } {
+  if (choice === 'never') return { neverExpires: true }
+  const days = choice === '30d' ? 30 : choice === '90d' ? 90 : 365
+  return { expiresAt: new Date(Date.now() + days * DAY_MS).toISOString() }
+}
+
+/** Roles this scope grants that also unlock at least one write action somewhere on this site. */
+function writeGrantingRoles(
+  scope: readonly string[],
+  collections: readonly CollectionSummary[],
+): readonly string[] {
+  return scope.filter((role) =>
+    collections.some((collection) =>
+      WRITE_ACTIONS.some((action) => canPerform(action, collection, [role])),
+    ),
+  )
+}
+
+/** What one role actually unlocks on this site, in plain language — for the hover detail. */
+function roleDetail(role: string, collections: readonly CollectionSummary[]): string {
+  const grants = collections
+    .map((collection) => {
+      const actions = ALL_ACTIONS.filter((action) => canPerform(action, collection, [role]))
+      return actions.length === 0 ? null : `${collection.labels.plural}: ${actions.join(', ')}`
+    })
+    .filter((line): line is string => line !== null)
+  return grants.length === 0 ? `${role}: no permission on this site` : grants.join(' — ')
+}
+
+function daysUntil(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS)
+}
+
 export function ApiKeysRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
+  const schemaState = useSchema()
+  const collections = useMemo(
+    () => (schemaState.status === 'ready' ? schemaState.schema.collections : []),
+    [schemaState],
+  )
 
   const [keys, setKeys] = useState<readonly AdminApiKey[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,7 +111,14 @@ export function ApiKeysRoute(): JSX.Element {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newScope, setNewScope] = useState('viewer')
+  const [newExpiry, setNewExpiry] = useState<ExpiryChoice>('90d')
+  const [newRateLimit, setNewRateLimit] = useState('')
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
+
+  const [revoking, setRevoking] = useState<AdminApiKey | null>(null)
+  const [rotating, setRotating] = useState<AdminApiKey | null>(null)
+  const [graceHours, setGraceHours] = useState<GraceHours>(24)
+  const [rotated, setRotated] = useState<RotatedApiKey | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -85,26 +149,49 @@ export function ApiKeysRoute(): JSX.Element {
     if (token === null) return
     setActionError(null)
     try {
-      const result = await createApiKey(token, { name: newName, scope: parseScope(newScope) })
+      const rateLimitPerMinute =
+        newRateLimit.trim() === '' ? undefined : Number.parseInt(newRateLimit, 10)
+      const result = await createApiKey(token, {
+        name: newName,
+        scope: parseScope(newScope),
+        ...expiryFieldsFor(newExpiry),
+        ...(rateLimitPerMinute === undefined ? {} : { rateLimitPerMinute }),
+      })
       setCreated(result)
       setCreating(false)
       setNewName('')
       setNewScope('viewer')
+      setNewExpiry('90d')
+      setNewRateLimit('')
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.createError'))
     }
   }
 
-  async function revoke(key: AdminApiKey): Promise<void> {
-    if (token === null) return
-    if (!globalThis.confirm(t('apiKeys.confirmRevoke'))) return
+  async function confirmRevoke(): Promise<void> {
+    if (token === null || revoking === null) return
     setActionError(null)
     try {
-      await revokeApiKey(token, key.id)
+      await revokeApiKey(token, revoking.id)
+      setRevoking(null)
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.revokeError'))
+    }
+  }
+
+  async function confirmRotate(): Promise<void> {
+    if (token === null || rotating === null) return
+    setActionError(null)
+    try {
+      const result = await rotateApiKey(token, rotating.id, graceHours)
+      setRotated(result)
+      setRotating(null)
+      setGraceHours(24)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.rotateError'))
     }
   }
 
@@ -113,7 +200,25 @@ export function ApiKeysRoute(): JSX.Element {
     if (key.expiresAt !== null && new Date(key.expiresAt).getTime() <= Date.now()) {
       return t('apiKeys.expired')
     }
+    if (key.supersededBy !== null) return t('apiKeys.onGracePeriod')
     return t('apiKeys.active')
+  }
+
+  function expiryLabel(key: AdminApiKey): string {
+    if (key.expiresAt === null) return t('apiKeys.neverExpires')
+    const days = daysUntil(key.expiresAt)
+    if (days <= 0) return t('apiKeys.expired')
+    return key.supersededBy !== null
+      ? t('apiKeys.gracePeriodUntil', { days })
+      : t('apiKeys.expiresInDays', { days })
+  }
+
+  function hygieneNote(key: AdminApiKey): string | null {
+    if (key.revokedAt !== null) return null
+    if (key.lastUsedAt === null) return t('apiKeys.neverUsed')
+    const idleDays = Math.floor((Date.now() - new Date(key.lastUsedAt).getTime()) / DAY_MS)
+    if (idleDays >= UNUSED_WARNING_DAYS) return t('apiKeys.unusedFor', { days: idleDays })
+    return null
   }
 
   if (!isAdmin) {
@@ -151,6 +256,20 @@ export function ApiKeysRoute(): JSX.Element {
         </Notice>
       )}
 
+      {rotated !== null && (
+        <Notice
+          tone="success"
+          live="assertive"
+          title={t('apiKeys.rotatedTitle', { name: rotated.issued.name })}
+          onDismiss={() => setRotated(null)}
+          dismissLabel={t('apiKeys.createdDismiss')}
+        >
+          <p>{t('apiKeys.rotatedBody', { hours: graceHours })}</p>
+          <p className="font-mono text-sm break-all">{rotated.issued.key}</p>
+          <p className="mt-2 font-semibold">{t('apiKeys.createdWarning')}</p>
+        </Notice>
+      )}
+
       {actionError !== null && (
         <Notice tone="danger" live="assertive">
           <p>{actionError}</p>
@@ -173,33 +292,73 @@ export function ApiKeysRoute(): JSX.Element {
                 <TableHeader>{t('apiKeys.prefixColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.scopeColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.createdColumn')}</TableHeader>
+                <TableHeader>{t('apiKeys.expiresColumn')}</TableHeader>
+                <TableHeader>{t('apiKeys.usageColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.lastUsedColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.statusColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.actionsColumn')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
-              {keys.map((key) => (
-                <TableRow key={key.id}>
-                  <TableCell>{key.name}</TableCell>
-                  <TableCell className="font-mono text-sm">{key.prefix}…</TableCell>
-                  <TableCell>{key.scope.join(', ')}</TableCell>
-                  <TableCell>{key.createdAt}</TableCell>
-                  <TableCell>{key.lastUsedAt ?? t('apiKeys.never')}</TableCell>
-                  <TableCell>{statusOf(key)}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={key.revokedAt !== null}
-                      onClick={() => void revoke(key)}
-                    >
-                      {t('apiKeys.revokeKey', { name: key.name })}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {keys.length === 0 && <TableEmpty colSpan={7}>{t('apiKeys.empty')}</TableEmpty>}
+              {keys.map((key) => {
+                const writeRoles = writeGrantingRoles(key.scope, collections)
+                const hygiene = hygieneNote(key)
+                const canManage = key.revokedAt === null && key.supersededBy === null
+                return (
+                  <TableRow key={key.id}>
+                    <TableCell>{key.name}</TableCell>
+                    <TableCell className="font-mono text-sm">{key.prefix}…</TableCell>
+                    <TableCell>
+                      <span
+                        title={key.scope.map((role) => roleDetail(role, collections)).join('\n')}
+                      >
+                        {key.scope.join(', ')}
+                      </span>
+                      {writeRoles.length > 0 && (
+                        <p className="mt-1 text-xs text-warning">
+                          {t('apiKeys.scopeWriteWarning', { roles: writeRoles.join(', ') })}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>{key.createdAt}</TableCell>
+                    <TableCell>{expiryLabel(key)}</TableCell>
+                    <TableCell>
+                      {t('apiKeys.usageSummary', {
+                        last7: key.usage.last7Days,
+                        last30: key.usage.last30Days,
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {key.lastUsedAt ?? t('apiKeys.never')}
+                      {hygiene !== null && (
+                        <p className="mt-1 text-xs text-muted-foreground">{hygiene}</p>
+                      )}
+                    </TableCell>
+                    <TableCell>{statusOf(key)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={!canManage}
+                          onClick={() => setRotating(key)}
+                        >
+                          {t('apiKeys.rotateKey', { name: key.name })}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={key.revokedAt !== null}
+                          onClick={() => setRevoking(key)}
+                        >
+                          {t('apiKeys.revokeKey', { name: key.name })}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {keys.length === 0 && <TableEmpty colSpan={9}>{t('apiKeys.empty')}</TableEmpty>}
             </TableBody>
           </Table>
         </TableRoot>
@@ -233,6 +392,37 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
+          <Field
+            label={t('apiKeys.expiryLabel')}
+            description={
+              newExpiry === 'never' ? t('apiKeys.expiryNeverWarning') : t('apiKeys.expiryHint')
+            }
+          >
+            {(control) => (
+              <Select
+                {...control}
+                value={newExpiry}
+                onChange={(event) => setNewExpiry(event.target.value as ExpiryChoice)}
+              >
+                <option value="30d">{t('apiKeys.expiry30d')}</option>
+                <option value="90d">{t('apiKeys.expiry90d')}</option>
+                <option value="1y">{t('apiKeys.expiry1y')}</option>
+                <option value="never">{t('apiKeys.expiryNever')}</option>
+              </Select>
+            )}
+          </Field>
+          <Field label={t('apiKeys.rateLimitLabel')} description={t('apiKeys.rateLimitHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={1}
+                placeholder={t('apiKeys.rateLimitPlaceholder')}
+                value={newRateLimit}
+                onChange={(event) => setNewRateLimit(event.target.value)}
+              />
+            )}
+          </Field>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setCreating(false)}>
               {t('common.cancel')}
@@ -240,6 +430,59 @@ export function ApiKeysRoute(): JSX.Element {
             <Button type="submit">{t('apiKeys.createButton')}</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={rotating !== null}
+        onOpenChange={(open) => {
+          if (!open) setRotating(null)
+        }}
+        title={t('apiKeys.rotateHeading', { name: rotating?.name ?? '' })}
+        description={t('apiKeys.rotateDescription')}
+        closeLabel={t('apiKeys.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRotating(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void confirmRotate()}>{t('apiKeys.rotateButton')}</Button>
+          </>
+        }
+      >
+        <Field label={t('apiKeys.graceLabel')} description={t('apiKeys.graceHint')}>
+          {(control) => (
+            <Select
+              {...control}
+              value={String(graceHours)}
+              onChange={(event) => setGraceHours(Number(event.target.value) as GraceHours)}
+            >
+              <option value="1">{t('apiKeys.grace1h')}</option>
+              <option value="24">{t('apiKeys.grace24h')}</option>
+              <option value={String(24 * 7)}>{t('apiKeys.grace7d')}</option>
+            </Select>
+          )}
+        </Field>
+      </Modal>
+
+      <Modal
+        open={revoking !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevoking(null)
+        }}
+        title={t('apiKeys.confirmRevokeTitle', { name: revoking?.name ?? '' })}
+        closeLabel={t('apiKeys.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRevoking(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmRevoke()}>
+              {t('apiKeys.confirmRevokeButton')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('apiKeys.confirmRevoke')}</p>
       </Modal>
     </section>
   )

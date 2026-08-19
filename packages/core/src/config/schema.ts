@@ -5,6 +5,7 @@ import {
   EMBEDDINGS_PROVIDERS,
   IMAGE_GENERATION_PROVIDERS,
   QUEUE_DRIVERS,
+  RATE_LIMIT_DRIVERS,
   STORAGE_DRIVERS,
   VECTOR_DRIVERS,
 } from './types.js'
@@ -56,6 +57,11 @@ const cacheSchema = z.strictObject({
 
 const queueSchema = z.strictObject({
   driver: z.enum(QUEUE_DRIVERS).default('auto'),
+  url: nonEmpty.optional(),
+})
+
+const rateLimitSchema = z.strictObject({
+  driver: z.enum(RATE_LIMIT_DRIVERS).default('auto'),
   url: nonEmpty.optional(),
 })
 
@@ -215,6 +221,7 @@ export const configSchema = z.strictObject({
   database: databaseSchema,
   cache: cacheSchema.prefault({}),
   queue: queueSchema.prefault({}),
+  rateLimit: rateLimitSchema.prefault({}),
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
   notFoundLog: notFoundLogSchema.prefault({}),

@@ -4,6 +4,8 @@
  * See `types.ts` for what a notice is and why it is shaped this way.
  */
 
+export type { ApiKeyExpiryOptions } from './api-key-expiry.js'
+export { createApiKeyExpiryNoticeSource } from './api-key-expiry.js'
 export type { NoticeDismissalStore } from './dismissals.js'
 export { createNoticeDismissalStore, NOTICE_DISMISSALS_TABLE } from './dismissals.js'
 export type { MfaRecommendationOptions } from './mfa-recommendation.js'

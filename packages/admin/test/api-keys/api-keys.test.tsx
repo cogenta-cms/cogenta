@@ -94,35 +94,49 @@ describe('creating an API key', () => {
 })
 
 describe('revoking an API key', () => {
-  it('marks it revoked after confirmation', async () => {
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => true),
-    )
+  it('marks it revoked after confirmation, through the design system modal rather than confirm()', async () => {
     render(<App />)
     await goToApiKeys()
     await screen.findByText('CI pipeline')
 
     fireEvent.click(screen.getByRole('button', { name: 'Révoquer CI pipeline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Révoquer CI pipeline ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Révoquer la clé' }))
 
     await waitFor(() => {
       expect(within(table()).getByText('Révoquée')).toBeDefined()
     })
   })
 
-  it('does nothing without confirmation', async () => {
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => false),
-    )
+  it('does nothing when the modal is cancelled', async () => {
     render(<App />)
     await goToApiKeys()
     await screen.findByText('CI pipeline')
 
     fireEvent.click(screen.getByRole('button', { name: 'Révoquer CI pipeline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Révoquer CI pipeline ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }))
 
     await waitFor(() => {
-      expect(within(table()).getByText('Active')).toBeDefined()
+      expect(screen.queryByRole('dialog', { name: 'Révoquer CI pipeline ?' })).toBeNull()
+    })
+    expect(within(table()).getByText('Active')).toBeDefined()
+  })
+})
+
+describe('rotating an API key (fiche 20 task 2)', () => {
+  it('mints a replacement and shows it exactly once, without revoking the original', async () => {
+    render(<App />)
+    await goToApiKeys()
+    await screen.findByText('CI pipeline')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Faire tourner CI pipeline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Faire tourner CI pipeline' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Faire tourner la clé' }))
+
+    expect(await screen.findByText(/^cogenta_sk_mock-rotated/u)).toBeDefined()
+    await waitFor(() => {
+      expect(within(table()).getByText('En sursis')).toBeDefined()
     })
   })
 })

@@ -209,6 +209,13 @@
         "body": "{{attempts}} tentatives de connexion ont échoué sur {{subjects}} compte(s) au cours des 15 dernières minutes. Elles sont déjà ralenties. Consultez le journal d'audit et vérifiez que les comptes concernés ont un mot de passe solide et un second facteur. Ce message disparaît de lui-même dès que les tentatives cessent.",
         "action": "Ouvrir le journal d'audit"
       }
+    },
+    "apikey": {
+      "expiring": {
+        "title": "Une clé API expire bientôt",
+        "body": "« {{name}} » expire dans {{days}} jour(s). Faites-la tourner avant, sinon tout ce qui l'utilise cessera de fonctionner sans prévenir.",
+        "action": "Ouvrir les clés API"
+      }
     }
   },
   "collections": {
@@ -749,6 +756,8 @@
     "prefixColumn": "Clé",
     "scopeColumn": "Portée",
     "createdColumn": "Créée le",
+    "expiresColumn": "Expire",
+    "usageColumn": "Usage",
     "lastUsedColumn": "Dernière utilisation",
     "statusColumn": "État",
     "actionsColumn": "Actions",
@@ -756,16 +765,48 @@
     "nameHint": "Un libellé pour reconnaître cette clé plus tard, par exemple « pipeline CI » ou « import analytics ».",
     "scopeLabel": "Portée",
     "scopeHint": "Un ou plusieurs noms de rôle, séparés par des virgules — les mêmes noms que pour les rôles d'un utilisateur.",
+    "scopeWriteWarning": "Donne un accès en écriture : {{roles}}",
+    "expiryLabel": "Expiration",
+    "expiryHint": "Une clé sans expiration est une clé qui fuite pour toujours. 90 jours est le défaut recommandé.",
+    "expiryNeverWarning": "Cette clé n'expirera jamais d'elle-même. Ne choisissez cette option que si vous avez une vraie raison de le faire.",
+    "expiry30d": "30 jours",
+    "expiry90d": "90 jours (recommandé)",
+    "expiry1y": "1 an",
+    "expiryNever": "N'expire jamais",
+    "rateLimitLabel": "Requêtes par minute (optionnel)",
+    "rateLimitHint": "Laissez vide pour le quota par défaut du site — généreux, mais réel.",
+    "rateLimitPlaceholder": "Défaut du site",
     "active": "Active",
     "revoked": "Révoquée",
     "expired": "Expirée",
+    "onGracePeriod": "En sursis",
     "never": "Jamais",
+    "neverExpires": "N'expire jamais",
+    "neverUsed": "Jamais utilisée",
+    "unusedFor": "Inutilisée depuis {{days}} jours",
+    "expiresInDays": "Expire dans {{days}} jour(s)",
+    "gracePeriodUntil": "En sursis, {{days}} jour(s) restant(s)",
+    "usageSummary": "{{last7}} (7j) / {{last30}} (30j)",
     "empty": "Aucune clé API n'a encore été créée.",
     "revokeKey": "Révoquer {{name}}",
+    "rotateKey": "Faire tourner {{name}}",
     "confirmRevoke": "Révoquer cette clé ? Tout ce qui l'utilise cessera immédiatement de s'authentifier.",
+    "confirmRevokeTitle": "Révoquer {{name}} ?",
+    "confirmRevokeButton": "Révoquer la clé",
+    "rotateHeading": "Faire tourner {{name}}",
+    "rotateDescription": "Une nouvelle clé est générée. L'actuelle continue de fonctionner jusqu'à la fin de la période de sursis choisie — aucune interruption de service.",
+    "rotateButton": "Faire tourner la clé",
+    "graceLabel": "Période de sursis",
+    "graceHint": "Combien de temps la clé actuelle continue de s'authentifier après la création de la nouvelle.",
+    "grace1h": "1 heure",
+    "grace24h": "24 heures (recommandé)",
+    "grace7d": "7 jours",
+    "rotatedTitle": "Clé API renouvelée : {{name}}",
+    "rotatedBody": "Voici la nouvelle clé. L'ancienne continue de fonctionner encore {{hours}} heure(s), puis s'arrête d'elle-même.",
     "loadError": "Impossible de charger la liste des clés API.",
     "createError": "Impossible de créer cette clé API.",
-    "revokeError": "Impossible de révoquer cette clé."
+    "revokeError": "Impossible de révoquer cette clé.",
+    "rotateError": "Impossible de faire tourner cette clé."
   },
   "commerceProducts": {
     "heading": "Produits",

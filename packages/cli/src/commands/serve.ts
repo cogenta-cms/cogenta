@@ -39,6 +39,7 @@ import {
   createNoticeRouter,
   createOpsStatusRouter,
   createPermissionLayer,
+  createRecoveryCodeUsedNoticeSource,
   createRedirectRouter,
   createRestRouter,
   createSearchRouter,
@@ -1116,9 +1117,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             logger,
           }),
     noticeRouter: createNoticeRouter({
-      // One source today, and the seam is the array: a future recommendation
-      // (a plugin update waiting, a certificate about to expire) is one more
-      // entry here and nothing else anywhere.
+      // The seam is the array: a new recommendation is one more entry here
+      // and nothing else anywhere.
       sources: [
         createMfaRecommendationSource({ collections, credentials: auth.credentials }),
         // The failed-sign-in table has been written to since L2 and read by
@@ -1134,6 +1134,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         // check's persisted status on every load, so it disappears on its
         // own once a forced full check reports the chain intact again.
         createAuditIntegritySource({ integrity: auth.auditIntegrity }),
+        // Fiche 18 task 1: signing in with a recovery code is exactly what a
+        // stolen batch of codes would also produce, so the account that just
+        // did it is told, and can look at its own sessions and remaining codes.
+        createRecoveryCodeUsedNoticeSource({ audit: auth.audit }),
       ],
       dismissals: noticeDismissals,
     }),
@@ -1506,8 +1510,17 @@ async function recordAuthAudit(
   const userId = typeof user?.id === 'string' ? user.id : null
   const roles = Array.isArray(user?.roles) ? (user.roles as string[]) : []
 
+  // A recovery-code sign-in is its own, more specific event (fiche 18 task
+  // 1): "a code was consumed" is worth remarking on in a way an ordinary
+  // login is not — it is what `createRecoveryCodeUsedNoticeSource` looks
+  // for — so it is recorded instead of the generic `auth.login`, not in
+  // addition to it.
+  const action = pathname.endsWith('/api/auth/recovery-code')
+    ? 'auth.recovery_code_used'
+    : 'auth.login'
+
   await site.auth.audit
-    .record({ actorId: userId, actorRoles: roles, action: 'auth.login' })
+    .record({ actorId: userId, actorRoles: roles, action })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 

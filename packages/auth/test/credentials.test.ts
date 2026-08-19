@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import { createCredentialStore, type WebAuthnCredentialData } from '../src/credentials.js'
+import { hashRecoveryCode } from '../src/recovery-codes.js'
 import { testDb } from './helpers/db.js'
 
 const PASSKEY: WebAuthnCredentialData = {
@@ -158,5 +159,93 @@ describe('CredentialStore — WebAuthn', () => {
     const db = await testDb()
     const credentials = createCredentialStore(db)
     expect(await credentials.kinds('nobody')).toEqual([])
+  })
+})
+
+// Fiche 18 task 1. `login.ts`'s tests cover the end-to-end sign-in flow; this
+// is the storage layer on its own — hashed like a password, single-use, and
+// scoped to the account that owns them.
+describe('CredentialStore — recovery codes', () => {
+  it('reports null for an account that was never issued any', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    expect(await credentials.recoveryCodesStatus('user-1')).toBeNull()
+  })
+
+  it('stores a batch as hashes, all unused, and reports the count', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    const hashes = await Promise.all(
+      ['CODE1-AAAAA', 'CODE2-BBBBB', 'CODE3-CCCCC'].map((code) => hashRecoveryCode(code)),
+    )
+    await credentials.setRecoveryCodes('user-1', hashes)
+
+    expect(await credentials.recoveryCodesStatus('user-1')).toEqual({ total: 3, remaining: 3 })
+  })
+
+  it('consumes exactly the matching code and decrements what remains', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    const hashes = await Promise.all(
+      ['CODE1-AAAAA', 'CODE2-BBBBB'].map((code) => hashRecoveryCode(code)),
+    )
+    await credentials.setRecoveryCodes('user-1', hashes)
+
+    expect(await credentials.consumeRecoveryCode('user-1', 'CODE1-AAAAA')).toBe(true)
+    expect(await credentials.recoveryCodesStatus('user-1')).toEqual({ total: 2, remaining: 1 })
+    // The other code still works — consuming one never touches its siblings.
+    expect(await credentials.consumeRecoveryCode('user-1', 'CODE2-BBBBB')).toBe(true)
+    expect(await credentials.recoveryCodesStatus('user-1')).toEqual({ total: 2, remaining: 0 })
+  })
+
+  it('refuses the same code a second time', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('CODE1-AAAAA')])
+
+    expect(await credentials.consumeRecoveryCode('user-1', 'CODE1-AAAAA')).toBe(true)
+    expect(await credentials.consumeRecoveryCode('user-1', 'CODE1-AAAAA')).toBe(false)
+  })
+
+  it('is case- and dash-insensitive, like the plaintext code was normalised before hashing', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('CODE1-AAAAA')])
+
+    expect(await credentials.consumeRecoveryCode('user-1', 'code1aaaaa')).toBe(true)
+  })
+
+  it('rejects an unknown code without throwing', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('CODE1-AAAAA')])
+    expect(await credentials.consumeRecoveryCode('user-1', 'NEVER-ISSUED')).toBe(false)
+  })
+
+  it('never touches another user’s codes', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('CODE1-AAAAA')])
+    expect(await credentials.consumeRecoveryCode('user-2', 'CODE1-AAAAA')).toBe(false)
+  })
+
+  it('regenerating replaces the batch wholesale, invalidating the old codes', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('OLD01-AAAAA')])
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('NEW01-BBBBB')])
+
+    expect(await credentials.consumeRecoveryCode('user-1', 'OLD01-AAAAA')).toBe(false)
+    expect(await credentials.consumeRecoveryCode('user-1', 'NEW01-BBBBB')).toBe(true)
+  })
+
+  it('removeRecoveryCodes clears the batch entirely', async () => {
+    const db = await testDb()
+    const credentials = createCredentialStore(db)
+    await credentials.setRecoveryCodes('user-1', [await hashRecoveryCode('CODE1-AAAAA')])
+
+    await credentials.removeRecoveryCodes('user-1')
+    expect(await credentials.recoveryCodesStatus('user-1')).toBeNull()
+    expect(await credentials.consumeRecoveryCode('user-1', 'CODE1-AAAAA')).toBe(false)
   })
 })

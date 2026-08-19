@@ -12,6 +12,11 @@ export type { NoticeDismissalStore } from './dismissals.js'
 export { createNoticeDismissalStore, NOTICE_DISMISSALS_TABLE } from './dismissals.js'
 export type { MfaRecommendationOptions } from './mfa-recommendation.js'
 export { createMfaRecommendationSource, MFA_RECOMMENDATION_ID } from './mfa-recommendation.js'
+export type { RecoveryCodeUsedOptions } from './recovery-code-used.js'
+export {
+  createRecoveryCodeUsedNoticeSource,
+  RECOVERY_CODE_USED_ID,
+} from './recovery-code-used.js'
 export type { NoticeRouter, NoticeRouterOptions } from './router.js'
 export { createNoticeRouter } from './router.js'
 export type { SuspiciousActivityOptions } from './suspicious-activity.js'

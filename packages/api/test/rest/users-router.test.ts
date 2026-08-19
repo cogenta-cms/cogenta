@@ -32,8 +32,21 @@ function router(
   return createUsersRouter({ auth, ...overrides })
 }
 
-function request(method: string, path: string, body?: unknown): RestRequest {
-  return { method, path, query: {}, ...(body === undefined ? {} : { body }) }
+function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: { readonly token?: string } = {},
+): RestRequest {
+  return {
+    method,
+    path,
+    query: {},
+    ...(body === undefined ? {} : { body }),
+    ...(options.token === undefined
+      ? {}
+      : { headers: { authorization: `Bearer ${options.token}` } }),
+  }
 }
 
 function withQuery(method: string, path: string, query: Record<string, string>): RestRequest {
@@ -522,6 +535,111 @@ describe('sessions', () => {
     )
     expect(revoked.status).toBe(204)
     expect(await auth.sessions.resolve(session.token)).toBeNull()
+  })
+
+  // Fiche 18 task 2: readable sessions and a real "current session" marker.
+  it('reports browser, device and which session is the one making the request', async () => {
+    const editor = await makeUser('ed@example.com', ['editor'])
+    const thisOne = await auth.sessions.create(editor.id, {
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+    })
+    const another = await auth.sessions.create(editor.id, {
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1',
+    })
+
+    const response = await router().handle(
+      request('GET', '/api/users/me/sessions', undefined, { token: thisOne.token }),
+      actorFor(editor.id, ['editor']),
+    )
+    const sessions =
+      dataOf<{ id: string; browser: string; device: string; isCurrent: boolean }[]>(response)
+
+    const mine = sessions.find((entry) => entry.id === thisOne.id)
+    const other = sessions.find((entry) => entry.id === another.id)
+    expect(mine).toMatchObject({ browser: 'chrome', device: 'desktop', isCurrent: true })
+    expect(other).toMatchObject({ browser: 'safari', device: 'mobile', isCurrent: false })
+  })
+
+  it('never marks a session as current for an admin looking at someone else’s list', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const adminSession = await auth.sessions.create(admin.id)
+    const editor = await makeUser('ed@example.com', ['editor'])
+    await auth.sessions.create(editor.id)
+
+    const response = await router().handle(
+      request('GET', `/api/users/${editor.id}/sessions`, undefined, {
+        token: adminSession.token,
+      }),
+      actorFor(admin.id, ['admin']),
+    )
+    const sessions = dataOf<{ isCurrent: boolean }[]>(response)
+    expect(sessions.every((entry) => entry.isCurrent === false)).toBe(true)
+  })
+
+  describe('POST /api/users/me/sessions/revoke-others', () => {
+    it('signs out every other session and keeps the one making the request alive', async () => {
+      const editor = await makeUser('ed@example.com', ['editor'])
+      const current = await auth.sessions.create(editor.id, { label: 'this device' })
+      const laptop = await auth.sessions.create(editor.id, { label: 'laptop' })
+      const phone = await auth.sessions.create(editor.id, { label: 'phone' })
+
+      const response = await router().handle(
+        request('POST', '/api/users/me/sessions/revoke-others', undefined, {
+          token: current.token,
+        }),
+        actorFor(editor.id, ['editor']),
+      )
+      expect(response.status).toBe(200)
+      expect(dataOf<{ revoked: number; keptSessionId: string }>(response)).toEqual({
+        revoked: 2,
+        keptSessionId: current.id,
+      })
+
+      expect(await auth.sessions.resolve(current.token)).not.toBeNull()
+      expect(await auth.sessions.resolve(laptop.token)).toBeNull()
+      expect(await auth.sessions.resolve(phone.token)).toBeNull()
+    })
+
+    it('refuses without a valid current session, even for the account owner', async () => {
+      const editor = await makeUser('ed@example.com', ['editor'])
+      await auth.sessions.create(editor.id)
+
+      const response = await router().handle(
+        request('POST', '/api/users/me/sessions/revoke-others'),
+        actorFor(editor.id, ['editor']),
+      )
+      expect(response.status).toBe(401)
+    })
+
+    it('refuses an admin trying to end another account’s "other" sessions', async () => {
+      const admin = await makeUser('root@example.com', ['admin'])
+      const adminSession = await auth.sessions.create(admin.id)
+      const editor = await makeUser('ed@example.com', ['editor'])
+      const editorSession = await auth.sessions.create(editor.id)
+
+      const response = await router().handle(
+        request('POST', `/api/users/${editor.id}/sessions/revoke-others`, undefined, {
+          token: adminSession.token,
+        }),
+        actorFor(admin.id, ['admin']),
+      )
+      expect(response.status).toBe(403)
+      expect(await auth.sessions.resolve(editorSession.token)).not.toBeNull()
+    })
+
+    it('refuses GET', async () => {
+      const editor = await makeUser('ed@example.com', ['editor'])
+      const session = await auth.sessions.create(editor.id)
+      const response = await router().handle(
+        request('GET', '/api/users/me/sessions/revoke-others', undefined, {
+          token: session.token,
+        }),
+        actorFor(editor.id, ['editor']),
+      )
+      expect(response.status).toBe(405)
+    })
   })
 })
 

@@ -125,6 +125,90 @@ describe('MFA-required login', () => {
 })
 
 /**
+ * Fiche 18 task 1 — the way back in when the authenticator behind the TOTP
+ * step is unavailable.
+ */
+describe('recovery-code login', () => {
+  it('reaches the dashboard with a correct recovery code, from the TOTP step', async () => {
+    installMockFetch({ requireTotp: true })
+    render(<App />)
+
+    await fillAndSubmitPassword(USER.email, 'correct horse battery staple')
+    await screen.findByRole('heading', { name: 'Code de vérification' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Utiliser un code de récupération' }))
+    expect(await screen.findByRole('heading', { name: 'Code de récupération' })).toBeDefined()
+
+    fireEvent.change(screen.getByLabelText('Code'), {
+      target: { value: 'AAAAA-AAAAA' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Vérifier' }))
+
+    expect(await screen.findByRole('heading', { name: 'Tableau de bord' })).toBeDefined()
+  })
+
+  it('reports an incorrect recovery code without dropping back to the password step', async () => {
+    installMockFetch({ requireTotp: true })
+    render(<App />)
+
+    await fillAndSubmitPassword(USER.email, 'correct horse battery staple')
+    await screen.findByRole('heading', { name: 'Code de vérification' })
+    fireEvent.click(screen.getByRole('button', { name: 'Utiliser un code de récupération' }))
+    await screen.findByRole('heading', { name: 'Code de récupération' })
+
+    fireEvent.change(screen.getByLabelText('Code'), {
+      target: { value: 'WRONG-CODE0' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Vérifier' }))
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'This recovery code is not valid.',
+    )
+    expect(screen.getByRole('heading', { name: 'Code de récupération' })).toBeDefined()
+  })
+
+  it('can switch back to the authenticator-app step', async () => {
+    installMockFetch({ requireTotp: true })
+    render(<App />)
+
+    await fillAndSubmitPassword(USER.email, 'correct horse battery staple')
+    await screen.findByRole('heading', { name: 'Code de vérification' })
+    fireEvent.click(screen.getByRole('button', { name: 'Utiliser un code de récupération' }))
+    await screen.findByRole('heading', { name: 'Code de récupération' })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Utiliser mon application d'authentification" }),
+    )
+    expect(await screen.findByRole('heading', { name: 'Code de vérification' })).toBeDefined()
+  })
+})
+
+describe('remember me', () => {
+  it('is checked by default, so unchecked behaviour is opt-in', async () => {
+    installMockFetch()
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+    expect(screen.getByLabelText('Se souvenir de moi sur cet appareil')).toHaveProperty(
+      'checked',
+      true,
+    )
+  })
+
+  it('still reaches the dashboard when unchecked', async () => {
+    installMockFetch()
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+    fireEvent.click(screen.getByLabelText('Se souvenir de moi sur cet appareil'))
+    await fillAndSubmitPassword(USER.email, 'correct horse battery staple')
+
+    expect(await screen.findByRole('heading', { name: 'Tableau de bord' })).toBeDefined()
+  })
+})
+
+/**
  * ADR-0021. The login screen used to have a third step: an account whose role
  * required MFA and had none was walked through a TOTP enrolment before it could
  * get anywhere. It does not exist any more, and the acceptance criterion is

@@ -1,6 +1,7 @@
-import { sql } from '@cogenta/core'
+import { createSqliteHandle, sql } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import { createSessionStore } from '../src/sessions.js'
+import { ensureAuthTables } from '../src/tables.js'
 import { testDb } from './helpers/db.js'
 
 describe('SessionStore', () => {
@@ -138,6 +139,142 @@ describe('SessionStore', () => {
 
       const lastSeen = await sessions.lastSeenByUser()
       expect(lastSeen.has('user-2')).toBe(false)
+    })
+  })
+
+  // Fiche 18 task 2: readable sessions, without ever keeping the raw header.
+  describe('device metadata', () => {
+    it('distils a User-Agent into a browser and device on creation, and resolve reports the same', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      const issued = await sessions.create('user-1', {
+        userAgent:
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1',
+      })
+      expect(issued.browser).toBe('safari')
+      expect(issued.device).toBe('mobile')
+
+      const resolved = await sessions.resolve(issued.token)
+      expect(resolved?.browser).toBe('safari')
+      expect(resolved?.device).toBe('mobile')
+    })
+
+    it('never stores the raw User-Agent header', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
+      await sessions.create('user-1', { userAgent })
+
+      const rows = await db.query<Record<string, unknown>>(sql`select * from cogenta_sessions`)
+      const row = rows.rows[0]
+      expect(row).toBeDefined()
+      for (const value of Object.values(row ?? {})) {
+        if (typeof value === 'string') expect(value).not.toContain('Windows NT')
+      }
+    })
+
+    it('reports "unknown" for a session created with no User-Agent', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      const issued = await sessions.create('user-1')
+      expect(issued.browser).toBe('unknown')
+      expect(issued.device).toBe('unknown')
+    })
+
+    /**
+     * The migration path, not just the end state. Every other test here calls
+     * `testDb()`, whose `ensureAuthTables` creates the `sessions` table and
+     * immediately adds `browser`/`device` to it in the same call — real
+     * `alter table` syntax, but never against a table an *older* version of
+     * this package already created and populated. This test builds that
+     * older shape by hand — the exact DDL `tables.ts` used before this
+     * fiche, a real row already in it — then runs the current
+     * `ensureAuthTables` against it, the same function `cogenta serve`
+     * calls on every startup, upgrade included.
+     */
+    it('adds the columns to a table that already existed, without losing the row already in it', async () => {
+      const db = await createSqliteHandle({ url: ':memory:' })
+      await db.query(sql`
+        create table cogenta_sessions (
+          id text not null primary key,
+          user_id text not null,
+          token_hash text not null unique,
+          label text,
+          created_at text not null,
+          expires_at text not null,
+          last_seen_at text not null,
+          revoked tinyint not null
+        )`)
+      await db.query(sql`
+        insert into cogenta_sessions
+          (id, user_id, token_hash, label, created_at, expires_at, last_seen_at, revoked)
+        values
+          ('session-pre-migration', 'user-1', 'a-real-token-hash', 'Old device',
+           '2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z',
+           '2026-01-01T00:00:00.000Z', 0)`)
+
+      // The real migration path: `create table if not exists` no-ops on a
+      // table that is already there, and the `alter table add column` calls
+      // that follow it now run against a table with a live row.
+      await ensureAuthTables(db)
+
+      const sessions = createSessionStore(db)
+      const migrated = await sessions.list('user-1')
+      expect(migrated).toHaveLength(1)
+      // A row from before this fiche has no browser/device to report — the
+      // column is `null`, and `fromRow` reads that as "unknown", never a
+      // crash and never an empty string standing in for missing data.
+      expect(migrated[0]).toMatchObject({
+        id: 'session-pre-migration',
+        label: 'Old device',
+        browser: 'unknown',
+        device: 'unknown',
+      })
+
+      // And the store this migration produced works going forward exactly
+      // like a fresh install's would.
+      const fresh = await sessions.create('user-1', {
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+      })
+      expect(fresh.browser).toBe('chrome')
+      expect(fresh.device).toBe('desktop')
+      expect(await sessions.list('user-1')).toHaveLength(2)
+    })
+  })
+
+  describe('revokeAllExcept', () => {
+    it('signs out every other session but leaves the named one alive', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      const kept = await sessions.create('user-1', { label: 'this device' })
+      const other1 = await sessions.create('user-1', { label: 'laptop' })
+      const other2 = await sessions.create('user-1', { label: 'phone' })
+
+      const revoked = await sessions.revokeAllExcept('user-1', kept.id)
+      expect(revoked).toBe(2)
+
+      expect(await sessions.resolve(kept.token)).not.toBeNull()
+      expect(await sessions.resolve(other1.token)).toBeNull()
+      expect(await sessions.resolve(other2.token)).toBeNull()
+    })
+
+    it('never touches another user’s sessions', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      const mine = await sessions.create('user-1')
+      const someoneElses = await sessions.create('user-2')
+
+      await sessions.revokeAllExcept('user-1', mine.id)
+
+      expect(await sessions.resolve(someoneElses.token)).not.toBeNull()
+    })
+
+    it('is harmless when there is nothing else to revoke', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      const only = await sessions.create('user-1')
+      expect(await sessions.revokeAllExcept('user-1', only.id)).toBe(0)
+      expect(await sessions.resolve(only.token)).not.toBeNull()
     })
   })
 })

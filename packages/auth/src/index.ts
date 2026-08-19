@@ -26,12 +26,25 @@ export type { AuditIntegrityStatus, AuditIntegrityStore } from './audit-integrit
 export { createAuditIntegrityStore } from './audit-integrity.js'
 export type { CredentialStore, WebAuthnCredentialData } from './credentials.js'
 export { createCredentialStore } from './credentials.js'
-export type { AuthService, AuthServiceOptions, LoginResult } from './login.js'
+export type {
+  AuthService,
+  AuthServiceOptions,
+  LoginContext,
+  LoginResult,
+  RecoveryCodesIssued,
+} from './login.js'
 export { createAuthService } from './login.js'
 export { requiresMfa, sensitiveRoles } from './mfa.js'
 export { hashPassword, verifyPassword } from './password.js'
 export type { LoginAttemptSummary, RateLimiter } from './rate-limit.js'
 export { createRateLimiter, LOGIN_ATTEMPT_WINDOW_MS } from './rate-limit.js'
+export {
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  normaliseRecoveryCode,
+  RECOVERY_CODE_COUNT,
+  verifyRecoveryCode,
+} from './recovery-codes.js'
 export type {
   IssuedPasswordReset,
   PasswordResetOutcome,
@@ -52,6 +65,8 @@ export {
   verifyTotp,
 } from './totp.js'
 export * from './types.js'
+export type { ParsedUserAgent } from './user-agent.js'
+export { parseUserAgent } from './user-agent.js'
 export type { UserStore } from './users.js'
 export { createUserStore } from './users.js'
 export type {

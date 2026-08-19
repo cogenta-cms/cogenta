@@ -176,7 +176,13 @@
     "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
     "connectionFailed": "Connexion impossible.",
     "incorrectCode": "Code incorrect.",
-    "forgotPassword": "Mot de passe oublié ?"
+    "forgotPassword": "Mot de passe oublié ?",
+    "rememberMe": "Se souvenir de moi sur cet appareil",
+    "useRecoveryCode": "Utiliser un code de récupération",
+    "useTotpCode": "Utiliser mon application d'authentification",
+    "recoveryHeading": "Code de récupération",
+    "recoveryPrompt": "Entrez l'un des codes de récupération reçus lors de l'activation de la vérification en deux étapes. Chaque code ne fonctionne qu'une fois.",
+    "recoveryCodeIncorrect": "Ce code de récupération n'est pas valide."
   },
   "forgotPassword": {
     "heading": "Réinitialiser le mot de passe",
@@ -189,12 +195,14 @@
   "resetPassword": {
     "heading": "Choisir un nouveau mot de passe",
     "newPassword": "Nouveau mot de passe",
-    "hint": "Au moins 12 caractères. Une phrase de quelques mots ordinaires est à la fois plus longue et plus facile à retenir qu'un mot de passe court avec des symboles.",
+    "hint": "Au moins {{minLength}} caractères. Une phrase de quelques mots ordinaires est à la fois plus longue et plus facile à retenir qu'un mot de passe court avec des symboles.",
     "submit": "Réinitialiser le mot de passe",
     "done": "Mot de passe changé. Toutes les sessions existantes ont été déconnectées — reconnectez-vous avec le nouveau mot de passe.",
     "goToLogin": "Aller à la connexion",
     "missingToken": "Ce lien n'a pas de jeton. Demandez-en un nouveau depuis l'écran « mot de passe oublié ».",
-    "error": "Impossible de réinitialiser le mot de passe. Le lien a peut-être expiré ou déjà été utilisé."
+    "error": "Impossible de réinitialiser le mot de passe. Le lien a peut-être expiré ou déjà été utilisé.",
+    "strengthOk": "Répond à la politique du site.",
+    "strengthShort": "Encore {{remaining}} caractère(s) nécessaire(s)."
   },
   "notices": {
     "dismiss": "Masquer cette recommandation",
@@ -862,6 +870,8 @@
     "unnamedSession": "Appareil sans nom",
     "lastSeen": "vue le",
     "revokeSession": "Révoquer la session vue le {{at}}",
+    "sessionDevice": "{{browser}} sur {{device}}",
+    "currentSession": "cette session",
     "loadError": "Impossible de charger la liste des comptes.",
     "createError": "Impossible de créer ce compte.",
     "updateError": "Impossible de modifier ce compte.",
@@ -1220,7 +1230,29 @@
     "avatarChange": "Changer l'image",
     "avatarRemove": "Retirer",
     "avatarLoadError": "Impossible de charger la médiathèque.",
-    "saveProfile": "Enregistrer le profil"
+    "saveProfile": "Enregistrer le profil",
+    "passwordPolicyAnnounce": "Un mot de passe doit compter au moins {{minLength}} caractères.",
+    "passwordStrengthOk": "Répond à la politique du site.",
+    "passwordStrengthShort": "Encore {{remaining}} caractère(s) nécessaire(s).",
+    "recoveryHeading": "Codes de récupération",
+    "recoveryIntro": "La façon de revenir si vous perdez l'appareil de votre application d'authentification. Dix codes à usage unique, émis dès l'activation de la vérification en deux étapes.",
+    "recoveryCodesIssuedTitle": "Enregistrez ces codes maintenant — ils ne seront plus jamais montrés",
+    "recoveryCodesIssuedBody": "Chaque code ne fonctionne qu'une fois. Conservez-les en lieu sûr, séparément de votre mot de passe.",
+    "recoveryCodesDownload": "Télécharger en fichier texte",
+    "recoveryCodesDismiss": "J’ai enregistré ces codes",
+    "recoveryRemaining": "{{remaining}} codes de récupération restants sur {{total}}.",
+    "recoveryNeedsTotp": "Les codes de récupération sont émis dès que vous activez la vérification en deux étapes ci-dessus.",
+    "recoveryRegenerate": "Générer de nouveaux codes de récupération",
+    "recoveryRegenerateError": "Impossible de générer de nouveaux codes de récupération.",
+    "sessionsHeading": "Sessions",
+    "sessionsIntro": "Chaque appareil actuellement connecté avec votre compte.",
+    "revokeOtherSessions": "Déconnecter toutes les autres sessions",
+    "sessionsRevokedOthers": "{{count}} autre(s) session(s) déconnectée(s). Celle-ci reste connectée.",
+    "sessionsRevokeOthersError": "Impossible de déconnecter les autres sessions.",
+    "activityHeading": "Mon activité",
+    "activityIntro": "Vos vingt dernières actions, depuis le journal d'audit du site.",
+    "activityEmpty": "Aucune activité enregistrée pour le moment.",
+    "activityError": "Impossible de charger votre activité."
   },
   "pluginPermissions": {
     "heading": "Autorisations demandées",

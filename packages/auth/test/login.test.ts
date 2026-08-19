@@ -3,6 +3,7 @@ import type { CollectionDefinition } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import { createCredentialStore } from '../src/credentials.js'
 import { createAuthService } from '../src/login.js'
+import { hashRecoveryCode } from '../src/recovery-codes.js'
 import { createUserStore } from '../src/users.js'
 import { testDb } from './helpers/db.js'
 import { codeFor } from './helpers/totp-code.js'
@@ -271,6 +272,80 @@ describe('totpLogin', () => {
 })
 
 /**
+ * Fiche 18 task 5 ("remember me") and task 2 (readable sessions): a choice
+ * made at the password step has nowhere to live except the MFA ticket, since
+ * no session exists yet when it is made.
+ */
+describe('LoginContext — remember me and device metadata', () => {
+  it('uses a shorter session when a shorter ttlMs is requested at the password step', async () => {
+    const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+
+    const oneHour = 60 * 60 * 1000
+    const result = await auth.passwordLogin('alice@example.com', 'correct horse battery staple', {
+      ttlMs: oneHour,
+    })
+    if (result.status !== 'session') throw new Error('expected a session')
+
+    const lifetime =
+      new Date(result.session.expiresAt).getTime() - new Date(result.session.createdAt).getTime()
+    expect(lifetime).toBe(oneHour)
+  })
+
+  it('carries the remember-me choice across the TOTP step, from the ticket', async () => {
+    const bundle = await setup(PUBLISH_COLLECTIONS)
+    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
+    await bundle.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+    await bundle.credentials.confirmTotp(user.id)
+
+    const oneHour = 60 * 60 * 1000
+    const passwordResult = await bundle.auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+      { ttlMs: oneHour },
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+
+    const now = Math.floor(Date.now() / 1000)
+    const code = codeFor('JBSWY3DPEHPK3PXP', now)
+    const result = await bundle.auth.totpLogin(passwordResult.ticket, code)
+    if (result.status !== 'session') throw new Error('expected a session')
+
+    const lifetime =
+      new Date(result.session.expiresAt).getTime() - new Date(result.session.createdAt).getTime()
+    expect(lifetime).toBe(oneHour)
+  })
+
+  it('records a browser family and device type from the User-Agent, never the header itself', async () => {
+    const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+
+    const userAgent =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    const result = await auth.passwordLogin('alice@example.com', 'correct horse battery staple', {
+      userAgent,
+    })
+    if (result.status !== 'session') throw new Error('expected a session')
+    expect(result.session.browser).toBe('chrome')
+    expect(result.session.device).toBe('desktop')
+  })
+
+  it('reports "unknown" rather than storing anything when no User-Agent is given', async () => {
+    const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+
+    const result = await auth.passwordLogin('alice@example.com', 'correct horse battery staple')
+    if (result.status !== 'session') throw new Error('expected a session')
+    expect(result.session.browser).toBe('unknown')
+    expect(result.session.device).toBe('unknown')
+  })
+})
+
+/**
  * ADR-0021 moved enrolment out of the sign-in flow entirely. It is no longer
  * driven by a ticket the password step handed out — it is driven by an already
  * signed-in session, from the account's own profile, and the only account it
@@ -338,9 +413,8 @@ describe('TOTP self-service enrolment', () => {
     await expect(
       auth.confirmTotpEnrolment(user.id, codeFor(first.secret, now)),
     ).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' })
-    await expect(
-      auth.confirmTotpEnrolment(user.id, codeFor(second.secret, now)),
-    ).resolves.toBeUndefined()
+    const confirmed = await auth.confirmTotpEnrolment(user.id, codeFor(second.secret, now))
+    expect(confirmed.codes).toHaveLength(10)
   })
 
   it('refuses to enrol a disabled account', async () => {
@@ -374,6 +448,179 @@ describe('TOTP self-service enrolment', () => {
       code: 'AUTH_RATE_LIMITED',
     })
   })
+})
+
+/**
+ * Fiche 18 task 1 — the priority of the whole fiche: losing an authenticator
+ * must not be a permanent lockout when there is no admin-driven password
+ * reset (`docs/plans/17-utilisateurs.md`'s deliberate decision).
+ */
+describe('recovery codes', () => {
+  async function editorWithTotpAndRecoveryCodes() {
+    const bundle = await setup(PUBLISH_COLLECTIONS)
+    const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
+    const enrolment = await bundle.auth.beginTotpEnrolment(user.id)
+    const now = Math.floor(Date.now() / 1000)
+    const issued = await bundle.auth.confirmTotpEnrolment(user.id, codeFor(enrolment.secret, now))
+    return { ...bundle, user, secret: enrolment.secret, codes: issued.codes }
+  }
+
+  it('issues ten distinct codes the moment TOTP is confirmed', async () => {
+    const { codes } = await editorWithTotpAndRecoveryCodes()
+    expect(codes).toHaveLength(10)
+    expect(new Set(codes).size).toBe(10)
+    for (const code of codes) expect(code).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/)
+  })
+
+  it('signs in with a recovery code end to end: enrol, "lose" the authenticator, use a code', async () => {
+    const { auth, user, codes } = await editorWithTotpAndRecoveryCodes()
+
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+
+    const firstCode = codes[0]
+    if (firstCode === undefined) throw new Error('no code issued')
+    const result = await auth.recoveryCodeLogin(passwordResult.ticket, firstCode)
+    expect(result.status).toBe('session')
+    if (result.status === 'session') expect(result.user.id).toBe(user.id)
+  })
+
+  it('consumes the code: the same code is refused on a second attempt', async () => {
+    const { auth, codes } = await editorWithTotpAndRecoveryCodes()
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+    const code = codes[0]
+    if (code === undefined) throw new Error('no code issued')
+
+    await auth.recoveryCodeLogin(passwordResult.ticket, code)
+
+    const second = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    if (second.status !== 'mfa_required') throw new Error('expected mfa_required')
+    await expect(auth.recoveryCodeLogin(second.ticket, code)).rejects.toMatchObject({
+      code: 'AUTH_RECOVERY_CODE_INVALID',
+    })
+  })
+
+  it('accepts a code typed back lowercase and without its dash', async () => {
+    const { auth, codes } = await editorWithTotpAndRecoveryCodes()
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+    const code = codes[0]
+    if (code === undefined) throw new Error('no code issued')
+
+    const messy = code.toLowerCase().replace('-', '')
+    const result = await auth.recoveryCodeLogin(passwordResult.ticket, messy)
+    expect(result.status).toBe('session')
+  })
+
+  it('rejects an unknown code', async () => {
+    const { auth } = await editorWithTotpAndRecoveryCodes()
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+
+    await expect(
+      auth.recoveryCodeLogin(passwordResult.ticket, 'AAAAA-AAAAA'),
+    ).rejects.toMatchObject({ code: 'AUTH_RECOVERY_CODE_INVALID' })
+  })
+
+  it('reports remaining codes and decrements them as they are used', async () => {
+    const { auth, user, codes } = await editorWithTotpAndRecoveryCodes()
+    expect(await auth.recoveryCodesStatus(user.id)).toEqual({ total: 10, remaining: 10 })
+
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+    const code = codes[0]
+    if (code === undefined) throw new Error('no code issued')
+    await auth.recoveryCodeLogin(passwordResult.ticket, code)
+
+    expect(await auth.recoveryCodesStatus(user.id)).toEqual({ total: 10, remaining: 9 })
+  })
+
+  it('reports zero for an account that never enrolled TOTP', async () => {
+    const { auth, users } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    expect(await auth.recoveryCodesStatus(user.id)).toEqual({ total: 0, remaining: 0 })
+  })
+
+  it('regenerating invalidates every previous code', async () => {
+    const { auth, user, codes } = await editorWithTotpAndRecoveryCodes()
+    const fresh = await auth.regenerateRecoveryCodes(user.id)
+    expect(fresh.codes).toHaveLength(10)
+    expect(new Set(fresh.codes).size).toBe(10)
+
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+    const oldCode = codes[0]
+    if (oldCode === undefined) throw new Error('no code issued')
+    // A miss scans every one of the ten fresh, scrypt-hashed codes before
+    // giving up — genuinely slower than a single check, hence the longer
+    // timeout rather than a shortcut in the code under test.
+    await expect(auth.recoveryCodeLogin(passwordResult.ticket, oldCode)).rejects.toMatchObject({
+      code: 'AUTH_RECOVERY_CODE_INVALID',
+    })
+
+    const second = await auth.passwordLogin('ed@example.com', 'correct horse battery staple')
+    if (second.status !== 'mfa_required') throw new Error('expected mfa_required')
+    const newCode = fresh.codes[0]
+    if (newCode === undefined) throw new Error('no code issued')
+    const result = await auth.recoveryCodeLogin(second.ticket, newCode)
+    expect(result.status).toBe('session')
+  }, 30_000)
+
+  it('refuses to regenerate for an account with no confirmed TOTP', async () => {
+    const { auth, users } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    await expect(auth.regenerateRecoveryCodes(user.id)).rejects.toMatchObject({
+      code: 'AUTH_RECOVERY_CODES_UNAVAILABLE',
+    })
+  })
+
+  it('turning TOTP off removes the recovery codes too — nothing left for them to unlock', async () => {
+    const { auth, user } = await editorWithTotpAndRecoveryCodes()
+    await auth.disableTotp(user.id)
+    expect(await auth.recoveryCodesStatus(user.id)).toEqual({ total: 0, remaining: 0 })
+  })
+
+  it('rate-limits repeated wrong recovery codes', async () => {
+    const { auth, credentials, user } = await editorWithTotpAndRecoveryCodes()
+    // A single outstanding code, set directly on the store: a miss then
+    // costs one scrypt verify rather than a ten-wide scan, which is what
+    // keeps six deliberately-wrong attempts fast enough for a unit test —
+    // the scan-cost itself is covered on its own above.
+    await credentials.setRecoveryCodes(user.id, [await hashRecoveryCode('REAL0-CODE0')])
+
+    const passwordResult = await auth.passwordLogin(
+      'ed@example.com',
+      'correct horse battery staple',
+    )
+    if (passwordResult.status !== 'mfa_required') throw new Error('expected mfa_required')
+
+    for (let i = 0; i < 5; i += 1) {
+      await auth.recoveryCodeLogin(passwordResult.ticket, 'AAAAA-AAAAA').catch(() => undefined)
+    }
+    await expect(
+      auth.recoveryCodeLogin(passwordResult.ticket, 'AAAAA-AAAAA'),
+    ).rejects.toMatchObject({ code: 'AUTH_RATE_LIMITED' })
+  }, 15_000)
 })
 
 describe('WebAuthn passkeys', () => {

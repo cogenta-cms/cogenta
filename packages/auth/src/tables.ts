@@ -257,6 +257,15 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       broken_message text
     )`)
 
+  // Session device metadata (fiche 18 task 2): additive for a database that
+  // already had this table before this fiche — there is no portable "add
+  // column if not exists", so the failure this swallows is exactly "already
+  // there", the same reasoning `createIndexIfMissing` below already follows.
+  // Never the raw `User-Agent` (see `user-agent.ts`): only its two-word
+  // distillation is ever written to either column.
+  await addColumnIfMissing(db, sessions, 'browser', t64)
+  await addColumnIfMissing(db, sessions, 'device', t64)
+
   await createIndexIfMissing(db, 'cogenta_credentials_user', credentials, sql`(user_id)`)
   await createIndexIfMissing(db, 'cogenta_sessions_user', sessions, sql`(user_id)`)
   await createIndexIfMissing(
@@ -277,9 +286,9 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
 /**
  * Additive column for a table that may already exist on an upgraded site
  * (fiche 20 task 3's rate-limit/rotation columns, fiche 17 task 3's profile
- * fields): same catch-and-ignore shape as `createIndexIfMissing` below, for
- * the same reason — no dialect here has a portable "add column if not
- * exists".
+ * fields, fiche 18 task 2's session device metadata): same catch-and-ignore
+ * shape as `createIndexIfMissing` below, for the same reason — no dialect
+ * here has a portable "add column if not exists".
  */
 async function addColumnIfMissing(
   db: DatabaseHandle,

@@ -125,6 +125,10 @@ export const ERROR_CODES = [
   'AUDIT_ENTRY_NOT_FOUND',
   // Auth — self-service password reset over HTTP (L11, forgot-password route)
   'AUTH_RESET_TOKEN_INVALID',
+  // Auth — recovery codes (fiche 18 task 1): the way back in when TOTP itself
+  // is unusable.
+  'AUTH_RECOVERY_CODE_INVALID',
+  'AUTH_RECOVERY_CODES_UNAVAILABLE',
 
   // Auth — account lifecycle (fiche 17: invitations and anonymization)
   // The invitation reuses AUTH_RESET_TOKEN_INVALID for the token itself

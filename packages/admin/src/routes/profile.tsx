@@ -1,10 +1,16 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { type AuditEntry, listMyActivity } from '../api/audit-client.js'
 import {
   ApiError,
   beginTotpEnrolment,
   confirmTotpEnrolment,
   disableTotp,
+  getPasswordPolicy,
+  getRecoveryCodesStatus,
+  type PasswordPolicy,
+  type RecoveryCodesStatus,
+  regenerateRecoveryCodes,
   registerPasskey,
   type TotpSetup,
 } from '../api/client.js'
@@ -14,6 +20,7 @@ import {
   changeOwnPassword,
   listUserSessions,
   readUser,
+  revokeOtherSessions,
   revokeUserSession,
   type UserSession,
   updateOwnProfile,
@@ -87,21 +94,63 @@ export function ProfileRoute(): JSX.Element {
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileSaved, setProfileSaved] = useState(false)
 
+  // Fiche 18 task 1 — recovery codes. `recoveryCodes` holds a freshly issued
+  // batch, shown exactly once (right after confirming enrolment or
+  // regenerating), never re-fetched: the server does not hand out an
+  // existing batch's plaintext again.
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryCodesStatus | null>(null)
+  const [recoveryCodes, setRecoveryCodes] = useState<readonly string[] | null>(null)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
+
+  // Fiche 18 task 2 — "sign out everywhere else".
+  const [sessionsActionError, setSessionsActionError] = useState<string | null>(null)
+  const [sessionsActionDone, setSessionsActionDone] = useState<string | null>(null)
+
+  // Fiche 18 task 3 — the password policy, fetched rather than recopied, so
+  // it can be announced before the form refuses anything.
+  const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicy | null>(null)
+
+  // Fiche 18 task 4 — "my activity", read-only, never anything more than the
+  // caller's own twenty most recent actions.
+  const [activity, setActivity] = useState<readonly AuditEntry[]>([])
+  const [activityError, setActivityError] = useState<string | null>(null)
+
   const load = useCallback(async () => {
     if (token === null) return
     setLoadError(null)
     try {
-      const [me, mine] = await Promise.all([readUser(token, 'me'), listUserSessions(token, 'me')])
+      const [me, mine, recovery] = await Promise.all([
+        readUser(token, 'me'),
+        listUserSessions(token, 'me'),
+        getRecoveryCodesStatus(token),
+      ])
       setProfile(me)
       setSessions(mine)
+      setRecoveryStatus(recovery)
     } catch (caught) {
       setLoadError(caught instanceof ApiError ? caught.message : t('profile.loadError'))
     }
   }, [token, t])
 
+  const loadActivity = useCallback(async () => {
+    if (token === null) return
+    setActivityError(null)
+    try {
+      setActivity(await listMyActivity(token, 20))
+    } catch (caught) {
+      setActivityError(caught instanceof ApiError ? caught.message : t('profile.activityError'))
+    }
+  }, [token, t])
+
   useEffect(() => {
     void load()
-  }, [load])
+    void loadActivity()
+    // Public and unchanging for the lifetime of the page: fetched once,
+    // never as part of the profile reload above.
+    getPasswordPolicy()
+      .then(setPasswordPolicy)
+      .catch(() => undefined)
+  }, [load, loadActivity])
 
   useEffect(() => {
     if (profile === null) return
@@ -198,14 +247,64 @@ export function ProfileRoute(): JSX.Element {
     event.preventDefault()
     if (token === null) return
     setSecurityError(null)
+    setRecoveryError(null)
     try {
-      await confirmTotpEnrolment(token, totpCode)
+      const issued = await confirmTotpEnrolment(token, totpCode)
       setEnrolment(null)
       setTotpCode('')
       setSecurityDone(t('profile.totpEnabled'))
+      // Minted in the same step as confirmation (fiche 18 task 1): shown
+      // once, right here, before anything else on the page changes.
+      setRecoveryCodes(issued.recoveryCodes)
       await load()
     } catch (caught) {
       setSecurityError(caught instanceof ApiError ? caught.message : t('profile.totpCodeError'))
+    }
+  }
+
+  async function regenerateCodes(): Promise<void> {
+    if (token === null) return
+    setRecoveryError(null)
+    try {
+      const issued = await regenerateRecoveryCodes(token)
+      setRecoveryCodes(issued.recoveryCodes)
+      setRecoveryStatus(await getRecoveryCodesStatus(token))
+    } catch (caught) {
+      setRecoveryError(
+        caught instanceof ApiError ? caught.message : t('profile.recoveryRegenerateError'),
+      )
+    }
+  }
+
+  /**
+   * A plain text download of the just-issued batch — the same "download"
+   * button the fiche asks for. Built with a `Blob` and an object URL, no new
+   * dependency: this is a real browser tab, not a sandboxed preview, so a
+   * script-driven `<a download>` click works exactly as it would on any
+   * other site.
+   */
+  function downloadRecoveryCodes(codes: readonly string[]): void {
+    const blob = new Blob([`${codes.join('\n')}\n`], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'cogenta-recovery-codes.txt'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function revokeOthers(): Promise<void> {
+    if (token === null) return
+    setSessionsActionError(null)
+    setSessionsActionDone(null)
+    try {
+      const result = await revokeOtherSessions(token)
+      setSessionsActionDone(t('profile.sessionsRevokedOthers', { count: result.revoked }))
+      setSessions(await listUserSessions(token, 'me'))
+    } catch (caught) {
+      setSessionsActionError(
+        caught instanceof ApiError ? caught.message : t('profile.sessionsRevokeOthersError'),
+      )
     }
   }
 
@@ -418,6 +517,14 @@ export function ProfileRoute(): JSX.Element {
           <CardDescription>{t('profile.passwordIntro')}</CardDescription>
         </CardHeader>
         <CardBody>
+          {/* Fiche 18 task 3: the policy announced before the form can
+              refuse anything — fetched from the same route the server
+              enforces, never a second, hand-copied number. */}
+          {passwordPolicy !== null && (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t('profile.passwordPolicyAnnounce', { minLength: passwordPolicy.minLength })}
+            </p>
+          )}
           <form onSubmit={submitPassword} className="flex flex-col gap-4">
             <Field label={t('profile.currentPassword')}>
               {(control) => (
@@ -447,6 +554,22 @@ export function ProfileRoute(): JSX.Element {
                 />
               )}
             </Field>
+            {passwordPolicy !== null && newPassword.length > 0 && (
+              <p
+                className={
+                  newPassword.length >= passwordPolicy.minLength
+                    ? 'm-0 text-sm text-success'
+                    : 'm-0 text-sm text-destructive'
+                }
+                role="status"
+              >
+                {newPassword.length >= passwordPolicy.minLength
+                  ? t('profile.passwordStrengthOk')
+                  : t('profile.passwordStrengthShort', {
+                      remaining: passwordPolicy.minLength - newPassword.length,
+                    })}
+              </p>
+            )}
             {passwordChanged && (
               <Notice tone="success" live="assertive">
                 <p>{t('profile.passwordChanged')}</p>
@@ -540,7 +663,136 @@ export function ProfileRoute(): JSX.Element {
         </CardBody>
       </Card>
 
+      {/*
+       * Fiche 18 task 1 — recovery codes. A section of its own rather than
+       * folded into "Two-step verification" above: it has its own state
+       * (a freshly issued batch, shown once) and its own action
+       * (regenerate), and it needs to stay legible whether or not TOTP is
+       * currently on.
+       */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2 id="recovery-codes">{t('profile.recoveryHeading')}</h2>
+          </CardTitle>
+          <CardDescription>{t('profile.recoveryIntro')}</CardDescription>
+        </CardHeader>
+        <CardBody>
+          {recoveryError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{recoveryError}</p>
+            </Notice>
+          )}
+
+          {recoveryCodes !== null ? (
+            <Notice
+              tone="warning"
+              live="assertive"
+              title={t('profile.recoveryCodesIssuedTitle')}
+              actions={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => downloadRecoveryCodes(recoveryCodes)}
+                >
+                  {t('profile.recoveryCodesDownload')}
+                </Button>
+              }
+              onDismiss={() => setRecoveryCodes(null)}
+              dismissLabel={t('profile.recoveryCodesDismiss')}
+            >
+              <p>{t('profile.recoveryCodesIssuedBody')}</p>
+              <ul className="m-0 grid grid-cols-2 gap-1 font-mono text-sm">
+                {recoveryCodes.map((code) => (
+                  <li key={code}>{code}</li>
+                ))}
+              </ul>
+            </Notice>
+          ) : profile?.mfa.totp === true ? (
+            <p>
+              {recoveryStatus !== null
+                ? t('profile.recoveryRemaining', {
+                    remaining: recoveryStatus.remaining,
+                    total: recoveryStatus.total,
+                  })
+                : t('profile.loadError')}
+            </p>
+          ) : (
+            <p>{t('profile.recoveryNeedsTotp')}</p>
+          )}
+
+          {profile?.mfa.totp === true && recoveryCodes === null && (
+            <div>
+              <Button variant="secondary" onClick={() => void regenerateCodes()}>
+                {t('profile.recoveryRegenerate')}
+              </Button>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2 id="sessions">{t('profile.sessionsHeading')}</h2>
+          </CardTitle>
+          <CardDescription>{t('profile.sessionsIntro')}</CardDescription>
+        </CardHeader>
+        <CardBody>
+          {sessionsActionError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{sessionsActionError}</p>
+            </Notice>
+          )}
+          {sessionsActionDone !== null && (
+            <Notice tone="success" live="assertive">
+              <p>{sessionsActionDone}</p>
+            </Notice>
+          )}
+          {/* Explicitly spares the session making this very request — the
+              server enforces that, this button just names it (fiche 18
+              task 2). */}
+          <div>
+            <Button
+              variant="destructive"
+              disabled={sessions.length <= 1}
+              onClick={() => void revokeOthers()}
+            >
+              {t('profile.revokeOtherSessions')}
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
       <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2 id="activity">{t('profile.activityHeading')}</h2>
+          </CardTitle>
+          <CardDescription>{t('profile.activityIntro')}</CardDescription>
+        </CardHeader>
+        <CardBody>
+          {activityError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{activityError}</p>
+            </Notice>
+          )}
+          {activity.length === 0 ? (
+            <p>{t('profile.activityEmpty')}</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+              {activity.map((entry) => (
+                <li key={entry.id} className="flex flex-wrap items-center justify-between gap-3">
+                  <span>{entry.action}</span>
+                  <span className="text-muted-foreground">{entry.at}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
     </section>
   )
 }

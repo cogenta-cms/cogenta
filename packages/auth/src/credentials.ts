@@ -1,5 +1,6 @@
 import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
 import { hashPassword, verifyPassword } from './password.js'
+import { verifyRecoveryCode } from './recovery-codes.js'
 import { TABLES } from './tables.js'
 import type { CredentialKind } from './types.js'
 
@@ -37,9 +38,44 @@ export interface CredentialStore {
   ): Promise<{ userId: string; data: WebAuthnCredentialData } | null>
   updateWebAuthnCounter(credentialId: string, counter: number): Promise<void>
 
+  /**
+   * Replaces this account's recovery codes wholesale with `hashes` — already
+   * hashed by the caller (`recovery-codes.ts`), never a plaintext code. Used
+   * both for the first batch (TOTP confirmation) and for regeneration, which
+   * is exactly what makes regeneration invalidate the old ones: there is
+   * nothing left to consume the previous batch against.
+   */
+  setRecoveryCodes(userId: string, hashes: readonly string[]): Promise<void>
+  /** How many codes exist and how many are still unused. `null` when none were ever issued. */
+  recoveryCodesStatus(
+    userId: string,
+  ): Promise<{ readonly total: number; readonly remaining: number } | null>
+  /**
+   * Checks `code` against every unused code for this account and, on a
+   * match, marks that one used. Single use is enforced with a
+   * compare-and-set on the write (`resets.ts`'s `markUsed` idiom): the
+   * `update` is conditioned on the row still holding the exact bytes this
+   * call read, so a concurrent redemption that wrote first makes this one's
+   * `update` affect zero rows, which is retried against the fresher row
+   * rather than blindly overwriting it. Two simultaneous calls with the same
+   * code can therefore never both return `true`. Returns `false` for no
+   * account, no codes, or no match at all.
+   */
+  consumeRecoveryCode(userId: string, code: string): Promise<boolean>
+  /** Deletes every recovery code for this account — there is nothing left to be a spare key for once TOTP itself is off. */
+  removeRecoveryCodes(userId: string): Promise<void>
+
   /** What second factors, if any, this user has set up. */
   kinds(userId: string): Promise<readonly CredentialKind[]>
 }
+
+interface RecoveryCodeEntry {
+  readonly hash: string
+  readonly usedAt: string | null
+}
+
+/** Retries for `consumeRecoveryCode`'s compare-and-set — covers a genuine concurrent race, not a hostile client (see that function's own comment). */
+const CONSUME_ATTEMPTS = 5
 
 export function createCredentialStore(
   db: DatabaseHandle,
@@ -156,6 +192,72 @@ export function createCredentialStore(
         sql`select distinct kind from ${table} where user_id = ${userId}`,
       )
       return result.rows.map((row) => row.kind as CredentialKind)
+    },
+
+    setRecoveryCodes: async (userId, hashes) => {
+      const codes: RecoveryCodeEntry[] = hashes.map((hash) => ({ hash, usedAt: null }))
+      await upsert(userId, 'recovery_codes', { codes })
+    },
+
+    recoveryCodesStatus: async (userId) => {
+      const row = await findOne(userId, 'recovery_codes')
+      if (row === undefined) return null
+      const { codes } = JSON.parse(row.data) as { codes: readonly RecoveryCodeEntry[] }
+      return {
+        total: codes.length,
+        remaining: codes.filter((entry) => entry.usedAt === null).length,
+      }
+    },
+
+    consumeRecoveryCode: async (userId, code) => {
+      // Bounded retries: a concurrent redemption can win the compare-and-set
+      // below between our read and our write. When that happens we re-read
+      // the row it just wrote and try again against the fresher data — the
+      // same shape as `resets.ts`'s single-use guarantee, applied to a batch
+      // of codes instead of one token. `CONSUME_ATTEMPTS` only has to cover
+      // genuine races, not a hostile client: a wrong code never enters this
+      // loop more than once, since a miss returns `false` on the first pass.
+      for (let attempt = 0; attempt < CONSUME_ATTEMPTS; attempt += 1) {
+        const row = await findOne(userId, 'recovery_codes')
+        if (row === undefined) return false
+
+        const parsed = JSON.parse(row.data) as { codes: readonly RecoveryCodeEntry[] }
+        let matchIndex = -1
+        // Each candidate is scrypt-hashed; short-circuiting on the first
+        // match is the whole point — a code is a spare password, not a value
+        // worth a constant-time scan over up to ten entries.
+        for (const [index, entry] of parsed.codes.entries()) {
+          if (entry.usedAt !== null) continue
+          if (await verifyRecoveryCode(code, entry.hash)) {
+            matchIndex = index
+            break
+          }
+        }
+        if (matchIndex === -1) return false
+
+        const updated = {
+          codes: parsed.codes.map((entry, index) =>
+            index === matchIndex ? { ...entry, usedAt: new Date(now()).toISOString() } : entry,
+          ),
+        }
+
+        // Compare-and-set against the exact bytes this call read: if another
+        // caller already wrote a different version of this batch between our
+        // read and this write — consuming this same code, or a different
+        // one — `rowsAffected` is 0 and we loop to retry against the row
+        // that actually won, rather than clobbering it.
+        const result = await db.query(
+          sql`update ${table} set data = ${JSON.stringify(updated)} where id = ${row.id} and data = ${row.data}`,
+        )
+        if (result.rowsAffected > 0) return true
+      }
+      return false
+    },
+
+    removeRecoveryCodes: async (userId) => {
+      await db.query(
+        sql`delete from ${table} where user_id = ${userId} and kind = ${'recovery_codes'}`,
+      )
     },
   }
 }

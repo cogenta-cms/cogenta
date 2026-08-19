@@ -118,6 +118,12 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AUTH_USER_NOT_FOUND: 404,
   AUTH_RESET_TOKEN_INVALID: 400,
   AUTH_ROLE_UNKNOWN: 400,
+  // Recovery codes (fiche 18 task 1). A wrong or already-consumed code is the
+  // same shape of failure as a wrong password. "Unavailable" is a conflict
+  // with the account's current state (no confirmed TOTP to be a spare key
+  // for), not a malformed request.
+  AUTH_RECOVERY_CODE_INVALID: 401,
+  AUTH_RECOVERY_CODES_UNAVAILABLE: 409,
 
   // Account lifecycle (fiche 17: invitations and anonymization). Both invite
   // codes describe a conflict with the account's *current* state, not a

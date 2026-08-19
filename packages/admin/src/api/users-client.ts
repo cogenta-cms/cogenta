@@ -58,6 +58,11 @@ export interface UserSession {
   readonly expiresAt: string
   readonly lastSeenAt: string
   readonly label: string | null
+  /** Distilled from the `User-Agent` at sign-in (fiche 18 task 2) — never a raw IP or user-agent string, see `@cogenta/auth`'s `parseUserAgent`. */
+  readonly browser: string
+  readonly device: string
+  /** Whether this is the session making the current request. Only ever true on your own list — see `revokeOtherSessions`. */
+  readonly isCurrent: boolean
 }
 
 export interface CreatedUser {
@@ -260,6 +265,21 @@ export async function revokeUserSession(
 ): Promise<void> {
   await request(`/api/users/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+/**
+ * "Déconnecter toutes les autres sessions" (fiche 18 task 2) — self only,
+ * always relative to the session making this very call, which is what the
+ * `me` here means: there is no such thing as "my other sessions" on someone
+ * else's account.
+ */
+export function revokeOtherSessions(
+  token: string,
+): Promise<{ readonly revoked: number; readonly keptSessionId: string }> {
+  return request('/api/users/me/sessions/revoke-others', {
+    method: 'POST',
     headers: authHeader(token),
   })
 }

@@ -34,8 +34,11 @@ export type AuthState =
 
 export interface AuthContextValue {
   readonly state: AuthState
-  login(email: string, password: string): Promise<api.LoginResult>
+  /** `rememberMe: false` asks for a day-long session instead of the usual sliding 30-day one (fiche 18 task 5). */
+  login(email: string, password: string, rememberMe?: boolean): Promise<api.LoginResult>
   completeTotp(ticket: string, token: string): Promise<api.LoginResult>
+  /** The recovery-code counterpart of `completeTotp` (fiche 18 task 1) — same ticket, a code instead of a 6-digit token. */
+  completeRecoveryCode(ticket: string, code: string): Promise<api.LoginResult>
   loginWithPasskey(): Promise<api.LoginResult>
   logout(): Promise<void>
 }
@@ -51,6 +54,7 @@ const DEFAULT_CONTEXT: AuthContextValue = {
   state: { status: 'loading' },
   login: () => Promise.reject(new Error('AuthProvider is not mounted')),
   completeTotp: () => Promise.reject(new Error('AuthProvider is not mounted')),
+  completeRecoveryCode: () => Promise.reject(new Error('AuthProvider is not mounted')),
   loginWithPasskey: () => Promise.reject(new Error('AuthProvider is not mounted')),
   logout: () => Promise.reject(new Error('AuthProvider is not mounted')),
 }
@@ -90,8 +94,11 @@ export function AuthProvider({ children }: { readonly children: ReactNode }): JS
   const value = useMemo<AuthContextValue>(
     () => ({
       state,
-      login: (email, password) => api.login(email, password).then(applyResult),
+      login: (email, password, rememberMe) =>
+        api.login(email, password, rememberMe).then(applyResult),
       completeTotp: (ticket, token) => api.completeTotp(ticket, token).then(applyResult),
+      completeRecoveryCode: (ticket, code) =>
+        api.completeRecoveryCode(ticket, code).then(applyResult),
       loginWithPasskey: () => api.loginWithPasskey().then(applyResult),
       logout: async () => {
         if (state.status === 'authenticated') {

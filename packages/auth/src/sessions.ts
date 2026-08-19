@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
 import { TABLES } from './tables.js'
 import type { IssuedSession, Session } from './types.js'
+import { parseUserAgent } from './user-agent.js'
 
 const TOKEN_BYTES = 32
 const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days, sliding on use.
@@ -32,6 +33,8 @@ interface SessionRow {
   expires_at: string
   last_seen_at: string
   revoked: number | boolean
+  browser: string | null
+  device: string | null
 }
 
 function fromRow(row: SessionRow): Session {
@@ -42,11 +45,25 @@ function fromRow(row: SessionRow): Session {
     expiresAt: row.expires_at,
     lastSeenAt: row.last_seen_at,
     label: row.label ?? undefined,
+    browser: row.browser ?? 'unknown',
+    device: row.device ?? 'unknown',
   }
 }
 
 export interface SessionStore {
-  create(userId: string, options?: { label?: string; ttlMs?: number }): Promise<IssuedSession>
+  create(
+    userId: string,
+    options?: {
+      label?: string
+      ttlMs?: number
+      /**
+       * Raw `User-Agent` header, if any. Distilled to a browser family and a
+       * device type before it ever reaches SQL (`user-agent.ts`) — the header
+       * itself is never stored (fiche 18 task 2).
+       */
+      userAgent?: string
+    },
+  ): Promise<IssuedSession>
   /**
    * Resolves a bearer token to its session, or `null` if it is missing,
    * expired or revoked. Touches `lastSeenAt` on success — a session is a
@@ -68,6 +85,13 @@ export interface SessionStore {
    * every account already, at the scale fiche 17 targets (about a hundred).
    */
   lastSeenByUser(): Promise<ReadonlyMap<string, string>>
+  /**
+   * Revokes every live session this user has **except** `keepSessionId` —
+   * "sign out everywhere else" (fiche 18 task 2). Returns how many sessions
+   * were actually revoked, so the caller can report a real number rather than
+   * a bare "done".
+   */
+  revokeAllExcept(userId: string, keepSessionId: string): Promise<number>
 }
 
 export function createSessionStore(db: DatabaseHandle, now: () => number = Date.now): SessionStore {
@@ -77,12 +101,19 @@ export function createSessionStore(db: DatabaseHandle, now: () => number = Date.
     create: async (userId, options) => {
       const token = issueToken()
       const id = newId(now)
-      const created = new Date(now()).toISOString()
-      const expires = new Date(now() + (options?.ttlMs ?? DEFAULT_TTL_MS)).toISOString()
+      // One instant, not two separate `now()` calls: `created`/`expires` are
+      // both derived from it, so `expiresAt - createdAt` is exactly `ttlMs`
+      // rather than off by however many milliseconds elapsed between two
+      // clock reads — the gap that made `remember me`'s duration assertion
+      // (fiche 18 task 5) flaky under real timing.
+      const nowMs = now()
+      const created = new Date(nowMs).toISOString()
+      const expires = new Date(nowMs + (options?.ttlMs ?? DEFAULT_TTL_MS)).toISOString()
+      const { browser, device } = parseUserAgent(options?.userAgent)
 
       await db.query(sql`
-        insert into ${table} (id, user_id, token_hash, label, created_at, expires_at, last_seen_at, revoked)
-        values (${id}, ${userId}, ${hashToken(token)}, ${options?.label ?? null}, ${created}, ${expires}, ${created}, ${false})`)
+        insert into ${table} (id, user_id, token_hash, label, created_at, expires_at, last_seen_at, revoked, browser, device)
+        values (${id}, ${userId}, ${hashToken(token)}, ${options?.label ?? null}, ${created}, ${expires}, ${created}, ${false}, ${browser}, ${device})`)
 
       return {
         id,
@@ -92,6 +123,8 @@ export function createSessionStore(db: DatabaseHandle, now: () => number = Date.
         expiresAt: expires,
         lastSeenAt: created,
         label: options?.label,
+        browser,
+        device,
       }
     },
 
@@ -133,6 +166,13 @@ export function createSessionStore(db: DatabaseHandle, now: () => number = Date.
       const result = await db.query<{ user_id: string; last_seen: string }>(sql`
         select user_id, max(last_seen_at) as last_seen from ${table} group by user_id`)
       return new Map(result.rows.map((row) => [row.user_id, row.last_seen]))
+    },
+
+    revokeAllExcept: async (userId, keepSessionId) => {
+      const result = await db.query(
+        sql`update ${table} set revoked = ${true} where user_id = ${userId} and id != ${keepSessionId} and revoked = ${false}`,
+      )
+      return result.rowsAffected
     },
   }
 }

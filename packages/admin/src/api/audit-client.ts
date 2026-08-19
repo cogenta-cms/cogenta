@@ -150,3 +150,14 @@ export async function exportAuditLog(
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+
+/**
+ * "Mon activité" (fiche 18 task 4) — open to anyone signed in, unlike the
+ * full log above. The server resolves whose activity this is from the bearer
+ * token; there is no `actorId` parameter here to send, because the route
+ * would ignore it anyway.
+ */
+export function listMyActivity(token: string, limit?: number): Promise<readonly AuditEntry[]> {
+  const query = limit === undefined ? '' : `?limit=${limit}`
+  return request(`/api/audit/me${query}`, { headers: authHeader(token) })
+}

@@ -387,8 +387,8 @@ function noRoute(): CogentaError {
     hint:
       'User routes are /api/users, /api/users/bulk, /api/users/{id|me}, ' +
       '/api/users/{id|me}/sessions, /api/users/{id|me}/sessions/{sessionId}, ' +
-      '/api/users/me/password, /api/users/me/profile, /api/users/{id}/invite ' +
-      'and /api/users/{id}/anonymize.',
+      '/api/users/me/sessions/revoke-others, /api/users/me/password, ' +
+      '/api/users/me/profile, /api/users/{id}/invite and /api/users/{id}/anonymize.',
   })
 }
 
@@ -642,8 +642,19 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
           return await anonymizeRoute(request, actor, userId, method)
         }
 
+        // Checked before the generic `sessions` fallback below: that handler
+        // treats `segments[2]` as a session id, so `revoke-others` must be
+        // matched by name first or it would be read as one.
+        if (
+          segments[1] === 'sessions' &&
+          segments.length === 3 &&
+          segments[2] === 'revoke-others'
+        ) {
+          return await revokeOtherSessionsRoute(request, actor, userId, method)
+        }
+
         if (segments[1] === 'sessions') {
-          return await sessionsRoute(actor, userId, segments[2], method)
+          return await sessionsRoute(request, actor, userId, segments[2], method)
         }
 
         throw noRoute()
@@ -1027,6 +1038,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
   }
 
   async function sessionsRoute(
+    request: RestRequest,
     actor: Actor,
     userId: string,
     sessionId: string | undefined,
@@ -1036,6 +1048,10 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       if (method !== 'GET') return methodNotAllowed(['GET'])
       requireSelfOrAdmin(actor, userId, "see another account's active sessions")
       const sessions = await auth.sessions.list(userId)
+      // "Which one is this" (fiche 18 task 2): only meaningful when the
+      // caller is looking at their own list — an admin browsing someone
+      // else's sessions has no session of their own among them.
+      const currentSessionId = actor.id === userId ? (await currentSession(request))?.id : undefined
       return jsonResponse(200, {
         data: sessions.map((session) => ({
           id: session.id,
@@ -1043,6 +1059,9 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
           expiresAt: session.expiresAt,
           lastSeenAt: session.lastSeenAt,
           label: session.label ?? null,
+          browser: session.browser,
+          device: session.device,
+          isCurrent: session.id === currentSessionId,
         })),
       })
     }
@@ -1066,4 +1085,55 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     await auth.sessions.revoke(sessionId)
     return { status: 204, body: null, headers: {} }
   }
+
+  /**
+   * `POST /api/users/{me}/sessions/revoke-others` — "sign out everywhere
+   * else" (fiche 18 task 2). Self only, even for an admin: "the current
+   * session" only means something relative to the bearer token this very
+   * request carries, which an admin acting on someone else's account does
+   * not have one of.
+   */
+  async function revokeOtherSessionsRoute(
+    request: RestRequest,
+    actor: Actor,
+    userId: string,
+    method: string,
+  ): Promise<RestResponse> {
+    if (method !== 'POST') return methodNotAllowed(['POST'])
+    if (actor.id !== userId) {
+      throw new CogentaError({
+        code: 'FORBIDDEN',
+        message: 'Only the account itself can end its other sessions.',
+        hint: '"Other sessions" is relative to the session making this request — there is no such thing for someone else’s account.',
+      })
+    }
+
+    const current = await currentSession(request)
+    if (current === null) {
+      throw new CogentaError({
+        code: 'AUTH_SESSION_INVALID',
+        message: 'No active session to keep.',
+        hint: 'Sign in, then send the returned token as "Authorization: Bearer <token>".',
+      })
+    }
+
+    const revoked = await auth.sessions.revokeAllExcept(userId, current.id)
+    return jsonResponse(200, { data: { revoked, keptSessionId: current.id } })
+  }
+
+  /** The session the bearer token on *this* request resolves to, or `null` for none. */
+  async function currentSession(
+    request: RestRequest,
+  ): ReturnType<AuthStore['sessions']['resolve']> {
+    const token = bearerToken(request.headers)
+    if (token === null) return null
+    return auth.sessions.resolve(token)
+  }
+}
+
+function bearerToken(headers: RestRequest['headers']): string | null {
+  const raw = headers?.['authorization']
+  if (raw === undefined) return null
+  const match = /^Bearer\s+(.+)$/iu.exec(raw)
+  return match?.[1]?.trim() ?? null
 }

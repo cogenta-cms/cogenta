@@ -86,6 +86,20 @@ function requireAdmin(actor: Actor): void {
   })
 }
 
+function unauthenticated(): CogentaError {
+  return new CogentaError({
+    code: 'UNAUTHENTICATED',
+    message: 'Sign in to see your activity.',
+    hint: 'Send "Authorization: Bearer <token>" from an existing session.',
+  })
+}
+
+/** How many entries `GET /api/audit/me` answers with when the caller sends no `limit` — fiche 18 task 4 asks for "the last twenty". */
+const MY_ACTIVITY_DEFAULT_LIMIT = 20
+
+/** The most `?limit=` may ever widen "my activity" to — a personal list, not an export. */
+const MY_ACTIVITY_MAX_LIMIT = 100
+
 function parseLimit(query: RestRequest['query'], max: number): number | undefined {
   const raw = single(query, 'limit')
   if (raw === undefined) return undefined
@@ -171,7 +185,7 @@ function notFound(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Audit routes are /api/audit, /api/audit/{id}, /api/audit/verify, /api/audit/export and /api/audit/integrity.',
+    hint: 'Audit routes are /api/audit, /api/audit/{id}, /api/audit/me, /api/audit/verify, /api/audit/export and /api/audit/integrity.',
   })
 }
 
@@ -277,11 +291,28 @@ export function createAuditRouter(options: AuditRouterOptions): AuditRouter {
   return {
     handle: async (request, actor) => {
       try {
-        requireAdmin(actor)
         const segments = segmentsOf(request.path, basePath)
         if (segments === null || segments.length > 1) throw notFound()
         const [action] = segments
         const method = request.method.toUpperCase()
+
+        // `GET /api/audit/me` — "my activity" (fiche 18 task 4), the one
+        // audit route that is not admin-only. `actorId` is `actor.id`,
+        // resolved from the bearer token by the transport layer before this
+        // router ever runs — nothing in the request path or query can name a
+        // different account, which is the whole point: the full log below is
+        // `admin`-only precisely because it names *every* actor, and this
+        // route must never become a second way to read it.
+        if (action === 'me') {
+          if (method !== 'GET') return methodNotAllowed(['GET'])
+          if (actor.id === null) throw unauthenticated()
+          const limit =
+            parseLimit(request.query, MY_ACTIVITY_MAX_LIMIT) ?? MY_ACTIVITY_DEFAULT_LIMIT
+          const entries = await audit.list({ actorId: actor.id, limit })
+          return jsonResponse(200, { data: entries })
+        }
+
+        requireAdmin(actor)
 
         if (action === undefined) {
           if (method !== 'GET') return methodNotAllowed(['GET'])

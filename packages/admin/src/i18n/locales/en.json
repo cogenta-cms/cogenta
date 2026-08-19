@@ -176,7 +176,13 @@
     "passkeyRefused": "The passkey was refused or cancelled.",
     "connectionFailed": "Could not sign in.",
     "incorrectCode": "Incorrect code.",
-    "forgotPassword": "Forgot your password?"
+    "forgotPassword": "Forgot your password?",
+    "rememberMe": "Remember me on this device",
+    "useRecoveryCode": "Use a recovery code instead",
+    "useTotpCode": "Use my authenticator app instead",
+    "recoveryHeading": "Recovery code",
+    "recoveryPrompt": "Enter one of the recovery codes you were given when you set up two-step verification. Each code works once.",
+    "recoveryCodeIncorrect": "This recovery code is not valid."
   },
   "forgotPassword": {
     "heading": "Reset your password",
@@ -189,12 +195,14 @@
   "resetPassword": {
     "heading": "Choose a new password",
     "newPassword": "New password",
-    "hint": "At least 12 characters. A phrase of a few ordinary words is both longer and easier to remember than a short one with symbols in it.",
+    "hint": "At least {{minLength}} characters. A phrase of a few ordinary words is both longer and easier to remember than a short one with symbols in it.",
     "submit": "Reset the password",
     "done": "Password changed. Every existing session was signed out — sign in again with the new one.",
     "goToLogin": "Go to sign in",
     "missingToken": "This link is missing its token. Ask for a new one from the \"forgot password\" screen.",
-    "error": "Could not reset the password. The link may have expired or already been used."
+    "error": "Could not reset the password. The link may have expired or already been used.",
+    "strengthOk": "Meets the site's policy.",
+    "strengthShort": "{{remaining}} more character(s) needed."
   },
   "notices": {
     "dismiss": "Hide this recommendation",
@@ -862,6 +870,8 @@
     "unnamedSession": "Unnamed device",
     "lastSeen": "last seen",
     "revokeSession": "Revoke the session last seen {{at}}",
+    "sessionDevice": "{{browser}} on {{device}}",
+    "currentSession": "this session",
     "loadError": "Could not load the account list.",
     "createError": "Could not create this account.",
     "updateError": "Could not change this account.",
@@ -1220,7 +1230,29 @@
     "avatarChange": "Change the image",
     "avatarRemove": "Remove",
     "avatarLoadError": "Could not load the media library.",
-    "saveProfile": "Save profile"
+    "saveProfile": "Save profile",
+    "passwordPolicyAnnounce": "Passwords need at least {{minLength}} characters.",
+    "passwordStrengthOk": "Meets the site's policy.",
+    "passwordStrengthShort": "{{remaining}} more character(s) needed.",
+    "recoveryHeading": "Recovery codes",
+    "recoveryIntro": "The way back in if you lose the device your authenticator app runs on. Ten single-use codes, issued the moment two-step verification is turned on.",
+    "recoveryCodesIssuedTitle": "Save these codes now — they will not be shown again",
+    "recoveryCodesIssuedBody": "Each code works once. Store them somewhere safe, separate from your password.",
+    "recoveryCodesDownload": "Download as a text file",
+    "recoveryCodesDismiss": "I have saved these codes",
+    "recoveryRemaining": "{{remaining}} of {{total}} recovery codes remain.",
+    "recoveryNeedsTotp": "Recovery codes are issued once you turn on two-step verification above.",
+    "recoveryRegenerate": "Generate new recovery codes",
+    "recoveryRegenerateError": "Could not generate new recovery codes.",
+    "sessionsHeading": "Sessions",
+    "sessionsIntro": "Every device currently signed in as you.",
+    "revokeOtherSessions": "Sign out of every other session",
+    "sessionsRevokedOthers": "Signed out of {{count}} other session(s). This one stays signed in.",
+    "sessionsRevokeOthersError": "Could not sign out the other sessions.",
+    "activityHeading": "My activity",
+    "activityIntro": "Your twenty most recent actions, from the site's audit log.",
+    "activityEmpty": "No recorded activity yet.",
+    "activityError": "Could not load your activity."
   },
   "pluginPermissions": {
     "heading": "Permissions requested",

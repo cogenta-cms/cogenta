@@ -1035,6 +1035,49 @@ export function runContentStoreContract(
       })
     })
 
+    // Fiche 01 ("Liste de contenu"), task 4: a real `GROUP BY status`, never
+    // a client-side count of one page.
+    describe('countByStatus', () => {
+      it('reports zero for every status on an empty collection', async () => {
+        expect(await articles.countByStatus()).toEqual({
+          draft: 0,
+          scheduled: 0,
+          published: 0,
+          archived: 0,
+        })
+      })
+
+      it('groups live entries by their real status', async () => {
+        await articles.create({ values: { title: 'a' }, status: 'draft' })
+        await articles.create({ values: { title: 'b' }, status: 'draft' })
+        await articles.create({ values: { title: 'c' }, status: 'published' })
+        await articles.create({
+          values: { title: 'd', publishedAt: '2027-01-01T00:00:00.000Z' },
+          status: 'scheduled',
+        })
+        await articles.create({ values: { title: 'e' }, status: 'archived' })
+
+        expect(await articles.countByStatus()).toEqual({
+          draft: 2,
+          scheduled: 1,
+          published: 1,
+          archived: 1,
+        })
+      })
+
+      it('excludes a trashed entry, and counts it again once restored (ADR-0022)', async () => {
+        const entry = await articles.create({ values: { title: 'a' }, status: 'published' })
+        expect((await articles.countByStatus()).published).toBe(1)
+
+        await articles.delete(entry.id)
+        expect((await articles.countByStatus()).published).toBe(0)
+
+        await articles.untrash(entry.id)
+        // Untrashing gives back exactly the status it went in with.
+        expect((await articles.countByStatus()).published).toBe(1)
+      })
+    })
+
     describe('internationalisation', () => {
       const family = async (): Promise<{ source: string; translation: string }> => {
         const source = await articles.create({

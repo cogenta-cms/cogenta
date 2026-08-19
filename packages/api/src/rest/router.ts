@@ -185,9 +185,16 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
       if (method === 'GET') {
         const query = parseListQuery(request.query, service.collection(name), service.limits)
         const page = await service.list(context, name, query)
+        // `?counts=1` (fiche 01 "Liste de contenu", task 4): a real
+        // `GROUP BY status` alongside the page, not instead of it — the
+        // status tabs of a list screen need both at once, and asking for
+        // one on every load of the other would double the round trips.
+        const counts =
+          single(request.query, 'counts') === '1' ? await service.counts(context, name) : undefined
         return jsonResponse(200, {
           data: page.items,
           page: { hasMore: page.hasMore, nextCursor: page.nextCursor },
+          ...(counts === undefined ? {} : { counts }),
           meta: meta(page.items, [name]),
         })
       }

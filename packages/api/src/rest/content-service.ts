@@ -3,6 +3,7 @@ import {
   type CollectionDefinition,
   type ContentDiff,
   type ContentEntry,
+  type ContentStatus,
   type ContentStore,
   type CreateInput,
   type DuplicateInput,
@@ -79,6 +80,20 @@ export interface ContentService {
    */
   definition(name: string): CollectionDefinition | undefined
   list(context: AccessContext, name: string, query: ListQuery): Promise<ContentPage>
+  /**
+   * How many live (non-trashed) entries this collection holds, by status
+   * (fiche 01 "Liste de contenu", task 4).
+   *
+   * Goes through the same permission layer as `list`, never around it: a
+   * role that may not read drafts gets `published` only — not `draft: 0`,
+   * not `draft: 12`. Either number would answer a question about drafts
+   * that role is not entitled to ask (the fiche's own "piège connu": *the
+   * count itself is what leaks*, not just the rows behind it).
+   */
+  counts(
+    context: AccessContext,
+    name: string,
+  ): Promise<Readonly<Partial<Record<ContentStatus, number>>>>
   read(
     context: AccessContext,
     name: string,
@@ -389,6 +404,18 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       }
 
       return { items: serialised, nextCursor, hasMore }
+    },
+
+    counts: async (context, name) => {
+      const target = collection(name)
+      permissions.assert('read', target, context)
+
+      const raw = await store(target).countByStatus()
+      if (permissions.canReadUnpublished(target, context).allowed) return raw
+
+      // Only the published count is safe to hand back — see the interface
+      // comment above.
+      return { published: raw.published }
     },
 
     read: async (context, name, id, readOptions) => {

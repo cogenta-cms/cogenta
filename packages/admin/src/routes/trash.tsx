@@ -5,6 +5,7 @@ import { ApiError } from '../api/client.js'
 import { type Entry, listEntries, purgeEntry, untrashEntry } from '../api/content-client.js'
 import { readTrashStatus, type TrashStatus } from '../api/ops-status-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { titleOf } from '../lib/entry-title.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
@@ -601,18 +602,19 @@ export function TrashRoute(): JSX.Element {
                         ? null
                         : daysUntilPurge(row.entry.deletedAt, retainDays, now)
                     const author = deletedBy[key]
+                    const rowTitle = titleOf(row.entry, collection)
 
                     return (
                       <TableRow key={key}>
                         <TableCell>
                           <input
                             type="checkbox"
-                            aria-label={t('trash.selectRow', { title: titleOf(row.entry) })}
+                            aria-label={t('trash.selectRow', { title: rowTitle })}
                             checked={selected.has(key)}
                             onChange={() => toggleSelected(row)}
                           />
                         </TableCell>
-                        <TableCell>{titleOf(row.entry)}</TableCell>
+                        <TableCell>{rowTitle}</TableCell>
                         {showCollectionColumn && (
                           <TableCell>{collection?.labels.plural ?? row.collection}</TableCell>
                         )}
@@ -705,16 +707,4 @@ export function TrashRoute(): JSX.Element {
       />
     </section>
   )
-}
-
-/**
- * Something recognisable to a human, without knowing the collection: the
- * first text-ish value, falling back to the id.
- */
-function titleOf(entry: Entry): string {
-  for (const key of ['title', 'name', 'slug']) {
-    const value = entry.values[key]
-    if (typeof value === 'string' && value !== '') return value
-  }
-  return entry.id
 }

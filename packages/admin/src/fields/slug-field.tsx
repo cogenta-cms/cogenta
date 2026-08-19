@@ -17,7 +17,12 @@ export function SlugField({
   const options = field.options as { readonly max?: number; readonly from?: string }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper
+      id={id}
+      field={field}
+      value={value}
+      onReset={() => onChange(field.default as string)}
+    >
       <input
         id={id}
         type="text"

@@ -48,9 +48,11 @@ const article: CollectionDefinition = {
     releasedOn: { kind: 'date', options: {} },
     publishedAt: { kind: 'datetime', options: {} },
     cover: { kind: 'media', options: { accept: ['image'] } },
+    gallery: { kind: 'media', options: { accept: ['image'], many: true } },
     meta: { kind: 'json', options: {} },
     tint: { kind: 'color', options: {} },
     layout: { kind: 'select', options: { options: ['wide', 'narrow'] } },
+    badges: { kind: 'select', options: { options: ['new', 'sale', 'limited'], many: true } },
     writer: { kind: 'relation', options: { to: 'store_author', onDelete: 'restrict' } },
     tags: { kind: 'relation', options: { to: 'store_tag', many: true } },
     zone: { kind: 'blocks', options: { allow: '*' } },
@@ -144,9 +146,14 @@ export function runContentStoreContract(
             featured: true,
             releasedOn: '2026-01-31',
             cover: 'a3f1e2d4-0000-7000-8000-000000000001',
+            gallery: [
+              'a3f1e2d4-0000-7000-8000-000000000002',
+              'a3f1e2d4-0000-7000-8000-000000000003',
+            ],
             meta: { source: 'import', tags: ['a', 'b'] },
             tint: '#ff8800',
             layout: 'wide',
+            badges: ['sale', 'new'],
           },
         })
 
@@ -157,9 +164,18 @@ export function runContentStoreContract(
         expect(read?.values['rating']).toBe(4.5)
         expect(read?.values['featured']).toBe(true)
         expect(read?.values['releasedOn']).toBe('2026-01-31')
+        expect(read?.values.cover).toBe('a3f1e2d4-0000-7000-8000-000000000001')
+        // The order the editor chose is the order that comes back — the same
+        // promise a to-many relation makes, even though this one has no join
+        // table behind it (see the "media/select, many-valued" suite below).
+        expect(read?.values.gallery).toEqual([
+          'a3f1e2d4-0000-7000-8000-000000000002',
+          'a3f1e2d4-0000-7000-8000-000000000003',
+        ])
         expect(read?.values['meta']).toEqual({ source: 'import', tags: ['a', 'b'] })
         expect(read?.values['tint']).toBe('#ff8800')
         expect(read?.values['layout']).toBe('wide')
+        expect(read?.values.badges).toEqual(['sale', 'new'])
       })
 
       it('mints a time-ordered identifier without asking the database for one', async () => {
@@ -231,6 +247,62 @@ export function runContentStoreContract(
         await articles.create({ values: { title: 'Sido', writer: writer.id } })
 
         await expect(authors.delete(writer.id)).rejects.toMatchObject({ name: 'CogentaError' })
+      })
+    })
+
+    /**
+     * `media`/`select` with `many: true`: several values, but — unlike a
+     * to-many `relation` or `taxonomy` field — nothing on the other end a
+     * foreign key could point at, so there is no join table here at all,
+     * only an ordered JSON array in the field's own column (`values.ts`,
+     * `isJsonEncodedArray`). Real bug found and fixed while building fiche
+     * 03's media/select field editors: the store validated an array for
+     * both (`validation.ts`'s `manyOf`) but then threw trying to store it
+     * as a plain string — an array has never round-tripped through either
+     * kind before this suite.
+     */
+    describe('media/select, many-valued', () => {
+      it('defaults an unset many-valued field to [], never null', async () => {
+        const entry = await articles.create({ values: { title: 'Sans galerie' } })
+        const read = await articles.read(entry.id, { state: 'working' })
+
+        expect(read?.values.gallery).toEqual([])
+        expect(read?.values.badges).toEqual([])
+      })
+
+      it('updates a many-valued field by replacing the whole array', async () => {
+        const entry = await articles.create({
+          values: { title: 'Galerie', gallery: ['id-1', 'id-2'], badges: ['new'] },
+        })
+
+        const updated = await articles.update(entry.id, {
+          values: { gallery: ['id-3'], badges: [] },
+        })
+
+        expect(updated.values.gallery).toEqual(['id-3'])
+        expect(updated.values.badges).toEqual([])
+        const read = await articles.read(entry.id, { state: 'working' })
+        expect(read?.values.gallery).toEqual(['id-3'])
+      })
+
+      it('refuses a non-array value for a many-valued media field', async () => {
+        await expect(
+          articles.create({ values: { title: 'x', gallery: 'not-an-array' } }),
+        ).rejects.toMatchObject({ name: 'CogentaError', code: 'CONTENT_INVALID' })
+      })
+
+      it('refuses a non-array value for a many-valued select field', async () => {
+        await expect(
+          articles.create({ values: { title: 'x', badges: 'sale' } }),
+        ).rejects.toMatchObject({ name: 'CogentaError', code: 'CONTENT_INVALID' })
+      })
+
+      it('creates no join table for either kind', async () => {
+        // A to-many relation gets `<t>_<field>`; media/select never do —
+        // asserting the table is genuinely absent, not just unused, is what
+        // tells the two mechanisms apart.
+        await expect(countRows(`${article.name}_gallery`, 'irrelevant')).rejects.toThrow()
+        await expect(countRows(`${article.name}_badges`, 'irrelevant')).rejects.toThrow()
       })
     })
 

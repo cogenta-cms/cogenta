@@ -63,6 +63,23 @@ export interface ListOptions {
   readonly trashed?: TrashFilter
 }
 
+/**
+ * `depth=0` on every request in this module that can carry it.
+ *
+ * REST expands a relation to the related entry's whole document by default
+ * (`packages/api/src/content/serialise.ts`'s `ExpansionOptions.depth`,
+ * defaulted to 1) — a reasonable default for a headless consumer rendering a
+ * page, and the wrong one for this admin: this module's `Entry.values` is
+ * read back into a form's local state and resubmitted verbatim on the next
+ * save (`EntryEditRoute`'s `values`/`setValues`), so an expanded relation
+ * silently turns "the id `person-1`" into a whole nested object the next
+ * save would try to write back as a relation's value — which the store
+ * refuses (a relation column holds a string, never an object). This admin
+ * always resolves a related entry's title itself (`EntryPicker`,
+ * `getEntriesByIds`), so it never needed the expansion in the first place.
+ */
+const NO_EXPANSION = 'depth=0'
+
 function searchParamsFor(options: ListOptions): URLSearchParams {
   const params = new URLSearchParams()
   // Editors come to this list to find their own drafts as much as anything
@@ -70,6 +87,7 @@ function searchParamsFor(options: ListOptions): URLSearchParams {
   // itself is the one thing that actually decides whether this actor may
   // see the unpublished half of it.
   params.set('state', 'working')
+  params.set('depth', '0')
   if (options.sort !== undefined) {
     params.set('sort', `${options.sort.field}:${options.sort.direction}`)
   }
@@ -106,7 +124,7 @@ export async function deleteEntry(token: string, collection: string, id: string)
 /** Takes an entry back out of the trash, with the status it went in with. */
 export function untrashEntry(token: string, collection: string, id: string): Promise<Entry> {
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/untrash`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/untrash?${NO_EXPANSION}`,
     { method: 'POST', headers: authHeader(token) },
   )
 }
@@ -128,9 +146,52 @@ export async function purgeEntry(token: string, collection: string, id: string):
 /** `state=working`, same reasoning as `listEntries`: editing means seeing the draft face, not just the published one. */
 export function getEntry(token: string, collection: string, id: string): Promise<Entry> {
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?state=working`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?state=working&${NO_EXPANSION}`,
     { headers: authHeader(token) },
   )
+}
+
+export interface GetEntriesByIdsOptions {
+  /**
+   * Reaches into the trash — the only way a relation's referenced entry stays
+   * resolvable once it has been trashed (ADR-0022: the join row survives a
+   * trash, on purpose). Absent means excluded, the default every list route
+   * applies. Reaching in needs `delete` on the target collection, same as
+   * every other trash-aware read; a caller without it gets a 403 it should
+   * treat the same way it treats "not found" for this one field.
+   */
+  readonly trashed?: TrashFilter
+}
+
+/**
+ * Resolves a batch of entries by id in one request, via `filter.id.in` — the
+ * only way a relation or a taxonomy-adjacent picker can show a linked
+ * entry's title (and whether it is trashed) without one request per id.
+ * `GET /{collection}/{id}` has no `trashed` option at all (only the list
+ * route does), so a single relation's linked-but-trashed entry can only be
+ * found this way.
+ */
+export function getEntriesByIds(
+  token: string,
+  collection: string,
+  ids: readonly string[],
+  options: GetEntriesByIdsOptions = {},
+): Promise<readonly Entry[]> {
+  if (ids.length === 0) return Promise.resolve([])
+  const unique = [...new Set(ids)]
+  const params = new URLSearchParams()
+  params.set('state', 'working')
+  params.set('depth', '0')
+  params.set('filter.id.in', unique.join(','))
+  // The list route's own ceiling (`DEFAULT_LIMITS.maxPageSize`) — a to-many
+  // relation carrying more ids than that cannot be fully resolved in one
+  // call; the picker still shows what came back rather than failing outright.
+  params.set('limit', String(Math.min(unique.length, 100)))
+  if (options.trashed !== undefined) params.set('trashed', options.trashed)
+  return requestBody<{ readonly data: readonly Entry[] }>(
+    `/api/content/${encodeURIComponent(collection)}?${params.toString()}`,
+    { headers: authHeader(token) },
+  ).then((body) => body.data)
 }
 
 export interface CreateEntryOptions {
@@ -147,7 +208,7 @@ export function createEntry(
   options: CreateEntryOptions = {},
 ): Promise<Entry> {
   const { blocks, locale, translationOf } = options
-  return request(`/api/content/${encodeURIComponent(collection)}`, {
+  return request(`/api/content/${encodeURIComponent(collection)}?${NO_EXPANSION}`, {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify({
@@ -166,11 +227,14 @@ export function updateEntry(
   values: Readonly<Record<string, unknown>>,
   blocks?: BlockZones,
 ): Promise<Entry> {
-  return request(`/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: authHeader(token),
-    body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
-  })
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?${NO_EXPANSION}`,
+    {
+      method: 'PATCH',
+      headers: authHeader(token),
+      body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
+    },
+  )
 }
 
 /** One entry of `GET /{collection}/{id}/history` — `packages/schema/src/store/types.ts`'s `VersionSummary`. */
@@ -255,7 +319,7 @@ export function restoreVersion(
   version: number,
 ): Promise<Entry> {
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/restore`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/restore?${NO_EXPANSION}`,
     { method: 'POST', headers: authHeader(token), body: JSON.stringify({ version }) },
   )
 }
@@ -283,7 +347,7 @@ export function issuePreview(token: string, collection: string, id: string): Pro
 /** Publishes the entry's working state — `POST /{collection}/{id}/publish`. */
 export function publishEntry(token: string, collection: string, id: string): Promise<Entry> {
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/publish`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/publish?${NO_EXPANSION}`,
     { method: 'POST', headers: authHeader(token) },
   )
 }
@@ -302,7 +366,7 @@ export function unpublishEntry(
   publishedAt?: string,
 ): Promise<Entry> {
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/unpublish`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/unpublish?${NO_EXPANSION}`,
     {
       method: 'POST',
       headers: authHeader(token),
@@ -319,7 +383,7 @@ export function duplicateEntry(
   values?: Readonly<Record<string, unknown>>,
 ): Promise<Entry> {
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/duplicate`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/duplicate?${NO_EXPANSION}`,
     {
       method: 'POST',
       headers: authHeader(token),

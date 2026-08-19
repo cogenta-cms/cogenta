@@ -12,6 +12,7 @@ import {
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { downloadCsv, toCsv } from '../lib/csv.js'
+import { titleOf } from '../lib/entry-title.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
@@ -33,11 +34,6 @@ import {
 } from '../ui/index.js'
 
 const STATUSES = ['draft', 'scheduled', 'published', 'archived'] as const
-
-function titleOf(entry: Entry): string {
-  const candidate = Object.values(entry.values).find((value) => typeof value === 'string')
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : entry.id
-}
 
 /**
  * L2 task 6: filters, sort, pagination and a bulk action, for one collection

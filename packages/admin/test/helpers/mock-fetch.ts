@@ -2006,7 +2006,12 @@ export function installMockFetch(
       // The two trash routes. Both `delete`, both refusing an actor without
       // it — and `purge` is a POST on its own path rather than a second
       // meaning for DELETE, which is exactly what the client sends.
-      const trashActionMatch = /\/api\/content\/([^/?]+)\/([^/?]+)\/(untrash|purge)$/u.exec(url)
+      // `(?:\?.*)?$` rather than a bare `$`: `content-client.ts`'s `untrashEntry`
+      // now asks for `?depth=0` on this route too (fiche 03 — every entry-returning
+      // request does, to avoid an expanded relation corrupting the next save), and
+      // a query string must not make this stub miss the route it is answering.
+      const trashActionMatch =
+        /\/api\/content\/([^/?]+)\/([^/?]+)\/(untrash|purge)(?:\?.*)?$/u.exec(url)
       if (trashActionMatch !== null && method === 'POST') {
         const [, , entryId, action] = trashActionMatch
         const allowed = MOCK_SCHEMA.collections[0]?.permissions.delete ?? []

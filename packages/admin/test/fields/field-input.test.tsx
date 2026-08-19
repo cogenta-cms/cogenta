@@ -109,16 +109,27 @@ describe('FieldInput — select', () => {
     expect(screen.getByRole('option', { name: 'Brouillon' })).toBeDefined()
   })
 
-  it('refuses to render an editor for a many-valued select, rather than editing it wrong', () => {
+  it('renders a many-valued select as a checkbox group, and reports the whole set', () => {
+    const onChange = vi.fn()
     render(
       <FieldInput
         id="tags"
-        field={field('select', { options: { options: [], many: true } })}
-        value={[]}
-        onChange={vi.fn()}
+        field={field('select', {
+          options: {
+            options: [{ value: 'fiction' }, { value: 'essay' }, { value: 'poetry' }],
+            many: true,
+          },
+        })}
+        value={['fiction']}
+        onChange={onChange}
       />,
     )
-    expect(screen.getByRole('alert')).toBeDefined()
+
+    // Already-chosen options show as removable tokens, never as a UUID or a
+    // raw value — the same rule `EntryPicker` follows for a relation.
+    expect(screen.getByRole('button', { name: 'Retirer fiction' })).toBeDefined()
+    fireEvent.click(screen.getByLabelText('essay'))
+    expect(onChange).toHaveBeenCalledWith(['fiction', 'essay'])
   })
 })
 
@@ -166,16 +177,162 @@ describe('FieldInput — json', () => {
   })
 })
 
-describe('FieldInput — deferred kinds', () => {
-  it("names the target collection in the relation field's placeholder", () => {
+describe('FieldInput — slug', () => {
+  it('reports changes and enforces the lowercase-hyphen pattern', () => {
+    const onChange = vi.fn()
+    render(<FieldInput id="slug" field={field('slug')} value="mon-titre" onChange={onChange} />)
+
+    const input = screen.getByLabelText('field-name') as HTMLInputElement
+    expect(input.pattern.length).toBeGreaterThan(0)
+    fireEvent.change(input, { target: { value: 'autre-titre' } })
+    expect(onChange).toHaveBeenCalledWith('autre-titre')
+  })
+})
+
+describe('FieldInput — date', () => {
+  it('reports a calendar-day change', () => {
+    const onChange = vi.fn()
+    render(
+      <FieldInput id="released" field={field('date')} value="2026-01-01" onChange={onChange} />,
+    )
+
+    fireEvent.change(screen.getByLabelText('field-name'), { target: { value: '2026-02-14' } })
+    expect(onChange).toHaveBeenCalledWith('2026-02-14')
+  })
+})
+
+describe('FieldInput — color', () => {
+  it('accepts a hex value typed into the text half, and shows a preview swatch', () => {
+    const onChange = vi.fn()
+    render(<FieldInput id="tint" field={field('color')} value="#112233" onChange={onChange} />)
+
+    const input = screen.getByLabelText('field-name') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '#ff8800' } })
+    expect(onChange).toHaveBeenCalledWith('#ff8800')
+  })
+})
+
+describe('FieldInput — geo', () => {
+  it('reports a point from its two number inputs, and makes no map request without configuration', () => {
+    const onChange = vi.fn()
+    render(<FieldInput id="location" field={field('geo')} value={null} onChange={onChange} />)
+
+    fireEvent.change(screen.getByLabelText('Latitude'), { target: { value: '48.85' } })
+    expect(onChange).toHaveBeenCalledWith({ lat: 48.85, lng: 0 })
+    // R1/R2: no `VITE_MAP_TILE_URL` is configured for this test run, so the
+    // map toggle — the only thing that could ever trigger a tile request —
+    // must not even be offered.
+    expect(screen.queryByRole('button', { name: /map|carte/i })).toBeNull()
+  })
+})
+
+describe('FieldInput — richText', () => {
+  it('mounts an editable document without crashing', () => {
+    render(<FieldInput id="body" field={field('richText')} value={undefined} onChange={vi.fn()} />)
+    expect(screen.getByRole('textbox')).toBeDefined()
+  })
+})
+
+describe('FieldInput — media/relation/taxonomy without a signed-in session', () => {
+  // None of the three can resolve anything without a token — `useAuth()`
+  // falls back to its harmless default (`status: 'loading'`) when no
+  // `AuthProvider` is mounted, exactly as it does here. What matters is that
+  // this renders a calm loading state, never a crash.
+  it.each([
+    ['media', field('media')],
+    ['relation', field('relation', { options: { to: 'author' } })],
+    ['taxonomy', field('taxonomy', { options: { of: 'topic' } })],
+  ] as const)('renders "%s" as a quiet loading state', (_kind, testField) => {
+    render(<FieldInput id="x" field={testField} value={null} onChange={vi.fn()} />)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('FieldInput — blocks', () => {
+  it('starts empty and offers the vocabulary picker', () => {
+    render(<FieldInput id="body" field={field('blocks')} value={[]} onChange={vi.fn()} />)
+    expect(screen.getByLabelText('Ajouter un bloc')).toBeDefined()
+  })
+})
+
+describe('FieldInput — repeater (an f.list(...) compiled to json)', () => {
+  it('is dispatched to the repeater, not the raw JSON textarea, when options.list is set', () => {
     render(
       <FieldInput
-        id="author"
-        field={field('relation', { options: { to: 'author' } })}
-        value={null}
+        id="items"
+        field={field('json', {
+          options: {
+            list: true,
+            items: [{ name: 'label', kind: 'text', required: true, localized: false, options: {} }],
+          },
+        })}
+        value={[]}
         onChange={vi.fn()}
       />,
     )
-    expect(screen.getByText(/« author »/)).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Ajouter un élément' })).toBeDefined()
+    expect(screen.queryByRole('textbox', { name: 'field-name' })).toBeNull()
+  })
+})
+
+describe('FieldInput — the fifteen kinds of contract A', () => {
+  // "Ajouter un seizième type de champ au contrat A ferait échouer cette
+  // suite tant qu'il n'a pas d'éditeur" (fiche 03, task 5's own acceptance
+  // criterion). `FieldInput`'s `switch` is already exhaustive over
+  // `FieldKind` at compile time (no `default` case): a new kind is a
+  // TypeScript error there before it can ever reach this test. What this
+  // adds is the runtime half of that guarantee — every declared kind really
+  // does mount, for a real value, without throwing.
+  const FIFTEEN_KINDS: readonly [SchemaField['kind'], unknown][] = [
+    ['text', 'x'],
+    ['richText', undefined],
+    ['slug', 'x'],
+    ['number', 1],
+    ['boolean', false],
+    ['date', '2026-01-01'],
+    ['datetime', '2026-01-01T00:00:00.000Z'],
+    ['media', null],
+    ['relation', null],
+    ['select', ''],
+    ['json', {}],
+    ['geo', null],
+    ['color', '#000000'],
+    ['blocks', []],
+    ['taxonomy', []],
+  ]
+
+  it('mounts every kind, and disables its control when asked to', () => {
+    expect(FIFTEEN_KINDS).toHaveLength(15)
+
+    for (const [kind, value] of FIFTEEN_KINDS) {
+      const overrides: Partial<SchemaField> =
+        kind === 'select'
+          ? { options: { options: ['a', 'b'] } }
+          : kind === 'relation'
+            ? { options: { to: 'author' } }
+            : kind === 'taxonomy'
+              ? { options: { of: 'topic' } }
+              : {}
+
+      const { unmount } = render(
+        <FieldInput
+          id={`field-${kind}`}
+          field={field(kind, overrides)}
+          value={value}
+          onChange={vi.fn()}
+          disabled
+        />,
+      )
+
+      const controls = document.querySelectorAll('input, textarea, select, button')
+      for (const control of controls) {
+        expect(
+          control.hasAttribute('disabled'),
+          `${kind}: "${control.outerHTML}" should be disabled`,
+        ).toBe(true)
+      }
+
+      unmount()
+    }
   })
 })

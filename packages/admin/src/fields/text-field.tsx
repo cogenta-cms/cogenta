@@ -16,7 +16,12 @@ export function TextField({
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper
+      id={id}
+      field={field}
+      value={value}
+      onReset={() => onChange(field.default as string)}
+    >
       {options.multiline === true ? (
         <textarea
           id={id}

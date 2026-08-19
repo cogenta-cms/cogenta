@@ -12,6 +12,7 @@ import { JsonField } from './json-field.js'
 import { MediaField } from './media-field.js'
 import { NumberField } from './number-field.js'
 import { RelationField } from './relation-field.js'
+import { RepeaterField } from './repeater-field.js'
 import { RichTextField } from './rich-text-field.js'
 import { SelectField } from './select-field.js'
 import { SlugField } from './slug-field.js'
@@ -46,17 +47,26 @@ export function FieldInput(props: FieldInputProps): JSX.Element {
     case 'datetime':
       return <DatetimeField {...props} value={props.value as string} />
     case 'select':
-      return <SelectField {...props} value={props.value as string} />
+      return <SelectField {...props} value={props.value as string | readonly string[]} />
     case 'color':
       return <ColorField {...props} value={props.value as string} />
     case 'geo':
       return <GeoField {...props} value={props.value as { lat: number; lng: number } | null} />
     case 'json':
-      return <JsonField {...props} />
+      // A `json` field whose `options.list` marks it as an `f.list(...)`'s
+      // compiled form (`packages/admin/src/blocks/vocabulary.ts`) gets the
+      // repeater built from `options.items`; a genuine `json` field — the
+      // top-level kind, or `collectionList`'s `filter`/`sort` — keeps the
+      // textarea, which is the right editor for arbitrary JSON (task 4).
+      return (props.field.options as { readonly list?: boolean }).list === true ? (
+        <RepeaterField {...props} />
+      ) : (
+        <JsonField {...props} />
+      )
     case 'richText':
       return <RichTextField {...props} value={props.value as RichTextDocument | undefined} />
     case 'media':
-      return <MediaField {...props} value={props.value as string | null} />
+      return <MediaField {...props} />
     case 'relation':
       return <RelationField {...props} />
     case 'taxonomy':

@@ -96,4 +96,48 @@ describe('SessionStore', () => {
     const b = await sessions.create('user-1')
     expect(a.token).not.toBe(b.token)
   })
+
+  describe('lastSeenByUser (fiche 17 task 4)', () => {
+    it('reports the most recent activity across every session of a user, not just its live ones', async () => {
+      let clock = 1_000_000
+      const db = await testDb()
+      const sessions = createSessionStore(db, () => clock)
+
+      const older = await sessions.create('user-1')
+      clock += 5_000
+      await sessions.resolve(older.token) // bumps last_seen_at to 1_005_000
+      await sessions.revoke(older.id)
+
+      clock += 5_000
+      const newer = await sessions.create('user-1')
+      clock += 1_000
+      await sessions.resolve(newer.token) // bumps last_seen_at to 1_011_000
+
+      const lastSeen = await sessions.lastSeenByUser()
+      expect(lastSeen.get('user-1')).toBe(new Date(1_011_000).toISOString())
+    })
+
+    it('keeps every account independent', async () => {
+      let clock = 1_000_000
+      const db = await testDb()
+      const sessions = createSessionStore(db, () => clock)
+
+      const a = await sessions.create('user-a')
+      clock += 1_000
+      const b = await sessions.create('user-b')
+
+      const lastSeen = await sessions.lastSeenByUser()
+      expect(lastSeen.get('user-a')).toBe(a.createdAt)
+      expect(lastSeen.get('user-b')).toBe(b.createdAt)
+    })
+
+    it('says nothing about an account that never had a session', async () => {
+      const db = await testDb()
+      const sessions = createSessionStore(db)
+      await sessions.create('user-1')
+
+      const lastSeen = await sessions.lastSeenByUser()
+      expect(lastSeen.has('user-2')).toBe(false)
+    })
+  })
 })

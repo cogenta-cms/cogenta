@@ -119,6 +119,19 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AUTH_RESET_TOKEN_INVALID: 400,
   AUTH_ROLE_UNKNOWN: 400,
 
+  // Account lifecycle (fiche 17: invitations and anonymization). Both invite
+  // codes describe a conflict with the account's *current* state, not a
+  // malformed request — resending/cancelling only ever makes sense for a row
+  // still sitting in "invited" — so 409, the same reasoning `CONTENT_REFERENCED`
+  // already gets. `AUTH_INVITE_UNAVAILABLE` mirrors `ASSIST_UNAVAILABLE`: the
+  // route exists, this site simply has no email transport wired (R1). A typed
+  // confirmation that does not match is the caller's input being wrong, same
+  // shape as `AUTH_RESET_TOKEN_INVALID`.
+  AUTH_INVITE_UNAVAILABLE: 503,
+  AUTH_INVITE_INVALID_STATE: 409,
+  AUTH_ACCOUNT_ANONYMIZED: 409,
+  AUTH_ANONYMIZE_CONFIRMATION_MISMATCH: 400,
+
   // API keys (L13 task 8)
   API_KEY_INVALID: 401,
   API_KEY_REVOKED: 401,

@@ -179,5 +179,45 @@ export function runPasswordResetContract(name: string, create: () => Promise<Res
       expect(await credentials.verifyPassword(userId, 'the new one')).toBe(true)
       expect(await sessions.resolve(stolen.token)).toBeNull()
     })
+
+    describe('pending (fiche 17 task 1: "invitation sent on …")', () => {
+      it('reports the still-usable token, never the token itself', async () => {
+        const userId = await someone()
+        const issued = await resets.issue(userId)
+
+        const pending = await resets.pending(userId)
+        expect(pending).toEqual({ issuedAt: expect.any(String), expiresAt: issued.expiresAt })
+        expect(JSON.stringify(pending)).not.toContain(issued.token)
+      })
+
+      it('says nothing is pending once redeemed', async () => {
+        const userId = await someone()
+        const issued = await resets.issue(userId)
+        await resets.redeem(issued.token)
+
+        expect(await resets.pending(userId)).toBeNull()
+      })
+
+      it('says nothing is pending once expired', async () => {
+        const userId = await someone()
+        await resets.issue(userId, { ttlMs: 60_000 })
+        clock += 60_001
+
+        expect(await resets.pending(userId)).toBeNull()
+      })
+
+      it('says nothing is pending for a user who was never issued one', async () => {
+        const userId = await someone()
+        expect(await resets.pending(userId)).toBeNull()
+      })
+
+      it('reports the newer token once a resend replaces the older one', async () => {
+        const userId = await someone()
+        await resets.issue(userId)
+        const second = await resets.issue(userId)
+
+        expect((await resets.pending(userId))?.expiresAt).toBe(second.expiresAt)
+      })
+    })
   })
 }

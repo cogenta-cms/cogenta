@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
+import { i18next } from '../../src/i18n/index.js'
 import { expectNoSeriousA11yViolations } from '../helpers/axe.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
 
@@ -17,8 +18,14 @@ beforeEach(() => {
   installMockFetch()
 })
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals()
+  // The public-profile "language" field (fiche 17 task 3) calls the real,
+  // shared `setLanguage`, which is a module-level singleton — left at 'en'
+  // it would silently translate every French assertion in every test that
+  // runs after it, in this file and beyond.
+  await i18next.changeLanguage('fr')
+  localStorage.removeItem('cogenta.admin.language')
 })
 
 async function goToProfile(): Promise<void> {
@@ -142,6 +149,61 @@ describe('my profile — sessions', () => {
       expect(screen.queryByText(/Work laptop/u)).toBeNull()
     })
     expect(screen.getByText(/Appareil sans nom/u)).toBeDefined()
+  })
+})
+
+/**
+ * Fiche 17 task 3 — self-service public profile. The avatar picker is not
+ * exercised here: it reuses the same `listMedia`/`getMedia` calls
+ * `fields/media-field.tsx` already does, and this suite's mock has no media
+ * fixtures wired in (that is fiche 11's screen) — clicking it would hit
+ * `mock-fetch.ts`'s "unhandled request" guard rather than prove anything
+ * about fiche 17.
+ */
+describe('my profile — public profile', () => {
+  it('saves the display name and bio', async () => {
+    render(<App />)
+    await goToProfile()
+    // Waits for the profile fetch to actually resolve before touching the
+    // form: the field-seeding effect is keyed on the loaded account's id, and
+    // firing a change before it settles would have that effect overwrite
+    // whatever was just typed the moment the fetch finally completes.
+    await screen.findByText(/Work laptop/u)
+
+    fireEvent.change(screen.getByLabelText('Nom affiché'), { target: { value: 'Alice A.' } })
+    fireEvent.change(screen.getByLabelText('Biographie courte'), {
+      target: { value: 'Écrit des articles.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le profil' }))
+
+    expect(await screen.findByText('Profil enregistré.')).toBeDefined()
+  })
+
+  it('changing the interface language takes effect in this browser immediately', async () => {
+    render(<App />)
+    await goToProfile()
+    await screen.findByText(/Work laptop/u)
+
+    fireEvent.change(screen.getByLabelText("Langue de l'interface"), {
+      target: { value: 'en' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le profil' }))
+
+    // The rest of this very page re-renders in the new language the moment
+    // it applies — proof the account-level preference (fiche 17 task 3) is
+    // wired to the same `setLanguage` ADR-0019 already uses, not just saved
+    // silently to the server.
+    expect(await screen.findByRole('heading', { name: 'My profile' })).toBeDefined()
+    expect(localStorage.getItem('cogenta.admin.language')).toBe('en')
+  })
+
+  it('says the fields are publishable, before any of them are filled in', async () => {
+    render(<App />)
+    await goToProfile()
+
+    expect(
+      screen.getByText(/peuvent devenir visibles par d'autres personnes utilisant ce site/u),
+    ).toBeDefined()
   })
 })
 

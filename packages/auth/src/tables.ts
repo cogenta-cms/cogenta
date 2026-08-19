@@ -81,6 +81,15 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       updated_at ${t64} not null
     )`)
 
+  // Public profile (fiche 17 task 3), added to a table that may already exist
+  // on an upgraded site — same additive pattern as the API key columns below.
+  // All four are nullable: "not set" is the default for every account that
+  // predates this column, not an empty string to backfill.
+  await addColumnIfMissing(db, users, 'display_name', t255)
+  await addColumnIfMissing(db, users, 'avatar_media_id', t64)
+  await addColumnIfMissing(db, users, 'bio', sql`text`)
+  await addColumnIfMissing(db, users, 'locale', t64)
+
   await db.query(sql`
     create table if not exists ${credentials} (
       id ${t64} not null primary key,
@@ -265,6 +274,13 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   )
 }
 
+/**
+ * Additive column for a table that may already exist on an upgraded site
+ * (fiche 20 task 3's rate-limit/rotation columns, fiche 17 task 3's profile
+ * fields): same catch-and-ignore shape as `createIndexIfMissing` below, for
+ * the same reason — no dialect here has a portable "add column if not
+ * exists".
+ */
 async function addColumnIfMissing(
   db: DatabaseHandle,
   table: SqlFragment,

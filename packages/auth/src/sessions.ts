@@ -57,6 +57,17 @@ export interface SessionStore {
   list(userId: string): Promise<readonly Session[]>
   revoke(sessionId: string): Promise<void>
   revokeAll(userId: string): Promise<void>
+  /**
+   * The last time each account was seen, across every session it has ever
+   * held — revoked and expired ones included, not just the live ones `list`
+   * returns (fiche 17 task 4's "last sign-in" column and dormant-account
+   * signal). `last_seen_at` is only ever advanced by a *successful* `resolve`
+   * (never by `create` alone), so this answers "when did this account last do
+   * something", not "when was its most recent token minted". One query for
+   * every account rather than one per account — the users admin screen loads
+   * every account already, at the scale fiche 17 targets (about a hundred).
+   */
+  lastSeenByUser(): Promise<ReadonlyMap<string, string>>
 }
 
 export function createSessionStore(db: DatabaseHandle, now: () => number = Date.now): SessionStore {
@@ -116,6 +127,12 @@ export function createSessionStore(db: DatabaseHandle, now: () => number = Date.
 
     revokeAll: async (userId) => {
       await db.query(sql`update ${table} set revoked = ${true} where user_id = ${userId}`)
+    },
+
+    lastSeenByUser: async () => {
+      const result = await db.query<{ user_id: string; last_seen: string }>(sql`
+        select user_id, max(last_seen_at) as last_seen from ${table} group by user_id`)
+      return new Map(result.rows.map((row) => [row.user_id, row.last_seen]))
     },
   }
 }

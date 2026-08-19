@@ -387,6 +387,13 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     // from a stranger's guessing should still count against this account.
     await auth.rateLimit.clear(`forgot-password:${user.email.toLowerCase()}`)
 
+    // This same route is also where an invited account (fiche 17 task 1)
+    // sets its very first password — the invitation reuses this exact token
+    // primitive rather than a second one, on the fiche's own instruction.
+    // Redeeming it is what turns "invited" into "active": nothing else in
+    // the product ever flips that bit.
+    if (user.status === 'invited') await auth.users.setStatus(user.id, 'active')
+
     return jsonResponse(200, { data: { reset: true } })
   }
 

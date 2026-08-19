@@ -62,13 +62,26 @@ export type PasswordResetOutcome =
   | { readonly kind: 'used' }
   | { readonly kind: 'ready'; readonly userId: string; readonly resetId: string }
 
+/**
+ * What `pending` reports for a still-usable token — fiche 17 task 1's "état «
+ * invitation envoyée le … »", read off the very row `issue` already wrote
+ * rather than a second, parallel piece of state to keep in sync with it.
+ */
+export interface PendingReset {
+  readonly issuedAt: string
+  readonly expiresAt: string
+}
+
 export interface PasswordResetStore {
   /**
    * Issues a token for a user, invalidating any still outstanding for them.
    *
    * Only one live reset per person: asking again because the first mail never
    * arrived must not leave two working links behind, and the newest request
-   * is always the one the person is actually looking at.
+   * is always the one the person is actually looking at. This is also how a
+   * resend works for an invitation (fiche 17 task 1): calling `issue` again
+   * both replaces the link and answers "which token is live" with no
+   * ambiguity.
    */
   issue(userId: string, options?: { readonly ttlMs?: number }): Promise<IssuedPasswordReset>
   /**
@@ -79,11 +92,14 @@ export interface PasswordResetStore {
   redeem(token: string): Promise<PasswordResetOutcome>
   /** Invalidates every outstanding reset for a user, used or not. */
   revokeAllFor(userId: string): Promise<void>
+  /** The still-usable token for this user, if any — never the token itself, which is only ever shown once, at `issue`. */
+  pending(userId: string): Promise<PendingReset | null>
 }
 
 interface ResetRow {
   id: string
   user_id: string
+  created_at: string
   expires_at: string
   used_at: string | null
 }
@@ -148,6 +164,17 @@ export function createPasswordResetStore(
 
     revokeAllFor: async (userId) => {
       await db.query(sql`delete from ${table} where user_id = ${userId}`)
+    },
+
+    pending: async (userId) => {
+      const result = await db.query<ResetRow>(
+        sql`select * from ${table} where user_id = ${userId} and used_at is null
+            order by created_at desc limit ${1}`,
+      )
+      const row = result.rows[0]
+      if (row === undefined) return null
+      if (new Date(row.expires_at).getTime() <= now()) return null
+      return { issuedAt: row.created_at, expiresAt: row.expires_at }
     },
   }
 }

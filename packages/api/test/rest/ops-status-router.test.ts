@@ -130,6 +130,52 @@ describe('the ops status transport', () => {
     })
   })
 
+  describe('trash status', () => {
+    it('refuses an editor read', async () => {
+      const router = createOpsStatusRouter({
+        security: SECURITY,
+        webhooks: { endpoints: [], secret: undefined },
+        trash: () => ({
+          retainDaysByCollection: { article: 30 },
+          lastRunAt: null,
+          lastPurged: null,
+        }),
+      })
+      const response = await router.handle(request('GET', '/api/trash-status'), asEditor)
+      expect(response.status).toBe(403)
+    })
+
+    it('mirrors the live sweep state a caller provides', async () => {
+      const router = createOpsStatusRouter({
+        security: SECURITY,
+        webhooks: { endpoints: [], secret: undefined },
+        trash: () => ({
+          retainDaysByCollection: { article: 30, page: 7 },
+          lastRunAt: '2026-08-19T00:00:00.000Z',
+          lastPurged: 3,
+        }),
+      })
+      const response = await router.handle(request('GET', '/api/trash-status'), asAdmin)
+      expect(response.status).toBe(200)
+      expect(dataOf(response)).toEqual({
+        retainDaysByCollection: { article: 30, page: 7 },
+        lastRunAt: '2026-08-19T00:00:00.000Z',
+        lastPurged: 3,
+      })
+    })
+
+    it('answers honestly when no caller wired trash purging at all', async () => {
+      const router = routerWith({ endpoints: [], secret: undefined })
+      const response = await router.handle(request('GET', '/api/trash-status'), asAdmin)
+      expect(response.status).toBe(200)
+      expect(dataOf(response)).toEqual({
+        retainDaysByCollection: {},
+        lastRunAt: null,
+        lastPurged: null,
+      })
+    })
+  })
+
   it('answers 404 for an unrelated path', async () => {
     const router = routerWith({ endpoints: [], secret: undefined })
     const response = await router.handle(request('GET', '/api/something-else'), asAdmin)

@@ -113,6 +113,8 @@ export interface StartServerOptions {
   readonly notFoundPurgeTickMs?: number
   /** Overrides the daily cadence of the audit-integrity check — see `ServeOptions.auditIntegrityTickMs`. */
   readonly auditIntegrityTickMs?: number
+  /** Overrides the daily cadence `runServe` sweeps the trash on — see `ServeOptions.trashPurgeTickMs` (fiche 07 task 5). */
+  readonly trashPurgeTickMs?: number
 }
 
 export async function startServer(
@@ -150,6 +152,9 @@ export async function startServer(
     ...(options.auditIntegrityTickMs === undefined
       ? {}
       : { auditIntegrityTickMs: options.auditIntegrityTickMs }),
+    ...(options.trashPurgeTickMs === undefined
+      ? {}
+      : { trashPurgeTickMs: options.trashPurgeTickMs }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

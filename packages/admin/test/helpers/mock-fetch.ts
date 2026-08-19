@@ -87,6 +87,26 @@ export const MOCK_SCHEMA = {
       permissions: { read: ['admin'] },
       fields: [],
     },
+    // A second collection with a trash of its own (fiche 07 task 1, the
+    // "All" tab): distinct `retainDays` from `article`'s, so the merged view
+    // and its banner have something real to tell apart.
+    {
+      name: 'note',
+      labels: { singular: 'Note', plural: 'Notes' },
+      trash: { retainDays: 7 },
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['editor'] },
+      fields: [
+        {
+          name: 'title',
+          kind: 'text',
+          required: true,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: {},
+        },
+      ],
+    },
   ],
 }
 
@@ -103,6 +123,43 @@ export const MOCK_TRASHED_ENTRY = {
   locale: 'en',
   translationOf: null,
   values: { title: 'Thrown away' },
+  blocks: {},
+}
+
+/**
+ * A second trashed `article`, whose `untrash`/`purge` routes below always
+ * refuse it (fiche 07 task 2 — a bulk action reporting a real, named
+ * failure). `untrash` answers 404 (a realistic race: someone else already
+ * restored or purged it first — `CONTENT_NOT_TRASHED`/`CONTENT_NOT_FOUND` in
+ * the real store, never `restrict`, which `@cogenta/schema`'s `store.ts`
+ * only ever checks on `delete()`/`purge()`). `purge` answers 409
+ * `CONTENT_REFERENCED`, the one this entry's own route really does raise —
+ * matching the real server's message shape from `assertNotReferenced`.
+ */
+export const MOCK_TRASHED_BLOCKED_ENTRY = {
+  id: 'entry-trashed-blocked',
+  status: 'draft',
+  deletedAt: '2026-03-02T00:00:00.000Z',
+  version: 1,
+  createdAt: '2026-01-04T00:00:00.000Z',
+  updatedAt: '2026-03-02T00:00:00.000Z',
+  locale: 'en',
+  translationOf: null,
+  values: { title: 'Still referenced elsewhere' },
+  blocks: {},
+}
+
+/** One entry in `note`'s own trash (fiche 07 task 1, the "All" tab). */
+export const MOCK_TRASHED_NOTE = {
+  id: 'note-trashed',
+  status: 'draft',
+  deletedAt: '2026-03-03T00:00:00.000Z',
+  version: 1,
+  createdAt: '2026-02-01T00:00:00.000Z',
+  updatedAt: '2026-03-03T00:00:00.000Z',
+  locale: 'en',
+  translationOf: null,
+  values: { title: 'A note nobody kept' },
   blocks: {},
 }
 
@@ -299,6 +356,16 @@ export function installMockFetch(
       readonly actorLabel: string | null
       readonly diff: Readonly<Record<string, unknown>> | null
       readonly diffUnavailable: string | null
+    }
+    /**
+     * What `GET /api/trash-status` answers with (fiche 07 task 5) — a fixed,
+     * already-swept state by default so the trash screen's banner has
+     * something deterministic to show without every test having to pass it.
+     */
+    readonly trashStatus?: {
+      readonly retainDaysByCollection?: Readonly<Record<string, number>>
+      readonly lastRunAt?: string | null
+      readonly lastPurged?: number | null
     }
   } = {},
 ): void {
@@ -724,7 +791,11 @@ export function installMockFetch(
   const taxonomyUsage: Record<string, { own: number; withDescendants: number }> = {
     ...options.taxonomyUsage,
   }
-  let trash = [MOCK_TRASHED_ENTRY]
+  let trash = [MOCK_TRASHED_ENTRY, MOCK_TRASHED_BLOCKED_ENTRY]
+  // `note`'s own trash, kept apart from `article`'s (fiche 07 task 1): a
+  // real server scopes the trash per collection, and a mock that merged them
+  // into one array would let `article?trashed=only` see `note`'s rows too.
+  let noteTrash = [MOCK_TRASHED_NOTE]
 
   // Menus live per `installMockFetch()` call too, the same way taxonomy terms
   // do: each test starts empty and changes state only through the routes the
@@ -1427,6 +1498,22 @@ export function installMockFetch(
               version: 1,
               hash: 'abc',
               previousHash: null,
+            },
+            // `note-trashed`'s own deletion (fiche 07 task 3 — "deleted by").
+            // Deliberately `note`, not `article`: a second `article` row
+            // here would give `audit.test.tsx`'s `getByText('article')` two
+            // matches instead of one.
+            {
+              id: 'audit-2',
+              at: '2026-03-03T00:00:00.000Z',
+              actorId: 'user-1',
+              actorRoles: ['editor'],
+              action: 'content.delete',
+              collection: 'note',
+              entryId: 'note-trashed',
+              diff: null,
+              hash: 'def',
+              previousHash: 'abc',
             },
           ],
         })
@@ -2546,6 +2633,77 @@ export function installMockFetch(
         if (collection === 'article' && id !== undefined && method === 'DELETE') {
           return new Response(null, { status: 204 })
         }
+
+        // `note`'s own trashed-only list (fiche 07 task 1, the "All" tab
+        // merging more than one collection's trash). Only what `trashed`
+        // asks for — `note` has no live entries seeded, since nothing in
+        // this fiche's tests needs one.
+        if (collection === 'note' && id === undefined && method === 'GET') {
+          const parsed = new URL(url, 'http://localhost')
+          const trashed = parsed.searchParams.get('trashed')
+          if (trashed !== null && trashed !== 'exclude') {
+            const allowed =
+              MOCK_SCHEMA.collections.find((c) => c.name === 'note')?.permissions.delete ?? []
+            if (!allowed.some((role) => user.roles.includes(role))) {
+              return json(403, {
+                error: { code: 'FORBIDDEN', message: 'Access denied: delete on note.' },
+              })
+            }
+            // No live `note` entries are seeded, so `only` and `include`
+            // answer the same thing — there is nothing else to include.
+            return json(200, { data: noteTrash, page: { hasMore: false, nextCursor: null } })
+          }
+          return json(200, { data: [], page: { hasMore: false, nextCursor: null } })
+        }
+      }
+
+      // A trashed `article` that always refuses `untrash` (404, the honest
+      // shape of "someone already restored or purged it first") and `purge`
+      // (409 `CONTENT_REFERENCED`, the real error `assertNotReferenced`
+      // raises) — fiche 07 task 2's partial-failure report, checked before
+      // the generic handler below so this one id never reaches it.
+      if (
+        url.endsWith(`/api/content/article/${MOCK_TRASHED_BLOCKED_ENTRY.id}/untrash`) &&
+        method === 'POST'
+      ) {
+        return json(404, {
+          error: {
+            code: 'CONTENT_NOT_TRASHED',
+            message: `"${MOCK_TRASHED_BLOCKED_ENTRY.id}" is not in the "article" trash.`,
+          },
+        })
+      }
+      if (
+        url.endsWith(`/api/content/article/${MOCK_TRASHED_BLOCKED_ENTRY.id}/purge`) &&
+        method === 'POST'
+      ) {
+        return json(409, {
+          error: {
+            code: 'CONTENT_REFERENCED',
+            message: `"${MOCK_TRASHED_BLOCKED_ENTRY.id}" cannot be removed from "article": 1 entry of "note" still reference it.`,
+          },
+        })
+      }
+
+      // `note`'s own untrash/purge, kept apart from `article`'s below for
+      // the same reason `noteTrash` is a separate array.
+      const noteTrashActionMatch = /\/api\/content\/note\/([^/?]+)\/(untrash|purge)$/u.exec(url)
+      if (noteTrashActionMatch !== null && method === 'POST') {
+        const [, entryId, action] = noteTrashActionMatch
+        const allowed =
+          MOCK_SCHEMA.collections.find((c) => c.name === 'note')?.permissions.delete ?? []
+        if (!allowed.some((role) => user.roles.includes(role))) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Access denied: delete on note.' },
+          })
+        }
+        const found = noteTrash.find((entry) => entry.id === entryId)
+        if (found === undefined) {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
+        }
+        noteTrash = noteTrash.filter((entry) => entry.id !== entryId)
+        if (action === 'purge') return new Response(null, { status: 204 })
+        return json(200, { data: { ...found, deletedAt: null } })
       }
 
       // The two trash routes. Both `delete`, both refusing an actor without
@@ -3198,6 +3356,28 @@ export function installMockFetch(
             endpoints: [],
             signed: false,
             disabledForMissingSecret: false,
+          },
+        })
+      }
+
+      // `GET /api/trash-status` (fiche 07 task 5) — admin-only, same as the
+      // two above. `'lastRunAt' in` rather than `??`: a test asserting the
+      // "no sweep yet" wording needs to pass an explicit `null`, which `??`
+      // would otherwise treat the same as "not provided".
+      if (url.endsWith('/api/trash-status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const override = options.trashStatus
+        return json(200, {
+          data: {
+            retainDaysByCollection: override?.retainDaysByCollection ?? { article: 30, note: 7 },
+            lastRunAt:
+              override !== undefined && 'lastRunAt' in override
+                ? override.lastRunAt
+                : '2026-03-05T00:10:00.000Z',
+            lastPurged:
+              override !== undefined && 'lastPurged' in override ? override.lastPurged : 0,
           },
         })
       }

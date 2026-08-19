@@ -27,9 +27,17 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
 export interface OpsStatusRouterOptions {
   readonly security: CogentaConfig['security']
   readonly webhooks: CogentaConfig['webhooks']
-  /** Mount points. `/api/security-status` and `/api/webhooks-status` by default. */
+  /**
+   * The trash auto-purge, read live rather than mirrored from config (fiche
+   * 07 task 5): unlike `security`/`webhooks`, whether the sweep actually ran
+   * is process state, not a file on disk. Absent only in a caller that never
+   * wires trash purging at all — every real `cogenta serve` passes one.
+   */
+  readonly trash?: () => TrashStatus
+  /** Mount points. `/api/security-status`, `/api/webhooks-status` and `/api/trash-status` by default. */
   readonly securityPath?: string
   readonly webhooksPath?: string
+  readonly trashPath?: string
 }
 
 export interface OpsStatusRouter {
@@ -38,6 +46,7 @@ export interface OpsStatusRouter {
 
 const DEFAULT_SECURITY_PATH = '/api/security-status'
 const DEFAULT_WEBHOOKS_PATH = '/api/webhooks-status'
+const DEFAULT_TRASH_PATH = '/api/trash-status'
 
 interface SecurityStatus {
   readonly cors: {
@@ -65,6 +74,21 @@ interface WebhooksStatus {
   readonly disabledForMissingSecret: boolean
 }
 
+/**
+ * Whether the trash's own promise — "purged automatically" — is actually
+ * kept (fiche 07 task 5). `purgeExpired()` has existed on every
+ * `ContentStore` since ADR-0022; nothing called it until `cogenta serve`
+ * wired a tick for it. `lastRunAt`/`lastPurged` are `null` until the first
+ * tick completes, which is honest for the brief window right after startup
+ * rather than claiming a sweep that has not happened yet.
+ */
+export interface TrashStatus {
+  /** Days a trashed entry is kept before it is swept, one entry per collection that has a trash at all. */
+  readonly retainDaysByCollection: Readonly<Record<string, number>>
+  readonly lastRunAt: string | null
+  readonly lastPurged: number | null
+}
+
 function forbidden(context: AccessContext, what: string): CogentaError {
   return new CogentaError({
     code: 'FORBIDDEN',
@@ -85,6 +109,7 @@ function assertAdmin(context: AccessContext, what: string): void {
 export function createOpsStatusRouter(options: OpsStatusRouterOptions): OpsStatusRouter {
   const securityPath = normalise(options.securityPath ?? DEFAULT_SECURITY_PATH)
   const webhooksPath = normalise(options.webhooksPath ?? DEFAULT_WEBHOOKS_PATH)
+  const trashPath = normalise(options.trashPath ?? DEFAULT_TRASH_PATH)
 
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
@@ -137,6 +162,17 @@ export function createOpsStatusRouter(options: OpsStatusRouterOptions): OpsStatu
       return jsonResponse(200, { data: status })
     }
 
+    if (path === trashPath) {
+      if (method !== 'GET') return methodNotAllowed(['GET'])
+      assertAdmin(context, 'the trash purge status')
+      const status: TrashStatus = options.trash?.() ?? {
+        retainDaysByCollection: {},
+        lastRunAt: null,
+        lastPurged: null,
+      }
+      return jsonResponse(200, { data: status })
+    }
+
     throw noRoute()
   }
 }
@@ -159,7 +195,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'The ops status routes are GET /api/security-status and GET /api/webhooks-status.',
+    hint: 'The ops status routes are GET /api/security-status, GET /api/webhooks-status and GET /api/trash-status.',
   })
 }
 

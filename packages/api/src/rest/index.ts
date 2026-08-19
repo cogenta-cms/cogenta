@@ -83,7 +83,7 @@ export type { MenuItemHealth, MenuRouter, MenuRouterOptions } from './menu-route
 export { createMenuRouter } from './menu-router.js'
 export type { NotFoundRouter, NotFoundRouterOptions } from './not-found-router.js'
 export { createNotFoundRouter } from './not-found-router.js'
-export type { OpsStatusRouter, OpsStatusRouterOptions } from './ops-status-router.js'
+export type { OpsStatusRouter, OpsStatusRouterOptions, TrashStatus } from './ops-status-router.js'
 export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'

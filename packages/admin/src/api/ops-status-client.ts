@@ -31,10 +31,25 @@ export interface WebhooksStatus {
   readonly disabledForMissingSecret: boolean
 }
 
+/**
+ * `GET /api/trash-status` (fiche 07 task 5) — whether the trash's own
+ * promise, "purged automatically", is actually kept. `lastRunAt`/`lastPurged`
+ * are `null` until `runServe`'s first sweep completes.
+ */
+export interface TrashStatus {
+  readonly retainDaysByCollection: Readonly<Record<string, number>>
+  readonly lastRunAt: string | null
+  readonly lastPurged: number | null
+}
+
 export function readSecurityStatus(token: string): Promise<SecurityStatus> {
   return request('/api/security-status', { headers: authHeader(token) })
 }
 
 export function readWebhooksStatus(token: string): Promise<WebhooksStatus> {
   return request('/api/webhooks-status', { headers: authHeader(token) })
+}
+
+export function readTrashStatus(token: string): Promise<TrashStatus> {
+  return request('/api/trash-status', { headers: authHeader(token) })
 }

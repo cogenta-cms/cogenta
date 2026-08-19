@@ -69,6 +69,7 @@ import {
   type SitePlanRouter,
   type SitePlanRouterOptions,
   type TaxonomyRouter,
+  type TrashStatus,
   type UsersRouter,
   variantKeyFor,
 } from '@cogenta/api'
@@ -134,6 +135,7 @@ import {
   createSchemaTables,
   createSearchIndex,
   createTaxonomyStore,
+  DEFAULT_TRASH_RETAIN_DAYS,
   ensureMenuTables,
   type MenuStore,
   type NotFoundLogStore,
@@ -329,6 +331,18 @@ const EMPTY_TOOLSET = Object.freeze({
   capabilities: Object.freeze([]),
 })
 
+/**
+ * What one sweep of the trash auto-purge (fiche 07 task 5) found, one
+ * collection at a time. `purgeExpired()` skips a still-`restrict`ed row
+ * rather than throwing (see `@cogenta/schema`'s `store.ts`), so this is
+ * never partial in a way that needs reporting here — it is simply how many
+ * of each collection's expired rows were actually removed.
+ */
+interface TrashPurgeSummary {
+  readonly purged: number
+  readonly perCollection: readonly { readonly collection: string; readonly purged: number }[]
+}
+
 interface Site {
   readonly db: DatabaseHandle
   readonly auth: AuthStore
@@ -480,6 +494,15 @@ interface Site {
    * so a test can call it directly instead of waiting a day.
    */
   readonly checkAuditIntegrity: () => Promise<void>
+  /**
+   * Sweeps every collection's trash past its `retainDays` (fiche 07 task 5).
+   * `purgeExpired()` has existed on every `ContentStore` since ADR-0022;
+   * nothing ever called it, so a site's trash grew forever despite the admin
+   * being about to say otherwise. `runServe` calls this on its own
+   * `setInterval`, the same shape as `tickScheduledPublishing`. Exposed so a
+   * test can call it directly instead of waiting a day.
+   */
+  readonly tickTrashPurge: () => Promise<TrashPurgeSummary>
   dispose(): Promise<void>
 }
 
@@ -735,6 +758,41 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // very first request. Populating eagerly here means both callers see the
   // same, already-complete map.
   for (const collection of collections) storeFor(collection)
+
+  // Trash auto-purge (fiche 07 task 5): the collections that actually have a
+  // trash, and the window each one keeps it for — computed once, since
+  // `collection.trash` cannot change without a restart.
+  const trashRetainDaysByCollection: Record<string, number> = {}
+  for (const collection of collections) {
+    if (collection.trash === false) continue
+    trashRetainDaysByCollection[collection.name] =
+      collection.trash?.retainDays ?? DEFAULT_TRASH_RETAIN_DAYS
+  }
+  // `null` until the first tick completes — see `TrashStatus` for why that is
+  // the honest answer for the brief window right after startup, rather than
+  // claiming a sweep that has not run yet.
+  let lastTrashPurgeAt: string | null = null
+  let lastTrashPurgeCount: number | null = null
+
+  const tickTrashPurge = async (): Promise<TrashPurgeSummary> => {
+    const perCollection: { collection: string; purged: number }[] = []
+    for (const collection of collections) {
+      if (collection.trash === false) continue
+      try {
+        const report = await storeFor(collection).purgeExpired()
+        perCollection.push({ collection: collection.name, purged: report.purged })
+      } catch (error) {
+        // One collection's sweep failing (a database hiccup, not the
+        // `restrict` case `purgeExpired()` already swallows per row) must
+        // not stop the rest of the site's collections from being swept.
+        logger.error('trash purge failed', { collection: collection.name, error: String(error) })
+      }
+    }
+    const purged = perCollection.reduce((sum, entry) => sum + entry.purged, 0)
+    lastTrashPurgeAt = new Date().toISOString()
+    lastTrashPurgeCount = purged
+    return { purged, perCollection }
+  }
 
   // The publish half of scheduling: re-reads the entry before acting, so an
   // entry edited back to `draft` — or already published by hand — before its
@@ -1026,6 +1084,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     opsStatusRouter: createOpsStatusRouter({
       security: options.security,
       webhooks: options.webhooks,
+      trash: (): TrashStatus => ({
+        retainDaysByCollection: trashRetainDaysByCollection,
+        lastRunAt: lastTrashPurgeAt,
+        lastPurged: lastTrashPurgeCount,
+      }),
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -1113,6 +1176,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         logger,
       })
     },
+    tickTrashPurge,
     dispose: async () => {
       await scheduledPublishQueue.close()
       await db.close()
@@ -1240,6 +1304,47 @@ function responseVersion(response: RestResponse): number | undefined {
 }
 
 /**
+ * The audit action a `/api/content/*` request stands for, or `null` for a
+ * read (`history`/`diff`/`preview`/`translations`, or an unrecognised
+ * sub-route this layer should not guess about).
+ *
+ * Found while wiring the trash screen's "deleted by" column (fiche 07 task
+ * 3): `untrash` and `purge` fell through to `null` here, alongside
+ * `unpublish` and `duplicate` — four real mutations silently missing from
+ * the audit log despite the header comment above claiming every mutation
+ * lands in it. All four are real writes and are named the same way
+ * `publish`/`restore` already were.
+ */
+function contentAuditAction(method: string, subAction: string | undefined): string | null {
+  switch (subAction) {
+    case 'publish':
+      return 'content.publish'
+    case 'unpublish':
+      return 'content.unpublish'
+    case 'duplicate':
+      return 'content.duplicate'
+    case 'restore':
+      return 'content.restore'
+    case 'untrash':
+      return 'content.untrash'
+    case 'purge':
+      return 'content.purge'
+    case 'history':
+    case 'diff':
+    case 'preview':
+    case 'translations':
+      return null
+    case undefined:
+      if (method === 'POST') return 'content.create'
+      if (method === 'PATCH' || method === 'PUT') return 'content.update'
+      if (method === 'DELETE') return 'content.delete'
+      return null
+    default:
+      return null
+  }
+}
+
+/**
  * Every mutation lands in `@cogenta/auth`'s hash-chained audit log
  * (`packages/auth/src/audit.ts`), which existed since L2's own `AuthStore`
  * was built but had no writer until now. Recording here, at the transport
@@ -1269,20 +1374,7 @@ async function recordContentAudit(
   const [collection, id, subAction] = segments
   if (collection === undefined || collection === '-') return
 
-  const action =
-    subAction === 'publish'
-      ? 'content.publish'
-      : subAction === 'restore'
-        ? 'content.restore'
-        : subAction !== undefined
-          ? null // history/diff/preview/translations are reads
-          : method === 'POST'
-            ? 'content.create'
-            : method === 'PATCH' || method === 'PUT'
-              ? 'content.update'
-              : method === 'DELETE'
-                ? 'content.delete'
-                : null
+  const action = contentAuditAction(method, subAction)
   if (action === null) return
 
   const entryId = id ?? responseId(response)
@@ -2007,9 +2099,14 @@ export function createRequestListener(
       }
 
       // Read-only mirrors of `security`/`webhooks` from the config file (audit
-      // follow-up to L10 task 6 / L14 task 1) — see `ops-status-router.ts` for
-      // why editing them here would be the wrong architecture.
-      if (url.pathname === '/api/security-status' || url.pathname === '/api/webhooks-status') {
+      // follow-up to L10 task 6 / L14 task 1), plus the trash auto-purge's
+      // live sweep state (fiche 07 task 5) — see `ops-status-router.ts` for
+      // why editing the first two here would be the wrong architecture.
+      if (
+        url.pathname === '/api/security-status' ||
+        url.pathname === '/api/webhooks-status' ||
+        url.pathname === '/api/trash-status'
+      ) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.opsStatusRouter.handle(request, context))
         return
@@ -2485,6 +2582,13 @@ export interface ServeOptions {
    * scheduled check really runs without waiting a day for it.
    */
   readonly auditIntegrityTickMs?: number
+  /**
+   * Overrides `TRASH_PURGE_TICK_MS`. Not a CLI flag, same reasoning as
+   * `scheduledPublishTickMs`: no operator has a reason to change a daily
+   * cadence, this exists so a test can prove the sweep really runs without
+   * waiting a day for it.
+   */
+  readonly trashPurgeTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -2522,6 +2626,15 @@ const NOT_FOUND_PURGE_TICK_MS = 24 * 60 * 60 * 1000
  * cheap incremental form rather than a full replay.
  */
 const AUDIT_INTEGRITY_TICK_MS = 24 * 60 * 60 * 1000
+
+/**
+ * How often `runServe` sweeps every collection's trash past its
+ * `retainDays` (fiche 07 task 5). Daily, not every minute like publication:
+ * nobody is waiting on a page load for a trashed entry to disappear, and a
+ * sweep that runs once a day is still the "purged automatically" the admin
+ * screen advertises — `retainDays` itself is already measured in whole days.
+ */
+const TRASH_PURGE_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
@@ -2723,6 +2836,23 @@ export async function runServe(options: ServeOptions): Promise<number> {
   )
   auditIntegrityTimer.unref()
 
+  // Trash auto-purge (fiche 07 task 5): same shape as scheduled publication —
+  // one tick now, one every `TRASH_PURGE_TICK_MS` after, never fatal. Before
+  // this, `purgeExpired()` existed and was tested but nothing ever called
+  // it, so a site's trash grew forever despite the promise `trash.retainDays`
+  // makes.
+  const runTrashPurgeTick = (): void => {
+    site.tickTrashPurge().catch((error: unknown) => {
+      logger.error('trash purge tick failed', { error: String(error) })
+    })
+  }
+  runTrashPurgeTick()
+  const trashPurgeTimer = setInterval(
+    runTrashPurgeTick,
+    options.trashPurgeTickMs ?? TRASH_PURGE_TICK_MS,
+  )
+  trashPurgeTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -2735,6 +2865,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   clearInterval(scheduledPublishTimer)
   clearInterval(notFoundPurgeTimer)
   clearInterval(auditIntegrityTimer)
+  clearInterval(trashPurgeTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

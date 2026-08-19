@@ -19,6 +19,7 @@ export function MediaField({
   value,
   onChange,
   disabled = false,
+  error: fieldError,
 }: FieldProps<string | null>): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -27,7 +28,7 @@ export function MediaField({
   const [picking, setPicking] = useState(false)
   const [choices, setChoices] = useState<readonly MediaAsset[]>([])
   const [selected, setSelected] = useState<MediaAsset | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [pickerError, setPickerError] = useState<string | null>(null)
 
   useEffect(() => {
     if (token === null || value === null || value === '') {
@@ -49,26 +50,26 @@ export function MediaField({
 
   async function openPicker(): Promise<void> {
     if (token === null) return
-    setError(null)
+    setPickerError(null)
     try {
       const page = await listMedia(token, { kind: 'image' })
       setChoices(page.items)
       setPicking(true)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
+      setPickerError(caught instanceof ApiError ? caught.message : t('media.loadError'))
     }
   }
 
   if (token === null) {
     return (
-      <FieldWrapper id={id} field={field}>
+      <FieldWrapper id={id} field={field} error={fieldError ?? null}>
         <p>{t('common.loading')}</p>
       </FieldWrapper>
     )
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={fieldError ?? null}>
       <div id={id} className="media-field">
         {value !== null && value !== '' && selected !== null && (
           <div className="media-field__selected">
@@ -95,7 +96,7 @@ export function MediaField({
           </div>
         )}
 
-        {error !== null && <p role="alert">{error}</p>}
+        {pickerError !== null && <p role="alert">{pickerError}</p>}
 
         {picking && (
           <ul className="media-field__picker">

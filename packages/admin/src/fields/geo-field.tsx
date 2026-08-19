@@ -9,6 +9,7 @@ export function GeoField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<GeoValue | null>): JSX.Element {
   const { t } = useTranslation()
   const lat = value?.lat ?? null
@@ -22,7 +23,7 @@ export function GeoField({
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={error ?? null}>
       <div className="field__geo">
         <label htmlFor={`${id}-lat`}>{t('fields.geoLat')}</label>
         <input

@@ -113,6 +113,8 @@ export const MOCK_ENTRIES = [
     version: 2,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
+    createdBy: 'user-1',
+    updatedBy: 'user-1',
     locale: 'en',
     translationOf: null,
     deletedAt: null,
@@ -1987,6 +1989,21 @@ export function installMockFetch(
           if (entry === undefined) {
             return json(404, {
               error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+            })
+          }
+          // Concurrent editing (fiche 02 task 7): refused exactly like the
+          // real `update()` when the caller's `expectedUpdatedAt` no longer
+          // matches — absent, this behaves exactly as before.
+          if (
+            typeof body.expectedUpdatedAt === 'string' &&
+            body.expectedUpdatedAt !== entry.updatedAt
+          ) {
+            return json(409, {
+              error: {
+                code: 'CONTENT_STALE_WRITE',
+                message: `"${id}" was changed by someone else since this write was loaded.`,
+                hint: 'Reload the entry, compare what changed, and reapply your edit.',
+              },
             })
           }
           return json(200, {

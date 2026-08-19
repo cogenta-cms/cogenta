@@ -19,6 +19,7 @@ export function BlocksField({
   value,
   onChange,
   disabled = false,
+  error,
 }: FieldProps<readonly ContentBlock[] | undefined>): JSX.Element {
   const { t } = useTranslation()
   const blocks = value ?? []
@@ -49,7 +50,7 @@ export function BlocksField({
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={error ?? null}>
       <ol className="blocks-field" aria-label={field.admin?.label ?? field.name}>
         {blocks.map((block, index) => {
           const definition = blockDefinition(block.type)

@@ -31,7 +31,34 @@ export interface RestErrorBody {
     readonly code: ErrorCode
     readonly message: string
     readonly hint?: string
+    /**
+     * The collection field this error is about, when the error has one and
+     * the code is one where naming it is safe. Only ever a field *name* the
+     * client's own copy of the schema already declares — never a value, an
+     * id or anything else a caller sent — which is what makes exposing it
+     * different from `details` (see below): a field name is not a secret.
+     */
+    readonly field?: string
   }
+}
+
+/**
+ * Codes whose `details.field` (when it names one) is a bare, schema-declared
+ * field name — safe for a client to key its per-field validation UI off
+ * (fiche 02 task 3). Deliberately a short, explicit list rather than "any
+ * code with a `field` key": `details` is per-call-site free-form context, and
+ * a future call site could reuse the key `field` for something that means
+ * "a query parameter" or anything else not meant to leave the server.
+ */
+const FIELD_NAMING_CODES: ReadonlySet<ErrorCode> = new Set([
+  'CONTENT_INVALID',
+  'CONTENT_SLUG_INVALID',
+])
+
+function fieldOf(error: CogentaError): string | undefined {
+  if (!FIELD_NAMING_CODES.has(error.code)) return undefined
+  const field = error.details?.['field']
+  return typeof field === 'string' ? field : undefined
 }
 
 const JSON_HEADERS: Readonly<Record<string, string>> = Object.freeze({
@@ -66,6 +93,9 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // the closest real status (the request is understood, authenticated where
   // needed, and refused on policy, not on the request's shape).
   CONTENT_READ_ONLY: 403,
+  // Concurrent editing (fiche 02 task 7): the request is well-formed, it is
+  // the live row's state that no longer matches what the write assumed.
+  CONTENT_STALE_WRITE: 409,
   // The trash (`schema@2.0`, ADR-0022). Both are conflicts with the state the
   // entry is actually in, not malformed requests: the client asked for
   // something coherent that the current state forbids.
@@ -198,11 +228,14 @@ export function statusFor(code: ErrorCode): number {
  */
 export function errorResponse(error: unknown): RestResponse {
   if (isCogentaError(error)) {
+    const field = fieldOf(error)
     const body: RestErrorBody = {
-      error:
-        error.hint === undefined
-          ? { code: error.code, message: error.message }
-          : { code: error.code, message: error.message, hint: error.hint },
+      error: {
+        code: error.code,
+        message: error.message,
+        ...(error.hint === undefined ? {} : { hint: error.hint }),
+        ...(field === undefined ? {} : { field }),
+      },
     }
     return jsonResponse(statusFor(error.code), body)
   }

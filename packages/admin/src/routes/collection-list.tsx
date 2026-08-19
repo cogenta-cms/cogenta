@@ -1,6 +1,6 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   deleteEntry,
@@ -8,6 +8,7 @@ import {
   listEntries,
   type SortDirection,
   type SortField,
+  untrashEntry,
 } from '../api/content-client.js'
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -45,11 +46,18 @@ function titleOf(entry: Entry): string {
  * `canPerform` — the same rule the server enforces, so nothing shown here
  * can be clicked into a 403.
  */
+/** What `entry-edit.tsx`'s "Mettre à la corbeille" hands this route in navigation state (fiche 02 task 4). */
+interface TrashedFlashState {
+  readonly trashed?: { readonly collection: string; readonly id: string; readonly title: string }
+}
+
 export function CollectionListRoute(): JSX.Element {
   const { t } = useTranslation()
   const { name = '' } = useParams<{ name: string }>()
   const auth = useAuth()
   const schema = useSchema()
+  const location = useLocation()
+  const navigate = useNavigate()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
 
@@ -77,6 +85,43 @@ export function CollectionListRoute(): JSX.Element {
   const [submitted, setSubmitted] = useState('')
   const [hits, setHits] = useState<readonly SearchHit[] | null>(null)
   const [searching, setSearching] = useState(false)
+
+  /**
+   * "Mis à la corbeille" flash, with an immediate undo (fiche 02 task 4).
+   *
+   * Read once from `location.state` on arrival — never on every render, which
+   * would re-show it after the very next navigation reuses the same route
+   * component instance — and the history entry is replaced right away so a
+   * refresh, or the browser's back button, does not resurrect it.
+   */
+  const [trashedFlash, setTrashedFlash] = useState(
+    () => (location.state as TrashedFlashState | null)?.trashed ?? null,
+  )
+  const [untrashing, setUntrashing] = useState(false)
+  const [untrashError, setUntrashError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if ((location.state as TrashedFlashState | null)?.trashed === undefined) return
+    navigate(location.pathname, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function undoTrash(): Promise<void> {
+    if (token === null || trashedFlash === null) return
+    setUntrashing(true)
+    setUntrashError(null)
+    try {
+      await untrashEntry(token, trashedFlash.collection, trashedFlash.id)
+      setTrashedFlash(null)
+      await load()
+    } catch (caught) {
+      setUntrashError(
+        caught instanceof ApiError ? caught.message : t('collectionList.undoTrashError'),
+      )
+    } finally {
+      setUntrashing(false)
+    }
+  }
 
   const cursor = cursorStack[cursorStack.length - 1]
 
@@ -239,6 +284,33 @@ export function CollectionListRoute(): JSX.Element {
           </Link>
         )}
       </div>
+
+      {trashedFlash !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={() => setTrashedFlash(null)}
+          dismissLabel={t('common.cancel')}
+          actions={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={untrashing}
+              onClick={() => void undoTrash()}
+            >
+              {untrashing ? t('collectionList.undoingTrash') : t('collectionList.undoTrash')}
+            </Button>
+          }
+        >
+          <p>{t('collectionList.trashedMessage', { title: trashedFlash.title })}</p>
+        </Notice>
+      )}
+      {untrashError !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{untrashError}</p>
+        </Notice>
+      )}
 
       <div className="flex flex-wrap items-end gap-4">
         {/* `<search>` rather than `role="search"`: the element carries the

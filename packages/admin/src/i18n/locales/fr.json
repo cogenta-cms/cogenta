@@ -20,7 +20,8 @@
     "blocksUnrecognized": "Ce type de bloc (« {{type}} ») n'est pas reconnu par cet admin — ses données sont conservées mais ne peuvent pas être éditées ici.",
     "blocksAddLabel": "Ajouter un bloc",
     "taxonomyEmpty": "Aucun terme disponible dans « {{taxonomy}} ».",
-    "taxonomyNone": "— aucun —"
+    "taxonomyNone": "— aucun —",
+    "wordCount": "{{count}} mot(s) · ~{{minutes}} min de lecture"
   },
   "richText": {
     "internalLinkTitle": "Lien interne : {{path}}",
@@ -218,7 +219,42 @@
     "scheduleError": "Impossible de programmer la publication de cette entrée.",
     "duplicateButton": "Dupliquer",
     "duplicating": "Duplication…",
-    "duplicateError": "Impossible de dupliquer cette entrée."
+    "duplicateError": "Impossible de dupliquer cette entrée.",
+    "validation": {
+      "required": "Ce champ est requis.",
+      "tooShort": "Saisissez au moins {{min}} caractères.",
+      "tooLong": "Saisissez au plus {{max}} caractères.",
+      "tooSmall": "Saisissez une valeur d'au moins {{min}}.",
+      "tooLarge": "Saisissez une valeur d'au plus {{max}}.",
+      "slugInvalid": "N'utilisez que des minuscules, des chiffres et des tirets."
+    },
+    "publishValidationError": "Remplissez les champs requis avant de publier.",
+    "trashButton": "Mettre à la corbeille",
+    "trashing": "Mise à la corbeille…",
+    "trashError": "Impossible de mettre cette entrée à la corbeille.",
+    "permalinkLabel": "Permalien",
+    "permalinkPending": "Remplissez les champs dont dépend cette URL pour en voir un aperçu.",
+    "authorCreatedBy": "Créé par {{author}}",
+    "authorUpdatedBy": "Dernière modification par {{author}}",
+    "shortcutsButton": "Raccourcis clavier",
+    "shortcutSaveKeys": "⌘/Ctrl + S",
+    "shortcutSaveLabel": "Enregistrer",
+    "shortcutPreviewKeys": "⌘/Ctrl + Maj + P",
+    "shortcutPreviewLabel": "Prévisualiser",
+    "staleWriteTitle": "Quelqu'un d'autre a modifié cette entrée",
+    "staleWriteBody": "Elle a été modifiée depuis le chargement de cet écran. Rechargez sa version, ou gardez vos modifications et enregistrez quand même.",
+    "staleWriteFieldDiffers": "« {{field}} » diffère de votre version",
+    "staleWriteReload": "Recharger sa version",
+    "staleWriteKeepMine": "Garder la mienne et enregistrer quand même",
+    "confirmLeaveTitle": "Quitter sans enregistrer ?",
+    "confirmLeaveBody": "Des modifications ne sont pas enregistrées. Que voulez-vous faire ?",
+    "confirmLeaveBodyAutosaved": "Vos modifications sont conservées dans ce navigateur (sauvegarde automatique à {{at}}), mais pas encore sur le serveur. Que voulez-vous faire ?",
+    "confirmLeaveCancel": "Annuler",
+    "confirmLeaveDiscard": "Quitter sans enregistrer",
+    "confirmLeaveSave": "Enregistrer",
+    "assistantSectionLabel": "Assistant",
+    "translationsSectionLabel": "Traductions",
+    "historySectionLabel": "Historique"
   },
   "media": {
     "heading": "Médiathèque",
@@ -270,7 +306,11 @@
     "notFoundBody": "Cette collection n'existe pas ou vous n'y avez pas accès.",
     "back": "Retour",
     "loadError": "Impossible de charger les contenus.",
-    "exportCsv": "Exporter en CSV"
+    "exportCsv": "Exporter en CSV",
+    "trashedMessage": "« {{title}} » a été mis à la corbeille.",
+    "undoTrash": "Annuler",
+    "undoingTrash": "Annulation…",
+    "undoTrashError": "Impossible d'annuler — l'entrée reste à la corbeille."
   },
   "taxonomies": {
     "heading": "Taxonomies",

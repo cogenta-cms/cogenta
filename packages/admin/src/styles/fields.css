@@ -78,3 +78,9 @@
 .field__geo label {
   font-weight: 400;
 }
+
+.field__word-count {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}

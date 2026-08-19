@@ -12,17 +12,29 @@ export const API_BASE = import.meta.env['VITE_API_BASE_URL'] ?? ''
 export class ApiError extends Error {
   readonly code: string
   readonly hint: string | undefined
+  /**
+   * The collection field a `CONTENT_INVALID`/`CONTENT_SLUG_INVALID` refusal
+   * is about, when the server named one (`packages/api/src/rest/http.ts`'s
+   * `errorResponse` — fiche 02 task 3). Absent for every other error.
+   */
+  readonly field: string | undefined
 
-  constructor(code: string, message: string, hint: string | undefined) {
+  constructor(code: string, message: string, hint: string | undefined, field?: string) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.hint = hint
+    this.field = field
   }
 }
 
 interface ErrorBody {
-  readonly error?: { readonly code?: string; readonly message?: string; readonly hint?: string }
+  readonly error?: {
+    readonly code?: string
+    readonly message?: string
+    readonly hint?: string
+    readonly field?: string
+  }
 }
 
 /** The whole parsed body — for a response that carries more than `data` alone, like a list page's `page.hasMore`/`page.nextCursor`. */
@@ -40,6 +52,7 @@ export async function requestBody<T>(path: string, init: RequestInit = {}): Prom
       error?.code ?? 'INTERNAL',
       error?.message ?? 'The request could not be completed.',
       error?.hint,
+      error?.field,
     )
   }
 

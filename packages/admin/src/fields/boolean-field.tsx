@@ -12,7 +12,10 @@ export function BooleanField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<boolean>): JSX.Element {
+  const invalid = error !== undefined && error !== null
+  const errorId = `${id}-error`
   return (
     <div className="field field--boolean">
       <label htmlFor={id}>
@@ -21,10 +24,17 @@ export function BooleanField({
           type="checkbox"
           disabled={disabled}
           checked={value}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? errorId : undefined}
           onChange={(event) => onChange(event.target.checked)}
         />
         {labelOf(field)}
       </label>
+      {invalid && (
+        <p id={errorId} role="alert" className="field__error">
+          {error}
+        </p>
+      )}
       {field.admin?.help !== undefined && <p className="field__help">{field.admin.help}</p>}
     </div>
   )

@@ -8,12 +8,12 @@ import type { FieldProps } from './types.js'
  * which the admin's data layer does not do yet outside of `/api/schema`.
  * Lands with the schema-driven edit form (task 7).
  */
-export function RelationField({ id, field }: FieldProps<unknown>): JSX.Element {
+export function RelationField({ id, field, error }: FieldProps<unknown>): JSX.Element {
   const { t } = useTranslation()
   const options = field.options as { readonly to?: string; readonly many?: boolean }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={error ?? null}>
       <p className="field__placeholder">
         {t('fields.relationPlaceholder', { target: options.to ?? '?' })}
       </p>

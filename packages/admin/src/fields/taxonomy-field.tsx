@@ -20,6 +20,7 @@ export function TaxonomyField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<unknown>): JSX.Element {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
@@ -68,7 +69,7 @@ export function TaxonomyField({
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={error ?? null}>
       {failed || terms.length === 0 ? (
         <p className="field__placeholder">{t('fields.taxonomyEmpty', { taxonomy })}</p>
       ) : (

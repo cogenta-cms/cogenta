@@ -1,0 +1,28 @@
+/*
+ * The two things Tailwind utility classes cannot express inline: full-screen
+ * mode (fiche 04 task 4, "confort") is a fixed overlay, not a class toggle
+ * on a normal document position; a drag highlight needs `!important`-free
+ * priority over the resting border colour it replaces.
+ */
+
+.rich-text-editor--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--background);
+  padding: var(--space-4, 1rem);
+  overflow-y: auto;
+}
+
+.rich-text-editor--fullscreen .rich-text-editor__surface {
+  min-height: calc(100vh - 8rem);
+}
+
+.rich-text-editor__surface--drag-over {
+  border-color: var(--ring);
+  border-style: dashed;
+}
+
+.rich-text-media img {
+  max-width: 12rem;
+}

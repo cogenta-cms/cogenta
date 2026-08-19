@@ -208,6 +208,11 @@
         "title": "Repeated failed sign-in attempts",
         "body": "{{attempts}} sign-in attempts failed across {{subjects}} account(s) in the last 15 minutes. They are already being slowed down. Check the audit log, and make sure the accounts involved have strong passwords and a second factor. This disappears on its own once the attempts stop.",
         "action": "Open the audit log"
+      },
+      "audit-integrity-broken": {
+        "title": "Audit log integrity check failed",
+        "body": "The scheduled integrity check found the audit log's hash chain broken at entry {{entryId}}. Every entry from this point on cannot be trusted. This stays until a forced full check reports the chain intact again.",
+        "action": "Open the audit log"
       }
     },
     "apikey": {
@@ -601,7 +606,7 @@
     "action": "Action",
     "collection": "Collection",
     "filter": "Filter",
-    "verify": "Verify integrity",
+    "verify": "Verify now",
     "verifying": "Verifying…",
     "verifyOk": "Chain intact.",
     "verifyBroken": "Anomaly detected.",
@@ -610,7 +615,51 @@
     "date": "Date",
     "roles": "Roles",
     "entry": "Entry",
-    "noEntries": "No entries."
+    "noEntries": "No entries.",
+    "since": "From",
+    "until": "To",
+    "rangeToday": "Today",
+    "range7d": "7 days",
+    "range30d": "30 days",
+    "rangeClear": "Clear range",
+    "actorKindLabel": "Actor type",
+    "actorKindAll": "All",
+    "actorKind": {
+      "human": "Human",
+      "agent": "Agent",
+      "api_key": "API key",
+      "system": "System"
+    },
+    "actionsColumn": "Actions",
+    "viewDetail": "Details",
+    "detailTitle": "Audit entry",
+    "detailError": "Could not load this entry's detail.",
+    "detailDate": "Date",
+    "detailActor": "Actor",
+    "detailActorKind": "Actor type",
+    "detailSystemActor": "System (no signed-in actor)",
+    "detailRoles": "Roles at the time",
+    "detailAction": "Action",
+    "detailEntry": "Entry",
+    "detailDiff": "What changed",
+    "close": "Close",
+    "diffUnavailable": {
+      "not-a-content-action": "This action did not touch a content entry.",
+      "no-version-recorded": "No content version was recorded for this action.",
+      "first-version": "This was the entry's first version — there is nothing before it to compare.",
+      "version-no-longer-kept": "The versions either side of this action are no longer kept (the collection's history limit).",
+      "no-permission-on-collection": "The admin role has no authoring permission on this collection, so its draft content cannot be diffed."
+    },
+    "exportCsv": "Export CSV",
+    "exportJson": "Export JSON",
+    "exporting": "Exporting…",
+    "exportError": "Could not export the audit log.",
+    "integrityHeading": "Scheduled integrity check",
+    "integrityNeverRun": "Not checked yet.",
+    "integrityLastChecked": "Last checked {{at}} ({{mode}}).",
+    "integrityOk": "Chain intact as of the last check.",
+    "integrityBroken": "The scheduled check found the chain broken at entry {{entryId}}. Treat every entry from this point on as untrusted.",
+    "retentionUnbounded": "No purge is configured for this log: it keeps every entry and grows without limit."
   },
   "analytics": {
     "heading": "Analytics",

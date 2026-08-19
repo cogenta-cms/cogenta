@@ -208,6 +208,11 @@
         "title": "Tentatives de connexion échouées répétées",
         "body": "{{attempts}} tentatives de connexion ont échoué sur {{subjects}} compte(s) au cours des 15 dernières minutes. Elles sont déjà ralenties. Consultez le journal d'audit et vérifiez que les comptes concernés ont un mot de passe solide et un second facteur. Ce message disparaît de lui-même dès que les tentatives cessent.",
         "action": "Ouvrir le journal d'audit"
+      },
+      "audit-integrity-broken": {
+        "title": "Échec de la vérification d'intégrité du journal d'audit",
+        "body": "La vérification planifiée a trouvé la chaîne de hachage du journal d'audit rompue à l'entrée {{entryId}}. Toute entrée à partir de ce point est à considérer comme non fiable. Ce message reste affiché jusqu'à ce qu'une vérification complète forcée confirme que la chaîne est de nouveau intacte.",
+        "action": "Ouvrir le journal d'audit"
       }
     },
     "apikey": {
@@ -601,7 +606,7 @@
     "action": "Action",
     "collection": "Collection",
     "filter": "Filtrer",
-    "verify": "Vérifier l'intégrité",
+    "verify": "Vérifier maintenant",
     "verifying": "Vérification…",
     "verifyOk": "Chaîne intacte.",
     "verifyBroken": "Anomalie détectée.",
@@ -610,7 +615,51 @@
     "date": "Date",
     "roles": "Rôles",
     "entry": "Entrée",
-    "noEntries": "Aucune entrée."
+    "noEntries": "Aucune entrée.",
+    "since": "Depuis",
+    "until": "Jusqu'à",
+    "rangeToday": "Aujourd'hui",
+    "range7d": "7 jours",
+    "range30d": "30 jours",
+    "rangeClear": "Effacer la période",
+    "actorKindLabel": "Type d'acteur",
+    "actorKindAll": "Tous",
+    "actorKind": {
+      "human": "Humain",
+      "agent": "Agent",
+      "api_key": "Clé API",
+      "system": "Système"
+    },
+    "actionsColumn": "Actions",
+    "viewDetail": "Détail",
+    "detailTitle": "Entrée d'audit",
+    "detailError": "Impossible de charger le détail de cette entrée.",
+    "detailDate": "Date",
+    "detailActor": "Acteur",
+    "detailActorKind": "Type d'acteur",
+    "detailSystemActor": "Système (aucun acteur connecté)",
+    "detailRoles": "Rôles au moment de l'action",
+    "detailAction": "Action",
+    "detailEntry": "Entrée",
+    "detailDiff": "Ce qui a changé",
+    "close": "Fermer",
+    "diffUnavailable": {
+      "not-a-content-action": "Cette action n'a pas touché une entrée de contenu.",
+      "no-version-recorded": "Aucune version de contenu n'a été enregistrée pour cette action.",
+      "first-version": "Il s'agit de la première version de l'entrée — rien à comparer avant elle.",
+      "version-no-longer-kept": "Les versions autour de cette action ne sont plus conservées (limite d'historique de la collection).",
+      "no-permission-on-collection": "Le rôle admin n'a aucune permission de rédaction sur cette collection ; son contenu en brouillon ne peut pas être comparé."
+    },
+    "exportCsv": "Exporter en CSV",
+    "exportJson": "Exporter en JSON",
+    "exporting": "Export en cours…",
+    "exportError": "Impossible d'exporter le journal d'audit.",
+    "integrityHeading": "Vérification d'intégrité planifiée",
+    "integrityNeverRun": "Pas encore vérifié.",
+    "integrityLastChecked": "Dernière vérification {{at}} ({{mode}}).",
+    "integrityOk": "Chaîne intacte lors de la dernière vérification.",
+    "integrityBroken": "La vérification planifiée a trouvé la chaîne rompue à l'entrée {{entryId}}. Considérez comme non fiable toute entrée à partir de ce point.",
+    "retentionUnbounded": "Aucune purge n'est configurée pour ce journal : il conserve toutes les entrées et croît sans limite."
   },
   "analytics": {
     "heading": "Statistiques",

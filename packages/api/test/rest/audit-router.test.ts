@@ -1,6 +1,7 @@
-import { createAuditLog, ensureAuthTables } from '@cogenta/auth'
-import { createSqliteHandle, type DatabaseHandle, sql } from '@cogenta/core'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { type AuditIntegrityStatus, createAuditLog, ensureAuthTables } from '@cogenta/auth'
+import { CogentaError, createSqliteHandle, type DatabaseHandle, sql } from '@cogenta/core'
+import type { ContentDiff } from '@cogenta/schema'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AuditRouter, createAuditRouter } from '../../src/rest/audit-router.js'
 import { ANONYMOUS } from '../../src/types.js'
 
@@ -108,5 +109,350 @@ describe('GET /api/audit/verify', () => {
     )
     expect(response.status).toBe(500)
     expect((response.body as { error: { code: string } }).error.code).toBe('AUDIT_CHAIN_BROKEN')
+  })
+})
+
+describe('GET /api/audit/{id} — detail (fiche 21 task 1)', () => {
+  it('refuses anyone below admin', async () => {
+    const list = await router.handle({ method: 'GET', path: '/api/audit', query: {} }, ADMIN)
+    const id = (list.body as { data: { id: string }[] }).data[0]?.id ?? ''
+    const response = await router.handle(
+      { method: 'GET', path: `/api/audit/${id}`, query: {} },
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('answers 404 for an id nothing recorded', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/nonexistent', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
+    expect((response.body as { error: { code: string } }).error.code).toBe('AUDIT_ENTRY_NOT_FOUND')
+  })
+
+  it('names the actor kind, without a diff dependency wired in', async () => {
+    const list = await router.handle({ method: 'GET', path: '/api/audit', query: {} }, ADMIN)
+    const id = (list.body as { data: { id: string; action: string }[] }).data.find(
+      (entry) => entry.action === 'content.create',
+    )?.id
+    const response = await router.handle(
+      { method: 'GET', path: `/api/audit/${id}`, query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as { data: { actorKind: string; diff: unknown } }
+    expect(body.data.actorKind).toBe('human')
+    expect(body.data.diff).toBeNull()
+  })
+
+  it('calls the injected diff function rather than recomputing one, and never for a create', async () => {
+    const db2 = await createSqliteHandle({ url: ':memory:' })
+    await ensureAuthTables(db2)
+    const audit2 = createAuditLog(db2)
+    await audit2.record({
+      actorId: 'user-1',
+      actorRoles: ['editor'],
+      action: 'content.create',
+      collection: 'article',
+      entryId: 'entry-1',
+      version: 1,
+    })
+    const updated = await audit2.record({
+      actorId: 'user-1',
+      actorRoles: ['editor'],
+      action: 'content.update',
+      collection: 'article',
+      entryId: 'entry-1',
+      version: 2,
+    })
+
+    const fakeDiff: ContentDiff = { fields: [], blocks: [], changed: true }
+    const diff = vi.fn(async () => fakeDiff)
+    const router2 = createAuditRouter({ audit: audit2, diff })
+
+    const createEntry = (
+      (
+        await router2.handle(
+          { method: 'GET', path: '/api/audit', query: { action: 'content.create' } },
+          ADMIN,
+        )
+      ).body as { data: { id: string }[] }
+    ).data[0]
+    const createDetail = await router2.handle(
+      { method: 'GET', path: `/api/audit/${createEntry?.id}`, query: {} },
+      ADMIN,
+    )
+    expect(
+      (createDetail.body as { data: { diffUnavailable: string | null } }).data.diffUnavailable,
+    ).toBe('first-version')
+    expect(diff).not.toHaveBeenCalled()
+
+    const updateDetail = await router2.handle(
+      { method: 'GET', path: `/api/audit/${updated.id}`, query: {} },
+      ADMIN,
+    )
+    expect(diff).toHaveBeenCalledWith(ADMIN, 'article', 'entry-1', 1, 2)
+    expect((updateDetail.body as { data: { diff: ContentDiff } }).data.diff).toEqual(fakeDiff)
+
+    await db2.close()
+  })
+
+  it('shows the entry without a diff when its versions were pruned, rather than failing the whole detail view', async () => {
+    const db2 = await createSqliteHandle({ url: ':memory:' })
+    await ensureAuthTables(db2)
+    const audit2 = createAuditLog(db2)
+    const recorded = await audit2.record({
+      actorId: 'user-1',
+      actorRoles: ['editor'],
+      action: 'content.update',
+      collection: 'article',
+      entryId: 'entry-1',
+      version: 5,
+    })
+    const diff = vi.fn(async () => {
+      throw new CogentaError({ code: 'CONTENT_NOT_FOUND', message: 'Version 4 is no longer kept.' })
+    })
+    const router2 = createAuditRouter({ audit: audit2, diff })
+
+    const response = await router2.handle(
+      { method: 'GET', path: `/api/audit/${recorded.id}`, query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as { data: { diff: unknown; diffUnavailable: string | null } }
+    expect(body.data.diff).toBeNull()
+    expect(body.data.diffUnavailable).toBe('version-no-longer-kept')
+
+    await db2.close()
+  })
+
+  it('degrades to no diff, not a 403, when admin has no authoring role on this collection', async () => {
+    // `/api/audit` itself is admin-only, but the diff underneath is still
+    // computed through the collection's own permission rules (R4) — a site
+    // that never granted `admin` create/update/publish there is unusual,
+    // not invalid, and must not turn the whole detail view into a refusal.
+    const db2 = await createSqliteHandle({ url: ':memory:' })
+    await ensureAuthTables(db2)
+    const audit2 = createAuditLog(db2)
+    const recorded = await audit2.record({
+      actorId: 'user-1',
+      actorRoles: ['editor'],
+      action: 'content.update',
+      collection: 'article',
+      entryId: 'entry-1',
+      version: 2,
+    })
+    const diff = vi.fn(async () => {
+      throw new CogentaError({ code: 'FORBIDDEN', message: 'admin has no authoring role here.' })
+    })
+    const router2 = createAuditRouter({ audit: audit2, diff })
+
+    const response = await router2.handle(
+      { method: 'GET', path: `/api/audit/${recorded.id}`, query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as { data: { diff: unknown; diffUnavailable: string | null } }
+    expect(body.data.diff).toBeNull()
+    expect(body.data.diffUnavailable).toBe('no-permission-on-collection')
+
+    await db2.close()
+  })
+
+  it('resolves a human actor to an email and an api-key actor to its name', async () => {
+    const db2 = await createSqliteHandle({ url: ':memory:' })
+    await ensureAuthTables(db2)
+    const audit2 = createAuditLog(db2)
+    const human = await audit2.record({
+      actorId: 'user-1',
+      actorRoles: ['editor'],
+      action: 'content.create',
+    })
+    const key = await audit2.record({
+      actorId: 'apikey:key-1',
+      actorRoles: ['editor'],
+      action: 'content.create',
+    })
+
+    const users = {
+      byId: vi.fn(async (id: string) => (id === 'user-1' ? { email: 'a@example.com' } : null)),
+    }
+    const apiKeys = { list: vi.fn(async () => [{ id: 'key-1', name: 'CI bot' }]) }
+    const router2 = createAuditRouter({ audit: audit2, users, apiKeys })
+
+    const humanDetail = await router2.handle(
+      { method: 'GET', path: `/api/audit/${human.id}`, query: {} },
+      ADMIN,
+    )
+    expect((humanDetail.body as { data: { actorLabel: string | null } }).data.actorLabel).toBe(
+      'a@example.com',
+    )
+
+    const keyDetail = await router2.handle(
+      { method: 'GET', path: `/api/audit/${key.id}`, query: {} },
+      ADMIN,
+    )
+    expect((keyDetail.body as { data: { actorLabel: string | null } }).data.actorLabel).toBe(
+      'CI bot',
+    )
+
+    await db2.close()
+  })
+})
+
+describe('GET /api/audit/export (fiche 21 task 2)', () => {
+  it('refuses anyone below admin', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/export', query: {} },
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('exports JSON by default', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/export', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: unknown[] }).data.length).toBe(3)
+  })
+
+  it('exports CSV with a header row and one row per entry', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/export', query: { format: 'csv' } },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers['content-type']).toContain('text/csv')
+    const text = response.body as string
+    const lines = text.replace(/^﻿/u, '').split('\r\n')
+    expect(lines[0]).toBe('id,at,actorId,actorKind,actorRoles,action,collection,entryId')
+    expect(lines.length).toBe(4) // header + 3 entries
+  })
+
+  it('rejects an unknown format', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/export', query: { format: 'xml' } },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('respects the same filters as the list route', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/export', query: { collection: 'article' } },
+      ADMIN,
+    )
+    expect((response.body as { data: unknown[] }).data.length).toBe(2)
+  })
+})
+
+describe('GET/POST /api/audit/integrity (fiche 21 task 3)', () => {
+  it('answers { data: null } when no integrity store is configured, rather than 404', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit/integrity', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({ data: null })
+  })
+
+  it('refuses anyone below admin even when configured', async () => {
+    const status: AuditIntegrityStatus = {
+      state: 'ok',
+      checkpoint: null,
+      entriesChecked: 0,
+      lastCheckedAt: null,
+      lastMode: null,
+      lastFullCheckedAt: null,
+      brokenAt: null,
+      brokenEntryId: null,
+      brokenMessage: null,
+    }
+    const integrity = { status: vi.fn(async () => status), check: vi.fn(async () => ({ status })) }
+    const router2 = createAuditRouter({ audit: createAuditLog(db), integrity })
+
+    const response = await router2.handle(
+      { method: 'GET', path: '/api/audit/integrity', query: {} },
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('GET reads the last status without running a new check', async () => {
+    const status: AuditIntegrityStatus = {
+      state: 'ok',
+      checkpoint: { id: 'x', at: '2026-01-01T00:00:00.000Z', hash: 'h' },
+      entriesChecked: 3,
+      lastCheckedAt: '2026-01-01T00:00:00.000Z',
+      lastMode: 'incremental',
+      lastFullCheckedAt: '2026-01-01T00:00:00.000Z',
+      brokenAt: null,
+      brokenEntryId: null,
+      brokenMessage: null,
+    }
+    const integrity = { status: vi.fn(async () => status), check: vi.fn(async () => ({ status })) }
+    const router2 = createAuditRouter({ audit: createAuditLog(db), integrity })
+
+    const response = await router2.handle(
+      { method: 'GET', path: '/api/audit/integrity', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: AuditIntegrityStatus }).data).toEqual(status)
+    expect(integrity.check).not.toHaveBeenCalled()
+  })
+
+  it('POST runs a forced full check and returns the fresh status', async () => {
+    const status: AuditIntegrityStatus = {
+      state: 'ok',
+      checkpoint: null,
+      entriesChecked: 3,
+      lastCheckedAt: '2026-01-01T00:00:00.000Z',
+      lastMode: 'full',
+      lastFullCheckedAt: '2026-01-01T00:00:00.000Z',
+      brokenAt: null,
+      brokenEntryId: null,
+      brokenMessage: null,
+    }
+    const integrity = { status: vi.fn(async () => status), check: vi.fn(async () => ({ status })) }
+    const router2 = createAuditRouter({ audit: createAuditLog(db), integrity })
+
+    const response = await router2.handle(
+      { method: 'POST', path: '/api/audit/integrity', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect(integrity.check).toHaveBeenCalledWith({ full: true })
+    expect((response.body as { data: AuditIntegrityStatus }).data).toEqual(status)
+  })
+})
+
+describe('GET /api/audit — actorKind and until filters (fiche 21 tasks 2/4)', () => {
+  it('filters by actorKind', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { actorKind: 'human' } },
+      ADMIN,
+    )
+    expect((response.body as { data: unknown[] }).data.length).toBe(3)
+  })
+
+  it('rejects an unknown actorKind', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { actorKind: 'robot' } },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('filters by an until date, in addition to since', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { until: '1970-01-01T00:00:00.000Z' } },
+      ADMIN,
+    )
+    expect((response.body as { data: unknown[] }).data.length).toBe(0)
   })
 })

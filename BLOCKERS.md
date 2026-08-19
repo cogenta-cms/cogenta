@@ -730,3 +730,43 @@ de compteur de « hits servis » sur une redirection elle-même (distinct du jou
 redirection servie (une vraie nouvelle portée, une migration de colonne sur une table
 déjà en production potentielle) plutôt qu'une correction dans le périmètre déjà
 engagé.
+
+## 12. Fiche 21 — Journal d'audit : ce qui reste ouvert
+
+Les cinq tâches sont faites (`@cogenta/auth` gagne `AuditLog.get`/`verifyRange`/
+`prune`, `classifyAuditActor`, `AuditIntegrityStatus`/`createAuditIntegrityStore` ;
+`@cogenta/api` gagne le détail d'une entrée, l'export CSV/JSON et
+`/api/audit/integrity` ; `cogenta serve` fait tourner la vérification planifiée
+et envoie l'alerte de canal ; l'admin a un écran refait). Deux points assumés,
+pas oubliés :
+
+### 11.1 Aucune purge automatique planifiée
+
+`AuditLog.prune(olderThan)` existe, est testé (y compris le refus de purger un
+segment déjà rompu, et la reprise propre de `verifyRange` après une purge
+légitime via l'ancre "genesis"), mais **rien ne l'appelle automatiquement**.
+La fiche demande d'« afficher la rétention effective… si elle n'existe pas,
+dire que le journal croît indéfiniment » — c'est exactement ce que fait
+l'écran (`audit.retentionUnbounded`). Câbler une purge planifiée (fréquence,
+politique de rétention par défaut, éventuellement une vraie configuration
+`audit.retentionDays`) est un second geste délibérément laissé pour plus
+tard : la fiche elle-même pose la rétention comme une « décision à prendre »
+(section 8), pas comme un critère d'acceptation obligatoire, et construire le
+registre de tâches planifiées générique (fiche 28) avant d'y accrocher une
+purge évite de créer deux mécanismes de planification parallèles dans le même
+lot.
+
+### 11.2 « Canal » n'est pas une origine distinguable dans le journal
+
+La tâche 1 demande le contexte technique d'une action : « session admin, clé
+d'API, agent, canal ». Trois de ces quatre sont réellement distinguables
+aujourd'hui (`classifyAuditActor` : `human`/`api_key`/`agent`, à partir de
+signaux que le journal porte déjà). Le quatrième ne l'est pas : une commande
+entrante par `@cogenta/channels` (L6) s'exécute avec les permissions de
+l'humain identifié — c'est la règle de sécurité centrale du lot — et ne passe
+donc jamais par `resolveActor`/un jeton porteur ; elle atterrit dans le
+journal comme une action humaine ordinaire, indiscernable d'un clic dans
+l'admin. Corriger cela demanderait de faire porter l'origine du canal jusqu'au
+runtime qui exécute la commande (`@cogenta/channels`) puis jusqu'à
+`RecordAuditInput`, un changement qui touche un paquet que cette fiche ne
+nomme pas. Documenté plutôt que deviné.

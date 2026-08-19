@@ -120,6 +120,9 @@ export const ERROR_CODES = [
   'AUTH_USER_NOT_FOUND',
   'AUTH_ROLE_UNKNOWN',
   'AUDIT_CHAIN_BROKEN',
+  // Fiche 21: a lookup by id (audit entry detail) found nothing — distinct
+  // from `AUDIT_CHAIN_BROKEN`, which means "found it, and it lied".
+  'AUDIT_ENTRY_NOT_FOUND',
   // Auth — self-service password reset over HTTP (L11, forgot-password route)
   'AUTH_RESET_TOKEN_INVALID',
 

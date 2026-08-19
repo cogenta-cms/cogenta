@@ -6,6 +6,8 @@
 
 export type { ApiKeyExpiryOptions } from './api-key-expiry.js'
 export { createApiKeyExpiryNoticeSource } from './api-key-expiry.js'
+export type { AuditIntegritySourceOptions } from './audit-integrity.js'
+export { AUDIT_INTEGRITY_BROKEN_ID, createAuditIntegritySource } from './audit-integrity.js'
 export type { NoticeDismissalStore } from './dismissals.js'
 export { createNoticeDismissalStore, NOTICE_DISMISSALS_TABLE } from './dismissals.js'
 export type { MfaRecommendationOptions } from './mfa-recommendation.js'

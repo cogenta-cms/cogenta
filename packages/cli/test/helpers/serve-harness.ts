@@ -111,6 +111,8 @@ export interface StartServerOptions {
   readonly scheduledPublishTickMs?: number
   /** Overrides the daily cadence `runServe` purges the 404 log on — see `ServeOptions.notFoundPurgeTickMs`. */
   readonly notFoundPurgeTickMs?: number
+  /** Overrides the daily cadence of the audit-integrity check — see `ServeOptions.auditIntegrityTickMs`. */
+  readonly auditIntegrityTickMs?: number
 }
 
 export async function startServer(
@@ -145,6 +147,9 @@ export async function startServer(
     ...(options.notFoundPurgeTickMs === undefined
       ? {}
       : { notFoundPurgeTickMs: options.notFoundPurgeTickMs }),
+    ...(options.auditIntegrityTickMs === undefined
+      ? {}
+      : { auditIntegrityTickMs: options.auditIntegrityTickMs }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

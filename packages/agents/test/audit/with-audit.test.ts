@@ -104,6 +104,34 @@ describe('withAudit', () => {
     expect(onAuditFailure).toHaveBeenCalledWith(expect.any(Error))
   })
 
+  it('carries the model and autonomy level into the diff, fiche 21 task 4', async () => {
+    const auditLog = fakeAuditLog()
+    const tool = withAudit(publishTool(), {
+      auditLog,
+      agentName: 'security',
+      actor: ACTOR,
+      model: 'claude-sonnet-5',
+      autonomyLevel: 'execute_with_approval',
+    })
+
+    await tool.execute({ id: 'e1' }, CTX)
+
+    expect(auditLog.calls[0]?.diff).toMatchObject({
+      model: 'claude-sonnet-5',
+      autonomy: 'execute_with_approval',
+    })
+  })
+
+  it('omits model/autonomy from the diff when the caller does not track them', async () => {
+    const auditLog = fakeAuditLog()
+    const tool = withAudit(publishTool(), { auditLog, agentName: 'security', actor: ACTOR })
+
+    await tool.execute({ id: 'e1' }, CTX)
+
+    expect(auditLog.calls[0]?.diff).not.toHaveProperty('model')
+    expect(auditLog.calls[0]?.diff).not.toHaveProperty('autonomy')
+  })
+
   it('preserves the tool spec unchanged', () => {
     const original = publishTool()
     const wrapped = withAudit(original, { auditLog: fakeAuditLog(), agentName: 'x', actor: ACTOR })

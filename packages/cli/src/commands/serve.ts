@@ -24,6 +24,7 @@ import {
   createApiKeyExpiryNoticeSource,
   createApiKeysRouter,
   createAssistantRouter,
+  createAuditIntegritySource,
   createAuditRouter,
   createAuthRouter,
   createContentGateway,
@@ -154,6 +155,7 @@ import type { Output, Writer } from '../output.js'
 import { sendResetMail } from '../reset-mail.js'
 import { serveAdminAsset } from './admin-assets.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
+import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
@@ -471,6 +473,13 @@ interface Site {
    * worker. Exposed so a test can call it directly instead of waiting.
    */
   readonly tickScheduledPublishing: () => Promise<number>
+  /**
+   * Runs one scheduled audit-integrity check (fiche 21 task 3) and sends the
+   * outbound alert when this run is what first finds the chain broken.
+   * `runServe` calls this on its own `setInterval`, daily by default; exposed
+   * so a test can call it directly instead of waiting a day.
+   */
+  readonly checkAuditIntegrity: () => Promise<void>
   dispose(): Promise<void>
 }
 
@@ -969,7 +978,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         ? {}
         : { images: options.images }),
     }),
-    auditRouter: createAuditRouter({ audit: auth.audit }),
+    auditRouter: createAuditRouter({
+      audit: auth.audit,
+      // Reuses `ContentService.diff` — the same function
+      // `GET /{collection}/{id}/diff` already calls — rather than the audit
+      // router re-deriving a structural diff of its own (fiche 21 task 1).
+      diff: (actor, name, id, from, to) => service.diff({ actor }, name, id, from, to),
+      users: auth.users,
+      apiKeys: auth.apiKeys,
+      integrity: auth.auditIntegrity,
+    }),
     taxonomyRouter: createTaxonomyRouter({
       taxonomies,
       permissions,
@@ -1039,6 +1057,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         // production" (fiche 20 task 1) — one more source, no change to the
         // router, the store or the admin's notice board.
         createApiKeyExpiryNoticeSource({ apiKeys: auth.apiKeys, href: '/api-keys' }),
+        // Fiche 21 task 3's on-screen half: recomputed from the scheduled
+        // check's persisted status on every load, so it disappears on its
+        // own once a forced full check reports the chain intact again.
+        createAuditIntegritySource({ integrity: auth.auditIntegrity }),
       ],
       dismissals: noticeDismissals,
     }),
@@ -1082,6 +1104,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     security: options.security,
     health: options.health,
     tickScheduledPublishing: () => scheduledPublishQueue.tick(),
+    checkAuditIntegrity: async () => {
+      const result = await auth.auditIntegrity.check()
+      if (!result.newlyBroken) return
+      await sendAuditIntegrityAlert(result.status, {
+        send: options.onSecurityEvent ?? null,
+        siteUrl: site.url,
+        logger,
+      })
+    },
     dispose: async () => {
       await scheduledPublishQueue.close()
       await db.close()
@@ -1197,6 +1228,18 @@ function responseId(response: RestResponse): string | undefined {
 }
 
 /**
+ * The content version a create/update/restore/publish response just
+ * produced — `SerialisedEntry.version`, a system field on every serialised
+ * entry. Feeds `RecordAuditInput.version` (fiche 21 task 1), which is what
+ * lets the audit detail view ask `GET .../diff?from={version-1}&to={version}`
+ * instead of re-deriving one.
+ */
+function responseVersion(response: RestResponse): number | undefined {
+  const data = (response.body as { readonly data?: { readonly version?: unknown } } | null)?.data
+  return typeof data?.version === 'number' ? data.version : undefined
+}
+
+/**
  * Every mutation lands in `@cogenta/auth`'s hash-chained audit log
  * (`packages/auth/src/audit.ts`), which existed since L2's own `AuthStore`
  * was built but had no writer until now. Recording here, at the transport
@@ -1247,6 +1290,7 @@ async function recordContentAudit(
     typeof body === 'object' && body !== null && 'values' in body
       ? (body as { readonly values?: Record<string, unknown> }).values
       : undefined
+  const version = responseVersion(response)
 
   await site.auth.audit
     .record({
@@ -1256,6 +1300,7 @@ async function recordContentAudit(
       collection,
       ...(entryId === undefined ? {} : { entryId }),
       ...(values === undefined ? {} : { diff: values }),
+      ...(version === undefined ? {} : { version }),
     })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
@@ -1479,12 +1524,55 @@ async function recordApiKeyAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/**
+ * Fiche 21 task 2: "l'export d'un journal d'audit est lui-même un événement à
+ * journaliser" — the log names emails and nominative actions, so pulling a
+ * copy of it out is a personal-data export, and who did it is worth knowing.
+ * The count is recorded, never the exported rows themselves: the audit log
+ * is not where a second copy of everyone's activity belongs.
+ */
+async function recordAuditExportAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  query: RestRequest['query'],
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (method !== 'GET' || response.status < 200 || response.status >= 300) return
+  if (!pathname.endsWith('/export')) return
+
+  const format = typeof query.format === 'string' ? query.format : 'json'
+  const count =
+    format === 'csv'
+      ? typeof response.body === 'string'
+        ? Math.max(response.body.trim().split(/\r\n/u).length - 1, 0) // minus the header row
+        : 0
+      : ((response.body as { readonly data?: readonly unknown[] } | null)?.data?.length ?? 0)
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'audit.export',
+      diff: { format, count },
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
 function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   res.writeHead(response.status, response.headers)
+  // A string body (the audit log's CSV export, fiche 21 task 2) is written
+  // as-is: every other route's body is a plain object or `null`, and
+  // `JSON.stringify`ing a string would wrap it in quotes and escape it,
+  // corrupting the file a browser downloads.
   res.end(
     response.body === null || response.body === undefined
       ? undefined
-      : JSON.stringify(response.body),
+      : typeof response.body === 'string'
+        ? response.body
+        : JSON.stringify(response.body),
   )
 }
 
@@ -1949,7 +2037,17 @@ export function createRequestListener(
 
       if (url.pathname.startsWith('/api/audit')) {
         const request = toRestRequest(req, url, undefined)
-        writeRestResponse(res, await site.auditRouter.handle(request, context.actor))
+        const response = await site.auditRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordAuditExportAudit(
+          site,
+          context.actor,
+          req.method ?? 'GET',
+          url.pathname,
+          request.query,
+          response,
+          logger,
+        )
         return
       }
 
@@ -2381,6 +2479,12 @@ export interface ServeOptions {
   readonly scheduledPublishTickMs?: number
   /** Overrides `NOT_FOUND_PURGE_TICK_MS`, for the same reason `scheduledPublishTickMs` exists. */
   readonly notFoundPurgeTickMs?: number
+  /**
+   * Overrides `AUDIT_INTEGRITY_TICK_MS` (fiche 21 task 3). Not a CLI flag,
+   * same reason as `scheduledPublishTickMs` — exists so a test can prove the
+   * scheduled check really runs without waiting a day for it.
+   */
+  readonly auditIntegrityTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -2409,6 +2513,15 @@ const SCHEDULED_PUBLISH_TICK_MS = 60_000
  * interval — is what actually bounds its size between purges.
  */
 const NOT_FOUND_PURGE_TICK_MS = 24 * 60 * 60 * 1000
+
+/**
+ * How often `runServe` runs the scheduled audit-integrity check (fiche 21
+ * task 3). Daily by default — frequent enough that "altérer une ligne fait
+ * apparaître une alerte dans les 24 heures" (the fiche's own acceptance
+ * bound) holds with room to spare, rare enough that most ticks do the
+ * cheap incremental form rather than a full replay.
+ */
+const AUDIT_INTEGRITY_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
@@ -2593,6 +2706,23 @@ export async function runServe(options: ServeOptions): Promise<number> {
   )
   notFoundPurgeTimer.unref()
 
+  // Audit integrity (fiche 21 task 3): same shape as the tick above — a
+  // first check right away (so a broken chain is found on startup, not only
+  // after the first full day), then one every `AUDIT_INTEGRITY_TICK_MS`.
+  // This is the "vérification planifiée" the fiche asks for: nobody has to
+  // press "verify now" for a tampered row to surface.
+  const runAuditIntegrityTick = (): void => {
+    site.checkAuditIntegrity().catch((error: unknown) => {
+      logger.error('audit integrity check failed', { error: String(error) })
+    })
+  }
+  runAuditIntegrityTick()
+  const auditIntegrityTimer = setInterval(
+    runAuditIntegrityTick,
+    options.auditIntegrityTickMs ?? AUDIT_INTEGRITY_TICK_MS,
+  )
+  auditIntegrityTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -2604,6 +2734,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   clearInterval(scheduledPublishTimer)
   clearInterval(notFoundPurgeTimer)
+  clearInterval(auditIntegrityTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

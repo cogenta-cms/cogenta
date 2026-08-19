@@ -10,8 +10,16 @@
 
 export type { ApiKeyStore } from './api-keys.js'
 export { createApiKeyStore, looksLikeApiKey } from './api-keys.js'
-export type { AuditFilter, AuditLog } from './audit.js'
-export { createAuditLog } from './audit.js'
+export type {
+  AuditChainPoint,
+  AuditFilter,
+  AuditLog,
+  AuditPruneResult,
+  AuditVerifyRangeResult,
+} from './audit.js'
+export { classifyAuditActor, createAuditLog } from './audit.js'
+export type { AuditIntegrityStatus, AuditIntegrityStore } from './audit-integrity.js'
+export { createAuditIntegrityStore } from './audit-integrity.js'
 export type { CredentialStore, WebAuthnCredentialData } from './credentials.js'
 export { createCredentialStore } from './credentials.js'
 export type { AuthService, AuthServiceOptions, LoginResult } from './login.js'

@@ -164,6 +164,9 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // something the caller's request could have avoided — the default 500
   // already fits, spelled out so it is not mistaken for an oversight.
   AUDIT_CHAIN_BROKEN: 500,
+  // Looking an audit entry up by id and finding nothing is an ordinary 404,
+  // unlike the line above.
+  AUDIT_ENTRY_NOT_FOUND: 404,
 
   // Marketplace (L17) and the `@cogenta/plugins` verification it reuses.
   // A missing/invalid signature is the caller's install attempt failing a

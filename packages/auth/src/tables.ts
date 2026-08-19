@@ -15,6 +15,21 @@ export const TABLES = {
   passwordResets: 'cogenta_password_resets',
   auditLog: 'cogenta_audit_log',
   apiKeys: 'cogenta_api_keys',
+  /**
+   * Fiche 21 task 5: a singleton row naming the last entry a `prune()` call
+   * removed. Never touched by anything but `prune()` and read by
+   * `verify()`/`verifyRange()`, which trust it as the chain's new starting
+   * point instead of requiring `previousHash: null` — a truncated chain's
+   * oldest surviving row legitimately chains to a hash that is no longer in
+   * the table.
+   */
+  auditGenesis: 'cogenta_audit_genesis',
+  /**
+   * Fiche 21 task 3: the one row a scheduled integrity check reads and
+   * writes — last outcome, last checkpoint, whether the chain is currently
+   * believed broken. Owned by `createAuditIntegrityStore` (`audit-integrity.ts`).
+   */
+  auditIntegrity: 'cogenta_audit_integrity',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -42,6 +57,8 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   const passwordResets = identifier(TABLES.passwordResets, d)
   const auditLog = identifier(TABLES.auditLog, d)
   const apiKeys = identifier(TABLES.apiKeys, d)
+  const auditGenesis = identifier(TABLES.auditGenesis, d)
+  const auditIntegrity = identifier(TABLES.auditIntegrity, d)
   const t512 = textColumn(d, 512)
   const t255 = textColumn(d, 255)
   const t64 = textColumn(d, 64)
@@ -126,6 +143,20 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       previous_hash ${t64}
     )`)
 
+  // Fiche 21 task 1: which content version this entry's action produced, so
+  // its detail view can ask `GET .../diff?from={version-1}&to={version}`
+  // instead of re-deriving one. Deliberately **not** part of `computeHash`'s
+  // canonical fields (see `audit.ts`) — adding a column to the hash would
+  // change the hash of every entry a site already has, and `verify()` would
+  // call its own untouched history broken the moment this code runs. A
+  // plain `alter table` rather than a place in the `create table` above,
+  // because that statement only runs for a table that does not exist yet —
+  // an upgrade's `cogenta_audit_log` already does, and would never see the
+  // column otherwise. No portable `add column if not exists` across all
+  // three dialects (SQLite has none at all), so — like `createIndexIfMissing`
+  // just below — this is a `try`, not a check.
+  await db.query(sql`alter table ${auditLog} add column version ${t64}`).catch(() => undefined)
+
   await db.query(sql`
     create table if not exists ${apiKeys} (
       id ${t64} not null primary key,
@@ -147,6 +178,41 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       expires_at ${t64},
       revoked_at ${t64},
       last_used_at ${t64}
+    )`)
+
+  // Fiche 21 task 5: at most one row, id `'singleton'`. Absent means no
+  // `prune()` has ever run, which `verify()`/`verifyRange()` read as "the
+  // chain starts at its very first entry" — the same behaviour as before
+  // this table existed.
+  await db.query(sql`
+    create table if not exists ${auditGenesis} (
+      id ${t64} not null primary key,
+      entry_id ${t64} not null,
+      entry_at ${t64} not null,
+      entry_hash ${t64} not null,
+      pruned_count ${t64} not null,
+      pruned_at ${t64} not null
+    )`)
+
+  // Fiche 21 task 3: at most one row, id `'singleton'` — the scheduled
+  // integrity check's memory of what it last found, surviving a restart the
+  // same way the scheduled-publication tick's own state does not need to
+  // (that one replays from the content table itself; this one would
+  // otherwise have to replay the whole log on every restart).
+  await db.query(sql`
+    create table if not exists ${auditIntegrity} (
+      id ${t64} not null primary key,
+      state ${t64} not null,
+      checkpoint_id ${t64},
+      checkpoint_at ${t64},
+      checkpoint_hash ${t64},
+      entries_checked ${t64},
+      last_checked_at ${t64},
+      last_mode ${t64},
+      last_full_checked_at ${t64},
+      broken_at ${t64},
+      broken_entry_id ${t64},
+      broken_message text
     )`)
 
   await createIndexIfMissing(db, 'cogenta_credentials_user', credentials, sql`(user_id)`)

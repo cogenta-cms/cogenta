@@ -4,6 +4,8 @@
  * See `types.ts` for what a notice is and why it is shaped this way.
  */
 
+export type { AuditIntegritySourceOptions } from './audit-integrity.js'
+export { AUDIT_INTEGRITY_BROKEN_ID, createAuditIntegritySource } from './audit-integrity.js'
 export type { NoticeDismissalStore } from './dismissals.js'
 export { createNoticeDismissalStore, NOTICE_DISMISSALS_TABLE } from './dismissals.js'
 export type { MfaRecommendationOptions } from './mfa-recommendation.js'

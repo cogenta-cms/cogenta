@@ -55,6 +55,16 @@ export interface AuditEntry {
   readonly collection: string | null
   readonly entryId: string | null
   readonly diff: Readonly<Record<string, unknown>> | null
+  /**
+   * The content version this action produced, when it produced one
+   * (`content.create`/`content.update`/`content.restore`; `null` for every
+   * other action, and for an action a site recorded before this field
+   * existed). Fiche 21 task 1: this is what lets the entry's detail view ask
+   * `GET .../diff?from={version-1}&to={version}` instead of re-deriving a
+   * diff from `at`, which a concurrent write could make point at the wrong
+   * pair of versions.
+   */
+  readonly version: number | null
   /** Chains to the previous entry's hash. The first entry chains to null. */
   readonly hash: string
   readonly previousHash: string | null
@@ -67,7 +77,16 @@ export interface RecordAuditInput {
   readonly collection?: string | undefined
   readonly entryId?: string | undefined
   readonly diff?: Readonly<Record<string, unknown>> | undefined
+  /** See `AuditEntry.version`. Omitted (not `null`) for an action that never produces one. */
+  readonly version?: number | undefined
 }
+
+/**
+ * Who or what an entry names, from signals the log already carries — see
+ * `classifyAuditActor` in `audit.ts`.
+ */
+export const AUDIT_ACTOR_KINDS = ['human', 'agent', 'api_key', 'system'] as const
+export type AuditActorKind = (typeof AUDIT_ACTOR_KINDS)[number]
 
 /**
  * A machine-to-machine bearer credential (L13 task 8).

@@ -1,3 +1,4 @@
+import type { AutonomyLevel } from '../autonomy/types.js'
 import type { ExecutableTool, ToolExecutionContext } from '../runtime/types.js'
 import type { AuditLogLike, AuditRecordInput } from './types.js'
 
@@ -5,6 +6,18 @@ export interface WithAuditOptions {
   readonly auditLog: AuditLogLike
   readonly agentName: string
   readonly actor: { readonly id: string | null; readonly roles: readonly string[] }
+  /**
+   * Which model actually ran this call (`AgentDeclaration.model.preferred` or
+   * its fallback) — fiche 21 task 4: the journal names "quel modèle", not
+   * only which agent. Absent when the caller does not track it.
+   */
+  readonly model?: string
+  /**
+   * This tool's resolved autonomy level (`AgentDeclaration.autonomy`,
+   * per-tool override applied) — the journal's "quelle autonomie". Absent
+   * when the caller does not track it.
+   */
+  readonly autonomyLevel?: AutonomyLevel
   /** Injectable so tests never depend on real wall-clock duration. */
   readonly now?: () => number
   /** Pulls `{collection, entryId}` out of a tool's input when it touches content, so the entry links to the right one — absent for tools that don't (site.config_read, http.fetch). */
@@ -29,6 +42,10 @@ export interface WithAuditOptions {
  */
 export function withAudit(tool: ExecutableTool, options: WithAuditOptions): ExecutableTool {
   const now = options.now ?? Date.now
+  const provenance = {
+    ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.autonomyLevel === undefined ? {} : { autonomy: options.autonomyLevel }),
+  }
 
   async function record(input: AuditRecordInput): Promise<void> {
     try {
@@ -54,6 +71,7 @@ export function withAudit(tool: ExecutableTool, options: WithAuditOptions): Exec
           diff: {
             agent: options.agentName,
             tool: tool.spec.name,
+            ...provenance,
             input,
             output,
             durationMs: now() - startedAt,
@@ -70,6 +88,7 @@ export function withAudit(tool: ExecutableTool, options: WithAuditOptions): Exec
           diff: {
             agent: options.agentName,
             tool: tool.spec.name,
+            ...provenance,
             input,
             durationMs: now() - startedAt,
             ok: false,

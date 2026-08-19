@@ -201,6 +201,34 @@ export function installMockFetch(
       readonly deviceBreakdown?: readonly { device: string; views: number }[]
       readonly dailyViews?: readonly { day: string; views: number }[]
     }
+    /**
+     * Fiche 21 task 3: what `GET`/`POST /api/audit/integrity` answers with.
+     * A plain `'ok'` status by default, so a test that never touches this
+     * screen's integrity panel does not have to think about it.
+     */
+    readonly auditIntegrity?: {
+      readonly state: string
+      readonly checkpoint: {
+        readonly id: string
+        readonly at: string
+        readonly hash: string
+      } | null
+      readonly entriesChecked: number
+      readonly lastCheckedAt: string | null
+      readonly lastMode: string | null
+      readonly lastFullCheckedAt: string | null
+      readonly brokenAt: string | null
+      readonly brokenEntryId: string | null
+      readonly brokenMessage: string | null
+    }
+    /** Fiche 21 task 1: what `GET /api/audit/{id}` answers with, for any id. */
+    readonly auditDetail?: {
+      readonly entry: Readonly<Record<string, unknown>>
+      readonly actorKind: string
+      readonly actorLabel: string | null
+      readonly diff: Readonly<Record<string, unknown>> | null
+      readonly diffUnavailable: string | null
+    }
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -1169,6 +1197,64 @@ export function installMockFetch(
         if (url.includes('/api/audit/verify')) {
           return json(200, { data: { ok: true } })
         }
+        // Fiche 21 task 3: the scheduled check's status, and the "run now"
+        // that forces a fresh, persisted one.
+        if (url.includes('/api/audit/integrity')) {
+          return json(200, {
+            data: options.auditIntegrity ?? {
+              state: 'ok',
+              checkpoint: { id: 'audit-1', at: '2026-03-01T00:00:00.000Z', hash: 'abc' },
+              entriesChecked: 1,
+              lastCheckedAt: '2026-03-01T00:05:00.000Z',
+              lastMode: 'full',
+              lastFullCheckedAt: '2026-03-01T00:05:00.000Z',
+              brokenAt: null,
+              brokenEntryId: null,
+              brokenMessage: null,
+            },
+          })
+        }
+        // Fiche 21 task 2: the filtered view as a file. CSV is not JSON, so
+        // it is returned as a plain `Response` with a text body, the same
+        // shape the real route sends.
+        if (url.includes('/api/audit/export')) {
+          if (url.includes('format=csv')) {
+            return new Response(
+              'id,at,actorId,actorKind,actorRoles,action,collection,entryId\r\n',
+              {
+                status: 200,
+                headers: { 'content-type': 'text/csv; charset=utf-8' },
+              },
+            )
+          }
+          return json(200, { data: [] })
+        }
+        // Fiche 21 task 1: one entry's detail — anything after `/api/audit/`
+        // that is not one of the routes above is an id.
+        const detailMatch = /\/api\/audit\/([^/?]+)/u.exec(url)
+        if (detailMatch !== null) {
+          return json(200, {
+            data: options.auditDetail ?? {
+              entry: {
+                id: detailMatch[1],
+                at: '2026-03-01T00:00:00.000Z',
+                actorId: 'user-1',
+                actorRoles: ['editor'],
+                action: 'content.create',
+                collection: 'article',
+                entryId: 'entry-1',
+                diff: { title: 'First article' },
+                version: 1,
+                hash: 'abc',
+                previousHash: null,
+              },
+              actorKind: 'human',
+              actorLabel: 'alice@example.com',
+              diff: null,
+              diffUnavailable: 'first-version',
+            },
+          })
+        }
         return json(200, {
           data: [
             {
@@ -1180,6 +1266,7 @@ export function installMockFetch(
               collection: 'article',
               entryId: 'entry-1',
               diff: { title: 'First article' },
+              version: 1,
               hash: 'abc',
               previousHash: null,
             },

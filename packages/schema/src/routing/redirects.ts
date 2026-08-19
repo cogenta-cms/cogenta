@@ -47,8 +47,24 @@ export const REDIRECT_REASONS = ['slug-change', 'manual', 'import'] as const
 
 export type RedirectReason = (typeof REDIRECT_REASONS)[number]
 
-/** 308 and 307 are deliberately absent: a moved page is a GET, and 301 is what search engines act on. */
-export type RedirectStatus = 301 | 302
+/**
+ * 301/308 are permanent (cacheable); 302/307 are temporary (never cached);
+ * 410 is not a redirect at all — it tells a visitor and a crawler the page is
+ * gone for good, which is honester than sending them to the home page.
+ */
+export type RedirectStatus = 301 | 302 | 307 | 308 | 410
+
+/** 301 and 308 are the two search engines and browsers may cache. */
+function isPermanent(status: RedirectStatus): boolean {
+  return status === 301 || status === 308
+}
+
+const REDIRECT_STATUSES: readonly RedirectStatus[] = [301, 302, 307, 308, 410]
+
+/** Falls back to 301 for anything a hand-edited table might hold that this version does not know. */
+function asStatus(value: number): RedirectStatus {
+  return (REDIRECT_STATUSES as readonly number[]).includes(value) ? (value as RedirectStatus) : 301
+}
 
 export interface RedirectRecord {
   readonly id: string
@@ -65,12 +81,19 @@ export interface RedirectRecord {
 
 export interface AddRedirectInput {
   readonly from: string
-  readonly to: string
+  /** Required unless `status` is 410 — a Gone rule has nothing to point at. */
+  readonly to?: string
   readonly status?: RedirectStatus
   readonly collection?: string
   readonly entryId?: string
   readonly locale?: string
   readonly reason?: RedirectReason
+}
+
+/** A PATCH: only `to` and/or `status` may change. Everything else about a rule is set once, at `add()`. */
+export interface UpdateRedirectInput {
+  readonly to?: string
+  readonly status?: RedirectStatus
 }
 
 export interface ListRedirectsOptions {
@@ -80,6 +103,7 @@ export interface ListRedirectsOptions {
 }
 
 export interface RedirectResolution {
+  /** For a 410, this is `from` itself — there is no destination, and the caller must not send a `Location` header. */
   readonly to: string
   readonly status: RedirectStatus
 }
@@ -88,6 +112,8 @@ export interface RedirectStore {
   /** Creates the table if it is missing. Called for you by every other method. */
   ensureTable(): Promise<void>
   add(input: AddRedirectInput): Promise<RedirectRecord>
+  /** Changes `to` and/or `status` of an existing rule in place — no gap where the old URL 404s. */
+  update(from: string, input: UpdateRedirectInput): Promise<RedirectRecord>
   /** The final destination of a path, following any chain left by an import. */
   resolve(path: string): Promise<RedirectResolution | null>
   list(options?: ListRedirectsOptions): Promise<RedirectRecord[]>
@@ -181,9 +207,15 @@ export function createRedirectStore(options: RedirectStoreOptions): RedirectStor
     return normalised
   }
 
+  /**
+   * A 410 row is excluded on purpose: its `to_path` is only ever itself
+   * (see `add`), and chasing it would make `flattenTarget` see a path that
+   * "leads back to itself" and refuse a perfectly ordinary redirect *into*
+   * a page that happens to be marked Gone.
+   */
   async function targetOf(tx: SqlExecutor, path: string): Promise<string | undefined> {
     const found = await tx.query<{ to_path: string }>(sql`
-      select to_path from ${table} where from_path = ${path} limit ${limit(1)}`)
+      select to_path from ${table} where from_path = ${path} and status != ${410} limit ${limit(1)}`)
     return found.rows[0]?.to_path
   }
 
@@ -228,67 +260,149 @@ export function createRedirectStore(options: RedirectStoreOptions): RedirectStor
     return result.rowsAffected > 0
   }
 
-  return {
-    ensureTable,
+  const performAdd = async (input: AddRedirectInput): Promise<RedirectRecord> => {
+    await ensureTable()
 
-    add: async (input: AddRedirectInput): Promise<RedirectRecord> => {
-      await ensureTable()
+    const from = checkPath(input.from, 'from')
+    const status = input.status ?? 301
+    const reason = input.reason ?? 'manual'
+    const createdAt = now()
 
-      const from = checkPath(input.from, 'from')
-      const to = checkPath(input.to, 'to')
-      const status = input.status ?? 301
-      const reason = input.reason ?? 'manual'
-      const createdAt = now()
-
-      if (from === to) {
-        throw new CogentaError({
-          code: 'CONTENT_REDIRECT_LOOP',
-          message: `${from} cannot redirect to itself.`,
-          hint: 'Nothing needs a redirect here: the path did not change.',
-          details: { from },
-        })
+    // 410 (Gone) is not a redirect: there is nothing to chase or flatten,
+    // and nothing else in the table should be rewritten because of it —
+    // an existing rule that happened to point here keeps pointing here,
+    // exactly as it would if any other ordinary page appeared at `from`.
+    // `to` is stored equal to `from` so every reader of this table can
+    // keep treating the column as a plain, non-null string.
+    if (status === 410) {
+      const record: RedirectRecord = {
+        id: nextId(),
+        from,
+        to: from,
+        status,
+        collection: input.collection ?? null,
+        entryId: input.entryId ?? null,
+        locale: input.locale ?? null,
+        reason,
+        createdAt,
       }
-
-      // One transaction: the chain is read, rewritten and extended together, so
-      // a second rename running at the same time cannot slot a hop in between.
       return db.transaction(
         async (tx) => {
-          const target = await flattenTarget(tx, from, to)
-
-          // Everything that pointed at the old path now points at the new one.
-          // This is what keeps the table one hop deep however often an entry is
-          // renamed.
-          await tx.query(sql`
-            update ${table} set to_path = ${target} where to_path = ${from}`)
-
-          // Delete-then-insert rather than an upsert: `ON CONFLICT`, `ON
-          // DUPLICATE KEY` and `INSERT OR REPLACE` are three different
-          // statements, and this layer owes callers one behaviour.
+          // Same delete-then-insert as below, for the same reason: one
+          // behaviour across three dialects that each spell "replace" differently.
           await tx.query(sql`delete from ${table} where from_path = ${from}`)
-
-          const record: RedirectRecord = {
-            id: nextId(),
-            from,
-            to: target,
-            status,
-            collection: input.collection ?? null,
-            entryId: input.entryId ?? null,
-            locale: input.locale ?? null,
-            reason,
-            createdAt,
-          }
-
           await tx.query(sql`
+              insert into ${table}
+                (id, from_path, to_path, status, collection, entry_id, locale, reason, created_at)
+              values (${record.id}, ${record.from}, ${record.to}, ${record.status},
+                      ${record.collection}, ${record.entryId}, ${record.locale},
+                      ${record.reason}, ${record.createdAt})`)
+          return record
+        },
+        { immediate: true },
+      )
+    }
+
+    if (input.to === undefined || input.to.length === 0) {
+      throw new CogentaError({
+        code: 'CONTENT_ROUTE_INVALID',
+        message: 'A redirect needs a destination unless its status is 410 (Gone).',
+        hint: 'Pass "to", or set status to 410 for a page that is gone rather than moved.',
+        details: { from },
+      })
+    }
+    const to = checkPath(input.to, 'to')
+
+    if (from === to) {
+      throw new CogentaError({
+        code: 'CONTENT_REDIRECT_LOOP',
+        message: `${from} cannot redirect to itself.`,
+        hint: 'Nothing needs a redirect here: the path did not change.',
+        details: { from },
+      })
+    }
+
+    // One transaction: the chain is read, rewritten and extended together, so
+    // a second rename running at the same time cannot slot a hop in between.
+    return db.transaction(
+      async (tx) => {
+        const target = await flattenTarget(tx, from, to)
+
+        // Everything that pointed at the old path now points at the new one.
+        // This is what keeps the table one hop deep however often an entry is
+        // renamed. Rows already marked 410 are left alone (see `flattenTarget`
+        // and `targetOf`, which never treat a Gone row as a link in a chain).
+        await tx.query(sql`
+            update ${table} set to_path = ${target}
+            where to_path = ${from} and status != ${410}`)
+
+        // Delete-then-insert rather than an upsert: `ON CONFLICT`, `ON
+        // DUPLICATE KEY` and `INSERT OR REPLACE` are three different
+        // statements, and this layer owes callers one behaviour.
+        await tx.query(sql`delete from ${table} where from_path = ${from}`)
+
+        const record: RedirectRecord = {
+          id: nextId(),
+          from,
+          to: target,
+          status,
+          collection: input.collection ?? null,
+          entryId: input.entryId ?? null,
+          locale: input.locale ?? null,
+          reason,
+          createdAt,
+        }
+
+        await tx.query(sql`
             insert into ${table}
               (id, from_path, to_path, status, collection, entry_id, locale, reason, created_at)
             values (${record.id}, ${record.from}, ${record.to}, ${record.status},
                     ${record.collection}, ${record.entryId}, ${record.locale},
                     ${record.reason}, ${record.createdAt})`)
 
-          return record
-        },
-        { immediate: true },
-      )
+        return record
+      },
+      { immediate: true },
+    )
+  }
+
+  return {
+    ensureTable,
+    add: performAdd,
+
+    // A PATCH by another name: `to` and/or `status` change, everything else
+    // — `collection`, `entryId`, `locale`, `reason` — stays what it was,
+    // because none of those describe *where this redirect points*, only
+    // *why it exists*. Routed through `performAdd` rather than a second copy
+    // of its chain-flattening and loop-refusal logic, for the same reason
+    // `add()` already treats "add at an existing `from`" as a replace: they
+    // are the same operation with a different name at the call site.
+    update: async (from: string, input: UpdateRedirectInput): Promise<RedirectRecord> => {
+      await ensureTable()
+      const normalisedFrom = normalisePath(from)
+
+      const found = await db.query<RedirectRow>(sql`
+        select * from ${table} where from_path = ${normalisedFrom} limit ${limit(1)}`)
+      const row = found.rows[0]
+      if (row === undefined) {
+        throw new CogentaError({
+          code: 'REDIRECT_UNKNOWN',
+          message: `No redirect leaves "${normalisedFrom}".`,
+          hint: 'Check the path — it may already have been removed, or never existed.',
+          details: { from: normalisedFrom },
+        })
+      }
+      const existing = toRecord(row)
+
+      return performAdd({
+        from: normalisedFrom,
+        to: input.to ?? existing.to,
+        status: input.status ?? existing.status,
+        reason: existing.reason,
+        ...(existing.collection === null ? {} : { collection: existing.collection }),
+        ...(existing.entryId === null ? {} : { entryId: existing.entryId }),
+        ...(existing.locale === null ? {} : { locale: existing.locale }),
+      })
     },
 
     resolve: async (path: string): Promise<RedirectResolution | null> => {
@@ -298,6 +412,10 @@ export function createRedirectStore(options: RedirectStoreOptions): RedirectStor
       const seen = new Set<string>([start])
       let current = start
       let status: RedirectStatus = 301
+      // Once true, a later permanent hop must not paper back over an earlier
+      // temporary one — the chain as a whole must not be cached as permanent
+      // by a browser that never sees the hop that made it temporary.
+      let sawTemporary = false
 
       for (let hop = 0; hop < MAX_HOPS; hop += 1) {
         const found = await db.query<{ to_path: string; status: number }>(sql`
@@ -306,9 +424,18 @@ export function createRedirectStore(options: RedirectStoreOptions): RedirectStor
         const row = found.rows[0]
         if (row === undefined) break
 
-        // A 302 anywhere in the chain wins: a temporary hop must not be cached
-        // as permanent by a browser that never sees the rest of the chain.
-        if (Number(row.status) === 302) status = 302
+        const rowStatus = asStatus(Number(row.status))
+
+        // 410 is terminal: there is nothing further to chase, and `to_path`
+        // is only ever `current` itself for a Gone row (see `add`).
+        if (rowStatus === 410) return { to: current, status: 410 }
+
+        if (isPermanent(rowStatus)) {
+          if (!sawTemporary) status = rowStatus
+        } else {
+          status = rowStatus
+          sawTemporary = true
+        }
         current = row.to_path
 
         // A cycle in imported data resolves to the last path before the loop
@@ -354,7 +481,7 @@ function toRecord(row: RedirectRow): RedirectRecord {
     id: row.id,
     from: row.from_path,
     to: row.to_path,
-    status: Number(row.status) === 302 ? 302 : 301,
+    status: asStatus(Number(row.status)),
     collection: row.collection,
     entryId: row.entry_id,
     locale: row.locale,

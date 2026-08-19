@@ -264,6 +264,14 @@ export function installMockFetch(
       readonly deviceBreakdown?: readonly { device: string; views: number }[]
       readonly dailyViews?: readonly { day: string; views: number }[]
     }
+    /** Seeds the 404 log (fiche 12 task 1) — empty by default, like a freshly started site. */
+    readonly notFound?: readonly {
+      readonly path: string
+      readonly hits: number
+      readonly firstSeen: number
+      readonly lastSeen: number
+      readonly lastReferrer: string | null
+    }[]
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -724,13 +732,32 @@ export function installMockFetch(
     id: string
     from: string
     to: string
-    status: 301 | 302
+    status: 301 | 302 | 307 | 308 | 410
     collection: null
     entryId: null
     locale: null
-    reason: 'manual'
+    reason: 'manual' | 'import'
     createdAt: number
   }[] = []
+
+  // Prefix redirects (fiche 12 task 4) — see `redirects/pattern-panel.tsx`.
+  let patternCounter = 0
+  let redirectPatterns: {
+    id: string
+    fromPrefix: string
+    toPrefix: string
+    status: 301 | 302
+    createdAt: number
+  }[] = []
+
+  // The 404 log (fiche 12 task 1) — see `redirects/not-found-panel.tsx`.
+  let notFoundEntries: {
+    path: string
+    hits: number
+    firstSeen: number
+    lastSeen: number
+    lastReferrer: string | null
+  }[] = options.notFound === undefined ? [] : [...options.notFound]
 
   let mediaCounter = 0
   const media: {
@@ -2750,6 +2777,163 @@ export function installMockFetch(
         return json(405, { error: { code: 'INTERNAL', message: 'No such route.' } })
       }
 
+      // `/api/redirects/patterns` — prefix redirects (fiche 12 task 4). Checked
+      // before the plain `/api/redirects` block below, since that one matches
+      // on `.includes('/api/redirects')` and would otherwise also catch this.
+      if (url.includes('/api/redirects/patterns')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Access denied: redirects are admin-only.' },
+          })
+        }
+        if (method === 'GET') return json(200, { data: redirectPatterns })
+        if (method === 'POST') {
+          if (typeof body.fromPrefix !== 'string' || typeof body.toPrefix !== 'string') {
+            return json(400, {
+              error: {
+                code: 'CONTENT_ROUTE_INVALID',
+                message: 'A prefix redirect needs "fromPrefix" and "toPrefix".',
+              },
+            })
+          }
+          patternCounter += 1
+          const created = {
+            id: `pattern-${patternCounter}`,
+            fromPrefix: body.fromPrefix.endsWith('*')
+              ? body.fromPrefix.slice(0, -1)
+              : body.fromPrefix,
+            toPrefix: body.toPrefix.endsWith('*') ? body.toPrefix.slice(0, -1) : body.toPrefix,
+            status: (body.status === 302 ? 302 : 301) as 301 | 302,
+            createdAt: Date.parse('2026-03-01T00:00:00.000Z'),
+          }
+          redirectPatterns = redirectPatterns.filter((p) => p.fromPrefix !== created.fromPrefix)
+          redirectPatterns.push(created)
+          return json(201, { data: created })
+        }
+        if (method === 'DELETE') {
+          const parsed = new URL(url, 'http://localhost')
+          const fromPrefix = parsed.searchParams.get('fromPrefix')
+          const before = redirectPatterns.length
+          redirectPatterns = redirectPatterns.filter(
+            (p) => `${p.fromPrefix}*` !== fromPrefix && p.fromPrefix !== fromPrefix,
+          )
+          if (redirectPatterns.length === before) {
+            return json(404, {
+              error: { code: 'REDIRECT_UNKNOWN', message: `No pattern leaves "${fromPrefix}".` },
+            })
+          }
+          return new Response(null, { status: 204 })
+        }
+      }
+
+      // `/api/redirects/export` and `/api/redirects/import` — CSV (fiche 12
+      // task 4), also checked before the plain block for the same reason.
+      if (url.includes('/api/redirects/export') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Access denied: redirects are admin-only.' },
+          })
+        }
+        const lines = [
+          'from,to,status,reason',
+          ...redirects.map(
+            (r) => `${r.from},${r.status === 410 ? '' : r.to},${r.status},${r.reason}`,
+          ),
+        ]
+        return json(200, { data: { csv: `${lines.join('\r\n')}\r\n`, filename: 'redirects.csv' } })
+      }
+
+      if (url.includes('/api/redirects/import') && method === 'POST') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Access denied: redirects are admin-only.' },
+          })
+        }
+        const csv = typeof body.csv === 'string' ? (body.csv as string) : ''
+        const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== '')
+        const [header, ...dataLines] = lines
+        const columns = (header ?? '').split(',').map((c) => c.trim().toLowerCase())
+        const fromIndex = columns.indexOf('from')
+        const toIndex = columns.indexOf('to')
+        const statusIndex = columns.indexOf('status')
+        const rows = dataLines.map((line, index) => {
+          const cells = line.split(',')
+          const from = (cells[fromIndex] ?? '').trim()
+          const to = (cells[toIndex] ?? '').trim()
+          const status = statusIndex === -1 ? 301 : Number((cells[statusIndex] ?? '301').trim())
+          const existing = redirects.find((r) => r.from === from)
+          const outcome = existing === undefined ? 'create' : 'update'
+          return { line: index + 2, from, to, status, outcome }
+        })
+        const apply = body.apply === true
+        if (!apply) {
+          return json(200, {
+            data: {
+              rows,
+              issues: [],
+              summary: {
+                create: rows.filter((r) => r.outcome === 'create').length,
+                update: rows.filter((r) => r.outcome === 'update').length,
+                unchanged: 0,
+                duplicate: 0,
+                loop: 0,
+                invalid: 0,
+              },
+            },
+          })
+        }
+        let created = 0
+        for (const row of rows) {
+          redirects = redirects.filter((r) => r.from !== row.from)
+          redirectCounter += 1
+          redirects.push({
+            id: `redirect-${redirectCounter}`,
+            from: row.from,
+            to: row.to,
+            status: row.status as 301 | 302 | 307 | 308 | 410,
+            collection: null,
+            entryId: null,
+            locale: null,
+            reason: 'import',
+            createdAt: Date.parse('2026-03-01T00:00:00.000Z'),
+          })
+          created += 1
+        }
+        return json(200, { data: { created, updated: 0, skipped: 0, failed: [] } })
+      }
+
+      // `/api/not-found` — the 404 log (fiche 12 task 1).
+      if (url.includes('/api/not-found')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Access denied: the not-found log is admin-only.',
+            },
+          })
+        }
+        if (method === 'GET') {
+          return json(200, {
+            data: [...notFoundEntries].sort((a, b) => b.hits - a.hits),
+          })
+        }
+        if (method === 'DELETE') {
+          const parsed = new URL(url, 'http://localhost')
+          const path = parsed.searchParams.get('path')
+          const before = notFoundEntries.length
+          notFoundEntries = notFoundEntries.filter((entry) => entry.path !== path)
+          if (notFoundEntries.length === before) {
+            return json(404, {
+              error: {
+                code: 'CONTENT_NOT_FOUND',
+                message: `"${path}" is not in the not-found log.`,
+              },
+            })
+          }
+          return new Response(null, { status: 204 })
+        }
+      }
+
       // `/api/redirects` — admin-only on every method, like the real router.
       if (url.includes('/api/redirects')) {
         if (!user.roles.includes('admin')) {
@@ -2759,15 +2943,26 @@ export function installMockFetch(
         }
 
         if (method === 'GET') {
-          return json(200, { data: redirects })
+          const parsed = new URL(url, 'http://localhost')
+          const q = parsed.searchParams.get('q')?.toLowerCase()
+          const filtered =
+            q === undefined || q === ''
+              ? redirects
+              : redirects.filter(
+                  (r) => r.from.toLowerCase().includes(q) || r.to.toLowerCase().includes(q),
+                )
+          return json(200, { data: filtered, total: filtered.length })
         }
 
         if (method === 'POST') {
-          if (typeof body.from !== 'string' || typeof body.to !== 'string') {
+          if (
+            typeof body.from !== 'string' ||
+            (body.status !== 410 && typeof body.to !== 'string')
+          ) {
             return json(400, {
               error: {
                 code: 'CONTENT_ROUTE_INVALID',
-                message: 'A redirect needs "from" and "to".',
+                message: 'A redirect needs "from" and "to" unless its status is 410.',
               },
             })
           }
@@ -2780,11 +2975,17 @@ export function installMockFetch(
             })
           }
           redirectCounter += 1
+          const status = ([301, 302, 307, 308, 410].includes(body.status) ? body.status : 301) as
+            | 301
+            | 302
+            | 307
+            | 308
+            | 410
           const created = {
             id: `redirect-${redirectCounter}`,
-            from: body.from,
-            to: body.to,
-            status: (body.status === 302 ? 302 : 301) as 301 | 302,
+            from: body.from as string,
+            to: status === 410 ? (body.from as string) : (body.to as string),
+            status,
             collection: null,
             entryId: null,
             locale: null,
@@ -2793,6 +2994,20 @@ export function installMockFetch(
           }
           redirects.push(created)
           return json(201, { data: created })
+        }
+
+        if (method === 'PATCH') {
+          const parsed = new URL(url, 'http://localhost')
+          const from = parsed.searchParams.get('from')
+          const existing = redirects.find((r) => r.from === from)
+          if (existing === undefined) {
+            return json(404, {
+              error: { code: 'REDIRECT_UNKNOWN', message: `No redirect leaves "${from}".` },
+            })
+          }
+          if (typeof body.to === 'string') existing.to = body.to
+          if (typeof body.status === 'number') existing.status = body.status
+          return json(200, { data: existing })
         }
 
         if (method === 'DELETE') {

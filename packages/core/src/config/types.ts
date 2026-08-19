@@ -82,6 +82,18 @@ export interface CogentaConfigInput {
     readonly pageMaxAge?: number
   }
   /**
+   * The log of public URLs that answered a 404 (fiche 12 task 1). On by
+   * default; every field bounds how much this ever keeps (see the schema
+   * comment in `schema.ts` for why). Never carries an IP or a user agent.
+   */
+  readonly notFoundLog?: {
+    readonly enabled?: boolean
+    /** Distinct paths tracked before new ones stop being recorded. */
+    readonly maxPaths?: number
+    /** Days a path is kept since it was last requested. */
+    readonly retainDays?: number
+  }
+  /**
    * Where a content-lifecycle webhook is sent (L14 task 1).
    *
    * There is no `secret` field, on purpose: the signing secret comes from
@@ -197,6 +209,12 @@ export interface CogentaConfig {
     readonly hstsMaxAge: number
     readonly hstsIncludeSubDomains: boolean
     readonly pageMaxAge: number
+  }
+  /** The log of public URLs that answered a 404 (fiche 12 task 1). Resolved, defaults applied. */
+  readonly notFoundLog: {
+    readonly enabled: boolean
+    readonly maxPaths: number
+    readonly retainDays: number
   }
   /**
    * `secret` is `undefined` until `COGENTA_WEBHOOK_SECRET` is set. Whoever

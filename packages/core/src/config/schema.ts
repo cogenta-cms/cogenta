@@ -126,6 +126,26 @@ const securitySchema = z.strictObject({
 })
 
 /**
+ * The log of public URLs that answered a 404 (fiche 12 task 1).
+ *
+ * On by default, because an unresolved 404 is the daily nuisance no CMS
+ * should make an editor discover by luck. Everything it keeps is bounded on
+ * purpose: `maxPaths` is the hard cap on distinct paths tracked at once — an
+ * anonymous scanner can produce thousands of unique URLs a minute, and
+ * without a ceiling this log would be a disk-exhaustion vector any visitor
+ * could trigger — and `retainDays` is how long a path is kept since it was
+ * last requested. Neither an IP address nor a user agent is ever a field
+ * here, on any path: `AGENTS.md` § Logs forbids personal data outright, and
+ * the path plus its referrer already answer the only question this log
+ * exists for ("what should I redirect?").
+ */
+const notFoundLogSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  maxPaths: z.number().int().positive().max(100_000).default(2000),
+  retainDays: z.number().int().positive().max(3650).default(30),
+})
+
+/**
  * Outbound content-lifecycle webhooks (L14 task 1).
  *
  * Only the destinations live here. The shared signing secret never does: it
@@ -197,6 +217,7 @@ export const configSchema = z.strictObject({
   queue: queueSchema.prefault({}),
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
+  notFoundLog: notFoundLogSchema.prefault({}),
   webhooks: webhooksSchema.prefault({}),
   llm: llmSchema.optional(),
   embeddings: embeddingsSchema.prefault({}),

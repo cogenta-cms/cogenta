@@ -59,6 +59,8 @@ export {
   versionsTable,
 } from './naming.js'
 export { withReadOnlyStore } from './read-only.js'
+export type { RedirectTrackingOptions } from './redirect-tracking.js'
+export { withRedirectTracking } from './redirect-tracking.js'
 export type { ScheduledPublishEnqueueOptions } from './scheduled-publish-enqueue.js'
 export { withScheduledPublishEnqueue } from './scheduled-publish-enqueue.js'
 export type { Schema2MigrationOptions } from './schema-2-migration.js'

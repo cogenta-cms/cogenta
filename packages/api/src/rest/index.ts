@@ -45,6 +45,7 @@ export type {
   ReadOptions,
 } from './content-service.js'
 export { createContentService } from './content-service.js'
+export { parseCsv, stringifyCsv } from './csv.js'
 export type { DependencySource, ResponseDependencies } from './dependencies.js'
 export { collectDependencies } from './dependencies.js'
 export { FILTER_PREFIX, parseFilter } from './filter.js'
@@ -80,6 +81,8 @@ export type {
 export { createMediaRouter, variantKeyFor } from './media-router.js'
 export type { MenuItemHealth, MenuRouter, MenuRouterOptions } from './menu-router.js'
 export { createMenuRouter } from './menu-router.js'
+export type { NotFoundRouter, NotFoundRouterOptions } from './not-found-router.js'
+export { createNotFoundRouter } from './not-found-router.js'
 export type { OpsStatusRouter, OpsStatusRouterOptions } from './ops-status-router.js'
 export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'

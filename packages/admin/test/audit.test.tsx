@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -79,7 +79,13 @@ describe('audit log', () => {
     render(<App />)
     await goToAudit()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Détail' }))
+    // The default fixture lists two entries (fiche 07 task 3 added a second,
+    // `note`/`content.delete`, row) — both carry a "Détail" button, so the
+    // query is scoped to `entry-1`'s own row rather than assuming there is
+    // only one on the page.
+    const entryRow = (await screen.findByText('entry-1')).closest('tr')
+    if (entryRow === null) throw new Error('entry-1 row not found')
+    fireEvent.click(within(entryRow).getByRole('button', { name: 'Détail' }))
 
     expect(await screen.findByText('alice@example.com')).toBeDefined()
     expect(await screen.findByText('title')).toBeDefined()

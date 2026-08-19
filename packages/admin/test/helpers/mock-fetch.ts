@@ -2686,8 +2686,19 @@ export function installMockFetch(
       // (409 `CONTENT_REFERENCED`, the real error `assertNotReferenced`
       // raises) — fiche 07 task 2's partial-failure report, checked before
       // the generic handler below so this one id never reaches it.
+      //
+      // Matched with a regex tolerating a trailing query string, not
+      // `.endsWith()`: `content-client.ts`'s entry-returning calls (fiche 03)
+      // append `?depth=0` to this same route, and a bare `.endsWith()` missed
+      // it entirely — the request fell through to the generic handler below,
+      // which happily untrashed/purged an entry this fixture exists
+      // specifically to keep refusing. Found by the real cross-fiche
+      // integration test, not a review.
       if (
-        url.endsWith(`/api/content/article/${MOCK_TRASHED_BLOCKED_ENTRY.id}/untrash`) &&
+        new RegExp(
+          `/api/content/article/${MOCK_TRASHED_BLOCKED_ENTRY.id}/untrash(?:\\?.*)?$`,
+          'u',
+        ).test(url) &&
         method === 'POST'
       ) {
         return json(404, {
@@ -2698,7 +2709,10 @@ export function installMockFetch(
         })
       }
       if (
-        url.endsWith(`/api/content/article/${MOCK_TRASHED_BLOCKED_ENTRY.id}/purge`) &&
+        new RegExp(
+          `/api/content/article/${MOCK_TRASHED_BLOCKED_ENTRY.id}/purge(?:\\?.*)?$`,
+          'u',
+        ).test(url) &&
         method === 'POST'
       ) {
         return json(409, {

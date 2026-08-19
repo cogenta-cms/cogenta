@@ -8,6 +8,7 @@ import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { TaxonomyStore } from '../../src/store/taxonomy-store.js'
 import { createTaxonomyStore } from '../../src/store/taxonomy-store.js'
+import { countTaxonomyUsage } from '../../src/store/taxonomy-usage.js'
 
 export interface TaxonomyHarness {
   readonly db: DatabaseHandle
@@ -241,6 +242,60 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
         expect((await categories.read(root.id))?.path).toBe(`/${root.id}/`)
       })
 
+      it('refuses a term nested past the depth the materialised path column is bounded to', async () => {
+        // Twelve terms, depths 0..11 — the deepest already allowed.
+        let parent: string | null = null
+        for (let level = 0; level < 12; level += 1) {
+          const term = await categories.create({
+            slug: `level-${level}`,
+            labels: { fr: `Niveau ${level}` },
+            parent,
+          })
+          expect(term.depth).toBe(level)
+          parent = term.id
+        }
+
+        // A thirteenth level would sit at depth 12, past MAX_TAXONOMY_DEPTH.
+        await expect(
+          categories.create({ slug: 'level-12', labels: { fr: 'Niveau 12' }, parent }),
+        ).rejects.toMatchObject({ code: 'TAXONOMY_TOO_DEEP' })
+      })
+
+      it('refuses a move whose subtree would land past the depth bound, and moves nothing', async () => {
+        // Eleven ancestors, depths 0..10.
+        let parent: string | null = null
+        for (let level = 0; level < 11; level += 1) {
+          const term = await categories.create({
+            slug: `branch-${level}`,
+            labels: { fr: `Branche ${level}` },
+            parent,
+          })
+          parent = term.id
+        }
+        const deepest = parent as string
+
+        // A two-level branch elsewhere: moving it under `deepest` (depth 10)
+        // would put its child at depth 12 — the leaf alone would fit (11),
+        // but the deepest descendant is what has to fit, not the root of the
+        // moved branch.
+        const branchRoot = await categories.create({ slug: 'other-root', labels: { fr: 'Racine' } })
+        const branchChild = await categories.create({
+          slug: 'other-child',
+          labels: { fr: 'Enfant' },
+          parent: branchRoot.id,
+        })
+
+        await expect(categories.move(branchRoot.id, deepest)).rejects.toMatchObject({
+          code: 'TAXONOMY_TOO_DEEP',
+        })
+
+        // Refused wholesale: neither the root nor the child was rewritten.
+        expect((await categories.read(branchRoot.id))?.path).toBe(`/${branchRoot.id}/`)
+        expect((await categories.read(branchChild.id))?.path).toBe(
+          `/${branchRoot.id}/${branchChild.id}/`,
+        )
+      })
+
       it('rewrites no path at all when a term is merely renamed', async () => {
         const root = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
         const child = await categories.create({
@@ -274,6 +329,47 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
         expect(await categories.list()).toHaveLength(3)
       })
 
+      it('orders siblings by position, and honours a later reorder — not by id or creation order', async () => {
+        const root = await categories.create({ slug: 'root', labels: { fr: 'Racine' } })
+        const first = await categories.create({
+          slug: 'a',
+          labels: { fr: 'A' },
+          parent: root.id,
+        })
+        const second = await categories.create({
+          slug: 'b',
+          labels: { fr: 'B' },
+          parent: root.id,
+        })
+
+        // Created in this order, so position starts out matching it.
+        expect((await categories.list({ parent: root.id })).map((term) => term.slug)).toEqual([
+          'a',
+          'b',
+        ])
+
+        // Swap the two — a plain position update, no move.
+        await categories.update(first.id, { position: 1 })
+        await categories.update(second.id, { position: 0 })
+
+        // Both the single-level listing and the whole tree must reflect it:
+        // a materialised path sorts by the id it ends in, which is not
+        // `position`, so this only holds if the store orders in memory
+        // rather than trusting `order by path`.
+        expect((await categories.list({ parent: root.id })).map((term) => term.slug)).toEqual([
+          'b',
+          'a',
+        ])
+        expect(
+          (await categories.list()).filter((term) => term.parent === root.id).map((t) => t.slug),
+        ).toEqual(['b', 'a'])
+        expect(
+          (await categories.subtree(root.id))
+            .filter((term) => term.parent === root.id)
+            .map((t) => t.slug),
+        ).toEqual(['b', 'a'])
+      })
+
       it('refuses to delete a term that still has children, unless cascade is asked for', async () => {
         const root = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
         const child = await categories.create({
@@ -302,7 +398,7 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
         })
 
         const read = await recipes.read(entry.id, { state: 'working' })
-        expect(read?.values['categories']).toEqual([desserts.id, cuisine.id])
+        expect(read?.values.categories).toEqual([desserts.id, cuisine.id])
       })
 
       it('reuses the very same term across two collections', async () => {
@@ -317,10 +413,10 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
 
         // The whole reason a taxonomy is not a collection: one term, two
         // collections, no duplication.
-        expect((await recipes.read(dish.id, { state: 'working' }))?.values['categories']).toEqual([
+        expect((await recipes.read(dish.id, { state: 'working' }))?.values.categories).toEqual([
           cuisine.id,
         ])
-        expect((await posts.read(article.id, { state: 'working' }))?.values['categories']).toEqual([
+        expect((await posts.read(article.id, { state: 'working' }))?.values.categories).toEqual([
           cuisine.id,
         ])
       })
@@ -335,7 +431,7 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
 
         const read = await recipes.read(entry.id, { state: 'working' })
         expect(read).not.toBeNull()
-        expect(read?.values['categories']).toEqual([])
+        expect(read?.values.categories).toEqual([])
       })
 
       it('holds a single term in a column when the field is not many', async () => {
@@ -344,9 +440,127 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
           values: { title: 'Soupe', keywords: vegan.id },
         })
 
-        expect((await recipes.read(entry.id, { state: 'working' }))?.values['keywords']).toBe(
-          vegan.id,
-        )
+        expect((await recipes.read(entry.id, { state: 'working' }))?.values.keywords).toBe(vegan.id)
+      })
+    })
+
+    describe('counting how many entries carry a term', () => {
+      it('counts direct usage and usage with descendants, across every collection that reuses the term', async () => {
+        const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+        const desserts = await categories.create({
+          slug: 'desserts',
+          labels: { fr: 'Desserts' },
+          parent: cuisine.id,
+        })
+
+        const dish = await recipes.create({
+          values: { title: 'Tarte', categories: [desserts.id] },
+        })
+        await recipes.publish(dish.id)
+        // The same term, reused on a second collection — the whole reason a
+        // taxonomy exists rather than being duplicated per collection.
+        const article = await posts.create({
+          values: { title: 'Le goût du sucre', categories: [cuisine.id] },
+        })
+        await posts.publish(article.id)
+
+        const usage = await countTaxonomyUsage({
+          db,
+          taxonomy: category,
+          terms: await categories.list(),
+          collections,
+          readable: () => true,
+          includeDrafts: () => false,
+        })
+
+        expect(usage.get(desserts.id)).toEqual({ own: 1, withDescendants: 1 })
+        // "Cuisine" itself classifies one article directly, and inherits
+        // "Desserts"'s one dish once descendants are counted in — the figure
+        // a deletion confirmation needs, since deleting "Cuisine" would take
+        // "Desserts" and unclassify both.
+        expect(usage.get(cuisine.id)).toEqual({ own: 1, withDescendants: 2 })
+      })
+
+      it('counts a single-valued (many: false) taxonomy field the same way as a many one', async () => {
+        const vegan = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })
+        const entry = await recipes.create({ values: { title: 'Soupe', keywords: vegan.id } })
+        await recipes.publish(entry.id)
+
+        const usage = await countTaxonomyUsage({
+          db,
+          taxonomy: keyword,
+          terms: await keywords.list(),
+          collections,
+          readable: () => true,
+          includeDrafts: () => false,
+        })
+
+        expect(usage.get(vegan.id)).toEqual({ own: 1, withDescendants: 1 })
+      })
+
+      it('excludes drafts unless the caller says this actor may read them on that collection', async () => {
+        const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+        // Never published: stays a draft.
+        await recipes.create({ values: { title: 'Tarte', categories: [cuisine.id] } })
+
+        const terms = await categories.list()
+
+        const publicOnly = await countTaxonomyUsage({
+          db,
+          taxonomy: category,
+          terms,
+          collections,
+          readable: () => true,
+          includeDrafts: () => false,
+        })
+        expect(publicOnly.get(cuisine.id)?.own).toBe(0)
+
+        const withDraftAccess = await countTaxonomyUsage({
+          db,
+          taxonomy: category,
+          terms,
+          collections,
+          readable: () => true,
+          includeDrafts: () => true,
+        })
+        expect(withDraftAccess.get(cuisine.id)?.own).toBe(1)
+      })
+
+      it('never counts a trashed entry, even for an actor who may read drafts', async () => {
+        const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+        const dish = await recipes.create({
+          values: { title: 'Tarte', categories: [cuisine.id] },
+        })
+        await recipes.publish(dish.id)
+        await recipes.delete(dish.id)
+
+        const usage = await countTaxonomyUsage({
+          db,
+          taxonomy: category,
+          terms: await categories.list(),
+          collections,
+          readable: () => true,
+          includeDrafts: () => true,
+        })
+        expect(usage.get(cuisine.id)?.own).toBe(0)
+      })
+
+      it('never counts a collection this caller may not read at all', async () => {
+        const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+        const article = await posts.create({
+          values: { title: 'Le goût du sucre', categories: [cuisine.id] },
+        })
+        await posts.publish(article.id)
+
+        const usage = await countTaxonomyUsage({
+          db,
+          taxonomy: category,
+          terms: await categories.list(),
+          collections,
+          readable: (name) => name !== 'tx_post',
+          includeDrafts: () => false,
+        })
+        expect(usage.get(cuisine.id)?.own).toBe(0)
       })
     })
   })

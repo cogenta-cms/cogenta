@@ -3,9 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import {
+  type CollectionDefinition,
+  createContentStore,
   createSchemaTables,
   createTaxonomyStore,
+  defineCollection,
   defineTaxonomy,
+  f,
   type TaxonomyDefinition,
   type TaxonomyStore,
 } from '@cogenta/schema'
@@ -308,5 +312,187 @@ describe('the taxonomy transport', () => {
 
       expect((await router.handle(request('GET', '/api_internal'), withGrant)).status).toBe(403)
     })
+  })
+})
+
+/**
+ * `?counts=1`, `?unused=1` and `?q=` (`08-taxonomies.md`, task 3): the list
+ * route grows the ability to say how many entries carry a term, and to find
+ * one by label or slug — never a second endpoint, since the client already
+ * fetches the whole tree to render it.
+ */
+describe('taxonomy usage counts and search', () => {
+  const TOPIC: TaxonomyDefinition = defineTaxonomy({
+    name: 'usage_topic',
+    labels: { singular: { fr: 'Sujet', en: 'Topic' } },
+    hierarchical: true,
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  })
+
+  const RECIPE: CollectionDefinition = defineCollection({
+    name: 'usage_recipe',
+    labels: { singular: 'Recipe', plural: 'Recipes' },
+    fields: {
+      title: f.text({ required: true, max: 200 }),
+      topics: f.taxonomy({ of: 'usage_topic', many: true }),
+    },
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
+  })
+
+  /** Closed to `public`, so it proves a term's usage there never leaks out. */
+  const SECRET: CollectionDefinition = defineCollection({
+    name: 'usage_secret',
+    labels: { singular: 'Secret', plural: 'Secrets' },
+    fields: {
+      title: f.text({ required: true, max: 200 }),
+      topics: f.taxonomy({ of: 'usage_topic', many: true }),
+    },
+    permissions: { read: ['admin'], create: ['admin'], publish: ['admin'] },
+  })
+
+  const COLLECTIONS = [RECIPE, SECRET]
+
+  let db: DatabaseHandle
+  let directory: string
+  let topics: TaxonomyStore
+  let recipes: ReturnType<typeof createContentStore>
+  let secrets: ReturnType<typeof createContentStore>
+
+  const routerWith = (usage: { readonly db: DatabaseHandle } | undefined): TaxonomyRouter =>
+    createTaxonomyRouter({
+      taxonomies: [TOPIC],
+      permissions: createPermissionLayer(),
+      storeFor: (taxonomy) => createTaxonomyStore({ db, taxonomy }),
+      ...(usage === undefined ? {} : { usage: { db: usage.db, collections: COLLECTIONS } }),
+    })
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'cogenta-taxonomy-usage-'))
+    db = await createSqliteHandle({ url: join(directory, 'taxonomy.db') })
+    await createSchemaTables(db, COLLECTIONS, [TOPIC])
+
+    topics = createTaxonomyStore({ db, taxonomy: TOPIC })
+    recipes = createContentStore({ db, collection: RECIPE })
+    secrets = createContentStore({ db, collection: SECRET })
+  })
+
+  afterEach(async () => {
+    await db.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  it('adds no entryCount at all unless ?counts=1 is asked for', async () => {
+    const cuisine = await topics.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+    const router = routerWith({ db })
+
+    const plain = await router.handle(request('GET', '/usage_topic'), asPublic)
+    expect(dataOf<{ id: string; entryCount?: unknown }[]>(plain)[0]?.entryCount).toBeUndefined()
+
+    const dish = await recipes.create({ values: { title: 'Tarte', topics: [cuisine.id] } })
+    await recipes.publish(dish.id)
+
+    const counted = await router.handle(
+      request('GET', '/usage_topic', { query: { counts: '1' } }),
+      asPublic,
+    )
+    const term =
+      dataOf<{ id: string; entryCount?: { own: number; withDescendants: number } }[]>(counted)[0]
+    expect(term?.entryCount).toEqual({ own: 1, withDescendants: 1 })
+  })
+
+  it('counts descendants in separately from a term’s own count', async () => {
+    const cuisine = await topics.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+    const desserts = await topics.create({
+      slug: 'desserts',
+      labels: { fr: 'Desserts' },
+      parent: cuisine.id,
+    })
+    const dish = await recipes.create({ values: { title: 'Tarte', topics: [desserts.id] } })
+    await recipes.publish(dish.id)
+
+    const router = routerWith({ db })
+    const response = await router.handle(
+      request('GET', '/usage_topic', { query: { counts: '1' } }),
+      asPublic,
+    )
+    const byId = new Map(
+      dataOf<{ id: string; entryCount: { own: number; withDescendants: number } }[]>(response).map(
+        (term) => [term.id, term.entryCount],
+      ),
+    )
+
+    expect(byId.get(desserts.id)).toEqual({ own: 1, withDescendants: 1 })
+    // "Cuisine" classifies nothing directly, but inherits its child's dish.
+    expect(byId.get(cuisine.id)).toEqual({ own: 0, withDescendants: 1 })
+  })
+
+  it('never counts a collection this actor may not read, even as admin sees it', async () => {
+    const cuisine = await topics.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+    const memo = await secrets.create({ values: { title: 'Confidentiel', topics: [cuisine.id] } })
+    await secrets.publish(memo.id)
+
+    const router = routerWith({ db })
+
+    const asPublicResponse = await router.handle(
+      request('GET', '/usage_topic', { query: { counts: '1' } }),
+      asPublic,
+    )
+    expect(
+      dataOf<{ id: string; entryCount: { own: number } }[]>(asPublicResponse)[0]?.entryCount.own,
+    ).toBe(0)
+
+    const asAdminResponse = await router.handle(
+      request('GET', '/usage_topic', { query: { counts: '1' } }),
+      asAdmin,
+    )
+    expect(
+      dataOf<{ id: string; entryCount: { own: number } }[]>(asAdminResponse)[0]?.entryCount.own,
+    ).toBe(1)
+  })
+
+  it('keeps only zero-usage terms with ?unused=1', async () => {
+    const cuisine = await topics.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+    const voyage = await topics.create({ slug: 'voyage', labels: { fr: 'Voyage' } })
+    const dish = await recipes.create({ values: { title: 'Tarte', topics: [cuisine.id] } })
+    await recipes.publish(dish.id)
+
+    const router = routerWith({ db })
+    const response = await router.handle(
+      request('GET', '/usage_topic', { query: { unused: '1' } }),
+      asPublic,
+    )
+    const ids = dataOf<{ id: string }[]>(response).map((term) => term.id)
+
+    expect(ids).toEqual([voyage.id])
+  })
+
+  it('finds a term by label or slug, accent- and case-insensitive, with ?q=', async () => {
+    await topics.create({ slug: 'cafe-gourmand', labels: { fr: 'Café gourmand' } })
+    await topics.create({ slug: 'voyage', labels: { fr: 'Voyage' } })
+
+    const router = routerWith({ db })
+    const response = await router.handle(
+      request('GET', '/usage_topic', { query: { q: 'CAFE' } }),
+      asPublic,
+    )
+    const slugs = dataOf<{ slug: string }[]>(response).map((term) => term.slug)
+
+    expect(slugs).toEqual(['cafe-gourmand'])
+  })
+
+  it('ignores ?counts=1 and ?unused=1 when no usage source is wired', async () => {
+    const cuisine = await topics.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+    const router = routerWith(undefined)
+
+    const response = await router.handle(
+      request('GET', '/usage_topic', { query: { counts: '1', unused: '1' } }),
+      asPublic,
+    )
+    const terms = dataOf<{ id: string; entryCount?: unknown }[]>(response)
+
+    // Neither parameter breaks the plain listing: no entryCount, and
+    // "unused" filters nothing since usage was never asked to compute it.
+    expect(terms.map((term) => term.id)).toEqual([cuisine.id])
+    expect(terms[0]?.entryCount).toBeUndefined()
   })
 })

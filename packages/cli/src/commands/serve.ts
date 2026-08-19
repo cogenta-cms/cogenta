@@ -846,6 +846,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       taxonomies,
       permissions,
       storeFor: (taxonomy) => taxonomyStoreFor(taxonomy),
+      // Wires `?counts=1`/`?unused=1` (08-taxonomies.md, task 3): every real
+      // server has a database and a collection set, so this is never left out
+      // here — only the router's own tests exercise the "no usage source"
+      // degradation.
+      usage: { db, collections },
     }),
     marketplaceRouter: createMarketplaceRouter({
       catalog: marketplaceCatalog,

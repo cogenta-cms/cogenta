@@ -255,4 +255,144 @@ describe('taxonomies and the trash, end to end', () => {
 
     await server.stop()
   })
+
+  it('renames a term, moves a subtree, and reports real usage counts — end to end, over HTTP', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['editor', 'admin'])
+    const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+
+    const createTerm = async (
+      slug: string,
+      labels: Record<string, string>,
+      parent: string | null = null,
+    ): Promise<{ id: string; depth: number }> => {
+      const response = await fetch(`${server.base}/api/taxonomies/topic`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ slug, labels, parent }),
+      })
+      expect(response.status).toBe(201)
+      return ((await response.json()) as { data: { id: string; depth: number } }).data
+    }
+
+    const cuisine = await createTerm('cuisine', { en: 'Cooking' })
+    const desserts = await createTerm('desserts', { en: 'Desserts' }, cuisine.id)
+    const voyage = await createTerm('voyage', { en: 'Travel' })
+
+    // Several articles classified with "desserts" — 08-taxonomies.md's own
+    // acceptance criterion for task 1 (stated there as "forty articles")
+    // is renaming must not unclassify any of them; the count here is
+    // smaller only to keep this real-HTTP test fast, not the property.
+    const ARTICLE_COUNT = 6
+    const articleIds: string[] = []
+    for (let index = 0; index < ARTICLE_COUNT; index += 1) {
+      const response = await fetch(`${server.base}/api/content/article`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ values: { title: `Article ${index}`, topics: [desserts.id] } }),
+      })
+      expect(response.status).toBe(201)
+      const created = ((await response.json()) as { data: { id: string } }).data
+      articleIds.push(created.id)
+      await fetch(`${server.base}/api/content/article/${created.id}/publish`, {
+        method: 'POST',
+        headers: auth,
+      })
+    }
+
+    // Rename "desserts" — labels and slug change, nothing about the tree does.
+    const renamed = await fetch(`${server.base}/api/taxonomies/topic/${desserts.id}`, {
+      method: 'PATCH',
+      headers: auth,
+      body: JSON.stringify({ slug: 'patisserie', labels: { en: 'Pastry' } }),
+    })
+    expect(renamed.status).toBe(200)
+    const renamedTerm = ((await renamed.json()) as { data: { slug: string; parent: string } }).data
+    expect(renamedTerm.slug).toBe('patisserie')
+    expect(renamedTerm.parent).toBe(cuisine.id)
+
+    // Every one of the articles is still classified.
+    for (const id of articleIds) {
+      const read = await fetch(`${server.base}/api/content/article/${id}?state=working`, {
+        headers: auth,
+      })
+      const body = (await read.json()) as { data: { values: { topics: string[] } } }
+      expect(body.data.values.topics).toEqual([desserts.id])
+    }
+
+    // Usage counts, over the real route — own and with-descendants, and the
+    // right numbers on the right term.
+    const counted = await fetch(`${server.base}/api/taxonomies/topic?counts=1`, {
+      headers: auth,
+    })
+    expect(counted.status).toBe(200)
+    const countedBody = (await counted.json()) as {
+      data: { id: string; entryCount: { own: number; withDescendants: number } }[]
+    }
+    const dessertsCount = countedBody.data.find((term) => term.id === desserts.id)
+    expect(dessertsCount?.entryCount).toEqual({
+      own: ARTICLE_COUNT,
+      withDescendants: ARTICLE_COUNT,
+    })
+    const cuisineCount = countedBody.data.find((term) => term.id === cuisine.id)
+    expect(cuisineCount?.entryCount).toEqual({ own: 0, withDescendants: ARTICLE_COUNT })
+    const voyageCount = countedBody.data.find((term) => term.id === voyage.id)
+    expect(voyageCount?.entryCount).toEqual({ own: 0, withDescendants: 0 })
+
+    // "unused only" keeps every term with zero *direct* classifications —
+    // "cuisine" qualifies too, even though it inherits every article
+    // through its child: `own` is what the filter reads, not
+    // `withDescendants`, and both counts are shown precisely so the two
+    // questions stay distinct. "desserts" is the only one excluded.
+    const unused = await fetch(`${server.base}/api/taxonomies/topic?unused=1`, {
+      headers: auth,
+    })
+    const unusedBody = (await unused.json()) as { data: { id: string }[] }
+    expect(unusedBody.data.map((term) => term.id).sort()).toEqual([cuisine.id, voyage.id].sort())
+
+    // Refuses a move that would make "cuisine" its own descendant — checked
+    // while "patisserie" (ex-"desserts") is still nested under it, which is
+    // the only arrangement that makes this a real cycle to refuse.
+    const cyclic = await fetch(`${server.base}/api/taxonomies/topic/${cuisine.id}/move`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ parent: desserts.id }),
+    })
+    expect(cyclic.status).toBe(400)
+    const cyclicBody = (await cyclic.json()) as { error: { code: string } }
+    expect(cyclicBody.error.code).toBe('TAXONOMY_CYCLE')
+    // Nothing moved: "cuisine" is still a root.
+    const cuisineAfter = await fetch(`${server.base}/api/taxonomies/topic/${cuisine.id}`, {
+      headers: auth,
+    })
+    expect(
+      ((await cuisineAfter.json()) as { data: { parent: string | null } }).data.parent,
+    ).toBeNull()
+
+    // Moving the (renamed) subtree: "patisserie" goes under "voyage" — a
+    // deliberately odd move, chosen only to prove the whole branch travels.
+    const moved = await fetch(`${server.base}/api/taxonomies/topic/${desserts.id}/move`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ parent: voyage.id }),
+    })
+    expect(moved.status).toBe(200)
+    const movedBody = ((await moved.json()) as { data: { parent: string; depth: number } }).data
+    expect(movedBody.parent).toBe(voyage.id)
+    expect(movedBody.depth).toBe(1)
+
+    // The articles are still classified with the very same term id — a
+    // move rewrites the tree, never the classification.
+    const stillClassified = await fetch(
+      `${server.base}/api/content/article/${articleIds[0]}?state=working`,
+      { headers: auth },
+    )
+    const stillBody = (await stillClassified.json()) as {
+      data: { values: { topics: string[] } }
+    }
+    expect(stillBody.data.values.topics).toEqual([desserts.id])
+
+    await server.stop()
+  }, 30_000)
 })

@@ -127,18 +127,18 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
   }
 
   function toTerm(row: Row): TaxonomyTerm {
-    const path = text(row['path'])
+    const path = text(row.path)
     return {
-      id: text(row['id']),
+      id: text(row.id),
       taxonomy: taxonomy.name,
-      parent: nullableText(row['parent_id']),
-      slug: text(row['slug']),
-      labels: parseLabels(row['labels']),
-      position: Number(row['position']),
+      parent: nullableText(row.parent_id),
+      slug: text(row.slug),
+      labels: parseLabels(row.labels),
+      position: Number(row.position),
       path,
       depth: depthOf(path),
-      createdAt: text(row['created_at']),
-      updatedAt: text(row['updated_at']),
+      createdAt: text(row.created_at),
+      updatedAt: text(row.updated_at),
     }
   }
 
@@ -148,21 +148,75 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
   }
 
   /**
-   * Tree order: a parent immediately before its children, siblings by
-   * `position`.
+   * Orders two siblings: by `position`, and by `id` only to break an exact
+   * tie (two terms never legitimately share a position; `id` just keeps the
+   * result deterministic if they do).
    *
-   * Sorting on the path alone would order siblings by id, which is arbitrary;
-   * sorting on `position` alone would interleave branches. Sorting on both,
-   * with the path first, is what makes a flat list renderable as a tree
-   * without a second pass.
+   * This — not an SQL `order by` — is what makes `position` mean anything.
+   * A term's path ends in its own id, so `order by path asc` alone already
+   * produces a full, unique order on its own: one that reflects the id
+   * (effectively creation order, since ids are UUIDv7), never `position`.
+   * Sorting rows here, once they are in memory, is what a caller's "move this
+   * term up" actually changes.
    */
-  const treeOrder: SqlFragment = sql`${pathColumn} asc, ${positionColumn} asc`
+  function siblingCompare(a: Row, b: Row): number {
+    const byPosition = Number(a.position) - Number(b.position)
+    if (byPosition !== 0) return byPosition
+    const idA = text(a.id)
+    const idB = text(b.id)
+    return idA < idB ? -1 : idA > idB ? 1 : 0
+  }
+
+  /** The whole tree, flattened depth-first from the roots, siblings by `position`. */
+  function flattenFullTree(rows: readonly Row[]): Row[] {
+    const byParent = groupByParent(rows)
+    const ordered: Row[] = []
+    const visit = (parent: string | null): void => {
+      for (const row of byParent.get(parent) ?? []) {
+        ordered.push(row)
+        visit(text(row.id))
+      }
+    }
+    visit(null)
+    return ordered
+  }
+
+  /**
+   * `rootId` plus everything beneath it, flattened depth-first — for
+   * `list({ under })` and `subtree()`, whose `rows` already hold exactly that
+   * set (fetched by the materialised path's `like`), unordered.
+   */
+  function flattenSubtree(rows: readonly Row[], rootId: string): Row[] {
+    const byParent = groupByParent(rows)
+    const byId = new Map(rows.map((row) => [text(row.id), row]))
+    const ordered: Row[] = []
+    const visit = (id: string): void => {
+      const row = byId.get(id)
+      if (row === undefined) return
+      ordered.push(row)
+      for (const child of byParent.get(id) ?? []) visit(text(child.id))
+    }
+    visit(rootId)
+    return ordered
+  }
+
+  function groupByParent(rows: readonly Row[]): Map<string | null, Row[]> {
+    const byParent = new Map<string | null, Row[]>()
+    for (const row of rows) {
+      const parent = nullableText(row.parent_id)
+      const list = byParent.get(parent) ?? []
+      list.push(row)
+      byParent.set(parent, list)
+    }
+    for (const list of byParent.values()) list.sort(siblingCompare)
+    return byParent
+  }
 
   async function assertSlugFree(tx: SqlExecutor, slug: string, exceptId?: string): Promise<void> {
     const found = await tx.query<Row>(
       sql`select ${idColumn} from ${table} where ${slugColumn} = ${slug}`,
     )
-    const clash = found.rows.find((row) => text(row['id']) !== exceptId)
+    const clash = found.rows.find((row) => text(row.id) !== exceptId)
     if (clash === undefined) return
 
     throw new CogentaError({
@@ -187,7 +241,7 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
 
     const row = await rowOf(tx, parent)
     if (row === null) throw termNotFound(parent)
-    return text(row['path'])
+    return text(row.path)
   }
 
   /** Last position among a parent's children, so a new term lands at the end. */
@@ -197,7 +251,7 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
         ? sql`select ${positionColumn} from ${table} where ${parentColumn} is null`
         : sql`select ${positionColumn} from ${table} where ${parentColumn} = ${parent}`,
     )
-    return found.rows.reduce((highest, row) => Math.max(highest, Number(row['position']) + 1), 0)
+    return found.rows.reduce((highest, row) => Math.max(highest, Number(row.position) + 1), 0)
   }
 
   return {
@@ -292,7 +346,7 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
           const row = await rowOf(tx, id)
           if (row === null) throw termNotFound(id)
 
-          const from = text(row['path'])
+          const from = text(row.path)
           const parentPath = await parentPathOf(tx, parent)
 
           // A term cannot become its own descendant. With a materialised path
@@ -319,13 +373,13 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
           // the moved term itself would let a three-level branch slide past the
           // bound and be refused later, half-moved.
           for (const member of subtree.rows) {
-            assertDepth(taxonomy.name, rebasedPath(text(member['path']), from, to))
+            assertDepth(taxonomy.name, rebasedPath(text(member.path), from, to))
           }
 
           const at = stamp()
           for (const member of subtree.rows) {
-            const memberId = text(member['id'])
-            const rebased = rebasedPath(text(member['path']), from, to)
+            const memberId = text(member.id)
+            const rebased = rebasedPath(text(member.path), from, to)
             await tx.query(
               sql`update ${table}
                   set ${pathColumn} = ${rebased}, ${identifier('updated_at', dialect)} = ${at}
@@ -351,24 +405,22 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
         const row = await rowOf(db, listOptions.under)
         if (row === null) throw termNotFound(listOptions.under)
         const found = await db.query<Row>(
-          sql`select * from ${table}
-              where ${pathColumn} like ${`${text(row['path'])}%`}
-              order by ${treeOrder}`,
+          sql`select * from ${table} where ${pathColumn} like ${`${text(row.path)}%`}`,
         )
-        return found.rows.map(toTerm)
+        return flattenSubtree(found.rows, listOptions.under).map(toTerm)
       }
 
       if (listOptions.parent !== undefined) {
         const found = await db.query<Row>(
           listOptions.parent === null
-            ? sql`select * from ${table} where ${parentColumn} is null order by ${treeOrder}`
-            : sql`select * from ${table} where ${parentColumn} = ${listOptions.parent} order by ${treeOrder}`,
+            ? sql`select * from ${table} where ${parentColumn} is null`
+            : sql`select * from ${table} where ${parentColumn} = ${listOptions.parent}`,
         )
-        return found.rows.map(toTerm)
+        return [...found.rows].sort(siblingCompare).map(toTerm)
       }
 
-      const found = await db.query<Row>(sql`select * from ${table} order by ${treeOrder}`)
-      return found.rows.map(toTerm)
+      const found = await db.query<Row>(sql`select * from ${table}`)
+      return flattenFullTree(found.rows).map(toTerm)
     },
 
     subtree: async (id) => {
@@ -376,11 +428,9 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
       if (row === null) throw termNotFound(id)
 
       const found = await db.query<Row>(
-        sql`select * from ${table}
-            where ${pathColumn} like ${`${text(row['path'])}%`}
-            order by ${treeOrder}`,
+        sql`select * from ${table} where ${pathColumn} like ${`${text(row.path)}%`}`,
       )
-      return found.rows.map(toTerm)
+      return flattenSubtree(found.rows, id).map(toTerm)
     },
 
     ancestors: async (id) => {
@@ -389,7 +439,7 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
 
       // The path already *is* the ancestry, so this is one query by id list
       // rather than a walk of n queries up the tree.
-      const ids = text(row['path'])
+      const ids = text(row.path)
         .split('/')
         .filter((segment) => segment !== '')
       if (ids.length === 0) return []
@@ -397,7 +447,7 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
       const found = await db.query<Row>(
         sql`select * from ${table} where ${idColumn} in (${valueList(ids)})`,
       )
-      const byId = new Map(found.rows.map((member) => [text(member['id']), member]))
+      const byId = new Map(found.rows.map((member) => [text(member.id), member]))
       return ids
         .map((ancestorId) => byId.get(ancestorId))
         .filter((member): member is Row => member !== undefined)
@@ -410,11 +460,11 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
           const row = await rowOf(tx, id)
           if (row === null) return false
 
-          const path = text(row['path'])
+          const path = text(row.path)
           const descendants = await tx.query<Row>(
             sql`select ${idColumn}, ${pathColumn} from ${table} where ${pathColumn} like ${`${path}%`}`,
           )
-          const children = descendants.rows.filter((member) => isBelow(text(member['path']), path))
+          const children = descendants.rows.filter((member) => isBelow(text(member.path), path))
 
           // Refusing by default rather than cascading: deleting "Cuisine" must
           // not silently take "Desserts" and "Entrées" with it. The caller who

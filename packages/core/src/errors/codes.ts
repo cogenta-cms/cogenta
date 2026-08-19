@@ -122,6 +122,15 @@ export const ERROR_CODES = [
   // Auth — self-service password reset over HTTP (L11, forgot-password route)
   'AUTH_RESET_TOKEN_INVALID',
 
+  // Auth — account lifecycle (fiche 17: invitations and anonymization)
+  // The invitation reuses AUTH_RESET_TOKEN_INVALID for the token itself
+  // (same primitive, same failure shape) — these four are the states around
+  // it that a reset token was never asked to describe.
+  'AUTH_INVITE_UNAVAILABLE',
+  'AUTH_INVITE_INVALID_STATE',
+  'AUTH_ACCOUNT_ANONYMIZED',
+  'AUTH_ANONYMIZE_CONFIRMATION_MISMATCH',
+
   // API keys (L13 task 8: machine-to-machine bearer tokens)
   'API_KEY_INVALID',
   'API_KEY_REVOKED',

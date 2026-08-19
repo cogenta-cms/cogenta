@@ -201,6 +201,14 @@ export function installMockFetch(
       readonly deviceBreakdown?: readonly { device: string; views: number }[]
       readonly dailyViews?: readonly { day: string; views: number }[]
     }
+    /**
+     * Fiche 17 task 1's R1 fallback, made choosable per test: `false` (the
+     * default, and what a site with no email transport actually reports)
+     * means `POST /api/users` always takes the generated-password path, the
+     * same as before this fiche — a test that wants to exercise the
+     * invitation path opts in explicitly.
+     */
+    readonly invitationEmailAvailable?: boolean
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -271,10 +279,36 @@ export function installMockFetch(
     id: string
     email: string
     roles: readonly string[]
-    status: 'active' | 'disabled'
+    status: 'active' | 'disabled' | 'invited' | 'anonymized'
     createdAt: string
     updatedAt: string
     mfa: { totp: boolean; passkeys: number }
+    // Fiche 17 task 3's public profile, self-service only in the real router
+    // — settable here only through the `me/profile` branch below.
+    displayName?: string | null
+    avatarMediaId?: string | null
+    bio?: string | null
+    locale?: string | null
+    // Fiche 17 task 1 — only meaningful while `status === 'invited'`.
+    invitedAt?: string
+  }
+
+  /** The wire shape `AdminUser` expects — fiche 17's fields default the same way an untouched account's do on the real server. */
+  function toWireAccount(account: MockAccount): unknown {
+    return {
+      ...account,
+      displayName: account.displayName ?? null,
+      avatarMediaId: account.avatarMediaId ?? null,
+      bio: account.bio ?? null,
+      locale: account.locale ?? null,
+      mfaRecommended: false,
+      lastSignInAt: null,
+      dormant: false,
+      invitation:
+        account.status === 'invited' && account.invitedAt !== undefined
+          ? { sentAt: account.invitedAt, expiresAt: '2030-01-01T00:00:00.000Z' }
+          : null,
+    }
   }
   // Commerce state (contract E, ADR-0024), per `installMockFetch()` call —
   // one order and one payment pre-seeded so a test can open the order detail
@@ -975,25 +1009,62 @@ export function installMockFetch(
           if (!isAdmin) return forbidden
           const parsed = new URL(url, 'http://localhost')
           const role = parsed.searchParams.get('role')
+          const filtered = role === null ? accounts : accounts.filter((a) => a.roles.includes(role))
           return json(200, {
-            data: role === null ? accounts : accounts.filter((a) => a.roles.includes(role)),
+            data: filtered.map(toWireAccount),
+            // Real pagination and sorting are proved against the real router
+            // in `packages/api/test/rest/users-router.test.ts` and end to end
+            // in `packages/cli/test/serve-users.test.ts` — this mock only
+            // needs to answer the shape `listUsersPage` expects.
+            page: { hasMore: false, nextCursor: null },
+            meta: { invitationEmailAvailable: options.invitationEmailAvailable ?? false },
           })
         }
 
         if (rawId === undefined && method === 'POST') {
           if (!isAdmin) return forbidden
           accountCounter += 1
+          const invite = body.invite === true && (options.invitationEmailAvailable ?? false)
           const created: MockAccount = {
             id: `user-new-${accountCounter}`,
             email: String(body.email).toLowerCase(),
             roles: body.roles as readonly string[],
-            status: 'active',
+            status: invite ? 'invited' : 'active',
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
             mfa: { totp: false, passkeys: 0 },
+            ...(invite ? { invitedAt: '2026-03-01T00:00:00.000Z' } : {}),
           }
           accounts.push(created)
-          return json(201, { data: { user: created, password: 'generated-password-xyz' } })
+          return json(201, {
+            data: invite
+              ? { user: toWireAccount(created), invited: true, emailSent: true }
+              : {
+                  user: toWireAccount(created),
+                  invited: false,
+                  emailSent: false,
+                  password: 'generated-password-xyz',
+                },
+          })
+        }
+
+        if (rawId === 'bulk' && method === 'POST') {
+          if (!isAdmin) return forbidden
+          const ids = body.ids as readonly string[]
+          const succeeded: string[] = []
+          const failed: { id: string; error: string }[] = []
+          for (const targetId of ids) {
+            const target = accounts.find((candidate) => candidate.id === targetId)
+            if (target === undefined) {
+              failed.push({ id: targetId, error: 'No account.' })
+              continue
+            }
+            if (body.action === 'disable') target.status = 'disabled'
+            else if (body.action === 'enable') target.status = 'active'
+            else if (body.action === 'setRoles') target.roles = body.roles as readonly string[]
+            succeeded.push(targetId)
+          }
+          return json(200, { data: { succeeded, failed } })
         }
 
         const account = accounts.find((candidate) => candidate.id === id)
@@ -1003,7 +1074,7 @@ export function installMockFetch(
           if (account === undefined) {
             return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
           }
-          return json(200, { data: account })
+          return json(200, { data: toWireAccount(account) })
         }
 
         if (sub === undefined && method === 'PATCH') {
@@ -1011,9 +1082,17 @@ export function installMockFetch(
           if (account === undefined) {
             return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
           }
+          if (account.status === 'anonymized') {
+            return json(409, {
+              error: {
+                code: 'AUTH_ACCOUNT_ANONYMIZED',
+                message: 'This account has been anonymized and can no longer be changed.',
+              },
+            })
+          }
           if (body.roles !== undefined) account.roles = body.roles as readonly string[]
           if (body.status !== undefined) account.status = body.status as 'active' | 'disabled'
-          return json(200, { data: account })
+          return json(200, { data: toWireAccount(account) })
         }
 
         if (sub === 'password' && method === 'POST') {
@@ -1027,6 +1106,88 @@ export function installMockFetch(
             })
           }
           return json(200, { data: { changed: true } })
+        }
+
+        if (sub === 'profile' && method === 'PATCH') {
+          if (id !== user.id) return forbidden
+          if (account === undefined) {
+            return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
+          }
+          if ('displayName' in body) account.displayName = body.displayName as string | null
+          if ('avatarMediaId' in body) account.avatarMediaId = body.avatarMediaId as string | null
+          if ('bio' in body) account.bio = body.bio as string | null
+          if ('locale' in body) account.locale = body.locale as string | null
+          return json(200, { data: toWireAccount(account) })
+        }
+
+        if (sub === 'invite' && method === 'POST') {
+          if (!isAdmin) return forbidden
+          if (account === undefined) {
+            return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
+          }
+          if (account.status !== 'invited') {
+            return json(409, {
+              error: {
+                code: 'AUTH_INVITE_INVALID_STATE',
+                message: 'This account is not a pending invitation.',
+              },
+            })
+          }
+          if (!(options.invitationEmailAvailable ?? false)) {
+            return json(503, {
+              error: {
+                code: 'AUTH_INVITE_UNAVAILABLE',
+                message: 'No email transport is configured on this site.',
+              },
+            })
+          }
+          account.invitedAt = '2026-03-02T00:00:00.000Z'
+          return json(200, { data: { invited: true, expiresAt: '2030-01-01T00:00:00.000Z' } })
+        }
+
+        if (sub === 'invite' && method === 'DELETE') {
+          if (!isAdmin) return forbidden
+          if (account === undefined || account.status !== 'invited') {
+            return json(409, {
+              error: {
+                code: 'AUTH_INVITE_INVALID_STATE',
+                message: 'This account is not a pending invitation.',
+              },
+            })
+          }
+          const index = accounts.findIndex((candidate) => candidate.id === account.id)
+          if (index !== -1) accounts.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
+
+        if (sub === 'anonymize' && method === 'POST') {
+          if (!isAdmin) return forbidden
+          if (account === undefined) {
+            return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
+          }
+          if (account.status === 'anonymized') {
+            return json(409, {
+              error: {
+                code: 'AUTH_ACCOUNT_ANONYMIZED',
+                message: 'This account has already been anonymized.',
+              },
+            })
+          }
+          if (body.confirmEmail !== account.email) {
+            return json(400, {
+              error: {
+                code: 'AUTH_ANONYMIZE_CONFIRMATION_MISMATCH',
+                message: 'The typed email does not match this account’s current address.',
+              },
+            })
+          }
+          account.email = `anon-${account.id}@anonymized.invalid`
+          account.status = 'anonymized'
+          account.displayName = null
+          account.avatarMediaId = null
+          account.bio = null
+          account.locale = null
+          return json(200, { data: { id: account.id, anonymized: true } })
         }
 
         if (sub === 'sessions' && sessionId === undefined && method === 'GET') {

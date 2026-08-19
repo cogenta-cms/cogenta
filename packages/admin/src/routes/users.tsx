@@ -3,10 +3,14 @@ import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
   type AdminUser,
+  anonymizeUser,
+  bulkUpdateUsers,
   type CreatedUser,
+  cancelInvitation,
   createUser,
   listUserSessions,
-  listUsers,
+  listUsersPage,
+  resendInvitation,
   revokeUserSession,
   type UserSession,
   updateUser,
@@ -49,23 +53,35 @@ import {
  */
 const STANDARD_ROLES = ['admin', 'editor', 'author', 'contributor'] as const
 
+const PAGE_SIZE = 25
+
+type SortChoice = 'createdAt:desc' | 'createdAt:asc' | 'lastSignInAt:desc' | 'lastSignInAt:asc'
+
+function parseSortChoice(value: SortChoice): {
+  sort: 'createdAt' | 'lastSignInAt'
+  direction: 'asc' | 'desc'
+} {
+  const [sort, direction] = value.split(':') as ['createdAt' | 'lastSignInAt', 'asc' | 'desc']
+  return { sort, direction }
+}
+
 /**
- * L11 task 3 — the account list, and everything an admin can do to an account
- * from the admin rather than from a terminal.
+ * L11 task 3 — the account list — grown by fiche 17 into the full account
+ * lifecycle: invite by email (with the R1 password fallback), search,
+ * pagination and bulk actions, a dormant/MFA-recommended signal per row, and
+ * irreversible anonymization.
  *
  * `admin` only, and the screen says so plainly to anyone else rather than
  * rendering controls that would 403 (the server refuses either way — this is
  * courtesy, not the check).
  *
- * One thing is deliberately not here: deleting an account. Accounts are
- * disabled, never removed, because an account that wrote content still has to
- * be nameable in the audit log. Resetting somebody's password used to be
- * absent for the same "needs a delivery channel and a single-use token"
- * reason — it now exists, but as the self-service `/forgot-password` flow
- * (`packages/api/src/rest/auth-router.ts`), not as something an admin does to
- * someone else's account: an admin who could set another password could sign
- * in as that person, and every audit entry afterwards would name the wrong
- * one.
+ * Deleting an account outright is still not here for an `active`/`disabled`
+ * one: it wrote content, and that content still has to be nameable in the
+ * audit log. Anonymization (fiche 17 task 5) is the RGPD-erasure answer to
+ * that — the id and every attribution survive, only the person's identity is
+ * gone. Cancelling a still-pending invitation is a real, hard delete, and
+ * that is fine: an `invited` account can never have signed in, so it can
+ * never have authored anything either (`UserStore.delete`'s doc comment).
  */
 export function UsersRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -75,40 +91,95 @@ export function UsersRoute(): JSX.Element {
   const isAdmin = roles.includes('admin')
 
   const [users, setUsers] = useState<readonly AdminUser[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [invitationEmailAvailable, setInvitationEmailAvailable] = useState(false)
   const [roleFilter, setRoleFilter] = useState('')
+  const [query, setQuery] = useState('')
+  const [submittedQuery, setSubmittedQuery] = useState('')
+  const [sortChoice, setSortChoice] = useState<SortChoice>('createdAt:desc')
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
+
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
 
   const [creating, setCreating] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [newRoleSet, setNewRoleSet] = useState<ReadonlySet<string>>(() => new Set(['editor']))
   const [newCustomRole, setNewCustomRole] = useState('')
+  const [sendInvite, setSendInvite] = useState(true)
   const [created, setCreated] = useState<CreatedUser | null>(null)
 
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [editRoleSet, setEditRoleSet] = useState<ReadonlySet<string>>(() => new Set())
   const [editCustomRole, setEditCustomRole] = useState('')
 
+  const [bulkRoleModal, setBulkRoleModal] = useState(false)
+  const [bulkRoleSet, setBulkRoleSet] = useState<ReadonlySet<string>>(() => new Set())
+  const [bulkCustomRole, setBulkCustomRole] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+
   const [sessionsOf, setSessionsOf] = useState<AdminUser | null>(null)
   const [sessions, setSessions] = useState<readonly UserSession[]>([])
+
+  const [anonymizing, setAnonymizing] = useState<AdminUser | null>(null)
+  const [anonymizeConfirm, setAnonymizeConfirm] = useState('')
+  const [anonymizeError, setAnonymizeError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
     setLoading(true)
     setError(null)
+    const { sort, direction } = parseSortChoice(sortChoice)
     try {
-      setUsers(await listUsers(token, { role: roleFilter }))
+      const page = await listUsersPage(token, {
+        role: roleFilter,
+        q: submittedQuery,
+        sort,
+        direction,
+        limit: PAGE_SIZE,
+      })
+      setUsers(page.users)
+      setHasMore(page.hasMore)
+      setNextCursor(page.nextCursor)
+      setInvitationEmailAvailable(page.invitationEmailAvailable)
+      setSelected(new Set())
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('users.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [token, isAdmin, roleFilter, t])
+  }, [token, isAdmin, roleFilter, submittedQuery, sortChoice, t])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  async function loadMore(): Promise<void> {
+    if (token === null || nextCursor === null) return
+    setLoadingMore(true)
+    const { sort, direction } = parseSortChoice(sortChoice)
+    try {
+      const page = await listUsersPage(token, {
+        role: roleFilter,
+        q: submittedQuery,
+        sort,
+        direction,
+        limit: PAGE_SIZE,
+        after: nextCursor,
+      })
+      setUsers((current) => [...current, ...page.users])
+      setHasMore(page.hasMore)
+      setNextCursor(page.nextCursor)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('users.loadError'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   /** Every role name any account actually holds — the filter offers real values, not a guessed list. */
   const knownRoles = [...new Set(users.flatMap((user) => user.roles))].sort()
@@ -144,6 +215,21 @@ export function UsersRoute(): JSX.Element {
     return [...new Set([...set, ...parseRoles(custom)])]
   }
 
+  function toggleSelected(id: string): void {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllOnPage(): void {
+    setSelected((current) =>
+      current.size === users.length ? new Set() : new Set(users.map((user) => user.id)),
+    )
+  }
+
   async function submitCreate(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
@@ -154,7 +240,11 @@ export function UsersRoute(): JSX.Element {
       return
     }
     try {
-      const result = await createUser(token, { email: newEmail, roles })
+      const result = await createUser(token, {
+        email: newEmail,
+        roles,
+        invite: invitationEmailAvailable && sendInvite,
+      })
       setCreated(result)
       setCreating(false)
       setNewEmail('')
@@ -220,6 +310,78 @@ export function UsersRoute(): JSX.Element {
     }
   }
 
+  async function resend(user: AdminUser): Promise<void> {
+    if (token === null) return
+    setActionError(null)
+    try {
+      await resendInvitation(token, user.id)
+      setActionNotice(t('users.inviteResent', { email: user.email }))
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('users.inviteResendError'))
+    }
+  }
+
+  async function cancel(user: AdminUser): Promise<void> {
+    if (token === null) return
+    setActionError(null)
+    try {
+      await cancelInvitation(token, user.id)
+      setActionNotice(t('users.inviteCancelled', { email: user.email }))
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('users.inviteCancelError'))
+    }
+  }
+
+  async function runBulk(
+    action: 'disable' | 'enable' | 'setRoles',
+    roles?: readonly string[],
+  ): Promise<void> {
+    if (token === null || selected.size === 0) return
+    setBulkBusy(true)
+    setActionError(null)
+    try {
+      const input =
+        action === 'setRoles'
+          ? { action, ids: [...selected], roles: roles ?? [] }
+          : { action, ids: [...selected] }
+      const result = await bulkUpdateUsers(token, input)
+      if (result.failed.length > 0) {
+        setActionError(
+          t('users.bulkPartialFailure', {
+            succeeded: result.succeeded.length,
+            failed: result.failed.length,
+            reasons: result.failed.map((f) => f.error).join('; '),
+          }),
+        )
+      } else {
+        setActionNotice(t('users.bulkSuccess', { count: result.succeeded.length }))
+      }
+      setBulkRoleModal(false)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('users.bulkError'))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function submitAnonymize(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (token === null || anonymizing === null) return
+    setAnonymizeError(null)
+    try {
+      await anonymizeUser(token, anonymizing.id, anonymizeConfirm)
+      setAnonymizing(null)
+      setAnonymizeConfirm('')
+      setActionNotice(t('users.anonymizeDone'))
+      await load()
+    } catch (caught) {
+      setAnonymizeError(caught instanceof ApiError ? caught.message : t('users.anonymizeError'))
+    }
+  }
+
   if (!isAdmin) {
     return (
       <section aria-labelledby="users-heading">
@@ -242,12 +404,35 @@ export function UsersRoute(): JSX.Element {
         <Notice
           tone="success"
           live="assertive"
-          title={t('users.createdTitle', { email: created.user.email })}
+          title={
+            created.invited
+              ? t('users.invitedTitle', { email: created.user.email })
+              : t('users.createdTitle', { email: created.user.email })
+          }
           onDismiss={() => setCreated(null)}
           dismissLabel={t('users.createdDismiss')}
         >
-          <p>{t('users.createdBody')}</p>
-          <p className="font-mono text-sm break-all">{created.password}</p>
+          {created.invited ? (
+            <p>{t('users.invitedBody')}</p>
+          ) : (
+            <>
+              <p>
+                {invitationEmailAvailable ? t('users.createdBodyNoInvite') : t('users.createdBody')}
+              </p>
+              <p className="font-mono text-sm break-all">{created.password}</p>
+            </>
+          )}
+        </Notice>
+      )}
+
+      {actionNotice !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={() => setActionNotice(null)}
+          dismissLabel={t('common.cancel')}
+        >
+          <p>{actionNotice}</p>
         </Notice>
       )}
 
@@ -257,24 +442,100 @@ export function UsersRoute(): JSX.Element {
         </Notice>
       )}
 
-      <div className="max-w-xs">
-        <Field label={t('users.roleFilter')}>
-          {(control) => (
-            <Select
-              {...control}
-              value={roleFilter}
-              onChange={(event) => setRoleFilter(event.target.value)}
-            >
-              <option value="">{t('users.allRoles')}</option>
-              {knownRoles.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="max-w-xs">
+          <Field label={t('users.roleFilter')}>
+            {(control) => (
+              <Select
+                {...control}
+                value={roleFilter}
+                onChange={(event) => setRoleFilter(event.target.value)}
+              >
+                <option value="">{t('users.allRoles')}</option>
+                {knownRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        </div>
+
+        <div className="max-w-xs">
+          <Field label={t('users.sortLabel')}>
+            {(control) => (
+              <Select
+                {...control}
+                value={sortChoice}
+                onChange={(event) => setSortChoice(event.target.value as SortChoice)}
+              >
+                <option value="createdAt:desc">{t('users.sortNewest')}</option>
+                <option value="createdAt:asc">{t('users.sortOldest')}</option>
+                <option value="lastSignInAt:desc">{t('users.sortMostActive')}</option>
+                <option value="lastSignInAt:asc">{t('users.sortLeastActive')}</option>
+              </Select>
+            )}
+          </Field>
+        </div>
+
+        <form
+          className="flex max-w-sm flex-1 items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setSubmittedQuery(query)
+          }}
+        >
+          <Field label={t('users.searchLabel')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="search"
+                placeholder={t('users.searchPlaceholder')}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            )}
+          </Field>
+          <Button type="submit" variant="secondary">
+            {t('users.searchButton')}
+          </Button>
+        </form>
       </div>
+
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-3">
+          <span className="text-sm">{t('users.selectedCount', { count: selected.size })}</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={bulkBusy}
+            onClick={() => void runBulk('disable')}
+          >
+            {t('users.bulkDisable')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={bulkBusy}
+            onClick={() => void runBulk('enable')}
+          >
+            {t('users.bulkEnable')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={bulkBusy}
+            onClick={() => {
+              setBulkRoleSet(new Set())
+              setBulkCustomRole('')
+              setBulkRoleModal(true)
+            }}
+          >
+            {t('users.bulkChangeRoles')}
+          </Button>
+        </div>
+      )}
 
       {error !== null && (
         <Notice tone="danger" live="assertive">
@@ -288,61 +549,157 @@ export function UsersRoute(): JSX.Element {
           <Table>
             <TableHead>
               <TableRow>
+                <TableHeader>
+                  <input
+                    type="checkbox"
+                    aria-label={t('users.selectAll')}
+                    checked={users.length > 0 && selected.size === users.length}
+                    onChange={toggleSelectAllOnPage}
+                  />
+                </TableHeader>
                 <TableHeader>{t('users.emailColumn')}</TableHeader>
                 <TableHeader>{t('users.rolesColumn')}</TableHeader>
                 <TableHeader>{t('users.statusColumn')}</TableHeader>
                 <TableHeader>{t('users.mfaColumn')}</TableHeader>
+                <TableHeader>{t('users.lastSignInColumn')}</TableHeader>
                 <TableHeader>{t('users.actionsColumn')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={t('users.selectOne', { email: user.email })}
+                      checked={selected.has(user.id)}
+                      onChange={() => toggleSelected(user.id)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span>{user.displayName ?? user.email}</span>
+                      {user.displayName !== null && (
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>{user.roles.join(', ')}</TableCell>
                   <TableCell>
-                    {user.status === 'active' ? t('users.active') : t('users.disabled')}
+                    <div className="flex flex-col gap-1">
+                      <span>
+                        {user.status === 'active' && t('users.active')}
+                        {user.status === 'disabled' && t('users.disabled')}
+                        {user.status === 'invited' && t('users.invited')}
+                        {user.status === 'anonymized' && t('users.anonymized')}
+                      </span>
+                      {user.status === 'invited' && (
+                        <span className="text-xs text-muted-foreground">
+                          {user.invitation !== null
+                            ? t('users.invitedOn', { at: user.invitation.sentAt })
+                            : t('users.invitedUnknownDate')}
+                        </span>
+                      )}
+                      {user.dormant && (
+                        <span className="inline-flex w-fit items-center gap-1 rounded-sm border border-warning bg-warning/10 px-1.5 py-0.5 text-xs text-warning">
+                          {t('users.dormantBadge')}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    {user.mfa.totp || user.mfa.passkeys > 0 ? t('users.mfaOn') : t('users.mfaOff')}
+                    <div className="flex flex-col gap-1">
+                      <span>
+                        {user.mfa.totp || user.mfa.passkeys > 0
+                          ? t('users.mfaOn')
+                          : t('users.mfaOff')}
+                      </span>
+                      {user.mfaRecommended && (
+                        <span className="inline-flex w-fit items-center gap-1 rounded-sm border border-warning bg-warning/10 px-1.5 py-0.5 text-xs text-warning">
+                          {t('users.mfaRecommendedBadge')}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
+                  <TableCell>{user.lastSignInAt ?? t('users.neverSignedIn')}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          setEditing(user)
-                          // Every role this account already holds is, by
-                          // construction, in `knownRoles` and therefore in
-                          // `offeredRoles` — nothing here needs the custom
-                          // field pre-filled.
-                          setEditRoleSet(new Set(user.roles))
-                          setEditCustomRole('')
-                        }}
-                      >
-                        {t('users.changeRoles', { email: user.email })}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => void openSessions(user)}>
-                        {t('users.viewSessions', { email: user.email })}
-                      </Button>
-                      <Button
-                        variant={user.status === 'active' ? 'destructive' : 'secondary'}
-                        size="sm"
-                        onClick={() => void toggleStatus(user)}
-                      >
-                        {user.status === 'active'
-                          ? t('users.disableAccount', { email: user.email })
-                          : t('users.enableAccount', { email: user.email })}
-                      </Button>
+                      {user.status === 'invited' ? (
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={!invitationEmailAvailable}
+                            onClick={() => void resend(user)}
+                          >
+                            {t('users.resendInvite', { email: user.email })}
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => void cancel(user)}>
+                            {t('users.cancelInvite', { email: user.email })}
+                          </Button>
+                        </>
+                      ) : user.status === 'anonymized' ? (
+                        <span className="text-xs text-muted-foreground">
+                          {t('users.anonymizedNote')}
+                        </span>
+                      ) : (
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setEditing(user)
+                              // Every role this account already holds is, by
+                              // construction, in `knownRoles` and therefore in
+                              // `offeredRoles` — nothing here needs the custom
+                              // field pre-filled.
+                              setEditRoleSet(new Set(user.roles))
+                              setEditCustomRole('')
+                            }}
+                          >
+                            {t('users.changeRoles', { email: user.email })}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => void openSessions(user)}>
+                            {t('users.viewSessions', { email: user.email })}
+                          </Button>
+                          <Button
+                            variant={user.status === 'active' ? 'destructive' : 'secondary'}
+                            size="sm"
+                            onClick={() => void toggleStatus(user)}
+                          >
+                            {user.status === 'active'
+                              ? t('users.disableAccount', { email: user.email })
+                              : t('users.enableAccount', { email: user.email })}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setAnonymizing(user)
+                              setAnonymizeConfirm('')
+                              setAnonymizeError(null)
+                            }}
+                          >
+                            {t('users.anonymizeAccount', { email: user.email })}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
-              {users.length === 0 && <TableEmpty colSpan={5}>{t('users.empty')}</TableEmpty>}
+              {users.length === 0 && <TableEmpty colSpan={7}>{t('users.empty')}</TableEmpty>}
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {!loading && hasMore && (
+        <div>
+          <Button variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? t('common.loading') : t('users.loadMore')}
+          </Button>
+        </div>
       )}
 
       <Modal
@@ -383,11 +740,32 @@ export function UsersRoute(): JSX.Element {
               />
             )}
           </Field>
+
+          {invitationEmailAvailable ? (
+            <label className="flex items-center gap-2 font-sans text-sm leading-5 text-foreground">
+              <input
+                type="checkbox"
+                checked={sendInvite}
+                onChange={(event) => setSendInvite(event.target.checked)}
+                className="h-4 w-4 rounded-sm border border-input accent-primary"
+              />
+              {t('users.sendInviteLabel')}
+            </label>
+          ) : (
+            <p className="m-0 text-xs leading-5 text-muted-foreground">
+              {t('users.noInviteTransport')}
+            </p>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setCreating(false)}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit">{t('users.createButton')}</Button>
+            <Button type="submit">
+              {invitationEmailAvailable && sendInvite
+                ? t('users.inviteButton')
+                : t('users.createButton')}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -429,6 +807,53 @@ export function UsersRoute(): JSX.Element {
       </Modal>
 
       <Modal
+        open={bulkRoleModal}
+        onOpenChange={setBulkRoleModal}
+        title={t('users.bulkRolesHeading', { count: selected.size })}
+        closeLabel={t('users.close')}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            const combined = combineRoles(bulkRoleSet, bulkCustomRole)
+            if (combined.length === 0) {
+              setActionError(t('users.rolesNone'))
+              return
+            }
+            void runBulk('setRoles', combined)
+          }}
+          className="flex flex-col gap-4"
+        >
+          <RoleCheckboxList
+            idPrefix="bulk-role"
+            legend={t('users.rolesColumn')}
+            description={t('users.rolesHint')}
+            roles={offeredRoles}
+            selected={bulkRoleSet}
+            onToggle={(role) => setBulkRoleSet((current) => toggleRole(current, role))}
+          />
+          <Field label={t('users.customRoleLabel')}>
+            {(control) => (
+              <Input
+                {...control}
+                placeholder={t('users.customRolePlaceholder')}
+                value={bulkCustomRole}
+                onChange={(event) => setBulkCustomRole(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setBulkRoleModal(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={bulkBusy}>
+              {t('users.saveRoles')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
         open={sessionsOf !== null}
         onOpenChange={(open) => {
           if (!open) setSessionsOf(null)
@@ -437,6 +862,52 @@ export function UsersRoute(): JSX.Element {
         closeLabel={t('users.close')}
       >
         <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)} />
+      </Modal>
+
+      <Modal
+        open={anonymizing !== null}
+        onOpenChange={(open) => {
+          if (!open) setAnonymizing(null)
+        }}
+        title={t('users.anonymizeHeading', { email: anonymizing?.email ?? '' })}
+        description={t('users.anonymizeWarning')}
+        closeLabel={t('users.close')}
+      >
+        <form onSubmit={submitAnonymize} className="flex flex-col gap-4">
+          <Notice tone="danger">
+            <p>{t('users.anonymizeIrreversible')}</p>
+          </Notice>
+          <Field
+            label={t('users.anonymizeConfirmLabel', { email: anonymizing?.email ?? '' })}
+            error={anonymizeError}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="email"
+                required
+                autoComplete="off"
+                value={anonymizeConfirm}
+                onChange={(event) => setAnonymizeConfirm(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setAnonymizing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={
+                anonymizing !== null &&
+                anonymizeConfirm.trim().toLowerCase() !== anonymizing.email.toLowerCase()
+              }
+            >
+              {t('users.anonymizeConfirmButton')}
+            </Button>
+          </div>
+        </form>
       </Modal>
     </section>
   )

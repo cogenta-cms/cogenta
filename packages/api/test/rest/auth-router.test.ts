@@ -746,6 +746,64 @@ describe('POST /api/auth/reset-password', () => {
     expect(response.status).toBe(400)
     expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_PASSWORD_INVALID')
   })
+
+  /**
+   * Fiche 17 task 1: an invitation reuses this exact route and this exact
+   * token primitive rather than a second one — redeeming it is what turns
+   * "invited" into "active", the only place in the product that flips that
+   * bit.
+   */
+  it('activates an invited account the moment its token is redeemed', async () => {
+    const router = createAuthRouter({ auth })
+    const invitee = await auth.users.create({
+      email: 'invitee@example.com',
+      roles: ['editor'],
+      status: 'invited',
+    })
+    const issued = await auth.resets.issue(invitee.id)
+
+    const response = await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issued.token, newPassword: 'a chosen passphrase for the invitee' },
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect((await auth.users.byId(invitee.id))?.status).toBe('active')
+
+    const login = await router.handle(
+      request('POST', '/api/auth/login', {
+        body: { email: 'invitee@example.com', password: 'a chosen passphrase for the invitee' },
+      }),
+    )
+    expect(login.status).toBe(200)
+  })
+
+  it('leaves an ordinary reset on an already-active account untouched', async () => {
+    let issuedToken = ''
+    const router = createAuthRouter({
+      auth,
+      onForgotPassword: async (event) => {
+        issuedToken = event.token
+      },
+    })
+    const user = await createLoggedInUser(
+      'already-active@example.com',
+      'correct horse battery staple',
+    )
+    await router.handle(
+      request('POST', '/api/auth/forgot-password', {
+        body: { email: 'already-active@example.com' },
+      }),
+    )
+
+    await router.handle(
+      request('POST', '/api/auth/reset-password', {
+        body: { token: issuedToken, newPassword: 'a brand new long passphrase' },
+      }),
+    )
+
+    expect((await auth.users.byId(user.id))?.status).toBe('active')
+  })
 })
 
 describe('unknown routes', () => {

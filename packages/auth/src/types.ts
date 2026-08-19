@@ -11,19 +11,55 @@
 export const CREDENTIAL_KINDS = ['password', 'totp', 'webauthn'] as const
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number]
 
+/**
+ * `invited` (fiche 17 task 1) and `anonymized` (fiche 17 task 5) joined
+ * `active`/`disabled` on the same grounds: neither is a role or a permission,
+ * both are states of the *account* itself, and both are enforced the same way
+ * every non-`active` status already was — `passwordLogin` and `resolveActor`
+ * both refuse anything but `active`, so an invited account (no password yet)
+ * and an anonymized one (deliberately made permanent) are blocked from
+ * signing in for free, with no new check anywhere.
+ */
+export type UserStatus = 'active' | 'disabled' | 'invited' | 'anonymized'
+
 export interface User {
   readonly id: string
   readonly email: string
   /** An open set of names, exactly as contract A's collection permissions expect. */
   readonly roles: readonly string[]
-  readonly status: 'active' | 'disabled'
+  readonly status: UserStatus
   readonly createdAt: string
   readonly updatedAt: string
+  /**
+   * Public profile (fiche 17 task 3) — volunteered by the account itself,
+   * never inferred. `null` means "not set", not "empty string": a theme or an
+   * audit view falls back to the email only when this is genuinely absent.
+   */
+  readonly displayName: string | null
+  /** A media asset id (`@cogenta/schema`'s media store), not a URL — resolved the same way any other avatar-shaped field is. */
+  readonly avatarMediaId: string | null
+  readonly bio: string | null
+  /** BCP-47-ish tag for the admin's own interface language, e.g. `en` or `fr-CA`. */
+  readonly locale: string | null
 }
 
 export interface CreateUserInput {
   readonly email: string
   readonly roles: readonly string[]
+  /**
+   * Defaults to `active`. Only `invited` (fiche 17 task 1) is meant to be
+   * passed by a caller today — `anonymized` is reached through
+   * `UserStore.anonymize`, never through `create`.
+   */
+  readonly status?: UserStatus
+}
+
+/** Self-service only (fiche 17 task 3) — see `UserStore.updateProfile`'s doc comment for why. */
+export interface UpdateProfileInput {
+  readonly displayName?: string | null
+  readonly avatarMediaId?: string | null
+  readonly bio?: string | null
+  readonly locale?: string | null
 }
 
 export interface Session {

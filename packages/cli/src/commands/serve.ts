@@ -47,6 +47,7 @@ import {
   executeGraphQL,
   type ForgotPasswordEvent,
   type ImportRouter,
+  type InvitedUserEvent,
   type MarketplaceRouter,
   type MediaImageProcessor,
   type MediaRouter,
@@ -138,6 +139,7 @@ import {
   withSearchIndexing,
 } from '@cogenta/schema'
 import type { GraphQLSchema } from 'graphql'
+import { sendInviteMail } from '../invite-mail.js'
 import type { Output, Writer } from '../output.js'
 import { sendResetMail } from '../reset-mail.js'
 import { serveAdminAsset } from './admin-assets.js'
@@ -534,6 +536,14 @@ interface AssembleSiteOptions {
    */
   readonly onForgotPassword?: ((event: ForgotPasswordEvent) => Promise<void>) | null
   /**
+   * Delivers the invitation `POST /api/users` (`invite: true`) or its resend
+   * route issues (fiche 17 task 1). Absent is the **mandatory R1 fallback**:
+   * `createUsersRouter` then falls back to the pre-fiche-17 behaviour — a
+   * generated password, shown once — rather than creating an account nobody
+   * can ever accept.
+   */
+  readonly onInvite?: ((event: InvitedUserEvent) => Promise<void>) | null
+  /**
    * The seller's legal identity (contract E, ADR-0024). `undefined` — the
    * default, until a site fills in `billing` in its config — means the
    * invoice route stays unreachable rather than issuing a document with a
@@ -896,7 +906,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ],
       dismissals: noticeDismissals,
     }),
-    usersRouter: createUsersRouter({ auth }),
+    usersRouter: createUsersRouter({
+      auth,
+      collections,
+      ...(options.onInvite == null ? {} : { onInvite: options.onInvite }),
+    }),
     apiKeysRouter: createApiKeysRouter({ auth }),
     assistantRouter: createAssistantRouter({
       toolset: (options.assistant?.toolset ?? EMPTY_TOOLSET) as AssistToolsetLike,
@@ -2262,6 +2276,24 @@ export async function runServe(options: ServeOptions): Promise<number> {
         },
         loaded.config.site,
         user.email,
+        token,
+        expiresAt,
+      ).then(() => undefined),
+    // Fiche 17 task 1. Same file, same transport, same "the token is redeemed
+    // at /admin/reset-password" screen `onForgotPassword` already points at
+    // — accepting an invitation and resetting a forgotten password are the
+    // same action from `POST /api/auth/reset-password`'s point of view (see
+    // that route's comment for the one line that tells them apart: whether
+    // the account was `invited`).
+    onInvite: ({ user, roles, token, expiresAt }) =>
+      sendInviteMail(
+        {
+          mailDir: join(projectRoot, '.cogenta', 'mail'),
+          acceptUrl: new URL('/admin/reset-password', loaded.config.site.url).toString(),
+        },
+        loaded.config.site,
+        user.email,
+        roles,
         token,
         expiresAt,
       ).then(() => undefined),

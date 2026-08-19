@@ -24,6 +24,7 @@ export type {
   IssuedPasswordReset,
   PasswordResetOutcome,
   PasswordResetStore,
+  PendingReset,
 } from './resets.js'
 export { createPasswordResetStore, PASSWORD_RESET_TTL_MS } from './resets.js'
 export type { SessionStore } from './sessions.js'

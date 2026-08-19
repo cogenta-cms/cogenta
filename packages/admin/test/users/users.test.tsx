@@ -180,6 +180,142 @@ describe("another account's sessions", () => {
   })
 })
 
+/**
+ * Fiche 17 task 1 — invitation by email, with its R1 fallback. The two mock
+ * paths (`invitationEmailAvailable: true`/absent) mirror what the real
+ * `meta.invitationEmailAvailable` flag drives (`packages/api/test/rest/users-router.test.ts`
+ * proves the server side; `packages/cli/test/serve-users.test.ts` proves the
+ * whole thing end to end over real HTTP and a real mail file).
+ */
+describe('inviting an account by email', () => {
+  it('offers the invitation checkbox and shows "invitation sent" instead of a password', async () => {
+    installMockFetch({ roles: ['admin'], invitationEmailAvailable: true })
+    render(<App />)
+    await goToUsers()
+    await within(await screen.findByRole('table')).findByText('bob@example.com')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvel utilisateur' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Créer un utilisateur' })
+    fireEvent.change(screen.getByLabelText('Adresse e-mail'), {
+      target: { value: 'dave@example.com' },
+    })
+    expect(
+      (
+        within(dialog).getByLabelText(
+          'Envoyer une invitation par e-mail plutôt que de créer un mot de passe maintenant',
+        ) as HTMLInputElement
+      ).checked,
+    ).toBe(true)
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+
+    expect(await screen.findByText('Invitation envoyée à dave@example.com')).toBeDefined()
+    expect(screen.queryByText(/generated-password-xyz/u)).toBeNull()
+    await waitFor(() => {
+      expect(within(table()).getByText('dave@example.com')).toBeDefined()
+    })
+    expect(within(table()).getByText('Invitation envoyée')).toBeDefined()
+  })
+
+  it('falls back to a shown-once password with no email transport configured', async () => {
+    render(<App />)
+    await goToUsers()
+    await within(await screen.findByRole('table')).findByText('bob@example.com')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvel utilisateur' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Créer un utilisateur' })
+    fireEvent.change(screen.getByLabelText('Adresse e-mail'), {
+      target: { value: 'dave@example.com' },
+    })
+    expect(
+      within(dialog).getByText(
+        "Aucun transport e-mail n'est configuré sur ce site : le compte est créé avec un mot de passe affiché une fois.",
+      ),
+    ).toBeDefined()
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+
+    expect(await screen.findByText('generated-password-xyz')).toBeDefined()
+  })
+
+  it('resends and then cancels a pending invitation', async () => {
+    installMockFetch({ roles: ['admin'], invitationEmailAvailable: true })
+    render(<App />)
+    await goToUsers()
+    await within(await screen.findByRole('table')).findByText('bob@example.com')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvel utilisateur' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Créer un utilisateur' })
+    fireEvent.change(screen.getByLabelText('Adresse e-mail'), {
+      target: { value: 'dave@example.com' },
+    })
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+    await screen.findByText('Invitation envoyée à dave@example.com')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Renvoyer l'invitation à dave@example.com" }),
+    )
+    expect(
+      await screen.findByText('Une nouvelle invitation a été envoyée à dave@example.com.'),
+    ).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: "Annuler l'invitation à dave@example.com" }))
+    expect(await screen.findByText("L'invitation à dave@example.com a été annulée.")).toBeDefined()
+    await waitFor(() => {
+      expect(within(table()).queryByText('dave@example.com')).toBeNull()
+    })
+  })
+})
+
+describe('bulk actions', () => {
+  it('disables several selected accounts at once', async () => {
+    render(<App />)
+    await goToUsers()
+    await within(await screen.findByRole('table')).findByText('bob@example.com')
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Sélectionner tous les comptes de cette page' }),
+    )
+    expect(await screen.findByText('2 comptes sélectionnés')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Désactiver la sélection' }))
+
+    await waitFor(() => {
+      expect(within(table()).getAllByText('Désactivé').length).toBeGreaterThan(0)
+    })
+  })
+})
+
+describe('anonymizing an account', () => {
+  it('requires typing the exact email before the confirm button is enabled', async () => {
+    render(<App />)
+    await goToUsers()
+    await within(await screen.findByRole('table')).findByText('bob@example.com')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anonymiser bob@example.com' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Anonymiser bob@example.com' })
+    const confirmButton = within(dialog).getByRole('button', {
+      name: 'Anonymiser ce compte',
+    }) as HTMLButtonElement
+    expect(confirmButton.disabled).toBe(true)
+
+    fireEvent.change(within(dialog).getByLabelText('Tapez bob@example.com pour confirmer'), {
+      target: { value: 'wrong@example.com' },
+    })
+    expect(confirmButton.disabled).toBe(true)
+
+    fireEvent.change(within(dialog).getByLabelText('Tapez bob@example.com pour confirmer'), {
+      target: { value: 'bob@example.com' },
+    })
+    expect(confirmButton.disabled).toBe(false)
+
+    fireEvent.click(confirmButton)
+
+    expect(await screen.findByText('Le compte a été anonymisé.')).toBeDefined()
+    await waitFor(() => {
+      expect(within(table()).queryByText('bob@example.com')).toBeNull()
+    })
+  })
+})
+
 describe('the user list, for accessibility', () => {
   it('has no serious accessibility violation', async () => {
     const { container } = render(<App />)

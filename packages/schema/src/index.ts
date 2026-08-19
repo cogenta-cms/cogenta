@@ -39,6 +39,12 @@ export { interfaceName, renderTypeDeclarations } from './generate-types.js'
 export { isUuidV7, newId, timestampOf } from './id.js'
 export * from './links/index.js'
 export type {
+  MediaUsageMatch,
+  MediaUsageReport,
+  MediaUsageScanOptions,
+} from './media-usage.js'
+export { findMediaUsage } from './media-usage.js'
+export type {
   RichTextBlock,
   RichTextDecorator,
   RichTextDocument,

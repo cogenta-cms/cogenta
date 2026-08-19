@@ -264,5 +264,240 @@ export function runMediaContract(
         await dispose?.()
       }
     })
+
+    it('stores tags and filters by one of them', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const tagged = await store.create({
+          kind: 'image',
+          filename: 'hero.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'A hero image',
+          storageKey: 'media/hero.jpg',
+          tags: ['homepage', 'campaign-2026'],
+        })
+        const untagged = await store.create({
+          kind: 'image',
+          filename: 'other.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'Something else',
+          storageKey: 'media/other.jpg',
+        })
+
+        expect((await store.get(tagged.id))?.tags).toEqual(['homepage', 'campaign-2026'])
+        expect((await store.get(untagged.id))?.tags).toEqual([])
+
+        const filtered = await store.list({ tag: 'homepage' })
+        expect(filtered.items.map((item) => item.id)).toEqual([tagged.id])
+
+        // A tag that merely contains the filter as a substring is not a match —
+        // `homepage` must not also return an asset tagged `homepage-archive`.
+        const decoy = await store.create({
+          kind: 'image',
+          filename: 'decoy.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'A decoy',
+          storageKey: 'media/decoy.jpg',
+          tags: ['homepage-archive'],
+        })
+        const stillOneMatch = await store.list({ tag: 'homepage' })
+        expect(stillOneMatch.items.map((item) => item.id)).toEqual([tagged.id])
+        expect(stillOneMatch.items.map((item) => item.id)).not.toContain(decoy.id)
+
+        const replaced = await store.update(tagged.id, { tags: ['rebrand'] })
+        expect(replaced.tags).toEqual(['rebrand'])
+        expect((await store.list({ tag: 'homepage' })).items).toHaveLength(0)
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('gives every asset a stable, non-empty content hash', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const asset = await store.create({
+          kind: 'image',
+          filename: 'a.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'a',
+          storageKey: 'media/a.jpg',
+        })
+        expect(asset.contentHash.length).toBeGreaterThan(0)
+        expect((await store.get(asset.id))?.contentHash).toBe(asset.contentHash)
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('replace() overwrites the file facts, keeps the id, and changes the content hash', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const asset = await store.create({
+          kind: 'image',
+          filename: 'logo.png',
+          mimeType: 'image/png',
+          size: 100,
+          width: 200,
+          height: 200,
+          alt: 'Company logo',
+          storageKey: 'media/logo/original',
+          contentHash: 'hash-v1',
+        })
+
+        const replaced = await store.replace(asset.id, {
+          mimeType: 'image/webp',
+          size: 240,
+          width: 400,
+          height: 400,
+          storageKey: 'media/logo/v2',
+          contentHash: 'hash-v2',
+        })
+
+        expect(replaced.id).toBe(asset.id)
+        expect(replaced.mimeType).toBe('image/webp')
+        expect(replaced.size).toBe(240)
+        expect(replaced.width).toBe(400)
+        expect(replaced.storageKey).toBe('media/logo/v2')
+        expect(replaced.contentHash).toBe('hash-v2')
+        // Untouched by a replace: this is still the same subject.
+        expect(replaced.alt).toBe('Company logo')
+        expect(replaced.filename).toBe('logo.png')
+
+        const reread = await store.get(asset.id)
+        expect(reread?.contentHash).toBe('hash-v2')
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('refuses to replace an unknown id', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        expect(
+          await codeOf(() =>
+            store.replace('does-not-exist', {
+              mimeType: 'image/png',
+              size: 1,
+              storageKey: 'media/x',
+              contentHash: 'x',
+            }),
+          ),
+        ).toBe('MEDIA_NOT_FOUND')
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('counts matching assets independently of limit and cursor', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        for (let index = 0; index < 5; index += 1) {
+          await store.create({
+            kind: index % 2 === 0 ? 'image' : 'file',
+            filename: `f-${index}`,
+            mimeType: 'application/octet-stream',
+            size: 1,
+            alt: `asset ${index}`,
+            storageKey: `media/f-${index}`,
+          })
+        }
+
+        expect(await store.count()).toBe(5)
+        expect(await store.count({ kind: 'image' })).toBe(3)
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('sorts by filename and by size, ascending or descending', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const banana = await store.create({
+          kind: 'image',
+          filename: 'banana.jpg',
+          mimeType: 'image/jpeg',
+          size: 300,
+          alt: 'banana',
+          storageKey: 'media/banana.jpg',
+        })
+        const apple = await store.create({
+          kind: 'image',
+          filename: 'apple.jpg',
+          mimeType: 'image/jpeg',
+          size: 100,
+          alt: 'apple',
+          storageKey: 'media/apple.jpg',
+        })
+        const cherry = await store.create({
+          kind: 'image',
+          filename: 'cherry.jpg',
+          mimeType: 'image/jpeg',
+          size: 200,
+          alt: 'cherry',
+          storageKey: 'media/cherry.jpg',
+        })
+
+        const byName = await store.list({ sort: 'filename', direction: 'asc' })
+        expect(byName.items.map((item) => item.id)).toEqual([apple.id, banana.id, cherry.id])
+
+        const bySizeDesc = await store.list({ sort: 'size', direction: 'desc' })
+        expect(bySizeDesc.items.map((item) => item.id)).toEqual([banana.id, cherry.id, apple.id])
+
+        const firstPage = await store.list({ sort: 'size', direction: 'asc', limit: 2 })
+        expect(firstPage.items.map((item) => item.id)).toEqual([apple.id, cherry.id])
+        expect(firstPage.hasMore).toBe(true)
+        const secondPage = await store.list({
+          sort: 'size',
+          direction: 'asc',
+          limit: 2,
+          ...(firstPage.nextCursor === null ? {} : { cursor: firstPage.nextCursor }),
+        })
+        expect(secondPage.items.map((item) => item.id)).toEqual([banana.id])
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('filters by a created-at date range', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const asset = await store.create({
+          kind: 'image',
+          filename: 'dated.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'dated',
+          storageKey: 'media/dated.jpg',
+        })
+        const created = await store.get(asset.id)
+        const createdAt = created?.createdAt ?? new Date().toISOString()
+
+        const past = new Date(Date.parse(createdAt) - 60_000).toISOString()
+        const future = new Date(Date.parse(createdAt) + 60_000).toISOString()
+
+        expect(
+          (await store.list({ from: past, to: future })).items.map((item) => item.id),
+        ).toContain(asset.id)
+        expect((await store.list({ from: future })).items.map((item) => item.id)).not.toContain(
+          asset.id,
+        )
+        expect((await store.list({ to: past })).items.map((item) => item.id)).not.toContain(
+          asset.id,
+        )
+      } finally {
+        await dispose?.()
+      }
+    })
   })
 }

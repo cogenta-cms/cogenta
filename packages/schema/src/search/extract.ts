@@ -139,7 +139,7 @@ function extractZones(zones: BlockZones): string {
  * it — and the first declared `text` field otherwise, which is what an editor
  * sees at the top of the form.
  */
-function titleOf(collection: CollectionDefinition, entry: ContentEntry): string {
+export function titleOf(collection: CollectionDefinition, entry: ContentEntry): string {
   const named = collection.fields['title']
   if (named?.kind === 'text') {
     const value = entry.values['title']

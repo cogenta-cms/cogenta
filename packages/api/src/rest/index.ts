@@ -80,6 +80,8 @@ export type {
 export { createMediaRouter, variantKeyFor } from './media-router.js'
 export type { MenuRouter, MenuRouterOptions } from './menu-router.js'
 export { createMenuRouter } from './menu-router.js'
+export type { MultipartFile, MultipartFormData } from './multipart.js'
+export { extractBoundary, isMultipartFormData, parseMultipartFormData } from './multipart.js'
 export type { OpsStatusRouter, OpsStatusRouterOptions } from './ops-status-router.js'
 export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'

@@ -92,17 +92,20 @@ export function lookupFilter(
  * believes it has a table it was never given, and silently dropping a redirect
  * an editor just created would be worse than the error.
  */
+function noRedirectTable(): never {
+  throw new CogentaError({
+    code: 'CONFIG_INVALID',
+    message: 'This API has no redirect table.',
+    hint: 'Pass routing.redirects to createContentService, built with createRedirectStore from @cogenta/schema.',
+  })
+}
+
 export const NO_REDIRECTS: RedirectStore = Object.freeze({
   ensureTable: async (): Promise<void> => undefined,
   resolve: async () => null,
   list: async () => [],
   remove: async () => false,
   release: async () => false,
-  add: async (): Promise<never> => {
-    throw new CogentaError({
-      code: 'CONFIG_INVALID',
-      message: 'This API has no redirect table.',
-      hint: 'Pass routing.redirects to createContentService, built with createRedirectStore from @cogenta/schema.',
-    })
-  },
+  add: async (): Promise<never> => noRedirectTable(),
+  update: async (): Promise<never> => noRedirectTable(),
 })

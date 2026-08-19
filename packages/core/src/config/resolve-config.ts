@@ -162,6 +162,11 @@ export function resolveConfig(
       hstsIncludeSubDomains: config.security.hstsIncludeSubDomains,
       pageMaxAge: config.security.pageMaxAge,
     }),
+    notFoundLog: Object.freeze({
+      enabled: config.notFoundLog.enabled,
+      maxPaths: config.notFoundLog.maxPaths,
+      retainDays: config.notFoundLog.retainDays,
+    }),
     webhooks: Object.freeze({
       endpoints: Object.freeze([...config.webhooks.endpoints]),
       secret: secrets.webhookSecret,

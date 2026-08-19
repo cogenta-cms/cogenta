@@ -678,3 +678,55 @@ Non fait par manque de temps dans cette session, pas par blocage technique :
 réel) est déjà câblé et testé de bout en bout côté API
 (`packages/api/test/rest/menu-router.test.ts`), il ne reste qu'à consommer la
 même route depuis le rendu de thème.
+
+## 11. Fiche 12 (redirections) — Postgres/MySQL/MariaDB non exécutés cette session
+
+Les quatre tâches de `docs/plans/12-redirections.md` sont faites et testées
+(SQLite : `@cogenta/schema` 505/505, `@cogenta/api` 589/589, `@cogenta/cli` — voir le
+rapport de session, `@cogenta/admin` 390/390 — le seul échec du paquet admin,
+`test/notices/notice-board.test.tsx`, est confirmé préexistant en isolant les
+changements par `git stash`, jamais causé par ce lot). `packages/schema/test/integration/routing.test.ts`
+existe, suit exactement le même patron que `search-indexing.test.ts` (skip bruyant
+nommant la variable manquante), et se skippe pour les trois bases — le moteur Docker
+de cette machine refuse toujours toute connexion (`docker version` échoue à joindre
+`dockerDesktopLinuxEngine`).
+
+Deux points précis à revérifier en priorité une fois Docker disponible, les deux
+identifiés par une revue statique de `db-dialect-specialist` (pas une hypothèse en
+l'air) :
+
+- **`NotFoundLogStore.record()` avait une vraie race sur Postgres/MySQL, corrigée
+  dans cette session.** `db.transaction(..., { immediate: true })` ne verrouille
+  réellement qu'sur SQLite (`BEGIN IMMEDIATE`) — Postgres et MySQL ignorent
+  silencieusement cette option et tournent sous leur isolation par défaut, donc deux
+  requêtes anonymes touchant simultanément le même chemin jamais vu auraient pu
+  toutes les deux passer le test « n'existe pas encore » puis se disputer le même
+  `INSERT`, la perdante plantant sur la clé primaire `path` — exactement le 500
+  qu'un journal de 404 ne doit jamais causer. Corrigé en remplaçant l'`insert` final
+  par un vrai upsert (`on conflict (path) do update set …` pour SQLite/Postgres,
+  `on duplicate key update …` pour MySQL — le même choix que `search/postgres.ts`
+  et `search/mysql.ts` font déjà pour la même raison). Un test de concurrence réel
+  (deux connexions SQLite indépendantes sur un fichier, jamais `:memory:`, calqué sur
+  `packages/commerce/test/stock-concurrency.test.ts`) prouve l'absence de crash et la
+  convergence vers une seule ligne ; **le même test tourne aussi dans
+  `routing.test.ts` contre les trois vrais serveurs**, mais n'a encore vérifié
+  concrètement que SQLite cette session.
+- **`redirect-patterns.ts`'s `add()` a la même forme de race** (vérifie l'existence,
+  puis `delete`, puis `insert`, sans upsert) — **préexistante**, puisque c'est
+  exactement l'idiome que `redirects.ts`'s `performAdd()` utilise déjà depuis avant
+  cette session pour la même opération « remplacer une règle ». Non corrigée : une
+  route admin authentifiée n'a pas la même surface d'attaque qu'un journal de 404
+  écrit par n'importe quel anonyme, donc la priorité était la correction ci-dessus.
+  À revoir si une vraie collision se produit en pratique (deux admins créant/éditant
+  la même règle au même instant).
+
+**À faire** : `pnpm services:up` puis `pnpm -F @cogenta/schema test:integration`.
+
+Détail hors dialecte, assumé et documenté dans le rapport de la fiche plutôt qu'ici
+puisque ce n'est pas un manque de vérification mais une décision de périmètre : pas
+de compteur de « hits servis » sur une redirection elle-même (distinct du journal des
+404, qui compte les échecs) — `écarts` §4 de la fiche le nomme sans jamais l'assigner
+à l'une des quatre tâches, et l'ajouter aurait exigé une écriture sur *chaque*
+redirection servie (une vraie nouvelle portée, une migration de colonne sur une table
+déjà en production potentielle) plutôt qu'une correction dans le périmètre déjà
+engagé.

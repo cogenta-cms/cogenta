@@ -1,4 +1,25 @@
 export type {
+  ListNotFoundOptions,
+  NotFoundLogEntry,
+  NotFoundLogStore,
+  NotFoundLogStoreOptions,
+  RecordNotFoundInput,
+} from './not-found-log.js'
+export {
+  createNotFoundLogStore,
+  DEFAULT_MAX_TRACKED_PATHS,
+  NOT_FOUND_LOG_TABLE,
+} from './not-found-log.js'
+export type {
+  AddRedirectPatternInput,
+  RedirectPatternRecord,
+  RedirectPatternResolution,
+  RedirectPatternStatus,
+  RedirectPatternStore,
+  RedirectPatternStoreOptions,
+} from './redirect-patterns.js'
+export { createRedirectPatternStore, REDIRECT_PATTERNS_TABLE } from './redirect-patterns.js'
+export type {
   AddRedirectInput,
   ListRedirectsOptions,
   RedirectReason,
@@ -7,6 +28,7 @@ export type {
   RedirectStatus,
   RedirectStore,
   RedirectStoreOptions,
+  UpdateRedirectInput,
 } from './redirects.js'
 export { createRedirectStore, REDIRECT_REASONS, REDIRECTS_TABLE } from './redirects.js'
 export type { EntryLookup, ResolveUrlOptions, UrlResolution } from './resolve.js'

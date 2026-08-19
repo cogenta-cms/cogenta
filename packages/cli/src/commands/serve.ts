@@ -32,6 +32,7 @@ import {
   createMediaRouter,
   createMenuRouter,
   createMfaRecommendationSource,
+  createNotFoundRouter,
   createNoticeDismissalStore,
   createNoticeRouter,
   createOpsStatusRouter,
@@ -51,6 +52,7 @@ import {
   type MediaImageProcessor,
   type MediaRouter,
   type MenuRouter,
+  type NotFoundRouter,
   type NoticeRouter,
   type OpsStatusRouter,
   type PermissionLayer,
@@ -120,12 +122,16 @@ import {
   type ContentStore,
   createContentStore,
   createMenuStore,
+  createNotFoundLogStore,
+  createRedirectPatternStore,
   createRedirectStore,
   createSchemaTables,
   createSearchIndex,
   createTaxonomyStore,
   ensureMenuTables,
   type MenuStore,
+  type NotFoundLogStore,
+  type RedirectPatternStore,
   type RedirectStore,
   registerScheduledPublishing,
   type SchemaDocument,
@@ -134,6 +140,7 @@ import {
   type TaxonomyStore,
   withLifecycleEvents,
   withReadOnlyStore,
+  withRedirectTracking,
   withScheduledPublishEnqueue,
   withSearchIndexing,
 } from '@cogenta/schema'
@@ -348,8 +355,27 @@ interface Site {
    * that never sells anything never pays for it (mirrors the taxonomy story).
    */
   readonly commerceRouter: CommerceAdminRouter
-  /** `/api/redirects` — admin-only management of the redirect table `cogenta serve` already applies to every public GET (audit follow-up to L10 task 2). */
+  /** `/api/redirects` — admin-only management of the redirect table `cogenta serve` already applies to every public GET (audit follow-up to L10 task 2; extended by fiche 12 with editing, search, patterns and CSV import/export). */
   readonly redirectRouter: RedirectRouter
+  /**
+   * Prefix redirects (`/blog/*` to `/actualites/*`, fiche 12 task 4) — a
+   * second, deliberately simpler table beside `redirects`, checked only when
+   * the exact-match table finds nothing. Never a regular expression: see
+   * `@cogenta/schema`'s `redirect-patterns.ts` for why that is structural,
+   * not a convention someone could accidentally violate.
+   */
+  readonly redirectPatterns: RedirectPatternStore
+  /**
+   * The log of public URLs that answered a 404 (fiche 12 task 1). Written on
+   * the public GET path in this file's own request handler, read and
+   * dismissed through `notFoundRouter` below.
+   */
+  readonly notFoundLog: NotFoundLogStore
+  readonly notFoundLogEnabled: boolean
+  /** `/api/not-found` — admin-only reads of `notFoundLog`. Never writes: the log fills itself. */
+  readonly notFoundRouter: NotFoundRouter
+  /** Drains rows of `notFoundLog` older than its configured retention. Ticked by `runServe`, exposed so a test can call it directly instead of waiting a day. */
+  readonly tickNotFoundPurge: () => Promise<number>
   /** `GET /api/security-status` and `GET /api/webhooks-status` — read-only mirrors of the site's configuration file, admin-only (audit follow-up to L10 task 6 / L14 task 1). */
   readonly opsStatusRouter: OpsStatusRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
@@ -505,6 +531,13 @@ interface AssembleSiteOptions {
   /** CORS, security headers and cache-control. */
   readonly security: SecurityConfig
   /**
+   * The log of public URLs that answered a 404 (fiche 12 task 1) — on by
+   * default, bounded by `maxPaths`, purged past `retainDays`. `enabled:
+   * false` stops new entries being recorded; existing ones are still
+   * readable and dismissible from the admin screen either way.
+   */
+  readonly notFoundLog: CogentaConfig['notFoundLog']
+  /**
    * The site's outbound webhook configuration, read-only mirrored at
    * `GET /api/webhooks-status` (audit follow-up to L14 task 1). Distinct from
    * `onContentEvent` below: this is the *configuration*, that is the sender
@@ -569,6 +602,25 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // persistent process.
   const scheduledPublishQueue = createDatabaseQueue({ db, logger })
 
+  // Built before `storeFor` below so a collection's store can be wrapped with
+  // `withRedirectTracking` (fiche 12 task 3): renaming the slug of a
+  // published entry must write its 301 in the very same place every other
+  // derived write — the search index, the vector index — already happens.
+  const redirects = createRedirectStore({ db })
+  await redirects.ensureTable()
+
+  // Prefix redirects (fiche 12 task 4) — a second, simpler table checked
+  // only when `redirects.resolve()` finds nothing. See `@cogenta/schema`'s
+  // `redirect-patterns.ts` for why this is not a merged into `redirects`.
+  const redirectPatterns = createRedirectPatternStore({ db })
+  await redirectPatterns.ensureTable()
+
+  // The 404 log (fiche 12 task 1) — bounded and purged, never carrying an
+  // IP or a user agent. See `@cogenta/schema`'s `not-found-log.ts` for the
+  // anti-abuse reasoning `maxPaths` exists for.
+  const notFoundLog = createNotFoundLogStore({ db, maxPaths: options.notFoundLog.maxPaths })
+  await notFoundLog.ensureTable()
+
   const stores = new Map<string, ContentStore>()
   const storeFor = (collection: CollectionDefinition): ContentStore => {
     const existing = stores.get(collection.name)
@@ -578,10 +630,23 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     // left to refuse at that moment.
     const created = createContentStore({ db, collection, siblings: collections })
     const guarded = readOnly ? withReadOnlyStore(created) : created
+    // Writes the redirect a slug rename on a *published* entry owes (fiche 12
+    // task 3). Placed right after the read-only guard, for the same reason
+    // scheduling is: a write the guard refused must never leave a redirect
+    // behind either.
+    const tracked = withRedirectTracking(guarded, {
+      collection,
+      redirects,
+      onError: (error) =>
+        logger.error('redirect tracking failed', {
+          collection: collection.name,
+          error: String(error),
+        }),
+    })
     // Queues the real publish job for a save that lands as `status:
     // 'scheduled'`. Placed right after the read-only guard so a write that
     // guard refused never reaches the queue either.
-    const schedulable = withScheduledPublishEnqueue(guarded, {
+    const schedulable = withScheduledPublishEnqueue(tracked, {
       collection,
       queue: scheduledPublishQueue,
       onError: (error) =>
@@ -662,9 +727,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     },
     { logger },
   )
-
-  const redirects = createRedirectStore({ db })
-  await redirects.ensureTable()
 
   const permissions = createPermissionLayer({ collections })
   const service = createContentService({
@@ -862,7 +924,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ...(commerceInvoices === undefined ? {} : { invoices: commerceInvoices }),
       permissions: commercePermissions,
     }),
-    redirectRouter: createRedirectRouter({ store: redirects }),
+    redirectRouter: createRedirectRouter({ store: redirects, patterns: redirectPatterns }),
+    redirectPatterns,
+    notFoundLog,
+    notFoundLogEnabled: options.notFoundLog.enabled,
+    notFoundRouter: createNotFoundRouter({ store: notFoundLog }),
+    tickNotFoundPurge: () => notFoundLog.purge(options.notFoundLog.retainDays),
     opsStatusRouter: createOpsStatusRouter({
       security: options.security,
       webhooks: options.webhooks,
@@ -1702,13 +1769,26 @@ export function createRequestListener(
         return
       }
 
-      // The admin screen the redirect table never had: creating and removing
-      // a rule from a browser instead of the database directly (audit
-      // follow-up to L10 task 2). Admin-only, checked by the router itself.
-      if (url.pathname === '/api/redirects') {
-        const body = req.method === 'POST' ? await readBody(req) : undefined
+      // The admin screen the redirect table never had: creating, editing and
+      // removing a rule from a browser instead of the database directly
+      // (audit follow-up to L10 task 2), extended by fiche 12 with prefix
+      // patterns and CSV import/export under the same prefix — all
+      // admin-only, checked by the router itself.
+      if (url.pathname.startsWith('/api/redirects')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.redirectRouter.handle(request, context))
+        return
+      }
+
+      // The 404 log's own admin screen (fiche 12 task 1) — read and dismiss
+      // only; the log fills itself from the public GET path below.
+      if (url.pathname === '/api/not-found') {
+        const body =
+          req.method === 'DELETE' || req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.notFoundRouter.handle(request, context))
         return
       }
 
@@ -1941,13 +2021,29 @@ export function createRequestListener(
       // answer its old URL with the 301 the rename recorded, not a 404 (L10
       // task 2). Before route matching, so a redirect wins even when some
       // other entry has since taken the old path — that is what `release()`
-      // is for on the write side.
+      // is for on the write side. Prefix patterns (fiche 12 task 4) are
+      // checked only when the exact-match table finds nothing — a curated
+      // rule for one path always wins over a broad prefix rewrite.
       if (req.method === 'GET' || req.method === 'HEAD') {
-        const redirect = await site.redirects.resolve(url.pathname)
+        const redirect =
+          (await site.redirects.resolve(url.pathname)) ??
+          (await site.redirectPatterns.resolve(url.pathname))
         if (redirect !== null) {
+          if (redirect.status === 410) {
+            // Not a redirect at all: no `Location`, and cacheable for a
+            // while — "gone for good" does not change from one request to
+            // the next the way a temporary hop might.
+            res.writeHead(410, {
+              'content-type': 'text/plain; charset=utf-8',
+              'cache-control': 'public, max-age=3600',
+            })
+            res.end('Gone')
+            return
+          }
+          const cacheableByBrowsersAndCrawlers = redirect.status === 301 || redirect.status === 308
           res.writeHead(redirect.status, {
             location: `${redirect.to}${url.search}`,
-            'cache-control': redirect.status === 301 ? 'public, max-age=3600' : 'no-store',
+            'cache-control': cacheableByBrowsersAndCrawlers ? 'public, max-age=3600' : 'no-store',
           })
           res.end()
           return
@@ -2046,6 +2142,24 @@ export function createRequestListener(
           return
         }
 
+        // The 404 log (fiche 12 task 1): every public GET that matched no
+        // route, recorded by path — never by IP or user agent — so the ten
+        // URLs most requested and never found are visible without anyone
+        // discovering that by luck. A failed write here must never turn an
+        // honest 404 into a 500. `/api/*` is excluded: an unmatched API path
+        // falls through to this same branch (nothing above returns for it
+        // either), but a wrong or retired API call is not a broken page link.
+        if (site.notFoundLogEnabled && !url.pathname.startsWith('/api/')) {
+          try {
+            await site.notFoundLog.record({
+              path: url.pathname,
+              ...(req.headers.referer === undefined ? {} : { referrer: req.headers.referer }),
+            })
+          } catch (error) {
+            logger.warn('not-found log write failed', { error: String(error) })
+          }
+        }
+
         // The site's own 404 page (L14 task 2). It is an ordinary entry at
         // `site.notFoundPath`, rendered by exactly the same function and
         // through exactly the same permission-checked gateway as any other
@@ -2127,6 +2241,8 @@ export interface ServeOptions {
    * it.
    */
   readonly scheduledPublishTickMs?: number
+  /** Overrides `NOT_FOUND_PURGE_TICK_MS`, for the same reason `scheduledPublishTickMs` exists. */
+  readonly notFoundPurgeTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -2147,6 +2263,14 @@ const SHUTDOWN_GRACE_MS = 2_000
  * on the first tick after the next start, however late that is.
  */
 const SCHEDULED_PUBLISH_TICK_MS = 60_000
+
+/**
+ * How often `runServe` purges the 404 log past its configured retention
+ * (fiche 12 task 1). Daily, not every minute like publication: a log purge
+ * has no visitor waiting on it, and the log's own `maxPaths` cap — not this
+ * interval — is what actually bounds its size between purges.
+ */
+const NOT_FOUND_PURGE_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
@@ -2231,6 +2355,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     images: images?.processor ?? null,
     security: loaded.config.security,
+    notFoundLog: loaded.config.notFoundLog,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
     sitePlans: await createSitePlanning({
@@ -2307,6 +2432,22 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // no open connections must still be able to exit.
   scheduledPublishTimer.unref()
 
+  // The 404 log's own purge (fiche 12 task 1): a bound on how long a tracked
+  // path is kept, independent of `maxPaths`'s bound on how many are. Same
+  // shape as scheduled publication — one tick now, one every
+  // `NOT_FOUND_PURGE_TICK_MS` after, never fatal.
+  const runNotFoundPurgeTick = (): void => {
+    site.tickNotFoundPurge().catch((error: unknown) => {
+      logger.error('not-found log purge failed', { error: String(error) })
+    })
+  }
+  runNotFoundPurgeTick()
+  const notFoundPurgeTimer = setInterval(
+    runNotFoundPurgeTick,
+    options.notFoundPurgeTickMs ?? NOT_FOUND_PURGE_TICK_MS,
+  )
+  notFoundPurgeTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -2317,6 +2458,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   })
 
   clearInterval(scheduledPublishTimer)
+  clearInterval(notFoundPurgeTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

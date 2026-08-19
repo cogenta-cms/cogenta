@@ -298,6 +298,25 @@ describe('resolveConfig — paths are relative to the config file', () => {
   })
 })
 
+describe('resolveConfig — notFoundLog (fiche 12 task 1)', () => {
+  it('is on by default, with a bounded cap and a 30-day retention', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    expect(config.notFoundLog.enabled).toBe(true)
+    expect(config.notFoundLog.maxPaths).toBe(2000)
+    expect(config.notFoundLog.retainDays).toBe(30)
+  })
+
+  it('lets a site turn the log off, or tighten its bounds', () => {
+    const config = resolveConfig(
+      { ...minimal, notFoundLog: { enabled: false, maxPaths: 100, retainDays: 7 } },
+      noEnv,
+    )
+
+    expect(config.notFoundLog).toEqual({ enabled: false, maxPaths: 100, retainDays: 7 })
+  })
+})
+
 describe('resolveConfig — security (L10 task 6)', () => {
   it('leaves CORS off, CSP absent and HSTS at zero when nothing is configured', () => {
     const config = resolveConfig(minimal, noEnv)

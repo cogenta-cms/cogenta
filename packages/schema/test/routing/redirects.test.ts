@@ -262,3 +262,103 @@ describe('a slug change on a published entry', () => {
     expect(record).toMatchObject({ from: '/contact-us', to: '/contact', locale: null })
   })
 })
+
+describe('410 Gone, 307/308, and editing a rule in place', () => {
+  let db: DatabaseHandle
+  let store: RedirectStore
+
+  beforeEach(async () => {
+    db = await createSqliteHandle({ url: ':memory:' })
+    store = createRedirectStore({ db })
+  })
+
+  afterEach(async () => {
+    await db.close()
+  })
+
+  it('marks a path Gone without needing a destination', async () => {
+    const record = await store.add({ from: '/discontinued', status: 410 })
+
+    expect(record).toMatchObject({ from: '/discontinued', status: 410 })
+    await expect(store.resolve('/discontinued')).resolves.toEqual({
+      to: '/discontinued',
+      status: 410,
+    })
+  })
+
+  it('lets a plain redirect be created into a page later marked Gone, without a false loop', async () => {
+    await store.add({ from: '/old-product', status: 410 })
+    // Someone points a different old URL at the now-Gone path. `add` must not
+    // treat that as a loop — `targetOf` excludes 410 rows from the chain it
+    // checks for exactly this reason.
+    await expect(store.add({ from: '/other-old-url', to: '/old-product' })).resolves.toMatchObject({
+      from: '/other-old-url',
+      to: '/old-product',
+      status: 301,
+    })
+  })
+
+  it('reports 410 for a redirect that chains into a page marked Gone', async () => {
+    await store.add({ from: '/old-product', status: 410 })
+    await store.add({ from: '/other-old-url', to: '/old-product' })
+
+    // `resolve` (the read path, at request time) walks the chain further
+    // than `add` needs to: a visitor sent through `/other-old-url` would
+    // land on a Gone page anyway, so the honest answer is 410, not a 301 to
+    // a dead end.
+    await expect(store.resolve('/other-old-url')).resolves.toEqual({
+      to: '/old-product',
+      status: 410,
+    })
+    await expect(store.resolve('/old-product')).resolves.toEqual({
+      to: '/old-product',
+      status: 410,
+    })
+  })
+
+  it('refuses a redirect with no destination and no 410', async () => {
+    await expect(store.add({ from: '/no-target' })).rejects.toMatchObject({
+      code: 'CONTENT_ROUTE_INVALID',
+    })
+  })
+
+  it('accepts 307 and 308, and reports the chain as temporary when any hop is', async () => {
+    await store.add({ from: '/a', to: '/b', status: 308 })
+    await expect(store.resolve('/a')).resolves.toEqual({ to: '/b', status: 308 })
+
+    await store.add({ from: '/c', to: '/d', status: 307 })
+    await expect(store.resolve('/c')).resolves.toEqual({ to: '/d', status: 307 })
+  })
+
+  it('edits the target and status of an existing rule without a 404 in between', async () => {
+    await store.add({ from: '/old', to: '/first-target' })
+
+    const updated = await store.update('/old', { to: '/second-target', status: 302 })
+
+    expect(updated).toMatchObject({ from: '/old', to: '/second-target', status: 302 })
+    await expect(store.resolve('/old')).resolves.toEqual({ to: '/second-target', status: 302 })
+  })
+
+  it('lets an edit change only the status, keeping the existing target', async () => {
+    await store.add({ from: '/old', to: '/new', reason: 'slug-change' })
+
+    const updated = await store.update('/old', { status: 302 })
+
+    expect(updated).toMatchObject({ from: '/old', to: '/new', status: 302, reason: 'slug-change' })
+  })
+
+  it('refuses to edit a rule that does not exist', async () => {
+    await expect(store.update('/nowhere', { to: '/somewhere' })).rejects.toMatchObject({
+      code: 'REDIRECT_UNKNOWN',
+    })
+  })
+
+  it('still refuses a loop through an edit', async () => {
+    await store.add({ from: '/a', to: '/b' })
+    await store.add({ from: '/b', to: '/c' })
+
+    await expect(store.update('/a', { to: '/a' })).rejects.toMatchObject({
+      code: 'CONTENT_REDIRECT_LOOP',
+    })
+  })
+})

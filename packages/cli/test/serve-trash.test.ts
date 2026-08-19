@@ -349,11 +349,15 @@ describe('the trash, end to end', () => {
       // ran and how many days each collection keeps its trash for.
       const status = await fetch(`${server.base}/api/trash-status`, { headers })
       expect(status.status).toBe(200)
-      const statusBody = (await status.json()).data as {
-        retainDaysByCollection: Record<string, number>
-        lastRunAt: string | null
-        lastPurged: number | null
-      }
+      const statusBody = (
+        (await status.json()) as {
+          data: {
+            retainDaysByCollection: Record<string, number>
+            lastRunAt: string | null
+            lastPurged: number | null
+          }
+        }
+      ).data
       expect(statusBody.retainDaysByCollection).toEqual({ author: 30, article: 30, note: 0 })
       expect(statusBody.lastRunAt).not.toBeNull()
       // `lastPurged` is the *most recent* tick's count, not a running total —

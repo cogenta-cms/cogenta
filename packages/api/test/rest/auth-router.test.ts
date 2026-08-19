@@ -68,14 +68,17 @@ afterEach(async () => {
 function request(
   method: string,
   path: string,
-  options: { body?: unknown; token?: string } = {},
+  options: { body?: unknown; token?: string; headers?: Record<string, string> } = {},
 ): RestRequest {
   return {
     method,
     path,
     query: {},
     ...(options.body === undefined ? {} : { body: options.body }),
-    headers: options.token === undefined ? {} : { authorization: `Bearer ${options.token}` },
+    headers: {
+      ...options.headers,
+      ...(options.token === undefined ? {} : { authorization: `Bearer ${options.token}` }),
+    },
   }
 }
 
@@ -368,6 +371,255 @@ describe('TOTP self-service enrolment', () => {
     } finally {
       await db_.close()
     }
+  })
+})
+
+/**
+ * Fiche 18 task 1 — the whole reason for this fiche. `confirmTotpEnrolment`
+ * now hands back ten recovery codes in the same response, and
+ * `/api/auth/recovery-code` is the door they open.
+ */
+describe('Recovery codes', () => {
+  async function signedInEditorWithTotpAndCodes() {
+    const db_ = await createSqliteHandle({ url: ':memory:' })
+    const authWithMfa = await createAuthStore({
+      db: db_,
+      signingKey: SIGNING_KEY,
+      collections: PUBLISH_COLLECTIONS,
+    })
+    const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
+    await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
+    const session = await authWithMfa.sessions.create(user.id)
+    const router = createAuthRouter({ auth: authWithMfa })
+
+    const now = Math.floor(Date.now() / 1000)
+    const begin = await router.handle(
+      request('POST', '/api/auth/totp/enrol', { token: session.token }),
+    )
+    const { secret } = (begin.body as { data: { secret: string } }).data
+    const confirm = await router.handle(
+      request('POST', '/api/auth/totp/enrol/confirm', {
+        token: session.token,
+        body: { token: codeFor(secret, now) },
+      }),
+    )
+    const codes = (confirm.body as { data: { recoveryCodes: string[] } }).data.recoveryCodes
+
+    return { db: db_, auth: authWithMfa, router, user, token: session.token, codes }
+  }
+
+  it('confirming TOTP enrolment hands back ten codes, shown once', async () => {
+    const { db: db_, codes } = await signedInEditorWithTotpAndCodes()
+    try {
+      expect(codes).toHaveLength(10)
+      expect(new Set(codes).size).toBe(10)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('signs in end to end with a recovery code, and the same code is refused a second time', async () => {
+    const { db: db_, router, codes } = await signedInEditorWithTotpAndCodes()
+    try {
+      const login = await router.handle(
+        request('POST', '/api/auth/login', {
+          body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+        }),
+      )
+      const { ticket } = (login.body as { data: { ticket: string } }).data
+      const code = codes[0]
+      if (code === undefined) throw new Error('no code issued')
+
+      const first = await router.handle(
+        request('POST', '/api/auth/recovery-code', { body: { ticket, code } }),
+      )
+      expect(first.status).toBe(200)
+      const body = first.body as { data: { status: string; session?: { token: string } } }
+      expect(body.data.status).toBe('session')
+      expect(body.data.session?.token).toBeTruthy()
+
+      const secondLogin = await router.handle(
+        request('POST', '/api/auth/login', {
+          body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+        }),
+      )
+      const secondTicket = (secondLogin.body as { data: { ticket: string } }).data.ticket
+      const second = await router.handle(
+        request('POST', '/api/auth/recovery-code', { body: { ticket: secondTicket, code } }),
+      )
+      expect(second.status).toBe(401)
+      expect((second.body as { error: { code: string } }).error.code).toBe(
+        'AUTH_RECOVERY_CODE_INVALID',
+      )
+    } finally {
+      await db_.close()
+    }
+  }, 15_000)
+
+  it('rejects an unknown code with 401, not a crash', async () => {
+    const { db: db_, router } = await signedInEditorWithTotpAndCodes()
+    try {
+      const login = await router.handle(
+        request('POST', '/api/auth/login', {
+          body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+        }),
+      )
+      const { ticket } = (login.body as { data: { ticket: string } }).data
+
+      const response = await router.handle(
+        request('POST', '/api/auth/recovery-code', { body: { ticket, code: 'AAAAA-AAAAA' } }),
+      )
+      expect(response.status).toBe(401)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  it('refuses GET on the recovery-code route', async () => {
+    const { db: db_, router } = await signedInEditorWithTotpAndCodes()
+    try {
+      const response = await router.handle(request('GET', '/api/auth/recovery-code'))
+      expect(response.status).toBe(405)
+    } finally {
+      await db_.close()
+    }
+  })
+
+  describe('GET /api/auth/totp/recovery-codes', () => {
+    it('reports how many remain, and requires a session', async () => {
+      const { db: db_, router, token } = await signedInEditorWithTotpAndCodes()
+      try {
+        const anonymous = await router.handle(request('GET', '/api/auth/totp/recovery-codes'))
+        expect(anonymous.status).toBe(401)
+
+        const response = await router.handle(
+          request('GET', '/api/auth/totp/recovery-codes', { token }),
+        )
+        expect(response.status).toBe(200)
+        expect(response.body).toEqual({ data: { total: 10, remaining: 10 } })
+      } finally {
+        await db_.close()
+      }
+    })
+  })
+
+  describe('POST /api/auth/totp/recovery-codes/regenerate', () => {
+    it('replaces the batch: the old codes stop working, the new ones do', async () => {
+      const { db: db_, router, token, codes } = await signedInEditorWithTotpAndCodes()
+      try {
+        const regenerate = await router.handle(
+          request('POST', '/api/auth/totp/recovery-codes/regenerate', { token }),
+        )
+        expect(regenerate.status).toBe(200)
+        const fresh = (regenerate.body as { data: { recoveryCodes: string[] } }).data.recoveryCodes
+        expect(fresh).toHaveLength(10)
+        expect(new Set(fresh)).not.toEqual(new Set(codes))
+
+        const login = await router.handle(
+          request('POST', '/api/auth/login', {
+            body: { email: 'ed@example.com', password: 'correct horse battery staple' },
+          }),
+        )
+        const { ticket } = (login.body as { data: { ticket: string } }).data
+        const oldCode = codes[0]
+        if (oldCode === undefined) throw new Error('no code issued')
+        const withOld = await router.handle(
+          request('POST', '/api/auth/recovery-code', { body: { ticket, code: oldCode } }),
+        )
+        expect(withOld.status).toBe(401)
+      } finally {
+        await db_.close()
+      }
+    }, 30_000)
+
+    it('requires a session', async () => {
+      const { db: db_, router } = await signedInEditorWithTotpAndCodes()
+      try {
+        const response = await router.handle(
+          request('POST', '/api/auth/totp/recovery-codes/regenerate'),
+        )
+        expect(response.status).toBe(401)
+      } finally {
+        await db_.close()
+      }
+    })
+  })
+})
+
+describe('GET /api/auth/password-policy', () => {
+  it('is public and announces the same floor the server enforces', async () => {
+    const router = createAuthRouter({ auth })
+    const response = await router.handle(request('GET', '/api/auth/password-policy'))
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({ data: { minLength: 12 } })
+  })
+
+  it('refuses POST', async () => {
+    const router = createAuthRouter({ auth })
+    const response = await router.handle(request('POST', '/api/auth/password-policy'))
+    expect(response.status).toBe(405)
+  })
+})
+
+/** Fiche 18 tasks 2 and 5: what the login step records about the request making it. */
+describe('LoginContext — remember me and device metadata', () => {
+  it('uses the default session length when "rememberMe" is omitted (no regression)', async () => {
+    const router = createAuthRouter({ auth })
+    await createLoggedInUser('alice@example.com', 'correct horse battery staple')
+
+    const response = await router.handle(
+      request('POST', '/api/auth/login', {
+        body: { email: 'alice@example.com', password: 'correct horse battery staple' },
+      }),
+    )
+    const body = response.body as {
+      data: { session: { expiresAt: string } }
+    }
+    const lifetimeDays =
+      (new Date(body.data.session.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)
+    expect(lifetimeDays).toBeGreaterThan(29)
+  })
+
+  it('shortens the session when "rememberMe" is explicitly false', async () => {
+    const router = createAuthRouter({ auth })
+    await createLoggedInUser('alice@example.com', 'correct horse battery staple')
+
+    const response = await router.handle(
+      request('POST', '/api/auth/login', {
+        body: {
+          email: 'alice@example.com',
+          password: 'correct horse battery staple',
+          rememberMe: false,
+        },
+      }),
+    )
+    const body = response.body as {
+      data: { session: { expiresAt: string } }
+    }
+    const lifetimeHours = (new Date(body.data.session.expiresAt).getTime() - Date.now()) / 3_600_000
+    expect(lifetimeHours).toBeLessThan(25)
+    expect(lifetimeHours).toBeGreaterThan(23)
+  })
+
+  it('records a browser and device from the User-Agent header on the session it creates', async () => {
+    const router = createAuthRouter({ auth })
+    await createLoggedInUser('alice@example.com', 'correct horse battery staple')
+
+    await router.handle(
+      request('POST', '/api/auth/login', {
+        body: { email: 'alice@example.com', password: 'correct horse battery staple' },
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+        },
+      }),
+    )
+
+    const user = await auth.users.byEmail('alice@example.com')
+    if (user === null) throw new Error('user not found')
+    const [session] = await auth.sessions.list(user.id)
+    expect(session?.browser).toBe('chrome')
+    expect(session?.device).toBe('desktop')
   })
 })
 

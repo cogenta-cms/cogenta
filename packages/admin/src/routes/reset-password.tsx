@@ -1,8 +1,11 @@
-import { type FormEvent, type JSX, useState } from 'react'
+import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { ApiError, resetPassword } from '../api/client.js'
+import { ApiError, getPasswordPolicy, resetPassword } from '../api/client.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
+
+/** The floor this screen falls back to before `getPasswordPolicy()` answers — matches the server's own default (`password-policy.ts`), never a guess that could be wrong. */
+const DEFAULT_MIN_LENGTH = 12
 
 /**
  * The other half of `forgot-password.tsx` — the screen the link in the mail
@@ -23,6 +26,15 @@ export function ResetPasswordRoute(): JSX.Element {
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Fiche 18 task 3: fetched rather than recopied by hand, so the floor
+  // announced here can never drift from what the server actually enforces.
+  const [minLength, setMinLength] = useState(DEFAULT_MIN_LENGTH)
+
+  useEffect(() => {
+    getPasswordPolicy()
+      .then((policy) => setMinLength(policy.minLength))
+      .catch(() => undefined)
+  }, [])
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -78,7 +90,10 @@ export function ResetPasswordRoute(): JSX.Element {
               aria-labelledby="reset-password-heading"
               className="flex flex-col gap-4"
             >
-              <Field label={t('resetPassword.newPassword')} description={t('resetPassword.hint')}>
+              <Field
+                label={t('resetPassword.newPassword')}
+                description={t('resetPassword.hint', { minLength })}
+              >
                 {(control) => (
                   <Input
                     {...control}
@@ -86,12 +101,28 @@ export function ResetPasswordRoute(): JSX.Element {
                     type="password"
                     autoComplete="new-password"
                     required
-                    minLength={12}
+                    minLength={minLength}
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
                   />
                 )}
               </Field>
+              {newPassword.length > 0 && (
+                <p
+                  className={
+                    newPassword.length >= minLength
+                      ? 'm-0 text-sm text-success'
+                      : 'm-0 text-sm text-destructive'
+                  }
+                  role="status"
+                >
+                  {newPassword.length >= minLength
+                    ? t('resetPassword.strengthOk')
+                    : t('resetPassword.strengthShort', {
+                        remaining: minLength - newPassword.length,
+                      })}
+                </p>
+              )}
               {error !== null && (
                 <Notice tone="danger" live="assertive">
                   <p>{error}</p>

@@ -39,8 +39,34 @@ export interface TotpSetup {
   readonly uri: string
 }
 
-export function login(email: string, password: string): Promise<LoginResult> {
-  return request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+/** Ten single-use codes (fiche 18 task 1), shown to the person exactly once — the caller never sees them again after this response. */
+export interface RecoveryCodesIssued {
+  readonly recoveryCodes: readonly string[]
+}
+
+export interface RecoveryCodesStatus {
+  readonly total: number
+  readonly remaining: number
+}
+
+/** The same floor `assertPasswordPolicy` enforces server-side (fiche 18 task 3) — fetched rather than recopied by hand. */
+export interface PasswordPolicy {
+  readonly minLength: number
+}
+
+/**
+ * `rememberMe: false` asks for a day-long session instead of the usual
+ * sliding 30-day one (fiche 18 task 5). Omitted keeps today's behaviour.
+ */
+export function login(email: string, password: string, rememberMe?: boolean): Promise<LoginResult> {
+  return request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      password,
+      ...(rememberMe === undefined ? {} : { rememberMe }),
+    }),
+  })
 }
 
 /**
@@ -68,6 +94,18 @@ export function completeTotp(ticket: string, token: string): Promise<LoginResult
 }
 
 /**
+ * The recovery-code counterpart of `completeTotp` (fiche 18 task 1) — the
+ * way back in when the authenticator that would have produced a TOTP code is
+ * unavailable. Same ticket, a code instead of a 6-digit token.
+ */
+export function completeRecoveryCode(ticket: string, code: string): Promise<LoginResult> {
+  return request('/api/auth/recovery-code', {
+    method: 'POST',
+    body: JSON.stringify({ ticket, code }),
+  })
+}
+
+/**
  * Self-service TOTP, for an account that is already signed in.
  *
  * `token` is the session bearer token, and it is the *only* thing that says
@@ -78,7 +116,11 @@ export function beginTotpEnrolment(token: string): Promise<TotpSetup> {
   return request('/api/auth/totp/enrol', { method: 'POST', headers: authHeader(token) })
 }
 
-export function confirmTotpEnrolment(token: string, code: string): Promise<void> {
+/**
+ * Confirming enrolment mints ten recovery codes in the same step (fiche 18
+ * task 1) — shown to the person exactly once, right here.
+ */
+export function confirmTotpEnrolment(token: string, code: string): Promise<RecoveryCodesIssued> {
   return request('/api/auth/totp/enrol/confirm', {
     method: 'POST',
     headers: authHeader(token),
@@ -88,6 +130,24 @@ export function confirmTotpEnrolment(token: string, code: string): Promise<void>
 
 export function disableTotp(token: string): Promise<void> {
   return request('/api/auth/totp', { method: 'DELETE', headers: authHeader(token) })
+}
+
+/** How many recovery codes this account still has unused. */
+export function getRecoveryCodesStatus(token: string): Promise<RecoveryCodesStatus> {
+  return request('/api/auth/totp/recovery-codes', { headers: authHeader(token) })
+}
+
+/** Replaces the batch wholesale, invalidating every code from the previous one. */
+export function regenerateRecoveryCodes(token: string): Promise<RecoveryCodesIssued> {
+  return request('/api/auth/totp/recovery-codes/regenerate', {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+/** Public and read-only: the password floor, announced before it is enforced (fiche 18 task 3). */
+export function getPasswordPolicy(): Promise<PasswordPolicy> {
+  return request('/api/auth/password-policy')
 }
 
 export function currentSession(token: string): Promise<SessionUser> {

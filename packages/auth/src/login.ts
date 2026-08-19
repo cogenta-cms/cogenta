@@ -9,6 +9,7 @@ import type {
 } from '@simplewebauthn/server'
 import { createCredentialStore } from './credentials.js'
 import { createRateLimiter } from './rate-limit.js'
+import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.js'
 import { createSessionStore } from './sessions.js'
 import { generateTotpSecret, totpUri, verifyTotp } from './totp.js'
 import type { IssuedSession, User } from './types.js'
@@ -32,11 +33,18 @@ interface TicketPayload {
   /** Present only for the two WebAuthn purposes — the challenge the ceremony must be answered against. */
   readonly challenge?: string
   readonly expiresAt: number
+  /**
+   * Carries a "remember me" choice from the password step across to whichever
+   * step actually issues the session (fiche 18 task 5) — a login ticket is the
+   * only thing both steps share, since no session exists yet to hold it in.
+   */
+  readonly ttlMs?: number
 }
 
 interface VerifiedTicket {
   readonly userId: string | null
   readonly challenge: string | undefined
+  readonly ttlMs: number | undefined
 }
 
 /**
@@ -85,12 +93,14 @@ function verifyTicket(
       userId: unknown
       challenge: unknown
       expiresAt: unknown
+      ttlMs: unknown
     }
     if (parsed.purpose !== purpose) return null
     if (parsed.userId !== null && typeof parsed.userId !== 'string') return null
     if (typeof parsed.expiresAt !== 'number' || parsed.expiresAt <= now) return null
     if (parsed.challenge !== undefined && typeof parsed.challenge !== 'string') return null
-    return { userId: parsed.userId, challenge: parsed.challenge }
+    if (parsed.ttlMs !== undefined && typeof parsed.ttlMs !== 'number') return null
+    return { userId: parsed.userId, challenge: parsed.challenge, ttlMs: parsed.ttlMs }
   } catch {
     return null
   }
@@ -117,6 +127,37 @@ export interface TotpSetup {
   readonly secret: string
   /** `otpauth://` URI, for a QR code the authenticator app scans. */
   readonly uri: string
+}
+
+/**
+ * What confirming TOTP enrolment (or a later regeneration) hands back —
+ * fiche 18 task 1. `codes` is shown to the person **exactly once**: it is
+ * never returned again by any other call, and only its hash is kept.
+ */
+export interface RecoveryCodesIssued {
+  readonly codes: readonly string[]
+}
+
+/**
+ * What a caller resolved about the request making a sign-in call — fiche 18
+ * tasks 2 and 5. Optional everywhere: a caller that passes nothing gets
+ * exactly today's behaviour (no metadata, the default sliding session).
+ */
+export interface LoginContext {
+  /**
+   * Raw `User-Agent` header, if any. Distilled to a browser family and a
+   * device type at the point of writing (`sessions.ts`) and never stored
+   * whole — see that file's own comment.
+   */
+  readonly userAgent?: string
+  /**
+   * Requested session lifetime in milliseconds. Absent means the default
+   * 30-day sliding window; "remember me" being left unchecked is what asks
+   * for a shorter one (fiche 18 task 5). Chosen at the password step and
+   * carried inside the MFA ticket to whichever step actually issues the
+   * session, since no session exists yet to hold it in.
+   */
+  readonly ttlMs?: number
 }
 
 export interface WebAuthnRegistrationChallenge {
@@ -149,8 +190,24 @@ export interface AuthServiceOptions {
 }
 
 export interface AuthService {
-  passwordLogin(email: string, password: string): Promise<LoginResult>
-  totpLogin(ticket: string, token: string): Promise<LoginResult>
+  passwordLogin(email: string, password: string, context?: LoginContext): Promise<LoginResult>
+  totpLogin(
+    ticket: string,
+    token: string,
+    context?: Pick<LoginContext, 'userAgent'>,
+  ): Promise<LoginResult>
+  /**
+   * Completes a sign-in with a recovery code instead of a TOTP code —
+   * fiche 18 task 1, the way back in for an account that lost the
+   * authenticator that would have produced one. The code is consumed
+   * atomically: a second attempt with the same code, even seconds later,
+   * fails exactly like a code that was never issued.
+   */
+  recoveryCodeLogin(
+    ticket: string,
+    code: string,
+    context?: Pick<LoginContext, 'userAgent'>,
+  ): Promise<LoginResult>
   /** Issues a session directly: a verified passkey already proved a strong second factor. */
   sessionForVerifiedUser(userId: string): Promise<LoginResult>
   /**
@@ -160,14 +217,33 @@ export interface AuthService {
    * is the one making the call.
    */
   beginTotpEnrolment(userId: string): Promise<TotpSetup>
-  /** Confirms the code from the authenticator app, which is what makes the factor real. */
-  confirmTotpEnrolment(userId: string, token: string): Promise<void>
+  /**
+   * Confirms the code from the authenticator app, which is what makes the
+   * factor real — and, in the same step, issues ten recovery codes (fiche 18
+   * task 1). TOTP without recovery codes is a lock with one key: losing the
+   * authenticator becomes a permanent lockout the moment this returns, so the
+   * two are minted together rather than as a second, skippable step.
+   */
+  confirmTotpEnrolment(userId: string, token: string): Promise<RecoveryCodesIssued>
   /**
    * Turns TOTP back off. No second proof is asked for: the caller already
    * holds a live session for this account, which — if TOTP was on — they could
-   * only have obtained by passing it.
+   * only have obtained by passing it. Recovery codes go with it: they exist
+   * to be a spare key for TOTP, and there is nothing left for them to unlock
+   * once it is off.
    */
   disableTotp(userId: string): Promise<void>
+  /**
+   * Replaces this account's recovery codes with a fresh batch, invalidating
+   * every code from the previous one (fiche 18 task 1). Requires a confirmed
+   * TOTP factor — a recovery code with nothing to recover from is not a
+   * feature.
+   */
+  regenerateRecoveryCodes(userId: string): Promise<RecoveryCodesIssued>
+  /** How many recovery codes remain unused, for the profile screen's counter. `{ total: 0, remaining: 0 }` if none were ever issued. */
+  recoveryCodesStatus(
+    userId: string,
+  ): Promise<{ readonly total: number; readonly remaining: number }>
   /** Adding a passkey to an already-identified account — `userId` comes from an existing session. */
   beginWebAuthnRegistration(userId: string): Promise<WebAuthnRegistrationChallenge>
   completeWebAuthnRegistration(
@@ -177,7 +253,11 @@ export interface AuthService {
   ): Promise<void>
   /** Usernameless: no account is named up front, so any resident passkey the browser offers can answer. */
   beginWebAuthnLogin(): Promise<WebAuthnAuthenticationChallenge>
-  completeWebAuthnLogin(ticket: string, response: AuthenticationResponseJSON): Promise<LoginResult>
+  completeWebAuthnLogin(
+    ticket: string,
+    response: AuthenticationResponseJSON,
+    context?: Pick<LoginContext, 'userAgent'>,
+  ): Promise<LoginResult>
 }
 
 function invalidTicket(): CogentaError {
@@ -209,9 +289,40 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
   const sessions = createSessionStore(db, now)
   const rateLimit = createRateLimiter(db, now)
 
-  async function issueSession(user: User): Promise<LoginResult> {
-    const session = await sessions.create(user.id)
+  async function issueSession(
+    user: User,
+    context?: Pick<LoginContext, 'userAgent'> & { readonly ttlMs?: number },
+  ): Promise<LoginResult> {
+    const session = await sessions.create(user.id, {
+      ...(context?.userAgent === undefined ? {} : { userAgent: context.userAgent }),
+      ...(context?.ttlMs === undefined ? {} : { ttlMs: context.ttlMs }),
+    })
     return { status: 'session', session, user }
+  }
+
+  /**
+   * Builds the `issueSession` context for a step completing an MFA ticket: the
+   * `userAgent` this HTTP request carried, plus the `ttlMs` "remember me"
+   * chose at the password step and which rode inside the ticket ever since.
+   * `exactOptionalPropertyTypes` means an explicit `undefined` is not the same
+   * as an absent key, so each part is added only when it actually has a value.
+   */
+  function sessionContextFrom(
+    context: Pick<LoginContext, 'userAgent'> | undefined,
+    ttlMs: number | undefined,
+  ): Pick<LoginContext, 'userAgent'> & { readonly ttlMs?: number } {
+    return {
+      ...(context?.userAgent === undefined ? {} : { userAgent: context.userAgent }),
+      ...(ttlMs === undefined ? {} : { ttlMs }),
+    }
+  }
+
+  /** Ten fresh codes, hashed and stored, replacing any still outstanding. */
+  async function issueRecoveryCodes(userId: string): Promise<RecoveryCodesIssued> {
+    const codes = generateRecoveryCodes()
+    const hashes = await Promise.all(codes.map((code) => hashRecoveryCode(code)))
+    await credentials.setRecoveryCodes(userId, hashes)
+    return { codes }
   }
 
   /**
@@ -230,20 +341,25 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     return available
   }
 
-  function mfaChallenge(user: User, available: readonly ('totp' | 'webauthn')[]): LoginResult {
+  function mfaChallenge(
+    user: User,
+    available: readonly ('totp' | 'webauthn')[],
+    ttlMs: number | undefined,
+  ): LoginResult {
     return {
       status: 'mfa_required',
       ticket: signTicket(signingKey, {
         purpose: 'login',
         userId: user.id,
         expiresAt: now() + TICKET_TTL_MS,
+        ...(ttlMs === undefined ? {} : { ttlMs }),
       }),
       availableFactors: available,
     }
   }
 
   return {
-    passwordLogin: async (email, password) => {
+    passwordLogin: async (email, password, context) => {
       const subject = email.trim().toLowerCase()
       await rateLimit.check(subject)
 
@@ -266,10 +382,12 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       // ignoring a factor someone deliberately enabled would be a silent
       // downgrade of their own security.
       const factors = await enrolledFactors(user.id)
-      return factors.length === 0 ? issueSession(user) : mfaChallenge(user, factors)
+      return factors.length === 0
+        ? issueSession(user, context)
+        : mfaChallenge(user, factors, context?.ttlMs)
     },
 
-    totpLogin: async (ticket, token) => {
+    totpLogin: async (ticket, token, context) => {
       const verified = verifyTicket(signingKey, 'login', ticket, now())
       if (verified === null || verified.userId === null) throw invalidTicket()
       const userId = verified.userId
@@ -299,7 +417,40 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         })
       }
       await rateLimit.clear(`mfa:${userId}`)
-      return issueSession(user)
+      return issueSession(user, sessionContextFrom(context, verified.ttlMs))
+    },
+
+    recoveryCodeLogin: async (ticket, code, context) => {
+      const verified = verifyTicket(signingKey, 'login', ticket, now())
+      if (verified === null || verified.userId === null) throw invalidTicket()
+      const userId = verified.userId
+
+      // Its own rate-limit subject, independent of `mfa:` (the TOTP guess
+      // counter) and `totp-setup:` — a wrong code here is a different event
+      // from a wrong 6-digit code, and neither should give the other a free
+      // pass on attempts.
+      await rateLimit.check(`recovery:${userId}`)
+      const consumed = await credentials.consumeRecoveryCode(userId, code)
+
+      if (!consumed) {
+        await rateLimit.record(`recovery:${userId}`)
+        throw new CogentaError({
+          code: 'AUTH_RECOVERY_CODE_INVALID',
+          message: 'This recovery code is not valid.',
+          hint: 'Check you typed it exactly as it was shown, dashes included. Each code works once.',
+        })
+      }
+
+      const user = await users.byId(userId)
+      if (user === null) {
+        throw new CogentaError({
+          code: 'AUTH_USER_NOT_FOUND',
+          message: 'This account no longer exists.',
+          hint: 'It may have been deleted between the password step and this one. Sign in again.',
+        })
+      }
+      await rateLimit.clear(`recovery:${userId}`)
+      return issueSession(user, sessionContextFrom(context, verified.ttlMs))
     },
 
     sessionForVerifiedUser: async (userId) => {
@@ -348,10 +499,33 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
 
       await rateLimit.clear(`totp-setup:${userId}`)
       await credentials.confirmTotp(userId)
+      // Minted in the same step, not a follow-up the person could skip: TOTP
+      // with no recovery codes is a lock with exactly one key, and losing the
+      // authenticator would be a permanent lockout the moment this returns.
+      return issueRecoveryCodes(userId)
     },
 
     disableTotp: async (userId) => {
       await credentials.removeTotp(userId)
+      // Nothing left for them to be a spare key for once TOTP itself is off.
+      await credentials.removeRecoveryCodes(userId)
+    },
+
+    regenerateRecoveryCodes: async (userId) => {
+      const totp = await credentials.totpSecret(userId)
+      if (totp === null || !totp.verified) {
+        throw new CogentaError({
+          code: 'AUTH_RECOVERY_CODES_UNAVAILABLE',
+          message: 'Recovery codes exist to get back in when two-step verification is unusable.',
+          hint: 'Turn on two-step verification first — recovery codes are issued the moment it is confirmed.',
+        })
+      }
+      return issueRecoveryCodes(userId)
+    },
+
+    recoveryCodesStatus: async (userId) => {
+      const status = await credentials.recoveryCodesStatus(userId)
+      return status ?? { total: 0, remaining: 0 }
     },
 
     beginWebAuthnRegistration: async (userId) => {
@@ -416,7 +590,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       }
     },
 
-    completeWebAuthnLogin: async (ticket, response) => {
+    completeWebAuthnLogin: async (ticket, response, context) => {
       if (webauthnConfig === undefined) throw webauthnNotConfigured()
       const verified = verifyTicket(signingKey, 'webauthn_login', ticket, now())
       if (verified === null || verified.challenge === undefined) throw invalidTicket()
@@ -445,7 +619,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
           message: 'This account no longer exists or is disabled.',
         })
       }
-      return issueSession(user)
+      return issueSession(user, context)
     },
   }
 }

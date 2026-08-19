@@ -121,6 +121,10 @@ export const ERROR_CODES = [
   'AUDIT_CHAIN_BROKEN',
   // Auth — self-service password reset over HTTP (L11, forgot-password route)
   'AUTH_RESET_TOKEN_INVALID',
+  // Auth — recovery codes (fiche 18 task 1): the way back in when TOTP itself
+  // is unusable.
+  'AUTH_RECOVERY_CODE_INVALID',
+  'AUTH_RECOVERY_CODES_UNAVAILABLE',
 
   // API keys (L13 task 8: machine-to-machine bearer tokens)
   'API_KEY_INVALID',

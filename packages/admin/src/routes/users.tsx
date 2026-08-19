@@ -470,8 +470,15 @@ export function SessionList({
           {sessions.map((session) => (
             <li key={session.id} className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm">
-                {session.label ?? t('users.unnamedSession')} — {t('users.lastSeen')}{' '}
-                {session.lastSeenAt}
+                {session.label ?? t('users.unnamedSession')} —{' '}
+                {t('users.sessionDevice', { browser: session.browser, device: session.device })} —{' '}
+                {t('users.lastSeen')} {session.lastSeenAt}
+                {session.isCurrent && (
+                  <>
+                    {' '}
+                    <strong>({t('users.currentSession')})</strong>
+                  </>
+                )}
               </span>
               <Button variant="destructive" size="sm" onClick={() => onRevoke(session.id)}>
                 {t('users.revokeSession', { at: session.lastSeenAt })}

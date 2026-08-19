@@ -678,3 +678,44 @@ Non fait par manque de temps dans cette session, pas par blocage technique :
 réel) est déjà câblé et testé de bout en bout côté API
 (`packages/api/test/rest/menu-router.test.ts`), il ne reste qu'à consommer la
 même route depuis le rendu de thème.
+
+## 11. Fiche 18 — profil et authentification : Postgres/MySQL/MariaDB non exécutés
+
+**Ce qui manque** : la case « tests d'intégration sur les trois bases » de la
+définition de terminé, pour la seule vraie migration de schéma de cette fiche
+— `packages/auth/src/tables.ts` ajoute deux colonnes (`browser`, `device`) à
+`cogenta_sessions` via `alter table ... add column`, avalée en
+catch-and-ignore (« déjà là » étant le seul échec que ce `.catch()` avale,
+faute d'un « if not exists » portable sur les trois dialectes — MySQL/MariaDB
+ne l'ont pas avant 8.0/10.something). Même cause que partout ailleurs dans ce
+dépôt cette période : le moteur Docker de cette machine ne répond pas, donc
+`pnpm services:up` puis `pnpm test:integration` n'ont pas pu tourner contre
+Postgres ni MySQL/MariaDB.
+
+**Ce qui est réellement testé, en SQLite** : le chemin de migration
+proprement dit, pas seulement l'état final —
+`packages/auth/test/sessions.test.ts` (« adds the columns to a table that
+already existed, without losing the row already in it ») construit à la main
+la forme de `cogenta_sessions` d'avant cette fiche, y insère une vraie ligne,
+puis relance `ensureAuthTables` (exactement ce que `cogenta serve` fait à
+chaque démarrage) — la ligne pré-existante survit avec `browser`/`device` à
+`'unknown'` (colonne `null`, jamais un crash ni une chaîne vide), et une
+session créée après la migration reçoit de vraies valeurs. Ce que ce test ne
+prouve pas : que `alter table add column` avec ce type de colonne
+(`varchar(64)` sur Postgres/MySQL, contre `text` en SQLite) se comporte pareil
+sur les deux autres dialectes — la syntaxe elle-même est standard et
+portable, mais « la syntaxe est standard » n'est pas « le test est passé ».
+Risque jugé faible malgré tout : aucune contrainte, aucun défaut, aucune
+donnée dérivée d'une autre colonne — le point le plus susceptible de varier
+entre dialectes (une valeur par défaut, une contrainte `not null` sur une
+colonne ajoutée à une table déjà peuplée) est justement absent ici, les deux
+colonnes étant nullables.
+
+**Décision de conception à confirmer par l'humain** (fiche § 8, « Décisions à
+prendre ») : dix codes de dix caractères (`XXXXX-XXXXX`, alphabet de 32
+caractères sans `0`/`O`/`1`/`I`, ~50 bits d'entropie chacun) — conventionnel,
+choisi sans qu'aucune alternative n'ait été sérieusement envisagée. Le niveau
+de détail des sessions (famille de navigateur + type d'appareil seulement,
+jamais l'OS ni la version) a été tranché pour rester strictement au-dessus de
+la règle « pas d'IP en clair » de la fiche sans en dire plus qu'un WHOIS de
+navigateur ne dirait déjà.

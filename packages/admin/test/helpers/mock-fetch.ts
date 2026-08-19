@@ -146,6 +146,11 @@ function json(status: number, body: unknown): Response {
   })
 }
 
+/** A fixed, recognisable batch of ten codes — fiche 18 task 1's "shown once" screen has something real to render and a test can assert on. */
+function mockRecoveryCodeBatch(): readonly string[] {
+  return Array.from({ length: 10 }, (_, index) => `CODE${index}-AAAAA`)
+}
+
 /**
  * A fetch stub that answers exactly the `/api/auth/*` shape the real server
  * returns — this is a network mock for a browser unit test, not the database
@@ -431,13 +436,45 @@ export function installMockFetch(
       mfa: { totp: true, passkeys: 0 },
     },
   ]
-  const userSessions: Record<string, { id: string; lastSeenAt: string; label: string | null }[]> = {
+  // `session-1` is always the id behind `VALID_TOKEN` (see `session()` above)
+  // — the only session this mock ever authenticates as, so it is also the
+  // only one that can ever be "the session making this request" (fiche 18
+  // task 2's `isCurrent`).
+  const CURRENT_SESSION_ID = 'session-1'
+  const userSessions: Record<
+    string,
+    { id: string; lastSeenAt: string; label: string | null; browser: string; device: string }[]
+  > = {
     [user.id]: [
-      { id: 'session-1', lastSeenAt: '2026-03-01T00:00:00.000Z', label: 'Work laptop' },
-      { id: 'session-2', lastSeenAt: '2026-03-02T00:00:00.000Z', label: null },
+      {
+        id: 'session-1',
+        lastSeenAt: '2026-03-01T00:00:00.000Z',
+        label: 'Work laptop',
+        browser: 'chrome',
+        device: 'desktop',
+      },
+      {
+        id: 'session-2',
+        lastSeenAt: '2026-03-02T00:00:00.000Z',
+        label: null,
+        browser: 'safari',
+        device: 'mobile',
+      },
     ],
-    'user-2': [{ id: 'session-3', lastSeenAt: '2026-03-03T00:00:00.000Z', label: 'Phone' }],
+    'user-2': [
+      {
+        id: 'session-3',
+        lastSeenAt: '2026-03-03T00:00:00.000Z',
+        label: 'Phone',
+        browser: 'firefox',
+        device: 'mobile',
+      },
+    ],
   }
+  // Fiche 18 task 1: recovery codes, per account, mirroring the real store's
+  // shape closely enough for the admin's own tests — a batch plus how many
+  // remain unused.
+  const recoveryCodes: Record<string, { total: number; remaining: number }> = {}
 
   let apiKeyCounter = 0
   const apiKeys: {
@@ -724,14 +761,54 @@ export function installMockFetch(
             error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect verification code.' },
           })
         }
-        return json(200, { data: { enrolled: true } })
+        // Minted alongside TOTP confirmation (fiche 18 task 1), shown once.
+        recoveryCodes[user.id] = { total: 10, remaining: 10 }
+        const confirmedAccount = accounts.find((candidate) => candidate.id === user.id)
+        if (confirmedAccount !== undefined) confirmedAccount.mfa.totp = true
+        return json(200, {
+          data: { enrolled: true, recoveryCodes: mockRecoveryCodeBatch() },
+        })
       }
 
       if (url.endsWith('/api/auth/totp') && method === 'DELETE') {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        delete recoveryCodes[user.id]
+        const disabledAccount = accounts.find((candidate) => candidate.id === user.id)
+        if (disabledAccount !== undefined) disabledAccount.mfa.totp = false
         return new Response(null, { status: 204 })
+      }
+
+      if (url.endsWith('/api/auth/totp/recovery-codes') && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return json(200, { data: recoveryCodes[user.id] ?? { total: 0, remaining: 0 } })
+      }
+
+      if (url.endsWith('/api/auth/totp/recovery-codes/regenerate') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        recoveryCodes[user.id] = { total: 10, remaining: 10 }
+        return json(200, { data: { recoveryCodes: mockRecoveryCodeBatch() } })
+      }
+
+      if (url.endsWith('/api/auth/recovery-code') && method === 'POST') {
+        if (body.ticket !== 'ticket-1' || body.code !== 'AAAAA-AAAAA') {
+          return json(401, {
+            error: {
+              code: 'AUTH_RECOVERY_CODE_INVALID',
+              message: 'This recovery code is not valid.',
+            },
+          })
+        }
+        return json(200, { data: session() })
+      }
+
+      if (url.endsWith('/api/auth/password-policy') && method === 'GET') {
+        return json(200, { data: { minLength: 12 } })
       }
 
       const dismissMatch = /\/api\/notices\/([^/?]+)\/dismiss$/u.exec(url)
@@ -1029,6 +1106,18 @@ export function installMockFetch(
           return json(200, { data: { changed: true } })
         }
 
+        // `/api/users/me/sessions/revoke-others` (fiche 18 task 2) matches
+        // the same three-segment shape as `/sessions/{sessionId}` above —
+        // disambiguated by the literal name, same convention the real
+        // router uses for `totp/enrol` vs a ticket-bearing path.
+        if (sub === 'sessions' && sessionId === 'revoke-others' && method === 'POST') {
+          if (id !== user.id) return forbidden
+          const list = userSessions[id ?? ''] ?? []
+          const revoked = list.filter((entry) => entry.id !== CURRENT_SESSION_ID).length
+          userSessions[id ?? ''] = list.filter((entry) => entry.id === CURRENT_SESSION_ID)
+          return json(200, { data: { revoked, keptSessionId: CURRENT_SESSION_ID } })
+        }
+
         if (sub === 'sessions' && sessionId === undefined && method === 'GET') {
           if (id !== user.id && !isAdmin) return forbidden
           return json(200, {
@@ -1036,6 +1125,9 @@ export function installMockFetch(
               ...session,
               createdAt: '2026-03-01T00:00:00.000Z',
               expiresAt: '2030-01-01T00:00:00.000Z',
+              // Only ever true on your own list, and only for the one
+              // session this mock ever authenticates as.
+              isCurrent: id === user.id && session.id === CURRENT_SESSION_ID,
             })),
           })
         }
@@ -1157,6 +1249,43 @@ export function installMockFetch(
             deviceBreakdown: options.analyticsSummary?.deviceBreakdown ?? [],
             dailyViews: options.analyticsSummary?.dailyViews ?? [],
           },
+        })
+      }
+
+      // `/api/audit/me` (fiche 18 task 4): open to anyone signed in, unlike
+      // the full log below — always the caller's own two entries here,
+      // whatever `actorId` the query string might try to name.
+      if (url.includes('/api/audit/me')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        return json(200, {
+          data: [
+            {
+              id: 'audit-mine-2',
+              at: '2026-03-05T00:00:00.000Z',
+              actorId: user.id,
+              actorRoles: user.roles,
+              action: 'user.password_change',
+              collection: null,
+              entryId: user.id,
+              diff: null,
+              hash: 'mine-2',
+              previousHash: 'mine-1',
+            },
+            {
+              id: 'audit-mine-1',
+              at: '2026-03-01T00:00:00.000Z',
+              actorId: user.id,
+              actorRoles: user.roles,
+              action: 'auth.login',
+              collection: null,
+              entryId: null,
+              diff: null,
+              hash: 'mine-1',
+              previousHash: null,
+            },
+          ],
         })
       }
 

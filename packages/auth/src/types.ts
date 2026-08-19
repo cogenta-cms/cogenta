@@ -8,7 +8,11 @@
  * signed-in person.
  */
 
-export const CREDENTIAL_KINDS = ['password', 'totp', 'webauthn'] as const
+// `recovery_codes` (fiche 18 task 1) stores a JSON blob of hashed, single-use
+// codes — the way back in for an account that enrolled TOTP and then lost
+// the device. Same shape as every other kind here: interpreted only by
+// `credentials.ts`, never by this layer.
+export const CREDENTIAL_KINDS = ['password', 'totp', 'webauthn', 'recovery_codes'] as const
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number]
 
 export interface User {
@@ -34,6 +38,14 @@ export interface Session {
   readonly lastSeenAt: string
   /** Free text, shown in "your sessions" so a person can recognise a device. */
   readonly label: string | undefined
+  /**
+   * Browser family and device type, distilled from the `User-Agent` header at
+   * creation time and never anything more (fiche 18 task 2) — no IP address,
+   * no raw user-agent string, no third-party geolocation (R1, and privacy).
+   * `'unknown'` for a session created without one (a script, an old row).
+   */
+  readonly browser: string
+  readonly device: string
 }
 
 /**

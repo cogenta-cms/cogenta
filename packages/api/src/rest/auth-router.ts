@@ -6,7 +6,17 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 import type { Actor } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
-import { assertPasswordPolicy } from './password-policy.js'
+import { assertPasswordPolicy, MIN_PASSWORD_LENGTH } from './password-policy.js'
+
+/**
+ * "Remember me" (fiche 18 task 5): unchecked asks for a day rather than the
+ * usual sliding 30-day window (`sessions.ts`'s `DEFAULT_TTL_MS`, not exported
+ * — this is a deliberately shorter *alternative*, not a mirror of it).
+ * Omitting `rememberMe` entirely keeps today's behaviour byte for byte, which
+ * is what lets every existing caller — the admin's own login screen included,
+ * until it opts in — go on not caring.
+ */
+const SHORT_SESSION_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
  * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment,
@@ -57,6 +67,39 @@ function bearerToken(headers: RestRequest['headers']): string | null {
   if (raw === undefined) return null
   const match = /^Bearer\s+(.+)$/iu.exec(raw)
   return match?.[1]?.trim() ?? null
+}
+
+/** Fiche 18 task 2: the only thing ever read off a `User-Agent` header at this layer is passed straight to `@cogenta/auth`, which distils it and discards the rest — this file never stores or logs it itself. */
+function requestUserAgent(headers: RestRequest['headers']): string | undefined {
+  return headers?.['user-agent']
+}
+
+/** `rememberMe: false` asks for the short session; anything else (`true`, or the field left out) keeps today's default. */
+function requestedTtlMs(body: Record<string, unknown>): number | undefined {
+  return body['rememberMe'] === false ? SHORT_SESSION_TTL_MS : undefined
+}
+
+/**
+ * `LoginContext` for the password step: `exactOptionalPropertyTypes` means an
+ * explicit `undefined` is not the same as an absent key, so each part is
+ * added only when it actually has a value.
+ */
+function loginContextFrom(
+  request: RestRequest,
+  body: Record<string, unknown>,
+): { userAgent?: string; ttlMs?: number } {
+  const userAgent = requestUserAgent(request.headers)
+  const ttlMs = requestedTtlMs(body)
+  return {
+    ...(userAgent === undefined ? {} : { userAgent }),
+    ...(ttlMs === undefined ? {} : { ttlMs }),
+  }
+}
+
+/** The MFA-completion steps only ever forward the `User-Agent` — `ttlMs` already rode inside the ticket from the password step. */
+function mfaContextFrom(request: RestRequest): { userAgent?: string } {
+  const userAgent = requestUserAgent(request.headers)
+  return userAgent === undefined ? {} : { userAgent }
 }
 
 /**
@@ -222,12 +265,16 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     if (action === 'totp') return totpRoute(request, segments, method)
     if (segments.length !== 1) throw noRoute()
 
+    if (action === 'recovery-code') return recoveryCodeRoute(request, method)
+    if (action === 'password-policy') return passwordPolicyRoute(method)
+
     if (action === 'login') {
       if (method !== 'POST') return methodNotAllowed(['POST'])
       const body = asRecord(request.body)
       const result = await auth.login.passwordLogin(
         stringField(body, 'email'),
         stringField(body, 'password'),
+        loginContextFrom(request, body),
       )
       return jsonResponse(200, { data: loginResponseBody(result) })
     }
@@ -379,6 +426,7 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
         const result = await auth.login.totpLogin(
           stringField(body, 'ticket'),
           stringField(body, 'token'),
+          mfaContextFrom(request),
         )
         return jsonResponse(200, { data: loginResponseBody(result) })
       }
@@ -404,11 +452,67 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
       if (method !== 'POST') return methodNotAllowed(['POST'])
       const actor = await resolveActor(auth, request.headers)
       if (actor.id === null) throw unauthenticated('setting up two-step verification')
-      await auth.login.confirmTotpEnrolment(actor.id, stringField(asRecord(request.body), 'token'))
-      return jsonResponse(200, { data: { enrolled: true } })
+      // Minted in the same step (fiche 18 task 1): TOTP with no recovery
+      // codes is a lock with exactly one key, so there is no separate,
+      // skippable call that could leave someone enrolled without a way back.
+      const issued = await auth.login.confirmTotpEnrolment(
+        actor.id,
+        stringField(asRecord(request.body), 'token'),
+      )
+      return jsonResponse(200, { data: { enrolled: true, recoveryCodes: issued.codes } })
+    }
+
+    // Self-service management of the recovery codes issued alongside TOTP
+    // (fiche 18 task 1). Nested under `totp` rather than a sibling of
+    // `/api/auth/recovery-code`: these two management routes never touch a
+    // sign-in, they touch the already-signed-in caller's own factor, exactly
+    // like `enrol`/`enrol/confirm` above.
+    if (segments.length === 2 && segments[1] === 'recovery-codes') {
+      if (method !== 'GET') return methodNotAllowed(['GET'])
+      const actor = await resolveActor(auth, request.headers)
+      if (actor.id === null) throw unauthenticated('checking your recovery codes')
+      return jsonResponse(200, { data: await auth.login.recoveryCodesStatus(actor.id) })
+    }
+
+    if (segments.length === 3 && segments[1] === 'recovery-codes' && segments[2] === 'regenerate') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      const actor = await resolveActor(auth, request.headers)
+      if (actor.id === null) throw unauthenticated('regenerating your recovery codes')
+      const issued = await auth.login.regenerateRecoveryCodes(actor.id)
+      return jsonResponse(200, { data: { recoveryCodes: issued.codes } })
     }
 
     throw noRoute()
+  }
+
+  /**
+   * `POST /api/auth/recovery-code` — completes a sign-in with one of the ten
+   * codes issued alongside TOTP (fiche 18 task 1), the way back in for an
+   * account that lost the device that would have produced a 6-digit code.
+   * Same ticket-driven shape as `POST /api/auth/totp`, and reachable the same
+   * way: on the strength of the ticket the password step issued, never a
+   * session.
+   */
+  async function recoveryCodeRoute(request: RestRequest, method: string): Promise<RestResponse> {
+    if (method !== 'POST') return methodNotAllowed(['POST'])
+    const body = asRecord(request.body)
+    const result = await auth.login.recoveryCodeLogin(
+      stringField(body, 'ticket'),
+      stringField(body, 'code'),
+      mfaContextFrom(request),
+    )
+    return jsonResponse(200, { data: loginResponseBody(result) })
+  }
+
+  /**
+   * `GET /api/auth/password-policy` — public and read-only (fiche 18 task 3):
+   * the same floor `assertPasswordPolicy` enforces server-side, exposed so a
+   * screen can announce it *before* a submission is refused rather than
+   * recopy the number by hand.
+   */
+  function passwordPolicyRoute(method: string): RestResponse {
+    if (method !== 'GET') return methodNotAllowed(['GET'])
+    return jsonResponse(200, { data: { minLength: MIN_PASSWORD_LENGTH } })
   }
 
   /**
@@ -454,6 +558,7 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
       const result = await auth.login.completeWebAuthnLogin(
         stringField(body, 'ticket'),
         objectField(body, 'response') as unknown as AuthenticationResponseJSON,
+        mfaContextFrom(request),
       )
       return jsonResponse(200, { data: loginResponseBody(result) })
     }
@@ -483,7 +588,9 @@ function noRoute(): CogentaError {
     hint:
       'Auth routes are /api/auth/login, /api/auth/forgot-password, ' +
       '/api/auth/reset-password, /api/auth/totp, /api/auth/totp/enrol, ' +
-      '/api/auth/totp/enrol/confirm, /api/auth/session, and ' +
+      '/api/auth/totp/enrol/confirm, /api/auth/totp/recovery-codes, ' +
+      '/api/auth/totp/recovery-codes/regenerate, /api/auth/recovery-code, ' +
+      '/api/auth/password-policy, /api/auth/session, and ' +
       '/api/auth/webauthn/{register|login}/{begin|complete}.',
   })
 }

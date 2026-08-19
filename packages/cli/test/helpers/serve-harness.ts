@@ -109,6 +109,8 @@ export interface StartServerOptions {
   readonly env?: Record<string, string | undefined>
   /** Overrides the 60s cadence `runServe` drains scheduled-publication jobs on — see `ServeOptions.scheduledPublishTickMs`. */
   readonly scheduledPublishTickMs?: number
+  /** Overrides the daily cadence `runServe` sweeps the trash on — see `ServeOptions.trashPurgeTickMs` (fiche 07 task 5). */
+  readonly trashPurgeTickMs?: number
 }
 
 export async function startServer(
@@ -140,6 +142,9 @@ export async function startServer(
     ...(options.scheduledPublishTickMs === undefined
       ? {}
       : { scheduledPublishTickMs: options.scheduledPublishTickMs }),
+    ...(options.trashPurgeTickMs === undefined
+      ? {}
+      : { trashPurgeTickMs: options.trashPurgeTickMs }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

@@ -42,6 +42,34 @@ export const pageCollection = defineCollection({
   permissions: { read: ['public'] },
 })
 
+/**
+ * Fiche 13 (SEO éditorial), Task 0 § decision (a): the five conventional SEO
+ * override fields, declared exactly as a real blueprint would declare them —
+ * ordinary fields, no contract A change. Kept separate from `articleCollection`
+ * above so every existing fixture and test keeps exercising the "collection
+ * declares none of this" path unchanged.
+ */
+export const seoArticleCollection = defineCollection({
+  name: 'seo_article',
+  labels: { singular: 'SEO article', plural: 'SEO articles' },
+  routing: { pattern: '/blog/:slug', locale: true },
+  versioning: { drafts: true, history: true },
+  fields: {
+    title: f.text({ required: true, max: 200, localized: true }),
+    slug: f.slug({ from: 'title', unique: true }),
+    excerpt: f.text({ max: 320, localized: true }),
+    body: f.richText({ localized: true }),
+    cover: f.media({ accept: ['image'], required: true }),
+    publishedAt: f.datetime(),
+    seoTitle: f.text({ max: 300, localized: true }),
+    seoDescription: f.text({ max: 400, localized: true }),
+    seoImage: f.media({ accept: ['image'] }),
+    seoNoindex: f.boolean({ default: false }),
+    seoCanonical: f.text({ max: 500, localized: true }),
+  },
+  permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+})
+
 export const authorCollection = defineCollection({
   name: 'author',
   labels: { singular: 'Author', plural: 'Authors' },
@@ -111,6 +139,21 @@ export function makeEntry(overrides: EntryOverrides = {}): ContentEntry {
 export function makeArticle(overrides: EntryOverrides = {}): SeoResource {
   return {
     collection: articleCollection,
+    entry: makeEntry({
+      ...overrides,
+      values: {
+        title: 'Hello world',
+        slug: 'hello-world',
+        excerpt: 'A short summary.',
+        ...overrides.values,
+      },
+    }),
+  }
+}
+
+export function makeSeoArticle(overrides: EntryOverrides = {}): SeoResource {
+  return {
+    collection: seoArticleCollection,
     entry: makeEntry({
       ...overrides,
       values: {

@@ -192,6 +192,38 @@ export function installMockFetch(
       signed: boolean
       disabledForMissingSecret: boolean
     }
+    /** What `GET /api/seo/diagnostics` answers with. A healthy, empty site by default. */
+    readonly seoDiagnostics?: {
+      readonly generatedAt?: string
+      readonly sitemap?: {
+        readonly totalUrls: number
+        readonly collections: readonly {
+          readonly name: string
+          readonly included: boolean
+          readonly reason: string | null
+          readonly urlCount: number
+        }[]
+      }
+      readonly robots?: {
+        readonly content: string
+        readonly allowIndexing: boolean
+        readonly disallowsEverything: boolean
+      }
+      readonly content?: {
+        readonly publishedCount: number
+        readonly noindexCount: number
+        readonly missingDescriptionCount: readonly {
+          readonly collection: string
+          readonly id: string
+        }[]
+        readonly tooLongTitleCount: readonly { readonly collection: string; readonly id: string }[]
+        readonly duplicateTitles: readonly {
+          readonly title: string
+          readonly entries: readonly { readonly collection: string; readonly id: string }[]
+        }[]
+      }
+      readonly anomalies?: readonly { readonly code: string; readonly message: string }[]
+    }
     /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
     readonly analyticsSummary?: {
       readonly totalViews?: number
@@ -2460,6 +2492,33 @@ export function installMockFetch(
             endpoints: [],
             signed: false,
             disabledForMissingSecret: false,
+          },
+        })
+      }
+
+      // `GET /api/seo/diagnostics` — fiche 13, admin-only, healthy-and-empty by default.
+      if (url.endsWith('/api/seo/diagnostics') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const diagnostics = options.seoDiagnostics
+        return json(200, {
+          data: {
+            generatedAt: diagnostics?.generatedAt ?? '2026-01-01T00:00:00.000Z',
+            sitemap: diagnostics?.sitemap ?? { totalUrls: 0, collections: [] },
+            robots: diagnostics?.robots ?? {
+              content: 'User-agent: *\nAllow: /\n',
+              allowIndexing: true,
+              disallowsEverything: false,
+            },
+            content: diagnostics?.content ?? {
+              publishedCount: 0,
+              noindexCount: 0,
+              missingDescriptionCount: [],
+              tooLongTitleCount: [],
+              duplicateTitles: [],
+            },
+            anomalies: diagnostics?.anomalies ?? [],
           },
         })
       }

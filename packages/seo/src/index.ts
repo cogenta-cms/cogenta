@@ -21,7 +21,7 @@ export { feedItemsFor, renderAtomFeed, renderRssFeed, toRfc822 } from './feeds.j
 export type { HreflangAlternate, TranslationFamily } from './hreflang.js'
 export { alternatesFor, buildHreflangMap, groupTranslationFamilies } from './hreflang.js'
 export type { IndexableOptions } from './indexable.js'
-export { indexableResources, isIndexable, isPublished } from './indexable.js'
+export { indexableResources, isIndexable, isPublished, isSeoNoindexed } from './indexable.js'
 export type { IndexNowFetch, IndexNowOptions, IndexNowResult } from './indexnow.js'
 export { INDEXNOW_MAX_URLS, indexNowKeyFile, pingIndexNow } from './indexnow.js'
 export type { JsonLdObject, JsonLdOptions, JsonLdValue } from './json-ld.js'

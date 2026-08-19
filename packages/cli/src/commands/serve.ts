@@ -39,6 +39,7 @@ import {
   createRedirectRouter,
   createRestRouter,
   createSearchRouter,
+  createSeoRouter,
   createSitePlanRouter,
   createSuspiciousActivitySource,
   createTaxonomyRouter,
@@ -60,6 +61,7 @@ import {
   type RestRouter,
   resolveActor,
   type SearchRouter,
+  type SeoRouter,
   type SitePlanRouter,
   type SitePlanRouterOptions,
   type TaxonomyRouter,
@@ -324,6 +326,13 @@ interface Site {
   readonly auditRouter: AuditRouter
   /** `GET /api/search` — the full-text index, reachable for the first time (L10 task 3). */
   readonly searchRouter: SearchRouter
+  /**
+   * `/api/seo` — fiche 13: the admin's only door onto what `@cogenta/seo`
+   * actually computes. `POST .../preview` follows `update` on the named
+   * collection; `GET .../diagnostics` is admin-only, same as `redirectRouter`
+   * and `opsStatusRouter` above.
+   */
+  readonly seoRouter: SeoRouter
   /**
    * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`).
    *
@@ -872,6 +881,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       collections,
       permissions,
       defaultLocale: site.defaultLocale,
+    }),
+    seoRouter: createSeoRouter({
+      collections,
+      gateway,
+      permissions,
+      site: seoSiteFor(site),
     }),
     securityAlerts:
       options.onSecurityEvent == null
@@ -1726,6 +1741,16 @@ export function createRequestListener(
       if (url.pathname === '/api/search') {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.searchRouter.handle(request, context))
+        return
+      }
+
+      // Fiche 13's admin-only door onto `@cogenta/seo`: a live preview of one
+      // edit in progress, and the site-wide diagnostic. Both permission
+      // checks live in the router itself, exactly like `/api/redirects`.
+      if (url.pathname.startsWith('/api/seo')) {
+        const body = req.method === 'POST' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.seoRouter.handle(request, context))
         return
       }
 

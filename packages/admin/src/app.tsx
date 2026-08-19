@@ -28,6 +28,7 @@ import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
 import { RedirectsRoute } from './routes/redirects.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
+import { SeoRoute } from './routes/seo.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
 import { TaxonomiesRoute } from './routes/taxonomies.js'
@@ -84,6 +85,7 @@ export function App(): JSX.Element {
               <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
               <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
               <Route path="redirects" element={<RedirectsRoute />} />
+              <Route path="seo" element={<SeoRoute />} />
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
               <Route path="trash" element={<TrashRoute />} />
               <Route path="assistant-chat" element={<AssistantChatRoute />} />

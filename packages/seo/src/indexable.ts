@@ -54,7 +54,23 @@ export function isPublished(entry: ContentEntry, options: IndexableOptions = {})
 }
 
 /**
- * Published **and** reachable at a URL.
+ * Whether a collection declares the conventional `seoNoindex` override field
+ * (fiche 13, Task 0 § decision (a) — an ordinary boolean field, never a
+ * contract A addition) and this entry has it switched on.
+ *
+ * Reading it here, in the one gate every output already goes through, is what
+ * makes the pitfall this fiche names explicit unavoidable: a page that carries
+ * `noindex` in its `<head>` and still lists itself in `/sitemap.xml` is asking
+ * a crawler to ignore a URL it is handed in the same breath.
+ */
+export function isSeoNoindexed(resource: SeoResource): boolean {
+  const field = resource.collection.fields.seoNoindex
+  if (field === undefined || field.kind !== 'boolean') return false
+  return resource.entry.values.seoNoindex === true
+}
+
+/**
+ * Published, not marked `seoNoindex`, and reachable at a URL.
  *
  * A published entry in a collection with no `routing` has nothing to put in a
  * sitemap, and an entry whose route parameters are incomplete — a slug that was
@@ -66,6 +82,7 @@ export function isIndexable(
   options: IndexableOptions = {},
 ): boolean {
   if (!isPublished(resource.entry, options)) return false
+  if (isSeoNoindexed(resource)) return false
   return canonicalUrl(site, resource) !== null
 }
 

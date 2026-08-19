@@ -164,4 +164,185 @@ describe('cogenta serve — menus rendered on the public site', () => {
       await server.stop()
     }
   }, 60_000)
+
+  it("changes the site's principal menu from the admin, by location, without a redeploy (task 3)", async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await editorToken(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      await fetch(`${server.base}/api/content/page`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ status: 'published', values: { title: 'Home', slug: 'home' } }),
+      })
+
+      // Two menus, neither named "main" — this is the header slot resolved
+      // purely by `location`, never by a theme-specific name.
+      const first = await fetch(`${server.base}/api/menus`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: 'nav-a', locale: 'en', label: 'Nav A', location: 'primary' }),
+      })
+      const firstMenu = (await first.json()) as { data: { id: string } }
+      await fetch(`${server.base}/api/menus/${firstMenu.data.id}/items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ kind: 'url', label: 'From nav A', url: '/from-a' }),
+      })
+
+      const second = await fetch(`${server.base}/api/menus`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: 'nav-b', locale: 'en', label: 'Nav B' }),
+      })
+      const secondMenu = (await second.json()) as { data: { id: string } }
+      await fetch(`${server.base}/api/menus/${secondMenu.data.id}/items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ kind: 'url', label: 'From nav B', url: '/from-b' }),
+      })
+
+      const beforeHtml = await (await fetch(`${server.base}/`)).text()
+      expect(beforeHtml).toContain('<a href="/from-a">From nav A</a>')
+      expect(beforeHtml).not.toContain('From nav B')
+
+      // Reassign the location — the same "change the principal menu" move an
+      // admin makes, with no restart of the process in between.
+      await fetch(`${server.base}/api/menus/${firstMenu.data.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ location: null }),
+      })
+      await fetch(`${server.base}/api/menus/${secondMenu.data.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ location: 'primary' }),
+      })
+
+      const afterHtml = await (await fetch(`${server.base}/`)).text()
+      expect(afterHtml).toContain('<a href="/from-b">From nav B</a>')
+      expect(afterHtml).not.toContain('From nav A')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('signals an unpublished link target to a draft-capable admin, and hides it from the public render (task 4)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await editorToken(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const home = await fetch(`${server.base}/api/content/page`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ status: 'published', values: { title: 'Home', slug: 'home' } }),
+      })
+      expect(home.status).toBe(201)
+
+      const about = await fetch(`${server.base}/api/content/page`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ status: 'published', values: { title: 'About', slug: 'about' } }),
+      })
+      expect(about.status).toBe(201)
+      const aboutEntry = (await about.json()) as { data: { id: string } }
+
+      const createdMenu = await fetch(`${server.base}/api/menus`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: 'main', locale: 'en', label: 'Main menu' }),
+      })
+      const menu = (await createdMenu.json()) as { data: { id: string } }
+      const createdItem = await fetch(`${server.base}/api/menus/${menu.data.id}/items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          kind: 'entry',
+          label: 'About',
+          targetCollection: 'page',
+          targetEntryId: aboutEntry.data.id,
+        }),
+      })
+      expect(createdItem.status).toBe(201)
+
+      const publishedHtml = await (await fetch(`${server.base}/`)).text()
+      expect(publishedHtml).toContain('/about')
+
+      // Take the target off its public face — the classic cause of a dead
+      // link in a menu, per the fiche.
+      const unpublished = await fetch(
+        `${server.base}/api/content/page/${aboutEntry.data.id}/unpublish`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ status: 'draft' }),
+        },
+      )
+      expect(unpublished.status).toBe(200)
+
+      const adminView = await fetch(`${server.base}/api/menus/${menu.data.id}`, { headers })
+      const adminBody = (await adminView.json()) as {
+        data: { items: readonly { resolvedHealth?: string }[] }
+      }
+      expect(adminBody.data.items[0]?.resolvedHealth).toBe('draft')
+
+      const anonymousView = await fetch(`${server.base}/api/menus/${menu.data.id}`)
+      const anonymousBody = (await anonymousView.json()) as {
+        data: { items: readonly { resolvedHealth?: string }[] }
+      }
+      // A public caller never learns that a draft exists behind this item.
+      expect(anonymousBody.data.items[0]?.resolvedHealth).toBeUndefined()
+
+      const publicHtml = await (await fetch(`${server.base}/`)).text()
+      expect(publicHtml).not.toContain('/about')
+      expect(publicHtml).not.toContain('>About<')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('renders target="_blank"/rel="noopener" and the title attribute on a public link (task 4)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await editorToken(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      await fetch(`${server.base}/api/content/page`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ status: 'published', values: { title: 'Home', slug: 'home' } }),
+      })
+
+      const createdMenu = await fetch(`${server.base}/api/menus`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: 'main', locale: 'en', label: 'Main menu' }),
+      })
+      const menu = (await createdMenu.json()) as { data: { id: string } }
+      const createdItem = await fetch(`${server.base}/api/menus/${menu.data.id}/items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          kind: 'url',
+          label: 'Docs',
+          url: 'https://example.org/docs',
+          title: 'Opens the documentation site',
+          openInNewTab: true,
+        }),
+      })
+      expect(createdItem.status).toBe(201)
+
+      const html = await (await fetch(`${server.base}/`)).text()
+      expect(html).toContain(
+        '<a href="https://example.org/docs" target="_blank" rel="noopener" title="Opens the documentation site">Docs</a>',
+      )
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
 })

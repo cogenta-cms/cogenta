@@ -1,5 +1,5 @@
 import { CogentaError } from '@cogenta/core'
-import type { Menu, MenuItem, MenuItemKind, MenuStore } from '@cogenta/schema'
+import type { Menu, MenuItem, MenuItemKind, MenuReorderUpdate, MenuStore } from '@cogenta/schema'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
@@ -11,12 +11,15 @@ import { single } from './query.js'
  *   GET    /api/menus                        list menus (?locale=)
  *   POST   /api/menus                         create a menu
  *   GET    /api/menus/{id}                    one menu, its items resolved
- *   PATCH  /api/menus/{id}                    relabel
+ *   PATCH  /api/menus/{id}                    relabel / reassign a location
  *   DELETE /api/menus/{id}                    delete (?cascade=true for its items)
  *   GET    /api/menus/by-name/{name}          look a menu up by its machine name
  *                                              (?locale=, defaults to the only
  *                                              locale it has, if there is one)
+ *   GET    /api/menus/by-location/{location}  look a menu up by where it is slotted
+ *                                              (?locale=, same disambiguation as by-name)
  *   POST   /api/menus/{id}/items               create an item
+ *   PATCH  /api/menus/{id}/items                reorder in bulk {"updates": [{id,parent,position}]}
  *   GET    /api/menus/{id}/items/{itemId}      one item
  *   PATCH  /api/menus/{id}/items/{itemId}      edit an item
  *   DELETE /api/menus/{id}/items/{itemId}      delete (?cascade=true for its children)
@@ -30,6 +33,23 @@ import { single } from './query.js'
  * would be new surface for something that never varies per site.
  */
 
+/**
+ * The state of an `entry` item's target, shown next to it in the admin so a
+ * dead link is caught before a visitor finds it (fiche 09, task 4).
+ * `'trashed'` covers a target moved to the trash (`schema@2.0`) as well as
+ * one purged outright — both read back as "not there" to a plain read.
+ *
+ * Deliberately never sent to a caller whose role could not have read the
+ * target directly either: `MenuRouterOptions.resolveEntry` is the only
+ * source of this value, and it is the caller's job (see `cogenta serve`'s
+ * `resolveMenuEntry`) to compute it only when the requesting actor's role
+ * already has draft access to that collection — the same rule
+ * `roleState`/`entryVisible` apply to every other read of unpublished
+ * content. A menu is public to read, so leaking "this is a draft" to an
+ * anonymous visitor would announce the draft's existence.
+ */
+export type MenuItemHealth = 'published' | 'scheduled' | 'draft' | 'archived' | 'trashed'
+
 export interface MenuRouterOptions {
   readonly store: MenuStore
   /**
@@ -38,10 +58,30 @@ export interface MenuRouterOptions {
    * as stored but rendered without a resolved link — the entry may have been
    * deleted, or the caller may not have wired content resolution in (a router
    * built for tests, for instance).
+   *
+   * `health` is optional on the result even when the resolver is wired: it is
+   * only meaningful for the actor who asked, and a resolver serving a public
+   * render never computes it.
    */
   readonly resolveEntry?: (
     collection: string,
     entryId: string,
+    context: AccessContext,
+  ) => Promise<{
+    readonly label: string
+    readonly route: string | null
+    readonly health?: MenuItemHealth
+  } | null>
+  /**
+   * Resolves the display label and public route of a referenced taxonomy
+   * term, for `kind: 'taxonomy'` items. Absent means the item is kept as
+   * stored but unresolved — no site in this codebase renders a taxonomy
+   * archive page yet, so `route` commonly stays `null` even when the label
+   * resolves.
+   */
+  readonly resolveTerm?: (
+    taxonomy: string,
+    termId: string,
   ) => Promise<{ readonly label: string; readonly route: string | null } | null>
   /** Mount point. `/api/menus` by default. */
   readonly basePath?: string
@@ -52,13 +92,20 @@ export interface MenuRouter {
 }
 
 const DEFAULT_BASE_PATH = '/api/menus'
-const MENU_ITEM_KINDS: readonly MenuItemKind[] = ['entry', 'url', 'submenu-placeholder']
+const MENU_ITEM_KINDS: readonly MenuItemKind[] = [
+  'entry',
+  'url',
+  'submenu-placeholder',
+  'taxonomy',
+  'home',
+]
 
 interface SerialisedMenu {
   readonly id: string
   readonly name: string
   readonly locale: string
   readonly label: string
+  readonly location: string | null
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -71,13 +118,18 @@ interface SerialisedItem {
   readonly kind: MenuItemKind
   readonly targetCollection: string | null
   readonly targetEntryId: string | null
+  readonly targetTaxonomy: string | null
+  readonly targetTermId: string | null
   readonly url: string | null
+  readonly title: string | null
   readonly position: number
   readonly depth: number
   readonly openInNewTab: boolean
-  /** Present only when this is an `entry` item and the target resolved. */
+  /** Present only when the target resolved (an `entry`, `taxonomy` or `home` item). */
   readonly resolvedLabel?: string
   readonly resolvedRoute?: string | null
+  /** Present only for an `entry` item whose resolver computed one — see `MenuItemHealth`. */
+  readonly resolvedHealth?: MenuItemHealth
 }
 
 function serialiseMenu(menu: Menu): SerialisedMenu {
@@ -86,6 +138,7 @@ function serialiseMenu(menu: Menu): SerialisedMenu {
     name: menu.name,
     locale: menu.locale,
     label: menu.label,
+    location: menu.location,
     createdAt: menu.createdAt,
     updatedAt: menu.updatedAt,
   }
@@ -93,7 +146,7 @@ function serialiseMenu(menu: Menu): SerialisedMenu {
 
 function serialiseItem(
   item: MenuItem,
-  resolved?: { label: string; route: string | null },
+  resolved?: { label: string; route: string | null; health?: MenuItemHealth },
 ): SerialisedItem {
   return {
     id: item.id,
@@ -103,13 +156,20 @@ function serialiseItem(
     kind: item.kind,
     targetCollection: item.targetCollection,
     targetEntryId: item.targetEntryId,
+    targetTaxonomy: item.targetTaxonomy,
+    targetTermId: item.targetTermId,
     url: item.url,
+    title: item.title,
     position: item.position,
     depth: item.depth,
     openInNewTab: item.openInNewTab,
     ...(resolved === undefined
       ? {}
-      : { resolvedLabel: resolved.label, resolvedRoute: resolved.route }),
+      : {
+          resolvedLabel: resolved.label,
+          resolvedRoute: resolved.route,
+          ...(resolved.health === undefined ? {} : { resolvedHealth: resolved.health }),
+        }),
   }
 }
 
@@ -180,7 +240,7 @@ function requiredKind(body: Record<string, unknown>): MenuItemKind {
   const kind = body['kind']
   if (typeof kind !== 'string' || !MENU_ITEM_KINDS.includes(kind as MenuItemKind)) {
     throw invalidBody(
-      'An item needs a "kind" of "entry", "url" or "submenu-placeholder".',
+      `An item needs a "kind" of ${MENU_ITEM_KINDS.map((value) => `"${value}"`).join(', ')}.`,
       'Send { "kind": "url", "label": "…", "url": "https://…" }.',
     )
   }
@@ -220,14 +280,65 @@ function optionalParent(body: Record<string, unknown>): string | null | undefine
   )
 }
 
+/**
+ * The batch body of `PATCH /api/menus/{id}/items` (fiche 09, task 2): every
+ * `{id, parent, position}` triple to write, applied in one transaction by
+ * `MenuStore.reorderItems`. A drag-and-drop session sends this once, never one
+ * request per moved row — the whole point being that a network failure never
+ * leaves the tree half-rewritten.
+ */
+function requiredReorderUpdates(body: Record<string, unknown>): readonly MenuReorderUpdate[] {
+  const raw = body['updates']
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw invalidBody(
+      'A reorder needs a non-empty "updates" array.',
+      'Send { "updates": [{ "id": "…", "parent": null, "position": 0 }, …] }.',
+    )
+  }
+  return raw.map((entry) => {
+    const record = asRecord(entry)
+    const id = record['id']
+    if (typeof id !== 'string' || id.length === 0) {
+      throw invalidBody(
+        'Each update needs an item "id".',
+        'Send { "id": "…", "parent": null, "position": 0 }.',
+      )
+    }
+    const parent = record['parent']
+    if (parent !== null && (typeof parent !== 'string' || parent.length === 0)) {
+      throw invalidBody(
+        'Each update needs a "parent" — an item id, or null at the top.',
+        'Send "parent": null for a top-level item.',
+      )
+    }
+    const position = record['position']
+    if (typeof position !== 'number' || !Number.isInteger(position) || position < 0) {
+      throw invalidBody(
+        'Each update needs a whole, non-negative "position".',
+        'Send { "position": 0 } for the first item in its group.',
+      )
+    }
+    return { id, parent, position }
+  })
+}
+
 export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
   const { store } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
 
-  async function resolve(item: MenuItem): Promise<SerialisedItem> {
+  async function resolve(item: MenuItem, context: AccessContext): Promise<SerialisedItem> {
+    if (item.kind === 'home') return serialiseItem(item, { label: item.label, route: '/' })
+
+    if (item.kind === 'taxonomy') {
+      if (options.resolveTerm === undefined) return serialiseItem(item)
+      if (item.targetTaxonomy === null || item.targetTermId === null) return serialiseItem(item)
+      const resolved = await options.resolveTerm(item.targetTaxonomy, item.targetTermId)
+      return resolved === null ? serialiseItem(item) : serialiseItem(item, resolved)
+    }
+
     if (item.kind !== 'entry' || options.resolveEntry === undefined) return serialiseItem(item)
     if (item.targetCollection === null || item.targetEntryId === null) return serialiseItem(item)
-    const resolved = await options.resolveEntry(item.targetCollection, item.targetEntryId)
+    const resolved = await options.resolveEntry(item.targetCollection, item.targetEntryId, context)
     return resolved === null ? serialiseItem(item) : serialiseItem(item, resolved)
   }
 
@@ -255,10 +366,12 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
       if (method === 'POST') {
         assertWriteAccess(context)
         const body = asRecord(request.body)
+        const location = optionalString(body, 'location')
         const menu = await store.create({
           name: requiredName(body),
           locale: requiredLocale(body),
           label: requiredLabel(body),
+          ...(location === undefined ? {} : { location }),
         })
         return jsonResponse(201, { data: serialiseMenu(menu) })
       }
@@ -271,7 +384,16 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
       if (name === undefined) throw noRoute()
       const locale = single(request.query, 'locale')
       const menu = await menuByName(name, locale)
-      return await menuResponse(menu)
+      return await menuResponse(menu, context)
+    }
+
+    if (segments[0] === 'by-location') {
+      if (segments.length !== 2 || method !== 'GET') throw noRoute()
+      const location = segments[1]
+      if (location === undefined) throw noRoute()
+      const locale = single(request.query, 'locale')
+      const menu = await menuByLocation(location, locale)
+      return await menuResponse(menu, context)
     }
 
     const menuId = segments[0]
@@ -281,13 +403,15 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
       if (method === 'GET') {
         const menu = await store.read(menuId)
         if (menu === null) throw menuNotFound(menuId)
-        return await menuResponse(menu)
+        return await menuResponse(menu, context)
       }
       if (method === 'PATCH' || method === 'PUT') {
         assertWriteAccess(context)
         const body = asRecord(request.body)
+        const location = optionalString(body, 'location')
         const menu = await store.update(menuId, {
           ...(Object.hasOwn(body, 'label') ? { label: requiredLabel(body) } : {}),
+          ...(location === undefined ? {} : { location }),
         })
         return jsonResponse(200, { data: serialiseMenu(menu) })
       }
@@ -315,15 +439,29 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
           ...(parent === undefined ? {} : { parent }),
           ...withOptional(body, 'targetCollection'),
           ...withOptional(body, 'targetEntryId'),
+          ...withOptional(body, 'targetTaxonomy'),
+          ...withOptional(body, 'targetTermId'),
           ...withOptional(body, 'url'),
+          ...withOptional(body, 'title'),
           ...(typeof body['position'] === 'number' ? { position: body['position'] } : {}),
           ...(typeof body['openInNewTab'] === 'boolean'
             ? { openInNewTab: body['openInNewTab'] }
             : {}),
         })
-        return jsonResponse(201, { data: await resolve(item) })
+        return jsonResponse(201, { data: await resolve(item, context) })
       }
-      return methodNotAllowed(['POST'])
+      if (method === 'PATCH') {
+        // The bulk reorder (task 2): one transaction rewriting `parent` and
+        // `position` for however many rows moved, never N sequential calls —
+        // see `MenuStore.reorderItems`.
+        assertWriteAccess(context)
+        const body = asRecord(request.body)
+        const updates = requiredReorderUpdates(body)
+        const items = await store.reorderItems(menuId, updates)
+        const resolved = await Promise.all(items.map((item) => resolve(item, context)))
+        return jsonResponse(200, { data: resolved })
+      }
+      return methodNotAllowed(['POST', 'PATCH'])
     }
 
     const itemId = segments[2]
@@ -333,7 +471,7 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
       if (method === 'GET') {
         const item = await store.readItem(itemId)
         if (item === null || item.menuId !== menuId) throw itemNotFound(itemId)
-        return jsonResponse(200, { data: await resolve(item) })
+        return jsonResponse(200, { data: await resolve(item, context) })
       }
       if (method === 'PATCH' || method === 'PUT') {
         assertWriteAccess(context)
@@ -343,12 +481,21 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
           ...(Object.hasOwn(body, 'kind') ? { kind: requiredKind(body) } : {}),
           ...withOptional(body, 'targetCollection'),
           ...withOptional(body, 'targetEntryId'),
+          ...withOptional(body, 'targetTaxonomy'),
+          ...withOptional(body, 'targetTermId'),
           ...withOptional(body, 'url'),
+          ...withOptional(body, 'title'),
           ...(typeof body['openInNewTab'] === 'boolean'
             ? { openInNewTab: body['openInNewTab'] }
             : {}),
         })
-        return jsonResponse(200, { data: await resolve(item) })
+        // A parent change is not accepted here: re-parenting rewrites the
+        // materialised path of a whole subtree (`MenuStore.moveItem`), which
+        // an editor's "correct a label" PATCH must never trigger by accident.
+        // `POST .../move` (below) and the bulk `PATCH /items` are the two
+        // routes that move an item; this one only ever changes what an item
+        // *is*, never where it sits.
+        return jsonResponse(200, { data: await resolve(item, context) })
       }
       if (method === 'DELETE') {
         assertWriteAccess(context)
@@ -375,7 +522,7 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
         )
       }
       const item = await store.moveItem(itemId, parent)
-      return jsonResponse(200, { data: await resolve(item) })
+      return jsonResponse(200, { data: await resolve(item, context) })
     }
 
     if (action === 'reorder') {
@@ -390,7 +537,7 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
         )
       }
       const item = await store.reorderItem(itemId, direction)
-      return jsonResponse(200, { data: await resolve(item) })
+      return jsonResponse(200, { data: await resolve(item, context) })
     }
 
     throw noRoute()
@@ -415,9 +562,28 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
     return only
   }
 
-  async function menuResponse(menu: Menu): Promise<RestResponse> {
+  async function menuByLocation(location: string, locale: string | undefined): Promise<Menu> {
+    if (locale !== undefined) {
+      const menu = await store.byLocation(location, locale)
+      if (menu === null) throw menuNotFoundByLocation(location, locale)
+      return menu
+    }
+
+    const candidates = (await store.list()).filter((menu) => menu.location === location)
+    const [only, ...rest] = candidates
+    if (only === undefined) throw menuNotFoundByLocation(location, undefined)
+    if (rest.length > 0) {
+      throw invalidBody(
+        `"${location}" is assigned in more than one locale.`,
+        'Pass ?locale= to disambiguate.',
+      )
+    }
+    return only
+  }
+
+  async function menuResponse(menu: Menu, context: AccessContext): Promise<RestResponse> {
     const items = await store.listItems(menu.id)
-    const resolved = await Promise.all(items.map(resolve))
+    const resolved = await Promise.all(items.map((item) => resolve(item, context)))
     return jsonResponse(200, { data: { ...serialiseMenu(menu), items: resolved } })
   }
 }
@@ -448,6 +614,18 @@ function menuNotFoundByName(name: string, locale: string | undefined): CogentaEr
   })
 }
 
+function menuNotFoundByLocation(location: string, locale: string | undefined): CogentaError {
+  return new CogentaError({
+    code: 'MENU_UNKNOWN',
+    message:
+      locale === undefined
+        ? `No menu is assigned to location "${location}".`
+        : `No menu is assigned to location "${location}" for locale "${locale}".`,
+    hint: 'Assign a menu to this location from the admin, or check the locale.',
+    details: { location, locale },
+  })
+}
+
 function itemNotFound(id: string): CogentaError {
   return new CogentaError({
     code: 'MENU_ITEM_NOT_FOUND',
@@ -475,7 +653,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Menu routes are /{id}, /by-name/{name}, /{id}/items/{itemId}, /{id}/items/{itemId}/move and /reorder.',
+    hint: 'Menu routes are /{id}, /by-name/{name}, /by-location/{location}, /{id}/items/{itemId}, /{id}/items/{itemId}/move and /reorder.',
   })
 }
 

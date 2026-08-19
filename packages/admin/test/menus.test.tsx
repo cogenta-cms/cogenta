@@ -29,64 +29,169 @@ function signedIn(roles: readonly string[]): void {
   installMockFetch({ roles })
 }
 
+/** The "New menu" form's fields always render first, before the "New item" form's. */
+function menuLabelField(): HTMLElement {
+  const fields = screen.getAllByLabelText('Libellé')
+  const field = fields[0]
+  if (field === undefined) throw new Error('No "Libellé" field found.')
+  return field
+}
+
+function itemLabelField(): HTMLElement {
+  const fields = screen.getAllByLabelText('Libellé')
+  const field = fields[1]
+  if (field === undefined) throw new Error('No second "Libellé" field found.')
+  return field
+}
+
+async function createMenu(name: string, label: string): Promise<void> {
+  fireEvent.change(screen.getByLabelText('Nom'), { target: { value: name } })
+  fireEvent.change(menuLabelField(), { target: { value: label } })
+  fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
+  await screen.findByRole('option', { name: new RegExp(`^${label} \\(`, 'u') })
+}
+
+/** The tree region `MenuTree` renders — scoping queries here avoids matching the "parent" `<select>`'s own options, which repeat every item's label as text. */
+function treeRegion(): HTMLElement {
+  return screen.getByRole('list', { name: 'Éléments du menu' })
+}
+
+async function addUrlItem(label: string, url: string): Promise<void> {
+  fireEvent.change(itemLabelField(), { target: { value: label } })
+  fireEvent.change(screen.getByLabelText('URL'), { target: { value: url } })
+  fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
+  // The tree only mounts once there is at least one item — an empty menu
+  // shows a plain message instead — so the very first item's own arrival is
+  // awaited before its containing list can be queried at all.
+  const tree = await screen.findByRole('list', { name: 'Éléments du menu' })
+  await within(tree).findByText(label)
+}
+
+/** The item's own row — the `<li>` `MenuTree` renders it as, carrying the drag handlers and the action buttons. */
+function rowOf(label: string): HTMLElement {
+  const element = within(treeRegion()).getByText(label).closest('li')
+  if (element === null) throw new Error(`No row found for "${label}".`)
+  return element as HTMLElement
+}
+
 describe('the menu screen', () => {
   it('creates a menu and an item through the real API, and shows both', async () => {
     signedIn(['editor'])
     render(<App />)
     await goToMenus()
 
-    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'main' } })
-    fireEvent.change(screen.getByLabelText('Libellé', { selector: '#menu-label' }), {
-      target: { value: 'Menu principal' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
+    await createMenu('main', 'Menu principal')
+    await addUrlItem('Accueil', '/')
 
-    await screen.findByRole('option', { name: 'Menu principal (fr)' })
-
-    fireEvent.change(screen.getByLabelText('Libellé', { selector: '#item-label' }), {
-      target: { value: 'Accueil' },
-    })
-    fireEvent.change(screen.getByLabelText('URL'), { target: { value: '/' } })
-    fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
-
-    expect(await screen.findByRole('cell', { name: 'Accueil' })).toBeDefined()
+    expect(within(treeRegion()).getByText('Accueil')).toBeDefined()
   })
 
-  it('reorders items with the up/down buttons', async () => {
+  it('reorders items with the up/down buttons, and it survives a reload (fiche 09, task 2)', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToMenus()
 
-    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'main' } })
-    fireEvent.change(screen.getByLabelText('Libellé', { selector: '#menu-label' }), {
-      target: { value: 'Menu principal' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
-    await screen.findByRole('option', { name: 'Menu principal (fr)' })
+    await createMenu('main', 'Menu principal')
+    await addUrlItem('A', '/a')
+    await addUrlItem('B', '/b')
 
-    fireEvent.change(screen.getByLabelText('Libellé', { selector: '#item-label' }), {
-      target: { value: 'A' },
-    })
-    fireEvent.change(screen.getByLabelText('URL'), { target: { value: '/a' } })
-    fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
-    await screen.findByRole('cell', { name: 'A' })
+    const tree = screen.getByRole('list', { name: 'Éléments du menu' })
+    const itemsBefore = within(tree).getAllByRole('listitem')
+    expect(within(itemsBefore[0] as HTMLElement).getByText('A')).toBeDefined()
 
-    fireEvent.change(screen.getByLabelText('Libellé', { selector: '#item-label' }), {
-      target: { value: 'B' },
-    })
-    fireEvent.change(screen.getByLabelText('URL'), { target: { value: '/b' } })
-    fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
-    await screen.findByRole('cell', { name: 'B' })
-
-    const rows = screen.getAllByRole('row').slice(1) // drop the header row
-    expect(within(rows[0] as HTMLElement).getByText('A')).toBeDefined()
-
-    fireEvent.click(within(rows[1] as HTMLElement).getByRole('button', { name: 'Monter' }))
+    fireEvent.click(within(rowOf('B')).getByRole('button', { name: 'Monter' }))
 
     await waitFor(() => {
-      const reordered = screen.getAllByRole('row')
-      expect(within(reordered[1] as HTMLElement).getByText('B')).toBeDefined()
+      const reordered = within(screen.getByRole('list', { name: 'Éléments du menu' })).getAllByRole(
+        'listitem',
+      )
+      expect(within(reordered[0] as HTMLElement).getByText('B')).toBeDefined()
     })
+
+    // Reselecting the menu re-fetches from the server — the order the
+    // single `PATCH /api/menus/{id}/items` call wrote, not just the local
+    // optimistic state.
+    fireEvent.change(screen.getByLabelText('Menu'), { target: { value: '' } })
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Éléments du menu' })).toBeNull())
+    fireEvent.change(screen.getByLabelText('Menu'), {
+      target: {
+        value: (screen.getByRole('option', { name: /^Menu principal/u }) as HTMLOptionElement)
+          .value,
+      },
+    })
+
+    await waitFor(() => {
+      const reloaded = within(screen.getByRole('list', { name: 'Éléments du menu' })).getAllByRole(
+        'listitem',
+      )
+      expect(within(reloaded[0] as HTMLElement).getByText('B')).toBeDefined()
+    })
+  })
+
+  it('indents and un-indents an item with the keyboard-operable buttons alone (fiche 09, task 2)', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToMenus()
+
+    await createMenu('main', 'Menu principal')
+    await addUrlItem('A', '/a')
+    await addUrlItem('B', '/b')
+
+    fireEvent.click(
+      within(rowOf('B')).getByRole('button', { name: "Imbriquer sous l'élément au-dessus" }),
+    )
+    await waitFor(() => {
+      const row = rowOf('B')
+      expect(row.style.marginLeft).not.toBe('0rem')
+    })
+
+    fireEvent.click(within(rowOf('B')).getByRole('button', { name: "Remonter d'un niveau" }))
+    await waitFor(() => {
+      expect(rowOf('B').style.marginLeft).toBe('0rem')
+    })
+  })
+
+  it("corrects an item's label without recreating it, keeping its position (fiche 09, task 1)", async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToMenus()
+
+    await createMenu('main', 'Menu principal')
+    await addUrlItem('Abuot', '/about')
+
+    fireEvent.click(within(rowOf('Abuot')).getByRole('button', { name: "Modifier l'élément" }))
+    const modal = await screen.findByRole('dialog')
+    const label = within(modal).getByLabelText('Libellé') as HTMLInputElement
+    fireEvent.change(label, { target: { value: 'About' } })
+    fireEvent.click(within(modal).getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(within(treeRegion()).getByText('About')).toBeDefined()
+    expect(within(treeRegion()).queryByText('Abuot')).toBeNull()
+  })
+
+  it('links an entry through the searchable picker and flags an unpublished target (fiche 09, task 4)', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToMenus()
+
+    await createMenu('main', 'Menu principal')
+
+    fireEvent.change(itemLabelField(), { target: { value: 'Second' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'entry' } })
+
+    // No search text yet: the picker falls back to a plain recent-entries
+    // listing (never a hard 100-row cap with no way past it — the gap this
+    // task fixes).
+    const option = await screen.findByRole('option', { name: /Second article/u })
+    fireEvent.click(option)
+
+    fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
+
+    const tree = await screen.findByRole('list', { name: 'Éléments du menu' })
+    await within(tree).findByText('Second')
+    // "Second article" is a draft in the fixture — the row must say so.
+    expect(within(rowOf('Second')).getByText('Brouillon')).toBeDefined()
   })
 
   it('offers no write controls to a viewer', async () => {

@@ -87,6 +87,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // Menus (navigation)
   MENU_UNKNOWN: 404,
   MENU_NAME_TAKEN: 409,
+  MENU_LOCATION_TAKEN: 409,
   MENU_ITEM_NOT_FOUND: 404,
   MENU_ITEM_INVALID: 400,
   MENU_CYCLE: 400,

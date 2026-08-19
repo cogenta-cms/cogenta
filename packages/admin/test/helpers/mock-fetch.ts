@@ -697,6 +697,7 @@ export function installMockFetch(
     name: string
     locale: string
     label: string
+    location: string | null
     createdAt: string
     updatedAt: string
   }[] = []
@@ -708,7 +709,10 @@ export function installMockFetch(
     kind: string
     targetCollection: string | null
     targetEntryId: string | null
+    targetTaxonomy: string | null
+    targetTermId: string | null
     url: string | null
+    title: string | null
     position: number
     depth: number
     openInNewTab: boolean
@@ -1955,6 +1959,83 @@ export function installMockFetch(
         /\/api\/menus\/([^/?]+)\/items(?:\/([^/?]+)(?:\/(reorder|move))?)?(?:\?.*)?$/u.exec(url)
       const menuMatch = /\/api\/menus(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
 
+      /** Depth from `parent`, recomputed rather than trusted — the same rule the real store follows. */
+      function depthOf(parent: string | null): number {
+        if (parent === null) return 0
+        const parentItem = menuItems.find((candidate) => candidate.id === parent)
+        return parentItem === undefined ? 0 : parentItem.depth + 1
+      }
+
+      /** Every descendant of `id`'s depth follows it — a re-parent moves a whole subtree, never just the one row. */
+      function refreshDescendantDepths(id: string): void {
+        for (const child of menuItems.filter((candidate) => candidate.parent === id)) {
+          child.depth = depthOf(child.parent)
+          refreshDescendantDepths(child.id)
+        }
+      }
+
+      /** Tree order: group by parent, sort each group by `position`, then depth-first from the roots. */
+      function treeOrder(menuId: string): typeof menuItems {
+        const byParent = new Map<string | null, typeof menuItems>()
+        for (const item of menuItems.filter((candidate) => candidate.menuId === menuId)) {
+          const siblings = byParent.get(item.parent) ?? []
+          siblings.push(item)
+          byParent.set(item.parent, siblings)
+        }
+        for (const siblings of byParent.values()) siblings.sort((a, b) => a.position - b.position)
+        const ordered: typeof menuItems = []
+        const visit = (parent: string | null): void => {
+          for (const item of byParent.get(parent) ?? []) {
+            ordered.push(item)
+            visit(item.id)
+          }
+        }
+        visit(null)
+        return ordered
+      }
+
+      /**
+       * The same shape the real router's `resolve()` adds — a display label,
+       * a route and (for `entry`) a health status — computed from the same
+       * fixtures every other route in this file already reads (`MOCK_ENTRIES`,
+       * `trash`, `terms`). Applied only where the admin actually consumes it
+       * (a menu's detail read), the same way the real server only resolves
+       * when it serialises an item, never when it stores one.
+       */
+      function resolveMenuItem(item: (typeof menuItems)[number]): typeof item & {
+        resolvedLabel?: string
+        resolvedRoute?: string | null
+        resolvedHealth?: string
+      } {
+        if (item.kind === 'home') return { ...item, resolvedLabel: item.label, resolvedRoute: '/' }
+        if (item.kind === 'taxonomy' && item.targetTermId !== null) {
+          const term = terms.find((candidate) => candidate.id === item.targetTermId)
+          if (term === undefined) return item
+          return {
+            ...item,
+            resolvedLabel: term.labels.fr ?? Object.values(term.labels)[0] ?? term.slug,
+            resolvedRoute: null,
+          }
+        }
+        if (
+          item.kind === 'entry' &&
+          item.targetCollection === 'article' &&
+          item.targetEntryId !== null
+        ) {
+          const entry =
+            MOCK_ENTRIES.find((candidate) => candidate.id === item.targetEntryId) ??
+            trash.find((candidate) => candidate.id === item.targetEntryId)
+          if (entry === undefined) return item
+          return {
+            ...item,
+            resolvedLabel: entry.values.title,
+            resolvedRoute: `/${entry.values.title.toLowerCase().replaceAll(' ', '-')}`,
+            resolvedHealth: entry.deletedAt !== null ? 'trashed' : entry.status,
+          }
+        }
+        return item
+      }
+
       if (menuItemMatch !== null) {
         const [, menuId = '', itemId, action] = menuItemMatch
 
@@ -1964,7 +2045,6 @@ export function installMockFetch(
           }
           itemCounter += 1
           const parent = typeof body.parent === 'string' ? body.parent : null
-          const parentItem = menuItems.find((item) => item.id === parent)
           const created = {
             id: `item-${itemCounter}`,
             menuId,
@@ -1973,14 +2053,48 @@ export function installMockFetch(
             kind: body.kind,
             targetCollection: body.targetCollection ?? null,
             targetEntryId: body.targetEntryId ?? null,
+            targetTaxonomy: body.targetTaxonomy ?? null,
+            targetTermId: body.targetTermId ?? null,
             url: body.url ?? null,
+            title: body.title ?? null,
             position: menuItems.filter((item) => item.menuId === menuId && item.parent === parent)
               .length,
-            depth: parentItem === undefined ? 0 : parentItem.depth + 1,
+            depth: depthOf(parent),
             openInNewTab: body.openInNewTab === true,
           }
           menuItems.push(created)
           return json(201, { data: created })
+        }
+
+        // The bulk reorder (fiche 09, task 2) — one call rewriting `parent`
+        // and `position` for however many rows are named, mirroring
+        // `MenuStore.reorderItems`'s contract closely enough for a UI test:
+        // real cycle/depth validation lives in the schema package's own
+        // suite, not here.
+        if (itemId === undefined && method === 'PATCH') {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          const updates = (body.updates ?? []) as {
+            id: string
+            parent: string | null
+            position: number
+          }[]
+          for (const update of updates) {
+            const item = menuItems.find((candidate) => candidate.id === update.id)
+            if (item === undefined) {
+              return json(404, {
+                error: { code: 'MENU_ITEM_NOT_FOUND', message: 'No such item.' },
+              })
+            }
+            item.parent = update.parent
+            item.position = update.position
+          }
+          for (const update of updates) refreshDescendantDepths(update.id)
+          for (const item of menuItems.filter((candidate) => candidate.menuId === menuId)) {
+            item.depth = depthOf(item.parent)
+          }
+          return json(200, { data: treeOrder(menuId) })
         }
 
         if (itemId !== undefined && action === 'reorder' && method === 'POST') {
@@ -2007,6 +2121,48 @@ export function installMockFetch(
           return json(200, { data: item })
         }
 
+        if (itemId !== undefined && action === 'move' && method === 'POST') {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          const item = menuItems.find((candidate) => candidate.id === itemId)
+          if (item === undefined) {
+            return json(404, { error: { code: 'MENU_ITEM_NOT_FOUND', message: 'No such item.' } })
+          }
+          const parent = typeof body.parent === 'string' ? body.parent : null
+          item.parent = parent
+          item.position = menuItems.filter(
+            (candidate) => candidate.menuId === item.menuId && candidate.parent === parent,
+          ).length
+          item.depth = depthOf(parent)
+          refreshDescendantDepths(item.id)
+          return json(200, { data: item })
+        }
+
+        if (
+          itemId !== undefined &&
+          action === undefined &&
+          (method === 'PATCH' || method === 'PUT')
+        ) {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
+          }
+          const item = menuItems.find((candidate) => candidate.id === itemId)
+          if (item === undefined) {
+            return json(404, { error: { code: 'MENU_ITEM_NOT_FOUND', message: 'No such item.' } })
+          }
+          if (typeof body.label === 'string') item.label = body.label
+          if (typeof body.kind === 'string') item.kind = body.kind
+          if (Object.hasOwn(body, 'targetCollection')) item.targetCollection = body.targetCollection
+          if (Object.hasOwn(body, 'targetEntryId')) item.targetEntryId = body.targetEntryId
+          if (Object.hasOwn(body, 'targetTaxonomy')) item.targetTaxonomy = body.targetTaxonomy
+          if (Object.hasOwn(body, 'targetTermId')) item.targetTermId = body.targetTermId
+          if (Object.hasOwn(body, 'url')) item.url = body.url
+          if (Object.hasOwn(body, 'title')) item.title = body.title
+          if (typeof body.openInNewTab === 'boolean') item.openInNewTab = body.openInNewTab
+          return json(200, { data: item })
+        }
+
         if (itemId !== undefined && action === undefined && method === 'DELETE') {
           const parsed = new URL(url, 'http://localhost')
           const hasChildren = menuItems.some((item) => item.parent === itemId)
@@ -2029,12 +2185,25 @@ export function installMockFetch(
           if (!mayWriteMenus) {
             return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
           }
+          const location = typeof body.location === 'string' ? body.location : null
+          if (
+            location !== null &&
+            menus.some((menu) => menu.location === location && menu.locale === body.locale)
+          ) {
+            return json(409, {
+              error: {
+                code: 'MENU_LOCATION_TAKEN',
+                message: 'That location is already assigned for this locale.',
+              },
+            })
+          }
           menuCounter += 1
           const created = {
             id: `menu-${menuCounter}`,
             name: body.name,
             locale: body.locale,
             label: body.label,
+            location,
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
           }
@@ -2047,26 +2216,39 @@ export function installMockFetch(
           if (menu === undefined) {
             return json(404, { error: { code: 'MENU_UNKNOWN', message: 'No such menu.' } })
           }
-          // Tree order, the same way the real store walks a materialised
-          // path: group by parent, sort each group by `position`, then
-          // depth-first from the roots — never the raw insertion order,
-          // which a reorder must not leave unchanged.
-          const byParent = new Map<string | null, typeof menuItems>()
-          for (const item of menuItems.filter((candidate) => candidate.menuId === id)) {
-            const siblings = byParent.get(item.parent) ?? []
-            siblings.push(item)
-            byParent.set(item.parent, siblings)
+          return json(200, { data: { ...menu, items: treeOrder(id).map(resolveMenuItem) } })
+        }
+
+        if (id !== undefined && (method === 'PATCH' || method === 'PUT')) {
+          if (!mayWriteMenus) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied: menus.' } })
           }
-          for (const siblings of byParent.values()) siblings.sort((a, b) => a.position - b.position)
-          const items: typeof menuItems = []
-          const visit = (parent: string | null): void => {
-            for (const item of byParent.get(parent) ?? []) {
-              items.push(item)
-              visit(item.id)
+          const menu = menus.find((candidate) => candidate.id === id)
+          if (menu === undefined) {
+            return json(404, { error: { code: 'MENU_UNKNOWN', message: 'No such menu.' } })
+          }
+          if (typeof body.label === 'string') menu.label = body.label
+          if (Object.hasOwn(body, 'location')) {
+            const location = body.location as string | null
+            if (
+              location !== null &&
+              menus.some(
+                (candidate) =>
+                  candidate.id !== id &&
+                  candidate.location === location &&
+                  candidate.locale === menu.locale,
+              )
+            ) {
+              return json(409, {
+                error: {
+                  code: 'MENU_LOCATION_TAKEN',
+                  message: 'That location is already assigned for this locale.',
+                },
+              })
             }
+            menu.location = location
           }
-          visit(null)
-          return json(200, { data: { ...menu, items } })
+          return json(200, { data: menu })
         }
 
         if (id !== undefined && method === 'DELETE') {

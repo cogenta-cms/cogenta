@@ -78,7 +78,7 @@ export type {
   UploadedImageVariant,
 } from './media-router.js'
 export { createMediaRouter, variantKeyFor } from './media-router.js'
-export type { MenuRouter, MenuRouterOptions } from './menu-router.js'
+export type { MenuItemHealth, MenuRouter, MenuRouterOptions } from './menu-router.js'
 export { createMenuRouter } from './menu-router.js'
 export type { OpsStatusRouter, OpsStatusRouterOptions } from './ops-status-router.js'
 export { createOpsStatusRouter } from './ops-status-router.js'

@@ -50,6 +50,7 @@ import {
   type MarketplaceRouter,
   type MediaImageProcessor,
   type MediaRouter,
+  type MenuItemHealth,
   type MenuRouter,
   type NoticeRouter,
   type OpsStatusRouter,
@@ -59,6 +60,7 @@ import {
   type RestResponse,
   type RestRouter,
   resolveActor,
+  roleState,
   type SearchRouter,
   type SitePlanRouter,
   type SitePlanRouterOptions,
@@ -720,22 +722,46 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
   const gateway = createContentGateway({ collections, stores, permissions })
 
-  // Resolves an `entry`-kind menu item to a display label and public route,
-  // through the same permission-checked gateway everything else reads
-  // through. `ANONYMOUS`: a menu is public navigation, so an item is only
-  // ever resolved to what an anonymous visitor could also reach — an
-  // unpublished target resolves to `null` rather than leaking a draft's
-  // title into a public nav response.
+  // Resolves an `entry`-kind menu item to a display label, public route and
+  // — for an actor entitled to see it — a health status (fiche 09, task 4).
+  //
+  // The label/route half always reads through the same permission-checked
+  // gateway everything else reads through, as `ANONYMOUS`: a menu is public
+  // navigation, so an item's *link* is only ever resolved to what an
+  // anonymous visitor could also reach — an unpublished target resolves to
+  // `null` rather than leaking a draft's title into a public nav response.
+  //
+  // `health` is the one piece computed differently, and only sometimes: it
+  // is read straight from the collection's own store (bypassing the
+  // gateway's published-only default, `trashed: 'include'` so a trashed
+  // target reads back rather than looking merely deleted) — but only for an
+  // actor whose *role* already has draft access to this collection, the
+  // same `roleState` gate every other read of unpublished content goes
+  // through (`draft-access.ts`). A public visitor, or an actor without that
+  // role, gets exactly the pre-task-4 behaviour: an unresolved item, never a
+  // status field announcing that a draft exists.
   const resolveMenuEntry = async (
     collectionName: string,
     entryId: string,
-  ): Promise<{ readonly label: string; readonly route: string | null } | null> => {
+    context: AccessContext,
+  ): Promise<{
+    readonly label: string
+    readonly route: string | null
+    readonly health?: MenuItemHealth
+  } | null> => {
     const collection = collections.find((candidate) => candidate.name === collectionName)
     if (collection === undefined) return null
 
-    const entry = await gateway.read(collectionName, entryId, {
-      actor: { id: null, roles: ['public'] },
-    })
+    const canSeeDrafts = roleState(permissions, collection, context) === 'working'
+    const collectionStore = stores.get(collectionName)
+    const privileged =
+      canSeeDrafts && collectionStore !== undefined
+        ? await collectionStore.read(entryId, { state: 'working', trashed: 'include' })
+        : null
+
+    const entry =
+      privileged ??
+      (await gateway.read(collectionName, entryId, { actor: { id: null, roles: ['public'] } }))
     if (entry === null) return null
 
     const stringValues = Object.fromEntries(
@@ -761,7 +787,34 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       }
     }
 
-    return { label, route }
+    return {
+      label,
+      route,
+      ...(privileged === null
+        ? {}
+        : { health: privileged.deletedAt !== null ? 'trashed' : privileged.status }),
+    }
+  }
+
+  // Resolves a `taxonomy`-kind menu item to a display label (fiche 09, task
+  // 4). `route` stays `null`: no site in this codebase renders a taxonomy
+  // archive page yet, so there is honestly nowhere for the link to point —
+  // adding that route is future work, not a gap this resolver should paper
+  // over with a guessed URL. The label picks the site's default locale
+  // rather than the visiting locale, since a term's labels carry no request
+  // context of their own the way an entry's own `locale` field does.
+  const resolveMenuTerm = async (
+    taxonomyName: string,
+    termId: string,
+  ): Promise<{ readonly label: string; readonly route: string | null } | null> => {
+    const taxonomy = taxonomies.find((candidate) => candidate.name === taxonomyName)
+    if (taxonomy === undefined) return null
+
+    const term = await taxonomyStoreFor(taxonomy).read(termId)
+    if (term === null) return null
+
+    const label = term.labels[site.defaultLocale] ?? Object.values(term.labels)[0] ?? term.slug
+    return { label, route: null }
   }
 
   // Contract E (ADR-0024): a whole separate domain, wired the same way the
@@ -851,7 +904,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       catalog: marketplaceCatalog,
       installer: marketplaceInstaller,
     }),
-    menuRouter: createMenuRouter({ store: menuStore, resolveEntry: resolveMenuEntry }),
+    menuRouter: createMenuRouter({
+      store: menuStore,
+      resolveEntry: resolveMenuEntry,
+      resolveTerm: resolveMenuTerm,
+    }),
     commerceRouter: createCommerceAdminRouter({
       catalog: commerceCatalog,
       orders: commerceOrders,

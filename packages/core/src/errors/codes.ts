@@ -59,6 +59,7 @@ export const ERROR_CODES = [
   // Menus (navigation)
   'MENU_UNKNOWN',
   'MENU_NAME_TAKEN',
+  'MENU_LOCATION_TAKEN',
   'MENU_ITEM_NOT_FOUND',
   'MENU_ITEM_INVALID',
   'MENU_CYCLE',

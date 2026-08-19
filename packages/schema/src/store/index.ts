@@ -36,11 +36,17 @@ export type {
   MenuItemKind,
   MenuStore,
   MenuStoreOptions,
+  ReorderUpdate as MenuReorderUpdate,
   UpdateMenuInput,
   UpdateMenuItemInput,
 } from './menu-store.js'
 export { createMenuStore, MAX_MENU_DEPTH } from './menu-store.js'
-export { ensureMenuTables, MENU_ITEM_PATH_LENGTH, MENU_TABLES } from './menu-tables.js'
+export {
+  ensureMenuTables,
+  MENU_ITEM_PATH_LENGTH,
+  MENU_LOCATION_LENGTH,
+  MENU_TABLES,
+} from './menu-tables.js'
 export {
   blocksTable,
   columnFor,

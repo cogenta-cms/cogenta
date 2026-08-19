@@ -155,22 +155,37 @@ export interface ThemeRenderOptions {
    */
   readonly analyticsBeacon?: { readonly referrer?: string | undefined }
   /**
-   * Wires `GET /api/menus/by-name/{name}` into the render pipeline (audit
-   * follow-up to L13's menu system: the backend, API and admin were complete
-   * and tested, but no menu ever reached the public theme). Called
+   * Wires `GET /api/menus/by-location/{location}` into the render pipeline
+   * (audit follow-up to L13's menu system: the backend, API and admin were
+   * complete and tested, but no menu ever reached the public theme). Called
    * in-process, through the very same `MenuRouter` `/api/menus/*` is mounted
    * with — never a second lookup path.
-   *
-   * Convention (undeclared by contract A or D, since navigation is not
-   * content): a menu named `main` renders in the header, one named `footer`
-   * renders in the footer. A site with neither keeps today's empty slots;
-   * one with only `main` gets no footer navigation, and so on.
    *
    * Absent means no menu lookup at all — the same empty slots as before this
    * was wired.
    */
   readonly menuRouter?: MenuRouter
+  /**
+   * The `location` (fiche 09, task 3) whose assigned menu renders in the
+   * page header. Defaults to `DEFAULT_HEADER_MENU_LOCATION`.
+   *
+   * This is the generic half of navigation resolution: a menu is looked up
+   * by *where it is slotted*, never by a theme's own name for that slot.
+   * `theme-render.ts` itself never hardcodes a vocabulary of locations — the
+   * default here is this one stand-in theme's choice, not a rule this file
+   * enforces, so a future second theme's own `assembleSite` wiring can pass
+   * a different string (`'header-nav'`, say) through this option without
+   * touching a line of render code or migrating any data.
+   */
+  readonly headerMenuLocation?: string
+  /** The `location` whose assigned menu renders in the page footer. Defaults to `DEFAULT_FOOTER_MENU_LOCATION`. */
+  readonly footerMenuLocation?: string
 }
+
+/** This stand-in theme's own default header slot — see `ThemeRenderOptions.headerMenuLocation`. */
+export const DEFAULT_HEADER_MENU_LOCATION = 'primary'
+/** This stand-in theme's own default footer slot — see `ThemeRenderOptions.footerMenuLocation`. */
+export const DEFAULT_FOOTER_MENU_LOCATION = 'footer'
 
 /**
  * Where the served stylesheet lives. Under `/_cogenta/` for the same reason
@@ -224,21 +239,26 @@ function entryTitle(entry: ContentEntry): string {
 
 interface ResolvedMenuLink {
   readonly label: string
-  /** `null` for an `entry` item whose target could not be resolved to a public route — kept in the list with no link, same treatment the admin gives it. */
+  /** `null` for an `entry`/`taxonomy`/`home` item whose target did not resolve to a public route. */
   readonly href: string | null
   readonly openInNewTab: boolean
+  readonly kind: string
+  /** The HTML `title` attribute (a tooltip) — `null` for none. Never this link's visible label. */
+  readonly title: string | null
 }
 
 /**
- * The body `GET /api/menus/by-name/{name}` answers with — only the fields
+ * The body `GET /api/menus/by-name/{name}` and `GET
+ * /api/menus/by-location/{location}` both answer with — only the fields
  * this renderer reads. `packages/api/src/rest/menu-router.ts`'s
  * `serialiseItem`/`menuResponse` own the real, complete shape.
  */
-interface MenuByNameBody {
+interface MenuLookupBody {
   readonly items?: readonly {
     readonly label: string
     readonly kind: string
     readonly url: string | null
+    readonly title: string | null
     readonly openInNewTab: boolean
     readonly resolvedLabel?: string
     readonly resolvedRoute?: string | null
@@ -246,15 +266,17 @@ interface MenuByNameBody {
 }
 
 /**
- * Looks a menu up by name, through the exact same `MenuRouter` `/api/menus/*`
- * is mounted with — an in-process call, `RestRequest` in and `RestResponse`
+ * Looks a menu up through the exact same `MenuRouter` `/api/menus/*` is
+ * mounted with — an in-process call, `RestRequest` in and `RestResponse`
  * out, never a second lookup path or a real HTTP round trip to itself.
+ * Shared by the by-location and by-name lookups below; only the path
+ * differs.
  *
- * `null` for "no menu router wired" and "no menu by that name" alike: both
+ * `null` for "no menu router wired" and "no menu found at all" alike: both
  * mean the slot renders empty, exactly as it always has.
  */
-async function fetchMenuLinks(
-  name: string,
+async function fetchMenuLinksFromPath(
+  path: string,
   locale: string,
   options: ThemeRenderOptions,
   context: AccessContext,
@@ -262,21 +284,80 @@ async function fetchMenuLinks(
   if (options.menuRouter === undefined) return null
 
   const response = await options.menuRouter.handle(
-    { method: 'GET', path: `/api/menus/by-name/${encodeURIComponent(name)}`, query: { locale } },
+    { method: 'GET', path, query: { locale } },
     context,
   )
   if (response.status !== 200) return null
 
-  const body = response.body as { readonly data?: MenuByNameBody } | null
+  const body = response.body as { readonly data?: MenuLookupBody } | null
   const items = body?.data?.items
   if (!Array.isArray(items)) return null
 
   return items.map((item) => ({
     label: item.resolvedLabel ?? item.label,
-    href:
-      item.kind === 'url' ? item.url : item.kind === 'entry' ? (item.resolvedRoute ?? null) : null,
+    // `url` carries its own stored destination; every other resolvable kind
+    // (`entry`, `taxonomy`, `home`) is only ever linked through the
+    // resolver's answer — never a second, ad hoc way to derive a route. A
+    // `submenu-placeholder` has no resolver call at all, so `resolvedRoute`
+    // is `undefined` for it and this falls through to `null`, exactly the
+    // "no link, just a heading" case `renderMenuLinks` keeps.
+    href: item.kind === 'url' ? item.url : (item.resolvedRoute ?? null),
     openInNewTab: item.openInNewTab,
+    kind: item.kind,
+    title: item.title,
   }))
+}
+
+/** Looks a menu up by its `location` (fiche 09, task 3) — the generic, theme-agnostic resolution. */
+function fetchMenuLinksByLocation(
+  location: string,
+  locale: string,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<readonly ResolvedMenuLink[] | null> {
+  return fetchMenuLinksFromPath(
+    `/api/menus/by-location/${encodeURIComponent(location)}`,
+    locale,
+    options,
+    context,
+  )
+}
+
+/** Looks a menu up by its machine `name` — the legacy resolution `fetchMenuLinksForSlot` falls back to. */
+function fetchMenuLinksByName(
+  name: string,
+  locale: string,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<readonly ResolvedMenuLink[] | null> {
+  return fetchMenuLinksFromPath(
+    `/api/menus/by-name/${encodeURIComponent(name)}`,
+    locale,
+    options,
+    context,
+  )
+}
+
+/**
+ * Resolves the menu for one render slot (header or footer): by `location`
+ * first — the only mechanism a future second theme needs, since it is a
+ * property of the *menu*, never a name this file hardcodes — and, only when
+ * nothing is assigned there, by the legacy `name` convention (`main`,
+ * `footer`) this stand-in theme shipped with before locations existed. That
+ * fallback is what lets a site created before task 3 keep its navigation
+ * showing up unchanged: nothing about its data has to move for `/` to keep
+ * rendering the menu it already had.
+ */
+async function fetchMenuLinksForSlot(
+  location: string,
+  legacyName: string,
+  locale: string,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<readonly ResolvedMenuLink[] | null> {
+  const byLocation = await fetchMenuLinksByLocation(location, locale, options, context)
+  if (byLocation !== null) return byLocation
+  return fetchMenuLinksByName(legacyName, locale, options, context)
 }
 
 /**
@@ -286,21 +367,31 @@ async function fetchMenuLinks(
  * (`parent`, `depth`), so nothing here would need to change to add it, only
  * this function's markup.
  *
+ * A dead link is **hidden, never served** (fiche 09, task 4's decision): an
+ * `entry`/`taxonomy`/`home` item whose target did not resolve to a public
+ * route is dropped from the render entirely, on the theory that a menu
+ * pointing at a 404 is worse than a menu with one fewer item — the same
+ * distinction the admin's health check exists to catch *before* a visitor
+ * hits it. A `submenu-placeholder` is not a dead link — it never had a
+ * target — so it keeps rendering as an unlinked heading, exactly as before.
+ *
  * `null`/empty renders nothing: the caller's slot stays exactly as empty as
- * it was before this was wired, for a site with no menu by that name.
+ * it was before this was wired, for a site with no menu in that slot.
  */
 function renderMenuLinks(links: readonly ResolvedMenuLink[] | null): string {
   if (links === null || links.length === 0) return ''
   const items = links
+    .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
     .map((link) => {
       const label = escapeText(link.label)
-      if (link.href === null) return `<li><span>${label}</span></li>`
+      const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
+      if (link.href === null) return `<li><span${titleAttr}>${label}</span></li>`
       const href = escapeAttribute(link.href)
       const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
-      return `<li><a href="${href}"${target}>${label}</a></li>`
+      return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
     })
     .join('')
-  return `<ul class="cg-menu">${items}</ul>`
+  return items === '' ? '' : `<ul class="cg-menu">${items}</ul>`
 }
 
 async function fetchOne(
@@ -639,14 +730,31 @@ async function renderEntryPage(
 
   const siteName = escapeAttribute(options.site.name)
 
-  // The navigation menus (audit follow-up to L13's menu system): `main` in
-  // the header, `footer` in the footer — see `ThemeRenderOptions.menuRouter`
-  // for the convention and why it lives here rather than in contract A/D.
-  // Both are `null`, rendering nothing, on a site with no menu router wired
-  // or no menu by that name — the same empty slots as before this was wired.
+  // The navigation menus (audit follow-up to L13's menu system, generalised
+  // to real `location`s by fiche 09 task 3): the menu assigned to the header
+  // location, the one assigned to the footer location — see
+  // `ThemeRenderOptions.headerMenuLocation`/`footerMenuLocation` for why the
+  // location key is a per-render option rather than a name this file
+  // hardcodes, and `fetchMenuLinksForSlot` for the legacy-name fallback that
+  // keeps a pre-task-3 site's navigation rendering unchanged. Both are
+  // `null`, rendering nothing, on a site with no menu router wired or no
+  // menu in that slot at all — the same empty slots as before this was
+  // wired.
   const [headerMenu, footerMenu] = await Promise.all([
-    fetchMenuLinks('main', themeContext.locale, options, context),
-    fetchMenuLinks('footer', themeContext.locale, options, context),
+    fetchMenuLinksForSlot(
+      options.headerMenuLocation ?? DEFAULT_HEADER_MENU_LOCATION,
+      'main',
+      themeContext.locale,
+      options,
+      context,
+    ),
+    fetchMenuLinksForSlot(
+      options.footerMenuLocation ?? DEFAULT_FOOTER_MENU_LOCATION,
+      'footer',
+      themeContext.locale,
+      options,
+      context,
+    ),
   ])
   const headerNav = renderMenuLinks(headerMenu)
   const footerNav = renderMenuLinks(footerMenu)

@@ -87,6 +87,8 @@ export type {
   UpdateTermInput,
 } from './taxonomy-store.js'
 export { createTaxonomyStore } from './taxonomy-store.js'
+export type { CountTaxonomyUsageOptions, TermUsage } from './taxonomy-usage.js'
+export { countTaxonomyUsage } from './taxonomy-usage.js'
 export type {
   BlockZones,
   ContentBlock,

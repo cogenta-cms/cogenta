@@ -146,6 +146,51 @@ function json(status: number, body: unknown): Response {
   })
 }
 
+/** Mirrors `@cogenta/api`'s taxonomy router folding, for the `?q=` stub below. */
+function foldForMockSearch(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/gu, '').toLowerCase()
+}
+
+interface MockTerm {
+  id: string
+  taxonomy: string
+  parent: string | null
+  slug: string
+  labels: Readonly<Record<string, string>>
+  position: number
+  depth: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Mirrors `@cogenta/schema`'s taxonomy store: a parent immediately before its
+ * children, siblings ordered by `position` — computed here rather than kept
+ * true by insertion order, so that a reorder through the tree's own buttons
+ * is actually visible the next time the list is fetched.
+ */
+function flattenMockTerms(list: readonly MockTerm[]): MockTerm[] {
+  const byParent = new Map<string | null, MockTerm[]>()
+  for (const term of list) {
+    const siblings = byParent.get(term.parent) ?? []
+    siblings.push(term)
+    byParent.set(term.parent, siblings)
+  }
+  for (const siblings of byParent.values()) {
+    siblings.sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1))
+  }
+
+  const ordered: MockTerm[] = []
+  const visit = (parentId: string | null): void => {
+    for (const term of byParent.get(parentId) ?? []) {
+      ordered.push(term)
+      visit(term.id)
+    }
+  }
+  visit(null)
+  return ordered
+}
+
 /**
  * A fetch stub that answers exactly the `/api/auth/*` shape the real server
  * returns — this is a network mock for a browser unit test, not the database
@@ -160,6 +205,24 @@ export function installMockFetch(
     readonly siteLocales?: readonly string[]
     /** Overrides the signed-in user's roles — `['editor']` by default. */
     readonly roles?: readonly string[]
+    /**
+     * Seeds the `topic` taxonomy's terms, replacing the single default
+     * "Cuisine" root. Lets a test set up a hierarchy (a parent and a child)
+     * without leaving every other taxonomy test to cope with the extra term.
+     */
+    readonly taxonomyTerms?: readonly {
+      id: string
+      taxonomy: string
+      parent: string | null
+      slug: string
+      labels: Readonly<Record<string, string>>
+      position: number
+      depth: number
+      createdAt: string
+      updatedAt: string
+    }[]
+    /** `?counts=1`'s per-term answer. Zero for every term not listed here. */
+    readonly taxonomyUsage?: Readonly<Record<string, { own: number; withDescendants: number }>>
     /**
      * `GET /api/assistant`'s answer. Absent means `available: false, tools:
      * []` — the same "no AI provider configured" a real site with none
@@ -599,19 +662,28 @@ export function installMockFetch(
     depth: number
     createdAt: string
     updatedAt: string
-  }[] = [
-    {
-      id: 'term-existing',
-      taxonomy: 'topic',
-      parent: null,
-      slug: 'cuisine',
-      labels: { fr: 'Cuisine', en: 'Cooking' },
-      position: 0,
-      depth: 0,
-      createdAt: '2026-02-01T00:00:00.000Z',
-      updatedAt: '2026-02-01T00:00:00.000Z',
-    },
-  ]
+  }[] = (
+    options.taxonomyTerms ?? [
+      {
+        id: 'term-existing',
+        taxonomy: 'topic',
+        parent: null,
+        slug: 'cuisine',
+        labels: { fr: 'Cuisine', en: 'Cooking' },
+        position: 0,
+        depth: 0,
+        createdAt: '2026-02-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      },
+    ]
+  ).map((term) => ({ ...term }))
+  // `?counts=1`'s answer, by term id — a simplified stand-in for the real
+  // cross-collection aggregation `countTaxonomyUsage` performs server-side
+  // (proven there, against a real database, in `@cogenta/schema`'s and
+  // `@cogenta/api`'s own test suites). Zero unless a test seeds otherwise.
+  const taxonomyUsage: Record<string, { own: number; withDescendants: number }> = {
+    ...options.taxonomyUsage,
+  }
   let trash = [MOCK_TRASHED_ENTRY]
 
   // Menus live per `installMockFetch()` call too, the same way taxonomy terms
@@ -1682,7 +1754,7 @@ export function installMockFetch(
       const taxonomyMatch =
         /\/api\/taxonomies\/([^/?]+)(?:\/([^/?]+))?(?:\/(move))?(?:\?.*)?$/u.exec(url)
       if (taxonomyMatch !== null) {
-        const [, taxonomy = '', id] = taxonomyMatch
+        const [, taxonomy = '', id, action] = taxonomyMatch
         const declared = MOCK_SCHEMA.taxonomies.find((entry) => entry.name === taxonomy)
         if (declared === undefined) {
           return json(404, {
@@ -1690,25 +1762,59 @@ export function installMockFetch(
           })
         }
 
-        const action =
+        const requiredAction =
           method === 'GET'
             ? 'read'
-            : method === 'POST'
+            : method === 'POST' && action !== 'move'
               ? 'create'
               : method === 'DELETE'
                 ? 'delete'
                 : 'update'
         const allowed: readonly string[] =
-          (declared.permissions as Record<string, readonly string[]>)[action] ?? []
+          (declared.permissions as Record<string, readonly string[]>)[requiredAction] ?? []
         const held = [...user.roles, 'public']
         if (!allowed.some((role) => held.includes(role))) {
           return json(403, {
-            error: { code: 'FORBIDDEN', message: `Access denied: ${action} on ${taxonomy}.` },
+            error: {
+              code: 'FORBIDDEN',
+              message: `Access denied: ${requiredAction} on ${taxonomy}.`,
+            },
           })
         }
 
         if (id === undefined && method === 'GET') {
-          return json(200, { data: terms })
+          const parsed = new URL(url, 'http://localhost')
+          // Mirrors the real store's in-memory tree flattening: a parent
+          // immediately before its children, siblings by `position` — not
+          // insertion order, so a reorder through the tree's buttons is
+          // actually visible on the next fetch.
+          let listed = flattenMockTerms(terms)
+
+          const q = parsed.searchParams.get('q')
+          if (q !== null && q.trim() !== '') {
+            const folded = foldForMockSearch(q.trim())
+            listed = listed.filter(
+              (term) =>
+                foldForMockSearch(term.slug).includes(folded) ||
+                Object.values(term.labels).some((label) =>
+                  foldForMockSearch(label).includes(folded),
+                ),
+            )
+          }
+
+          const wantsCounts = parsed.searchParams.get('counts') === '1'
+          const wantsUnusedOnly = parsed.searchParams.get('unused') === '1'
+          if (wantsUnusedOnly) {
+            listed = listed.filter((term) => (taxonomyUsage[term.id]?.own ?? 0) === 0)
+          }
+          const withCounts = wantsCounts
+            ? listed.map((term) => ({
+                ...term,
+                entryCount: taxonomyUsage[term.id] ?? { own: 0, withDescendants: 0 },
+              }))
+            : listed
+
+          return json(200, { data: withCounts })
         }
 
         if (id === undefined && method === 'POST') {
@@ -1735,7 +1841,95 @@ export function installMockFetch(
           return json(201, { data: created })
         }
 
-        if (id !== undefined && method === 'DELETE') {
+        if (id !== undefined && action === undefined && (method === 'PATCH' || method === 'PUT')) {
+          const term = terms.find((candidate) => candidate.id === id)
+          if (term === undefined) {
+            return json(404, {
+              error: { code: 'TAXONOMY_TERM_NOT_FOUND', message: 'No such term.' },
+            })
+          }
+          if (
+            typeof body.slug === 'string' &&
+            terms.some((candidate) => candidate.id !== id && candidate.slug === body.slug)
+          ) {
+            return json(409, {
+              error: { code: 'TAXONOMY_SLUG_TAKEN', message: 'That slug is taken.' },
+            })
+          }
+          if (typeof body.slug === 'string') term.slug = body.slug
+          if (body.labels !== undefined) term.labels = body.labels
+          if (typeof body.position === 'number') term.position = body.position
+          term.updatedAt = '2026-03-02T00:00:00.000Z'
+          return json(200, { data: term })
+        }
+
+        if (id !== undefined && action === 'move' && method === 'POST') {
+          const term = terms.find((candidate) => candidate.id === id)
+          if (term === undefined) {
+            return json(404, {
+              error: { code: 'TAXONOMY_TERM_NOT_FOUND', message: 'No such term.' },
+            })
+          }
+          const parent =
+            body.parent === null ? null : typeof body.parent === 'string' ? body.parent : undefined
+          if (parent === undefined) {
+            return json(400, {
+              error: { code: 'CONTENT_INVALID', message: 'A move needs a new parent.' },
+            })
+          }
+
+          const isWithinSubtree = (candidateId: string): boolean => {
+            let current = terms.find((entry) => entry.id === candidateId)
+            while (current !== undefined) {
+              if (current.id === id) return true
+              current = terms.find((entry) => entry.id === current?.parent)
+            }
+            return false
+          }
+          if (parent !== null && isWithinSubtree(parent)) {
+            return json(400, {
+              error: {
+                code: 'TAXONOMY_CYCLE',
+                message: `Moving "${id}" under "${parent}" would make it its own ancestor.`,
+              },
+            })
+          }
+
+          const parentTerm =
+            parent === null ? undefined : terms.find((entry) => entry.id === parent)
+          const newDepth = parentTerm === undefined ? 0 : parentTerm.depth + 1
+          const depthDelta = newDepth - term.depth
+
+          // Rewrites the depth of the whole moved subtree, mirroring the real
+          // store's "only a move pays" write cost.
+          const subtree = new Set([id])
+          let grew = true
+          while (grew) {
+            grew = false
+            for (const candidate of terms) {
+              if (
+                candidate.parent !== null &&
+                subtree.has(candidate.parent) &&
+                !subtree.has(candidate.id)
+              ) {
+                subtree.add(candidate.id)
+                grew = true
+              }
+            }
+          }
+          for (const candidate of terms) {
+            if (subtree.has(candidate.id)) candidate.depth += depthDelta
+          }
+
+          term.parent = parent
+          term.position = terms.filter(
+            (candidate) => candidate.parent === parent && candidate.id !== id,
+          ).length
+          term.updatedAt = '2026-03-02T00:00:00.000Z'
+          return json(200, { data: term })
+        }
+
+        if (id !== undefined && action === undefined && method === 'DELETE') {
           const parsed = new URL(url, 'http://localhost')
           const hasChildren = terms.some((term) => term.parent === id)
           if (hasChildren && parsed.searchParams.get('cascade') !== 'true') {

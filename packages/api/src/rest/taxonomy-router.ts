@@ -1,5 +1,12 @@
-import { CogentaError } from '@cogenta/core'
-import type { TaxonomyDefinition, TaxonomyStore, TaxonomyTerm } from '@cogenta/schema'
+import { CogentaError, type DatabaseHandle } from '@cogenta/core'
+import {
+  type CollectionDefinition,
+  countTaxonomyUsage,
+  type TaxonomyDefinition,
+  type TaxonomyStore,
+  type TaxonomyTerm,
+  type TermUsage,
+} from '@cogenta/schema'
 import type { AccessContext, PermissionLayer } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
@@ -15,6 +22,13 @@ import { single } from './query.js'
  *   DELETE /{taxonomy}/{id}           delete a term (?cascade=true for the branch)
  *   POST   /{taxonomy}/{id}/move      re-parent it
  *
+ * The list route also answers three query parameters (`08-taxonomies.md`,
+ * task 3): `?q=` filters by label or slug, accent- and case-insensitive;
+ * `?counts=1` adds how many entries carry each term, direct and with
+ * descendants; `?unused=1` keeps only the terms nothing classifies directly.
+ * Both count-bearing parameters are silently inert unless `usage` was passed
+ * to `createTaxonomyRouter` — a site with none wired still lists its terms.
+ *
  * Mounted apart from `/api/content` because a taxonomy is **not** a
  * collection: sharing the mount point would make `/api/content/category`
  * ambiguous the day a site has both, which is exactly the case ADR-0022
@@ -25,10 +39,26 @@ import { single } from './query.js'
  * handler (R4).
  */
 
+/**
+ * What `?counts=1`/`?unused=1` need: a database to query and the site's
+ * collections, so usage can be found across every one of them that carries a
+ * `taxonomy` field pointing here.
+ *
+ * Optional on the router as a whole (`R2`-shaped: a taxonomy lists and
+ * writes its terms with nothing more than `storeFor`), and required only the
+ * moment a caller actually asks for counts.
+ */
+export interface TaxonomyUsageSource {
+  readonly db: DatabaseHandle
+  readonly collections: readonly CollectionDefinition[]
+}
+
 export interface TaxonomyRouterOptions {
   readonly taxonomies: readonly TaxonomyDefinition[]
   readonly permissions: PermissionLayer
   readonly storeFor: (taxonomy: TaxonomyDefinition) => TaxonomyStore
+  /** Wires `?counts=1` and `?unused=1`. Left out, both parameters are ignored. */
+  readonly usage?: TaxonomyUsageSource
   /** Mount point. `/api/taxonomies` by default. */
   readonly basePath?: string
 }
@@ -50,6 +80,8 @@ interface SerialisedTerm {
   readonly depth: number
   readonly createdAt: string
   readonly updatedAt: string
+  /** Present only when `?counts=1` was asked for and `usage` is wired. */
+  readonly entryCount?: TermUsage
 }
 
 /**
@@ -59,7 +91,8 @@ interface SerialisedTerm {
  * to parse it would be coupled to a decision ADR-0022 took for the database's
  * sake. `parent` and `depth` say everything a tree renderer needs.
  */
-function serialise(term: TaxonomyTerm): SerialisedTerm {
+function serialise(term: TaxonomyTerm, usage?: ReadonlyMap<string, TermUsage>): SerialisedTerm {
+  const entryCount = usage?.get(term.id)
   return {
     id: term.id,
     taxonomy: term.taxonomy,
@@ -70,7 +103,36 @@ function serialise(term: TaxonomyTerm): SerialisedTerm {
     depth: term.depth,
     createdAt: term.createdAt,
     updatedAt: term.updatedAt,
+    ...(entryCount === undefined ? {} : { entryCount }),
   }
+}
+
+/** Strips diacritics and case, so "Cafe" with an accent matches "cafe" without one. */
+const COMBINING_MARKS = /[̀-ͯ]/gu
+
+/**
+ * Folds a string for search: decompose accented letters into base letter plus
+ * combining mark (`́` etc.), then drop every combining mark.
+ *
+ * Done in JS rather than SQL on purpose — `unaccent` is a Postgres extension
+ * that may not be installed, MySQL's accent folding depends on the column
+ * collation, and SQLite has neither. The whole term list is already read into
+ * memory for tree ordering, so this never costs a second query, and it
+ * behaves identically on all three dialects because it never touches one.
+ */
+function foldForSearch(text: string): string {
+  return text.normalize('NFD').replace(COMBINING_MARKS, '').toLowerCase()
+}
+
+/** Whether a term's slug or any of its labels contain `query`, accent- and case-insensitively. */
+function matchesQuery(term: TaxonomyTerm, foldedQuery: string): boolean {
+  if (foldForSearch(term.slug).includes(foldedQuery)) return true
+  return Object.values(term.labels).some((label) => foldForSearch(label).includes(foldedQuery))
+}
+
+/** `?counts=1` and `?counts=true` both mean yes; absent or anything else means no. */
+function isTruthyFlag(value: string | undefined): boolean {
+  return value === '1' || value === 'true'
 }
 
 function invalidBody(what: string, hint: string): CogentaError {
@@ -134,6 +196,9 @@ export function createTaxonomyRouter(options: TaxonomyRouterOptions): TaxonomyRo
   const { permissions } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const byName = new Map(options.taxonomies.map((taxonomy) => [taxonomy.name, taxonomy]))
+  const collectionsByName = new Map(
+    (options.usage?.collections ?? []).map((collection) => [collection.name, collection]),
+  )
 
   function definition(name: string): TaxonomyDefinition {
     const found = byName.get(name)
@@ -143,6 +208,38 @@ export function createTaxonomyRouter(options: TaxonomyRouterOptions): TaxonomyRo
       message: `This site declares no taxonomy called "${name}".`,
       hint: 'Check the name against the taxonomies passed to defineTaxonomy().',
       details: { taxonomy: name },
+    })
+  }
+
+  /**
+   * Usage counts for `?counts=1`/`?unused=1`, gated the same way every other
+   * read of unpublished content is: a collection this actor may not read
+   * contributes nothing, and one whose drafts they may not see only counts
+   * its published entries (`BLOCKERS.md`: "le compteur peut fuiter").
+   */
+  async function usageFor(
+    taxonomy: TaxonomyDefinition,
+    terms: readonly TaxonomyTerm[],
+    context: AccessContext,
+  ): Promise<ReadonlyMap<string, TermUsage>> {
+    const source = options.usage
+    if (source === undefined) return new Map()
+
+    return countTaxonomyUsage({
+      db: source.db,
+      taxonomy,
+      terms,
+      collections: source.collections,
+      readable: (collectionName) => {
+        const collection = collectionsByName.get(collectionName)
+        return collection !== undefined && permissions.can('read', collection, context).allowed
+      },
+      includeDrafts: (collectionName) => {
+        const collection = collectionsByName.get(collectionName)
+        return (
+          collection !== undefined && permissions.canReadUnpublished(collection, context).allowed
+        )
+      },
     })
   }
 
@@ -171,8 +268,26 @@ export function createTaxonomyRouter(options: TaxonomyRouterOptions): TaxonomyRo
       if (method === 'GET') {
         permissions.assertTerm('read', taxonomy, context)
         const under = single(request.query, 'under')
-        const terms = under === undefined ? await store.list() : await store.list({ under })
-        return jsonResponse(200, { data: terms.map(serialise) })
+        let terms = under === undefined ? await store.list() : await store.list({ under })
+
+        const query = single(request.query, 'q')
+        if (query !== undefined && query.trim() !== '') {
+          const folded = foldForSearch(query.trim())
+          terms = terms.filter((term) => matchesQuery(term, folded))
+        }
+
+        const wantsCounts = isTruthyFlag(single(request.query, 'counts'))
+        const wantsUnusedOnly = isTruthyFlag(single(request.query, 'unused'))
+        const usage =
+          (wantsCounts || wantsUnusedOnly) && options.usage !== undefined
+            ? await usageFor(taxonomy, terms, context)
+            : undefined
+
+        if (wantsUnusedOnly && usage !== undefined) {
+          terms = terms.filter((term) => (usage.get(term.id)?.own ?? 0) === 0)
+        }
+
+        return jsonResponse(200, { data: terms.map((term) => serialise(term, usage)) })
       }
       if (method === 'POST') {
         permissions.assertTerm('create', taxonomy, context)

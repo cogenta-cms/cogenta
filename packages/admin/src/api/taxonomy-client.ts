@@ -12,6 +12,12 @@ import { authHeader, request } from './http.js'
  * coupled to it. `parent` and `depth` are what a tree needs.
  */
 
+/** How many entries carry a term, direct and with descendants (task 3). */
+export interface TermUsage {
+  readonly own: number
+  readonly withDescendants: number
+}
+
 export interface Term {
   readonly id: string
   readonly taxonomy: string
@@ -23,13 +29,38 @@ export interface Term {
   readonly depth: number
   readonly createdAt: string
   readonly updatedAt: string
+  /** Present only when `listTerms` was asked for `counts`. */
+  readonly entryCount?: TermUsage
+}
+
+export interface ListTermsOptions {
+  /** Label/slug search, accent- and case-insensitive — the server folds it. */
+  readonly q?: string
+  /** Adds `entryCount` to every term. */
+  readonly counts?: boolean
+  /** Keeps only terms with zero direct usage — the question before a clean-up. */
+  readonly unused?: boolean
+}
+
+function searchParamsFor(options: ListTermsOptions): URLSearchParams {
+  const params = new URLSearchParams()
+  if (options.q !== undefined && options.q !== '') params.set('q', options.q)
+  if (options.counts === true) params.set('counts', '1')
+  if (options.unused === true) params.set('unused', '1')
+  return params
 }
 
 /** The whole tree, in tree order: a parent immediately before its children. */
-export function listTerms(token: string, taxonomy: string): Promise<readonly Term[]> {
-  return request(`/api/taxonomies/${encodeURIComponent(taxonomy)}`, {
-    headers: authHeader(token),
-  })
+export function listTerms(
+  token: string,
+  taxonomy: string,
+  options: ListTermsOptions = {},
+): Promise<readonly Term[]> {
+  const query = searchParamsFor(options).toString()
+  return request(
+    `/api/taxonomies/${encodeURIComponent(taxonomy)}${query === '' ? '' : `?${query}`}`,
+    { headers: authHeader(token) },
+  )
 }
 
 export interface CreateTermInput {
@@ -50,16 +81,42 @@ export function createTerm(token: string, taxonomy: string, input: CreateTermInp
   })
 }
 
+export interface UpdateTermInput {
+  readonly slug?: string
+  readonly labels?: Readonly<Record<string, string>>
+  readonly position?: number
+}
+
+/** Renames, relabels or reorders a term. Never changes its parent — see `moveTerm`. */
 export function updateTerm(
   token: string,
   taxonomy: string,
   id: string,
-  input: { readonly slug?: string; readonly labels?: Readonly<Record<string, string>> },
+  input: UpdateTermInput,
 ): Promise<Term> {
   return request(`/api/taxonomies/${encodeURIComponent(taxonomy)}/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: authHeader(token),
     body: JSON.stringify(input),
+  })
+}
+
+/**
+ * Re-parents a term. A separate call from `updateTerm` because it is a
+ * separate server operation — the store rewrites the whole subtree's
+ * materialised path, refuses a cycle (`TAXONOMY_CYCLE`) and refuses landing
+ * past the depth bound (`TAXONOMY_TOO_DEEP`).
+ */
+export function moveTerm(
+  token: string,
+  taxonomy: string,
+  id: string,
+  parent: string | null,
+): Promise<Term> {
+  return request(`/api/taxonomies/${encodeURIComponent(taxonomy)}/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ parent }),
   })
 }
 

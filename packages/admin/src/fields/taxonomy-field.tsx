@@ -1,7 +1,10 @@
-import { type JSX, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { listTerms, type Term } from '../api/taxonomy-client.js'
+import { ApiError } from '../api/client.js'
+import { createTerm, listTerms, type Term } from '../api/taxonomy-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { canPerformOnTerms } from '../schema/permissions.js'
+import { useSchema } from '../schema/schema-context.js'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -13,6 +16,12 @@ import type { FieldProps } from './types.js'
  * Deliberately a plain `<select>`: L11 owns how this looks. What matters is
  * that it writes what the store expects — an ordered list of term ids for a
  * to-many field, a single id (or null) otherwise.
+ *
+ * Task 5 (`08-taxonomies.md`) adds three things on top of the original
+ * picker: a label/slug filter so a long taxonomy stays usable, a parent
+ * mention on every child term so nesting reads without leaving the form, and
+ * a quick-create control for a role that may create terms — the point being
+ * to classify an entry without leaving the editor.
  */
 export function TaxonomyField({
   id,
@@ -23,7 +32,9 @@ export function TaxonomyField({
 }: FieldProps<unknown>): JSX.Element {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
+  const schemaState = useSchema()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
 
   const options = field.options as { readonly of?: string; readonly many?: boolean }
   const taxonomy = options.of ?? ''
@@ -31,6 +42,10 @@ export function TaxonomyField({
 
   const [terms, setTerms] = useState<readonly Term[]>([])
   const [failed, setFailed] = useState(false)
+  const [filter, setFilter] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -52,6 +67,20 @@ export function TaxonomyField({
     }
   }, [token, taxonomy])
 
+  const labelOf = (term: Term): string =>
+    term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug
+
+  const byId = useMemo(() => new Map(terms.map((term) => [term.id, term])), [terms])
+
+  const foldedFilter = useMemo(() => foldForSearch(filter.trim()), [filter])
+  const visibleTerms = useMemo(() => {
+    if (foldedFilter === '') return terms
+    return terms.filter((term) => {
+      if (foldForSearch(term.slug).includes(foldedFilter)) return true
+      return Object.values(term.labels).some((label) => foldForSearch(label).includes(foldedFilter))
+    })
+  }, [terms, foldedFilter])
+
   const selected = many
     ? Array.isArray(value)
       ? value.map(String)
@@ -67,30 +96,134 @@ export function TaxonomyField({
     onChange(many ? chosen : (chosen[0] ?? null))
   }
 
+  const taxonomyDefinition =
+    schemaState.status === 'ready'
+      ? (schemaState.schema.taxonomies ?? []).find((candidate) => candidate.name === taxonomy)
+      : undefined
+  const mayCreate =
+    taxonomyDefinition !== undefined && canPerformOnTerms('create', taxonomyDefinition, roles)
+
+  async function createQuickTerm(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (token === null || newLabel.trim() === '') return
+
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const created = await createTerm(token, taxonomy, {
+        slug: slugify(newLabel),
+        labels: { [i18n.language]: newLabel.trim() },
+      })
+      setTerms((current) => [...current, created])
+      setNewLabel('')
+      // Selects the freshly created term straight away: the whole point of
+      // creating it here is not to have to go find it in a picker next.
+      onChange(many ? [...selected, created.id] : created.id)
+    } catch (caught) {
+      setCreateError(caught instanceof ApiError ? caught.message : t('fields.taxonomyCreateError'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <FieldWrapper id={id} field={field}>
-      {failed || terms.length === 0 ? (
+      {failed ? (
         <p className="field__placeholder">{t('fields.taxonomyEmpty', { taxonomy })}</p>
       ) : (
-        <select
-          id={id}
-          multiple={many}
-          value={many ? selected : (selected[0] ?? '')}
-          disabled={disabled}
-          onChange={change}
+        <>
+          {terms.length > 0 && (
+            <input
+              type="search"
+              aria-label={t('fields.taxonomySearch')}
+              placeholder={t('fields.taxonomySearch')}
+              value={filter}
+              disabled={disabled}
+              onChange={(event) => setFilter(event.target.value)}
+            />
+          )}
+          {terms.length === 0 ? (
+            <p className="field__placeholder">{t('fields.taxonomyEmpty', { taxonomy })}</p>
+          ) : (
+            <select
+              id={id}
+              multiple={many}
+              value={many ? selected : (selected[0] ?? '')}
+              disabled={disabled}
+              onChange={change}
+            >
+              {!many && <option value="">{t('fields.taxonomyNone')}</option>}
+              {visibleTerms.map((term) => {
+                const parent = term.parent === null ? undefined : byId.get(term.parent)
+                return (
+                  <option key={term.id} value={term.id}>
+                    {/* Indented by depth: the API returns the tree in tree
+                        order, so this is all it takes to show the shape of
+                        it. The parent's own label is appended for a child so
+                        it reads on its own, without the sibling context an
+                        indented list normally supplies. */}
+                    {`${'— '.repeat(term.depth)}${labelOf(term)}${
+                      parent === undefined ? '' : ` (${labelOf(parent)})`
+                    }`}
+                  </option>
+                )
+              })}
+            </select>
+          )}
+          {visibleTerms.length === 0 && terms.length > 0 && (
+            <p className="field__placeholder">{t('fields.taxonomyNoMatch')}</p>
+          )}
+        </>
+      )}
+
+      {mayCreate && (
+        <form
+          onSubmit={(event) => void createQuickTerm(event)}
+          aria-label={t('fields.taxonomyQuickCreate')}
         >
-          {!many && <option value="">{t('fields.taxonomyNone')}</option>}
-          {terms.map((term) => (
-            <option key={term.id} value={term.id}>
-              {/* Indented by depth: the API returns the tree in tree order,
-                  so this is all it takes to show the shape of it. */}
-              {`${'— '.repeat(term.depth)}${
-                term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug
-              }`}
-            </option>
-          ))}
-        </select>
+          <input
+            type="text"
+            aria-label={t('fields.taxonomyNewTermLabel')}
+            placeholder={t('fields.taxonomyNewTermLabel')}
+            value={newLabel}
+            disabled={disabled || creating}
+            onChange={(event) => setNewLabel(event.target.value)}
+          />
+          <button type="submit" disabled={disabled || creating || newLabel.trim() === ''}>
+            {t('fields.taxonomyCreate')}
+          </button>
+          {createError !== null && (
+            <p role="alert" className="field__error">
+              {createError}
+            </p>
+          )}
+        </form>
       )}
     </FieldWrapper>
   )
+}
+
+/** Strips diacritics and case — mirrors the server's own `?q=` folding. */
+function foldForSearch(text: string): string {
+  return text.normalize('NFD').replace(COMBINING_MARKS, '').toLowerCase()
+}
+
+const COMBINING_MARKS = /[̀-ͯ]/gu
+
+/**
+ * A minimal slug from a freshly typed label: lowercase, non-alphanumerics
+ * become one dash, no leading/trailing dash.
+ *
+ * The quick-create control is a shortcut for the common case — a new root
+ * term with an unremarkable name — so this never needs to be as thorough as
+ * a dedicated slug field; the server is the one thing that actually enforces
+ * `TAXONOMY_SLUG_TAKEN` if two editors race for the same name.
+ */
+function slugify(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
 }

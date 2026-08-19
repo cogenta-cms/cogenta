@@ -450,6 +450,8 @@ export function installMockFetch(
     expiresAt: string | null
     revokedAt: string | null
     lastUsedAt: string | null
+    rateLimitPerMinute: number
+    supersededBy: string | null
   }[] = [
     {
       id: 'key-1',
@@ -461,6 +463,8 @@ export function installMockFetch(
       expiresAt: null,
       revokedAt: null,
       lastUsedAt: '2026-03-05T00:00:00.000Z',
+      rateLimitPerMinute: 600,
+      supersededBy: null,
     },
   ]
 
@@ -756,10 +760,11 @@ export function installMockFetch(
       }
 
       // `/api/api-keys/*`. Admin-only, mirroring the real router: the raw
-      // `key` is present only in the `POST` response's body, never in the
-      // list — proving the screen never re-displays it depends on this stub
-      // agreeing with `packages/api/test/rest/api-keys-router.test.ts`.
-      const apiKeysMatch = /\/api\/api-keys(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
+      // `key` is present only in the `POST` and `POST .../rotate` response
+      // bodies, never in the list — proving the screen never re-displays it
+      // depends on this stub agreeing with
+      // `packages/api/test/rest/api-keys-router.test.ts`.
+      const apiKeysMatch = /\/api\/api-keys(?:\/([^/?]+)(?:\/(rotate))?)?(?:\?.*)?$/u.exec(url)
       if (apiKeysMatch !== null && url.includes('/api/api-keys')) {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
@@ -768,17 +773,25 @@ export function installMockFetch(
         const forbidden = json(403, {
           error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
         })
-        const [, rawId] = apiKeysMatch
+        const [, rawId, rotateSuffix] = apiKeysMatch
 
         if (rawId === undefined && method === 'GET') {
           if (!isAdmin) return forbidden
-          return json(200, { data: apiKeys })
+          return json(200, {
+            data: apiKeys.map((key) => ({ ...key, usage: { last7Days: 0, last30Days: 3 } })),
+          })
         }
 
         if (rawId === undefined && method === 'POST') {
           if (!isAdmin) return forbidden
           apiKeyCounter += 1
           const rawKey = `cogenta_sk_mock-${apiKeyCounter}-not-a-real-secret`
+          const expiresAt =
+            typeof body.expiresAt === 'string'
+              ? body.expiresAt
+              : body.neverExpires === true
+                ? null
+                : '2026-06-06T00:00:00.000Z'
           const record = {
             id: `key-new-${apiKeyCounter}`,
             name: String(body.name),
@@ -786,12 +799,54 @@ export function installMockFetch(
             scope: body.scope as readonly string[],
             createdBy: user.id,
             createdAt: '2026-03-06T00:00:00.000Z',
-            expiresAt: null,
+            expiresAt,
             revokedAt: null,
             lastUsedAt: null,
+            rateLimitPerMinute:
+              typeof body.rateLimitPerMinute === 'number' ? body.rateLimitPerMinute : 600,
+            supersededBy: null,
           }
           apiKeys.push(record)
-          return json(201, { data: { ...record, key: rawKey } })
+          return json(201, {
+            data: { ...record, key: rawKey, usage: { last7Days: 0, last30Days: 0 } },
+          })
+        }
+
+        if (rawId !== undefined && rotateSuffix === 'rotate' && method === 'POST') {
+          if (!isAdmin) return forbidden
+          const found = apiKeys.find((candidate) => candidate.id === rawId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'API_KEY_NOT_FOUND', message: 'No API key with that id.' },
+            })
+          }
+          apiKeyCounter += 1
+          const rawKey = `cogenta_sk_mock-rotated-${apiKeyCounter}-not-a-real-secret`
+          const issued = {
+            id: `key-rotated-${apiKeyCounter}`,
+            name: found.name,
+            prefix: rawKey.slice(0, 12),
+            scope: found.scope,
+            createdBy: user.id,
+            createdAt: '2026-03-07T00:00:00.000Z',
+            expiresAt: found.expiresAt,
+            revokedAt: null,
+            lastUsedAt: null,
+            rateLimitPerMinute: found.rateLimitPerMinute,
+            supersededBy: null,
+          }
+          found.supersededBy = issued.id
+          // Far in the future on purpose: this only has to outlive whatever
+          // the real wall clock is when the test suite runs, so the row
+          // reads "on grace period" rather than "expired" by coincidence.
+          found.expiresAt = '2099-01-01T00:00:00.000Z'
+          apiKeys.push(issued)
+          return json(201, {
+            data: {
+              issued: { ...issued, key: rawKey, usage: { last7Days: 0, last30Days: 0 } },
+              previous: { ...found, usage: { last7Days: 0, last30Days: 3 } },
+            },
+          })
         }
 
         if (rawId !== undefined && method === 'DELETE') {

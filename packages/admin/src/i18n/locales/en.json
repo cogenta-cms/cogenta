@@ -144,6 +144,13 @@
         "body": "{{attempts}} sign-in attempts failed across {{subjects}} account(s) in the last 15 minutes. They are already being slowed down. Check the audit log, and make sure the accounts involved have strong passwords and a second factor. This disappears on its own once the attempts stop.",
         "action": "Open the audit log"
       }
+    },
+    "apikey": {
+      "expiring": {
+        "title": "An API key expires soon",
+        "body": "\"{{name}}\" expires in {{days}} day(s). Rotate it before then, or anything using it will start failing with no warning.",
+        "action": "Open API keys"
+      }
     }
   },
   "collections": {
@@ -551,6 +558,8 @@
     "prefixColumn": "Key",
     "scopeColumn": "Scope",
     "createdColumn": "Created",
+    "expiresColumn": "Expires",
+    "usageColumn": "Usage",
     "lastUsedColumn": "Last used",
     "statusColumn": "Status",
     "actionsColumn": "Actions",
@@ -558,16 +567,48 @@
     "nameHint": "A label to recognise this key later, e.g. \"CI pipeline\" or \"analytics import\".",
     "scopeLabel": "Scope",
     "scopeHint": "One or more role names, separated by commas — the same names used for a user's roles.",
+    "scopeWriteWarning": "Grants write access: {{roles}}",
+    "expiryLabel": "Expiry",
+    "expiryHint": "A key with no expiry is a key that leaks forever. 90 days is the recommended default.",
+    "expiryNeverWarning": "This key will never expire on its own. Only choose this if you have a real reason to.",
+    "expiry30d": "30 days",
+    "expiry90d": "90 days (recommended)",
+    "expiry1y": "1 year",
+    "expiryNever": "Never expires",
+    "rateLimitLabel": "Requests per minute (optional)",
+    "rateLimitHint": "Leave blank for the site's default quota — generous, but real.",
+    "rateLimitPlaceholder": "Site default",
     "active": "Active",
     "revoked": "Revoked",
     "expired": "Expired",
+    "onGracePeriod": "On grace period",
     "never": "Never",
+    "neverExpires": "Never expires",
+    "neverUsed": "Never used",
+    "unusedFor": "Unused for {{days}} days",
+    "expiresInDays": "Expires in {{days}} day(s)",
+    "gracePeriodUntil": "Grace period, {{days}} day(s) left",
+    "usageSummary": "{{last7}} (7d) / {{last30}} (30d)",
     "empty": "No API key has been created yet.",
     "revokeKey": "Revoke {{name}}",
+    "rotateKey": "Rotate {{name}}",
     "confirmRevoke": "Revoke this key? Anything using it will stop authenticating immediately.",
+    "confirmRevokeTitle": "Revoke {{name}}?",
+    "confirmRevokeButton": "Revoke the key",
+    "rotateHeading": "Rotate {{name}}",
+    "rotateDescription": "A new key is generated. The current one keeps working until the grace period you choose ends — no interruption of service.",
+    "rotateButton": "Rotate the key",
+    "graceLabel": "Grace period",
+    "graceHint": "How long the current key keeps authenticating after the new one is minted.",
+    "grace1h": "1 hour",
+    "grace24h": "24 hours (recommended)",
+    "grace7d": "7 days",
+    "rotatedTitle": "API key rotated: {{name}}",
+    "rotatedBody": "Here is the new key. The previous one keeps working for {{hours}} more hour(s), then stops on its own.",
     "loadError": "Could not load the API key list.",
     "createError": "Could not create this API key.",
-    "revokeError": "Could not revoke this key."
+    "revokeError": "Could not revoke this key.",
+    "rotateError": "Could not rotate this key."
   },
   "commerceProducts": {
     "heading": "Products",

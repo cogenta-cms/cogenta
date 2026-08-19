@@ -21,6 +21,7 @@ import {
   buildContentSchema,
   createAgentsRouter,
   createAnalyticsRouter,
+  createApiKeyExpiryNoticeSource,
   createApiKeysRouter,
   createAssistantRouter,
   createAuditRouter,
@@ -92,6 +93,7 @@ import {
   createDatabaseQueue,
   createDatabaseRegistry,
   createLogger,
+  createRateLimitRegistry,
   createStorageRegistry,
   type DatabaseHandle,
   type HealthReport,
@@ -99,6 +101,7 @@ import {
   type Logger,
   loadConfig,
   type MediaStore,
+  type RateLimitDriver,
   type StorageDriver,
 } from '@cogenta/core'
 import { importWordPress } from '@cogenta/import'
@@ -360,6 +363,14 @@ interface Site {
   readonly usersRouter: UsersRouter
   /** `/api/api-keys` — machine-to-machine bearer credentials, admin-only (L13 task 8). */
   readonly apiKeysRouter: ApiKeysRouter
+  /**
+   * Per-API-key request quota, checked once by `resolveActor` for every
+   * request (fiche 20 task 3, R1). `undefined` only in a test harness that
+   * builds a `Site` without going through `runServe` — every real server
+   * gets one, selected by `createRateLimitRegistry`, Redis when configured
+   * and available, an in-process counter otherwise.
+   */
+  readonly requestQuota?: RateLimitDriver
   /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
   readonly agentsRouter?: AgentsRouter
   /**
@@ -540,6 +551,8 @@ interface AssembleSiteOptions {
    * made-up seller address.
    */
   readonly billing?: CogentaConfig['billing']
+  /** See `Site.requestQuota` (fiche 20 task 3). Absent means no quota is enforced — only test harnesses omit it. */
+  readonly requestQuota?: RateLimitDriver
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -893,11 +906,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         // in this array is the whole wiring — the seam the notice mechanism was
         // designed around.
         createSuspiciousActivitySource({ rateLimit: auth.rateLimit }),
+        // "Une clé qui expire sans prévenir casse une intégration en
+        // production" (fiche 20 task 1) — one more source, no change to the
+        // router, the store or the admin's notice board.
+        createApiKeyExpiryNoticeSource({ apiKeys: auth.apiKeys, href: '/api-keys' }),
       ],
       dismissals: noticeDismissals,
     }),
     usersRouter: createUsersRouter({ auth }),
     apiKeysRouter: createApiKeysRouter({ auth }),
+    ...(options.requestQuota === undefined ? {} : { requestQuota: options.requestQuota }),
     assistantRouter: createAssistantRouter({
       toolset: (options.assistant?.toolset ?? EMPTY_TOOLSET) as AssistToolsetLike,
       collections,
@@ -1271,11 +1289,13 @@ async function recordUserAudit(
 }
 
 /**
- * Who minted or revoked a machine credential, in the same append-only log as
- * every other account action (L13 task 8). The raw key itself never reaches
- * this function — `POST`'s response carries it once, but the audit entry
- * only ever names the key's id, exactly like `recordUserAudit` never logs a
- * password.
+ * Who minted, rotated or revoked a machine credential, in the same
+ * append-only log as every other account action (L13 task 8; rotation added
+ * by fiche 20 task 2 — "vérifier que c'est déjà le cas" for create/revoke
+ * found it already was, so rotation is the one lifecycle event this fiche
+ * actually adds here). The raw key itself never reaches this function —
+ * `POST`'s response carries it once, but the audit entry only ever names the
+ * key's id, exactly like `recordUserAudit` never logs a password.
  */
 async function recordApiKeyAudit(
   site: Site,
@@ -1288,19 +1308,36 @@ async function recordApiKeyAudit(
   if (response.status < 200 || response.status >= 300) return
 
   const segments = pathname.split('/').filter((segment) => segment.length > 0)
-  // ['api', 'api-keys', <id?>]
+  // ['api', 'api-keys', <id?>, <'rotate'?>]
   const target = segments[2]
+  const sub = segments[3]
 
   const action =
     method === 'POST' && target === undefined
       ? 'apikey.create'
-      : method === 'DELETE' && target !== undefined
-        ? 'apikey.revoke'
-        : null
+      : method === 'POST' && target !== undefined && sub === 'rotate'
+        ? 'apikey.rotate'
+        : method === 'DELETE' && target !== undefined
+          ? 'apikey.revoke'
+          : null
   if (action === null) return
 
-  const created = (response.body as { readonly data?: { readonly id?: unknown } } | null)?.data
-  const subjectId = typeof created?.id === 'string' ? created.id : (target ?? null)
+  const body = response.body as {
+    readonly data?: { readonly id?: unknown; readonly issued?: { readonly id?: unknown } }
+  } | null
+  const subjectId =
+    action === 'apikey.rotate'
+      ? typeof body?.data?.issued?.id === 'string'
+        ? body.data.issued.id
+        : null
+      : typeof body?.data?.id === 'string'
+        ? body.data.id
+        : (target ?? null)
+  // For a rotation the diff names what was replaced — the id alone, never
+  // any key material, the same restraint every other field in this
+  // function already keeps.
+  const diff =
+    action === 'apikey.rotate' && target !== undefined ? { rotatedFrom: target } : undefined
 
   await site.auth.audit
     .record({
@@ -1308,6 +1345,7 @@ async function recordApiKeyAudit(
       actorRoles: actor.roles,
       action,
       ...(subjectId === null ? {} : { entryId: subjectId }),
+      ...(diff === undefined ? {} : { diff }),
     })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
@@ -1324,6 +1362,31 @@ function writeRestResponse(res: ServerResponse, response: RestResponse): void {
 function jsonError(res: ServerResponse, status: number, code: string, message: string): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify({ error: { code, message } }))
+}
+
+/**
+ * `Retry-After` plus the `RateLimit-*` draft headers (fiche 20 task 3), built
+ * from the `{ limit, remaining, resetAt }` `resolveApiKeyActor` (`@cogenta/api`)
+ * put on `API_KEY_RATE_LIMITED`'s `details`. `resetAt` is an absolute instant;
+ * every header here wants a delta, computed once against the real clock so a
+ * response that took a moment to reach this point still reports correctly.
+ */
+function rateLimitHeaders(
+  details: Readonly<Record<string, unknown>> | undefined,
+): Record<string, string> {
+  const limit = typeof details?.['limit'] === 'number' ? details['limit'] : undefined
+  const remaining = typeof details?.['remaining'] === 'number' ? details['remaining'] : undefined
+  const resetAt = typeof details?.['resetAt'] === 'number' ? details['resetAt'] : undefined
+  const retryAfterSeconds =
+    resetAt === undefined ? 60 : Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))
+
+  return {
+    'content-type': 'application/json; charset=utf-8',
+    'retry-after': String(retryAfterSeconds),
+    ...(limit === undefined ? {} : { 'ratelimit-limit': String(limit) }),
+    ...(remaining === undefined ? {} : { 'ratelimit-remaining': String(remaining) }),
+    'ratelimit-reset': String(retryAfterSeconds),
+  }
 }
 
 /** Same authentication gate as every other `/api/media` route — the file itself is not public. */
@@ -1500,6 +1563,7 @@ export function createRequestListener(
             Array.isArray(value) ? value.join(', ') : value,
           ]),
         ),
+        site.requestQuota === undefined ? {} : { requestQuota: site.requestQuota },
       )
       const context: AccessContext = { actor }
 
@@ -2079,6 +2143,18 @@ export function createRequestListener(
         jsonError(res, 413, error.code, error.message)
         return
       }
+      // A valid, over-quota API key (fiche 20 task 3) — the one error this
+      // listener turns into rate-limit headers, since `errorResponse` in
+      // `@cogenta/api` deliberately never serialises `details` onto the wire
+      // (that field is for logs, and could otherwise echo caller-controlled
+      // data). `resolveActor` throws this only after resolving a real,
+      // valid key, so the caller is exactly who it says it is; it just has
+      // to wait.
+      if (isCogentaError(error) && error.code === 'API_KEY_RATE_LIMITED') {
+        res.writeHead(429, rateLimitHeaders(error.details))
+        res.end(JSON.stringify({ error: { code: error.code, message: error.message } }))
+        return
+      }
       res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({
@@ -2189,6 +2265,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
   const storageSelection = await createStorageRegistry({ logger }).select(loaded.config.storage)
+  // Per-API-key request quota (fiche 20 task 3, R1): Redis when configured
+  // and reachable, an in-process counter otherwise — never a hard dependency
+  // on either.
+  const rateLimitSelection = await createRateLimitRegistry({ logger }).select(
+    loaded.config.rateLimit,
+  )
   const styles = joinStyles(
     await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),
     await loadThemeCss({ read: (url) => readFile(url, 'utf8') }),
@@ -2250,6 +2332,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // endpoint, or configured one without a signing secret.
     onContentEvent: webhooks.emit,
     onSecurityEvent: webhooks.send,
+    requestQuota: rateLimitSelection.instance,
     // Same mail this site's `cogenta users reset-password --email` already
     // sends (`../reset-mail.js`), just pointed at the admin's reset screen
     // instead of a terminal command — see that file for why the wording is
@@ -2332,6 +2415,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   await assistant.dispose()
   await selection.dispose()
   await storageSelection.dispose()
+  await rateLimitSelection.dispose()
   await site.dispose().catch(() => undefined) // selection.dispose() already closed the same handle
 
   return 0

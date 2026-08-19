@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto'
 import type { AuthStore, LoginResult, User } from '@cogenta/auth'
 import { looksLikeApiKey } from '@cogenta/auth'
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, type RateLimitDriver } from '@cogenta/core'
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 import type { Actor } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 import { assertPasswordPolicy } from './password-policy.js'
+
+/** One request-quota window: a minute, the unit fiche 20 states the quota in. */
+const REQUEST_QUOTA_WINDOW_MS = 60_000
 
 /**
  * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment,
@@ -76,15 +79,23 @@ function bearerToken(headers: RestRequest['headers']): string | null {
  * than the roles it was explicitly granted, and its actor id is prefixed so
  * it can never collide with — or be mistaken for — a real user id in the
  * audit log or a `me` route.
+ *
+ * `requestQuota` (fiche 20 task 3) is checked only for a key that already
+ * resolved successfully — a session-authenticated human, and a request that
+ * fails to authenticate at all, are both untouched by it. Omitting it (the
+ * default) keeps this function's existing behaviour byte for byte, which is
+ * what lets every caller that does not care about the quota — most tests
+ * included — go on not caring.
  */
 export async function resolveActor(
   auth: AuthStore,
   headers: RestRequest['headers'],
+  options: { readonly requestQuota?: RateLimitDriver } = {},
 ): Promise<Actor> {
   const token = bearerToken(headers)
   if (token === null) return ANONYMOUS
 
-  if (looksLikeApiKey(token)) return resolveApiKeyActor(auth, token)
+  if (looksLikeApiKey(token)) return resolveApiKeyActor(auth, token, options.requestQuota)
 
   const session = await auth.sessions.resolve(token)
   if (session === null) return ANONYMOUS
@@ -102,8 +113,19 @@ export async function resolveActor(
  * Brute-forcing the 256-bit key space itself is infeasible regardless — this
  * defends against a leaked-and-retried or misconfigured key hammering the
  * server, the same failure mode the login rate limit defends against.
+ *
+ * A *valid* key is a different case entirely (fiche 20 task 3): it is not
+ * being guessed, it is doing real work, and the request quota exists so that
+ * a leaked-but-real key cannot read the whole site as fast as the network
+ * allows. That failure is loud, not swallowed into `ANONYMOUS` — the caller
+ * is who it says it is, and deserves a `429` naming when it may try again,
+ * not a `403` that looks like it was never authenticated at all.
  */
-async function resolveApiKeyActor(auth: AuthStore, token: string): Promise<Actor> {
+async function resolveApiKeyActor(
+  auth: AuthStore,
+  token: string,
+  requestQuota: RateLimitDriver | undefined,
+): Promise<Actor> {
   const subject = `apikey:${createHash('sha256').update(token).digest('base64url')}`
   try {
     await auth.rateLimit.check(subject)
@@ -119,6 +141,21 @@ async function resolveApiKeyActor(auth: AuthStore, token: string): Promise<Actor
     return ANONYMOUS
   }
   await auth.rateLimit.clear(subject)
+
+  if (requestQuota !== undefined) {
+    const result = await requestQuota.consume(`apikey:${key.id}`, {
+      limit: key.rateLimitPerMinute,
+      windowMs: REQUEST_QUOTA_WINDOW_MS,
+    })
+    if (!result.allowed) {
+      throw new CogentaError({
+        code: 'API_KEY_RATE_LIMITED',
+        message: `This key is limited to ${result.limit} requests per minute.`,
+        hint: 'Wait for the quota to reset, or ask an admin to raise this key’s limit.',
+        details: { limit: result.limit, remaining: result.remaining, resetAt: result.resetAt },
+      })
+    }
+  }
 
   return { id: `apikey:${key.id}`, roles: key.scope }
 }

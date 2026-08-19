@@ -96,6 +96,13 @@ export function applyEnv(
     output['queue'] = queue
   }
 
+  const rateLimit = section(output, 'rateLimit')
+  if (rateLimit !== undefined) {
+    assign(rateLimit, 'driver', read(env, 'COGENTA_RATE_LIMIT_DRIVER'))
+    assign(rateLimit, 'url', read(env, 'COGENTA_RATE_LIMIT_URL', 'REDIS_URL'))
+    output['rateLimit'] = rateLimit
+  }
+
   const storage = section(output, 'storage')
   if (storage !== undefined) {
     assign(storage, 'driver', read(env, 'COGENTA_STORAGE_DRIVER'))

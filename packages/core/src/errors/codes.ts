@@ -127,6 +127,10 @@ export const ERROR_CODES = [
   'API_KEY_REVOKED',
   'API_KEY_EXPIRED',
   'API_KEY_NOT_FOUND',
+  // API keys — lifecycle and request quota (fiche 20: expiry defaults,
+  // rotation, per-key rate limiting).
+  'API_KEY_ROTATION_INVALID',
+  'API_KEY_RATE_LIMITED',
 
   // Media
   'MEDIA_NOT_FOUND',
@@ -137,6 +141,7 @@ export const ERROR_CODES = [
   'CACHE_FAILED',
   'QUEUE_FAILED',
   'STORAGE_FAILED',
+  'RATE_LIMIT_FAILED',
 
   // Agents — LLM provider adapters (L4)
   'PROVIDER_UNKNOWN',

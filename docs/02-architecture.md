@@ -52,6 +52,7 @@ honnêtement ce qui est actif et ce qui ne l'est pas.
 | Cache | Redis | Fichiers sur disque, puis mémoire |
 | Stockage média | S3 / R2 / MinIO | Système de fichiers local |
 | Recherche vectorielle | pgvector, MariaDB VECTOR | Cosinus exact en mémoire |
+| Limitation de débit (clés d'API) | Redis (`INCR`/`PEXPIRE`) | Compteur en mémoire de processus |
 | Temps réel | WebSocket | SSE, puis polling |
 | Traitement d'image | `sharp` natif | WASM (`jsquash`), ou pré-calcul au build |
 

@@ -4,6 +4,7 @@ import {
   createCacheRegistry,
   createDatabaseRegistry,
   createLogger,
+  createRateLimitRegistry,
   createStorageRegistry,
   type DriverSelection,
   type DriverTier,
@@ -126,6 +127,10 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
   await check('database', () => createDatabaseRegistry(registryOptions).select(config.database))
   await check('cache', () => createCacheRegistry(registryOptions).select(config.cache))
   await check('storage', () => createStorageRegistry(registryOptions).select(config.storage))
+  // Per-API-key request quota (fiche 20 task 3) — "file de jobs : base de
+  // données (dégradé), car Redis est absent" for this need too: an operator
+  // must be able to see which counter is actually enforcing a key's limit.
+  await check('rateLimit', () => createRateLimitRegistry(registryOptions).select(config.rateLimit))
 
   // Rule R2, stated out loud rather than left to be discovered: no provider is a
   // supported configuration, not a broken one.

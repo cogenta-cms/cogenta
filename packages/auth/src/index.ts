@@ -8,8 +8,12 @@
  * roles, and the hash-chained audit log L4's agents will write to as well.
  */
 
-export type { ApiKeyStore } from './api-keys.js'
-export { createApiKeyStore, looksLikeApiKey } from './api-keys.js'
+export type { ApiKeyStore, RotateApiKeyOptions } from './api-keys.js'
+export {
+  createApiKeyStore,
+  DEFAULT_RATE_LIMIT_PER_MINUTE,
+  looksLikeApiKey,
+} from './api-keys.js'
 export type { AuditFilter, AuditLog } from './audit.js'
 export { createAuditLog } from './audit.js'
 export type { CredentialStore, WebAuthnCredentialData } from './credentials.js'

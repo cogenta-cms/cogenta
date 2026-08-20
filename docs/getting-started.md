@@ -166,6 +166,21 @@ npx cogenta migrate up
 The new column exists on the next request — no separate "generate migration" step for
 an additive change like this one.
 
+## 6. Connecting an AI assistant (MCP)
+
+```sh
+npx cogenta mcp --email you@example.com
+```
+
+Starts a real MCP (Model Context Protocol) server on stdin/stdout, exposing
+this site's content tools — and, for an authenticated actor, its media and
+site-config tools — to any MCP client: Claude Desktop, Claude Code, Cursor.
+Every tool call runs with the resolved actor's real permissions, checked by
+the same `PermissionLayer` REST and GraphQL use (rule R4) — there is no
+implicit admin access. See [`packages/mcp/README.md`](../packages/mcp/README.md)
+for the client-side JSON configuration and the known limitation around
+search/redirect indexing.
+
 ## Where to go next
 
 - [`docs/lots/`](lots/) — the full design behind every command above, lot by lot.

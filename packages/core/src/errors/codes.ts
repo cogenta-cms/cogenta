@@ -211,6 +211,11 @@ export const ERROR_CODES = [
   'MCP_CLIENT_REMOTE_ERROR',
   'MCP_CLIENT_TOOL_FAILED',
 
+  // MCP server (L20) — "cogenta mcp"
+  'MCP_ACTOR_OPTIONS_CONFLICT',
+  'MCP_ACTOR_USER_NOT_FOUND',
+  'MCP_ACTOR_ROLE_EMPTY',
+
   // Agents — privacy (L4)
   'PRIVACY_NO_DATA_LEAVES_VIOLATION',
 

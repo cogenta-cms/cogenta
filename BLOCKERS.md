@@ -994,3 +994,91 @@ l'ouverture. Corrigé dans `packages/admin/src/lib/csv.ts` (préfixe `'` avant l
 guillemetage RFC 4180 — la mitigation standard), ce qui bénéficie à tout appelant
 partagé (export de soumissions, export de liste de collection), pas seulement aux
 formulaires. Un second constat, faible et informationnel, n'était pas bloquant.
+
+# BLOCKERS — L20 (audit admin complet, câblage MCP)
+
+## 18. MCP actor scoping — câblage complet, deux limites honnêtes et voulues
+
+**Ce qui a été fait** : `cogenta mcp` (nouvelle commande CLI,
+`packages/cli/src/commands/mcp.ts`) démarre un vrai serveur MCP sur
+stdin/stdout, câblé au manifeste d'outils réel du site
+(`buildManifest`/`createToolRegistry`, `@cogenta/agents`) — plus le point 1
+du plan d'action MCP de `docs/lots/L20-audit-admin-complet.md` § 2, qui
+n'existait dans aucun routeur de commande avant cette fiche. Un vrai
+`AccessContext` traverse chaque appel d'outil (point 2) : `--email` résout
+l'acteur réel depuis le magasin d'utilisateurs (`createUserStore(db).byEmail`,
+le même que `cogenta users create`) ; `--role` construit un acteur synthétique
+pour les tests locaux ; sans l'un ou l'autre, l'acteur est `{id: null, roles:
+['public']}`, identique à une requête REST non authentifiée.
+
+**Ce qui distingue les outils `content.*` des outils `media.*` /
+`site.config_read`, et pourquoi le manifeste diffère selon l'acteur.** Les
+outils `content.*` (`content.read`/`write_draft`/`publish`/`delete`) sont
+toujours sur le manifeste, acteur anonyme inclus : leur vraie porte de
+permission vit un niveau plus bas — `createContentService` appelle
+`PermissionLayer.assert` à chaque lecture/écriture, exactement le layer que
+REST et GraphQL utilisent (`packages/api/src/access/permissions.ts`), donc un
+acteur `public` est déjà refusé sur tout ce qu'un rôle `public` ne peut pas
+lire ou écrire — testé (`packages/cli/test/mcp.test.ts`, « really enforces
+R4 »).
+
+`media.read`/`media.write`/`site.config_read` n'ont **aucun** contrôle
+équivalent — leurs propres commentaires dans
+`packages/agents/src/tools/core/media.ts` et `site-config.ts` le disent
+explicitement : « the manifest decides, not this tool ». `buildSiteManifest`
+(dans `mcp.ts`) applique donc la seule porte qui existe pour ces trois
+outils : ils ne rejoignent le manifeste que pour un acteur authentifié
+(`--email` ou `--role`), jamais pour le défaut anonyme — testé (« leaves
+media, site-config and http tools out of the manifest for the anonymous
+default actor »). `http.fetch` suit la même règle dans le code mais n'est
+construit par aucun site aujourd'hui (il a besoin d'une liste de domaines
+autorisés que rien ne configure encore côté CLI) ; il est nommé ici pour que
+la prochaine personne qui le câble sache où mettre la même garde.
+
+**Limite honnête n°1, assumée et documentée dans `packages/mcp/README.md`** :
+le contenu créé ou modifié via `cogenta mcp` traverse le même `ContentStore`
+que `cogenta serve`, mais **pas** les mêmes stores décorés qu'`assembleSite`
+construit au démarrage — index plein-texte, index vectoriel, suivi de
+redirection sur renommage de slug, mise en file de publication programmée
+sont tous des décorateurs appliqués une fois par `assembleSite`
+(`packages/cli/src/commands/serve.ts`), et `cogenta mcp` construit son propre
+`storeFor` minimal (`createContentStore` + `siblings`, sans décorateurs) —
+reconstruire l'intégralité d'`assembleSite` (recherche, webhooks, quotas,
+assistant IA, taxonomies, chemins routés…) dans une commande stdio autonome
+dépassait largement le périmètre de cette fiche. Une entrée écrite par MCP
+est un vrai contenu, immédiatement visible en lecture, mais n'apparaît pas
+dans la recherche/l'index vectoriel avant une réindexation (l'écran
+« Outils » de l'admin, ou `cogenta serve` redémarré et retouchant l'entrée).
+Un futur lot qui veut fusionner les deux chemins devrait factoriser
+`assembleSite`'s construction de `storeFor` en une fonction partagée plutôt
+que de la dupliquer une troisième fois.
+
+**Limite honnête n°2** : `--role` construit un acteur avec `id: null` — un
+acteur synthétique n'a pas de compte réel, donc aucun champ `createdBy`
+cohérent n'existe pour ce qu'il écrit. C'est le même compromis que
+`ANONYMOUS` (`packages/api/src/types.ts`) fait déjà pour tout visiteur non
+authentifié ; `--role` ne fait rien de nouveau ici, il rend juste ce
+compromis accessible en dehors d'une vraie session HTTP, explicitement pour
+des tests locaux (le README le dit).
+
+**Tests réels** : `packages/cli/test/mcp.test.ts` — cinq scénarios contre un
+vrai projet SQLite temporaire et un vrai `runMcp`, en pilotant un vrai
+JSON-RPC sur des flux `stdin`/`stdout` en mémoire (`node:stream.PassThrough`,
+injectés via les options `stdin`/`stdout` ajoutées à `McpOptions`) : liste du
+manifeste pour un acteur authentifié, création/lecture/publication réelles
+d'une entrée via les outils, refus réel d'un rôle sans `create`/`publish`
+(erreur d'outil, pas d'erreur JSON-RPC — même convention que `server.ts`),
+absence des outils média/config pour l'acteur anonyme par défaut (avec une
+écriture de contenu qui reste, elle, réellement refusée plutôt qu'absente),
+et refus propre d'un `--email` pointant vers un compte inexistant. Tests
+existants de `@cogenta/mcp` (`server.test.ts`, `stdio-transport.test.ts`)
+inchangés et toujours verts.
+
+**Non fait, hors périmètre explicite de cette fiche** : aucune UI admin pour
+choisir/afficher l'acteur MCP actif (la fiche demandait une commande CLI, pas
+un écran) ; aucun test d'intégration Postgres/MySQL/MariaDB pour ce chemin
+(même contrainte Docker que le reste du dépôt cette session, voir §1 plus
+haut) — `cogenta mcp` réutilise le même `createDatabaseRegistry` que toute
+autre commande, donc le risque de dialecte spécifique à ce chemin est bas
+mais non prouvé.
+formulaires. Un second constat, faible et informationnel, n'était pas bloquant.

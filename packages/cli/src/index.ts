@@ -7,6 +7,7 @@ import { runExport, runImportContent } from './commands/export.js'
 import { runGenerate } from './commands/generate.js'
 import { runImport } from './commands/import.js'
 import { runLinks } from './commands/links.js'
+import { runMcp } from './commands/mcp.js'
 import { runMigrate } from './commands/migrate.js'
 import { runServe } from './commands/serve.js'
 import { runSkin } from './commands/skin.js'
@@ -25,6 +26,8 @@ export type { ImportOptions, ImportSubcommand } from './commands/import.js'
 export { runImport } from './commands/import.js'
 export type { LinksOptions, LinksSubcommand } from './commands/links.js'
 export { runLinks } from './commands/links.js'
+export type { McpOptions } from './commands/mcp.js'
+export { runMcp } from './commands/mcp.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
 export type { ServeOptions } from './commands/serve.js'
@@ -62,6 +65,7 @@ Commands
   skin apply <tokens.json>      Validate, then make it the active skin
   skin generate --description "…"   Generate a skin from a description
   serve, dev       Run the content and auth API over HTTP
+  mcp              Run an MCP server over stdin/stdout, exposing this site's tools
   help             Show this message
   version          Print the version
 
@@ -97,6 +101,10 @@ User options
 Serve options
   --port <n>              Port to listen on (default 4000)
   --host <host>           Host to bind to (default 127.0.0.1)
+
+MCP options
+  --email <email>         mcp: run as this real user (looked up in the user store)
+  --role <role,role>      mcp: run as a synthetic actor with these roles (testing only)
 `
 
 export interface RunOptions {
@@ -142,6 +150,7 @@ export async function run(options: RunOptions): Promise<number> {
         'backup-verified': { type: 'boolean' },
         email: { type: 'string' },
         roles: { type: 'string' },
+        role: { type: 'string' },
         admin: { type: 'boolean' },
         token: { type: 'string' },
         password: { type: 'string' },
@@ -356,6 +365,18 @@ export async function run(options: RunOptions): Promise<number> {
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(options.onListening === undefined ? {} : { onListening: options.onListening }),
+    })
+  }
+
+  if (command === 'mcp') {
+    return runMcp({
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.email === 'string' ? { email: parsed.values.email } : {}),
+      ...(typeof parsed.values.role === 'string' ? { role: parsed.values.role } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }
 

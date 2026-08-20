@@ -21,6 +21,27 @@ describe('csvField', () => {
   it('quotes a field with both a comma and a quote', () => {
     expect(csvField('Title, "quoted"')).toBe('"Title, ""quoted"""')
   })
+
+  // CSV/formula injection (CWE-1236): a spreadsheet reads a cell starting
+  // with =, +, - or @ as a live formula. An anonymous-visitor-supplied
+  // field (a form submission) exported to CSV and opened in Excel or
+  // Sheets must never execute as one.
+  it.each(['=', '+', '-', '@'] as const)(
+    'guards a field whose first character is a formula trigger (%s)',
+    (trigger) => {
+      expect(csvField(`${trigger}cmd|' /C calc'!A0`)).toBe(`'${trigger}cmd|' /C calc'!A0`)
+    },
+  )
+
+  it('does not guard a formula-trigger character that is not the first one', () => {
+    expect(csvField('Total = 5')).toBe('Total = 5')
+  })
+
+  it('still quotes a guarded field that also needs RFC 4180 escaping', () => {
+    expect(csvField('=HYPERLINK("http://evil.example")')).toBe(
+      '"\'=HYPERLINK(""http://evil.example"")"',
+    )
+  })
 })
 
 describe('toCsv', () => {

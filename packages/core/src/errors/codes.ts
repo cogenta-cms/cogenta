@@ -364,6 +364,11 @@ export const ERROR_CODES = [
   // Analytics — self-hosted, cookie-free page-view analytics (`@cogenta/analytics`)
   'ANALYTICS_SALT_UNAVAILABLE',
 
+  // Health, migrations and maintenance tools (fiche 24)
+  'MAINT_TOOL_UNKNOWN',
+  'MAINT_TOOL_RUN_NOT_FOUND',
+  'MAINT_TOOL_INPUT_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

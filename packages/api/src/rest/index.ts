@@ -48,6 +48,21 @@ export { createContentService } from './content-service.js'
 export type { DependencySource, ResponseDependencies } from './dependencies.js'
 export { collectDependencies } from './dependencies.js'
 export { FILTER_PREFIX, parseFilter } from './filter.js'
+export type {
+  AuditIntegrityStatus,
+  DiskUsageStatus,
+  ErrorLogEntryLike,
+  HealthDoctorCheck,
+  HealthReportLike,
+  HealthRouter,
+  HealthRouterOptions,
+  MaintenanceStateLike,
+  MigrationStatusLike,
+  MigrationsApplyResult,
+  MigrationsStatus,
+  SetMaintenanceInputLike,
+} from './health-router.js'
+export { createHealthRouter } from './health-router.js'
 export type { RestErrorBody, RestRequest, RestResponse } from './http.js'
 export { errorResponse, jsonResponse, queryError, statusFor } from './http.js'
 export type {
@@ -114,5 +129,13 @@ export type {
 export { createSitePlanRouter } from './site-plan-router.js'
 export type { TaxonomyRouter, TaxonomyRouterOptions } from './taxonomy-router.js'
 export { createTaxonomyRouter } from './taxonomy-router.js'
+export type {
+  ToolDefinitionLike,
+  ToolRunLike,
+  ToolRunStatus,
+  ToolsRouter,
+  ToolsRouterOptions,
+} from './tools-router.js'
+export { createToolsRouter } from './tools-router.js'
 export type { UsersRouter, UsersRouterOptions } from './users-router.js'
 export { createUsersRouter } from './users-router.js'

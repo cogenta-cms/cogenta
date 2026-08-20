@@ -19,6 +19,7 @@ import { DashboardRoute } from './routes/dashboard.js'
 import { DuplicatesRoute } from './routes/duplicates.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
+import { HealthRoute } from './routes/health.js'
 import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
 import { MarketplaceRoute } from './routes/marketplace.js'
@@ -31,6 +32,7 @@ import { ResetPasswordRoute } from './routes/reset-password.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
 import { TaxonomiesRoute } from './routes/taxonomies.js'
+import { ToolsRoute } from './routes/tools.js'
 import { TrashRoute } from './routes/trash.js'
 import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
@@ -85,6 +87,8 @@ export function App(): JSX.Element {
               <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
               <Route path="redirects" element={<RedirectsRoute />} />
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
+              <Route path="health" element={<HealthRoute />} />
+              <Route path="tools" element={<ToolsRoute />} />
               <Route path="trash" element={<TrashRoute />} />
               <Route path="assistant-chat" element={<AssistantChatRoute />} />
               <Route path="duplicates" element={<DuplicatesRoute />} />

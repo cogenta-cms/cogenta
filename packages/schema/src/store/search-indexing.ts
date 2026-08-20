@@ -74,6 +74,44 @@ async function reindex<TValues extends ContentValues>(
   }
 }
 
+/**
+ * Re-derives the indexed document for one entry — exported so a full rebuild
+ * (`reindexAll`, and `cogenta`'s "Reindex search" tool, fiche 24 task 3) uses
+ * the exact same per-entry logic as the write path, rather than a second
+ * copy that could drift from what `withSearchIndexing` actually does on save.
+ */
+export const reindexEntry = reindex
+
+/**
+ * Walks every entry of a collection — trashed included, since a trashed entry
+ * can still be `published` (ADR-0022: trash is orthogonal to status) and a
+ * stale search hit for it is exactly the kind of thing a full rebuild exists
+ * to fix — and re-derives its indexed document.
+ *
+ * This is the "Reindexer la recherche" tool (fiche 24 task 3): after an
+ * import, or after `SearchDriver.clear()`, nothing else ever repopulates the
+ * index for content that already existed before the write path saw it.
+ */
+export async function reindexAll<TValues extends ContentValues = ContentValues>(
+  store: ContentStore<TValues>,
+  options: SearchIndexingOptions,
+  onProgress?: (count: number) => void,
+): Promise<number> {
+  let cursor: string | undefined
+  let count = 0
+  for (;;) {
+    const page = await store.list({ trashed: 'include', limit: 100, ...(cursor ? { cursor } : {}) })
+    for (const entry of page.items) {
+      await reindex(store, options, entry.id)
+      count += 1
+      onProgress?.(count)
+    }
+    if (!page.hasMore || page.nextCursor === null) break
+    cursor = page.nextCursor
+  }
+  return count
+}
+
 export function withSearchIndexing<TValues extends ContentValues = ContentValues>(
   store: ContentStore<TValues>,
   options: SearchIndexingOptions,

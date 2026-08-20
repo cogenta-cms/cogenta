@@ -181,6 +181,19 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // which is a conflict with the item's current pending-permission state,
   // not a malformed request.
   MARKETPLACE_UPDATE_REQUIRES_APPROVAL: 409,
+
+  // Migrations, surfaced through the health screen (fiche 24 task 2). A
+  // destructive/checksum/lock refusal is a conflict with the database's own
+  // state, not a malformed request; a plain failure keeps the default 500.
+  MIGRATION_DESTRUCTIVE: 409,
+  MIGRATION_LOCKED: 409,
+  MIGRATION_CHECKSUM_MISMATCH: 409,
+
+  // Maintenance tools (fiche 24 task 3). An unknown tool id or run id is the
+  // caller's fault, same shape as `AGENT_UNKNOWN`.
+  MAINT_TOOL_UNKNOWN: 404,
+  MAINT_TOOL_RUN_NOT_FOUND: 404,
+  MAINT_TOOL_INPUT_INVALID: 400,
 }
 
 export function statusFor(code: ErrorCode): number {

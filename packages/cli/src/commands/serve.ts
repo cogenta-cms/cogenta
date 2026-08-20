@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, stat, statfs } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -27,6 +27,7 @@ import {
   createAuthRouter,
   createContentGateway,
   createContentService,
+  createHealthRouter,
   createImportRouter,
   createMarketplaceRouter,
   createMediaRouter,
@@ -35,6 +36,7 @@ import {
   createNoticeDismissalStore,
   createNoticeRouter,
   createOpsStatusRouter,
+  createPendingMigrationsSource,
   createPermissionLayer,
   createRedirectRouter,
   createRestRouter,
@@ -42,10 +44,12 @@ import {
   createSitePlanRouter,
   createSuspiciousActivitySource,
   createTaxonomyRouter,
+  createToolsRouter,
   createUsersRouter,
   errorResponse,
   executeGraphQL,
   type ForgotPasswordEvent,
+  type HealthRouter,
   type ImportRouter,
   type MarketplaceRouter,
   type MediaImageProcessor,
@@ -63,10 +67,12 @@ import {
   type SitePlanRouter,
   type SitePlanRouterOptions,
   type TaxonomyRouter,
+  type ToolsRouter,
   type UsersRouter,
   variantKeyFor,
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
+import { createFileEmailTransport } from '@cogenta/channels'
 import {
   type CommerceAdminRouter,
   type CommerceRequest,
@@ -88,17 +94,22 @@ import {
 import {
   type CogentaConfig,
   CogentaError,
+  createCacheRegistry,
   createDatabaseMediaStore,
   createDatabaseQueue,
   createDatabaseRegistry,
+  createErrorLog,
   createLogger,
+  createMigrator,
   createStorageRegistry,
   type DatabaseHandle,
+  type ErrorLog,
   type HealthReport,
   isCogentaError,
   type Logger,
   loadConfig,
   type MediaStore,
+  type MigrationStatus,
   type StorageDriver,
 } from '@cogenta/core'
 import { importWordPress } from '@cogenta/import'
@@ -119,12 +130,15 @@ import {
   type ContentLifecycleEvent,
   type ContentStore,
   createContentStore,
+  createMaintenanceStore,
   createMenuStore,
   createRedirectStore,
   createSchemaTables,
   createSearchIndex,
   createTaxonomyStore,
+  ensureMaintenanceTable,
   ensureMenuTables,
+  type MaintenanceStore,
   type MenuStore,
   type RedirectStore,
   registerScheduledPublishing,
@@ -143,8 +157,10 @@ import { sendResetMail } from '../reset-mail.js'
 import { serveAdminAsset } from './admin-assets.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
+import { runDoctor } from './doctor.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
+import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
 import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
@@ -155,9 +171,11 @@ import {
   joinStyles,
   loadSkinCss,
   renderDraftPage,
+  renderMaintenancePage,
   renderRequestedPage,
   STYLESHEET_PATH,
 } from './theme-render.js'
+import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
@@ -534,6 +552,16 @@ interface AssembleSiteOptions {
    */
   readonly onForgotPassword?: ((event: ForgotPasswordEvent) => Promise<void>) | null
   /**
+   * "Une migration en attente n'est pas signalée" (fiche 24 task 2). Absent
+   * means no such notice — every existing test that builds a `Site` without
+   * a migrator keeps working, and a site whose migrations were already
+   * applied gets an empty list from these callbacks anyway.
+   */
+  readonly pendingMigrations?: {
+    readonly countPending: () => Promise<number>
+    readonly hasDestructive: () => Promise<boolean>
+  }
+  /**
    * The seller's legal identity (contract E, ADR-0024). `undefined` — the
    * default, until a site fills in `billing` in its config — means the
    * invoice route stays unreachable rather than issuing a document with a
@@ -893,6 +921,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         // in this array is the whole wiring — the seam the notice mechanism was
         // designed around.
         createSuspiciousActivitySource({ rateLimit: auth.rateLimit }),
+        // Fiche 24 task 2's second bullet. Absent (a caller with no migrator)
+        // means the array simply does not grow.
+        ...(options.pendingMigrations === undefined
+          ? []
+          : [createPendingMigrationsSource(options.pendingMigrations)]),
       ],
       dismissals: noticeDismissals,
     }),
@@ -1471,6 +1504,22 @@ async function loadRenderMedia(
 }
 
 /**
+ * Fiche 24's extra runtime state — health/tools/maintenance/error-log — kept
+ * separate from `Site` rather than folded into it: none of it is part of
+ * "what a site is" the way a `ContentStore` or a `MediaStore` is, and every
+ * caller that already constructs a bare `Site` by hand (tests included) goes
+ * on working unchanged with this omitted, in which case the routes it would
+ * serve simply do not exist.
+ */
+export interface RuntimeExtras {
+  readonly healthRouter: HealthRouter
+  readonly toolsRouter: ToolsRouter
+  readonly maintenance: MaintenanceStore
+  readonly errorLog: ErrorLog
+  readonly siteName: string
+}
+
+/**
  * Builds the Node request handler from an already-assembled site.
  *
  * All the actual logic — routing, permissions, actor resolution — was already
@@ -1482,6 +1531,7 @@ async function loadRenderMedia(
 export function createRequestListener(
   site: Site,
   logger: Logger,
+  extras?: RuntimeExtras,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
@@ -1502,6 +1552,33 @@ export function createRequestListener(
         ),
       )
       const context: AccessContext = { actor }
+
+      // Maintenance mode (fiche 24 task 5): every visitor of the *public*
+      // site gets a 503 while it is on — `/api/*` and `/admin*` stay
+      // reachable so a signed-in admin can still turn it back off, and any
+      // already-authenticated actor is let straight through (an editor
+      // previewing the live site during a maintenance window is not "a
+      // visitor"). Never cached: an intermediary that stored this 503 would
+      // turn "maintenance is over" into "still down" for whoever it serves
+      // next.
+      if (
+        extras !== undefined &&
+        actor.id === null &&
+        !url.pathname.startsWith('/api/') &&
+        url.pathname !== '/admin' &&
+        !url.pathname.startsWith('/admin/')
+      ) {
+        const maintenance = await extras.maintenance.get()
+        if (maintenance.enabled) {
+          res.writeHead(503, {
+            'content-type': 'text/html; charset=utf-8',
+            'retry-after': '120',
+            'cache-control': 'no-store',
+          })
+          res.end(renderMaintenancePage(extras.siteName, maintenance.message))
+          return
+        }
+      }
 
       // The admin SPA's own built shell — never permission-checked here: it
       // is static HTML/JS, not data. Every real action it takes goes through
@@ -1718,6 +1795,36 @@ export function createRequestListener(
       if (url.pathname === '/api/security-status' || url.pathname === '/api/webhooks-status') {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.opsStatusRouter.handle(request, context))
+        return
+      }
+
+      // The "Santé" screen (fiche 24 tasks 1, 2, 4): the same `runDoctor`
+      // `cogenta doctor` calls, migrations, audit integrity and the bounded
+      // server error log — all read-only, admin-only, all injected rather
+      // than recomputed here.
+      if (
+        extras !== undefined &&
+        (url.pathname === '/api/health-report' ||
+          url.pathname === '/api/migrations-status' ||
+          url.pathname === '/api/migrations-apply' ||
+          url.pathname === '/api/audit-integrity' ||
+          url.pathname === '/api/disk-usage' ||
+          url.pathname === '/api/error-log' ||
+          url.pathname === '/api/maintenance')
+      ) {
+        const body = req.method === 'POST' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await extras.healthRouter.handle(request, context))
+        return
+      }
+
+      // The "Outils" screen (fiche 24 task 3): purge caches, reindex,
+      // regenerate image variants, check links, test email, purge expired
+      // trash — every one of them queued, never run inline in this request.
+      if (extras !== undefined && url.pathname.startsWith('/api/tools')) {
+        const body = req.method === 'POST' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await extras.toolsRouter.handle(request, context))
         return
       }
 
@@ -2075,6 +2182,11 @@ export function createRequestListener(
       logger.error('request failed', {
         error: isCogentaError(error) ? error.toJSON() : String(error),
       })
+      // The error journal (fiche 24 task 4): a bounded, redacted record of
+      // exactly this failure, readable from the admin on a host where the
+      // process's own stdout is not — see `createErrorLog` for why redaction
+      // here is not optional.
+      extras?.errorLog.recordError(error, { method: req.method ?? 'GET', path: url.pathname })
       if (isCogentaError(error) && error.code === 'REQUEST_BODY_TOO_LARGE') {
         jsonError(res, 413, error.code, error.message)
         return
@@ -2213,6 +2325,25 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // fused with this one by RRF (L18 task 5).
     fullText: searchIndex,
   })
+  // The "Santé" / "Outils" screens (fiche 24). `migrator` is built once here
+  // — not per request, unlike `cogenta migrate`'s own CLI invocation, which
+  // has no long-running process to amortise the cost across.
+  const migrations = await loadMigrations(join(projectRoot, MIGRATIONS_DIRECTORY))
+  const migrator = createMigrator({ db: selection.instance, migrations, logger })
+  await ensureMaintenanceTable(selection.instance)
+  const maintenanceStore = createMaintenanceStore({ db: selection.instance })
+  const errorLog = createErrorLog()
+  // The registry the doctor report already selects from for its own check —
+  // built again here because a page cache and a diagnostic snapshot are
+  // different lifetimes, not because the driver logic differs. Never fatal:
+  // an install with no reachable cache backend still serves (R1's degraded
+  // tier — `memory` — always resolves).
+  const cacheSelection = await createCacheRegistry({ logger }).select(loaded.config.cache)
+  const emailTransport = createFileEmailTransport({
+    directory: join(projectRoot, '.cogenta', 'mail'),
+  })
+  const toolsQueue = createDatabaseQueue({ db: selection.instance, logger })
+
   const site = await assembleSite({
     db: selection.instance,
     assistant,
@@ -2233,6 +2364,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
     security: loaded.config.security,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
+    pendingMigrations: {
+      countPending: async () => (await migrator.status()).filter((item) => !item.applied).length,
+      hasDestructive: async () =>
+        (await migrator.status()).some((item) => !item.applied && item.destructive),
+    },
     sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,
@@ -2267,7 +2403,122 @@ export async function runServe(options: ServeOptions): Promise<number> {
       ).then(() => undefined),
   })
 
-  const server = createServer(createRequestListener(site, logger))
+  const toolRunner = createToolRunner({
+    queue: toolsQueue,
+    logger,
+    bodies: buildToolBodies({
+      db: selection.instance,
+      collections,
+      locales: loaded.config.site.locales,
+      defaultLocale: loaded.config.site.defaultLocale,
+      cache: cacheSelection.instance,
+      searchIndex,
+      vectors:
+        assistant.vectors === undefined
+          ? null
+          : { siteId: loaded.config.site.url, ...assistant.vectors },
+      mediaStore: site.mediaStore,
+      storage: storageSelection.instance,
+      images: images?.processor ?? null,
+      emailTransport,
+      siteName: loaded.config.site.name,
+    }),
+  })
+  const healthRouter = createHealthRouter({
+    // The literal function `cogenta doctor` calls — task 1's acceptance
+    // criterion ("le diagnostic de l'admin est le même code") holds by
+    // construction, not by convention.
+    getReport: () => runDoctor({ cwd: projectRoot, env, logger }),
+    getMigrations: async () => {
+      const status: MigrationStatus[] = await migrator.status()
+      return {
+        items: status.map((item) => ({
+          id: item.id,
+          name: item.name,
+          applied: item.applied,
+          destructive: item.destructive,
+          ...(item.appliedAt === undefined ? {} : { appliedAt: item.appliedAt }),
+          ...(item.impact === undefined ? {} : { impact: item.impact }),
+        })),
+      }
+    },
+    // "Appliquer seulement les migrations non destructives, et renvoyer
+    // explicitement à la CLI pour les destructives" (fiche 24 task 2's
+    // recommendation, taken). `up({ to })` already applies in order up to a
+    // named id — the id right before the first pending destructive one — so
+    // this never needs to touch `confirmDestructive`/`backupVerified` at all.
+    applyMigrations: async () => {
+      const status = await migrator.status()
+      const pending = status.filter((item) => !item.applied)
+      const firstDestructive = pending.find((item) => item.destructive)
+      if (firstDestructive === undefined) {
+        const outcomes = await migrator.up()
+        return { applied: outcomes.map((outcome) => outcome.id), remainingDestructive: [] }
+      }
+      const before = pending.slice(
+        0,
+        pending.findIndex((item) => item.id === firstDestructive.id),
+      )
+      const remainingDestructive = pending
+        .slice(pending.findIndex((item) => item.id === firstDestructive.id))
+        .filter((item) => item.destructive)
+        .map((item) => item.id)
+      const cutoff = before[before.length - 1]
+      if (cutoff === undefined) return { applied: [], remainingDestructive }
+      const outcomes = await migrator.up({ to: cutoff.id })
+      return { applied: outcomes.map((outcome) => outcome.id), remainingDestructive }
+    },
+    getAuditIntegrity: async () => {
+      try {
+        await site.auth.audit.verify()
+        return { ok: true, checkedAt: new Date().toISOString(), error: undefined }
+      } catch (error) {
+        return {
+          ok: false,
+          checkedAt: new Date().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+    },
+    getDiskUsage: async () => {
+      if (loaded.config.storage.driver === 's3') return { available: false }
+      try {
+        const stats = await statfs(join(projectRoot, '.cogenta', 'storage'))
+        return {
+          available: true,
+          freeBytes: stats.bfree * stats.bsize,
+          totalBytes: stats.blocks * stats.bsize,
+          path: join(projectRoot, '.cogenta', 'storage'),
+        }
+      } catch {
+        return { available: false }
+      }
+    },
+    getErrorLog: () => errorLog.entries(),
+    getMaintenance: () => maintenanceStore.get(),
+    setMaintenance: (input, actorId) =>
+      maintenanceStore.set({
+        enabled: input.enabled,
+        ...(input.message === undefined ? {} : { message: input.message }),
+        updatedBy: actorId,
+      }),
+  })
+  const toolsRouter = createToolsRouter({
+    tools: TOOL_DEFINITIONS,
+    run: (id, runOptions) => toolRunner.run(id, runOptions),
+    getRun: (id) => toolRunner.getRun(id),
+    listRuns: () => toolRunner.listRuns(),
+  })
+
+  const server = createServer(
+    createRequestListener(site, logger, {
+      healthRouter,
+      toolsRouter,
+      maintenance: maintenanceStore,
+      errorLog,
+      siteName: loaded.config.site.name,
+    }),
+  )
   const port = options.port ?? DEFAULT_PORT
   const host = options.host ?? DEFAULT_HOST
 
@@ -2293,10 +2544,24 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // `SCHEDULED_PUBLISH_TICK_MS` for as long as this server runs. A failed
   // tick is logged, never fatal — a scheduling hiccup must not take the
   // whole site down.
+  // The maintenance tools' queue rides the same clock — no durable worker
+  // exists (R1), so this `setInterval` *is* the drain for its degraded
+  // (database) driver too, exactly as it already is for scheduled
+  // publication.
   const runScheduledPublishTick = (): void => {
-    site.tickScheduledPublishing().catch((error: unknown) => {
-      logger.error('scheduled publish tick failed', { error: String(error) })
-    })
+    // Sequenced, not fired concurrently: both ticks open a transaction on
+    // the *same* database connection, and starting one before the other
+    // has committed is what a single SQLite connection cannot do.
+    site
+      .tickScheduledPublishing()
+      .catch((error: unknown) => {
+        logger.error('scheduled publish tick failed', { error: String(error) })
+      })
+      .then(() =>
+        toolsQueue.tick().catch((error: unknown) => {
+          logger.error('tools queue tick failed', { error: String(error) })
+        }),
+      )
   }
   runScheduledPublishTick()
   const scheduledPublishTimer = setInterval(
@@ -2330,6 +2595,8 @@ export async function runServe(options: ServeOptions): Promise<number> {
     grace.unref()
   })
   await assistant.dispose()
+  await toolsQueue.close()
+  await cacheSelection.dispose()
   await selection.dispose()
   await storageSelection.dispose()
   await site.dispose().catch(() => undefined) // selection.dispose() already closed the same handle

@@ -740,3 +740,36 @@ export function joinStyles(skinCss: string | null, themeCss: string | null): str
   ].filter((sheet): sheet is string => sheet !== null)
   return sheets.length === 0 ? null : sheets.join('\n')
 }
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+}
+
+/**
+ * The public wait page for maintenance mode (fiche 24 task 5) — deliberately
+ * theme-agnostic (no skin, no block, no `RenderContext`): a site down for
+ * maintenance may be down for exactly the reason its theme cannot render, so
+ * this page must stand on its own, unstyled beyond a few inline rules.
+ */
+export function renderMaintenancePage(siteName: string, message: string | null): string {
+  const body =
+    message === null ? 'We are performing scheduled maintenance. Please check back soon.' : message
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(siteName)} — Maintenance</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}h1{font-size:1.25rem}</style>
+</head>
+<body>
+<h1>${escapeHtml(siteName)}</h1>
+<p>${escapeHtml(body)}</p>
+</body>
+</html>
+`
+}

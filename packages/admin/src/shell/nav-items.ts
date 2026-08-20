@@ -38,4 +38,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/profile', labelKey: 'nav.profile' },
   { to: '/settings', labelKey: 'nav.settings' },
   { to: '/ops-settings', labelKey: 'nav.opsSettings' },
+  { to: '/health', labelKey: 'nav.health' },
+  { to: '/tools', labelKey: 'nav.tools' },
 ]

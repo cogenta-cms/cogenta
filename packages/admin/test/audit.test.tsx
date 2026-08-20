@@ -49,6 +49,33 @@ describe('audit log', () => {
     expect(await screen.findByText(/Chaîne intacte/)).toBeDefined()
   })
 
+  it('resolves the actor to an email and localises the date, keeping the raw ISO in a title (L20 audit point 14)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToAudit()
+
+    await screen.findByText('content.create')
+    const table = within(screen.getByRole('table'))
+    // The fixture's every row is `actorId: 'user-1'`, resolved through
+    // `/api/users` the same best-effort way `trash.tsx`/`version-history.tsx`
+    // already resolve an actor — the raw id must not be what shows. (The
+    // topbar also shows `alice@example.com`, for the signed-in account
+    // itself — this scopes to the table so that unrelated match does not
+    // count toward the two rows.)
+    expect(await table.findAllByText('alice@example.com')).toHaveLength(2)
+    expect(table.queryByText('user-1')).toBeNull()
+
+    // '2026-03-01T00:00:00.000Z' localised in French, not the raw ISO
+    // string — but the ISO stays reachable as a `title` attribute rather
+    // than disappearing.
+    const dateCell = table.getByTitle('2026-03-01T00:00:00.000Z')
+    expect(dateCell.textContent).not.toBe('2026-03-01T00:00:00.000Z')
+    expect(dateCell.textContent).toMatch(/2026/)
+  })
+
   it('shows an entry detail with its diff, without navigating away (fiche 21 task 1)', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
@@ -90,10 +117,14 @@ describe('audit log', () => {
     if (entryRow === null) throw new Error('entry-1 row not found')
     fireEvent.click(within(entryRow).getByRole('button', { name: 'Détail' }))
 
-    expect(await screen.findByText('alice@example.com')).toBeDefined()
-    expect(await screen.findByText('title')).toBeDefined()
-    expect(screen.getByText(/Before/)).toBeDefined()
-    expect(screen.getByText(/After/)).toBeDefined()
+    // Scoped to the modal: the table underneath now also resolves its own
+    // `actorId` to this same email (L20 audit point 14), so the bare query
+    // would match more than once.
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(await dialog.findByText('alice@example.com')).toBeDefined()
+    expect(await dialog.findByText('title')).toBeDefined()
+    expect(dialog.getByText(/Before/)).toBeDefined()
+    expect(dialog.getByText(/After/)).toBeDefined()
     // Still on the audit screen underneath — a modal (correctly marking the
     // rest of the page inert while open), never a route change.
     expect(document.body.textContent).toContain("Journal d'audit")

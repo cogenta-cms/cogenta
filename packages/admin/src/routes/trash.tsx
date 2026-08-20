@@ -4,11 +4,13 @@ import { listAuditEntries } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
 import { type Entry, listEntries, purgeEntry, untrashEntry } from '../api/content-client.js'
 import { readTrashStatus, type TrashStatus } from '../api/ops-status-client.js'
+import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { titleOf } from '../lib/entry-title.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
+import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import { daysUntilPurge, relativeTime } from '../trash/date-format.js'
 import { PurgeConfirmModal } from '../trash/purge-confirm-modal.js'
 import {
@@ -92,6 +94,7 @@ export function TrashRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
   const schemaState = useSchema()
+  const refreshChromeStatus = useRefreshChromeStatus()
 
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -129,6 +132,8 @@ export function TrashRoute(): JSX.Element {
 
   const [trashStatus, setTrashStatus] = useState<TrashStatus | null>(null)
   const [deletedBy, setDeletedBy] = useState<Readonly<Record<string, string>>>({})
+  /** `deletedBy`'s actor ids resolved to an email, same best-effort pattern as `version-history.tsx`: a 403 (any non-admin role) just leaves the map empty and the raw id shows. */
+  const [actorNames, setActorNames] = useState<ReadonlyMap<string, string>>(new Map())
 
   const cursor = cursorStack[cursorStack.length - 1]
 
@@ -237,6 +242,26 @@ export function TrashRoute(): JSX.Element {
     }
   }, [token, isAdmin, activeTab, collections])
 
+  // Resolves `deletedBy`'s actor ids to an email (fiche L20 point 13) — same
+  // best-effort, one-request pattern `version-history.tsx` already uses for
+  // `createdBy`/`updatedBy`: a 403 (any non-admin role) leaves the map empty
+  // and every row simply falls back to the raw id.
+  useEffect(() => {
+    if (token === null || !isAdmin) {
+      setActorNames(new Map())
+      return
+    }
+    let cancelled = false
+    listUsers(token)
+      .then((users) => {
+        if (!cancelled) setActorNames(new Map(users.map((user) => [user.id, user.email])))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [token, isAdmin])
+
   function switchTab(tab: TabId): void {
     setActiveTab(tab)
     setCursorStack([undefined])
@@ -321,6 +346,9 @@ export function TrashRoute(): JSX.Element {
     setBusy(false)
     setActionReport({ action: 'restore', succeeded, failed })
     await load()
+    // L20 audit point 15: the sidebar's "Trash" badge is fetched once per
+    // session — without this, a restore left it showing a stale count.
+    if (succeeded > 0) refreshChromeStatus()
   }
 
   function openPurgeForRows(
@@ -360,6 +388,8 @@ export function TrashRoute(): JSX.Element {
     setPurgeTarget(null)
     setActionReport({ action: 'purge', succeeded, failed })
     await load()
+    // Same reasoning as `restoreRows` above.
+    if (succeeded > 0) refreshChromeStatus()
   }
 
   /**
@@ -637,7 +667,11 @@ export function TrashRoute(): JSX.Element {
                               ? t('trash.purgeInDays', { count: days })
                               : t('trash.purgeDue')}
                         </TableCell>
-                        {isAdmin && <TableCell>{author ?? '—'}</TableCell>}
+                        {isAdmin && (
+                          <TableCell>
+                            {author === undefined ? '—' : (actorNames.get(author) ?? author)}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
                             <Button

@@ -214,6 +214,45 @@ const billingSchema = z.strictObject({
   footer: nonEmpty.optional(),
 })
 
+/**
+ * The scheduled-task clock (fiche 28 task 5).
+ *
+ * `'internal'` (the default) is `cogenta serve`'s own `setInterval` loop —
+ * the same shape every other recurring job in this codebase has always
+ * used, and the right choice for a process that stays up. `'external-cron'`
+ * is `docs/hebergement-mutualise.md`'s target: a host that recycles the
+ * process between requests, where an in-memory timer never fires reliably.
+ * In that mode `cogenta serve` registers every task but never ticks its own
+ * clock — only `cogenta cron`, called from the panel's own cron, drains due
+ * tasks. The admin screen reads this setting to say which mode is active,
+ * rather than guessing from whether a tick has happened recently.
+ */
+const schedulerSchema = z.strictObject({
+  mode: z.enum(['internal', 'external-cron']).default('internal'),
+})
+
+/**
+ * Scheduled full-site backups, riding the same clock as every other
+ * maintenance task (fiche 28 task 1's "sauvegarde planifiée", reusing
+ * `@cogenta/export`'s `createBackup` — the exact function `cogenta backup
+ * create` already calls by hand). Off by default: a backup file is
+ * unbounded disk usage a site did not ask for, and `dir` defaults to
+ * `.cogenta/backups` — the same directory the manual command writes to, so
+ * `cogenta backup list` shows scheduled and manual backups side by side.
+ */
+const backupSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  intervalHours: z
+    .number()
+    .int()
+    .positive()
+    .max(24 * 30)
+    .default(24),
+  /** Files kept before the oldest is pruned. */
+  keep: z.number().int().positive().max(365).default(10),
+  dir: nonEmpty.default('.cogenta/backups'),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -231,6 +270,8 @@ export const configSchema = z.strictObject({
   imageGeneration: imageGenerationSchema.optional(),
   vector: vectorSchema.prefault({}),
   billing: billingSchema.optional(),
+  scheduler: schedulerSchema.prefault({}),
+  backup: backupSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

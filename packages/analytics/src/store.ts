@@ -44,6 +44,14 @@ export interface AnalyticsStore {
    */
   recordEvent(input: RecordEventInput, now?: number): Promise<RecordEventResult>
   getSummary(options: SummaryOptions): Promise<AnalyticsSummary>
+  /**
+   * Deletes daily salts older than `retainDays` (fiche 28 task 1's "purge de
+   * rétention analytics"). `createDailySaltStore`'s own doc says this exists
+   * as defence in depth, not as a correctness requirement — but nothing ever
+   * called it before, so a long-lived site's salt table grew forever. Meant
+   * to be driven by the scheduled-task registry, not called ad hoc.
+   */
+  purgeSalts(retainDays: number, now?: number): Promise<number>
 }
 
 export function createAnalyticsStore(
@@ -159,6 +167,11 @@ export function createAnalyticsStore(
         deviceBreakdown,
         dailyViews,
       }
+    },
+
+    purgeSalts: async (retainDays, at) => {
+      const cutoff = (at ?? now()) - retainDays * 24 * 60 * 60 * 1000
+      return saltStore.purgeOlderThan(utcDateKey(cutoff))
     },
   }
 }

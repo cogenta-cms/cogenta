@@ -6,9 +6,9 @@ import type { ContentValues } from './types.js'
  * "Commencer par une démo en lecture seule" (L9 tâche 12, playground). Wraps
  * any `ContentStore` so every mutating method refuses instead of writing —
  * `create`/`duplicate`/`update`/`delete`/`untrash`/`purge`/`purgeExpired`/
- * `publish`/`unpublish`/`restore` — while every read (`read`/`list`/`history`/
- * `readVersion`/`diff`/`translations`/`resolveLocale`) passes straight
- * through, unchanged.
+ * `publish`/`unpublish`/`restore`/`claimForScheduledPublish` — while every
+ * read (`read`/`list`/`history`/`readVersion`/`diff`/`translations`/
+ * `resolveLocale`) passes straight through, unchanged.
  *
  * The three trash methods are refused for the reason `delete` always was, and
  * `purge` most of all: a read-only demo that let a visitor empty the trash
@@ -47,5 +47,6 @@ export function withReadOnlyStore<TValues extends ContentValues = ContentValues>
     publish: () => refuse(),
     unpublish: () => refuse(),
     restore: () => refuse(),
+    claimForScheduledPublish: () => refuse(),
   }
 }

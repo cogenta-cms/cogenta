@@ -34,6 +34,13 @@ export interface JobState {
 
 export type JobHandler<TPayload = unknown> = (job: Job<TPayload>) => Promise<void>
 
+export interface ListJobsOptions {
+  /** Narrows to one status. Absent lists every status. */
+  readonly status?: JobStatus
+  /** Most recently touched first. Defaults to 50. */
+  readonly limit?: number
+}
+
 export interface QueueDriver {
   enqueue(options: EnqueueOptions): Promise<JobId>
   /** Registers the handler for a job name. One handler per name. */
@@ -48,6 +55,19 @@ export interface QueueDriver {
   tick(): Promise<number>
   cancel(id: JobId): Promise<void>
   status(id: JobId): Promise<JobState | null>
+  /**
+   * Lists jobs, most recently touched first — what fiche 28's admin screen
+   * shows as "pending / running / failed" in its queue section.
+   */
+  list(options?: ListJobsOptions): Promise<readonly JobState[]>
+  /**
+   * Puts a `failed` job back to `pending` so the next `tick()` picks it up
+   * again, with its attempt counter reset. `false` for a job that is not
+   * `failed` (already retried, already gone, still running) — a no-op, not
+   * an error, since two admins clicking "retry" on the same job at once must
+   * not throw for the one who lost the race.
+   */
+  retry(id: JobId): Promise<boolean>
   close(): Promise<void>
 }
 

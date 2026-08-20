@@ -412,6 +412,12 @@ export const ERROR_CODES = [
   'RESTORE_NOT_ALLOWED',
   'RESTORE_CONFLICT',
 
+  // Scheduled tasks — the maintenance clock's admin surface (fiche 28)
+  'SCHEDULER_TASK_UNKNOWN',
+  'SCHEDULER_TASK_DUPLICATE',
+  'SCHEDULER_QUEUE_JOB_NOT_FOUND',
+  'SCHEDULER_QUEUE_JOB_NOT_RETRYABLE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

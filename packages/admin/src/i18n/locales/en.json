@@ -172,7 +172,8 @@
     "sitePlan": "Site plan",
     "marketplace": "Marketplace",
     "health": "Health",
-    "tools": "Tools"
+    "tools": "Tools",
+    "scheduled": "Scheduled tasks"
   },
   "shell": {
     "skipLink": "Skip to main content",
@@ -1844,5 +1845,46 @@
     "checkExternalLinks": "Also check external links (makes outbound requests)",
     "activeHeading": "Run status: {{status}}",
     "historyHeading": "Recent runs"
+  },
+  "scheduled": {
+    "heading": "Scheduled tasks",
+    "modeInternal": "Driven by the internal scheduler — this process ticks every task on its own.",
+    "modeExternal": "Driven by external cron — a scheduled command calls the tasks due; this process does not tick them on its own.",
+    "errorTitle": "Something went wrong",
+    "loadError": "Could not load scheduled tasks.",
+    "runError": "Could not run this task.",
+    "retryError": "Could not retry this job.",
+    "tasksHeading": "Tasks",
+    "columnTask": "Task",
+    "columnLastRun": "Last run",
+    "columnDuration": "Duration",
+    "columnResult": "Result",
+    "columnNextRun": "Next run",
+    "columnActions": "Actions",
+    "never": "Never run",
+    "overdue": "Overdue",
+    "outcomeSuccess": "Succeeded",
+    "outcomeError": "Failed",
+    "runButton": "Run now",
+    "running": "Running…",
+    "lastResultTitle": "{{name}} — run complete",
+    "noSummary": "Done, no details reported.",
+    "queueHeading": "Queue",
+    "queueEmpty": "Nothing queued.",
+    "jobStatus": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "retryButton": "Retry",
+    "contentHeading": "Scheduled content",
+    "contentBody": "The list of entries waiting to publish is on the dashboard.",
+    "contentLink": "Go to the dashboard",
+    "confirmTitle": "Run \"{{name}}\" now?",
+    "confirmBody": "This task is destructive — it permanently removes data. This cannot be undone.",
+    "confirmCancel": "Cancel",
+    "confirmRun": "Run now"
   }
 }

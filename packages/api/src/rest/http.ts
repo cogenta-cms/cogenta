@@ -262,6 +262,13 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   MAINT_TOOL_UNKNOWN: 404,
   MAINT_TOOL_RUN_NOT_FOUND: 404,
   MAINT_TOOL_INPUT_INVALID: 400,
+
+  // Scheduled tasks (fiche 28). Same shape as the maintenance tools above:
+  // an unknown task or job id is the caller's fault, not a server fault.
+  SCHEDULER_TASK_UNKNOWN: 404,
+  SCHEDULER_TASK_DUPLICATE: 409,
+  SCHEDULER_QUEUE_JOB_NOT_FOUND: 404,
+  SCHEDULER_QUEUE_JOB_NOT_RETRYABLE: 409,
 }
 
 export function statusFor(code: ErrorCode): number {

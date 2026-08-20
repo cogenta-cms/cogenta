@@ -171,7 +171,8 @@
     "sitePlan": "Plan du site",
     "marketplace": "Marketplace",
     "health": "Santé",
-    "tools": "Outils"
+    "tools": "Outils",
+    "scheduled": "Tâches planifiées"
   },
   "shell": {
     "skipLink": "Aller au contenu principal",
@@ -1843,5 +1844,46 @@
     "checkExternalLinks": "Vérifier aussi les liens externes (requêtes sortantes)",
     "activeHeading": "Statut : {{status}}",
     "historyHeading": "Exécutions récentes"
+  },
+  "scheduled": {
+    "heading": "Tâches planifiées",
+    "modeInternal": "Pilotées par le planificateur interne — ce processus déclenche chaque tâche lui-même.",
+    "modeExternal": "Pilotées par un cron externe — une commande planifiée exécute les tâches dues ; ce processus ne les déclenche pas lui-même.",
+    "errorTitle": "Une erreur est survenue",
+    "loadError": "Impossible de charger les tâches planifiées.",
+    "runError": "Impossible d'exécuter cette tâche.",
+    "retryError": "Impossible de relancer ce travail.",
+    "tasksHeading": "Tâches",
+    "columnTask": "Tâche",
+    "columnLastRun": "Dernière exécution",
+    "columnDuration": "Durée",
+    "columnResult": "Résultat",
+    "columnNextRun": "Prochaine exécution",
+    "columnActions": "Actions",
+    "never": "Jamais exécutée",
+    "overdue": "En retard",
+    "outcomeSuccess": "Réussie",
+    "outcomeError": "Échouée",
+    "runButton": "Exécuter maintenant",
+    "running": "En cours…",
+    "lastResultTitle": "{{name}} — exécution terminée",
+    "noSummary": "Terminé, aucun détail rapporté.",
+    "queueHeading": "File",
+    "queueEmpty": "Rien en attente.",
+    "jobStatus": {
+      "pending": "En attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "failed": "Échoué",
+      "cancelled": "Annulé"
+    },
+    "retryButton": "Relancer",
+    "contentHeading": "Contenu programmé",
+    "contentBody": "La liste des entrées en attente de publication se trouve sur le tableau de bord.",
+    "contentLink": "Aller au tableau de bord",
+    "confirmTitle": "Exécuter « {{name}} » maintenant ?",
+    "confirmBody": "Cette tâche est destructive — elle supprime des données de façon définitive. Cette action est irréversible.",
+    "confirmCancel": "Annuler",
+    "confirmRun": "Exécuter maintenant"
   }
 }

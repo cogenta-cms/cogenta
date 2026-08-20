@@ -117,6 +117,16 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
     id: string,
     input?: { readonly publishedBy?: string | null },
   ): Promise<ContentEntry<TValues>>
+  /**
+   * The atomic half of scheduled publication (fiche 28 task 4, ADR-free —
+   * additive to contract A, no shape changed). Publishes the entry only if
+   * it is still `status: 'scheduled'` at the moment of the write, in one
+   * guarded `UPDATE`; returns `null` — not an error — when it is not (already
+   * published by another process, or edited back to `draft` before its hour
+   * came). Two processes racing to publish the same entry therefore run the
+   * full publish side effects exactly once between them, never twice.
+   */
+  claimForScheduledPublish(id: string): Promise<ContentEntry<TValues> | null>
   unpublish(
     id: string,
     input?: {
@@ -752,12 +762,19 @@ export function createContentStore<TValues extends ContentValues = ContentValues
     )
   }
 
+  /**
+   * `guard` narrows the `WHERE` beyond `id = ?` — the atomic claim
+   * `claimForScheduledPublish` needs. Returns rows affected so a caller can
+   * tell a guarded write that changed nothing from one that changed a row:
+   * the difference between "I published it" and "someone else already did".
+   */
   async function writeLiveColumns(
     tx: SqlExecutor,
     id: string,
     columns: Record<string, unknown>,
     system: Record<string, unknown>,
-  ): Promise<void> {
+    guard?: SqlFragment,
+  ): Promise<number> {
     const assignments: SqlFragment[] = []
 
     for (const [name, value] of Object.entries(system)) {
@@ -767,10 +784,93 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       assignments.push(sql`${identifier(columnFor(name), dialect)} = ${value}`)
     }
 
-    await tx.query(
-      sql`update ${entries} set ${joinFragments(assignments, ', ')}
-          where ${identifier('id', dialect)} = ${id}`,
+    const where =
+      guard === undefined
+        ? sql`where ${identifier('id', dialect)} = ${id}`
+        : sql`where ${identifier('id', dialect)} = ${id} and ${guard}`
+
+    const result = await tx.query(
+      sql`update ${entries} set ${joinFragments(assignments, ', ')} ${where}`,
     )
+    return result.rowsAffected
+  }
+
+  interface PublishTxOptions {
+    readonly publishedBy?: string | null
+    /**
+     * When set, the write only takes effect if the row's current `status`
+     * still equals this value — the atomic claim scheduled publication
+     * needs. `null` is returned, not thrown, when the guard does not match:
+     * that is "someone else already handled it", not a failure.
+     */
+    readonly requireStatus?: ContentStatus
+  }
+
+  /** Shared by `publish()` and `claimForScheduledPublish()` — see each call site for what `requireStatus` buys. */
+  async function publishTx(
+    tx: SqlExecutor,
+    id: string,
+    options: PublishTxOptions,
+  ): Promise<ContentEntry<TValues> | null> {
+    const row = await loadRow(tx, id)
+    if (row === null) return null
+    if (options.requireStatus !== undefined && text(row['status']) !== options.requireStatus) {
+      return null
+    }
+
+    const working = await workingEntry(tx, row)
+    const at = stamp()
+    const author = options.publishedBy ?? nullableText(row['updated_by'])
+
+    const values: Record<string, unknown> = { ...working.values }
+    if (collection.fields['publishedAt'] !== undefined && values['publishedAt'] == null) {
+      values['publishedAt'] = at
+    }
+
+    // Publication is the moment `required` starts to mean something: a
+    // half-written draft can be saved, but it cannot go out.
+    const normalised = normaliseValues(collection, values, {
+      partial: false,
+      enforceRequired: true,
+    })
+
+    const guard =
+      options.requireStatus === undefined
+        ? undefined
+        : sql`${identifier('status', dialect)} = ${options.requireStatus}`
+
+    const affected = await writeLiveColumns(
+      tx,
+      id,
+      normalised.columns,
+      {
+        status: 'published' satisfies ContentStatus,
+        version: working.version,
+        updated_at: at,
+        updated_by: author,
+      },
+      guard,
+    )
+    if (guard !== undefined && affected === 0) return null
+
+    await writeRelations(tx, id, normalised.relations)
+    // The version row is updated rather than rewritten: its `created_at`
+    // is when the draft was written, and publication must not erase it.
+    await tx.query(
+      sql`update ${versions}
+          set ${identifier('status', dialect)} = ${'published'},
+              ${identifier('data', dialect)} = ${JSON.stringify({
+                ...normalised.values,
+                ...normalised.relations,
+              })}
+          where ${identifier('entry_id', dialect)} = ${id}
+            and ${identifier('version', dialect)} = ${working.version}`,
+    )
+    await prune(tx, id, working.version)
+
+    const after = await loadRow(tx, id)
+    if (after === null) return null
+    return liveEntry(tx, after)
   }
 
   // ------------------------------------------------------------ pagination
@@ -1328,52 +1428,30 @@ export function createContentStore<TValues extends ContentValues = ContentValues
     publish: async (id, publishOptions) =>
       db.transaction(
         async (tx) => {
-          const row = await loadRow(tx, id)
-          if (row === null) throw notFound(collection.name, id)
-
-          const working = await workingEntry(tx, row)
-          const at = stamp()
-          const author = publishOptions?.publishedBy ?? nullableText(row['updated_by'])
-
-          const values: Record<string, unknown> = { ...working.values }
-          if (collection.fields['publishedAt'] !== undefined && values['publishedAt'] == null) {
-            values['publishedAt'] = at
-          }
-
-          // Publication is the moment `required` starts to mean something: a
-          // half-written draft can be saved, but it cannot go out.
-          const normalised = normaliseValues(collection, values, {
-            partial: false,
-            enforceRequired: true,
+          const result = await publishTx(tx, id, {
+            ...(publishOptions?.publishedBy === undefined
+              ? {}
+              : { publishedBy: publishOptions.publishedBy }),
           })
-
-          await writeLiveColumns(tx, id, normalised.columns, {
-            status: 'published' satisfies ContentStatus,
-            version: working.version,
-            updated_at: at,
-            updated_by: author,
-          })
-          await writeRelations(tx, id, normalised.relations)
-          // The version row is updated rather than rewritten: its `created_at`
-          // is when the draft was written, and publication must not erase it.
-          await tx.query(
-            sql`update ${versions}
-                set ${identifier('status', dialect)} = ${'published'},
-                    ${identifier('data', dialect)} = ${JSON.stringify({
-                      ...normalised.values,
-                      ...normalised.relations,
-                    })}
-                where ${identifier('entry_id', dialect)} = ${id}
-                  and ${identifier('version', dialect)} = ${working.version}`,
-          )
-          await prune(tx, id, working.version)
-
-          const after = await loadRow(tx, id)
-          if (after === null) throw notFound(collection.name, id)
-          return liveEntry(tx, after)
+          if (result === null) throw notFound(collection.name, id)
+          return result
         },
         { immediate: true },
       ),
+
+    // Fiche 28 task 4's concurrency fix: two processes racing to publish the
+    // same scheduled entry (a multi-instance deploy, or the scheduler and a
+    // manual "publish now" click landing at once) must not both run the full
+    // publish side effects. `publishTx`'s `requireStatus` guard makes the
+    // claim atomic — `writeLiveColumns`'s `WHERE status = 'scheduled'` either
+    // wins outright or affects zero rows, never both at once, on all three
+    // dialects (see the "claiming a scheduled publish" test for the proof: a
+    // naive read-then-write reimplementation of this same operation is shown
+    // to double-run).
+    claimForScheduledPublish: async (id) =>
+      db.transaction((tx) => publishTx(tx, id, { requireStatus: 'scheduled' }), {
+        immediate: true,
+      }),
 
     unpublish: async (id, unpublishOptions) =>
       db.transaction(

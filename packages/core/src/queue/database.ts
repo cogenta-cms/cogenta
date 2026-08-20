@@ -16,6 +16,7 @@ import type {
   JobHandler,
   JobId,
   JobState,
+  ListJobsOptions,
   QueueDriver,
   QueueDriverOptions,
 } from './types.js'
@@ -36,6 +37,28 @@ interface JobRow {
   payload: string | null
   attempt: number
   max_attempts: number
+}
+
+interface JobStateRow {
+  id: string
+  name: string
+  status: string
+  attempt: number
+  max_attempts: number
+  run_at: number
+  last_error: string | null
+}
+
+function toJobState(row: JobStateRow): JobState {
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status as JobState['status'],
+    attempt: Number(row.attempt),
+    maxAttempts: Number(row.max_attempts),
+    runAt: Number(row.run_at),
+    lastError: row.last_error ?? undefined,
+  }
 }
 
 /** Exponential, capped. A failing job must not retry in a tight loop. */
@@ -281,30 +304,37 @@ export function createDatabaseQueue(options: DatabaseQueueOptions): QueueDriver 
 
     status: async (id: JobId): Promise<JobState | null> => {
       await ensureTable()
-      const result = await db.query<{
-        id: string
-        name: string
-        status: string
-        attempt: number
-        max_attempts: number
-        run_at: number
-        last_error: string | null
-      }>(sql`
+      const result = await db.query<JobStateRow>(sql`
         select id, name, status, attempt, max_attempts, run_at, last_error
         from ${table} where id = ${id}`)
 
       const row = result.rows[0]
-      if (row === undefined) return null
+      return row === undefined ? null : toJobState(row)
+    },
 
-      return {
-        id: row.id,
-        name: row.name,
-        status: row.status as JobState['status'],
-        attempt: Number(row.attempt),
-        maxAttempts: Number(row.max_attempts),
-        runAt: Number(row.run_at),
-        lastError: row.last_error ?? undefined,
-      }
+    list: async (listOptions: ListJobsOptions = {}): Promise<readonly JobState[]> => {
+      await ensureTable()
+      const statusFilter =
+        listOptions.status === undefined ? sql`1 = 1` : sql`status = ${listOptions.status}`
+
+      const result = await db.query<JobStateRow>(sql`
+        select id, name, status, attempt, max_attempts, run_at, last_error
+        from ${table}
+        where ${statusFilter}
+        order by run_at desc
+        limit ${limit(listOptions.limit ?? 50)}`)
+
+      return result.rows.map(toJobState)
+    },
+
+    retry: async (id: JobId): Promise<boolean> => {
+      await ensureTable()
+      const result = await db.query(sql`
+        update ${table}
+        set status = ${'pending'}, attempt = ${0}, run_at = ${now()}, last_error = ${null},
+            locked_by = ${null}, locked_until = ${null}
+        where id = ${id} and status = ${'failed'}`)
+      return result.rowsAffected > 0
     },
 
     close: async (): Promise<void> => {

@@ -42,4 +42,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/ops-settings', labelKey: 'nav.opsSettings' },
   { to: '/health', labelKey: 'nav.health' },
   { to: '/tools', labelKey: 'nav.tools' },
+  { to: '/scheduled', labelKey: 'nav.scheduled' },
 ]

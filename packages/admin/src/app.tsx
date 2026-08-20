@@ -29,6 +29,7 @@ import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
 import { RedirectsRoute } from './routes/redirects.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
+import { ScheduledRoute } from './routes/scheduled.js'
 import { SeoRoute } from './routes/seo.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
@@ -96,6 +97,7 @@ export function App(): JSX.Element {
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
               <Route path="health" element={<HealthRoute />} />
               <Route path="tools" element={<ToolsRoute />} />
+              <Route path="scheduled" element={<ScheduledRoute />} />
               <Route path="trash" element={<TrashRoute />} />
               <Route path="assistant-chat" element={<AssistantChatRoute />} />
               <Route path="duplicates" element={<DuplicatesRoute />} />

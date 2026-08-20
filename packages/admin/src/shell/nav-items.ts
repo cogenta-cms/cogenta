@@ -23,6 +23,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/commerce/coupons', labelKey: 'nav.commerceCoupons' },
   { to: '/commerce/subscriptions', labelKey: 'nav.commerceSubscriptions' },
   { to: '/redirects', labelKey: 'nav.redirects' },
+  { to: '/translations', labelKey: 'nav.translations' },
   { to: '/trash', labelKey: 'nav.trash' },
   { to: '/assistant-chat', labelKey: 'nav.assistantChat' },
   { to: '/duplicates', labelKey: 'nav.duplicates' },

@@ -3,12 +3,14 @@ import {
   type CollectionDefinition,
   type ContentDiff,
   type ContentEntry,
+  type ContentStatus,
   type ContentStore,
   type CreateInput,
   type DuplicateInput,
   type EntryState,
   type RouteMatch,
   resolveUrl,
+  type SortOrder,
   type UpdateInput,
   type VersionSummary,
 } from '@cogenta/schema'
@@ -173,6 +175,70 @@ export interface ContentService {
     version: number,
     options: ReadOptions,
   ): Promise<SerialisedEntry>
+  /**
+   * The translation dashboard (fiche 10 task 1): every root entry of a
+   * collection (`translationOf: null`), each with the locale-by-locale state
+   * of its family — absent, drafted, published, or published-but-obsolete
+   * (task 2: the source changed since this translation was last written).
+   *
+   * One paginated query for the roots plus one batched query for every
+   * translation of that page (`ContentStore.translationsOfMany`) — never a
+   * `translations()` call per row, which is exactly the "N × M built by N
+   * requests" the fiche's own "piège connu" warns against.
+   *
+   * Permission note, honestly stated rather than silently assumed: contract A
+   * has no per-locale permission — a role reads or does not read a
+   * *collection*, never "this collection, but not in Spanish". Every cell
+   * still passes through the same per-entry draft gate `list()` uses (so a
+   * preview grant or a role without unpublished access sees exactly what it
+   * would see from `list()`), but a role that could invent "cannot read
+   * Spanish" has nowhere in today's `PermissionLayer` to declare it. Adding
+   * that dimension is a permission-model change, not a dashboard change, and
+   * is out of this fiche's scope.
+   *
+   * Signal (a) inherits one more honest limit from `ContentEntry.updatedAt`
+   * itself: on a `versioning.drafts` collection, editing an already-published
+   * entry lands as a version overlay and does not move the live row's
+   * `updatedAt` until that edit is published (the same clock `history()` and
+   * every response's cache tags already key off). A pending, unpublished
+   * edit to the source therefore does not yet mark a translation obsolete —
+   * publishing it does. Fiche 10 picked (a) precisely for being free and
+   * honest, not exact; this is that trade-off, not a bug.
+   */
+  translationMatrix(
+    context: AccessContext,
+    name: string,
+    query: TranslationMatrixQuery,
+  ): Promise<TranslationMatrixPage>
+}
+
+export interface TranslationMatrixQuery {
+  readonly cursor?: string
+  readonly limit: number
+  readonly sort: SortOrder
+}
+
+export type TranslationMatrixState = ContentStatus | 'absent'
+
+export interface TranslationMatrixCell {
+  readonly id: string
+  readonly status: ContentStatus
+  readonly updatedAt: string
+  /** Task 2's signal (a), stated as a fact: the source's `updatedAt` is later than this translation's. Always `false` for the root's own cell. */
+  readonly obsolete: boolean
+}
+
+export interface TranslationMatrixEntry {
+  /** The root entry (`translationOf: null`) — its `values` are what a title is derived from client-side, the same convention every other list uses. */
+  readonly root: SerialisedEntry
+  /** Keyed by locale, including the root's own. A missing key means "absent": no entry of that locale exists in this family, or the actor may not see the one that does. */
+  readonly cells: Readonly<Record<string, TranslationMatrixCell>>
+}
+
+export interface TranslationMatrixPage {
+  readonly items: readonly TranslationMatrixEntry[]
+  readonly nextCursor: string | null
+  readonly hasMore: boolean
 }
 
 /**
@@ -559,6 +625,79 @@ export function createContentService(options: ContentServiceOptions): ContentSer
 
       const entry = await store(target).restore(id, version)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    translationMatrix: async (context, name, query) => {
+      const target = collection(name)
+      permissions.assert('read', target, context)
+      // Every cell answers a working-state question ("does a draft exist at
+      // all") — the same gate `history`/`translations` require.
+      stateFor(target, context, 'working')
+
+      const gate = draftGate(target, context, 'working')
+      const entries = store(target)
+
+      const scan = await scanPages<ContentEntry>({
+        limit: query.limit,
+        accept: gate,
+        startCursor: query.cursor,
+        maxRows: SCAN_BUDGET,
+        fetch: (cursor) =>
+          entries.list({
+            state: 'working',
+            translationOf: null,
+            limit: SCAN_BATCH,
+            sort: query.sort,
+            ...(cursor === undefined ? {} : { cursor }),
+          }),
+      })
+
+      const hasMore = scan.overflowed || (!scan.exhausted && scan.budgetSpent)
+      const anchor = scan.overflowed ? scan.items.at(-1) : scan.lastScanned
+      const nextCursor = hasMore && anchor !== undefined ? cursorFor(anchor, query.sort) : null
+
+      const roots = scan.items
+      const rootIds = roots.map((entry) => entry.id)
+      // One batched query for every translation of this page's roots — the
+      // "N × M, one query, one join" the fiche's own piège connu insists on.
+      const translations = (await entries.translationsOfMany(rootIds)).filter(gate)
+
+      const byRoot = new Map<string, ContentEntry[]>()
+      for (const translation of translations) {
+        const key = translation.translationOf ?? ''
+        const bucket = byRoot.get(key)
+        if (bucket === undefined) byRoot.set(key, [translation])
+        else bucket.push(translation)
+      }
+
+      const items: TranslationMatrixEntry[] = []
+      for (const root of roots) {
+        const cells: Record<string, TranslationMatrixCell> = {
+          [root.locale]: {
+            id: root.id,
+            status: root.status,
+            updatedAt: root.updatedAt,
+            obsolete: false,
+          },
+        }
+        for (const translation of byRoot.get(root.id) ?? []) {
+          cells[translation.locale] = {
+            id: translation.id,
+            status: translation.status,
+            updatedAt: translation.updatedAt,
+            // Signal (a) from the fiche: a fact ("the source changed since"),
+            // not a verdict — deliberately a plain string comparison of two
+            // ISO 8601 timestamps, which sort the same as they compare.
+            obsolete: root.updatedAt > translation.updatedAt,
+          }
+        }
+        items.push({
+          root: await serialise(context, target, root, { state: 'working', depth: 0 }),
+          cells,
+        })
+      }
+
+      return { items, nextCursor, hasMore }
     },
   }
 }

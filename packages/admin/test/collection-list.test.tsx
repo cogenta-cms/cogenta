@@ -145,6 +145,32 @@ describe('CollectionListRoute', () => {
     }
   })
 
+  it('shows a language column and filter only on a multilingual site (fiche 10 task 3)', async () => {
+    installMockFetch({ siteLocales: ['en', 'fr'] })
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    // Column header present, and the fixture's `en` entries show it.
+    expect(screen.getByRole('columnheader', { name: 'Langue' })).toBeDefined()
+    expect(screen.getAllByRole('cell', { name: 'en' }).length).toBeGreaterThan(0)
+
+    // Filtering to `fr` (a language neither fixture entry has) empties the
+    // table without erroring.
+    fireEvent.change(screen.getByLabelText('Langue'), { target: { value: 'fr' } })
+    await waitFor(() => expect(screen.queryByText('First article')).toBeNull())
+    expect(screen.getByText('Aucun contenu.')).toBeDefined()
+  })
+
+  it('never shows a language column on a single-locale site', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    expect(screen.queryByRole('columnheader', { name: 'Langue' })).toBeNull()
+    expect(screen.queryByLabelText('Langue')).toBeNull()
+  })
+
   it('reports a collection nobody can read as not found', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })

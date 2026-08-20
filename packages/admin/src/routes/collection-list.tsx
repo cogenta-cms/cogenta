@@ -61,6 +61,7 @@ export function CollectionListRoute(): JSX.Element {
     direction: 'desc',
   })
   const [status, setStatus] = useState('')
+  const [locale, setLocale] = useState('')
   const [items, setItems] = useState<readonly Entry[]>([])
   const [cursorStack, setCursorStack] = useState<readonly (string | undefined)[]>([undefined])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -88,6 +89,7 @@ export function CollectionListRoute(): JSX.Element {
       const page = await listEntries(token, collection.name, {
         sort,
         ...(status === '' ? {} : { status }),
+        ...(locale === '' ? {} : { locale }),
         ...(cursor === undefined ? {} : { after: cursor }),
       })
       setItems(page.items)
@@ -99,7 +101,7 @@ export function CollectionListRoute(): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [token, collection, sort, status, cursor, t])
+  }, [token, collection, sort, status, locale, cursor, t])
 
   useEffect(() => {
     void load()
@@ -163,6 +165,9 @@ export function CollectionListRoute(): JSX.Element {
     await load()
   }
 
+  const siteLocales: readonly string[] =
+    schema.status === 'ready' ? (schema.schema.site?.locales ?? []) : []
+
   const canDelete = useMemo(
     () => collection !== undefined && canPerform('delete', collection, roles),
     [collection, roles],
@@ -184,20 +189,30 @@ export function CollectionListRoute(): JSX.Element {
    */
   function exportCsv(): void {
     if (collection === undefined) return
+    const showLocale = siteLocales.length > 1
     const header = [
       t('collectionList.idColumn'),
       t('collectionList.titleColumn'),
       t('collectionList.statusColumn'),
+      ...(showLocale ? [t('collectionList.localeColumn')] : []),
       t('collectionList.createdColumn'),
       t('collectionList.updatedColumn'),
     ]
     const rows =
       hits !== null
-        ? hits.map((hit) => [hit.id, hit.title === '' ? hit.id : hit.title, hit.status, '', ''])
+        ? hits.map((hit) => [
+            hit.id,
+            hit.title === '' ? hit.id : hit.title,
+            hit.status,
+            ...(showLocale ? [''] : []),
+            '',
+            '',
+          ])
         : items.map((entry) => [
             entry.id,
             titleOf(entry),
             entry.status,
+            ...(showLocale ? [entry.locale] : []),
             entry.createdAt,
             entry.updatedAt,
           ])
@@ -302,6 +317,30 @@ export function CollectionListRoute(): JSX.Element {
           </Field>
         </div>
 
+        {siteLocales.length > 1 && (
+          <div className="max-w-xs">
+            <Field label={t('collectionList.localeFilter')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={locale}
+                  onChange={(event) => {
+                    setCursorStack([undefined])
+                    setLocale(event.target.value)
+                  }}
+                >
+                  <option value="">{t('collectionList.allLocales')}</option>
+                  {siteLocales.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+        )}
+
         <button type="button" onClick={exportCsv}>
           {t('collectionList.exportCsv')}
         </button>
@@ -373,6 +412,9 @@ export function CollectionListRoute(): JSX.Element {
                     onSort={toggleSort}
                   />
                   <TableHeader>{t('collectionList.statusColumn')}</TableHeader>
+                  {siteLocales.length > 1 && (
+                    <TableHeader>{t('collectionList.localeColumn')}</TableHeader>
+                  )}
                   <SortableHeader
                     field="updatedAt"
                     label={t('collectionList.updatedColumn')}
@@ -404,11 +446,12 @@ export function CollectionListRoute(): JSX.Element {
                     </TableCell>
                     <TableCell>{entry.id}</TableCell>
                     <TableCell>{entry.status}</TableCell>
+                    {siteLocales.length > 1 && <TableCell>{entry.locale}</TableCell>}
                     <TableCell>{entry.updatedAt}</TableCell>
                   </TableRow>
                 ))}
                 {items.length === 0 && (
-                  <TableEmpty colSpan={canDelete ? 5 : 4}>
+                  <TableEmpty colSpan={(canDelete ? 5 : 4) + (siteLocales.length > 1 ? 1 : 0)}>
                     {t('collectionList.noContent')}
                   </TableEmpty>
                 )}

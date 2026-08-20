@@ -129,6 +129,18 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   restore(id: string, version: number, input?: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
   diff(id: string, from: number, to: number): Promise<ContentDiff>
   translations(id: string, options?: TrashOptions): Promise<readonly ContentEntry<TValues>[]>
+  /**
+   * The working-state translations of every root in `rootIds`, in one query
+   * (fiche 10 task 1: a translation dashboard over a thousand entries must
+   * not become a thousand `translations()` calls). Rows whose `translationOf`
+   * is not among `rootIds` are never returned — this is deliberately not
+   * "every family member", only the non-root half of it, since the caller
+   * already has the roots from `list({ translationOf: null })`.
+   */
+  translationsOfMany(
+    rootIds: readonly string[],
+    options?: TrashOptions,
+  ): Promise<readonly ContentEntry<TValues>[]>
   resolveLocale(
     id: string,
     locale: string,
@@ -1479,6 +1491,27 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       // — including one whose source is in the trash.
       const visible = found.rows.filter((member) => !hiddenBy(member, translationsOptions?.trashed))
       return liveEntries(db, visible)
+    },
+
+    translationsOfMany: async (rootIds, translationsOptions) => {
+      if (rootIds.length === 0) return []
+
+      const predicates: SqlFragment[] = [
+        sql`${identifier('translation_of', dialect)} in (${valueList([...rootIds])})`,
+      ]
+      const trash = trashPredicate(translationsOptions?.trashed)
+      if (trash !== null) predicates.push(trash)
+
+      const found = await db.query<Row>(
+        sql`select * from ${entries} where ${joinFragments(predicates, ' and ')}`,
+      )
+
+      // The working state of each row, same as `list({ state: 'working' })`
+      // does: it cannot be read in the same pass because the newest version
+      // may be ahead of the live row (see that method's own comment).
+      const items: ContentEntry<TValues>[] = []
+      for (const row of found.rows) items.push(await workingEntry(db, row))
+      return items
     },
 
     resolveLocale: async (id, locale, resolveOptions) => {

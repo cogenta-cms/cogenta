@@ -486,6 +486,9 @@ importers:
       '@cogenta/import':
         specifier: workspace:*
         version: link:../import
+      '@cogenta/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@cogenta/plugins':
         specifier: workspace:*
         version: link:../plugins

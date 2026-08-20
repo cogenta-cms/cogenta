@@ -373,6 +373,40 @@ export function installMockFetch(
       }
       readonly anomalies?: readonly { readonly code: string; readonly message: string }[]
     }
+    /**
+     * What `GET /api/config-status` answers with (fiche 23 task 5) — `null`
+     * by default, the same "caller never wired a mirror" shape the real
+     * router answers with.
+     */
+    readonly configStatus?: {
+      readonly site: { readonly name: string; readonly url: string; readonly notFoundPath: string }
+      readonly database: { readonly driver: string }
+      readonly cache: { readonly driver: string }
+      readonly queue: { readonly driver: string }
+      readonly storage: {
+        readonly driver: string
+        readonly bucket: string | undefined
+        readonly region: string | undefined
+        readonly endpoint: string | undefined
+      }
+      readonly llm: { readonly provider: string; readonly model: string } | undefined
+      readonly embeddings: { readonly provider: string; readonly model: string }
+      readonly imageGeneration: { readonly provider: string; readonly model: string } | undefined
+      readonly vector: { readonly driver: string }
+      readonly billingConfigured: boolean
+      readonly secretHygiene: {
+        readonly databaseUrlHasCredentialsInFile: boolean
+        readonly envFilePath: string | null
+        readonly envFileReadableByOthers: boolean | null
+      }
+    }
+    /**
+     * Pre-seeds a site-scoped editorial setting's value (fiche 23), as if it
+     * had already been written — keyed by the setting's registry key
+     * (`general.title`, `reading.homePath`, …). Every setting not listed
+     * here answers with its own registry default, `isDefault: true`.
+     */
+    readonly siteSettings?: Readonly<Record<string, unknown>>
     /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
     readonly analyticsSummary?: {
       readonly totalViews?: number
@@ -450,6 +484,92 @@ export function installMockFetch(
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
+
+  // Site settings (fiche 23) — the registry's own defaults, hand-mirrored
+  // here rather than imported (this file imports nothing but `vitest`, on
+  // purpose: it is the admin's own idea of what the API answers, not a
+  // second consumer of the real registry). `siteSettingsWrites` holds only
+  // what a PATCH during this test actually changed, keyed by `key locale`
+  // — a key never written stays at its registry default and `isDefault: true`.
+  const SITE_SETTINGS_DEFAULTS: Readonly<
+    Record<
+      string,
+      { group: string; order: number; uiType: string; scope: 'site' | 'locale'; value: unknown }
+    >
+  > = {
+    'general.title': { group: 'general', order: 0, uiType: 'string', scope: 'site', value: '' },
+    'general.tagline': { group: 'general', order: 1, uiType: 'string', scope: 'locale', value: '' },
+    'general.adminEmail': { group: 'general', order: 2, uiType: 'email', scope: 'site', value: '' },
+    'general.timeZone': {
+      group: 'general',
+      order: 3,
+      uiType: 'timeZone',
+      scope: 'site',
+      value: '',
+    },
+    'general.dateStyle': {
+      group: 'general',
+      order: 4,
+      uiType: 'dateStyle',
+      scope: 'site',
+      value: 'medium',
+    },
+    'general.timeStyle': {
+      group: 'general',
+      order: 5,
+      uiType: 'timeStyle',
+      scope: 'site',
+      value: 'short',
+    },
+    'reading.homePath': { group: 'reading', order: 0, uiType: 'path', scope: 'site', value: '' },
+    'reading.postsPerPage': {
+      group: 'reading',
+      order: 1,
+      uiType: 'number',
+      scope: 'site',
+      value: 10,
+    },
+    'media.maxUploadSizeMb': {
+      group: 'media',
+      order: 0,
+      uiType: 'number',
+      scope: 'site',
+      value: 15,
+    },
+    'privacy.policyPath': { group: 'privacy', order: 0, uiType: 'path', scope: 'site', value: '' },
+    'privacy.cookieBannerEnabled': {
+      group: 'privacy',
+      order: 1,
+      uiType: 'boolean',
+      scope: 'site',
+      value: false,
+    },
+    'privacy.cookieBannerMessage': {
+      group: 'privacy',
+      order: 2,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+    'privacy.dataRetentionNote': {
+      group: 'privacy',
+      order: 3,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+  }
+  const siteSettingsWrites = new Map<
+    string,
+    { readonly value: unknown; readonly updatedAt: string; readonly updatedBy: string | null }
+  >()
+  for (const [key, seeded] of Object.entries(options.siteSettings ?? {})) {
+    siteSettingsWrites.set(`${key} `, {
+      value: seeded,
+      updatedAt: '2025-01-01T00:00:00.000Z',
+      updatedBy: 'user-1',
+    })
+  }
 
   // L19 site plans, stateful per `installMockFetch()` call: decisions merge
   // across requests and `apply` refuses an incomplete review, exactly as the
@@ -3782,6 +3902,74 @@ export function installMockFetch(
               duplicateTitles: [],
             },
             anomalies: diagnostics?.anomalies ?? [],
+          },
+        })
+      }
+
+      if (url.includes('/api/config-status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, { data: options.configStatus ?? null })
+      }
+
+      // `GET|PATCH /api/settings` — the editorial site settings (fiche 23).
+      // Read is public — no role check — the same as the real router.
+      if (url.includes('/api/settings') && method === 'GET') {
+        const requestedLocale = new URL(url, 'http://localhost').searchParams.get('locale') ?? ''
+        const data = Object.entries(SITE_SETTINGS_DEFAULTS).map(([key, definition]) => {
+          const locale = definition.scope === 'locale' ? requestedLocale : ''
+          const write = siteSettingsWrites.get(`${key} ${locale}`)
+          return {
+            key,
+            group: definition.group,
+            order: definition.order,
+            uiType: definition.uiType,
+            scope: definition.scope,
+            locale: definition.scope === 'locale' ? locale : null,
+            value: write?.value ?? definition.value,
+            isDefault: write === undefined,
+            updatedAt: write?.updatedAt ?? null,
+            updatedBy: write?.updatedBy ?? null,
+          }
+        })
+        return json(200, { data })
+      }
+
+      if (url.includes('/api/settings') && method === 'PATCH') {
+        const key = body.key as string | undefined
+        const definition = key === undefined ? undefined : SITE_SETTINGS_DEFAULTS[key]
+        if (key === undefined || definition === undefined) {
+          return json(404, {
+            error: {
+              code: 'SITE_SETTING_UNKNOWN',
+              message: `"${String(key)}" is not a declared site setting.`,
+            },
+          })
+        }
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const requestedLocale = new URL(url, 'http://localhost').searchParams.get('locale') ?? ''
+        const locale = definition.scope === 'locale' ? requestedLocale : ''
+        const updatedAt = '2025-06-15T10:00:00.000Z'
+        siteSettingsWrites.set(`${key} ${locale}`, {
+          value: body.value,
+          updatedAt,
+          updatedBy: user.id,
+        })
+        return json(200, {
+          data: {
+            key,
+            group: definition.group,
+            order: definition.order,
+            uiType: definition.uiType,
+            scope: definition.scope,
+            locale: definition.scope === 'locale' ? locale : null,
+            value: body.value,
+            isDefault: false,
+            updatedAt,
+            updatedBy: user.id,
           },
         })
       }

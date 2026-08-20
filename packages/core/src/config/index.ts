@@ -2,6 +2,8 @@ export { defineConfig } from './define-config.js'
 export type { LoadConfigOptions, LoadedConfig } from './load-config.js'
 export { CONFIG_FILE_NAMES, findConfigFile, loadConfig } from './load-config.js'
 export { resolveConfig } from './resolve-config.js'
+export type { SecretHygieneReport } from './secret-hygiene.js'
+export { hasGroupOrOtherRead, urlHasEmbeddedCredentials } from './secret-hygiene.js'
 export type {
   CacheDriverName,
   CogentaConfig,

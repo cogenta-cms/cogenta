@@ -125,6 +125,16 @@ export interface MediaRouterOptions {
   /** Wires `GET .../usage` and the informed-deletion warning. Absent: usage always reports empty. */
   readonly usage?: MediaUsageSource
   readonly limits?: MediaUploadLimits
+  /**
+   * The upload size ceiling actually enforced, in bytes (fiche 23 task 2 —
+   * the "Médias" tab's `media.maxUploadSizeMb` setting). A function, not a
+   * plain number: it is backed by a database row that can change without a
+   * redeploy, so this is read fresh on every upload/replace rather than
+   * baked in when the router is constructed. Absent means `limits`'s static
+   * `maxUploadBytes` (or `DEFAULT_MAX_UPLOAD_BYTES` if that is absent too),
+   * unchanged from before fiche 23.
+   */
+  readonly maxUploadBytes?: () => Promise<number>
   /** Mount point. `/api/media` by default. */
   readonly basePath?: string
 }
@@ -569,19 +579,30 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     })
   }
 
+  /**
+   * The ceiling actually enforced for this request (fiche 23 task 2): the
+   * dynamic, database-backed setting when the caller wired one, read fresh
+   * every time rather than once at router construction — otherwise the
+   * static `limits`-derived value unchanged from before fiche 23.
+   */
+  async function effectiveMaxUploadBytes(): Promise<number> {
+    return options.maxUploadBytes === undefined ? maxUploadBytes : await options.maxUploadBytes()
+  }
+
   async function upload(request: RestRequest, actor: Actor): Promise<RestResponse> {
     requireActor(actor)
+    const maxBytes = await effectiveMaxUploadBytes()
 
     const normalised = isMultipartFormData(request.body)
       ? normaliseMultipartUpload(request.body)
-      : legacyJsonUpload(request.body)
+      : legacyJsonUpload(request.body, maxBytes)
 
-    return finishUpload(normalised, actor)
+    return finishUpload(normalised, actor, maxBytes)
   }
 
-  function legacyJsonUpload(body: unknown): NormalisedUpload {
+  function legacyJsonUpload(body: unknown, maxBytes: number): NormalisedUpload {
     const input = decode(uploadSchema, body)
-    const bytes = decodeBase64(input.data, maxUploadBytes)
+    const bytes = decodeBase64(input.data, maxBytes)
     return {
       kind: input.kind,
       filename: input.filename,
@@ -596,8 +617,12 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     }
   }
 
-  async function finishUpload(input: NormalisedUpload, actor: Actor): Promise<RestResponse> {
-    if (input.bytes.length > maxUploadBytes) throw tooLargeError(maxUploadBytes)
+  async function finishUpload(
+    input: NormalisedUpload,
+    actor: Actor,
+    maxBytes: number,
+  ): Promise<RestResponse> {
+    if (input.bytes.length > maxBytes) throw tooLargeError(maxBytes)
 
     // For an image this is the type the *bytes* say, not the one the uploader
     // typed — the asset record and every response built from it use it, so a
@@ -730,7 +755,8 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     }
 
     let bytes = Buffer.from(file.data)
-    if (bytes.length > maxUploadBytes) throw tooLargeError(maxUploadBytes)
+    const maxBytes = await effectiveMaxUploadBytes()
+    if (bytes.length > maxBytes) throw tooLargeError(maxBytes)
 
     // A replace keeps the asset's identity, including its `kind` — a photo
     // stays a photo. Swapping a video in over an image id would strand every

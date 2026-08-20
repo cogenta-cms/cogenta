@@ -391,6 +391,10 @@ export const ERROR_CODES = [
   // Analytics — self-hosted, cookie-free page-view analytics (`@cogenta/analytics`)
   'ANALYTICS_SALT_UNAVAILABLE',
 
+  // Site settings — the editorial key/value store (fiche 23, ADR-0025)
+  'SITE_SETTING_UNKNOWN',
+  'SITE_SETTING_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

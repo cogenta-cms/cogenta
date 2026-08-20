@@ -749,7 +749,30 @@
     "webhooksSigned": "Chaque événement est signé (HMAC-SHA256) avant l'envoi.",
     "webhooksUnsigned": "Non signé — l'envoi est désactivé tant qu'aucun secret n'est défini.",
     "webhooksHistoryUnavailable": "Aucun historique de livraison n'est encore conservé — les livraisons sont journalisées, pas stockées.",
-    "readOnlyNote": "Ces réglages viennent du fichier de configuration de ce site, pas de la base de données. Modifiez cogenta.config.mjs et redémarrez le serveur pour les changer."
+    "readOnlyNote": "Ces réglages viennent du fichier de configuration de ce site, pas de la base de données. Modifiez cogenta.config.mjs et redémarrez le serveur pour les changer.",
+    "configHeading": "Infrastructure",
+    "configUnavailable": "Ce serveur n'a pas fourni de miroir d'infrastructure.",
+    "databaseLabel": "Pilote de base de données",
+    "cacheLabel": "Pilote de cache",
+    "queueLabel": "Pilote de file",
+    "storageLabel": "Pilote de stockage",
+    "llmLabel": "Fournisseur LLM",
+    "llmNone": "Non configuré — le CMS fonctionne sans (R2).",
+    "embeddingsLabel": "Fournisseur d'embeddings",
+    "imageGenerationLabel": "Fournisseur de génération d'images",
+    "imageGenerationNone": "Non configuré.",
+    "vectorLabel": "Pilote vectoriel",
+    "billingLabel": "Facturation",
+    "billingConfigured": "Configurée.",
+    "billingNotConfigured": "Non configurée — la route de facturation reste inaccessible.",
+    "notFoundPathLabel": "Page 404",
+    "secretHygieneHeading": "Hygiène des secrets",
+    "databaseUrlWarning": "L'URL de base de données dans cogenta.config.mjs contient des identifiants réels. Déplacez-les vers la variable d'environnement COGENTA_DATABASE_URL — le fichier de configuration est versionné dans git.",
+    "databaseUrlOk": "Aucun identifiant intégré trouvé dans l'URL de base de données du fichier de configuration.",
+    "envFileWarning": "Le fichier .env ({{path}}) est lisible par d'autres utilisateurs sur cette machine — sur un hébergement mutualisé, cela inclut tous les autres locataires. Restreignez ses permissions (chmod 600).",
+    "envFileOk": "Les permissions du fichier .env semblent correctement restreintes.",
+    "envFileUnknown": "Impossible de vérifier les permissions du fichier .env sur cette plateforme.",
+    "envFileNone": "Aucun fichier .env trouvé à côté de la configuration."
   },
   "trash": {
     "heading": "Corbeille",
@@ -945,11 +968,78 @@
     "backupsBody": "Aucune source de données pour l'instant : ce widget arrive avec l'agent de sauvegarde (L5)."
   },
   "settings": {
-    "heading": "Paramètres du compte",
-    "signedInAs": "Connecté en tant que {{email}}.",
-    "languageHeading": "Langue de l'interface",
-    "languageLabel": "Langue",
-    "securityMoved": "Mot de passe, vérification en deux étapes et sessions actives : voir « Mon profil »."
+    "heading": "Réglages du site",
+    "description": "Réglages éditoriaux uniquement. L'infrastructure et la sécurité restent dans cogenta.config.mjs — voir « Avancé ».",
+    "adminOnly": "Seul le rôle admin peut lire ou changer les réglages éditoriaux du site.",
+    "loadError": "Impossible de charger les réglages du site.",
+    "saveError": "Ce réglage n'a pas pu être enregistré.",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré.",
+    "provenanceEditable": "Modifiable ici.",
+    "provenanceReadOnly": "Défini dans cogenta.config.mjs — lecture seule.",
+    "tab": {
+      "general": "Général",
+      "reading": "Lecture",
+      "discussion": "Discussion",
+      "media": "Médias",
+      "privacy": "Confidentialité",
+      "advanced": "Avancé"
+    },
+    "dateTimeStyle": {
+      "full": "Complet",
+      "long": "Long",
+      "medium": "Moyen",
+      "short": "Court"
+    },
+    "taglineLocaleLabel": "Langue de l'accroche",
+    "defaultLocaleHeading": "Langue par défaut du site",
+    "notFoundPathLabel": "Page 404",
+    "notFoundPathUnavailable": "Non disponible.",
+    "notFoundPathNote": "Reste volontairement dans le fichier de configuration — une page 404 personnalisée voyage avec le déploiement qui l'a écrite, comme le ferait un changement de route.",
+    "mediaFormatsLabel": "Variantes d'image produites",
+    "mediaFormatsValue": "WebP, à un ensemble fixe de largeurs — intégré au pipeline d'images, non modifiable ici.",
+    "discussionPlaceholder": "Sans objet pour l'instant : Cogenta n'a pas de système de commentaires aujourd'hui (voir fiche 15). Cet onglet est un emplacement réservé.",
+    "noCookieByDefault": "Cogenta ne pose aucun cookie par défaut. N'activez ceci que si ce site en ajoute un (un widget intégré, un script de mesure d'audience) — un bandeau dont personne n'a besoin est pire que son absence.",
+    "advancedLink": "Sécurité, webhooks et infrastructure (lecture seule)",
+    "advancedNote": "Tout y vient de cogenta.config.mjs. Modifiez le fichier et redémarrez le serveur pour changer ces réglages.",
+    "field": {
+      "general": {
+        "title": {
+          "label": "Titre du site",
+          "help": "Affiché dans l'onglet du navigateur et les résultats de recherche quand une page n'en a pas de propre."
+        },
+        "tagline": { "label": "Accroche", "help": "Une courte description du site." },
+        "adminEmail": { "label": "E-mail d'administration", "help": "" },
+        "timeZone": {
+          "label": "Fuseau horaire",
+          "help": "Un nom de fuseau IANA, ex. Europe/Paris. Gouverne la publication programmée et toutes les dates affichées dans cet admin."
+        },
+        "dateStyle": { "label": "Format de date", "help": "" },
+        "timeStyle": { "label": "Format d'heure", "help": "" }
+      },
+      "reading": {
+        "homePath": {
+          "label": "Page d'accueil",
+          "help": "Le chemin servi à /, ex. /home. Laisser vide pour garder le défaut (/home)."
+        },
+        "postsPerPage": { "label": "Éléments par page", "help": "" }
+      },
+      "media": {
+        "maxUploadSizeMb": { "label": "Taille maximale de téléversement (Mo)", "help": "" }
+      },
+      "privacy": {
+        "policyPath": {
+          "label": "Page de politique de confidentialité",
+          "help": "Un chemin relatif au site, ex. /confidentialite."
+        },
+        "cookieBannerEnabled": { "label": "Afficher un bandeau cookies", "help": "" },
+        "cookieBannerMessage": { "label": "Message du bandeau cookies", "help": "" },
+        "dataRetentionNote": {
+          "label": "Note de rétention des données",
+          "help": "Affichée aux visiteurs, purement informative — rien ici ne change ce qui est réellement conservé."
+        }
+      }
+    }
   },
   "users": {
     "heading": "Utilisateurs",

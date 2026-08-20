@@ -132,13 +132,13 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     await expectNoSeriousA11yViolations(document.body)
   })
 
-  it('account settings', async () => {
+  it('site settings', async () => {
     installMockFetch()
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(screen.getByRole('link', { name: 'Paramètres' }))
-    await screen.findByRole('heading', { name: 'Paramètres du compte' })
+    await screen.findByRole('heading', { name: 'Réglages du site' })
     await expectNoSeriousA11yViolations(document.body)
   })
 })

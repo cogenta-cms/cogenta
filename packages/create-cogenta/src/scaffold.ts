@@ -233,10 +233,17 @@ export async function scaffoldSite(
   // real friction before `@cogenta/core`'s `loadConfig` learned to read a
   // `.env` file here automatically (Node's own `--env-file` support, no new
   // dependency). Never committed — `.gitignore` below covers it.
+  //
+  // `mode: 0o600` (fiche 23 audit follow-up, `docs/hebergement-mutualise.md`):
+  // on shared hosting every tenant's process runs as a different,
+  // unprivileged user, and the default mode a plain `writeFile` leaves a new
+  // file at is readable by all of them — exactly the file that holds the key
+  // signing every admin session. POSIX-only in effect (Windows ACLs ignore
+  // it), which is the platform this actually protects against.
   await writeFile(
     join(answers.targetDir, '.env'),
     `COGENTA_AUTH_SIGNING_KEY=${randomBytes(32).toString('base64')}\n`,
-    'utf8',
+    { encoding: 'utf8', mode: 0o600 },
   )
   await writeFile(
     join(answers.targetDir, '.gitignore'),

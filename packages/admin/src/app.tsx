@@ -35,6 +35,7 @@ import { TaxonomiesRoute } from './routes/taxonomies.js'
 import { TrashRoute } from './routes/trash.js'
 import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
+import { SiteSettingsProvider } from './settings/site-settings-context.js'
 import { AppShell } from './shell/app-shell.js'
 import { ThemeProvider } from './theme/theme-context.js'
 
@@ -67,7 +68,9 @@ export function App(): JSX.Element {
               element={
                 <RequireAuth>
                   <SchemaProvider>
-                    <AppShell />
+                    <SiteSettingsProvider>
+                      <AppShell />
+                    </SiteSettingsProvider>
                   </SchemaProvider>
                 </RequireAuth>
               }

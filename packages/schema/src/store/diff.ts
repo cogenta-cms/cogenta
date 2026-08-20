@@ -1,3 +1,4 @@
+import { CogentaError } from '@cogenta/core'
 import type { BlockZones, ContentBlock, ContentValues } from './types.js'
 
 /**
@@ -16,6 +17,14 @@ export interface FieldChange {
   readonly change: ChangeKind
   readonly before: unknown
   readonly after: unknown
+  /**
+   * A word-level diff of `before`/`after`, populated only by `enrichWordDiffs`
+   * — never by `diffValues` itself, so the plain structural diff this file
+   * has always produced stays exactly as it was for every existing caller.
+   * Present only for a `changed` field whose two values are both plain text
+   * (a `text` field) or both extract to plain text (a `richText` document).
+   */
+  readonly words?: readonly WordChange[]
 }
 
 export interface BlockChange {
@@ -176,4 +185,164 @@ export function diffContent(
   const fields = diffValues(before.values, after.values)
   const blocks = diffBlockZones(before.blocks, after.blocks)
   return { fields, blocks, changed: fields.length > 0 || blocks.length > 0 }
+}
+
+/**
+ * Word-level diff, task 06-3 ("un mot corrigé apparaît comme un mot corrigé,
+ * pas « changé »"). A "word" is a maximal run of non-whitespace, or a maximal
+ * run of whitespace — so the reconstruction of either side is exactly
+ * `words.map(w => w.text).join('')`, whitespace included. `Array.from`-free by
+ * construction: the `u` flag makes `\S`/`\s` match by code point, so an
+ * astral character (outside the BMP) is one token, never a lone surrogate.
+ */
+export type WordOp = 'equal' | 'added' | 'removed'
+
+export interface WordChange {
+  readonly op: WordOp
+  readonly text: string
+}
+
+function tokenizeWords(text: string): readonly string[] {
+  return text.match(/\s+|\S+/gu) ?? []
+}
+
+/** Bounds are the loop invariant's job here, not the type checker's — this is
+ * the one place that turns "the invariant holds" into a value the compiler
+ * accepts, without a non-null assertion (R9's neighbour rule: no unchecked
+ * escape hatch in library code). */
+function wordAt(words: readonly string[], index: number): string {
+  const word = words[index]
+  if (word === undefined) {
+    throw new CogentaError({
+      code: 'INTERNAL',
+      message: 'diffWords walked past the end of a tokenised side.',
+      hint: 'This is a bug in diffWords — its own loop bounds should make this unreachable.',
+    })
+  }
+  return word
+}
+
+function lcsLength(table: readonly Int32Array[], i: number, j: number): number {
+  return table[i]?.[j] ?? 0
+}
+
+/**
+ * Longest common subsequence of words, walked into a left-to-right script of
+ * equal/removed/added runs. Plain dynamic programming, ~30 lines — R9: no
+ * diff library for this.
+ */
+export function diffWords(before: string, after: string): readonly WordChange[] {
+  const a = tokenizeWords(before)
+  const b = tokenizeWords(after)
+  const n = a.length
+  const m = b.length
+
+  // lcs[i][j] = length of the LCS of a[i:] and b[j:]. One row per position in
+  // `a`, so each row is a flat, single-indexed `Int32Array` — no 2D access
+  // ever needs its own non-null assertion.
+  const lcs: Int32Array[] = Array.from({ length: n + 1 }, () => new Int32Array(m + 1))
+  for (let i = n - 1; i >= 0; i--) {
+    const row = lcs[i] as Int32Array
+    for (let j = m - 1; j >= 0; j--) {
+      row[j] =
+        a[i] === b[j]
+          ? lcsLength(lcs, i + 1, j + 1) + 1
+          : Math.max(lcsLength(lcs, i + 1, j), lcsLength(lcs, i, j + 1))
+    }
+  }
+
+  const ops: WordChange[] = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      ops.push({ op: 'equal', text: wordAt(a, i) })
+      i++
+      j++
+    } else if (lcsLength(lcs, i + 1, j) >= lcsLength(lcs, i, j + 1)) {
+      ops.push({ op: 'removed', text: wordAt(a, i) })
+      i++
+    } else {
+      ops.push({ op: 'added', text: wordAt(b, j) })
+      j++
+    }
+  }
+  while (i < n) {
+    ops.push({ op: 'removed', text: wordAt(a, i) })
+    i++
+  }
+  while (j < m) {
+    ops.push({ op: 'added', text: wordAt(b, j) })
+    j++
+  }
+
+  // Merge adjacent same-op runs, so "un mot" -> "un gros mot" reports one
+  // insertion of "gros " rather than a token at a time.
+  const merged: WordChange[] = []
+  for (const op of ops) {
+    const last = merged.at(-1)
+    if (last !== undefined && last.op === op.op) {
+      merged[merged.length - 1] = { op: last.op, text: last.text + op.text }
+    } else {
+      merged.push(op)
+    }
+  }
+  return merged
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Plain text out of a `text` field (a string, returned as-is) or a `richText`
+ * document (contract A: an array of `block`/`media` nodes — `@cogenta/blocks`'s
+ * `richTextDocumentSchema`). Returns `null` for anything else, including a
+ * shape that merely looks like a document — the piège this file's own
+ * comment warns about: "le portable-text est un arbre; comparer
+ * `JSON.stringify` produit du bruit", so an unrecognised node refuses rather
+ * than guesses.
+ */
+export function extractPlainText(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (!Array.isArray(value)) return null
+
+  const parts: string[] = []
+  for (const node of value) {
+    if (!isRecord(node)) return null
+    if (node._type === 'media') continue
+    if (node._type !== 'block' || !Array.isArray(node.children)) return null
+
+    for (const child of node.children) {
+      if (!isRecord(child) || typeof child.text !== 'string') return null
+      parts.push(child.text)
+    }
+    parts.push('\n')
+  }
+  return parts.join('')
+}
+
+/**
+ * Attaches a word-level diff to every `changed` field whose two sides both
+ * extract to plain text — never to `added`/`removed` fields (there is only
+ * one side to show) and never in place: `diffValues`/`diffContent` stay
+ * exactly as every existing caller already relies on them being.
+ */
+function enrichFieldChanges(fields: readonly FieldChange[]): readonly FieldChange[] {
+  return fields.map((change) => {
+    if (change.change !== 'changed') return change
+    const before = extractPlainText(change.before)
+    const after = extractPlainText(change.after)
+    if (before === null || after === null || before === after) return change
+    return { ...change, words: diffWords(before, after) }
+  })
+}
+
+/** Same enrichment, walked into every block's own field changes as well. */
+export function enrichWordDiffs(diff: ContentDiff): ContentDiff {
+  return {
+    ...diff,
+    fields: enrichFieldChanges(diff.fields),
+    blocks: diff.blocks.map((block) => ({ ...block, fields: enrichFieldChanges(block.fields) })),
+  }
 }

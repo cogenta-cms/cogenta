@@ -7,6 +7,7 @@ import {
   type CreateInput,
   type DuplicateInput,
   type EntryState,
+  enrichWordDiffs,
   type RouteMatch,
   resolveUrl,
   type UpdateInput,
@@ -550,7 +551,11 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       stateFor(target, context, 'working')
       assertEntryDraftAccess(target, context, id)
 
-      return store(target).diff(id, from, to)
+      // Task 06-3: a corrected word must show as a corrected word, not
+      // "changed" — computed here rather than inside `ContentStore.diff`, so
+      // every existing caller of the store's own diff (agents included) keeps
+      // getting the plain structural diff it has always returned.
+      return enrichWordDiffs(await store(target).diff(id, from, to))
     },
 
     restore: async (context, name, id, version, readOptions) => {

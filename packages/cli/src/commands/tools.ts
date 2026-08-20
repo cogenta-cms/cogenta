@@ -212,6 +212,23 @@ export function createToolRunner(options: ToolRunnerOptions): ToolRunner {
           ...(runOptions.email === undefined ? {} : { email: runOptions.email }),
         },
       })
+      // Nudge the degraded (database) queue right away instead of leaving this
+      // run to wait for the next scheduled drain — on `cogenta serve` that is
+      // `SCHEDULED_PUBLISH_TICK_MS` (60s) away, which reads as "stuck forever"
+      // for a tool the admin screen itself labels as taking mere seconds. This
+      // is fire-and-forget on purpose: the response to the caller must still
+      // return the run id immediately, never wait on the tool body itself
+      // (that would turn a long tool into the very "requête HTTP qui expire"
+      // this whole queue exists to avoid). The periodic tick remains the real
+      // drain — for jobs left behind by a crash, and for every backend that
+      // isn't the single in-process caller of `run()`.
+      options.queue.tick().catch((error: unknown) => {
+        options.logger.error('immediate tool queue tick failed', {
+          tool: toolId,
+          runId: id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
       return id
     },
     getRun: (id) => {

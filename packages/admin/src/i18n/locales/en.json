@@ -173,14 +173,33 @@
     "marketplace": "Marketplace",
     "health": "Health",
     "tools": "Tools",
-    "scheduled": "Scheduled tasks"
+    "scheduled": "Scheduled tasks",
+    "groups": {
+      "content": "Content",
+      "appearance": "Appearance",
+      "commerce": "Commerce",
+      "ai": "AI",
+      "accounts": "Accounts",
+      "ops": "Operations",
+      "settings": "Settings"
+    }
+  },
+  "breadcrumb": {
+    "newEntry": "New",
+    "editEntry": "Edit"
   },
   "shell": {
     "skipLink": "Skip to main content",
     "brand": "Cogenta",
     "logout": "Sign out",
     "nav": "Main navigation",
-    "footer": "Cogenta admin"
+    "footer": "Cogenta admin",
+    "breadcrumb": "Breadcrumb",
+    "openNav": "Open navigation",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "badgeCount": "{{count}} item",
+    "badgeCount_other": "{{count}} items"
   },
   "theme": {
     "toggleLabel": "Colour theme: {{mode}}. Activate to switch.",
@@ -193,9 +212,16 @@
     "placeholder": "Search content, media, users…",
     "resultsLabel": "Search results",
     "groups": {
+      "actions": "Actions",
       "content": "Content",
       "media": "Media",
       "users": "Users"
+    },
+    "actions": {
+      "goTo": "Go to: {{target}}",
+      "create": "Create: {{target}}",
+      "toggleTheme": "Toggle the theme",
+      "logout": "Sign out"
     }
   },
   "login": {

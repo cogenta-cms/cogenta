@@ -47,6 +47,7 @@ import {
   createRestRouter,
   createSearchRouter,
   createSeoRouter,
+  createShellStatusRouter,
   createSitePlanRouter,
   createSiteSettingsRouter,
   createSuspiciousActivitySource,
@@ -76,6 +77,7 @@ import {
   roleState,
   type SearchRouter,
   type SeoRouter,
+  type ShellStatusRouter,
   type SitePlanRouter,
   type SitePlanRouterOptions,
   type SiteSettingsRouter,
@@ -451,6 +453,13 @@ interface Site {
    * a live value without an in-process HTTP round trip to itself.
    */
   readonly siteSettingsStore: SiteSettingsStore
+  /**
+   * `GET /api/shell-status` — fiche 35 task 3: one aggregated read for
+   * every badge and feature flag the admin's chrome draws (trash count,
+   * pending orders, whether the shop has ever sold anything, marketplace
+   * updates), so a navigation never fires one request per badge.
+   */
+  readonly shellStatusRouter: ShellStatusRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
@@ -1190,6 +1199,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         lastPurged: lastTrashPurgeCount,
       }),
       config: options.configStatus,
+    }),
+    shellStatusRouter: createShellStatusRouter({
+      content: service,
+      trashableCollections: collections
+        .filter((collection) => collection.trash !== false)
+        .map((collection) => collection.name),
+      commerceOrders,
+      commerceCatalog,
+      marketplaceCatalog,
+      marketplaceInstaller,
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -2419,6 +2438,15 @@ export function createRequestListener(
           response,
           logger,
         )
+        return
+      }
+
+      // The admin chrome's one aggregated read (fiche 35 task 3) — badges
+      // and feature flags in a single round trip, never one request per
+      // nav entry.
+      if (url.pathname === '/api/shell-status') {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.shellStatusRouter.handle(request, context))
         return
       }
 

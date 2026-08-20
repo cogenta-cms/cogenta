@@ -130,6 +130,15 @@ export { createSearchRouter } from './search-router.js'
 export type { SeoDiagnostics, SeoRouter, SeoRouterOptions } from './seo-router.js'
 export { createSeoRouter } from './seo-router.js'
 export type {
+  CommerceCatalogLike,
+  CommerceOrdersLike,
+  ContentListProviderLike,
+  ShellStatus,
+  ShellStatusRouter,
+  ShellStatusRouterOptions,
+} from './shell-status-router.js'
+export { createShellStatusRouter } from './shell-status-router.js'
+export type {
   AppliedPlanReport,
   PlanDecisionsLike,
   PlanItemLike,

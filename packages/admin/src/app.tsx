@@ -41,6 +41,7 @@ import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { SiteSettingsProvider } from './settings/site-settings-context.js'
 import { AppShell } from './shell/app-shell.js'
+import { ChromeStatusProvider } from './shell/shell-status-context.js'
 import { ThemeProvider } from './theme/theme-context.js'
 
 /**
@@ -73,7 +74,9 @@ export function App(): JSX.Element {
                 <RequireAuth>
                   <SchemaProvider>
                     <SiteSettingsProvider>
-                      <AppShell />
+                      <ChromeStatusProvider>
+                        <AppShell />
+                      </ChromeStatusProvider>
                     </SiteSettingsProvider>
                   </SchemaProvider>
                 </RequireAuth>

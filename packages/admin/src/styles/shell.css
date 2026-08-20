@@ -89,9 +89,228 @@
   border-right: 2px solid var(--color-text);
   background: var(--card);
   padding: var(--space-6) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.app-shell__sidebar ul {
+/* Groups (fiche 35 task 1) — a native `<details>` per group, so opening one
+   needs no script at all and a closed group's links stay in the DOM (a
+   screen reader that already knows a route exists can still be told about
+   it; nothing here removes an element from the accessibility tree the way
+   `display: none` would for the summary's own name). */
+.app-shell__nav-group {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-2);
+}
+
+.app-shell__nav-group:last-of-type {
+  border-bottom: none;
+}
+
+.app-shell__nav-group-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.app-shell__nav-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A drawn chevron rather than the UA marker, so it matches the rest of this
+   admin's square, hand-drawn icon set instead of the browser's own bullet. */
+.app-shell__nav-group-summary::before {
+  content: "";
+  width: 0.5em;
+  height: 0.5em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+}
+
+.app-shell__nav-group[open] > .app-shell__nav-group-summary::before {
+  transform: rotate(45deg);
+}
+
+/* The badge a trash/orders/marketplace count renders on its own entry
+   (fiche 35 task 3) — never on more than the one item it describes. */
+.app-shell__badge {
+  margin-left: auto;
+  min-width: 1.4em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.app-shell__sidebar a {
+  position: relative;
+}
+
+/* The collapse toggle (fiche 35 task 2) — icons-only mode, remembered in
+   `localStorage`. */
+.app-shell__collapse-toggle {
+  margin-top: auto;
+  align-self: flex-end;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  width: 1.75rem;
+  height: 1.75rem;
+  cursor: pointer;
+}
+
+.app-shell__collapse-toggle:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Icons-only sidebar: the label stays in the DOM (an accessible name, and
+   the drawer at a narrow viewport reuses the very same markup with labels
+   shown), only visually hidden here — a `title` attribute on the link
+   itself is what a mouse hover reads instead. */
+.app-shell--sidebar-collapsed .app-shell__sidebar {
+  width: 3.5rem;
+}
+
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-summary span,
+.app-shell--sidebar-collapsed .app-shell__sidebar a span,
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__badge {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-shell--sidebar-collapsed .app-shell__nav-group-summary::before {
+  display: none;
+}
+
+.app-shell--sidebar-collapsed .app-shell__nav-group > ul {
+  display: none;
+}
+
+/* The hamburger that opens the mobile drawer — a topbar button, hidden
+   above the breakpoint where the ordinary sidebar already does the job. */
+.app-shell__drawer-trigger {
+  display: none;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  width: 2rem;
+  height: 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.app-shell__drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 45%);
+  z-index: 90;
+}
+
+.app-shell__drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(80vw, 20rem);
+  overflow-y: auto;
+  background: var(--card);
+  border-right: 2px solid var(--color-text);
+  padding: var(--space-6) var(--space-3);
+  z-index: 91;
+}
+
+.app-shell__breadcrumb ol {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.app-shell__breadcrumb li:not(:last-child)::after {
+  content: "›";
+  margin-left: var(--space-1);
+}
+
+.app-shell__breadcrumb a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell__breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.app-shell__breadcrumb [aria-current="page"] {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "content"
+      "footer";
+  }
+
+  .app-shell__sidebar {
+    display: none;
+  }
+
+  .app-shell__drawer-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-shell__breadcrumb {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .app-shell__drawer,
+  .app-shell__drawer-backdrop {
+    display: none;
+  }
+}
+
+.app-shell__sidebar ul,
+.app-shell__drawer ul {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -100,7 +319,8 @@
   gap: 2px;
 }
 
-.app-shell__sidebar a {
+.app-shell__sidebar a,
+.app-shell__drawer a {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -118,12 +338,14 @@
     padding-left 150ms ease;
 }
 
-.app-shell__sidebar a:hover {
+.app-shell__sidebar a:hover,
+.app-shell__drawer a:hover {
   background: var(--color-surface);
   padding-left: calc(var(--space-3) + 3px);
 }
 
-.app-shell__sidebar a.active {
+.app-shell__sidebar a.active,
+.app-shell__drawer a.active {
   background: var(--color-surface);
   border-left-color: var(--color-primary);
   color: var(--color-primary);

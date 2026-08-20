@@ -55,7 +55,7 @@ describe('resource-limit policy — time and memory violations disable the plugi
     // run immediately afterwards still succeeds — not just "the promise
     // rejected", but no lingering host-level corruption from the crash.
     const followUp = await runIsolated('1 + 1')
-    expect(followUp).toEqual({ ok: true, value: 2 })
+    expect(followUp).toMatchObject({ ok: true, value: 2 })
   }, 15_000)
 
   it('a timeout violation disables the plugin, fires the alert callback, and blocks every future run', async () => {
@@ -115,7 +115,7 @@ describe('resource-limit policy — time and memory violations disable the plugi
     expect(await disableStore.isDisabled('@auteur/resource-policy-test')).toBeNull()
 
     const result = await runPlugin(manifest(), '1 + 1', [], { disableStore })
-    expect(result).toEqual({ ok: true, value: 2 })
+    expect(result).toMatchObject({ ok: true, value: 2 })
   })
 
   afterEach(async () => {

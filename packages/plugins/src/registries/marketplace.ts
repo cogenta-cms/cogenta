@@ -1,8 +1,10 @@
 import { CogentaError, type DatabaseHandle, identifier, sql } from '@cogenta/core'
 import { loadMarketplacePlugin } from '../loader.js'
 import { describeCapability, type PluginCapabilityDescription } from '../permissions/describe.js'
+import type { PluginDisableStore } from '../permissions/disabled.js'
 import type { PluginGrantStore } from '../permissions/grants.js'
 import { detectCapabilitiesNeedingApproval } from '../permissions/resolve.js'
+import type { PluginUsageStore } from '../permissions/usage.js'
 import { MARKETPLACE_TABLES } from './marketplace-tables.js'
 
 /**
@@ -23,6 +25,8 @@ export type MarketplaceItemKind = 'plugin' | 'theme' | 'skin' | 'skill'
 export interface MarketplaceChangelogEntry {
   readonly version: string
   readonly notes: string
+  /** Fiche 29 task 5 — "date de la dernière mise à jour", read off the newest changelog entry when present. */
+  readonly releasedAt?: string
 }
 
 export interface MarketplaceCatalogEntry {
@@ -37,6 +41,8 @@ export interface MarketplaceCatalogEntry {
    * directory `loadMarketplacePlugin` can resolve. Never interpreted here.
    */
   readonly reference: string
+  /** Fiche 29 task 5 — "Auteur, source" shown on the compatibility/trust panel before install. Caller-supplied, deployer-authored catalog metadata; never derived from the manifest (which has no author field). */
+  readonly author?: string
   readonly screenshots?: readonly string[]
   readonly changelog?: readonly MarketplaceChangelogEntry[]
 }
@@ -90,6 +96,8 @@ export interface MarketplaceInstallRecord {
   readonly installedBy: string | null
   readonly installedAt: string
   readonly updatedAt: string
+  /** Fiche 29 task 1 — the manual activate/deactivate toggle, independent of `@cogenta/plugins`' automatic `PluginDisableStore` (a timeout/memory/crash violation, task 6 of L7). Both can make a plugin non-runnable; this is only the human-chosen half. */
+  readonly enabled: boolean
 }
 
 /** What viewing an item's "fiche détaillée" (task 3) needs, before installing. */
@@ -100,6 +108,20 @@ export interface MarketplacePreview {
   readonly capabilities: readonly (PluginCapabilityDescription & { readonly capability: string })[]
   /** Set when resolution/verification failed — the real `CogentaError` code, e.g. `PLUGIN_SIGNATURE_INVALID`. */
   readonly error?: { readonly code: string; readonly message: string }
+  /**
+   * Fiche 29 task 5 — "Version de Cogenta requise, vérifiée avant
+   * l'installation, avec un refus clair". `null` only when resolution
+   * itself failed (`error` is set) — there is no manifest to check
+   * compatibility against. Computed by `loadMarketplacePlugin` from the
+   * `engineVersion` this installer was constructed with; `install`/`update`
+   * refuse honestly (`MARKETPLACE_ENGINE_INCOMPATIBLE`) rather than let an
+   * incompatible plugin fail at runtime instead.
+   */
+  readonly engineCompatible: boolean | null
+  /** The resolvable manifest's own version — `null` only when resolution failed. Compared against an installed item's `pluginVersion` to answer "is an update available" (task 2). */
+  readonly latestVersion: string | null
+  /** Fiche 29 task 5 — "source". Always `'registry'` when `supported`: `install`/`update` always call `loadMarketplacePlugin`, which classifies every marketplace item as registry-trust regardless of whether its `reference` happens to be a local path (see that function's own doc comment). */
+  readonly source: 'registry' | null
 }
 
 export interface MarketplaceUpdateResult {
@@ -144,13 +166,37 @@ export interface MarketplaceInstaller {
   ): Promise<MarketplaceUpdateResult>
   list(): Promise<readonly MarketplaceInstallRecord[]>
   get(itemId: string): Promise<MarketplaceInstallRecord | null>
-  uninstall(itemId: string): Promise<void>
+  /**
+   * Fiche 29 task 4 — "désinstallation propre". `removeData: true` also
+   * revokes every active capability grant for the plugin
+   * (`PluginGrantStore.revokeAll`) and, when a disable/usage store was
+   * supplied to this installer, clears its auto-disable record and
+   * accumulated resource usage — irreversible, matching the router's own
+   * "confirmation forte" for this path. Without it (the default), only the
+   * install row is removed: grants, the disable record and usage history
+   * all survive, which is what makes a later reinstall able to pick up
+   * exactly where the plugin left off.
+   */
+  uninstall(itemId: string, options?: { readonly removeData?: boolean }): Promise<void>
+  /** Fiche 29 task 1 — the manual half of "activer/désactiver" (`MarketplaceInstallRecord.enabled`). Activating an item still auto-disabled (`PluginDisableStore`) does not by itself make it runnable again — that decision is `PluginDisableStore.enable`'s, deliberately kept a separate, explicit action (the router composes both). */
+  activate(itemId: string): Promise<MarketplaceInstallRecord>
+  deactivate(itemId: string): Promise<MarketplaceInstallRecord>
 }
 
 export interface MarketplaceInstallerOptions {
   readonly trustedPublicKeys?: readonly string[]
   readonly grantStore: PluginGrantStore
   readonly now?: () => number
+  /**
+   * Cogenta's own version, checked against a resolved manifest's `engine`
+   * range (fiche 29 task 5). Passed straight through to
+   * `loadMarketplacePlugin` — see `LoadPluginOptions.engineVersion` for why
+   * the default is an honest placeholder rather than a fabricated pass.
+   */
+  readonly engineVersion?: string
+  /** Fiche 29 task 4 — only consulted by `uninstall(id, { removeData: true })`; a plain uninstall never touches either store. */
+  readonly disableStore?: PluginDisableStore
+  readonly usageStore?: PluginUsageStore
 }
 
 interface InstallRow {
@@ -164,6 +210,7 @@ interface InstallRow {
   installed_by: string | null
   installed_at: string
   updated_at: string
+  enabled: string | null
 }
 
 function toRecord(row: InstallRow): MarketplaceInstallRecord {
@@ -178,7 +225,24 @@ function toRecord(row: InstallRow): MarketplaceInstallRecord {
     installedBy: row.installed_by,
     installedAt: row.installed_at,
     updatedAt: row.updated_at,
+    // `enabled` is nullable at the SQL level only because a row created
+    // before fiche 29's `alter table ... add column` ran has no explicit
+    // value in older engines that ignore `default` on backfill — treated as
+    // "still active", matching every pre-existing install's real state.
+    enabled: row.enabled !== 'false',
   }
+}
+
+function engineIncompatible(
+  entry: MarketplaceCatalogEntry,
+  manifest: { engine: string },
+): CogentaError {
+  return new CogentaError({
+    code: 'MARKETPLACE_ENGINE_INCOMPATIBLE',
+    message: `"${entry.displayName}" requires Cogenta "${manifest.engine}", which this installation does not satisfy.`,
+    hint: 'Upgrade Cogenta, or choose a version of this item compatible with the current installation.',
+    details: { itemId: entry.id, engine: manifest.engine },
+  })
 }
 
 function unsupportedKind(entry: MarketplaceCatalogEntry): CogentaError {
@@ -204,6 +268,7 @@ export function createMarketplaceInstaller(
   const now = options.now ?? Date.now
   const trustedPublicKeys = options.trustedPublicKeys ?? []
   const grantStore = options.grantStore
+  const engineVersion = options.engineVersion
 
   async function getRecord(itemId: string): Promise<MarketplaceInstallRecord | null> {
     const result = await db.query<InstallRow>(sql`
@@ -212,20 +277,54 @@ export function createMarketplaceInstaller(
     return row === undefined ? null : toRecord(row)
   }
 
+  async function setEnabled(itemId: string, enabled: boolean): Promise<MarketplaceInstallRecord> {
+    await db.query(sql`
+      update ${installs} set enabled = ${String(enabled)}, updated_at = ${new Date(now()).toISOString()}
+      where item_id = ${itemId}`)
+    const record = await getRecord(itemId)
+    if (record === null) {
+      throw new CogentaError({
+        code: 'MARKETPLACE_NOT_INSTALLED',
+        message: `"${itemId}" is not installed.`,
+        hint: 'Install it first.',
+        details: { itemId },
+      })
+    }
+    return record
+  }
+
   async function resolveOrError(entry: MarketplaceCatalogEntry): Promise<
     | {
         readonly ok: true
-        readonly manifest: { name: string; version: string; capabilities: readonly string[] }
+        readonly manifest: {
+          name: string
+          version: string
+          engine: string
+          capabilities: readonly string[]
+        }
         readonly signatureVerified: boolean
+        /**
+         * `null` when this installer was never given a real
+         * `engineVersion` — `loadMarketplacePlugin`'s own placeholder
+         * default (`0.0.0`) would make `satisfiesRange` return `false`
+         * against almost every real `engine` range, which is a fabricated
+         * "incompatible" verdict, not an honest one. Only ever a real
+         * `true`/`false` once a caller configures a real Cogenta version.
+         */
+        readonly engineCompatible: boolean | null
       }
     | { readonly ok: false; readonly error: { code: string; message: string } }
   > {
     try {
-      const resolved = await loadMarketplacePlugin(entry.reference, { trustedPublicKeys })
+      const resolved = await loadMarketplacePlugin(entry.reference, {
+        trustedPublicKeys,
+        ...(engineVersion === undefined ? {} : { engineVersion }),
+      })
       return {
         ok: true,
         manifest: resolved.manifest,
         signatureVerified: resolved.signatureVerified,
+        engineCompatible: engineVersion === undefined ? null : resolved.engineCompatible,
       }
     } catch (error) {
       if (error instanceof CogentaError) {
@@ -238,7 +337,15 @@ export function createMarketplaceInstaller(
   return {
     async preview(entry) {
       if (entry.kind !== 'plugin') {
-        return { entry, supported: false, signatureVerified: false, capabilities: [] }
+        return {
+          entry,
+          supported: false,
+          signatureVerified: false,
+          capabilities: [],
+          engineCompatible: null,
+          latestVersion: null,
+          source: null,
+        }
       }
       const resolution = await resolveOrError(entry)
       if (!resolution.ok) {
@@ -248,6 +355,9 @@ export function createMarketplaceInstaller(
           signatureVerified: false,
           capabilities: [],
           error: resolution.error,
+          engineCompatible: null,
+          latestVersion: null,
+          source: null,
         }
       }
       return {
@@ -255,6 +365,9 @@ export function createMarketplaceInstaller(
         supported: true,
         signatureVerified: resolution.signatureVerified,
         capabilities: describeAll(resolution.manifest.capabilities),
+        engineCompatible: resolution.engineCompatible,
+        latestVersion: resolution.manifest.version,
+        source: 'registry',
       }
     },
 
@@ -263,23 +376,37 @@ export function createMarketplaceInstaller(
 
       // Never a soft catch here: an invalid/missing signature throws and
       // nothing below runs — this is the one line the whole task hinges on.
-      const resolved = await loadMarketplacePlugin(entry.reference, { trustedPublicKeys })
+      const resolved = await loadMarketplacePlugin(entry.reference, {
+        trustedPublicKeys,
+        ...(engineVersion === undefined ? {} : { engineVersion }),
+      })
+
+      // Fiche 29 task 5 — refused BEFORE anything is persisted, exactly
+      // like the signature check above: an incompatible version never gets
+      // a chance to fail later at runtime instead. Only enforced once this
+      // installer was configured with a real `engineVersion` — see
+      // `resolveOrError`'s doc comment for why the default placeholder
+      // must never manufacture a refusal.
+      if (engineVersion !== undefined && !resolved.engineCompatible) {
+        throw engineIncompatible(entry, resolved.manifest)
+      }
 
       const timestamp = new Date(now()).toISOString()
       // Delete-then-insert rather than a dialect-specific upsert (`on
       // conflict` on Postgres/SQLite, `on duplicate key` on MySQL) — the
       // same portable idiom `PluginGrantStore.grant` already uses
       // (`../permissions/grants.js`) for the identical "re-installing is
-      // idempotent, not a duplicate row" requirement.
+      // idempotent, not a duplicate row" requirement. A (re)install always
+      // resets `enabled` to `true` — a fresh install is never born disabled.
       await db.query(sql`delete from ${installs} where item_id = ${entry.id}`)
       await db.query(sql`
         insert into ${installs}
           (item_id, kind, display_name, reference, plugin_name, plugin_version,
-           signature_verified, installed_by, installed_at, updated_at)
+           signature_verified, installed_by, installed_at, updated_at, enabled)
         values
           (${entry.id}, ${entry.kind}, ${entry.displayName}, ${entry.reference},
            ${resolved.manifest.name}, ${resolved.manifest.version},
-           ${String(resolved.signatureVerified)}, ${actorId}, ${timestamp}, ${timestamp})`)
+           ${String(resolved.signatureVerified)}, ${actorId}, ${timestamp}, ${timestamp}, ${'true'})`)
 
       return {
         itemId: entry.id,
@@ -292,6 +419,7 @@ export function createMarketplaceInstaller(
         installedBy: actorId,
         installedAt: timestamp,
         updatedAt: timestamp,
+        enabled: true,
       }
     },
 
@@ -311,7 +439,14 @@ export function createMarketplaceInstaller(
       // Signature is verified before anything else here too — an update
       // never trusts the previously-installed state as a substitute for
       // re-checking the new reference.
-      const resolved = await loadMarketplacePlugin(entry.reference, { trustedPublicKeys })
+      const resolved = await loadMarketplacePlugin(entry.reference, {
+        trustedPublicKeys,
+        ...(engineVersion === undefined ? {} : { engineVersion }),
+      })
+
+      if (engineVersion !== undefined && !resolved.engineCompatible) {
+        throw engineIncompatible(entry, resolved.manifest)
+      }
 
       const previousGrants =
         existing.pluginName === null ? [] : await grantStore.listGrants(existing.pluginName)
@@ -364,8 +499,24 @@ export function createMarketplaceInstaller(
       return getRecord(itemId)
     },
 
-    async uninstall(itemId) {
+    async uninstall(itemId, uninstallOptions = {}) {
+      if (uninstallOptions.removeData === true) {
+        const record = await getRecord(itemId)
+        if (record?.pluginName !== null && record?.pluginName !== undefined) {
+          await grantStore.revokeAll(record.pluginName)
+          await options.disableStore?.enable(record.pluginName)
+          await options.usageStore?.clearUsage(record.pluginName)
+        }
+      }
       await db.query(sql`delete from ${installs} where item_id = ${itemId}`)
+    },
+
+    async activate(itemId) {
+      return setEnabled(itemId, true)
+    },
+
+    async deactivate(itemId) {
+      return setEnabled(itemId, false)
     },
   }
 }

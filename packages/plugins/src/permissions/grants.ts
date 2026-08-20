@@ -20,6 +20,14 @@ export interface PluginGrantStore {
   /** Revoking an already-unrevoked-or-nonexistent grant is not an error — it's already in the state being asked for. */
   revoke(pluginName: string, capability: string): Promise<void>
 
+  /**
+   * Revokes every currently-active grant for `pluginName` at once — fiche
+   * 29 task 4's "désinstallation propre", the "tout supprimer" option:
+   * uninstalling with data removal must leave no lingering capability a
+   * reinstalled-but-different plugin could inherit by name collision.
+   */
+  revokeAll(pluginName: string): Promise<void>
+
   /** Every currently-active (non-revoked) grant for a plugin. */
   listGrants(pluginName: string): Promise<readonly PluginGrant[]>
 }
@@ -55,6 +63,12 @@ export function createPluginGrantStore(
       await db.query(sql`
         update ${grants} set revoked_at = ${new Date(now()).toISOString()}
         where plugin_name = ${pluginName} and capability = ${capability} and revoked_at is null`)
+    },
+
+    async revokeAll(pluginName) {
+      await db.query(sql`
+        update ${grants} set revoked_at = ${new Date(now()).toISOString()}
+        where plugin_name = ${pluginName} and revoked_at is null`)
     },
 
     async listGrants(pluginName) {

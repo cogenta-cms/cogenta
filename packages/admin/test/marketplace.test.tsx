@@ -43,10 +43,17 @@ async function goToMarketplace(): Promise<void> {
   await screen.findByRole('heading', { name: 'Marketplace' })
 }
 
+/** Fiche 29 task 1 split the screen into "Installées" (default) and "Découvrir" tabs — the catalog these existing L17 tests exercise lives under the latter. */
+async function goToDiscoverTab(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Découvrir' }))
+  await screen.findByLabelText('Rechercher')
+}
+
 describe('the marketplace catalog', () => {
   it('lists every item with its type, category and install status', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
 
     const rows = within(await screen.findByRole('table'))
     expect(rows.getByText('SEO Helper')).toBeDefined()
@@ -58,6 +65,7 @@ describe('the marketplace catalog', () => {
   it('filters by free-text search', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('SEO Helper')
 
     fireEvent.change(screen.getByLabelText('Rechercher'), { target: { value: 'forged' } })
@@ -72,6 +80,7 @@ describe('the marketplace catalog', () => {
   it('filters by type', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('SEO Helper')
 
     fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'theme' } })
@@ -99,6 +108,7 @@ describe('the fiche détaillée', () => {
   it('shows description, changelog and plain-language capabilities', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('SEO Helper')
 
     fireEvent.click(screen.getByRole('button', { name: 'SEO Helper' }))
@@ -115,6 +125,7 @@ describe('installing an item', () => {
   it('installs on approval and shows that the signature was verified', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('SEO Helper')
 
     fireEvent.click(screen.getByRole('button', { name: 'SEO Helper' }))
@@ -132,6 +143,7 @@ describe('installing an item', () => {
   it('never shows a signature-refused item as installable, and says so clearly', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('Forged Plugin')
 
     fireEvent.click(screen.getByRole('button', { name: 'Forged Plugin' }))
@@ -151,6 +163,7 @@ describe('installing an item', () => {
   it('shows the refusal plainly when installing itself is what fails, never a false success', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('Flaky Signature Plugin')
 
     fireEvent.click(screen.getByRole('button', { name: 'Flaky Signature Plugin' }))
@@ -169,6 +182,7 @@ describe('updating an installed item that would widen its permissions', () => {
   it('never applies on the first click, and only applies after explicit confirmation', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('Widening Plugin')
 
     fireEvent.click(screen.getByRole('button', { name: 'Widening Plugin' }))
@@ -198,6 +212,7 @@ describe('updating an installed item that would widen its permissions', () => {
   it('lets the admin cancel instead of confirming the widened permissions', async () => {
     render(<App />)
     await goToMarketplace()
+    await goToDiscoverTab()
     await within(await screen.findByRole('table')).findByText('Widening Plugin')
 
     fireEvent.click(screen.getByRole('button', { name: 'Widening Plugin' }))
@@ -211,5 +226,77 @@ describe('updating an installed item that would widen its permissions', () => {
 
     expect(scoped.queryByText('Cette mise à jour demande des permissions élargies')).toBeNull()
     expect(scoped.getByRole('button', { name: 'Vérifier une mise à jour' })).toBeDefined()
+  })
+})
+
+describe('fiche 29 — the installed extensions screen (task 1)', () => {
+  it('is the default tab, and lists the pre-installed item', async () => {
+    render(<App />)
+    await goToMarketplace()
+
+    const rows = within(await screen.findByRole('table'))
+    expect(rows.getByText('Widening Plugin')).toBeDefined()
+    expect(rows.getByText('Active')).toBeDefined()
+  })
+
+  it('deactivating and reactivating toggles the shown status', async () => {
+    render(<App />)
+    await goToMarketplace()
+    const table = await screen.findByRole('table')
+    await within(table).findByText('Widening Plugin')
+
+    fireEvent.click(within(table).getByRole('button', { name: 'Désactiver' }))
+    await within(table).findByText('Désactivée')
+
+    fireEvent.click(within(table).getByRole('button', { name: 'Activer' }))
+    await within(table).findByText('Active')
+  })
+
+  it('flags an available update, and offers "review & update" when it would widen permissions', async () => {
+    render(<App />)
+    await goToMarketplace()
+    const table = await screen.findByRole('table')
+    await within(table).findByText('Widening Plugin')
+
+    expect(await screen.findByText('1 mise à jour est disponible.', { exact: false })).toBeDefined()
+    expect(within(table).getByRole('button', { name: 'Examiner et mettre à jour' })).toBeDefined()
+  })
+
+  it('a grouped "update all" skips the item and reports it needs review', async () => {
+    render(<App />)
+    await goToMarketplace()
+    await screen.findByText('1 mise à jour est disponible.', { exact: false })
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Tout mettre à jour (sauf ce qui demande de nouvelles permissions)',
+      }),
+    )
+
+    expect(await screen.findByText('0 mises à jour, 1 à examiner, 0 en échec.')).toBeDefined()
+  })
+
+  it('uninstalling asks for confirmation and offers to remove data', async () => {
+    render(<App />)
+    await goToMarketplace()
+    const table = await screen.findByRole('table')
+    await within(table).findByText('Widening Plugin')
+
+    fireEvent.click(within(table).getByRole('button', { name: 'Désinstaller' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Désinstaller « Widening Plugin »' })
+    const scoped = within(dialog)
+
+    expect(scoped.getByLabelText(/Supprimer aussi ses données/u)).toBeDefined()
+    fireEvent.click(scoped.getByRole('button', { name: 'Désinstaller' }))
+
+    await screen.findByText("Aucune extension n'est installée pour l'instant.")
+  })
+
+  it('shows the plugin author guide and starter template links', async () => {
+    render(<App />)
+    await goToMarketplace()
+
+    expect(screen.getByRole('link', { name: 'Guide pour les auteurs de plugins' })).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Modèle de démarrage de plugin' })).toBeDefined()
   })
 })

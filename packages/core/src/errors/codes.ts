@@ -388,6 +388,9 @@ export const ERROR_CODES = [
   'MARKETPLACE_NOT_INSTALLED',
   'MARKETPLACE_UPDATE_REQUIRES_APPROVAL',
 
+  // Marketplace — installed extensions management (fiche 29)
+  'MARKETPLACE_ENGINE_INCOMPATIBLE',
+
   // Analytics — self-hosted, cookie-free page-view analytics (`@cogenta/analytics`)
   'ANALYTICS_SALT_UNAVAILABLE',
 

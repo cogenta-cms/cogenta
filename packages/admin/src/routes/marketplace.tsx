@@ -1,18 +1,29 @@
+import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
+  activateMarketplaceItem,
+  applyMarketplaceUpdates,
+  deactivateMarketplaceItem,
   getMarketplaceItem,
+  getMarketplaceUpdates,
   installMarketplaceItem,
+  listInstalledMarketplaceItems,
   listMarketplaceItems,
+  type MarketplaceApplyUpdatesResult,
   type MarketplaceCapabilityItem,
   type MarketplaceCatalogItem,
+  type MarketplaceInstalledItem,
   type MarketplaceItemDetail,
   type MarketplaceItemKind,
+  type MarketplaceUpdatesSummary,
+  uninstallMarketplaceItem,
   updateMarketplaceItem,
 } from '../api/marketplace-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { PluginPermissionReview } from '../plugins/permission-review.js'
+import { relativeTime } from '../trash/date-format.js'
 import {
   Button,
   Field,
@@ -29,6 +40,22 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+
+type MarketplaceTab = 'installed' | 'discover'
+
+function statusLabel(
+  item: MarketplaceInstalledItem,
+  t: TFunction,
+): { readonly label: string; readonly tone: 'success' | 'warning' | 'danger' } {
+  if (item.disabled !== null) {
+    return {
+      label: t(`marketplace.installed.autoDisabledReason.${item.disabled.reason}`),
+      tone: 'danger',
+    }
+  }
+  if (!item.enabled) return { label: t('marketplace.installed.statusDisabled'), tone: 'warning' }
+  return { label: t('marketplace.installed.statusActive'), tone: 'success' }
+}
 
 /**
  * L17 — the marketplace's admin screens, the last missing piece of a
@@ -54,11 +81,109 @@ import {
  *     server data either way, and never a silent apply.
  */
 export function MarketplaceRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
+
+  const [activeTab, setActiveTab] = useState<MarketplaceTab>('installed')
+
+  const [installedItems, setInstalledItems] = useState<readonly MarketplaceInstalledItem[]>([])
+  const [installedLoading, setInstalledLoading] = useState(true)
+  const [installedError, setInstalledError] = useState<string | null>(null)
+  const [updatesSummary, setUpdatesSummary] = useState<MarketplaceUpdatesSummary | null>(null)
+  const [rowOutcome, setRowOutcome] = useState<{
+    readonly itemId: string
+    readonly tone: 'success' | 'danger'
+    readonly message: string
+  } | null>(null)
+  const [confirmUninstall, setConfirmUninstall] = useState<{
+    readonly itemId: string
+    readonly displayName: string
+    readonly removeData: boolean
+  } | null>(null)
+  const [applyingUpdates, setApplyingUpdates] = useState(false)
+  const [applyResult, setApplyResult] = useState<MarketplaceApplyUpdatesResult | null>(null)
+
+  const loadInstalled = useCallback(async () => {
+    if (token === null || !isAdmin) return
+    setInstalledLoading(true)
+    setInstalledError(null)
+    try {
+      const [installed, updates] = await Promise.all([
+        listInstalledMarketplaceItems(token),
+        getMarketplaceUpdates(token),
+      ])
+      setInstalledItems(installed)
+      setUpdatesSummary(updates)
+    } catch (caught) {
+      setInstalledError(
+        caught instanceof ApiError ? caught.message : t('marketplace.installed.loadError'),
+      )
+    } finally {
+      setInstalledLoading(false)
+    }
+  }, [token, isAdmin, t])
+
+  useEffect(() => {
+    if (activeTab === 'installed') void loadInstalled()
+  }, [activeTab, loadInstalled])
+
+  async function toggleEnabled(item: MarketplaceInstalledItem): Promise<void> {
+    if (token === null) return
+    setRowOutcome(null)
+    try {
+      if (item.enabled) await deactivateMarketplaceItem(token, item.itemId)
+      else await activateMarketplaceItem(token, item.itemId)
+      await loadInstalled()
+    } catch (caught) {
+      setRowOutcome({
+        itemId: item.itemId,
+        tone: 'danger',
+        message:
+          caught instanceof ApiError ? caught.message : t('marketplace.installed.toggleError'),
+      })
+    }
+  }
+
+  async function confirmUninstallAction(): Promise<void> {
+    if (token === null || confirmUninstall === null) return
+    try {
+      await uninstallMarketplaceItem(token, confirmUninstall.itemId, {
+        removeData: confirmUninstall.removeData,
+      })
+      setConfirmUninstall(null)
+      await loadInstalled()
+    } catch (caught) {
+      setRowOutcome({
+        itemId: confirmUninstall.itemId,
+        tone: 'danger',
+        message:
+          caught instanceof ApiError ? caught.message : t('marketplace.installed.uninstallError'),
+      })
+      setConfirmUninstall(null)
+    }
+  }
+
+  async function applyAllUpdates(): Promise<void> {
+    if (token === null) return
+    setApplyingUpdates(true)
+    setApplyResult(null)
+    try {
+      setApplyResult(await applyMarketplaceUpdates(token))
+      await loadInstalled()
+    } catch (caught) {
+      setRowOutcome({
+        itemId: '*',
+        tone: 'danger',
+        message:
+          caught instanceof ApiError ? caught.message : t('marketplace.installed.updateError'),
+      })
+    } finally {
+      setApplyingUpdates(false)
+    }
+  }
 
   const [items, setItems] = useState<readonly MarketplaceCatalogItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -107,8 +232,8 @@ export function MarketplaceRoute(): JSX.Element {
   }, [token, isAdmin, kindFilter, query, t])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (activeTab === 'discover') void load()
+  }, [activeTab, load])
 
   const openDetail = useCallback(
     async (id: string): Promise<void> => {
@@ -263,85 +388,309 @@ export function MarketplaceRoute(): JSX.Element {
           {t('marketplace.heading')}
         </h1>
         <p className="mt-1 text-sm">{t('marketplace.intro')}</p>
+        <p className="mt-1 text-sm">
+          <a
+            href="https://github.com/cogenta-cms/cogenta/blob/main/docs/guide-plugin.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('marketplace.guideLink')}
+          </a>
+          {' · '}
+          <a
+            href="https://github.com/cogenta-cms/cogenta/tree/main/examples/plugin-starter"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('marketplace.starterLink')}
+          </a>
+        </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="max-w-xs grow">
-          <Field label={t('marketplace.searchLabel')}>
-            {(control) => (
-              <Input
-                {...control}
-                value={query}
-                placeholder={t('marketplace.searchPlaceholder')}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            )}
-          </Field>
-        </div>
-        <div className="max-w-xs">
-          <Field label={t('marketplace.kindLabel')}>
-            {(control) => (
-              <Select
-                {...control}
-                value={kindFilter}
-                onChange={(event) => setKindFilter(event.target.value as MarketplaceItemKind | '')}
-              >
-                <option value="">{t('marketplace.kindAll')}</option>
-                <option value="plugin">{t('marketplace.kindPlugin')}</option>
-                <option value="theme">{t('marketplace.kindTheme')}</option>
-                <option value="skin">{t('marketplace.kindSkin')}</option>
-                <option value="skill">{t('marketplace.kindSkill')}</option>
-              </Select>
-            )}
-          </Field>
-        </div>
+      <div role="tablist" aria-label={t('marketplace.tabsLabel')} className="flex flex-wrap gap-2">
+        <Button
+          variant={activeTab === 'installed' ? 'primary' : 'secondary'}
+          size="sm"
+          aria-pressed={activeTab === 'installed'}
+          onClick={() => setActiveTab('installed')}
+        >
+          {t('marketplace.installedTab')}
+          {updatesSummary !== null && updatesSummary.count > 0
+            ? ` (${t('marketplace.installed.updatesBadge', { count: updatesSummary.count })})`
+            : ''}
+        </Button>
+        <Button
+          variant={activeTab === 'discover' ? 'primary' : 'secondary'}
+          size="sm"
+          aria-pressed={activeTab === 'discover'}
+          onClick={() => setActiveTab('discover')}
+        >
+          {t('marketplace.discoverTab')}
+        </Button>
       </div>
 
-      {loadError !== null && (
-        <Notice tone="danger" live="assertive">
-          <p>{loadError}</p>
-        </Notice>
-      )}
-      {loading && <p>{t('common.loading')}</p>}
+      {activeTab === 'installed' && (
+        <div className="flex flex-col gap-4">
+          {installedError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{installedError}</p>
+            </Notice>
+          )}
+          {installedLoading && <p>{t('common.loading')}</p>}
 
-      {!loading && loadError === null && (
-        <TableRoot label={t('marketplace.tableLabel')}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeader>{t('marketplace.nameColumn')}</TableHeader>
-                <TableHeader>{t('marketplace.kindColumn')}</TableHeader>
-                <TableHeader>{t('marketplace.categoryColumn')}</TableHeader>
-                <TableHeader>{t('marketplace.descriptionColumn')}</TableHeader>
-                <TableHeader>{t('marketplace.statusColumn')}</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <button
-                      type="button"
-                      className="cursor-pointer bg-transparent p-0 text-left font-medium text-primary underline-offset-2 hover:underline"
-                      onClick={() => void openDetail(item.id)}
+          {!installedLoading && installedError === null && (
+            <>
+              {updatesSummary !== null && updatesSummary.count > 0 && (
+                <Notice tone="info" live="off">
+                  <p>
+                    {t('marketplace.installed.updatesAvailable', { count: updatesSummary.count })}
+                  </p>
+                  <div className="mt-2">
+                    <Button
+                      size="sm"
+                      disabled={applyingUpdates}
+                      onClick={() => void applyAllUpdates()}
                     >
-                      {item.displayName}
-                    </button>
-                  </TableCell>
-                  <TableCell>{kindLabel(item.kind, t)}</TableCell>
-                  <TableCell>{item.category}</TableCell>
-                  <TableCell>{item.description}</TableCell>
-                  <TableCell>
-                    {item.installed
-                      ? t('marketplace.installedBadge', { version: item.installedVersion ?? '' })
-                      : t('marketplace.notInstalledBadge')}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {items.length === 0 && <TableEmpty colSpan={5}>{t('marketplace.empty')}</TableEmpty>}
-            </TableBody>
-          </Table>
-        </TableRoot>
+                      {t('marketplace.installed.updateAll')}
+                    </Button>
+                  </div>
+                </Notice>
+              )}
+
+              {applyResult !== null && (
+                <Notice tone="success" live="polite">
+                  <p>
+                    {t('marketplace.installed.applyResult', {
+                      applied: applyResult.applied.length,
+                      skipped: applyResult.skipped.length,
+                      failed: applyResult.failed.length,
+                    })}
+                  </p>
+                  {applyResult.skipped.length > 0 && (
+                    <p>{t('marketplace.installed.applySkippedHint')}</p>
+                  )}
+                </Notice>
+              )}
+
+              <TableRoot label={t('marketplace.installed.tableLabel')}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>{t('marketplace.nameColumn')}</TableHeader>
+                      <TableHeader>{t('marketplace.installed.versionColumn')}</TableHeader>
+                      <TableHeader>{t('marketplace.statusColumn')}</TableHeader>
+                      <TableHeader>{t('marketplace.installed.permissionsColumn')}</TableHeader>
+                      <TableHeader>{t('marketplace.installed.usageColumn')}</TableHeader>
+                      <TableHeader>{t('marketplace.installed.actionsColumn')}</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {installedItems.map((item) => {
+                      const status = statusLabel(item, t)
+                      const outcome = rowOutcome?.itemId === item.itemId ? rowOutcome : null
+                      return (
+                        <TableRow key={item.itemId}>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="cursor-pointer bg-transparent p-0 text-left font-medium text-primary underline-offset-2 hover:underline"
+                              onClick={() => void openDetail(item.itemId)}
+                            >
+                              {item.displayName}
+                            </button>
+                            {outcome !== null && (
+                              <p role="alert" className="mt-1 text-sm text-danger">
+                                {outcome.message}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.pluginVersion ?? '—'}
+                            {item.updateAvailable && (
+                              <span className="ml-1 text-xs">
+                                {t('marketplace.installed.updateAvailable', {
+                                  version: item.latestVersion ?? '',
+                                })}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span data-tone={status.tone}>{status.label}</span>
+                          </TableCell>
+                          <TableCell>
+                            {item.grantedCapabilities.length === 0
+                              ? t('marketplace.installed.noPermissions')
+                              : t('marketplace.installed.permissionsCount', {
+                                  count: item.grantedCapabilities.length,
+                                })}
+                          </TableCell>
+                          <TableCell>
+                            {item.usage === null
+                              ? t('marketplace.installed.noUsage')
+                              : t('marketplace.installed.usageSummary', {
+                                  count: item.usage.callCount,
+                                  when: relativeTime(
+                                    item.usage.lastRunAt,
+                                    new Date(),
+                                    i18n.language,
+                                  ),
+                                })}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => void toggleEnabled(item)}
+                              >
+                                {item.enabled
+                                  ? t('marketplace.installed.deactivate')
+                                  : t('marketplace.installed.activate')}
+                              </Button>
+                              {item.updateAvailable && !item.updateRequiresApproval && (
+                                <Button
+                                  size="sm"
+                                  onClick={async () => {
+                                    if (token === null) return
+                                    try {
+                                      await updateMarketplaceItem(token, item.itemId)
+                                      await loadInstalled()
+                                    } catch (caught) {
+                                      setRowOutcome({
+                                        itemId: item.itemId,
+                                        tone: 'danger',
+                                        message:
+                                          caught instanceof ApiError
+                                            ? caught.message
+                                            : t('marketplace.installed.updateError'),
+                                      })
+                                    }
+                                  }}
+                                >
+                                  {t('marketplace.installed.updateNow')}
+                                </Button>
+                              )}
+                              {item.updateAvailable && item.updateRequiresApproval && (
+                                <Button size="sm" onClick={() => void openDetail(item.itemId)}>
+                                  {t('marketplace.installed.reviewUpdate')}
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  setConfirmUninstall({
+                                    itemId: item.itemId,
+                                    displayName: item.displayName,
+                                    removeData: false,
+                                  })
+                                }
+                              >
+                                {t('marketplace.installed.uninstall')}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {installedItems.length === 0 && (
+                      <TableEmpty colSpan={6}>{t('marketplace.installed.empty')}</TableEmpty>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableRoot>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'discover' && (
+        <>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="max-w-xs grow">
+              <Field label={t('marketplace.searchLabel')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={query}
+                    placeholder={t('marketplace.searchPlaceholder')}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                )}
+              </Field>
+            </div>
+            <div className="max-w-xs">
+              <Field label={t('marketplace.kindLabel')}>
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={kindFilter}
+                    onChange={(event) =>
+                      setKindFilter(event.target.value as MarketplaceItemKind | '')
+                    }
+                  >
+                    <option value="">{t('marketplace.kindAll')}</option>
+                    <option value="plugin">{t('marketplace.kindPlugin')}</option>
+                    <option value="theme">{t('marketplace.kindTheme')}</option>
+                    <option value="skin">{t('marketplace.kindSkin')}</option>
+                    <option value="skill">{t('marketplace.kindSkill')}</option>
+                  </Select>
+                )}
+              </Field>
+            </div>
+          </div>
+
+          {loadError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{loadError}</p>
+            </Notice>
+          )}
+          {loading && <p>{t('common.loading')}</p>}
+
+          {!loading && loadError === null && (
+            <TableRoot label={t('marketplace.tableLabel')}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>{t('marketplace.nameColumn')}</TableHeader>
+                    <TableHeader>{t('marketplace.kindColumn')}</TableHeader>
+                    <TableHeader>{t('marketplace.categoryColumn')}</TableHeader>
+                    <TableHeader>{t('marketplace.descriptionColumn')}</TableHeader>
+                    <TableHeader>{t('marketplace.statusColumn')}</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="cursor-pointer bg-transparent p-0 text-left font-medium text-primary underline-offset-2 hover:underline"
+                          onClick={() => void openDetail(item.id)}
+                        >
+                          {item.displayName}
+                        </button>
+                      </TableCell>
+                      <TableCell>{kindLabel(item.kind, t)}</TableCell>
+                      <TableCell>{item.category}</TableCell>
+                      <TableCell>{item.description}</TableCell>
+                      <TableCell>
+                        {item.installed
+                          ? t('marketplace.installedBadge', {
+                              version: item.installedVersion ?? '',
+                            })
+                          : t('marketplace.notInstalledBadge')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {items.length === 0 && (
+                    <TableEmpty colSpan={5}>{t('marketplace.empty')}</TableEmpty>
+                  )}
+                </TableBody>
+              </Table>
+            </TableRoot>
+          )}
+        </>
       )}
 
       <Modal
@@ -362,6 +711,31 @@ export function MarketplaceRoute(): JSX.Element {
         {detail !== null && (
           <div className="flex flex-col gap-4">
             <p>{detail.description}</p>
+
+            <dl className="m-0 grid grid-cols-2 gap-1 text-sm">
+              <dt className="font-medium">{t('marketplace.authorLabel')}</dt>
+              <dd className="m-0">{detail.author ?? t('marketplace.unknownValue')}</dd>
+              <dt className="font-medium">{t('marketplace.sourceLabel')}</dt>
+              <dd className="m-0">
+                {detail.source === 'registry'
+                  ? t('marketplace.sourceRegistry')
+                  : t('marketplace.unknownValue')}
+              </dd>
+              <dt className="font-medium">{t('marketplace.compatibilityLabel')}</dt>
+              <dd className="m-0">
+                {detail.engineCompatible === null
+                  ? t('marketplace.compatibilityUnknown')
+                  : detail.engineCompatible
+                    ? t('marketplace.compatibilityOk')
+                    : t('marketplace.compatibilityRefused')}
+              </dd>
+            </dl>
+
+            {detail.engineCompatible === false && (
+              <Notice tone="danger" live="assertive">
+                <p>{t('marketplace.compatibilityRefusedBody')}</p>
+              </Notice>
+            )}
 
             {detail.screenshots.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -485,6 +859,46 @@ export function MarketplaceRoute(): JSX.Element {
                 )}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={confirmUninstall !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmUninstall(null)
+        }}
+        title={t('marketplace.installed.uninstallHeading', {
+          name: confirmUninstall?.displayName ?? '',
+        })}
+        closeLabel={t('marketplace.close')}
+      >
+        {confirmUninstall !== null && (
+          <div className="flex flex-col gap-4">
+            <p>{t('marketplace.installed.uninstallIntro')}</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={confirmUninstall.removeData}
+                onChange={(event) =>
+                  setConfirmUninstall({ ...confirmUninstall, removeData: event.target.checked })
+                }
+              />
+              {t('marketplace.installed.removeDataLabel')}
+            </label>
+            {confirmUninstall.removeData && (
+              <Notice tone="warning">
+                <p>{t('marketplace.installed.removeDataWarning')}</p>
+              </Notice>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setConfirmUninstall(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button variant="destructive" onClick={() => void confirmUninstallAction()}>
+                {t('marketplace.installed.uninstall')}
+              </Button>
+            </div>
           </div>
         )}
       </Modal>

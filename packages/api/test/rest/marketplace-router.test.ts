@@ -5,13 +5,19 @@ import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import {
   createMarketplaceCatalog,
   createMarketplaceInstaller,
+  createPluginDisableStore,
   createPluginGrantStore,
+  createPluginUsageStore,
+  describeCapability,
   ensureMarketplaceTables,
   ensurePluginTables,
   ensureRegistryTables,
   generateSigningKeyPair,
   type MarketplaceCatalogEntry,
   type MarketplaceInstaller,
+  type PluginDisableStore,
+  type PluginGrantStore,
+  type PluginUsageStore,
   signManifest,
 } from '@cogenta/plugins'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -65,6 +71,9 @@ describe('createMarketplaceRouter (L17)', () => {
   let privateKey: string
   let pluginDir: string
   let catalogEntry: MarketplaceCatalogEntry
+  let grantStore: PluginGrantStore
+  let disableStore: PluginDisableStore
+  let usageStore: PluginUsageStore
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'cogenta-marketplace-router-'))
@@ -82,15 +91,32 @@ describe('createMarketplaceRouter (L17)', () => {
       description: 'Suggests meta descriptions.',
       category: 'SEO',
       reference: pluginDir,
+      author: 'Cogenta',
       screenshots: ['https://example.test/shot.png'],
       changelog: [{ version: '1.0.0', notes: 'First release.' }],
     }
 
-    const grantStore = createPluginGrantStore(db)
+    grantStore = createPluginGrantStore(db)
+    disableStore = createPluginDisableStore(db)
+    usageStore = createPluginUsageStore(db)
     installer = createMarketplaceInstaller(db, { trustedPublicKeys: [publicKey], grantStore })
     const catalog = createMarketplaceCatalog([catalogEntry])
     router = createMarketplaceRouter({ catalog, installer })
   })
+
+  /** A richer router wired with disable/usage/grant stores — used by the "installed" and "updates" describe blocks below. */
+  function richRouter(
+    entries: readonly MarketplaceCatalogEntry[] = [catalogEntry],
+  ): MarketplaceRouter {
+    return createMarketplaceRouter({
+      catalog: createMarketplaceCatalog(entries),
+      installer,
+      disableStore,
+      usageStore,
+      grantStore,
+      describeCapability,
+    })
+  }
 
   afterEach(async () => {
     await db.close()
@@ -270,6 +296,243 @@ describe('createMarketplaceRouter (L17)', () => {
       )
       expect(response.status).toBe(200)
       expect(await installer.get('seo-helper')).toBeNull()
+    })
+
+    it('fiche 29 task 4 — a plain uninstall leaves grants behind; removeData clears them', async () => {
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      await grantStore.grant('marketplace-plugin', 'content.read')
+
+      const plain = await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/uninstall', query: {} },
+        ADMIN,
+      )
+      expect(plain.status).toBe(200)
+      expect(await grantStore.listGrants('marketplace-plugin')).toHaveLength(1)
+
+      // Reinstall to uninstall again, this time with removeData.
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      const withRemoval = await router.handle(
+        {
+          method: 'POST',
+          path: '/api/marketplace/items/seo-helper/uninstall',
+          query: {},
+          body: { removeData: true },
+        },
+        ADMIN,
+      )
+      expect(withRemoval.status).toBe(200)
+      expect((withRemoval.body as { data: { dataRemoved: boolean } }).data.dataRemoved).toBe(true)
+      expect(await grantStore.listGrants('marketplace-plugin')).toHaveLength(0)
+    })
+  })
+
+  describe('fiche 29 task 5 — engine compatibility surfaced on the fiche détaillée', () => {
+    it('reports engineCompatible: null (unknown) and the author when no Cogenta version is configured', async () => {
+      const response = await router.handle(
+        { method: 'GET', path: '/api/marketplace/items/seo-helper', query: {} },
+        ADMIN,
+      )
+      const body = response.body as {
+        data: { engineCompatible: boolean | null; author: string | null; source: string | null }
+      }
+      expect(body.data.engineCompatible).toBeNull()
+      expect(body.data.author).toBe('Cogenta')
+      expect(body.data.source).toBe('registry')
+    })
+
+    it('refuses installation with MARKETPLACE_ENGINE_INCOMPATIBLE once a Cogenta version is configured and unmet', async () => {
+      const strictInstaller = createMarketplaceInstaller(db, {
+        trustedPublicKeys: [publicKey],
+        grantStore,
+        engineVersion: '2.0.0', // manifest declares engine: ^1.0.0
+      })
+      const strictRouter = createMarketplaceRouter({
+        catalog: createMarketplaceCatalog([catalogEntry]),
+        installer: strictInstaller,
+      })
+      const response = await strictRouter.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      expect(response.status).toBe(422)
+      expect((response.body as { error: { code: string } }).error.code).toBe(
+        'MARKETPLACE_ENGINE_INCOMPATIBLE',
+      )
+    })
+  })
+
+  describe('fiche 29 task 1 — activate/deactivate', () => {
+    it('toggles the enabled flag and is reflected on GET /installed', async () => {
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+
+      const deactivate = await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/deactivate', query: {} },
+        ADMIN,
+      )
+      expect(deactivate.status).toBe(200)
+      expect((deactivate.body as { data: { enabled: boolean } }).data.enabled).toBe(false)
+
+      const activate = await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/activate', query: {} },
+        ADMIN,
+      )
+      expect((activate.body as { data: { enabled: boolean } }).data.enabled).toBe(true)
+    })
+
+    it('refuses to toggle an item that was never installed', async () => {
+      const response = await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/activate', query: {} },
+        ADMIN,
+      )
+      expect(response.status).toBe(404)
+    })
+  })
+
+  describe('GET /api/marketplace/installed — task 1\'s "installed extensions" screen', () => {
+    it('reports capabilities, disabled state and usage for an installed item', async () => {
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      await grantStore.grant('marketplace-plugin', 'content.read')
+      await usageStore.recordRun('marketplace-plugin', { durationMs: 42, ok: true })
+      await disableStore.disable('marketplace-plugin', 'timeout', 'took too long')
+
+      const response = await richRouter().handle(
+        { method: 'GET', path: '/api/marketplace/installed', query: {} },
+        ADMIN,
+      )
+      expect(response.status).toBe(200)
+      const body = response.body as {
+        data: readonly {
+          itemId: string
+          enabled: boolean
+          disabled: { reason: string; details: string | null } | null
+          usage: { callCount: number } | null
+          grantedCapabilities: readonly { capability: string; sentence: string }[]
+        }[]
+      }
+      expect(body.data).toHaveLength(1)
+      const [item] = body.data
+      expect(item?.itemId).toBe('seo-helper')
+      expect(item?.enabled).toBe(true)
+      expect(item?.disabled).toMatchObject({ reason: 'timeout', details: 'took too long' })
+      expect(item?.usage).toMatchObject({ callCount: 1 })
+      expect(item?.grantedCapabilities.map((c) => c.capability)).toEqual(['content.read'])
+      expect(item?.grantedCapabilities[0]?.sentence.length).toBeGreaterThan(0)
+    })
+
+    it('an item never touched by disable/usage stores reports null, not an error', async () => {
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      const response = await richRouter().handle(
+        { method: 'GET', path: '/api/marketplace/installed', query: {} },
+        ADMIN,
+      )
+      const body = response.body as {
+        data: readonly { disabled: unknown; usage: unknown }[]
+      }
+      expect(body.data[0]?.disabled).toBeNull()
+      expect(body.data[0]?.usage).toBeNull()
+    })
+  })
+
+  describe('GET/POST /api/marketplace/updates — task 2, grouped update never widens permissions silently', () => {
+    it('lists an available update, flagging whether it needs approval', async () => {
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      await grantStore.grant('marketplace-plugin', 'content.read')
+      const bumpedDir = await writeSignedPlugin(dir, privateKey, ['content.read'])
+      // Overwrite the manifest with a higher version, same capabilities.
+      await writeFile(
+        join(bumpedDir, 'plugin.manifest.mjs'),
+        `export default ${JSON.stringify({ ...manifestFor(['content.read']), version: '1.1.0' })}\n`,
+        'utf8',
+      )
+      await writeFile(
+        join(bumpedDir, 'plugin.manifest.mjs.sig'),
+        signManifest({ ...manifestFor(['content.read']), version: '1.1.0' }, privateKey),
+        'utf8',
+      )
+      const bumpedEntry = { ...catalogEntry, reference: bumpedDir }
+
+      const list = await richRouter([bumpedEntry]).handle(
+        { method: 'GET', path: '/api/marketplace/updates', query: {} },
+        ADMIN,
+      )
+      expect(list.status).toBe(200)
+      const body = list.body as {
+        data: {
+          count: number
+          items: readonly { itemId: string; latestVersion: string; requiresApproval: boolean }[]
+        }
+      }
+      expect(body.data.count).toBe(1)
+      expect(body.data.items[0]).toMatchObject({
+        itemId: 'seo-helper',
+        latestVersion: '1.1.0',
+        requiresApproval: false,
+      })
+    })
+
+    it('a grouped apply skips an item whose update would widen permissions, and applies the rest', async () => {
+      await router.handle(
+        { method: 'POST', path: '/api/marketplace/items/seo-helper/install', query: {} },
+        ADMIN,
+      )
+      await grantStore.grant('marketplace-plugin', 'content.read')
+
+      const widenedManifest = {
+        ...manifestFor(['content.read', 'content.publish']),
+        version: '1.1.0',
+      }
+      const widenedDir = await mkdtemp(join(dir, 'plugin-'))
+      const widenedManifestPath = join(widenedDir, 'plugin.manifest.mjs')
+      await writeFile(
+        widenedManifestPath,
+        `export default ${JSON.stringify(widenedManifest)}\n`,
+        'utf8',
+      )
+      await writeFile(
+        `${widenedManifestPath}.sig`,
+        signManifest(widenedManifest, privateKey),
+        'utf8',
+      )
+      const widenedEntry = { ...catalogEntry, reference: widenedDir }
+
+      const apply = await richRouter([widenedEntry]).handle(
+        { method: 'POST', path: '/api/marketplace/updates/apply', query: {} },
+        ADMIN,
+      )
+      expect(apply.status).toBe(200)
+      const body = apply.body as {
+        data: {
+          applied: readonly { itemId: string }[]
+          skipped: readonly { itemId: string; reason: string }[]
+        }
+      }
+      expect(body.data.applied).toHaveLength(0)
+      expect(body.data.skipped).toEqual([{ itemId: 'seo-helper', reason: 'requires_approval' }])
+
+      // Never half-applied: the stored version is unchanged.
+      expect((await installer.get('seo-helper'))?.pluginVersion).toBe('1.0.0')
+      // And never auto-granted either.
+      expect(await grantStore.listGrants('marketplace-plugin')).toEqual([
+        expect.objectContaining({ capability: 'content.read' }),
+      ])
     })
   })
 })

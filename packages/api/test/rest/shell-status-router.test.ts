@@ -183,6 +183,12 @@ describe('the shell status transport', () => {
       uninstall: async () => {
         throw new Error('not used')
       },
+      activate: async () => {
+        throw new Error('not used')
+      },
+      deactivate: async () => {
+        throw new Error('not used')
+      },
       list: async () => records,
       get: async () => null,
     }
@@ -200,6 +206,7 @@ describe('the shell status transport', () => {
       installedBy: 'user-admin',
       installedAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      enabled: true,
     }
   }
 

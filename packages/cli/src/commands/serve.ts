@@ -30,6 +30,7 @@ import {
   createAuthRouter,
   createContentGateway,
   createContentService,
+  createFormsRouter,
   createHealthRouter,
   createImportRouter,
   createMarketplaceRouter,
@@ -63,6 +64,8 @@ import {
   errorResponse,
   executeGraphQL,
   type ForgotPasswordEvent,
+  type FormsRequestContext,
+  type FormsRouter,
   type HealthRouter,
   type ImportRouter,
   type InvitedUserEvent,
@@ -104,6 +107,7 @@ import {
   createFileEmailTransport,
   createNotificationDispatcher,
   createPreferenceStore,
+  type EmailTransport,
   ensureChannelTables,
   ensurePreferenceTables,
 } from '@cogenta/channels'
@@ -135,6 +139,7 @@ import {
   createDatabaseRegistry,
   createErrorLog,
   createLogger,
+  createMemoryRateLimiter,
   createMigrator,
   createRateLimitRegistry,
   createStorageRegistry,
@@ -150,6 +155,7 @@ import {
   type SecretHygieneReport,
   type StorageDriver,
 } from '@cogenta/core'
+import { createFormStore, ensureFormsTables, type FormStore } from '@cogenta/forms'
 import {
   analyzeGeneric,
   analyzeJson,
@@ -226,6 +232,7 @@ import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './as
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { runDoctor } from './doctor.js'
+import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
@@ -549,6 +556,19 @@ interface Site {
    * admin panel disappear instead of erroring.
    */
   readonly assistantRouter: AssistantRouter
+  /**
+   * Contract G (ADR-0026, fiche 16) — form definitions and submissions.
+   * Always mounted: a site that never builds a form still creates these
+   * tables (unlike commerce, which is opt-in), because the tables are
+   * cheap and the alternative — deciding at startup whether to mount a
+   * route — is the kind of conditional wiring this file already avoids
+   * everywhere else it can.
+   */
+  readonly formStore: FormStore
+  /** `/api/forms/*` — admin CRUD on definitions/submissions, plus the public `POST .../submit`. */
+  readonly formsRouter: FormsRouter
+  /** Purges submissions past each form's own `retainDays` (fiche 16 task 7's GDPR retention, ADR-0022's `purgeExpired` model). Ticked by `runServe` on a `setInterval`. */
+  readonly tickFormsPurge: () => Promise<number>
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -822,6 +842,13 @@ interface AssembleSiteOptions {
    * `loaded.config.analytics`, this only saves a test harness from repeating it.
    */
   readonly analytics?: CogentaConfig['analytics']
+  /**
+   * Forms notifications (fiche 16 task 5) — the same `FileEmailTransport`
+   * already built for account invitations, never a second transport of this
+   * file's own. Absent only in a test harness that does not care: the
+   * submission still stores, notifications are simply skipped (R1/R2).
+   */
+  readonly emailTransport?: EmailTransport
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -863,6 +890,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // `redirect-patterns.ts` for why this is not a merged into `redirects`.
   const redirectPatterns = createRedirectPatternStore({ db })
   await redirectPatterns.ensureTable()
+
+  // Forms (contract G, ADR-0026, fiche 16). Always mounted — see `Site.formStore`'s
+  // own comment for why this, unlike commerce, is not opt-in.
+  await ensureFormsTables(db)
+  const formStore = createFormStore(db)
+  const formsRouter = createFormsRouter({
+    forms: formStore,
+    // Falls back to an in-process limiter rather than leaving the public
+    // submit route unprotected when no shared driver was configured (R1) —
+    // the same fallback `resolveActor`'s own `requestQuota` parameter takes.
+    rateLimit: options.requestQuota ?? createMemoryRateLimiter(),
+    ...(options.emailTransport === undefined ? {} : { emailTransport: options.emailTransport }),
+    adminUrl: new URL('/admin', site.url).toString(),
+  })
 
   // The 404 log (fiche 12 task 1) — bounded and purged, never carrying an
   // IP or a user agent. See `@cogenta/schema`'s `not-found-log.ts` for the
@@ -1650,6 +1691,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }),
     redirectRouter: createRedirectRouter({ store: redirects, patterns: redirectPatterns }),
     redirectPatterns,
+    formStore,
+    formsRouter,
+    tickFormsPurge: async () => (await formStore.submissions.purgeExpired()).purged,
     notFoundLog,
     notFoundLogEnabled: options.notFoundLog.enabled,
     notFoundRouter: createNotFoundRouter({ store: notFoundLog }),
@@ -1673,6 +1717,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       commerceCatalog,
       marketplaceCatalog,
       marketplaceInstaller,
+      forms: { countUnread: () => formStore.submissions.unreadCount() },
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -1850,7 +1895,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
  */
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+async function readRawBody(req: IncomingMessage): Promise<string | undefined> {
   const chunks: Buffer[] = []
   let total = 0
   let tooLarge = false
@@ -1877,7 +1922,12 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
   if (chunks.length === 0) return undefined
   const text = Buffer.concat(chunks).toString('utf8')
-  if (text.trim().length === 0) return undefined
+  return text.trim().length === 0 ? undefined : text
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const text = await readRawBody(req)
+  if (text === undefined) return undefined
   try {
     return JSON.parse(text)
   } catch {
@@ -1887,6 +1937,28 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
       hint: 'Send a JSON body with a matching Content-Type, or no body at all.',
     })
   }
+}
+
+/**
+ * `POST /api/forms/{name}/submit` must work with a plain HTML `<form>`
+ * (fiche 16 task 3: "fonctionne sans JavaScript") — which posts
+ * `application/x-www-form-urlencoded`, not JSON. Every other route on this
+ * server only ever receives JSON from the admin SPA, so this parsing lives
+ * here rather than in the shared `readBody`.
+ */
+async function readFormAwareBody(req: IncomingMessage): Promise<unknown> {
+  const contentType = req.headers['content-type'] ?? ''
+  if (!contentType.includes('application/x-www-form-urlencoded')) return readBody(req)
+
+  const text = await readRawBody(req)
+  if (text === undefined) return undefined
+  const params = new URLSearchParams(text)
+  const body: Record<string, string | string[]> = {}
+  for (const key of params.keys()) {
+    const values = params.getAll(key)
+    body[key] = values.length > 1 ? values : (values[0] ?? '')
+  }
+  return body
 }
 
 function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestRequest {
@@ -2874,6 +2946,79 @@ export function createRequestListener(
         return
       }
 
+      // Contract G (ADR-0026, fiche 16): form definitions/submissions
+      // (admin-only) and the public `POST .../submit` this same mount also
+      // serves — the router itself decides which is which (see
+      // `forms-router.ts`'s own comment). The submit route is the CMS's
+      // second public write route, and it must work with a plain HTML
+      // `<form>` and no JavaScript at all (fiche 16 task 3) — that is the one
+      // path handled specially below, everything else on this mount is a
+      // normal JSON admin route.
+      if (url.pathname.startsWith('/api/forms')) {
+        const submitMatch = /^\/api\/forms\/([^/]+)\/submit$/u.exec(url.pathname)
+        const isHtmlSubmit =
+          submitMatch !== null &&
+          req.method === 'POST' &&
+          (req.headers['content-type'] ?? '').includes('application/x-www-form-urlencoded')
+
+        const body = isHtmlSubmit
+          ? await readFormAwareBody(req)
+          : req.method === 'GET' || req.method === 'DELETE'
+            ? undefined
+            : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        const formsContext: FormsRequestContext = { actor: context.actor, ip: clientIpOf(req) }
+        const response = await site.formsRouter.handle(request, formsContext)
+
+        if (isHtmlSubmit) {
+          const formName = submitMatch[1] as string
+          if (response.status === 201) {
+            const data = (
+              response.body as { readonly data: { readonly redirectTo: string | null } }
+            ).data
+            const location = data.redirectTo ?? `/forms/${encodeURIComponent(formName)}?submitted=1`
+            res.writeHead(303, { location, 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+
+          const definition = await site.formStore.definitions.readByName(formName)
+          const errorBody = response.body as {
+            readonly error?: { readonly message?: string; readonly field?: string }
+          }
+          const formPageOptions = {
+            site: site.site,
+            styles: await site.resolveStyles(),
+            now: Date.now,
+          }
+          const html =
+            definition === null
+              ? renderFormNotFoundPage(formPageOptions)
+              : renderFormPage(
+                  definition,
+                  {
+                    errorMessage:
+                      errorBody.error?.message ?? 'This submission could not be accepted.',
+                    errorField: errorBody.error?.field ?? null,
+                    values:
+                      typeof body === 'object' && body !== null
+                        ? (body as Record<string, unknown>)
+                        : {},
+                  },
+                  formPageOptions,
+                )
+          res.writeHead(definition === null ? 404 : response.status, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          res.end(html)
+          return
+        }
+
+        writeRestResponse(res, response)
+        return
+      }
+
       // The 404 log's own admin screen (fiche 12 task 1) — read and dismiss
       // only; the log fills itself from the public GET path below.
       if (url.pathname === '/api/not-found') {
@@ -3407,6 +3552,36 @@ export function createRequestListener(
         return
       }
 
+      // `GET /forms/{name}` — the public "route dédiée" ADR-0026 chose for a
+      // form's first arrival on a page. `?submitted=1` (no `redirectTo`
+      // configured) shows the confirmation view instead of the form itself.
+      {
+        const formPageMatch = /^\/forms\/([^/]+)$/u.exec(url.pathname)
+        if (formPageMatch !== null && req.method === 'GET') {
+          const formName = formPageMatch[1] as string
+          const definition = await site.formStore.definitions.readByName(formName)
+          const formPageOptions = {
+            site: site.site,
+            styles: await site.resolveStyles(),
+            now: Date.now,
+          }
+          const html =
+            definition === null || !definition.active
+              ? renderFormNotFoundPage(formPageOptions)
+              : renderFormPage(
+                  definition,
+                  { submitted: url.searchParams.get('submitted') === '1' },
+                  formPageOptions,
+                )
+          res.writeHead(definition === null || !definition.active ? 404 : 200, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          res.end(html)
+          return
+        }
+      }
+
       // Real theme HTML for anything else — see `theme-render.ts`'s own
       // doc comment for what this is and, as importantly, what it isn't
       // (no Astro build, one theme, no image pipeline). GET only: rendering
@@ -3576,6 +3751,8 @@ export interface ServeOptions {
    * waiting a day for it.
    */
   readonly trashPurgeTickMs?: number
+  /** Test seam for the forms GDPR retention sweep (fiche 16 task 7) — production always uses `FORMS_PURGE_TICK_MS`. */
+  readonly formsPurgeTickMs?: number
   /** Overrides `CHANNEL_NOTIFICATION_TICK_MS`, for the same reason as `scheduledPublishTickMs`. */
   readonly channelNotificationTickMs?: number
   /**
@@ -3630,6 +3807,8 @@ const AUDIT_INTEGRITY_TICK_MS = 24 * 60 * 60 * 1000
  * screen advertises — `retainDays` itself is already measured in whole days.
  */
 const TRASH_PURGE_TICK_MS = 24 * 60 * 60 * 1000
+/** Same daily cadence as the trash sweep (fiche 16 task 7's GDPR retention, ADR-0022's `retainDays`/`purgeExpired` model applied to submissions). */
+const FORMS_PURGE_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
  * How often `runServe` flushes queued/grouped channel notifications (fiche
@@ -3807,6 +3986,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
     payment: loaded.config.payment,
+    emailTransport,
     configStatus: buildConfigStatus(loaded.config, loaded.secretHygiene),
     pendingMigrations: {
       countPending: async () => (await migrator.status()).filter((item) => !item.applied).length,
@@ -4085,6 +4265,20 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.trashPurgeTickMs ?? TRASH_PURGE_TICK_MS,
   )
   trashPurgeTimer.unref()
+
+  // Forms GDPR retention (fiche 16 task 7): same shape as the trash sweep
+  // above — a first sweep right away, then daily, never fatal.
+  const runFormsPurgeTick = (): void => {
+    site.tickFormsPurge().catch((error: unknown) => {
+      logger.error('forms purge tick failed', { error: String(error) })
+    })
+  }
+  runFormsPurgeTick()
+  const formsPurgeTimer = setInterval(
+    runFormsPurgeTick,
+    options.formsPurgeTickMs ?? FORMS_PURGE_TICK_MS,
+  )
+  formsPurgeTimer.unref()
 
   // Channel notification flush (fiche 38 task 3) — same shape as the tick
   // above: run once immediately, then on its own interval, never fatal.

@@ -13,6 +13,7 @@ export interface ShellStatus {
   readonly commerceOrdersPending: number | null
   readonly commerceActive: boolean
   readonly marketplaceUpdates: number | null
+  readonly formSubmissionsUnread: number | null
 }
 
 export function getShellStatus(token: string): Promise<ShellStatus> {

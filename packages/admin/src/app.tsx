@@ -23,6 +23,8 @@ import { CommerceTaxRoute } from './routes/commerce-tax.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
+import { FormSubmissionsRoute } from './routes/form-submissions.js'
+import { FormsRoute } from './routes/forms.js'
 import { HealthRoute } from './routes/health.js'
 import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
@@ -123,6 +125,8 @@ export function App(): JSX.Element {
               <Route path="users" element={<UsersRoute />} />
               <Route path="api-keys" element={<ApiKeysRoute />} />
               <Route path="roles" element={<RolesRoute />} />
+              <Route path="forms" element={<FormsRoute />} />
+              <Route path="form-submissions" element={<FormSubmissionsRoute />} />
               <Route path="profile" element={<ProfileRoute />} />
               <Route path="settings" element={<SettingsRoute />} />
               <Route path="site-plan" element={<SitePlanRoute />} />

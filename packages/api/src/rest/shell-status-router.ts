@@ -67,6 +67,8 @@ export interface ShellStatus {
   readonly commerceActive: boolean
   /** `null` when marketplace is unmounted, or this actor is not `admin` (the only role that can act on an update). */
   readonly marketplaceUpdates: number | null
+  /** Unread form submissions (contract G, fiche 16 task 4's nav badge). `null` for an actor holding no role — the same courtesy as `commerceOrdersPending`. */
+  readonly formSubmissionsUnread: number | null
 }
 
 export interface ShellStatusRouterOptions {
@@ -79,6 +81,8 @@ export interface ShellStatusRouterOptions {
   /** Both present together, or both absent — a marketplace with a catalogue and no installer (or the reverse) cannot answer "updates". */
   readonly marketplaceCatalog?: MarketplaceCatalogLike
   readonly marketplaceInstaller?: MarketplaceInstallerLike
+  /** Absent only in a test harness that does not care — every real site always has one (forms tables are always created, unlike commerce's). */
+  readonly forms?: { countUnread(): Promise<number> }
   /** Mount point. `/api/shell-status` by default. */
   readonly path?: string
 }
@@ -116,6 +120,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
         commerceOrdersPending: null,
         commerceActive: false,
         marketplaceUpdates: null,
+        formSubmissionsUnread: null,
       }
       return jsonResponse(200, { data: empty })
     }
@@ -125,8 +130,16 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
       commerceOrdersPending: await ordersPending(context),
       commerceActive: await catalogueHasProducts(),
       marketplaceUpdates: await pendingMarketplaceUpdates(context),
+      formSubmissionsUnread: await formSubmissionsUnread(context),
     }
     return jsonResponse(200, { data: status })
+  }
+
+  /** Same courtesy-only shape as `ordersPending`: `admin` sees the real count, everyone else `null` — a form definition names no per-role reader today. */
+  async function formSubmissionsUnread(context: AccessContext): Promise<number | null> {
+    if (options.forms === undefined) return null
+    if (!context.actor.roles.includes('admin')) return null
+    return options.forms.countUnread()
   }
 
   async function trashCount(context: AccessContext): Promise<number> {

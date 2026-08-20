@@ -33,6 +33,7 @@ const FALLBACK: ChromeStatus = {
     commerceOrdersPending: null,
     commerceActive: false,
     marketplaceUpdates: null,
+    formSubmissionsUnread: null,
   },
   assistantTools: [],
 }

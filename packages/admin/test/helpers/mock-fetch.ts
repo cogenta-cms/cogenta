@@ -498,7 +498,36 @@ export function installMockFetch(
       readonly commerceOrdersPending?: number | null
       readonly commerceActive?: boolean
       readonly marketplaceUpdates?: number | null
+      readonly formSubmissionsUnread?: number | null
     }
+    /** Seeds `/api/forms` (contract G, ADR-0026) — see `forms.tsx`. */
+    readonly forms?: readonly {
+      readonly id: string
+      readonly name: string
+      readonly label: string
+      readonly fields: readonly Record<string, unknown>[]
+      readonly active: boolean
+      readonly confirmationMessage: string
+      readonly redirectTo: string | null
+      readonly notifyEmails: readonly string[]
+      readonly autoresponder: { readonly enabled: boolean; readonly body?: string }
+      readonly retainDays: number
+      readonly createdAt: string
+      readonly updatedAt: string
+    }[]
+    /** Seeds `/api/forms/submissions` — see `form-submissions.tsx`. */
+    readonly formSubmissions?: readonly {
+      readonly id: string
+      readonly formId: string
+      readonly formName: string
+      readonly values: Readonly<Record<string, unknown>>
+      readonly consents: readonly Record<string, unknown>[]
+      readonly status: 'new' | 'read' | 'archived' | 'spam'
+      readonly ipHash: string | null
+      readonly referrer: string | null
+      readonly userAgent: string | null
+      readonly submittedAt: string
+    }[]
     /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
     readonly analyticsSummary?: {
       readonly totalViews?: number
@@ -1388,6 +1417,36 @@ export function installMockFetch(
     reason: 'manual' | 'import'
     createdAt: number
   }[] = []
+
+  // Forms (contract G, ADR-0026) — see `forms.tsx`/`form-submissions.tsx`.
+  let formCounter = 0
+  let formDefs: {
+    id: string
+    name: string
+    label: string
+    fields: readonly Record<string, unknown>[]
+    active: boolean
+    confirmationMessage: string
+    redirectTo: string | null
+    notifyEmails: readonly string[]
+    autoresponder: { enabled: boolean; body?: string }
+    retainDays: number
+    createdAt: string
+    updatedAt: string
+  }[] = (options.forms ?? []).map((form) => ({ ...form }))
+  const submissionCounter = 0
+  let formSubmissions: {
+    id: string
+    formId: string
+    formName: string
+    values: Readonly<Record<string, unknown>>
+    consents: readonly Record<string, unknown>[]
+    status: 'new' | 'read' | 'archived' | 'spam'
+    ipHash: string | null
+    referrer: string | null
+    userAgent: string | null
+    submittedAt: string
+  }[] = (options.formSubmissions ?? []).map((submission) => ({ ...submission }))
 
   // Prefix redirects (fiche 12 task 4) — see `redirects/pattern-panel.tsx`.
   let patternCounter = 0
@@ -4957,6 +5016,9 @@ export function installMockFetch(
           commerceOrdersPending: user.roles.length > 0 ? 0 : null,
           commerceActive: false,
           marketplaceUpdates: user.roles.includes('admin') ? 0 : null,
+          formSubmissionsUnread: user.roles.includes('admin')
+            ? formSubmissions.filter((s) => s.status === 'new').length
+            : null,
         }
         return json(200, { data: { ...defaults, ...options.shellStatus } })
       }
@@ -4984,6 +5046,136 @@ export function installMockFetch(
           })
         }
         return json(200, { data: answer })
+      }
+
+      // `/api/forms/*` (contract G, ADR-0026) — admin-only, mirroring
+      // `forms-router.ts`'s own gate. Submissions sub-routes are checked
+      // before the general `/api/forms/{id}` shape, the same ordering
+      // discipline `/api/redirects`'s block above documents for itself.
+      if (url.includes('/api/forms')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may manage forms.' },
+          })
+        }
+        const parsed = new URL(url, 'http://localhost')
+        const segments = parsed.pathname
+          .replace(/^.*\/api\/forms\/?/u, '')
+          .split('/')
+          .filter(Boolean)
+
+        if (segments[0] === 'submissions') {
+          const rest = segments.slice(1)
+
+          if (rest.length === 0 && method === 'GET') {
+            const formId = parsed.searchParams.get('formId')
+            const status = parsed.searchParams.get('status')
+            const filtered = formSubmissions.filter(
+              (s) =>
+                (formId === null || s.formId === formId) &&
+                (status === null || s.status === status),
+            )
+            return json(200, { data: filtered, nextCursor: null })
+          }
+          if (rest.length === 1 && rest[0] === 'unread-count' && method === 'GET') {
+            return json(200, {
+              data: { count: formSubmissions.filter((s) => s.status === 'new').length },
+            })
+          }
+          if (rest.length === 1 && rest[0] === 'search' && method === 'GET') {
+            const email = (parsed.searchParams.get('email') ?? '').toLowerCase()
+            const matches = formSubmissions.filter((s) =>
+              Object.values(s.values).some(
+                (v) => typeof v === 'string' && v.toLowerCase() === email,
+              ),
+            )
+            return json(200, { data: matches })
+          }
+          if (rest.length === 1 && rest[0] === 'by-email' && method === 'DELETE') {
+            const email = (parsed.searchParams.get('email') ?? '').toLowerCase()
+            const before = formSubmissions.length
+            formSubmissions = formSubmissions.filter(
+              (s) =>
+                !Object.values(s.values).some(
+                  (v) => typeof v === 'string' && v.toLowerCase() === email,
+                ),
+            )
+            return json(200, { data: { erased: before - formSubmissions.length } })
+          }
+          if (rest.length === 1 && rest[0] === 'bulk' && method === 'POST') {
+            const ids = (body.ids ?? []) as string[]
+            const action = body.action as string
+            if (action === 'delete') {
+              const before = formSubmissions.length
+              formSubmissions = formSubmissions.filter((s) => !ids.includes(s.id))
+              return json(200, { data: { updated: before - formSubmissions.length } })
+            }
+            let updated = 0
+            formSubmissions = formSubmissions.map((s) => {
+              if (!ids.includes(s.id)) return s
+              updated += 1
+              return { ...s, status: action as typeof s.status }
+            })
+            return json(200, { data: { updated } })
+          }
+          if (rest.length === 1) {
+            const submission = formSubmissions.find((s) => s.id === rest[0])
+            if (submission === undefined) {
+              return json(404, {
+                error: { code: 'FORM_SUBMISSION_NOT_FOUND', message: 'No such submission.' },
+              })
+            }
+            if (method === 'GET') return json(200, { data: submission })
+            if (method === 'PATCH') {
+              submission.status = body.status as typeof submission.status
+              return json(200, { data: submission })
+            }
+            if (method === 'DELETE') {
+              formSubmissions = formSubmissions.filter((s) => s.id !== submission.id)
+              return new Response(null, { status: 204 })
+            }
+          }
+        }
+
+        if (segments.length === 0 && method === 'GET') return json(200, { data: formDefs })
+        if (segments.length === 0 && method === 'POST') {
+          formCounter += 1
+          const created = {
+            id: `form-${formCounter}`,
+            name: body.name as string,
+            label: body.label as string,
+            fields: (body.fields ?? []) as Record<string, unknown>[],
+            active: (body.active as boolean | undefined) ?? true,
+            confirmationMessage:
+              (body.confirmationMessage as string | undefined) ??
+              'Thank you — your message has been received.',
+            redirectTo: (body.redirectTo as string | null | undefined) ?? null,
+            notifyEmails: (body.notifyEmails as string[] | undefined) ?? [],
+            autoresponder: (body.autoresponder as { enabled: boolean } | undefined) ?? {
+              enabled: false,
+            },
+            retainDays: (body.retainDays as number | undefined) ?? 180,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+          }
+          formDefs.push(created)
+          return json(201, { data: created })
+        }
+        if (segments.length === 1) {
+          const existing = formDefs.find((f) => f.id === segments[0])
+          if (existing === undefined) {
+            return json(404, { error: { code: 'FORM_UNKNOWN', message: 'No such form.' } })
+          }
+          if (method === 'GET') return json(200, { data: existing })
+          if (method === 'PATCH') {
+            Object.assign(existing, body, { updatedAt: '2026-03-01T00:01:00.000Z' })
+            return json(200, { data: existing })
+          }
+          if (method === 'DELETE') {
+            formDefs = formDefs.filter((f) => f.id !== existing.id)
+            return new Response(null, { status: 204 })
+          }
+        }
       }
 
       throw new Error(`unhandled request in test: ${method} ${url}`)

@@ -64,6 +64,7 @@ describe('the shell status transport', () => {
       commerceOrdersPending: null,
       commerceActive: false,
       marketplaceUpdates: null,
+      formSubmissionsUnread: null,
     })
   })
 
@@ -250,6 +251,28 @@ describe('the shell status transport', () => {
     // Only `theme-a` moved (1.0.0 installed, 2.0.0 in the catalogue) —
     // `skin-b` is already current.
     expect(dataOf<{ marketplaceUpdates: number }>(response).marketplaceUpdates).toBe(1)
+  })
+
+  it('reports unread form submissions to admin (fiche 16 task 4 nav badge)', async () => {
+    const router = createShellStatusRouter({
+      content: emptyContent,
+      forms: { countUnread: async () => 3 },
+    })
+    const response = await router.handle(request(), { actor: ADMIN })
+    expect(dataOf<{ formSubmissionsUnread: number }>(response).formSubmissionsUnread).toBe(3)
+  })
+
+  it('answers null for form submissions to a non-admin (courtesy only — the forms router is the real gate)', async () => {
+    const router = createShellStatusRouter({
+      content: emptyContent,
+      forms: { countUnread: async () => 3 },
+    })
+    const response = await router.handle(request(), {
+      actor: { id: 'u1', roles: ['contributor'] },
+    })
+    expect(dataOf<{ formSubmissionsUnread: number | null }>(response).formSubmissionsUnread).toBe(
+      null,
+    )
   })
 
   it('answers 404 for an unrelated path', async () => {

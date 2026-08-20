@@ -783,6 +783,82 @@ commande ou la représentation d'un montant est majeur.
 
 ---
 
+## Contrat G — Formulaires
+
+> **Acté (ADR-0026), non figé.** Ce contrat repose sur l'**ADR-0026**, actée dans
+> `docs/03-decisions.md`. La fiche 16 est son premier et seul consommateur.
+
+### Pourquoi un contrat séparé et pas une extension du contrat A
+
+Même raisonnement qu'ADR-0024 (commerce) et ADR-0025 (commentaires) : une soumission de
+formulaire est un fait constaté — elle arrive, elle ne se rédige pas — sans traduction,
+sans brouillon, sans version. Son volume et son modèle de menace (une route publique en
+écriture, un accusé de réception qui peut devenir un relais de spam) sont d'un autre
+ordre que ce que le contrat A a jamais eu à porter.
+
+### Objets
+
+```
+FormDefinition  nom unique, libellé, liste de champs typés, actif, message de
+                confirmation ou redirection, destinataires de notification,
+                accusé de réception (désactivé par défaut), rétention (jours)
+FormSubmission  formulaire, valeurs, consentements horodatés (texte figé au
+                moment du recueil), statut (nouveau | lu | archivé |
+                indésirable), IP hachée (jamais en clair), référent, horodatage
+```
+
+Ni l'un ni l'autre ne porte `status` de contenu, `version`, `translationOf` ni
+`deletedAt`, et aucun ne passe par `ContentStore`.
+
+### Champs
+
+Neuf types, fermés : `text`, `longText`, `email`, `phone`, `number`, `date`,
+`choiceSingle`, `choiceMulti`, `consent`. **Pas de champ `file`** dans cette première
+version — décision délibérée, pour ne pas ouvrir la surface téléversement/antivirus sans
+besoin prouvé (voir le renoncement assumé de l'ADR).
+
+Un champ `consent` porte son propre texte (`consentText`), et c'est ce texte exact —
+jamais celui d'aujourd'hui — qui est copié, horodaté, sur chaque soumission qui le coche :
+c'est lui qui a valeur probante, pas la définition du formulaire au moment où on la
+consulte.
+
+### La route publique
+
+`POST /api/forms/{name}/submit` est la deuxième route publique en écriture du CMS, après
+les commentaires (contrat F). Mêmes exigences : limitation de débit par IP et par
+formulaire, champ piège, délai minimal de remplissage, validation serveur complète
+indépendante du client. Elle **fonctionne sans JavaScript** — un `POST`
+`application/x-www-form-urlencoded` classique — et répond par une redirection vers la
+page de confirmation en cas de succès ; une soumission refusée réaffiche ce que le
+visiteur a tapé, jamais un formulaire vidé.
+
+Arrivée sur une page : une **route dédiée** (`GET /forms/{name}`), rendue par le gabarit
+comme `/search` (L10) — le contrat B est figé et un bloc `form` exige une RFC, ouverte en
+parallèle sans bloquer cette fiche.
+
+### Rétention et RGPD
+
+Rétention configurable par formulaire (`retainDays`), purgée automatiquement sur le
+modèle exact d'ADR-0022 (`retainDays`/`purgeExpired`, appliqué aux soumissions plutôt
+qu'au contenu). Recherche et effacement par adresse e-mail à travers toutes les
+soumissions — le minimum qu'exige une demande d'export ou de suppression RGPD.
+
+### Notifications
+
+Réutilisent l'adaptateur e-mail existant de `@cogenta/channels` (jamais un second
+transport) et son format `AlertChannelMessage`. L'accusé de réception au visiteur est
+**désactivé par défaut** et limité en débit indépendamment de la limite de soumission :
+un e-mail envoyé au nom du site vers une adresse fournie par un anonyme, sans plafond,
+est un relais de spam en puissance.
+
+### Versionnement
+
+`forms@1.0` (ADR-0026, non figé). Ajouter un type de champ ou un statut de soumission
+est mineur ; changer le sens d'un statut existant ou la forme d'un consentement
+enregistré est majeur.
+
+---
+
 ## Format d'export et de sauvegarde (fiche 26)
 
 > **Documenté ici par décision du plan de la fiche 26** (« le format d'export est un

@@ -359,6 +359,9 @@ importers:
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core
+      '@cogenta/forms':
+        specifier: workspace:*
+        version: link:../forms
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema
@@ -474,6 +477,9 @@ importers:
       '@cogenta/export':
         specifier: workspace:*
         version: link:../export
+      '@cogenta/forms':
+        specifier: workspace:*
+        version: link:../forms
       '@cogenta/import':
         specifier: workspace:*
         version: link:../import
@@ -626,6 +632,22 @@ importers:
       '@cogenta/plugins':
         specifier: workspace:*
         version: link:../plugins
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@22.20.1)(jsdom@27.4.0)(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/forms:
+    dependencies:
+      '@cogenta/channels':
+        specifier: workspace:*
+        version: link:../channels
+      '@cogenta/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       typescript:
         specifier: 'catalog:'

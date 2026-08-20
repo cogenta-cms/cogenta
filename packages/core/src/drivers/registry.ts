@@ -5,6 +5,7 @@ import {
   type Driver,
   type DriverChoice,
   type DriverSelection,
+  type DriverSelectionReason,
   type HealthReport,
   type SkippedDriver,
 } from './types.js'
@@ -60,6 +61,7 @@ export function createDriverRegistry<TInstance, TConfig extends DriverChoice>(
     instance: TInstance,
     requested: boolean,
     reason: string,
+    reasonCode: DriverSelectionReason,
     skipped: readonly SkippedDriver[],
   ): DriverSelection<TInstance> {
     let disposed = false
@@ -73,6 +75,7 @@ export function createDriverRegistry<TInstance, TConfig extends DriverChoice>(
       instance,
       requested,
       reason,
+      reasonCode,
       skipped,
       dispose: async () => {
         if (disposed) return
@@ -122,7 +125,14 @@ export function createDriverRegistry<TInstance, TConfig extends DriverChoice>(
 
     try {
       const instance = await driver.init(config)
-      return selection(driver, instance, true, `named in the configuration`, [])
+      return selection(
+        driver,
+        instance,
+        true,
+        `named in the configuration`,
+        { code: 'named', skipped: [] },
+        [],
+      )
     } catch (error) {
       throw new CogentaError({
         code: 'DRIVER_INIT_FAILED',
@@ -138,18 +148,28 @@ export function createDriverRegistry<TInstance, TConfig extends DriverChoice>(
     const skipped: SkippedDriver[] = []
 
     for (const driver of ordered()) {
-      const skip = (reason: string): void => {
-        skipped.push({ driver: driver.name, tier: driver.tier, reason })
+      const skip = (
+        reason: string,
+        reasonCode: SkippedDriver['reasonCode'],
+        detail?: string,
+      ): void => {
+        skipped.push({
+          driver: driver.name,
+          tier: driver.tier,
+          reason,
+          reasonCode,
+          ...(detail === undefined ? {} : { detail }),
+        })
         logger.debug('driver skipped', { driver: driver.name, tier: driver.tier, reason })
       }
 
       try {
         if (!(await driver.available(config))) {
-          skip('not available')
+          skip('not available', 'not-available')
           continue
         }
       } catch (error) {
-        skip(`not available: ${describe(error)}`)
+        skip(`not available: ${describe(error)}`, 'not-available-error', describe(error))
         continue
       }
 
@@ -159,11 +179,18 @@ export function createDriverRegistry<TInstance, TConfig extends DriverChoice>(
           skipped.length === 0
             ? 'first available driver'
             : `${skipped.map((s) => `${s.driver} ${s.reason}`).join(', ')}`
-        return selection(driver, instance, false, because, skipped)
+        return selection(
+          driver,
+          instance,
+          false,
+          because,
+          { code: skipped.length === 0 ? 'first-available' : 'fallback', skipped },
+          skipped,
+        )
       } catch (error) {
         // It answered the probe and failed anyway. Keep going: the site booting
         // on a degraded driver beats the site not booting.
-        skip(`failed to start: ${describe(error)}`)
+        skip(`failed to start: ${describe(error)}`, 'failed-to-start', describe(error))
         logger.warn('driver failed to start, trying the next one', {
           driver: driver.name,
           error,

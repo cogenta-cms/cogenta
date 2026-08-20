@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
@@ -5,6 +6,7 @@ import {
   type AuditIntegrityStatus,
   applyMigrations,
   type DiskUsageStatus,
+  type DoctorCheck,
   type DoctorReport,
   type ErrorLogEntry,
   type MaintenanceState,
@@ -16,6 +18,7 @@ import {
   readHealthReport,
   readMaintenance,
   readMigrationsStatus,
+  type SkippedDriverReason,
   setMaintenance,
 } from '../api/health-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -34,6 +37,35 @@ function statusTone(status: 'ok' | 'degraded' | 'down'): 'success' | 'warning' |
   if (status === 'ok') return 'success'
   if (status === 'degraded') return 'warning'
   return 'danger'
+}
+
+/**
+ * `check.reason` on its own is `@cogenta/core`'s driver registry composing
+ * plain English sentences ("named in the configuration", "redis not
+ * available") for `cogenta doctor`'s terminal output, which has never been
+ * localized — showing that text verbatim in this French-language screen was
+ * L20 audit §1 point 12. `check.reasonCode` carries the same information as
+ * a stable code instead, translated here the way an `ErrorCode` is; `reason`
+ * is kept only as the fallback for a server built before this field existed.
+ */
+function describeSkip(skip: SkippedDriverReason, t: TFunction): string {
+  if (skip.reasonCode === 'not-available') {
+    return t('health.skipNotAvailable', { driver: skip.driver })
+  }
+  if (skip.reasonCode === 'not-available-error') {
+    return t('health.skipNotAvailableError', { driver: skip.driver, detail: skip.detail ?? '' })
+  }
+  return t('health.skipFailedToStart', { driver: skip.driver, detail: skip.detail ?? '' })
+}
+
+function describeReason(check: DoctorCheck, t: TFunction): string {
+  const code = check.reasonCode
+  if (code === undefined) return check.reason
+  if (code.code === 'named') return t('health.reasonNamed')
+  if (code.code === 'first-available') return t('health.reasonFirstAvailable')
+  return t('health.reasonFallback', {
+    skipped: code.skipped.map((skip) => describeSkip(skip, t)).join(', '),
+  })
 }
 
 export function HealthRoute(): JSX.Element | null {
@@ -154,7 +186,8 @@ export function HealthRoute(): JSX.Element | null {
               {report.checks.map((check) => (
                 <li key={check.need}>
                   <Notice tone={statusTone(check.status)} live="off">
-                    <strong>{check.need}</strong>: {check.driver} ({check.tier}) — {check.reason}
+                    <strong>{check.need}</strong>: {check.driver} ({check.tier}) —{' '}
+                    {describeReason(check, t)}
                     {check.message !== undefined && (
                       <p className="m-0 mt-1 text-xs">{check.message}</p>
                     )}

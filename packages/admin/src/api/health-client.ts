@@ -33,12 +33,32 @@ export function getSiteHealth(token: string): Promise<SiteHealth> {
  * `/api/health` and `/api/health-report` as two separate routes.
  */
 
+/** Mirrors `@cogenta/core`'s `SkipReasonCode` — why a driver earlier in the tier order was passed over. `detail`, when present, is that driver's own error text, shown as-is (untranslatable, like any exception message). */
+export type SkipReasonCode = 'not-available' | 'not-available-error' | 'failed-to-start'
+
+export interface SkippedDriverReason {
+  readonly driver: string
+  readonly tier: string
+  readonly reasonCode: SkipReasonCode
+  readonly detail?: string
+}
+
+/** Mirrors `@cogenta/core`'s `DriverSelectionReasonCode` — the stable-code counterpart of `DoctorCheck.reason` (L20 audit §1 point 12: `reason` itself is hard-coded English prose, never translated in this French-language screen). */
+export type DriverSelectionReasonCode = 'named' | 'first-available' | 'fallback'
+
+export interface DriverSelectionReason {
+  readonly code: DriverSelectionReasonCode
+  readonly skipped: readonly SkippedDriverReason[]
+}
+
 export interface DoctorCheck {
   readonly need: string
   readonly status: 'ok' | 'degraded' | 'down'
   readonly driver: string
   readonly tier: string
   readonly reason: string
+  /** Absent only from a server built before this field existed — `health.tsx` falls back to `reason` in that case. */
+  readonly reasonCode?: DriverSelectionReason
   readonly message: string | undefined
 }
 

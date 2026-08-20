@@ -248,6 +248,9 @@ importers:
       '@cogenta/blocks':
         specifier: workspace:*
         version: link:../blocks
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
@@ -378,6 +381,9 @@ importers:
       '@cogenta/plugins':
         specifier: workspace:*
         version: link:../plugins
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

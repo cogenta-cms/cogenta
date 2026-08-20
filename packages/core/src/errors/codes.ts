@@ -418,6 +418,13 @@ export const ERROR_CODES = [
   'SCHEDULER_QUEUE_JOB_NOT_FOUND',
   'SCHEDULER_QUEUE_JOB_NOT_RETRYABLE',
 
+  // Appearance and theme — DB-stored skin overrides overlaying contract D's
+  // file-based skin (fiche 14)
+  'THEME_OVERRIDE_INVALID',
+  'THEME_SKIN_NOT_FOUND',
+  'THEME_NO_PROVIDER',
+  'THEME_EXPORT_NOT_ALLOWED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

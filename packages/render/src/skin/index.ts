@@ -18,6 +18,8 @@ export {
 } from './color.js'
 export type { RenderSkinCssOptions } from './css.js'
 export { CSS_VARIABLE_PREFIX, cssVariableName, renderSkinCss } from './css.js'
+export type { SkinTokenOverrides } from './merge.js'
+export { mergeSkinTokens } from './merge.js'
 export type { SkinSheet, SkinStore, SkinStoreOptions } from './sheet.js'
 export { createSkinStore, renderSkin } from './sheet.js'
 export type {

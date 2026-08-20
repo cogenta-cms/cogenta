@@ -162,6 +162,19 @@ export { createSiteSettingsRouter } from './site-settings-router.js'
 export type { TaxonomyRouter, TaxonomyRouterOptions } from './taxonomy-router.js'
 export { createTaxonomyRouter } from './taxonomy-router.js'
 export type {
+  SetThemeOverridesInputLike,
+  SkinCandidateLike,
+  SkinGalleryEntryLike,
+  SkinGalleryLike,
+  SkinGeneratorLike,
+  ThemeOverridesLike,
+  ThemeRouter,
+  ThemeRouterOptions,
+  ThemeStoreLike,
+  ThemeTokensLike,
+} from './theme-router.js'
+export { createThemeRouter } from './theme-router.js'
+export type {
   ToolDefinitionLike,
   ToolRunLike,
   ToolRunStatus,

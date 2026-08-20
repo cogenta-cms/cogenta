@@ -57,6 +57,7 @@ import {
   createSiteSettingsRouter,
   createSuspiciousActivitySource,
   createTaxonomyRouter,
+  createThemeRouter,
   createToolsRouter,
   createUsersRouter,
   errorResponse,
@@ -88,6 +89,8 @@ import {
   type SitePlanRouterOptions,
   type SiteSettingsRouter,
   type TaxonomyRouter,
+  type ThemeRouter,
+  type ThemeRouterOptions,
   type ToolsRouter,
   type TrashStatus,
   type UsersRouter,
@@ -223,6 +226,7 @@ import {
   renderRequestedPage,
   STYLESHEET_PATH,
 } from './theme-render.js'
+import { computeEffectiveStyles, computePreviewStyles, createThemeWiring } from './theme-wiring.js'
 import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
@@ -551,8 +555,29 @@ interface Site {
     /** Which page answers an unmatched URL (L14 task 2). `/404` by default. */
     readonly notFoundPath: string
   }
-  /** The skin's custom properties plus the theme's own stylesheet, minified into one. `null` when neither could be loaded — the theme-render fallback serves unstyled HTML rather than refusing. */
+  /** The skin's custom properties plus the theme's own stylesheet, minified into one, as computed once at startup. `null` when neither could be loaded — the theme-render fallback serves unstyled HTML rather than refusing. Kept for callers with no theme wiring; a live request should call `resolveStyles()` instead — see its own comment for why. */
   readonly styles: string | null
+  /**
+   * The live stylesheet (fiche 14): `theme.tokens.json` overlaid with
+   * whatever an `admin` saved from the appearance screen, recomputed on
+   * every call rather than cached at startup — this is what makes a saved
+   * override show up on the very next page view without a restart. Falls
+   * back to the static `styles` above when this instance built no theme
+   * wiring (`options.theme` absent — only test harnesses that do not care
+   * about appearance omit it).
+   */
+  readonly resolveStyles: () => Promise<string | null>
+  /**
+   * The appearance screen's live preview (fiche 14 task 2): renders the
+   * given token/CSS candidate without saving it. Absent under the same
+   * condition as `themeRouter`.
+   */
+  readonly previewStyles?: (candidate: {
+    readonly tokens?: Record<string, unknown>
+    readonly additionalCss?: string
+  }) => Promise<string | null>
+  /** `/api/theme` (fiche 14). Absent only when this instance built no theme wiring — see `resolveStyles`. */
+  readonly themeRouter?: ThemeRouter
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -652,6 +677,15 @@ interface AssembleSiteOptions {
   readonly readOnly?: boolean
   /** `null` when neither the skin nor the theme stylesheet could be loaded — see `joinStyles`. */
   readonly styles?: string | null
+  /**
+   * `theme.tokens.json`'s directory-independent CSS — the theme package's
+   * own stylesheet, loaded once, never a function of the request. Paired
+   * with `theme` below to let `resolveStyles()` recompute only the skin half
+   * (the tokens) on every call, not this.
+   */
+  readonly themeCss?: string | null
+  /** Fiche 14. Absent only in a test that does not care about appearance. */
+  readonly theme?: ThemeRouterOptions
   /**
    * Resizes and re-encodes images at upload (L10 task 5).
    *
@@ -1448,6 +1482,25 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     taxonomies,
     site,
     styles,
+    resolveStyles:
+      options.theme === undefined
+        ? async () => styles
+        : () =>
+            computeEffectiveStyles(options.theme as ThemeRouterOptions, options.themeCss ?? null),
+    ...(options.theme === undefined
+      ? {}
+      : {
+          previewStyles: (candidate: {
+            readonly tokens?: Record<string, unknown>
+            readonly additionalCss?: string
+          }) =>
+            computePreviewStyles(
+              options.theme as ThemeRouterOptions,
+              options.themeCss ?? null,
+              candidate,
+            ),
+        }),
+    ...(options.theme === undefined ? {} : { themeRouter: createThemeRouter(options.theme) }),
     security: options.security,
     health: options.health,
     tickScheduledPublishing: () => scheduledPublishQueue.tick(),
@@ -2292,11 +2345,18 @@ export function createRequestListener(
           res.writeHead(405, { allow: 'GET' }).end()
           return
         }
-        if (site.styles === null) {
+        // Recomputed on every request (`resolveStyles`, fiche 14) rather
+        // than the fixed startup snapshot — this is the one route where
+        // "a skin swap must show up on the next request" actually has to be
+        // true, and the ETag below is what keeps that promise cheap: a
+        // browser that already has the current bytes gets a 304, not a
+        // re-download, even though the server recomputed to know that.
+        const liveStyles = await site.resolveStyles()
+        if (liveStyles === null) {
           jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This site has no stylesheet.')
           return
         }
-        const etag = cssEtag(site.styles)
+        const etag = cssEtag(liveStyles)
         if (req.headers['if-none-match'] === etag) {
           res.writeHead(304, { etag }).end()
           return
@@ -2309,7 +2369,7 @@ export function createRequestListener(
           // ETag makes that revalidation a 304 rather than a re-download.
           'cache-control': 'public, max-age=0, must-revalidate',
         })
-        res.end(site.styles)
+        res.end(liveStyles)
         return
       }
 
@@ -2658,6 +2718,110 @@ export function createRequestListener(
         return
       }
 
+      // `/api/theme/preview` (fiche 14 task 2) — a candidate token/CSS
+      // overlay, rendered on the real home page without saving it. Checked
+      // before the generic `/api/theme` mount below since this is not a
+      // `ThemeRouter` route: it needs `renderRequestedPage`, which that
+      // router structurally cannot reach (same reason `/api/builder/render`
+      // lives here rather than inside a router package).
+      if (url.pathname === '/api/theme/preview') {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { allow: 'POST' }).end()
+          return
+        }
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may preview a theme change.')
+          return
+        }
+        if (site.previewStyles === undefined) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This instance has no theme preview.')
+          return
+        }
+        const body = (await readBody(req)) as
+          | { pathname?: unknown; tokens?: unknown; additionalCss?: unknown }
+          | undefined
+        const pathname =
+          typeof body?.pathname === 'string' && body.pathname.startsWith('/') ? body.pathname : '/'
+        let previewStyles: string | null
+        try {
+          previewStyles = await site.previewStyles({
+            ...(typeof body?.tokens === 'object' && body.tokens !== null
+              ? { tokens: body.tokens as Record<string, unknown> }
+              : {}),
+            ...(typeof body?.additionalCss === 'string'
+              ? { additionalCss: body.additionalCss }
+              : {}),
+          })
+        } catch (error) {
+          writeRestResponse(res, errorResponse(error))
+          return
+        }
+        const html = await renderRequestedPage(
+          pathname,
+          {
+            collections: site.collections,
+            gateway: site.gateway,
+            site: site.site,
+            styles: previewStyles,
+            loadMedia: (ids) => loadRenderMedia(site, ids),
+            // A preview is never a real visit, and never cacheable.
+            analyticsBeacon: {},
+            menuRouter: site.menuRouter,
+            homePath: async () => {
+              const setting = await site.siteSettingsStore.get(
+                'reading.homePath',
+                SITE_SETTINGS_SITE_SCOPE,
+              )
+              return typeof setting?.value === 'string' ? setting.value : null
+            },
+          },
+          context,
+        )
+        if (html === null) {
+          jsonError(
+            res,
+            404,
+            'CONTENT_NOT_FOUND',
+            'No page exists at this path to preview against.',
+          )
+          return
+        }
+        // `renderRequestedPage`'s own `styles` option only decides whether
+        // the `<link rel="stylesheet">` tag is emitted — the browser then
+        // fetches whatever `/_cogenta/styles.css` currently serves, which is
+        // the *saved* overrides, never an unsaved candidate. An inline
+        // `<style>` right before `</head>` overrides those custom
+        // properties by cascade order (same `:root` specificity, later
+        // wins) — the one place in this file a `<style>` tag is correct
+        // rather than a CSP violation: this response is JSON, consumed by
+        // the appearance screen's own iframe (`srcDoc`, not a served
+        // document on the site's own origin), the same trust boundary
+        // `PreviewFrame` already relies on for the page builder.
+        const withPreviewCss =
+          previewStyles === null
+            ? html
+            : html.replace('</head>', `<style>${previewStyles}</style></head>`)
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(JSON.stringify({ data: { html: withPreviewCss } }))
+        return
+      }
+
+      // `/api/theme` (fiche 14) — the appearance screen. Admin only, every
+      // route; `ThemeRouter` itself refuses a non-admin, checked again here
+      // is unnecessary since nothing below reads the body unbounded the way
+      // `/api/site-plans` does. Absent only when this instance built no
+      // theme wiring (never true for a real `cogenta serve`/`cogenta dev`).
+      if (url.pathname.startsWith('/api/theme') && site.themeRouter !== undefined) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.themeRouter.handle(request, context.actor))
+        return
+      }
+
       // The admin's WordPress importer. Same defensive order as
       // `/api/site-plans` just above and for the same reason: this route
       // invites a multi-megabyte upload by design, so the role is checked
@@ -2890,7 +3054,7 @@ export function createRequestListener(
             gateway: site.gateway,
             collections: site.collections,
             site: site.site,
-            styles: site.styles,
+            styles: await site.resolveStyles(),
           },
           context,
         )
@@ -2911,7 +3075,9 @@ export function createRequestListener(
           collections: site.collections,
           gateway: site.gateway,
           site: site.site,
-          styles: site.styles,
+          // Live, not the startup snapshot — a saved appearance override
+          // must show up on the very next page view (fiche 14).
+          styles: await site.resolveStyles(),
           loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
           // Self-hosted analytics (`@cogenta/analytics`): the referrer is read
           // from *this* request's own header, server-side — see
@@ -3210,9 +3376,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const rateLimitSelection = await createRateLimitRegistry({ logger }).select(
     loaded.config.rateLimit,
   )
+  const themeCss = await loadThemeCss({ read: (url) => readFile(url, 'utf8') })
   const styles = joinStyles(
     await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),
-    await loadThemeCss({ read: (url) => readFile(url, 'utf8') }),
+    themeCss,
   )
   const images = await selectMediaImageProcessor(logger)
   // One signed channel for both outbound events — the content lifecycle (task
@@ -3269,6 +3436,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
     }),
     readOnly: options.readOnly ?? false,
     styles,
+    themeCss,
+    theme: await createThemeWiring({
+      projectRoot,
+      db: selection.instance,
+      config: loaded.config,
+      development: options.development ?? false,
+      readOnly: options.readOnly ?? false,
+    }),
     images: images?.processor ?? null,
     security: loaded.config.security,
     notFoundLog: loaded.config.notFoundLog,

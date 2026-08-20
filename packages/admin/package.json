@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@cogenta/blocks": "workspace:*",
+    "@cogenta/render": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",

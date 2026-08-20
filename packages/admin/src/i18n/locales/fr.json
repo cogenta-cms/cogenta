@@ -154,6 +154,7 @@
     "commerceOrders": "Commandes",
     "commerceCoupons": "Coupons",
     "commerceSubscriptions": "Abonnements",
+    "appearance": "Apparence",
     "redirects": "Redirections",
     "seo": "SEO",
     "translations": "Traductions",
@@ -1189,6 +1190,87 @@
       "todo": "À faire",
       "shortcuts": "Raccourcis",
       "backups": "État des sauvegardes"
+    }
+  },
+  "appearance": {
+    "heading": "Apparence",
+    "description": "Changez les couleurs, la typographie et l'identité du site sans terminal. Les changements s'enregistrent en surcharge de theme.tokens.json et s'appliquent à la prochaine page vue.",
+    "adminOnly": "Seul le rôle admin peut lire ou modifier l'apparence du site.",
+    "loadError": "Impossible de charger le thème actuel.",
+    "saveError": "Ce changement n'a pas pu être enregistré.",
+    "previewError": "L'aperçu n'a pas pu être généré.",
+    "generateError": "Aucun thème utilisable n'a pu être généré.",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré.",
+    "saveAction": "Enregistrer",
+    "resetAction": "Revenir au fichier",
+    "exportAction": "Exporter vers theme.tokens.json",
+    "applyAction": "Appliquer",
+    "chooseAction": "Choisir",
+    "provenanceFileOnly": "Chaque valeur affichée ici vient de theme.tokens.json — rien n'a encore été surchargé.",
+    "provenanceOverridden": "Certaines valeurs ci-dessous sont des surcharges enregistrées en base, par-dessus theme.tokens.json.",
+    "previewHeading": "Aperçu en direct",
+    "previewLoading": "Génération de l'aperçu…",
+    "contrastWarningHeading": "Certaines combinaisons de couleurs échouent le contraste AA du WCAG 2.2 :",
+    "contrastWarningLine": "{{foreground}} sur {{background}} est à {{ratio}}:1, il faut {{required}}:1",
+    "additionalCssHeading": "CSS additionnel",
+    "additionalCssLabel": "CSS, ajouté après la feuille de style du thème",
+    "additionalCssNote": "Servi comme partie de la feuille de style du site, jamais comme balise <style> en ligne — cela ne peut donc pas forcer la Content-Security-Policy à autoriser le style en ligne.",
+    "identityHeading": "Identité",
+    "logoLabel": "Logo",
+    "logoDarkLabel": "Logo (mode sombre)",
+    "faviconLabel": "Favicon",
+    "shareImageLabel": "Image de partage par défaut",
+    "galleryHeading": "Galerie de thèmes",
+    "galleryEmpty": "Aucun thème n'a encore été déposé dans la galerie de ce site.",
+    "aiHeading": "Générer un thème",
+    "aiDescriptionLabel": "Décrivez le design voulu",
+    "aiDescriptionPlaceholder": "Sobre, chaleureux, plutôt papier",
+    "aiGenerateAction": "Générer",
+    "aiGenerating": "Génération…",
+    "group": {
+      "color": "Couleurs",
+      "font": "Typographie",
+      "space": "Espacement",
+      "radius": "Rayon",
+      "motion": "Mouvement",
+      "shadow": "Ombre"
+    },
+    "token": {
+      "color": {
+        "bg": "Fond",
+        "fg": "Texte",
+        "accent": "Accent",
+        "accentFg": "Texte sur accent",
+        "muted": "Fond atténué",
+        "mutedFg": "Texte sur fond atténué",
+        "border": "Bordure"
+      },
+      "font": {
+        "sans": "Police sans-serif",
+        "serif": "Police serif",
+        "mono": "Police monospace",
+        "scale": "Ratio d'échelle typographique",
+        "baseSize": "Taille de base"
+      },
+      "space": {
+        "unit": "Unité d'espacement",
+        "density": "Densité"
+      },
+      "radius": {
+        "sm": "Petit",
+        "md": "Moyen",
+        "lg": "Grand"
+      },
+      "motion": {
+        "duration": "Durée",
+        "easing": "Accélération",
+        "reduced": "Respecte prefers-reduced-motion"
+      },
+      "shadow": {
+        "sm": "Petite",
+        "md": "Moyenne"
+      }
     }
   },
   "settings": {

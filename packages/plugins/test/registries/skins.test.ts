@@ -153,6 +153,10 @@ describe('createSkinGallery', () => {
     const listed = await gallery.listAccepted()
     expect(listed.map((entry) => entry.displayName)).toEqual(['accepted one', 'accepted two'])
     expect(listed.every((entry) => entry.status === 'accepted')).toBe(true)
+    // An accepted entry carries its real tokens back out — a caller (fiche
+    // 14's appearance screen) needs more than a name to render a swatch or
+    // apply the skin.
+    expect(listed[0]?.tokens).toEqual(VALID_TOKENS)
   })
 
   it('retrieves a single submission by id, accepted or rejected', async () => {
@@ -168,6 +172,9 @@ describe('createSkinGallery', () => {
     const fetched = await gallery.get(rejected.id)
     expect(fetched?.status).toBe('rejected')
     expect(fetched?.rejectionCode).toBe('SKIN_TOKEN_MISSING')
+    // A rejected entry's tokens never passed validateSkin, so nothing here
+    // hands them back as if they were trustworthy.
+    expect(fetched?.tokens).toBeNull()
 
     expect(await gallery.get('nonexistent-id')).toBeNull()
   })

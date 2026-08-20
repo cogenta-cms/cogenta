@@ -1,7 +1,8 @@
+import type { AccessContext } from '@cogenta/api'
 import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
 import { HONEYPOT_FIELD, TIMESTAMP_FIELD } from '@cogenta/forms'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
-import { STYLESHEET_PATH } from './theme-render.js'
+import { type PageChromeMenus, renderPageChrome } from './theme-render.js'
 
 /**
  * `GET /forms/{name}` — the "route dédiée" ADR-0026 chose over a contract B
@@ -30,6 +31,8 @@ export interface FormPageOptions {
   /** `null` when neither the skin nor the theme stylesheet could be loaded. */
   readonly styles: string | null
   readonly now: () => number
+  /** Same menu wiring the rest of the public site uses (`theme-render.ts`). Absent renders an empty header/footer nav, exactly as before this page had any chrome at all. */
+  readonly menus?: PageChromeMenus
 }
 
 export interface FormPageState {
@@ -142,31 +145,44 @@ ${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">Conse
   return fieldWrapper(field, hasError, input)
 }
 
-function confirmationPage(definition: FormDefinition, options: FormPageOptions): string {
+function confirmationPage(
+  definition: FormDefinition,
+  options: FormPageOptions,
+  context: AccessContext,
+): Promise<string> {
   return shell(
     definition.label,
     `<div class="cg-form__confirmation" role="status"><p>${escapeHtmlText(definition.confirmationMessage)}</p></div>`,
     options,
+    context,
   )
 }
 
-function shell(title: string, body: string, options: FormPageOptions): string {
-  return `<!doctype html>
-<html lang="${escapeHtmlAttribute(options.site.defaultLocale)}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtmlText(title)} — ${escapeHtmlText(options.site.name)}</title>
-${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
-</head>
-<body>
-<main class="cg-main" id="cg-main">
+/**
+ * The real site chrome (`renderPageChrome`, `theme-render.ts`) — the same
+ * skip link, header and footer every collection page renders, not a second,
+ * thinner `<html>` shell of this file's own (L20 audit, points 8-9).
+ */
+async function shell(
+  title: string,
+  body: string,
+  options: FormPageOptions,
+  context: AccessContext,
+): Promise<string> {
+  return renderPageChrome(
+    {
+      site: options.site,
+      locale: options.site.defaultLocale,
+      styles: options.styles,
+      headHtml: `<title>${escapeHtmlText(title)} — ${escapeHtmlText(options.site.name)}</title>`,
+      bodyHtml: `<main class="cg-main" id="cg-main">
 <h1 class="cg-page__title">${escapeHtmlText(title)}</h1>
 ${body}
-</main>
-</body>
-</html>
-`
+</main>`,
+      ...(options.menus === undefined ? {} : { menus: options.menus }),
+    },
+    context,
+  )
 }
 
 /**
@@ -177,8 +193,9 @@ export function renderFormPage(
   definition: FormDefinition,
   state: FormPageState,
   options: FormPageOptions,
-): string {
-  if (state.submitted === true) return confirmationPage(definition, options)
+  context: AccessContext,
+): Promise<string> {
+  if (state.submitted === true) return confirmationPage(definition, options, context)
 
   const errorBanner =
     state.errorMessage != null
@@ -198,13 +215,17 @@ ${fields}
 <button type="submit">Send</button>
 </form>`
 
-  return shell(definition.label, body, options)
+  return shell(definition.label, body, options, context)
 }
 
-export function renderFormNotFoundPage(options: FormPageOptions): string {
+export function renderFormNotFoundPage(
+  options: FormPageOptions,
+  context: AccessContext,
+): Promise<string> {
   return shell(
     'Not found',
     '<p>This form does not exist, or is not accepting submissions.</p>',
     options,
+    context,
   )
 }

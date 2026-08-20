@@ -393,7 +393,7 @@ interface MenuLookupBody {
 async function fetchMenuLinksFromPath(
   path: string,
   locale: string,
-  options: ThemeRenderOptions,
+  options: { readonly menuRouter?: MenuRouter },
   context: AccessContext,
 ): Promise<readonly ResolvedMenuLink[] | null> {
   if (options.menuRouter === undefined) return null
@@ -427,7 +427,7 @@ async function fetchMenuLinksFromPath(
 function fetchMenuLinksByLocation(
   location: string,
   locale: string,
-  options: ThemeRenderOptions,
+  options: { readonly menuRouter?: MenuRouter },
   context: AccessContext,
 ): Promise<readonly ResolvedMenuLink[] | null> {
   return fetchMenuLinksFromPath(
@@ -442,7 +442,7 @@ function fetchMenuLinksByLocation(
 function fetchMenuLinksByName(
   name: string,
   locale: string,
-  options: ThemeRenderOptions,
+  options: { readonly menuRouter?: MenuRouter },
   context: AccessContext,
 ): Promise<readonly ResolvedMenuLink[] | null> {
   return fetchMenuLinksFromPath(
@@ -467,7 +467,7 @@ async function fetchMenuLinksForSlot(
   location: string,
   legacyName: string,
   locale: string,
-  options: ThemeRenderOptions,
+  options: { readonly menuRouter?: MenuRouter },
   context: AccessContext,
 ): Promise<readonly ResolvedMenuLink[] | null> {
   const byLocation = await fetchMenuLinksByLocation(location, locale, options, context)
@@ -507,6 +507,94 @@ function renderMenuLinks(links: readonly ResolvedMenuLink[] | null): string {
     })
     .join('')
   return items === '' ? '' : `<ul class="cg-menu">${items}</ul>`
+}
+
+/**
+ * The subset of `ThemeRenderOptions` the menu lookups actually read —
+ * narrowed so `renderPageChrome` (below) can be called from a page that has
+ * no `ThemeRenderOptions` of its own (`search-page.ts`, `forms-page.ts`)
+ * without either fabricating one or duplicating the lookup.
+ */
+export interface PageChromeMenus {
+  readonly menuRouter?: MenuRouter
+  readonly headerMenuLocation?: string
+  readonly footerMenuLocation?: string
+}
+
+export interface PageChromeOptions {
+  readonly site: { readonly name: string }
+  readonly locale: string
+  /** The joined skin+theme stylesheet (`STYLESHEET_PATH`). `null` renders unstyled rather than refused. */
+  readonly styles: string | null
+  /** Goes inside `<head>`, after the fixed `charset`/`viewport`/`color-scheme` meta tags — a `<title>`, `<meta name="robots">`, SEO tags, whatever the caller already built. */
+  readonly headHtml: string
+  /** The page's own content — normally a `<main id="cg-main">…</main>`, matching the skip-link's target. */
+  readonly bodyHtml: string
+  readonly menus?: PageChromeMenus
+}
+
+/**
+ * The one page frame every public page shares: skip link, `color-scheme`
+ * meta, site header with the primary navigation, the page's own content, the
+ * footer with its own navigation.
+ *
+ * Extracted from `renderEntryPage` (below) so `/search` and `/forms/{name}`
+ * (L20 audit, points 8-9) stop hand-rolling a second, thinner `<html>` shell
+ * that carried the stylesheet link but none of the site's chrome — the two
+ * pages looked unstyled not because the stylesheet failed to load, but
+ * because the markup the stylesheet's selectors target (`.cg-site-header`,
+ * `.cg-site-footer`, the skip link) was never there. `renderEntryPage` itself
+ * is not routed through this helper: its admin bar, comments section and
+ * analytics beacon are specific to a real content entry, and duplicating
+ * `renderPageChrome`'s call there would only move the divergence risk rather
+ * than remove it.
+ */
+export async function renderPageChrome(
+  options: PageChromeOptions,
+  context: AccessContext,
+): Promise<string> {
+  const siteName = escapeAttribute(options.site.name)
+
+  let headerNav = ''
+  let footerNav = ''
+  if (options.menus?.menuRouter !== undefined) {
+    const [headerMenu, footerMenu] = await Promise.all([
+      fetchMenuLinksForSlot(
+        options.menus.headerMenuLocation ?? DEFAULT_HEADER_MENU_LOCATION,
+        'main',
+        options.locale,
+        options.menus,
+        context,
+      ),
+      fetchMenuLinksForSlot(
+        options.menus.footerMenuLocation ?? DEFAULT_FOOTER_MENU_LOCATION,
+        'footer',
+        options.locale,
+        options.menus,
+        context,
+      ),
+    ])
+    headerNav = renderMenuLinks(headerMenu)
+    footerNav = renderMenuLinks(footerMenu)
+  }
+
+  return `<!doctype html>
+<html lang="${escapeAttribute(options.locale)}" dir="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+${options.headHtml}
+${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
+</head>
+<body>
+<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
+${options.bodyHtml}
+<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}</div></footer>
+</body>
+</html>
+`
 }
 
 /**

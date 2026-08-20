@@ -35,6 +35,13 @@ export interface SummaryOptions {
   readonly limit?: number
 }
 
+export interface PageStatsOptions {
+  /** The exact stored path, e.g. `/blog/hello-world` — never a prefix or a pattern. */
+  readonly path: string
+  readonly since: Date
+  readonly until?: Date
+}
+
 export interface CountedPath {
   readonly path: string
   readonly views: number
@@ -71,4 +78,36 @@ export interface AnalyticsSummary {
   readonly topReferrers: readonly CountedReferrer[]
   readonly deviceBreakdown: readonly CountedDevice[]
   readonly dailyViews: readonly DailyViews[]
+  /**
+   * The equal-length window immediately before `since` — the comparison
+   * baseline a "vs. previous period" display needs (fiche 27 task 1). Same
+   * over-count caveat as `uniqueVisitors` above: the daily salt makes a
+   * cross-window unique count exact only *within* one window, not across two.
+   */
+  readonly previousTotalViews: number
+  readonly previousUniqueVisitors: number
+  /**
+   * `(totalViews - previousTotalViews) / previousTotalViews * 100`, or `null`
+   * when there is no previous traffic to compare against — a page with 0
+   * views last period and 5 this period has no meaningful percentage, and
+   * reporting `0%` would say "no change" about what is actually "brand new".
+   */
+  readonly viewsChangePercent: number | null
+}
+
+export interface PageStats {
+  readonly path: string
+  readonly since: string
+  readonly until: string
+  readonly views: number
+  readonly previousViews: number
+  readonly changePercent: number | null
+  /**
+   * This path's 1-based rank by view count among every path seen in the
+   * window, or `null` when the path itself had zero views in it (there is
+   * nothing to rank).
+   */
+  readonly rank: number | null
+  /** How many distinct paths were seen in the window — `rank`'s denominator. */
+  readonly rankedPages: number
 }

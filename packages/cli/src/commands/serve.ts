@@ -152,10 +152,12 @@ import { createSitePlanning } from './site-plan.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
 import {
   DEFAULT_IMAGE_ENDPOINT,
+  entryTitle,
   joinStyles,
   loadSkinCss,
   renderDraftPage,
   renderRequestedPage,
+  resolveEntry,
   STYLESHEET_PATH,
 } from './theme-render.js'
 
@@ -335,6 +337,14 @@ interface Site {
    */
   readonly analyticsStore: AnalyticsStore
   readonly analyticsRouter: AnalyticsRouter
+  /**
+   * Purges event rows (and their daily salts) past the site's configured
+   * retention (fiche 27 task 3) — same shape as `tickScheduledPublishing`,
+   * ticked by `runServe` on a `setInterval` rather than called ad hoc. Returns
+   * how many event rows were dropped, for a test to assert against without
+   * waiting for the real interval.
+   */
+  readonly tickAnalyticsPurge: () => Promise<number>
   /** `/api/taxonomies/*` — terms, mounted apart from content because a taxonomy is not a collection (`schema@2.0`, ADR-0022). */
   readonly taxonomyRouter: TaxonomyRouter
   /** `/api/marketplace/*` — L17's local plugin/theme/skin catalog, reusing `@cogenta/plugins`' real Ed25519 verification unchanged. Always mounted; the catalog is empty until a site configures one. */
@@ -540,6 +550,12 @@ interface AssembleSiteOptions {
    * made-up seller address.
    */
   readonly billing?: CogentaConfig['billing']
+  /**
+   * Events-table retention (fiche 27 task 3). Absent falls back to the
+   * schema's own default (400 days) — every real caller passes
+   * `loaded.config.analytics`, this only saves a test harness from repeating it.
+   */
+  readonly analytics?: CogentaConfig['analytics']
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -823,6 +839,31 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensureAnalyticsTables(db)
   const analyticsStore = createAnalyticsStore(db)
   const siteHost = new URL(site.url).hostname
+  // Mirrors `@cogenta/core`'s `analyticsSchema` default: every real caller
+  // passes `loaded.config.analytics`, this only covers a test harness that
+  // builds a `Site` directly without going through config resolution.
+  const analyticsRetainDays = options.analytics?.retainDays ?? 400
+
+  /**
+   * Resolves a stored analytics path to the entry that lives there (fiche 27
+   * task 1) — the seam `analytics-router.ts` documents: `@cogenta/analytics`
+   * itself knows nothing about collections or routes, so this is where a
+   * bare path becomes a title and an admin link, through the exact same
+   * `resolveEntry`/permission-checked `gateway` the public page render uses.
+   * `undefined` for "no route matches" or "nothing published there any
+   * more" — the top-pages table then falls back to the bare path.
+   */
+  async function resolveAnalyticsPage(
+    path: string,
+    actor: AccessContext['actor'],
+  ): Promise<{ readonly title: string; readonly editHref: string } | undefined> {
+    const resolved = await resolveEntry(path, { collections, gateway, site, styles }, { actor })
+    if (resolved === null) return undefined
+    return {
+      title: entryTitle(resolved.entry),
+      editHref: `/admin/collections/${encodeURIComponent(resolved.collection.name)}/${encodeURIComponent(resolved.entry.id)}`,
+    }
+  }
 
   return {
     db,
@@ -833,7 +874,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ...(options.onForgotPassword == null ? {} : { onForgotPassword: options.onForgotPassword }),
     }),
     analyticsStore,
-    analyticsRouter: createAnalyticsRouter({ store: analyticsStore, siteHost }),
+    analyticsRouter: createAnalyticsRouter({
+      store: analyticsStore,
+      siteHost,
+      resolvePage: resolveAnalyticsPage,
+      retainDays: analyticsRetainDays,
+    }),
+    tickAnalyticsPurge: async () => {
+      const purged = await analyticsStore.purgeEvents(analyticsRetainDays)
+      // Not load-bearing for the purge count a test asserts against — see
+      // `AnalyticsStore.purgeSalts`'s own doc — so its own count is not
+      // reported here.
+      await analyticsStore.purgeSalts(analyticsRetainDays)
+      return purged
+    },
     mediaRouter: createMediaRouter({
       store: mediaStore,
       storage,
@@ -2127,6 +2181,12 @@ export interface ServeOptions {
    * it.
    */
   readonly scheduledPublishTickMs?: number
+  /**
+   * Overrides `ANALYTICS_PURGE_TICK_MS`. Not a CLI flag, same reason as
+   * `scheduledPublishTickMs`: a test proves the retention sweep really runs
+   * without waiting a day for it.
+   */
+  readonly analyticsPurgeTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -2147,6 +2207,16 @@ const SHUTDOWN_GRACE_MS = 2_000
  * on the first tick after the next start, however late that is.
  */
 const SCHEDULED_PUBLISH_TICK_MS = 60_000
+
+/**
+ * How often `runServe` purges analytics events (and their daily salts) past
+ * the site's configured retention (fiche 27 task 3). Once a day: the events
+ * table is the largest table on a site with real traffic, but retention is
+ * measured in days, so nothing is lost by a sweep that runs on this cadence
+ * rather than every minute — same honest trade `SCHEDULED_PUBLISH_TICK_MS`
+ * documents for publication.
+ */
+const ANALYTICS_PURGE_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
@@ -2233,6 +2303,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     security: loaded.config.security,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
+    analytics: loaded.config.analytics,
     sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,
@@ -2307,6 +2378,22 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // no open connections must still be able to exit.
   scheduledPublishTimer.unref()
 
+  // Analytics retention (fiche 27 task 3): same shape as the scheduled-publish
+  // tick above — a first sweep right away, then one every
+  // `ANALYTICS_PURGE_TICK_MS` for as long as this process runs. A failed sweep
+  // is logged, never fatal: a retention hiccup must not take the site down.
+  const runAnalyticsPurgeTick = (): void => {
+    site.tickAnalyticsPurge().catch((error: unknown) => {
+      logger.error('analytics purge tick failed', { error: String(error) })
+    })
+  }
+  runAnalyticsPurgeTick()
+  const analyticsPurgeTimer = setInterval(
+    runAnalyticsPurgeTick,
+    options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
+  )
+  analyticsPurgeTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -2317,6 +2404,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   })
 
   clearInterval(scheduledPublishTimer)
+  clearInterval(analyticsPurgeTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

@@ -196,10 +196,27 @@ export function installMockFetch(
     readonly analyticsSummary?: {
       readonly totalViews?: number
       readonly uniqueVisitors?: number
-      readonly topPages?: readonly { path: string; views: number }[]
+      readonly topPages?: readonly {
+        path: string
+        views: number
+        title?: string
+        editHref?: string
+      }[]
       readonly topReferrers?: readonly { domain: string; views: number }[]
       readonly deviceBreakdown?: readonly { device: string; views: number }[]
       readonly dailyViews?: readonly { day: string; views: number }[]
+      readonly previousTotalViews?: number
+      readonly previousUniqueVisitors?: number
+      readonly viewsChangePercent?: number | null
+      readonly retentionDays?: number | null
+    }
+    /** What `GET /api/analytics/page` answers with — the entry-edit sidebar stats (fiche 27 task 2). Absent means `views: 0, rank: null`, like a page nobody has visited yet. */
+    readonly analyticsPageStats?: {
+      readonly views?: number
+      readonly previousViews?: number
+      readonly changePercent?: number | null
+      readonly rank?: number | null
+      readonly rankedPages?: number
     }
   } = {},
 ): void {
@@ -1156,6 +1173,31 @@ export function installMockFetch(
             topReferrers: options.analyticsSummary?.topReferrers ?? [],
             deviceBreakdown: options.analyticsSummary?.deviceBreakdown ?? [],
             dailyViews: options.analyticsSummary?.dailyViews ?? [],
+            previousTotalViews: options.analyticsSummary?.previousTotalViews ?? 0,
+            previousUniqueVisitors: options.analyticsSummary?.previousUniqueVisitors ?? 0,
+            viewsChangePercent: options.analyticsSummary?.viewsChangePercent ?? null,
+            retentionDays: options.analyticsSummary?.retentionDays ?? 400,
+          },
+        })
+      }
+
+      if (url.includes('/api/analytics/page')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read page stats.' },
+          })
+        }
+        const parsed = new URL(url, 'http://localhost')
+        return json(200, {
+          data: {
+            path: parsed.searchParams.get('path') ?? '',
+            since: '2026-03-01T00:00:00.000Z',
+            until: '2026-03-08T00:00:00.000Z',
+            views: options.analyticsPageStats?.views ?? 0,
+            previousViews: options.analyticsPageStats?.previousViews ?? 0,
+            changePercent: options.analyticsPageStats?.changePercent ?? null,
+            rank: options.analyticsPageStats?.rank ?? null,
+            rankedPages: options.analyticsPageStats?.rankedPages ?? 0,
           },
         })
       }

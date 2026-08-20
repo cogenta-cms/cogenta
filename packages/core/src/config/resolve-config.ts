@@ -166,6 +166,7 @@ export function resolveConfig(
       endpoints: Object.freeze([...config.webhooks.endpoints]),
       secret: secrets.webhookSecret,
     }),
+    analytics: Object.freeze({ retainDays: config.analytics.retainDays }),
     llm:
       config.llm === undefined
         ? undefined

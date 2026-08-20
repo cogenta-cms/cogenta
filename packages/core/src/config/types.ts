@@ -90,6 +90,17 @@ export interface CogentaConfigInput {
   readonly webhooks?: {
     readonly endpoints?: readonly string[]
   }
+  /**
+   * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`, fiche
+   * 27 task 3). The only knob a site owner has: how long a raw event row is
+   * kept before `cogenta serve`'s daily sweep purges it. The events table is
+   * the largest table on a site with real traffic (fiche 27's own piège), so
+   * there is no way to switch purging off entirely — only how long to wait.
+   */
+  readonly analytics?: {
+    /** Days an event row is kept, counted from when it was recorded. */
+    readonly retainDays?: number
+  }
   readonly llm?: {
     readonly provider?: string
     readonly model?: string
@@ -206,6 +217,10 @@ export interface CogentaConfig {
   readonly webhooks: {
     readonly endpoints: readonly string[]
     readonly secret: string | undefined
+  }
+  /** The events-table retention window (fiche 27 task 3). Resolved, default applied. */
+  readonly analytics: {
+    readonly retainDays: number
   }
   /** Absent when no provider is configured. The CMS works without AI (rule R2). */
   readonly llm:

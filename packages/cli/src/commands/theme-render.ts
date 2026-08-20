@@ -217,7 +217,7 @@ function toVocabularyBlocks(
   ]
 }
 
-function entryTitle(entry: ContentEntry): string {
+export function entryTitle(entry: ContentEntry): string {
   const value = entry.values.title
   return typeof value === 'string' && value.trim() !== '' ? value : entry.id
 }
@@ -325,7 +325,7 @@ async function fetchOne(
  * tries first. Not a magic redirect: a site with no page at that slug still
  * 404s honestly, exactly like every other unmatched path.
  */
-async function resolveEntry(
+export async function resolveEntry(
   pathname: string,
   options: ThemeRenderOptions,
   context: AccessContext,

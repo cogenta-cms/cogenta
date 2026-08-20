@@ -82,6 +82,143 @@ describe('createAnalyticsStore — recordEvent', () => {
   })
 })
 
+describe('createAnalyticsStore — getSummary, previous-period comparison', () => {
+  it('compares totals against the equal-length window immediately before', async () => {
+    const db = await testDb()
+    let clock = Date.UTC(2026, 0, 1, 12, 0, 0)
+    const store = createAnalyticsStore(db, () => clock)
+
+    // Previous 7-day window: 2 views.
+    await store.recordEvent({ path: '/a', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+    await store.recordEvent({ path: '/a', ip: '203.0.113.6', userAgent: UA_DESKTOP })
+
+    // Current 7-day window: 4 views.
+    clock = Date.UTC(2026, 0, 8, 12, 0, 0)
+    for (let i = 0; i < 4; i += 1) {
+      await store.recordEvent({ path: '/a', ip: `203.0.113.${i}`, userAgent: UA_DESKTOP })
+    }
+
+    const summary = await store.getSummary({
+      since: new Date(Date.UTC(2026, 0, 8)),
+      until: new Date(Date.UTC(2026, 0, 15)),
+    })
+
+    expect(summary.totalViews).toBe(4)
+    expect(summary.previousTotalViews).toBe(2)
+    expect(summary.viewsChangePercent).toBe(100)
+  })
+
+  it('reports no percentage — not zero — when the previous period had no traffic at all', async () => {
+    const db = await testDb()
+    const store = createAnalyticsStore(db, () => Date.UTC(2026, 0, 15, 12, 0, 0))
+    await store.recordEvent({ path: '/new', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+
+    const summary = await store.getSummary({
+      since: new Date(Date.UTC(2026, 0, 8)),
+      until: new Date(Date.UTC(2026, 0, 16)),
+    })
+
+    expect(summary.totalViews).toBe(1)
+    expect(summary.previousTotalViews).toBe(0)
+    expect(summary.viewsChangePercent).toBeNull()
+  })
+})
+
+describe('createAnalyticsStore — getPageStats', () => {
+  it('reports views, previous-period views and rank for one page', async () => {
+    const db = await testDb()
+    const store = createAnalyticsStore(db, () => Date.UTC(2026, 0, 15, 12, 0, 0))
+
+    for (let i = 0; i < 3; i += 1) {
+      await store.recordEvent({ path: '/popular', ip: `203.0.113.${i}`, userAgent: UA_DESKTOP })
+    }
+    await store.recordEvent({ path: '/rare', ip: '203.0.113.9', userAgent: UA_DESKTOP })
+
+    const stats = await store.getPageStats({
+      path: '/popular',
+      since: new Date(Date.UTC(2026, 0, 1)),
+    })
+
+    expect(stats.views).toBe(3)
+    expect(stats.rank).toBe(1)
+    expect(stats.rankedPages).toBe(2)
+  })
+
+  it('ranks a page below a more popular one', async () => {
+    const db = await testDb()
+    const store = createAnalyticsStore(db, () => Date.UTC(2026, 0, 15, 12, 0, 0))
+
+    for (let i = 0; i < 3; i += 1) {
+      await store.recordEvent({ path: '/popular', ip: `203.0.113.${i}`, userAgent: UA_DESKTOP })
+    }
+    await store.recordEvent({ path: '/rare', ip: '203.0.113.9', userAgent: UA_DESKTOP })
+
+    const stats = await store.getPageStats({
+      path: '/rare',
+      since: new Date(Date.UTC(2026, 0, 1)),
+    })
+
+    expect(stats.views).toBe(1)
+    expect(stats.rank).toBe(2)
+  })
+
+  it('has no rank at all for a page with zero views in the window', async () => {
+    const db = await testDb()
+    const store = createAnalyticsStore(db, () => Date.UTC(2026, 0, 15, 12, 0, 0))
+    await store.recordEvent({ path: '/other', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+
+    const stats = await store.getPageStats({
+      path: '/never-visited',
+      since: new Date(Date.UTC(2026, 0, 1)),
+    })
+
+    expect(stats.views).toBe(0)
+    expect(stats.rank).toBeNull()
+  })
+})
+
+describe('createAnalyticsStore — purgeEvents', () => {
+  it('deletes event rows older than retainDays, keeping newer ones', async () => {
+    const db = await testDb()
+    let clock = Date.UTC(2026, 0, 1, 12, 0, 0)
+    const store = createAnalyticsStore(db, () => clock)
+
+    for (let day = 0; day < 5; day += 1) {
+      await store.recordEvent({ path: '/', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+      clock += 24 * 60 * 60 * 1000
+    }
+
+    // `clock` now sits on day 5 (0-indexed): the events from days 0-1 are
+    // more than 3 days old, days 2-4 are not.
+    const purged = await store.purgeEvents(3, clock)
+    expect(purged).toBe(2)
+
+    const remaining = await store.getSummary({ since: new Date(0), until: new Date(clock + 1) })
+    expect(remaining.totalViews).toBe(3)
+
+    // A second purge at the same instant has nothing left to remove.
+    expect(await store.purgeEvents(3, clock)).toBe(0)
+  })
+})
+
+describe('createAnalyticsStore — purgeSalts', () => {
+  it('deletes salts older than retainDays, keeping newer ones', async () => {
+    const db = await testDb()
+    let clock = Date.UTC(2026, 0, 1, 12, 0, 0)
+    const store = createAnalyticsStore(db, () => clock)
+
+    // Mints one salt per day for five distinct days.
+    for (let day = 0; day < 5; day += 1) {
+      await store.recordEvent({ path: '/', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+      clock += 24 * 60 * 60 * 1000
+    }
+
+    const purged = await store.purgeSalts(3, clock)
+    expect(purged).toBe(2)
+    expect(await store.purgeSalts(3, clock)).toBe(0)
+  })
+})
+
 describe('createAnalyticsStore — getSummary', () => {
   it('breaks views down by day', async () => {
     const db = await testDb()

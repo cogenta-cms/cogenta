@@ -139,6 +139,19 @@ const webhooksSchema = z.strictObject({
   endpoints: z.array(z.url()).default([]),
 })
 
+/**
+ * Analytics events retention (fiche 27 task 3).
+ *
+ * 400 days by default — long enough that "compare this year to last year" (a
+ * real question a site owner asks) still has data on both sides, short
+ * enough that the events table cannot grow forever on a busy site. `cogenta
+ * serve` purges past this every day; there is no way to disable purging
+ * outright, only to choose how long to keep.
+ */
+const analyticsSchema = z.strictObject({
+  retainDays: z.number().int().positive().max(3650).default(400),
+})
+
 const embeddingsSchema = z.strictObject({
   provider: z.enum(EMBEDDINGS_PROVIDERS).default('local'),
   model: nonEmpty.default('all-MiniLM-L6-v2'),
@@ -198,6 +211,7 @@ export const configSchema = z.strictObject({
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
   webhooks: webhooksSchema.prefault({}),
+  analytics: analyticsSchema.prefault({}),
   llm: llmSchema.optional(),
   embeddings: embeddingsSchema.prefault({}),
   imageGeneration: imageGenerationSchema.optional(),

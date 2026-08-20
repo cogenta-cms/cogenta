@@ -9,6 +9,8 @@ import type {
   CountedPath,
   CountedReferrer,
   DailyViews,
+  PageStats,
+  PageStatsOptions,
   RecordEventInput,
   RecordEventResult,
   SummaryOptions,
@@ -44,6 +46,36 @@ export interface AnalyticsStore {
    */
   recordEvent(input: RecordEventInput, now?: number): Promise<RecordEventResult>
   getSummary(options: SummaryOptions): Promise<AnalyticsSummary>
+  /**
+   * Views, trend and rank for one page — what an entry-editor sidebar needs
+   * (fiche 27 task 2), without pulling the whole site's top-N list to find
+   * one row in it.
+   */
+  getPageStats(options: PageStatsOptions): Promise<PageStats>
+  /**
+   * Deletes event rows older than `retainDays`, counted from `now` (fiche 27
+   * task 3). The events table is the largest table on a site with real
+   * traffic — see this package's own privacy/retention notes — so this is
+   * meant to be driven by a daily tick, not called ad hoc.
+   */
+  purgeEvents(retainDays: number, now?: number): Promise<number>
+  /**
+   * Deletes daily salts older than `retainDays`. Not load-bearing for the
+   * cross-day-unlinkability guarantee (`session-hash.ts`) — defence in depth,
+   * so a long-lived site does not accumulate salts it has no more use for
+   * once the events that used them are themselves purged.
+   */
+  purgeSalts(retainDays: number, now?: number): Promise<number>
+}
+
+/**
+ * `(current - previous) / previous * 100`, or `null` when `previous` is zero
+ * — there is no percentage that honestly describes "went from nothing to
+ * something", and reporting `0` would claim the opposite of what happened.
+ */
+function changePercent(current: number, previous: number): number | null {
+  if (previous === 0) return null
+  return ((current - previous) / previous) * 100
 }
 
 export function createAnalyticsStore(
@@ -99,12 +131,25 @@ export function createAnalyticsStore(
       const untilIso = until.toISOString()
       const rowLimit = options.limit ?? DEFAULT_SUMMARY_LIMIT
 
+      // The equal-length window immediately before `since` (task 1's
+      // "comparaison à la période précédente"). `[prevSince, since)`, never
+      // touching `since` itself, so the two windows never share a row.
+      const durationMs = Math.max(until.getTime() - since.getTime(), 0)
+      const previousSinceIso = new Date(since.getTime() - durationMs).toISOString()
+
       const totalResult = await db.query<{ n: number }>(sql`
         select count(*) as n from ${events} where at >= ${sinceIso} and at <= ${untilIso}`)
 
       const uniqueResult = await db.query<{ n: number }>(sql`
         select count(distinct session_hash) as n from ${events}
         where at >= ${sinceIso} and at <= ${untilIso}`)
+
+      const previousTotalResult = await db.query<{ n: number }>(sql`
+        select count(*) as n from ${events} where at >= ${previousSinceIso} and at < ${sinceIso}`)
+
+      const previousUniqueResult = await db.query<{ n: number }>(sql`
+        select count(distinct session_hash) as n from ${events}
+        where at >= ${previousSinceIso} and at < ${sinceIso}`)
 
       const topPagesResult = await db.query<{ path: string; n: number }>(sql`
         select path, count(*) as n from ${events}
@@ -149,16 +194,79 @@ export function createAnalyticsStore(
         views: Number(row.n),
       }))
 
+      const totalViews = Number(totalResult.rows[0]?.n ?? 0)
+      const previousTotalViews = Number(previousTotalResult.rows[0]?.n ?? 0)
+
       return {
         since: sinceIso,
         until: untilIso,
-        totalViews: Number(totalResult.rows[0]?.n ?? 0),
+        totalViews,
         uniqueVisitors: Number(uniqueResult.rows[0]?.n ?? 0),
         topPages,
         topReferrers,
         deviceBreakdown,
         dailyViews,
+        previousTotalViews,
+        previousUniqueVisitors: Number(previousUniqueResult.rows[0]?.n ?? 0),
+        viewsChangePercent: changePercent(totalViews, previousTotalViews),
       }
+    },
+
+    getPageStats: async (options) => {
+      const { path } = options
+      const since = options.since
+      const until = options.until ?? new Date(now())
+      const sinceIso = since.toISOString()
+      const untilIso = until.toISOString()
+      const durationMs = Math.max(until.getTime() - since.getTime(), 0)
+      const previousSinceIso = new Date(since.getTime() - durationMs).toISOString()
+
+      const viewsResult = await db.query<{ n: number }>(sql`
+        select count(*) as n from ${events}
+        where path = ${path} and at >= ${sinceIso} and at <= ${untilIso}`)
+      const previousResult = await db.query<{ n: number }>(sql`
+        select count(*) as n from ${events}
+        where path = ${path} and at >= ${previousSinceIso} and at < ${sinceIso}`)
+
+      const views = Number(viewsResult.rows[0]?.n ?? 0)
+      const previousViews = Number(previousResult.rows[0]?.n ?? 0)
+
+      let rank: number | null = null
+      let rankedPages = 0
+      if (views > 0) {
+        // Every path's count in the window, read once — cheaper than a
+        // correlated subquery per row, and this only runs for a page an
+        // editor has open, never in a hot loop.
+        const rankedResult = await db.query<{ n: number }>(sql`
+          select count(*) as n from ${events}
+          where at >= ${sinceIso} and at <= ${untilIso}
+          group by path`)
+        const counts = rankedResult.rows.map((row) => Number(row.n))
+        rankedPages = counts.length
+        rank = counts.filter((count) => count > views).length + 1
+      }
+
+      return {
+        path,
+        since: sinceIso,
+        until: untilIso,
+        views,
+        previousViews,
+        changePercent: changePercent(views, previousViews),
+        rank,
+        rankedPages,
+      }
+    },
+
+    purgeEvents: async (retainDays, at) => {
+      const cutoff = new Date((at ?? now()) - retainDays * 24 * 60 * 60 * 1000).toISOString()
+      const result = await db.query(sql`delete from ${events} where at < ${cutoff}`)
+      return result.rowsAffected
+    },
+
+    purgeSalts: async (retainDays, at) => {
+      const cutoff = (at ?? now()) - retainDays * 24 * 60 * 60 * 1000
+      return saltStore.purgeOlderThan(utcDateKey(cutoff))
     },
   }
 }

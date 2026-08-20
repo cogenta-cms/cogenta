@@ -20,15 +20,19 @@ afterEach(() => {
   for (const controller of activeServers.splice(0)) controller.abort()
 })
 
-async function project(): Promise<string> {
+async function project(options: { readonly analyticsRetainDays?: number } = {}): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-analytics-'))
+  const analyticsSection =
+    options.analyticsRetainDays === undefined
+      ? ''
+      : `,\n  analytics: { retainDays: ${options.analyticsRetainDays} }`
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
   site: { name: 'Analytics test site', url: 'https://example.com' },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
-  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} }${analyticsSection}
 }
 `,
     'utf8',
@@ -84,7 +88,10 @@ export default [
   return root
 }
 
-async function startServer(root: string): Promise<{ base: string; stop: () => Promise<void> }> {
+async function startServer(
+  root: string,
+  options: { readonly analyticsPurgeTickMs?: number } = {},
+): Promise<{ base: string; stop: () => Promise<void> }> {
   const controller = new AbortController()
   activeServers.push(controller)
 
@@ -102,6 +109,9 @@ async function startServer(root: string): Promise<{ base: string; stop: () => Pr
     port: 0,
     signal: controller.signal,
     onListening: (a) => resolveAddress(a),
+    ...(options.analyticsPurgeTickMs === undefined
+      ? {}
+      : { analyticsPurgeTickMs: options.analyticsPurgeTickMs }),
   })
   const bound = await Promise.race([
     address,
@@ -182,13 +192,20 @@ describe('analytics — end to end through a real server', () => {
         data: {
           totalViews: number
           uniqueVisitors: number
-          topPages: readonly { path: string; views: number }[]
+          topPages: readonly { path: string; views: number; title?: string; editHref?: string }[]
           topReferrers: readonly { domain: string; views: number }[]
         }
       }
       expect(afterBody.data.totalViews).toBe(1)
       expect(afterBody.data.uniqueVisitors).toBe(1)
-      expect(afterBody.data.topPages).toEqual([{ path: '/home', views: 1 }])
+      // `topPages` is enriched with the real entry's title and admin edit
+      // link (fiche 27 task 1) — resolved through the same route matcher and
+      // permission-checked gateway the public page render uses, not a mock.
+      expect(afterBody.data.topPages).toHaveLength(1)
+      expect(afterBody.data.topPages[0]?.path).toBe('/home')
+      expect(afterBody.data.topPages[0]?.views).toBe(1)
+      expect(afterBody.data.topPages[0]?.title).toBe('Home')
+      expect(afterBody.data.topPages[0]?.editHref).toMatch(/^\/admin\/collections\/page\/.+/)
       expect(afterBody.data.topReferrers).toEqual([{ domain: 'search.example', views: 1 }])
     } finally {
       await server.stop()
@@ -238,6 +255,71 @@ describe('analytics — end to end through a real server', () => {
     try {
       const response = await fetch(`${server.base}/api/analytics/beacon`)
       expect(response.status).toBe(204)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('reports per-page stats (views, previous period, rank) at /api/analytics/page', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const admin = await createAdmin(root, server.base)
+      const page = await fetch(`${server.base}/home`)
+      const html = await page.text()
+      const beaconUrlMatch = html.match(/<img src="([^"]*analytics\/beacon[^"]*)"/)
+      const beaconPath = beaconUrlMatch?.[1]?.replace(/&amp;/g, '&')
+      expect(beaconPath).toBeDefined()
+      await fetch(`${server.base}${beaconPath}`)
+
+      const response = await fetch(`${server.base}/api/analytics/page?path=%2Fhome&days=7`, {
+        headers: { authorization: `Bearer ${admin}` },
+      })
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        data: { path: string; views: number; rank: number | null; rankedPages: number }
+      }
+      expect(body.data.path).toBe('/home')
+      expect(body.data.views).toBe(1)
+      expect(body.data.rank).toBe(1)
+      expect(body.data.rankedPages).toBe(1)
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
+describe('analytics — retention purge', () => {
+  it('purges an event past its configured retention on the very first tick', async () => {
+    const root = await project({ analyticsRetainDays: 1 })
+
+    // Seed one event 10 days in the past and one from just now, directly
+    // through the real store — before the server (and its purge tick) ever
+    // starts, so the very first sweep is what is under test.
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createAnalyticsStore, ensureAnalyticsTables } = await import('@cogenta/analytics')
+    const seedDb = await createSqliteHandle({ url: join(root, 'site.db') })
+    await ensureAnalyticsTables(seedDb)
+    const seedStore = createAnalyticsStore(seedDb)
+    const tenDaysAgo = Date.now() - 10 * 24 * 60 * 60 * 1000
+    await seedStore.recordEvent({ path: '/ancient', ip: '203.0.113.5' }, tenDaysAgo)
+    await seedStore.recordEvent({ path: '/recent', ip: '203.0.113.6' }, Date.now())
+    await seedDb.close()
+
+    const server = await startServer(root, { analyticsPurgeTickMs: 24 * 60 * 60 * 1000 })
+    try {
+      const admin = await createAdmin(root, server.base)
+      const response = await fetch(`${server.base}/api/analytics/summary?days=90`, {
+        headers: { authorization: `Bearer ${admin}` },
+      })
+      const body = (await response.json()) as {
+        data: { totalViews: number; topPages: readonly { path: string }[] }
+      }
+      // The 10-day-old event, past the 1-day retention configured above, was
+      // dropped by the tick `runServe` fires once immediately at startup;
+      // the recent one survives.
+      expect(body.data.totalViews).toBe(1)
+      expect(body.data.topPages.map((page) => page.path)).toEqual(['/recent'])
     } finally {
       await server.stop()
     }

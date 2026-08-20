@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
-import { createContentStore } from '@cogenta/schema'
+import { createContentStore, createSearchIndex } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 import { category, post } from '../src/blueprints/blog.js'
 import { resetPlaygroundData } from '../src/playground-reset.js'
@@ -60,6 +60,24 @@ describe('resetPlaygroundData', () => {
     const categories = createContentStore({ db, collection: category, defaultLocale: 'en' })
     const page = await categories.list({ state: 'published' })
     expect(page.items[0]?.createdBy).toBe(admin.id)
+  })
+
+  // L20 audit, point 2: `pack.seedDemoContent` writes straight through
+  // `createContentStore`, never through the `withSearchIndexing`-wrapped
+  // store `cogenta serve` builds — a reset playground would otherwise leave
+  // its search index empty (or stale from before the reset), same root cause
+  // as the installer's own seed path.
+  it('reindexes the reseeded demo content for search', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cogenta-playground-search-'))
+    dirs.push(directory)
+    db = await createSqliteHandle({ url: join(directory, 'site.db') })
+
+    await resetPlaygroundData({ db, blueprintId: 'blog', defaultLocale: 'en' })
+
+    const index = await createSearchIndex({ db })
+    const results = await index.search({ text: 'Cogenta', locale: 'en' })
+    expect(results.hits.length).toBeGreaterThan(0)
+    expect(results.hits.some((hit) => hit.collection === 'post')).toBe(true)
   })
 
   it('refuses an unknown blueprint id with a real, typed error', async () => {

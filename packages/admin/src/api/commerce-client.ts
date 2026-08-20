@@ -429,3 +429,184 @@ export async function fetchInvoicePdf(token: string, orderId: string): Promise<B
   }
   return response.blob()
 }
+
+// ---- tax (fiche 34 task 1) --------------------------------------------------
+
+export interface TaxRule {
+  readonly id: string
+  readonly country: string | null
+  readonly region: string | null
+  readonly taxCategory: string
+  readonly name: string
+  readonly rateBp: number
+  readonly includedInPrice: boolean
+  readonly priority: number
+  readonly active: boolean
+  readonly createdAt: string
+}
+
+export interface TaxOutcome {
+  readonly rateBp: number
+  readonly taxMinor: number
+  readonly includedInPrice: boolean
+  readonly ruleName: string | null
+}
+
+export function listTaxRules(token: string): Promise<{ readonly rules: readonly TaxRule[] }> {
+  return requestBody('/api/commerce/tax/rules', { headers: authHeader(token) })
+}
+
+export function createTaxRule(
+  token: string,
+  input: {
+    readonly name: string
+    readonly rateBp: number
+    readonly country?: string
+    readonly region?: string
+    readonly taxCategory?: string
+    readonly includedInPrice?: boolean
+    readonly priority?: number
+  },
+): Promise<TaxRule> {
+  return requestBody('/api/commerce/tax/rules', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteTaxRule(token: string, id: string): Promise<void> {
+  await requestBody(`/api/commerce/tax/rules/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+/** Calls the exact resolver checkout uses — never a second implementation of "which rule wins". */
+export function simulateTax(
+  token: string,
+  input: {
+    readonly amountMinor: number
+    readonly taxCategory?: string
+    readonly country?: string
+    readonly region?: string
+  },
+): Promise<{ readonly rule: TaxRule | null; readonly outcome: TaxOutcome }> {
+  return requestBody('/api/commerce/tax/simulate', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+// ---- shipping (fiche 34 task 2) ---------------------------------------------
+
+export type ShippingKind = 'flat' | 'by_weight' | 'free'
+
+export interface ShippingMethod {
+  readonly id: string
+  readonly label: string
+  readonly country: string | null
+  readonly region: string | null
+  readonly kind: ShippingKind
+  readonly currency: string
+  readonly amountMinor: number
+  readonly perKgMinor: number
+  readonly freeOverMinor: number | null
+  readonly carrier: string | null
+  readonly position: number
+  readonly active: boolean
+  readonly createdAt: string
+}
+
+export interface ShippingQuote {
+  readonly methodId: string
+  readonly label: string
+  readonly amountMinor: number
+  readonly currency: string
+  readonly carrier: string | null
+}
+
+export function listShippingMethods(
+  token: string,
+): Promise<{ readonly methods: readonly ShippingMethod[] }> {
+  return requestBody('/api/commerce/shipping/methods', { headers: authHeader(token) })
+}
+
+export function createShippingMethod(
+  token: string,
+  input: {
+    readonly label: string
+    readonly currency: string
+    readonly kind?: ShippingKind
+    readonly country?: string
+    readonly region?: string
+    readonly amountMinor?: number
+    readonly perKgMinor?: number
+    readonly freeOverMinor?: number
+    readonly carrier?: string
+  },
+): Promise<ShippingMethod> {
+  return requestBody('/api/commerce/shipping/methods', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteShippingMethod(token: string, id: string): Promise<void> {
+  await requestBody(`/api/commerce/shipping/methods/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+export function simulateShipping(
+  token: string,
+  input: {
+    readonly currency: string
+    readonly weightGrams?: number
+    readonly subtotalMinor?: number
+    readonly country?: string
+    readonly region?: string
+  },
+): Promise<{ readonly quotes: readonly ShippingQuote[] }> {
+  return requestBody('/api/commerce/shipping/simulate', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+// ---- payment (fiche 34 task 3) -----------------------------------------------
+
+export interface PaymentDriverStatus {
+  readonly name: string
+  readonly tier: 'optimal' | 'degraded'
+  readonly settlesOffline: boolean
+  /** Whether this server can reach the driver with its configured credentials — never the credential itself. */
+  readonly configured: boolean
+  /** `true`/`false` when a driver is explicitly named in configuration, `undefined` on `auto`. */
+  readonly selected: boolean | undefined
+}
+
+export function listPaymentDrivers(token: string): Promise<{
+  readonly drivers: readonly PaymentDriverStatus[]
+  readonly testMode: boolean
+  readonly webhookUrl: string | null
+}> {
+  return requestBody('/api/commerce/payment/drivers', { headers: authHeader(token) })
+}
+
+export function testPaymentConnection(
+  token: string,
+  driver: string,
+): Promise<{ readonly ok: boolean; readonly message: string | null }> {
+  return requestBody(
+    `/api/commerce/payment/drivers/${encodeURIComponent(driver)}/test-connection`,
+    {
+      method: 'POST',
+      headers: authHeader(token),
+    },
+  )
+}

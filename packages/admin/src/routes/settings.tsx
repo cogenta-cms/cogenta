@@ -26,8 +26,15 @@ import { Card, CardBody, CardHeader, CardTitle, Notice, Select } from '../ui/ind
 const TAB_ORDER = ['general', 'reading', 'discussion', 'media', 'privacy', 'advanced'] as const
 type TabId = (typeof TAB_ORDER)[number]
 
-function groupOf(setting: SiteSetting): TabId {
-  return TAB_ORDER.includes(setting.group as TabId) ? (setting.group as TabId) : 'general'
+/**
+ * `null` for a group this screen has no tab for — today only `commerce`
+ * (fiche 34 task 4), which gets its own "Boutique" screen instead of a slot
+ * here. Falling back to `'general'` for an unknown group would silently mix
+ * shop settings into the editorial general tab; skipping them is the correct
+ * behaviour until a future group earns its own tab.
+ */
+function groupOf(setting: SiteSetting): TabId | null {
+  return TAB_ORDER.includes(setting.group as TabId) ? (setting.group as TabId) : null
 }
 
 export function SettingsRoute(): JSX.Element {
@@ -84,9 +91,11 @@ export function SettingsRoute(): JSX.Element {
   const byTab = useMemo(() => {
     const grouped = new Map<TabId, SiteSetting[]>()
     for (const setting of settings ?? []) {
-      const list = grouped.get(groupOf(setting)) ?? []
+      const tabId = groupOf(setting)
+      if (tabId === null) continue
+      const list = grouped.get(tabId) ?? []
       list.push(setting)
-      grouped.set(groupOf(setting), list)
+      grouped.set(tabId, list)
     }
     for (const list of grouped.values()) list.sort((a, b) => a.order - b.order)
     return grouped

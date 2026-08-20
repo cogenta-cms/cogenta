@@ -34,11 +34,33 @@ export const SITE_SETTING_UI_TYPES = [
   'timeZone',
   'dateStyle',
   'timeStyle',
+  /**
+   * A closed choice, rendered as a `<select>`. Fiche 34 task 4's first user:
+   * `commerce.priceDisplay` (`ttc`/`ht`) — free text would let an operator
+   * type a third value the totals engine does not know what to do with.
+   */
+  'select',
 ] as const
 
 export type SiteSettingUiType = (typeof SITE_SETTING_UI_TYPES)[number]
 
-export const SITE_SETTING_GROUPS = ['general', 'reading', 'discussion', 'media', 'privacy'] as const
+export const SITE_SETTING_GROUPS = [
+  'general',
+  'reading',
+  'discussion',
+  'media',
+  'privacy',
+  /**
+   * The shop-wide settings of fiche 34 task 4 — currency, tax-inclusive vs.
+   * exclusive display, countries served, minimum order, default backorder
+   * policy, and the invoice mentions of task 5. `commerce.tosPagePath` and
+   * `commerce.returnPolicyPagePath` are, deliberately, **paths** here —
+   * exactly the way `reading.homePath`/`privacy.policyPath` already point at
+   * a real content entry rather than storing legal text as a settings field
+   * (fiche 34 § pièges: "les CGV doivent être une page publique").
+   */
+  'commerce',
+] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
 
@@ -56,6 +78,8 @@ export interface SiteSettingDefinition {
   readonly scope: SiteSettingScope
   readonly schema: z.ZodType
   readonly defaultValue: unknown
+  /** Only meaningful for `uiType: 'select'` — the closed set of choices the admin renders. */
+  readonly options?: readonly { readonly value: string; readonly label: string }[]
   /**
    * Only `admin` may write any of these (fiche 23 § "Critères d'acceptation":
    * "réglages éditoriaux réservés à admin"). Kept on the descriptor rather
@@ -241,6 +265,150 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     scope: 'site',
     schema: freeText,
     defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Commerce (fiche 34 task 4) — general store settings. `commerce.currency`
+  // and `commerce.priceDisplay` feed the checkout's own totals engine
+  // (@cogenta/commerce) as the *default* when an order does not say
+  // otherwise; they never duplicate a value the totals engine itself owns.
+  {
+    key: 'commerce.currency',
+    group: 'commerce',
+    order: 0,
+    uiType: 'string',
+    scope: 'site',
+    schema: z
+      .string()
+      .regex(/^[A-Z]{3}$/u, { error: 'A currency is a three-letter ISO 4217 code, e.g. "EUR".' }),
+    defaultValue: 'EUR',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.priceDisplay',
+    group: 'commerce',
+    order: 1,
+    uiType: 'select',
+    scope: 'site',
+    schema: z.enum(['ttc', 'ht']),
+    // Tax-inclusive by default — the European convention this codebase's own
+    // tax engine already documents (`TaxRule.includedInPrice`).
+    defaultValue: 'ttc',
+    options: [
+      { value: 'ttc', label: 'Tax-inclusive (TTC)' },
+      { value: 'ht', label: 'Tax-exclusive (HT)' },
+    ],
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.countriesServed',
+    group: 'commerce',
+    order: 2,
+    uiType: 'text',
+    scope: 'site',
+    // Comma-separated ISO 3166-1 alpha-2 codes. Empty means "every country" —
+    // the same "unset means no restriction" convention `path` settings use.
+    schema: z
+      .string()
+      .max(2000)
+      .refine(
+        (value) =>
+          value
+            .split(',')
+            .map((code) => code.trim())
+            .filter((code) => code !== '')
+            .every((code) => /^[A-Z]{2}$/u.test(code)),
+        {
+          error:
+            'Each country must be a two-letter ISO 3166-1 code, comma-separated (e.g. "FR, BE, LU").',
+        },
+      ),
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.minOrderSubtotalMinor',
+    group: 'commerce',
+    order: 3,
+    uiType: 'number',
+    scope: 'site',
+    // Minor units, like every other amount in @cogenta/commerce (ADR-0006) —
+    // 0 means no minimum.
+    schema: z.number().int().nonnegative().max(1_000_000_000),
+    defaultValue: 0,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.allowBackorderDefault',
+    group: 'commerce',
+    order: 4,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    defaultValue: false,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.tosPagePath',
+    group: 'commerce',
+    order: 5,
+    uiType: 'path',
+    scope: 'site',
+    schema: pathOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.returnPolicyPagePath',
+    group: 'commerce',
+    order: 6,
+    uiType: 'path',
+    scope: 'site',
+    schema: pathOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Commerce — invoice template (fiche 34 task 5). `billing` (legal name,
+  // address, tax id, footer) stays in `cogenta.config.mjs` — ADR-0024's
+  // seller identity, and infrastructure per ADR-0025's classification. These
+  // four are editorial on top of it: how numbering and wording read, which a
+  // shop owner changes without redeploying.
+  {
+    key: 'commerce.invoiceSeriesPrefix',
+    group: 'commerce',
+    order: 7,
+    uiType: 'string',
+    scope: 'site',
+    // Prepended to the year-based series (`formatInvoiceNumber`), e.g.
+    // "AC" + "2026" => series "AC2026". Empty keeps today's plain year series.
+    schema: z
+      .string()
+      .max(20)
+      .regex(/^[A-Za-z0-9-]*$/u, {
+        error: 'A series prefix may only contain letters, digits and hyphens.',
+      }),
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.invoicePaymentTerms',
+    group: 'commerce',
+    order: 8,
+    uiType: 'text',
+    scope: 'site',
+    schema: freeText,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.invoiceLanguage',
+    group: 'commerce',
+    order: 9,
+    uiType: 'string',
+    scope: 'site',
+    schema: z.string().max(10),
+    defaultValue: 'en',
     writeRoles: ADMIN_ONLY,
   },
 ] as const

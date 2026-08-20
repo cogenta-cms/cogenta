@@ -11,6 +11,8 @@ export const SECRET_KEYS: ReadonlyMap<string, string> = new Map([
   ['storage.accessKeyId', 'COGENTA_STORAGE_ACCESS_KEY_ID'],
   ['storage.secretAccessKey', 'COGENTA_STORAGE_SECRET_ACCESS_KEY'],
   ['webhooks.secret', 'COGENTA_WEBHOOK_SECRET'],
+  ['payment.stripeSecretKey', 'COGENTA_PAYMENT_STRIPE_SECRET_KEY'],
+  ['payment.stripeWebhookSecret', 'COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET'],
 ])
 
 /** First variable that is set and not empty. An empty variable means "unset". */
@@ -170,6 +172,14 @@ export function applyEnv(
     output['vector'] = vector
   }
 
+  const payment = section(output, 'payment')
+  if (payment !== undefined) {
+    assign(payment, 'driver', read(env, 'COGENTA_PAYMENT_DRIVER'))
+    const testMode = read(env, 'COGENTA_PAYMENT_TEST_MODE')
+    if (testMode !== undefined) payment['testMode'] = testMode === 'true'
+    output['payment'] = payment
+  }
+
   return output
 }
 
@@ -183,6 +193,10 @@ export interface EnvironmentSecrets {
   readonly authSigningKey: string | undefined
   /** Signs outbound content-lifecycle webhooks. Shared with every configured endpoint. */
   readonly webhookSecret: string | undefined
+  /** Stripe's secret key (contract E, fiche 34 task 3). Never in the config file. */
+  readonly paymentStripeSecretKey: string | undefined
+  /** The signing secret Stripe shows when a webhook endpoint is created. */
+  readonly paymentStripeWebhookSecret: string | undefined
 }
 
 export function readSecrets(env: Environment): EnvironmentSecrets {
@@ -193,6 +207,8 @@ export function readSecrets(env: Environment): EnvironmentSecrets {
     storageSecretAccessKey: read(env, 'COGENTA_STORAGE_SECRET_ACCESS_KEY'),
     authSigningKey: read(env, 'COGENTA_AUTH_SIGNING_KEY'),
     webhookSecret: read(env, 'COGENTA_WEBHOOK_SECRET'),
+    paymentStripeSecretKey: read(env, 'COGENTA_PAYMENT_STRIPE_SECRET_KEY'),
+    paymentStripeWebhookSecret: read(env, 'COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET'),
   }
 }
 

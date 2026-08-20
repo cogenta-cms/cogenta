@@ -14,8 +14,12 @@ import { CollectionsRoute } from './routes/collections.js'
 import { CommerceCouponsRoute } from './routes/commerce-coupons.js'
 import { CommerceOrderRoute } from './routes/commerce-order-detail.js'
 import { CommerceOrdersRoute } from './routes/commerce-orders.js'
+import { CommercePaymentRoute } from './routes/commerce-payment.js'
 import { CommerceProductsRoute } from './routes/commerce-products.js'
+import { CommerceSettingsRoute } from './routes/commerce-settings.js'
+import { CommerceShippingRoute } from './routes/commerce-shipping.js'
 import { CommerceSubscriptionsRoute } from './routes/commerce-subscriptions.js'
+import { CommerceTaxRoute } from './routes/commerce-tax.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
@@ -95,6 +99,10 @@ export function App(): JSX.Element {
               <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
               <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
               <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
+              <Route path="commerce/settings" element={<CommerceSettingsRoute />} />
+              <Route path="commerce/tax" element={<CommerceTaxRoute />} />
+              <Route path="commerce/shipping" element={<CommerceShippingRoute />} />
+              <Route path="commerce/payment" element={<CommercePaymentRoute />} />
               <Route path="appearance" element={<AppearanceRoute />} />
               <Route path="redirects" element={<RedirectsRoute />} />
               <Route path="seo" element={<SeoRoute />} />

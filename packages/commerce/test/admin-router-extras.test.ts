@@ -33,6 +33,8 @@ describe('multiple variants per product', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions(),
     })
   })
@@ -129,6 +131,8 @@ describe('coupons', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions(),
     })
   })
@@ -216,6 +220,8 @@ describe('invoices, once a site fills in billing', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions(),
     })
     const orderId = await seedPaidOrder()
@@ -239,6 +245,8 @@ describe('invoices, once a site fills in billing', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       invoices,
       permissions: createCommercePermissions(),
     })
@@ -292,6 +300,8 @@ describe('subscriptions', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       subscriptions,
       permissions: createCommercePermissions(),
     })
@@ -368,6 +378,8 @@ describe('subscriptions', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions(),
     })
     const response = await bare.handle(

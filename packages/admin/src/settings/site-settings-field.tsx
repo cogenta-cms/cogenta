@@ -178,6 +178,30 @@ export function SiteSettingsField({
     )
   }
 
+  if (setting.uiType === 'select') {
+    return (
+      <div className="flex flex-col gap-1">
+        <Field label={label} description={description} error={error}>
+          {(control) => (
+            <Select
+              {...control}
+              disabled={!canEdit || saving}
+              value={typeof value === 'string' ? value : ''}
+              onChange={(event) => void commit(event.target.value)}
+            >
+              {(setting.options ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        {error === null && <FieldStatus saving={saving} saved={saved} />}
+      </div>
+    )
+  }
+
   if (setting.uiType === 'number') {
     return (
       <div className="flex flex-col gap-1">

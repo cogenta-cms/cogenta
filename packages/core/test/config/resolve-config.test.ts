@@ -394,3 +394,78 @@ describe('resolveConfig — security (L10 task 6)', () => {
     ).toThrow(CogentaError)
   })
 })
+
+describe('resolveConfig — payment (contract E, fiche 34 task 3)', () => {
+  it('defaults to "auto" and test mode on, so a shop cannot silently start taking real money', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    expect(config.payment.driver).toBe('auto')
+    expect(config.payment.testMode).toBe(true)
+    expect(config.payment.stripeSecretKey).toBeUndefined()
+    expect(config.payment.stripeWebhookSecret).toBeUndefined()
+  })
+
+  it('refuses a Stripe secret key written in the config file', () => {
+    expect(() =>
+      resolveConfig(
+        { ...minimal, payment: { driver: 'stripe', stripeSecretKey: 'sk_live_x' } },
+        noEnv,
+      ),
+    ).toThrowError(/payment\.stripeSecretKey/)
+  })
+
+  it('points the user at the environment variable for the leaked Stripe key', () => {
+    try {
+      resolveConfig({ ...minimal, payment: { stripeSecretKey: 'sk_live_x' } }, noEnv)
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(CogentaError)
+      expect((error as CogentaError).code).toBe('CONFIG_SECRET_IN_FILE')
+      expect((error as CogentaError).hint).toContain('COGENTA_PAYMENT_STRIPE_SECRET_KEY')
+    }
+  })
+
+  it('refuses a Stripe webhook secret written in the config file', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, payment: { stripeWebhookSecret: 'whsec_x' } }, noEnv),
+    ).toThrowError(/payment\.stripeWebhookSecret/)
+  })
+
+  it('never echoes the Stripe key back in the error', () => {
+    try {
+      resolveConfig({ ...minimal, payment: { stripeSecretKey: 'sk_live_super_secret' } }, noEnv)
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(JSON.stringify((error as CogentaError).toJSON())).not.toContain('sk_live_super_secret')
+    }
+  })
+
+  it('takes the Stripe secret key and webhook secret from the environment', () => {
+    const config = resolveConfig(minimal, {
+      COGENTA_PAYMENT_STRIPE_SECRET_KEY: 'sk_live_from_env',
+      COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET: 'whsec_from_env',
+    })
+
+    expect(config.payment.stripeSecretKey).toBe('sk_live_from_env')
+    expect(config.payment.stripeWebhookSecret).toBe('whsec_from_env')
+  })
+
+  it('lets the environment name the driver and flip test mode off', () => {
+    const config = resolveConfig(minimal, {
+      COGENTA_PAYMENT_DRIVER: 'stripe',
+      COGENTA_PAYMENT_TEST_MODE: 'false',
+    })
+
+    expect(config.payment.driver).toBe('stripe')
+    expect(config.payment.testMode).toBe(false)
+  })
+
+  it('carries manual bank-transfer instructions, which are not a secret', () => {
+    const config = resolveConfig(
+      { ...minimal, payment: { manualInstructions: 'IBAN FR76…, reference: order number' } },
+      noEnv,
+    )
+
+    expect(config.payment.manualInstructions).toBe('IBAN FR76…, reference: order number')
+  })
+})

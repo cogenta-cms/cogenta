@@ -166,6 +166,10 @@
     "commerceOrders": "Orders",
     "commerceCoupons": "Coupons",
     "commerceSubscriptions": "Subscriptions",
+    "commerceSettings": "Store settings",
+    "commerceTax": "Tax",
+    "commerceShipping": "Shipping",
+    "commercePayment": "Payment",
     "appearance": "Appearance",
     "redirects": "Redirects",
     "seo": "SEO",
@@ -1380,6 +1384,48 @@
           "label": "Data retention note",
           "help": "Shown to visitors, purely informational — nothing here changes what is actually retained."
         }
+      },
+      "commerce": {
+        "currency": {
+          "label": "Default currency",
+          "help": "Three-letter ISO 4217 code, e.g. EUR."
+        },
+        "priceDisplay": {
+          "label": "Price display",
+          "help": "Whether catalogue prices are shown tax-inclusive or tax-exclusive."
+        },
+        "countriesServed": {
+          "label": "Countries served",
+          "help": "Comma-separated two-letter codes, e.g. \"FR, BE, LU\". Leave empty to serve every country."
+        },
+        "minOrderSubtotalMinor": {
+          "label": "Minimum order (minor units)",
+          "help": "0 means no minimum. Amounts are in minor units — 500 is 5.00 in a two-decimal currency."
+        },
+        "allowBackorderDefault": {
+          "label": "Allow selling past zero stock by default",
+          "help": "A new variant's own setting can still override this."
+        },
+        "tosPagePath": {
+          "label": "Terms of sale page",
+          "help": "A site-relative path to a real, published content entry, e.g. /terms."
+        },
+        "returnPolicyPagePath": {
+          "label": "Return policy page",
+          "help": "A site-relative path to a real, published content entry, e.g. /returns."
+        },
+        "invoiceSeriesPrefix": {
+          "label": "Invoice series prefix",
+          "help": "Prepended to the year-based series, e.g. \"AC\" + \"2026\" = series \"AC2026\". Letters, digits and hyphens only."
+        },
+        "invoicePaymentTerms": {
+          "label": "Payment terms",
+          "help": "Printed on every invoice, e.g. \"Payment due within 30 days.\""
+        },
+        "invoiceLanguage": {
+          "label": "Invoice language",
+          "help": "A short language code, e.g. \"en\" or \"fr\"."
+        }
       }
     }
   },
@@ -1684,6 +1730,136 @@
       "year_one": "{{count}} year",
       "year_other": "{{count}} years"
     }
+  },
+  "commerceTax": {
+    "heading": "Tax",
+    "description": "Zones and rates, resolved by specificity — the most precise rule always wins, whatever order it was created in.",
+    "adminOnly": "Only an administrator can configure taxes.",
+    "newButton": "New rule",
+    "newHeading": "New tax rule",
+    "close": "Close",
+    "tableLabel": "Tax rules",
+    "nameColumn": "Name",
+    "zoneColumn": "Zone",
+    "rateColumn": "Rate",
+    "priorityColumn": "Priority",
+    "priorityHint": "Higher wins when two rules are otherwise equally specific.",
+    "actionsColumn": "Actions",
+    "delete": "Delete",
+    "empty": "No tax rule yet — every sale is untaxed until one is added.",
+    "loadError": "Could not load the tax rules.",
+    "createError": "Could not create this tax rule.",
+    "deleteError": "Could not delete this tax rule.",
+    "rateInvalid": "Enter a rate between 0 and 100.",
+    "ratePercent": "Rate (%)",
+    "includedInPrice": "Included in the catalogue price (tax-inclusive)",
+    "createButton": "Create rule",
+    "everywhere": "Everywhere",
+    "ttc": "incl.",
+    "ht": "excl.",
+    "simCountry": "Country",
+    "countryHint": "Two-letter ISO code, e.g. \"FR\". Leave empty for \"everywhere\".",
+    "simRegion": "Region",
+    "simCategory": "Tax category",
+    "simAmount": "Amount",
+    "amountInvalid": "Enter a valid amount.",
+    "simulatorHeading": "Simulator",
+    "simulatorHint": "Calls the exact resolver a real order uses — this can never show a different answer than checkout.",
+    "simulateButton": "Simulate",
+    "simulateError": "Could not run the simulation.",
+    "appliedRule": "Rule applied",
+    "noRuleApplied": "No rule matched — this sale would be untaxed.",
+    "wonBecause": "the most specific match for this zone and category",
+    "rateApplied": "Rate applied",
+    "taxAmount": "Tax amount"
+  },
+  "commerceShipping": {
+    "heading": "Shipping",
+    "description": "Zones and methods. A method naming a carrier always falls back to its stored rate if the courier's API does not answer.",
+    "adminOnly": "Only an administrator can configure shipping.",
+    "newButton": "New method",
+    "newHeading": "New shipping method",
+    "close": "Close",
+    "tableLabel": "Shipping methods",
+    "labelColumn": "Label",
+    "zoneColumn": "Zone",
+    "kindColumn": "Kind",
+    "rateColumn": "Rate",
+    "carrierColumn": "Carrier",
+    "carrierHint": "Name of a registered carrier driver. Leave empty for a plain stored rate.",
+    "actionsColumn": "Actions",
+    "delete": "Delete",
+    "empty": "No shipping method yet — nothing can be delivered until one is added.",
+    "loadError": "Could not load the shipping methods.",
+    "createError": "Could not create this shipping method.",
+    "deleteError": "Could not delete this shipping method.",
+    "amountInvalid": "Enter a valid amount.",
+    "amountColumn": "Amount",
+    "perKgColumn": "Per kilogram",
+    "freeOverColumn": "Free above",
+    "freeOverHint": "Order subtotal above which this method is free. Leave empty to never do that.",
+    "createButton": "Create method",
+    "everywhere": "Everywhere",
+    "free": "Free",
+    "freeOver": "free above {{amount}}",
+    "storedRate": "Stored rate",
+    "carrierWithFallback": "{{carrier}} — falls back to the stored rate if the API does not answer",
+    "kind": {
+      "flat": "Flat rate",
+      "by_weight": "By weight",
+      "free": "Free"
+    },
+    "simulatorHeading": "Simulator",
+    "simWeight": "Weight (g)",
+    "simSubtotal": "Order subtotal",
+    "simulateButton": "Simulate",
+    "simulateError": "Could not run the simulation.",
+    "noQuotes": "No method serves this address."
+  },
+  "commercePayment": {
+    "heading": "Payment",
+    "description": "Which gateways are active and reachable. Never a key's value — presence only.",
+    "adminOnly": "Only an administrator can configure payment.",
+    "loadError": "Could not load the payment drivers.",
+    "testError": "Could not test this connection.",
+    "testModeOn": "Test mode is ON",
+    "testModeOnHint": "No real money moves. Switch payment.testMode off in the server configuration when you are ready to take real payments.",
+    "testModeOff": "Live mode",
+    "testModeOffHint": "This shop takes real payments.",
+    "driver": {
+      "stripe": "Stripe",
+      "manual": "Bank transfer"
+    },
+    "active": "Active",
+    "tier": "Tier: {{tier}}",
+    "tierName": {
+      "optimal": "optimal",
+      "degraded": "degraded (no external service needed)"
+    },
+    "keyPresent": "Credentials configured on this server ✓",
+    "keyAbsent": "No credentials configured",
+    "settlesOffline": "Settled by a person, from a bank statement.",
+    "settlesOnline": "Settled automatically by the gateway.",
+    "testConnection": "Test connection",
+    "testing": "Testing…",
+    "testOk": "Connected.",
+    "testFailed": "Connection failed.",
+    "empty": "No payment driver registered.",
+    "webhookHeading": "Webhook",
+    "webhookNone": "Not configured on this site.",
+    "webhookNotWired": "This server does not yet receive inbound webhook events — configure it at your provider only once support is announced."
+  },
+  "commerceSettings": {
+    "heading": "Store settings",
+    "description": "Currency, pricing display, and the shop's invoice template.",
+    "adminOnly": "Only an administrator can change store settings.",
+    "generalHeading": "General",
+    "legalHeading": "Legal pages",
+    "legalHint": "CGV and the return policy are real, published content entries — enter the path to each one here, so a customer always lands on a real page.",
+    "invoiceHeading": "Invoice template",
+    "invoiceHint": "Seller identity (legal name, address, tax id) stays in the server configuration — these are the parts a shop owner changes without redeploying.",
+    "seriesWarning": "Changing the series prefix mid-fiscal-year is an accounting problem: the sequential number itself never resets, but a new prefix reads as a different series to an auditor. Confirm with your accountant before changing it after the year has started.",
+    "invoicePreviewHint": "To preview a real invoice, open an order that already has one and use its own \"Download invoice\" button."
   },
   "commerceOrderDetail": {
     "back": "← Back to orders",

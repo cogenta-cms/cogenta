@@ -38,6 +38,8 @@ describe('the shop back office, by role', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       invoices: createInvoiceStore(db, {
         orders: shop.orders,
         seller: { address: ['Shop'], footer: 'VAT 1' },
@@ -239,6 +241,86 @@ describe('the shop back office, by role', () => {
     // `details` is the structured context for logs, and it is the one place a
     // value a caller sent could travel back out. It never does.
     expect(JSON.stringify(response.body)).not.toContain('Not A Handle')
+  })
+
+  it('lets a viewer read tax rules and refuses to let them create one', async () => {
+    expect(
+      (await router.handle({ method: 'GET', path: '/api/commerce/tax/rules' }, VIEWER)).status,
+    ).toBe(200)
+
+    const write = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/commerce/tax/rules',
+        body: { name: 'Standard', rateBp: 2000 },
+      },
+      VIEWER,
+    )
+    expect(write.status).toBe(403)
+    expect(await shop.tax.listRules()).toHaveLength(0)
+  })
+
+  it('lets an editor (catalog.write) create and delete a tax rule', async () => {
+    const created = await router.handle(
+      { method: 'POST', path: '/api/commerce/tax/rules', body: { name: 'Standard', rateBp: 2000 } },
+      EDITOR,
+    )
+    expect(created.status).toBe(201)
+    const id = (created.body as { id: string }).id
+
+    const deleted = await router.handle(
+      { method: 'DELETE', path: `/api/commerce/tax/rules/${id}` },
+      EDITOR,
+    )
+    expect(deleted.status).toBe(204)
+    expect(await shop.tax.listRules()).toHaveLength(0)
+  })
+
+  it('lets a viewer read shipping methods and refuses to let them create one', async () => {
+    expect(
+      (await router.handle({ method: 'GET', path: '/api/commerce/shipping/methods' }, VIEWER))
+        .status,
+    ).toBe(200)
+
+    const write = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/commerce/shipping/methods',
+        body: { label: 'Flat', currency: 'EUR', amountMinor: 500 },
+      },
+      VIEWER,
+    )
+    expect(write.status).toBe(403)
+    expect(await shop.shipping.listMethods()).toHaveLength(0)
+  })
+
+  it('lets an editor (catalog.write) create and delete a shipping method', async () => {
+    const created = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/commerce/shipping/methods',
+        body: { label: 'Flat', currency: 'EUR', amountMinor: 500 },
+      },
+      EDITOR,
+    )
+    expect(created.status).toBe(201)
+    const id = (created.body as { id: string }).id
+
+    const deleted = await router.handle(
+      { method: 'DELETE', path: `/api/commerce/shipping/methods/${id}` },
+      EDITOR,
+    )
+    expect(deleted.status).toBe(204)
+    expect(await shop.shipping.listMethods()).toHaveLength(0)
+  })
+
+  it('refuses an anonymous caller on the tax simulator', async () => {
+    const response = await router.handle({
+      method: 'POST',
+      path: '/api/commerce/tax/simulate',
+      body: { amountMinor: 1000, taxCategory: 'standard' },
+    })
+    expect(response.status).toBe(401)
   })
 })
 

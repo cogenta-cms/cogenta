@@ -780,3 +780,81 @@ regénère à l'identique, sans horloge ni aléa.
 `commerce@1.0` (ADR-0024, non figé — voir le bandeau en tête de section). Ajouter un
 champ optionnel ou un statut de paiement est mineur ; modifier le sens d'un statut de
 commande ou la représentation d'un montant est majeur.
+
+---
+
+## Format d'export et de sauvegarde (fiche 26)
+
+> **Documenté ici par décision du plan de la fiche 26** (« le format d'export est un
+> format public […] le versionner et le documenter dans `docs/04-contrats.md` dès le
+> début »), sans passer par le statut de contrat A-E : la fiche ne demande pas d'ADR pour
+> cette décision, seulement une décision de format écrite. Deux formats distincts,
+> délibérément — un export respecte les permissions et est fait pour circuler, une
+> sauvegarde est la base entière et ne l'est pas.
+
+### `export@1.0` — export de contenu
+
+NDJSON : une ligne, un objet JSON, un `ExportRecord`. La première ligne est toujours un
+enregistrement `manifest` (`format`, `version`, `site`, `selection`, `counts`) — jamais
+un fichier séparé, pour qu'un export ne puisse jamais se retrouver avec un manifeste et
+un contenu qui ont divergé. Les lignes suivantes portent, dans cet ordre :
+`term` (taxonomies, dans l'ordre de l'arbre), `entry` (collections, dans l'ordre de
+dépendance de `orderByDependency`, chaque collection dans son ordre de liste), `version`
+(historique, seulement si demandé), `menu`, `menu-item`, `redirect`.
+
+Cet ordre n'est pas cosmétique : un import à passe unique (`importContent`,
+`@cogenta/export`) rejoue le flux tel quel, donc tout ce qu'un enregistrement référence
+par identifiant (un terme de taxonomie, l'entrée source d'une traduction, l'entrée
+cible d'un article de menu) doit avoir été émis avant lui. Une traduction dont la
+source apparaîtrait plus tard dans le flux est mise en file d'attente et rejouée à la
+fin plutôt que de faire échouer tout l'import.
+
+Un export **respecte les permissions de l'acteur qui le demande** (R4) : la route
+`/api/export` construit le même filtre `canReadCollection`/`canReadTaxonomy` que toute
+autre lecture, à partir du même `PermissionLayer`. La CLI (`cogenta export`), qui
+tourne comme l'opérateur du site, n'a par défaut aucune restriction — c'est
+`--collections` qui la borne, jamais un rôle.
+
+Versionnement : mineur pour un nouveau type d'enregistrement ou un champ optionnel
+ajouté à un type existant ; majeur pour retirer un champ ou changer le sens d'un champ
+existant.
+
+### `cogenta-backup@1.0` — sauvegarde complète
+
+Un fichier ZIP (mode « store », sans compression — R9, `node:zlib`'s `crc32` suffit,
+aucune dépendance nouvelle), produit et lu en flux (`@cogenta/export`'s
+`zip-writer.ts`/`zip-reader.ts`) : jamais assemblé en mémoire, qu'il s'agisse du contenu
+ou d'une archive de médias. Il contient un `<table>.ndjson` (ou `.ndjson.enc` si
+chiffré) par table physique — contenu, utilisateurs (mots de passe **hachés**), audit,
+médias, menus, redirections et, si le site vend quelque chose, commerce — plus un
+`manifest.json` en clair (jamais chiffré : il ne porte que des noms de table, des
+comptes de lignes et une somme de contrôle, pas de données personnelles).
+
+La somme de contrôle (`sha256`) porte sur les octets **en clair** de chaque table,
+concaténés dans l'ordre du manifeste — calculée pendant que les lignes défilent, jamais
+en relisant le fichier fini. Une restauration (`applyRestore`) la revérifie **avant
+d'écrire la moindre ligne** ; un fichier corrompu ou modifié après coup est refusé
+(`BACKUP_CHECKSUM_MISMATCH`) sans toucher la base cible.
+
+Chiffrement optionnel par phrase de passe : `AES-256-GCM`, clé dérivée par `scrypt`
+(profil coûteux exprès — une sauvegarde contient tous les hachages de mots de passe du
+site), chiffrement **par table** plutôt que sur l'archive entière, pour que le flux
+reste borné en mémoire même chiffré.
+
+L'ordre des tables dans le manifeste est celui d'insertion sûr pour une restauration :
+tables hors contenu fournies par l'appelant (`before` — utilisateurs, médias), termes de
+taxonomie, tables de contenu par collection en ordre de dépendance (entrées, versions,
+blocs, jointures de relation), puis tables hors contenu fournies par l'appelant
+(`after` — menus, redirections, commerce). `@cogenta/export` ne connaît lui-même ni
+`@cogenta/auth`, ni `@cogenta/commerce`, ni la table de médias de `@cogenta/core` — cet
+ordre est assemblé par l'appelant (`cogenta backup`, `packages/cli`), qui seul dépend de
+tout cela.
+
+**La restauration complète n'est jamais exposée par l'API admin, seulement par la
+CLI** (`cogenta restore` — voir la fiche 26, tâche 4, et son piège nommé : une
+restauration réécrit la base sur laquelle l'admin qui l'aurait déclenchée tourne
+lui-même). L'admin peut appliquer un **export de contenu** (`importContent`), additif et
+réversible par la corbeille — jamais une sauvegarde complète.
+
+Versionnement : mineur pour une table supplémentaire ou un champ ajouté au manifeste ;
+majeur pour changer le sens du chiffrement ou de la somme de contrôle.

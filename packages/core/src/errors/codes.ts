@@ -400,6 +400,18 @@ export const ERROR_CODES = [
   'MAINT_TOOL_RUN_NOT_FOUND',
   'MAINT_TOOL_INPUT_INVALID',
 
+  // Export/import/backup/restore (`@cogenta/export`)
+  'EXPORT_FORMAT_INVALID',
+  'EXPORT_PERMISSION_DENIED',
+  'EXPORT_MEDIA_NOT_FOUND',
+  'EXPORT_ENTRY_TOO_LARGE',
+  'BACKUP_CHECKSUM_MISMATCH',
+  'BACKUP_VERSION_UNSUPPORTED',
+  'BACKUP_DECRYPTION_FAILED',
+  'BACKUP_PASSPHRASE_REQUIRED',
+  'RESTORE_NOT_ALLOWED',
+  'RESTORE_CONFLICT',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

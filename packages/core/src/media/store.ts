@@ -13,7 +13,8 @@ import type {
   UpdateMediaInput,
 } from './types.js'
 
-const TABLE = 'cogenta_media'
+export const MEDIA_TABLE = 'cogenta_media'
+const TABLE = MEDIA_TABLE
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
 

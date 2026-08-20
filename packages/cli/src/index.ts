@@ -1,7 +1,9 @@
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
+import { runBackup, runRestore } from './commands/backup.js'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
+import { runExport, runImportContent } from './commands/export.js'
 import { runGenerate } from './commands/generate.js'
 import { runImport } from './commands/import.js'
 import { runLinks } from './commands/links.js'
@@ -11,8 +13,12 @@ import { runSkin } from './commands/skin.js'
 import { runUsers } from './commands/users.js'
 import { createOutput, shouldUseColour, type Writer } from './output.js'
 
+export type { BackupOptions, RestoreOptions } from './commands/backup.js'
+export { runBackup, runRestore } from './commands/backup.js'
 export type { DoctorCheck, DoctorOptions, DoctorReport } from './commands/doctor.js'
 export { formatDoctorReport, runDoctor } from './commands/doctor.js'
+export type { ExportOptions, ImportContentOptions } from './commands/export.js'
+export { runExport, runImportContent } from './commands/export.js'
 export type { GenerateOptions, GenerateSubcommand } from './commands/generate.js'
 export { runGenerate } from './commands/generate.js'
 export type { ImportOptions, ImportSubcommand } from './commands/import.js'
@@ -43,6 +49,12 @@ Commands
   users create     Create a user — the first admin account is made this way
   users reset-password   Send a single-use reset token, or redeem one
   import wordpress <file.xml>   Import a WordPress WXR export, with a report
+  export <file.ndjson>   Export content — entries, terms, menus, redirects
+  import content <file.ndjson>   Re-import an export produced by "export"
+  backup create    Back up every table (content, users, audit…) to a file
+  backup list      List backups in the backup directory
+  restore preview <file.zip>   Show what a backup would add or overwrite
+  restore apply <file.zip>     Restore a backup — CLI only (fiche 26)
   generate types   Write TypeScript declarations for the content schema
   links check      Crawl published content and report links that lead nowhere
   skin list        Show the site's active skin
@@ -53,9 +65,9 @@ Commands
   help             Show this message
   version          Print the version
 
-Not built yet: build, backup, upgrade, deploy, theme, agent, and
-generate schema/generate migrations — see CLAUDE.md for why each is
-deferred rather than stubbed.
+Not built yet: build, upgrade, deploy, theme, agent, and generate
+schema/generate migrations — see CLAUDE.md for why each is deferred
+rather than stubbed.
 
 Options
   --cwd <path>            Run as if from this directory
@@ -64,6 +76,9 @@ Options
   --out <path>            generate types: where to write the declarations
   --description <text>    skin generate: free text describing the site
   --external              links check: also follow links that leave the site
+  --collections <a,b,c>   export: only these collections (default: all)
+  --dir <path>            backup: where to write/read backups (default .cogenta/backups)
+  --passphrase <text>     backup create / restore: encrypt or decrypt the backup
 
 Migration options
   --to <id>               Stop at this migration, inclusive
@@ -136,6 +151,9 @@ export async function run(options: RunOptions): Promise<number> {
         out: { type: 'string' },
         description: { type: 'string' },
         external: { type: 'boolean' },
+        collections: { type: 'string' },
+        dir: { type: 'string' },
+        passphrase: { type: 'string' },
       },
     })
   } catch (error) {
@@ -209,6 +227,17 @@ export async function run(options: RunOptions): Promise<number> {
     })
   }
 
+  if (command === 'import' && parsed.positionals[1] === 'content') {
+    return runImportContent({
+      file: parsed.positionals[2],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
   if (command === 'import') {
     return runImport({
       subcommand: parsed.positionals[1],
@@ -217,6 +246,50 @@ export async function run(options: RunOptions): Promise<number> {
       stderr,
       env,
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'export') {
+    return runExport({
+      file: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.collections === 'string'
+        ? { collections: parsed.values.collections.split(',').map((name) => name.trim()) }
+        : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'backup') {
+    return runBackup({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.dir === 'string' ? { dir: parsed.values.dir } : {}),
+      ...(typeof parsed.values.passphrase === 'string'
+        ? { passphrase: parsed.values.passphrase }
+        : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'restore') {
+    return runRestore({
+      subcommand: parsed.positionals[1],
+      file: parsed.positionals[2],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.passphrase === 'string'
+        ? { passphrase: parsed.values.passphrase }
+        : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

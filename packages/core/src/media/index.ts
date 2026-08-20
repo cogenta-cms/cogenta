@@ -1,5 +1,5 @@
 export { describeContainer, type SniffedImageFormat, sniffImageFormat } from './format-sniff.js'
-export { createDatabaseMediaStore, type DatabaseMediaStoreOptions } from './store.js'
+export { createDatabaseMediaStore, type DatabaseMediaStoreOptions, MEDIA_TABLE } from './store.js'
 export type {
   CreateMediaInput,
   FocalPoint,

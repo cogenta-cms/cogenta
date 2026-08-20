@@ -13,9 +13,17 @@ import { fileToBase64, type MediaAsset, mediaKindFor, uploadMedia } from '../api
 export function UploadForm({
   token,
   onUploaded,
+  initialFile,
 }: {
   readonly token: string
   onUploaded(asset: MediaAsset): void
+  /**
+   * Pre-fills the file input — the rich text editor's drag-and-drop path
+   * (fiche 04 task 3) hands over the dropped file this way, so the upload
+   * starts already knowing what to upload and the form only has to ask for
+   * the alt text, never a second, separate file choice.
+   */
+  readonly initialFile?: File
 }): JSX.Element {
   const { t } = useTranslation()
   const fileId = useId()
@@ -23,7 +31,8 @@ export function UploadForm({
   const decorativeId = useId()
   const justificationId = useId()
 
-  const [file, setFile] = useState<File | null>(null)
+  const [file, setFile] = useState<File | null>(initialFile ?? null)
+  const [pickingFile, setPickingFile] = useState(initialFile === undefined)
   const [alt, setAlt] = useState('')
   const [decorative, setDecorative] = useState(false)
   const [justification, setJustification] = useState('')
@@ -48,6 +57,7 @@ export function UploadForm({
       })
       onUploaded(asset)
       setFile(null)
+      setPickingFile(true)
       setAlt('')
       setDecorative(false)
       setJustification('')
@@ -62,11 +72,20 @@ export function UploadForm({
     <form className="upload-form" onSubmit={(event) => void submit(event)}>
       <div className="field">
         <label htmlFor={fileId}>{t('media.fileLabel')}</label>
-        <input
-          id={fileId}
-          type="file"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
+        {pickingFile ? (
+          <input
+            id={fileId}
+            type="file"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+        ) : (
+          <p className="upload-form__filename">
+            {file?.name}{' '}
+            <button type="button" onClick={() => setPickingFile(true)}>
+              {t('media.changeFile')}
+            </button>
+          </p>
+        )}
       </div>
 
       {!decorative && (

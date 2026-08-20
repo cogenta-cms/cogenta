@@ -41,6 +41,31 @@ describe('data that reaches the markup', () => {
     )
   })
 
+  it('renders an internal link whose target could not be resolved as plain text, never a dead anchor', () => {
+    // `ctx.link` returns `'#'` for a target `theme-render.ts` could not
+    // fetch — trashed, still a draft, or gone. A real `<a href="#">` would
+    // be a broken link a visitor can click; the fiche's own recommendation
+    // is plain text instead.
+    const unresolved = makeContext({
+      link: (target) => {
+        if (typeof target === 'object' && 'collection' in target && target.id === 'contracts') {
+          return '#'
+        }
+        return ctx.link(target)
+      },
+    })
+    const html = serialize(
+      renderBlock(BLOCKS.prose, unresolved, { 'b-collection': ENTRIES }) as NonNullable<
+        ReturnType<typeof renderBlock>
+      >,
+    )
+    // Plain text, unwrapped — never `<a href="#">A read-only content client</a>`.
+    expect(html).toContain('<li>A read-only content client</li>')
+    expect(html).not.toContain('href="#"')
+    // The unrelated external link elsewhere in the same document is untouched.
+    expect(html).toContain('<a href="https://example.org/adr-0004"')
+  })
+
   it('falls back to a readable title when the entry has none', () => {
     const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
     expect(html).toContain('entry.untitled')

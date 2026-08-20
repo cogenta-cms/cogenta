@@ -37,7 +37,15 @@ function applyMark(
   if (definition._type === 'link') {
     return h('a', { href: ctx.link(definition.href), rel: definition.rel }, child)
   }
-  return h('a', { href: ctx.link({ collection: definition.collection, id: definition.id }) }, child)
+
+  const href = ctx.link({ collection: definition.collection, id: definition.id })
+  // `'#'` is `RenderContext.link`'s own signal (see `theme-render.ts`'s
+  // `link`) that the target could not be resolved — trashed, still a draft,
+  // renamed away, or simply gone. Rendering it as a live `<a>` would ship a
+  // dead link or, worse, an anchor to nothing; falling back to plain text is
+  // the fiche's own recommendation ("texte simple, jamais un lien mort").
+  if (href === '#') return child
+  return h('a', { href }, child)
 }
 
 function renderSpan(ctx: RenderContext, span: Span, markDefs: readonly MarkDefinition[]): HtmlNode {

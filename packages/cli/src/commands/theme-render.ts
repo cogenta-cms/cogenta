@@ -6,7 +6,7 @@ import {
   type MenuRouter,
   type QueryRequest,
 } from '@cogenta/api'
-import type { VocabularyBlock } from '@cogenta/blocks'
+import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
 import {
@@ -230,6 +230,57 @@ function toVocabularyBlocks(
       body: entry.values[richTextField],
     } as VocabularyBlock,
   ]
+}
+
+interface RichTextAssets {
+  /** Ids of every `media` node found inside a rich text document. */
+  readonly media: readonly string[]
+  /** `{collection, id}` of every `internalLink` mark definition found. */
+  readonly links: readonly { readonly collection: string; readonly id: string }[]
+}
+
+function richTextRefs(document: RichTextDocument): RichTextAssets {
+  const media = new Set<string>()
+  const links: { collection: string; id: string }[] = []
+  for (const node of document) {
+    if (node._type === 'media') {
+      media.add(node.id)
+      continue
+    }
+    for (const definition of node.markDefs) {
+      if (definition._type === 'internalLink') {
+        links.push({ collection: definition.collection, id: definition.id })
+      }
+    }
+  }
+  return { media: [...media], links }
+}
+
+/**
+ * The `media` nodes and `internalLink` marks a page's rich text carries
+ * (ADR-0013), gathered up front for the same reason `collectionList`'s
+ * entries are: `renderBlock` is pure and synchronous (contract D), so
+ * `ctx.image()` and `link()` cannot await a lookup once rendering starts.
+ *
+ * `@cogenta/api`'s `collectDependencies` does not reach inside a `richText`
+ * value — it only walks a collection's own declared `media`/`relation`
+ * fields — so a media node or an internal link living *inside* prose would
+ * otherwise never be fetched, and `ctx.image()` would throw on a perfectly
+ * valid page. Only `prose` carries a top-level `richText` field in contract
+ * B's vocabulary (`body`); a `faq` answer is also rich text, but nested
+ * inside a repeated item the same way gallery/logo media is, which
+ * `collectDependencies` already treats as a known, separate limitation.
+ */
+function collectRichTextAssets(blocks: readonly VocabularyBlock[]): RichTextAssets {
+  const media = new Set<string>()
+  const links: { collection: string; id: string }[] = []
+  for (const block of blocks) {
+    if (block._type !== 'prose') continue
+    const refs = richTextRefs(block.body)
+    for (const id of refs.media) media.add(id)
+    links.push(...refs.links)
+  }
+  return { media: [...media], links }
 }
 
 function entryTitle(entry: ContentEntry): string {
@@ -577,12 +628,30 @@ async function renderEntryPage(
 
   const collectionsByName = new Map(options.collections.map((entry) => [entry.name, entry]))
 
+  // Rich text (ADR-0013) can carry its own `media` nodes and `internalLink`
+  // marks, invisible to `collectDependencies` (see `collectRichTextAssets`).
+  // Every linked entry is fetched through the same permission-checked
+  // `gateway.read` a preview already uses: a target that is trashed, still a
+  // draft, or simply gone comes back `null` and is left out of `knownEntries`
+  // — `link()` below then resolves it to `'#'`, and `renderRichText` turns
+  // that into plain text rather than a dead anchor, never a 404.
+  const richTextAssets = collectRichTextAssets(blocks)
+  for (const target of richTextAssets.links) {
+    if (knownEntries.has(target.id)) continue
+    if (!collectionsByName.has(target.collection)) continue
+    const found = await options.gateway.read(target.collection, target.id, context)
+    if (found === null) continue
+    knownEntries.set(found.id, found)
+    entryCollections.set(found.id, target.collection)
+  }
+
   // Which media this page references, from the same walk `/api/content` uses
   // to declare a response's dependencies (`collectDependencies`): declared
   // `media` fields *and* the media inside every block, resolved through the
   // block registry rather than guessed at from the JSON. A `ContentEntry`
   // plus its collection name is exactly a `SerialisedEntry`, which is why
-  // this reuse costs nothing.
+  // this reuse costs nothing. Rich text's own media nodes are merged in
+  // separately, above.
   const mediaAssets = new Map<string, RenderMediaAsset>()
   if (options.loadMedia !== undefined) {
     const dependencies = collectDependencies(
@@ -592,8 +661,9 @@ async function renderEntryPage(
       })),
       { collection: (name) => collectionsByName.get(name) },
     )
-    if (dependencies.media.length > 0) {
-      for (const [id, asset] of await options.loadMedia(dependencies.media)) {
+    const mediaIds = new Set([...dependencies.media, ...richTextAssets.media])
+    if (mediaIds.size > 0) {
+      for (const [id, asset] of await options.loadMedia([...mediaIds])) {
         mediaAssets.set(id, asset)
       }
     }

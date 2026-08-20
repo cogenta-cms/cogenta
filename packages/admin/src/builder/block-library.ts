@@ -47,8 +47,15 @@ export const BLOCK_LIBRARY: readonly LibraryEntry[] = BLOCK_VOCABULARY.map((defi
   category: CATEGORY_BY_BLOCK[definition.name] ?? 'listing',
 }))
 
-/** Diacritic- and case-insensitive, so "media" finds "Média". */
-function fold(value: string): string {
+/**
+ * Diacritic- and case-insensitive, so "media" finds "Média".
+ *
+ * Exported for the rich text editor's own slash-command menu (fiche 04 task
+ * 5), which the fiche's own wording asks to reuse rather than write a
+ * second normalisation: "réutiliser sa normalisation plutôt que d'en écrire
+ * une deuxième".
+ */
+export function fold(value: string): string {
   return value.normalize('NFD').replace(/[̀-ͯ]/gu, '').toLowerCase()
 }
 

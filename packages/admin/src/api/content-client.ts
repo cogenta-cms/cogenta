@@ -190,10 +190,26 @@ export async function purgeEntry(token: string, collection: string, id: string):
   })
 }
 
-/** `state=working`, same reasoning as `listEntries`: editing means seeing the draft face, not just the published one. */
-export function getEntry(token: string, collection: string, id: string): Promise<Entry> {
+/**
+ * `state=working`, same reasoning as `listEntries`: editing means seeing the
+ * draft face, not just the published one.
+ *
+ * `options.trashed` defaults to unset (the store's own default, `exclude`) —
+ * a caller that needs to tell "trashed" apart from "never existed", such as
+ * the rich text editor's internal-link picker warning about a dead target,
+ * passes `'include'` explicitly.
+ */
+export function getEntry(
+  token: string,
+  collection: string,
+  id: string,
+  options: { readonly trashed?: TrashFilter } = {},
+): Promise<Entry> {
+  const params = new URLSearchParams({ state: 'working' })
+  if (options.trashed !== undefined) params.set('trashed', options.trashed)
+  params.set('depth', '0')
   return request(
-    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?state=working&${NO_EXPANSION}`,
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?${params.toString()}`,
     { headers: authHeader(token) },
   )
 }

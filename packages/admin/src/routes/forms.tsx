@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../auth/auth-context.js'
 import type { ItemFieldDefinition } from '../blocks/vocabulary.js'
 import { RepeaterField } from '../fields/repeater-field.js'
+import { slugify } from '../lib/slugify.js'
 import {
   Button,
   Card,
@@ -158,7 +159,14 @@ export function FormsRoute(): JSX.Element {
 
   const [forms, setForms] = useState<readonly FormDefinition[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [draft, setDraft] = useState<DraftState | null>(null)
+  // Only meaningful for a brand-new form (`draft.id === null`): once the
+  // admin edits "Name" directly, typing in "Label" must stop overwriting it —
+  // the same rule the taxonomy quick-create control and the product create
+  // modal already follow for their own identifier field. Reset whenever a
+  // draft is (re)opened, below.
+  const [nameTouched, setNameTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const headingId = useId()
@@ -189,6 +197,8 @@ export function FormsRoute(): JSX.Element {
     if (token === null || draft === null) return
     setSaving(true)
     setError(null)
+    setNotice(null)
+    const wasNew = draft.id === null
     try {
       const notifyEmails = draft.notifyEmailsText
         .split(',')
@@ -205,9 +215,14 @@ export function FormsRoute(): JSX.Element {
         autoresponder: { enabled: draft.autoresponderEnabled, body: draft.autoresponderBody },
         retainDays: Number(draft.retainDays) || 180,
       }
-      if (draft.id === null) await createForm(token, input)
-      else await updateForm(token, draft.id, input)
+      if (wasNew) await createForm(token, input)
+      else await updateForm(token, draft.id as string, input)
       setDraft(null)
+      setNotice(
+        wasNew
+          ? t('forms.createSuccess', { label: input.label })
+          : t('forms.saveSuccess', { label: input.label }),
+      )
       await load()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('forms.saveError'))
@@ -236,11 +251,23 @@ export function FormsRoute(): JSX.Element {
           </h1>
           <p className="text-muted-foreground text-sm">{t('forms.description')}</p>
         </div>
-        <Button type="button" onClick={() => setDraft(BLANK_DRAFT)}>
+        <Button
+          type="button"
+          onClick={() => {
+            setNameTouched(false)
+            setNotice(null)
+            setDraft(BLANK_DRAFT)
+          }}
+        >
           {t('forms.newForm')}
         </Button>
       </div>
 
+      {notice !== null && (
+        <Notice tone="success" live="polite">
+          <p>{notice}</p>
+        </Notice>
+      )}
       {error !== null && (
         <Notice tone="danger" live="assertive">
           <p>{error}</p>
@@ -254,6 +281,8 @@ export function FormsRoute(): JSX.Element {
           onCancel={() => setDraft(null)}
           onSave={() => void save()}
           saving={saving}
+          nameTouched={nameTouched}
+          onNameTouched={() => setNameTouched(true)}
         />
       ) : forms === null ? (
         <p>{t('common.loading')}</p>
@@ -282,7 +311,11 @@ export function FormsRoute(): JSX.Element {
                       type="button"
                       size="sm"
                       variant="secondary"
-                      onClick={() => setDraft(draftFromForm(form))}
+                      onClick={() => {
+                        setNameTouched(true)
+                        setNotice(null)
+                        setDraft(draftFromForm(form))
+                      }}
                     >
                       {t('forms.edit')}
                     </Button>
@@ -337,12 +370,16 @@ function FormEditor({
   onCancel,
   onSave,
   saving,
+  nameTouched,
+  onNameTouched,
 }: {
   readonly draft: DraftState
   onChange(next: DraftState): void
   onCancel(): void
   onSave(): void
   readonly saving: boolean
+  readonly nameTouched: boolean
+  onNameTouched(): void
 }): JSX.Element {
   const { t } = useTranslation()
 
@@ -361,7 +398,17 @@ function FormEditor({
             <Input
               {...control}
               value={draft.label}
-              onChange={(event) => onChange({ ...draft, label: event.target.value })}
+              onChange={(event) => {
+                const value = event.target.value
+                // Only ever a courtesy pre-fill for a brand-new form — an
+                // existing form's name is already load-bearing (submission
+                // routing, form-key lookups) and must never move under it.
+                if (draft.id === null && !nameTouched) {
+                  onChange({ ...draft, label: value, name: slugify(value) })
+                } else {
+                  onChange({ ...draft, label: value })
+                }
+              }}
             />
           )}
         </Field>
@@ -370,7 +417,10 @@ function FormEditor({
             <Input
               {...control}
               value={draft.name}
-              onChange={(event) => onChange({ ...draft, name: event.target.value })}
+              onChange={(event) => {
+                onNameTouched()
+                onChange({ ...draft, name: event.target.value })
+              }}
             />
           )}
         </Field>

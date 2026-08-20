@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { createTerm, listTerms, type Term } from '../api/taxonomy-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { COMBINING_MARKS, slugify } from '../lib/slugify.js'
 import { canPerformOnTerms } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { FieldWrapper } from './field-wrapper.js'
@@ -207,24 +208,4 @@ export function TaxonomyField({
 /** Strips diacritics and case — mirrors the server's own `?q=` folding. */
 function foldForSearch(text: string): string {
   return text.normalize('NFD').replace(COMBINING_MARKS, '').toLowerCase()
-}
-
-const COMBINING_MARKS = /[̀-ͯ]/gu
-
-/**
- * A minimal slug from a freshly typed label: lowercase, non-alphanumerics
- * become one dash, no leading/trailing dash.
- *
- * The quick-create control is a shortcut for the common case — a new root
- * term with an unremarkable name — so this never needs to be as thorough as
- * a dedicated slug field; the server is the one thing that actually enforces
- * `TAXONOMY_SLUG_TAKEN` if two editors race for the same name.
- */
-function slugify(label: string): string {
-  return label
-    .normalize('NFD')
-    .replace(COMBINING_MARKS, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-+|-+$/gu, '')
 }

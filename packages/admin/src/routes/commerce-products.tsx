@@ -16,6 +16,7 @@ import {
 import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
 import { formatMinor, majorTextToMinor, minorToMajorText } from '../commerce/money.js'
+import { slugify } from '../lib/slugify.js'
 import {
   Button,
   Field,
@@ -61,10 +62,15 @@ export function CommerceProductsRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
 
   const [creating, setCreating] = useState(false)
   const [newHandle, setNewHandle] = useState('')
   const [newTitle, setNewTitle] = useState('')
+  // Once the admin edits the handle directly, typing in the title must stop
+  // overwriting it — same rule the taxonomy quick-create control already
+  // follows for its own slug.
+  const [handleTouched, setHandleTouched] = useState(false)
 
   const [editing, setEditing] = useState<Product | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -101,11 +107,14 @@ export function CommerceProductsRoute(): JSX.Element {
     event.preventDefault()
     if (token === null) return
     setActionError(null)
+    setActionNotice(null)
     try {
-      await createProduct(token, { handle: newHandle, title: newTitle })
+      const product = await createProduct(token, { handle: newHandle, title: newTitle })
       setCreating(false)
       setNewHandle('')
       setNewTitle('')
+      setHandleTouched(false)
+      setActionNotice(t('commerceProducts.createSuccess', { title: product.title }))
       await load()
     } catch (caught) {
       setActionError(
@@ -124,9 +133,14 @@ export function CommerceProductsRoute(): JSX.Element {
     event.preventDefault()
     if (token === null || editing === null) return
     setActionError(null)
+    setActionNotice(null)
     try {
-      await updateProduct(token, editing.id, { title: editTitle, status: editStatus })
+      const product = await updateProduct(token, editing.id, {
+        title: editTitle,
+        status: editStatus,
+      })
       setEditing(null)
+      setActionNotice(t('commerceProducts.updateSuccess', { title: product.title }))
       await load()
     } catch (caught) {
       setActionError(
@@ -138,8 +152,10 @@ export function CommerceProductsRoute(): JSX.Element {
   async function archive(product: Product): Promise<void> {
     if (token === null) return
     setActionError(null)
+    setActionNotice(null)
     try {
       await archiveProduct(token, product.id)
+      setActionNotice(t('commerceProducts.archiveSuccess', { title: product.title }))
       await load()
     } catch (caught) {
       setActionError(
@@ -166,6 +182,11 @@ export function CommerceProductsRoute(): JSX.Element {
         <Button onClick={() => setCreating(true)}>{t('commerceProducts.newButton')}</Button>
       </div>
 
+      {actionNotice !== null && (
+        <Notice tone="success" live="polite">
+          <p>{actionNotice}</p>
+        </Notice>
+      )}
       {actionError !== null && (
         <Notice tone="danger" live="assertive">
           <p>{actionError}</p>
@@ -251,7 +272,11 @@ export function CommerceProductsRoute(): JSX.Element {
                 {...control}
                 required
                 value={newTitle}
-                onChange={(event) => setNewTitle(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setNewTitle(value)
+                  if (!handleTouched) setNewHandle(slugify(value))
+                }}
               />
             )}
           </Field>
@@ -264,7 +289,10 @@ export function CommerceProductsRoute(): JSX.Element {
                 {...control}
                 required
                 value={newHandle}
-                onChange={(event) => setNewHandle(event.target.value)}
+                onChange={(event) => {
+                  setHandleTouched(true)
+                  setNewHandle(event.target.value)
+                }}
               />
             )}
           </Field>

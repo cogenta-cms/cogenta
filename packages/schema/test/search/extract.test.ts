@@ -28,6 +28,8 @@ function entry(overrides: Partial<ContentEntry> = {}): ContentEntry {
     updatedBy: null,
     status: 'published',
     deletedAt: null,
+    reviewState: 'none',
+    assignedReviewer: null,
     locale: 'fr',
     translationOf: null,
     version: 1,

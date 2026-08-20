@@ -72,6 +72,13 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   CONTENT_REFERENCED: 409,
   CONTENT_NOT_TRASHED: 409,
 
+  // Editorial workflow (`schema@2.1`, ADR-0027). A collection that never
+  // turned the workflow on has nothing to transition; an illegal jump (e.g.
+  // approving an entry nobody submitted) is a conflict with its current
+  // `reviewState`, not a malformed request.
+  CONTENT_WORKFLOW_DISABLED: 409,
+  CONTENT_REVIEW_TRANSITION_INVALID: 409,
+
   // Taxonomies (`schema@2.0`, ADR-0022)
   TAXONOMY_UNKNOWN: 404,
   TAXONOMY_TERM_NOT_FOUND: 404,

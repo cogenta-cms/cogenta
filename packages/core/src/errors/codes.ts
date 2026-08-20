@@ -47,6 +47,11 @@ export const ERROR_CODES = [
   'CONTENT_REFERENCED',
   'CONTENT_NOT_TRASHED',
 
+  // Editorial workflow (`schema@2.1`, ADR-0027). `reviewState` is orthogonal
+  // to `status`, exactly as `deletedAt` is to it since ADR-0022.
+  'CONTENT_WORKFLOW_DISABLED',
+  'CONTENT_REVIEW_TRANSITION_INVALID',
+
   // Taxonomies (`schema@2.0`, ADR-0022)
   'TAXONOMY_UNKNOWN',
   'TAXONOMY_TERM_NOT_FOUND',

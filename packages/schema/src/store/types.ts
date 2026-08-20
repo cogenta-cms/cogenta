@@ -1,4 +1,4 @@
-import type { ContentStatus, Provenance, SystemFields } from '../types.js'
+import type { ContentStatus, Provenance, ReviewState, SystemFields } from '../types.js'
 
 /** The user-declared fields of an entry, keyed by field name. */
 export type ContentValues = Readonly<Record<string, unknown>>
@@ -125,6 +125,12 @@ export interface ListOptions extends TrashOptions {
   readonly state?: EntryState
   readonly locale?: string
   readonly status?: ContentStatus
+  /** Filters on the editorial workflow's state (`schema@2.1`, ADR-0027). */
+  readonly reviewState?: ReviewState
+  /** Filters on who is assigned to review next. `null` means "unassigned". */
+  readonly assignedReviewer?: string | null
+  /** Filters on the entry's author — "my own submissions" in the review queue. */
+  readonly createdBy?: string | null
   readonly translationOf?: string | null
   /** Equality on declared fields. Richer filters belong to the API layer (L1/13). */
   readonly where?: Readonly<Record<string, unknown>>

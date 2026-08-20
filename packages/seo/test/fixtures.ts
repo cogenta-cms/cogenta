@@ -91,6 +91,8 @@ export function makeEntry(overrides: EntryOverrides = {}): ContentEntry {
     // in a sitemap or a canonical tag at all — the store filters it out long
     // before SEO sees it (ADR-0022).
     deletedAt: null,
+    reviewState: 'none',
+    assignedReviewer: null,
     locale: overrides.locale ?? 'en',
     translationOf: overrides.translationOf ?? null,
     version: 1,

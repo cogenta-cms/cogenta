@@ -26,6 +26,8 @@ function systemValues(overrides: Record<string, unknown> = {}): Record<string, u
     updatedBy: null,
     status: 'draft',
     deletedAt: null,
+    reviewState: 'none',
+    assignedReviewer: null,
     locale: 'fr',
     translationOf: null,
     version: 1,
@@ -36,7 +38,7 @@ function systemValues(overrides: Record<string, unknown> = {}): Record<string, u
 }
 
 describe('system fields', () => {
-  it('declares the twelve fields of the contract, in the order the contract lists them', () => {
+  it('declares the fourteen fields of the contract, in the order the contract lists them', () => {
     expect(SYSTEM_FIELD_NAMES).toEqual([
       'id',
       'createdAt',
@@ -45,12 +47,24 @@ describe('system fields', () => {
       'updatedBy',
       'status',
       'deletedAt',
+      'reviewState',
+      'assignedReviewer',
       'locale',
       'translationOf',
       'version',
       'provenance',
       'provenanceDetail',
     ])
+  })
+
+  it('keeps reviewState orthogonal to status rather than adding a status value (`schema@2.1`, ADR-0027)', () => {
+    expect(SYSTEM_FIELD_NAMES).toContain('reviewState')
+    const pendingButDraft = systemValues({ status: 'draft', reviewState: 'pending' })
+    expect(systemFieldsSchema.safeParse(pendingButDraft).success).toBe(true)
+    expect(systemFieldsSchema.safeParse(systemValues({ status: 'pending' })).success).toBe(false)
+    expect(systemFieldsSchema.safeParse(systemValues({ reviewState: 'submitted' })).success).toBe(
+      false,
+    )
   })
 
   it('keeps deletedAt orthogonal to status rather than adding a status value', () => {

@@ -170,6 +170,12 @@ function systemColumns(dialect: DatabaseDialect): SqlFragment[] {
     // Nullable, and orthogonal to `status` (ADR-0022): an entry in the trash
     // keeps the status it had, so restoring it cannot silently demote it.
     sql`${identifier('deleted_at', dialect)} ${timestampColumn(dialect)}`,
+    // Orthogonal to `status`, same reasoning (`schema@2.1`, ADR-0027):
+    // 'none' rather than nullable, so an unfiltered `select *` from a client
+    // written before this column existed sees a value it can safely ignore
+    // instead of a NULL it has to special-case.
+    sql`${identifier('review_state', dialect)} ${textColumn(dialect, 24)} not null`,
+    sql`${identifier('assigned_reviewer', dialect)} ${textColumn(dialect, 64)}`,
     sql`${identifier('locale', dialect)} ${textColumn(dialect, 16)} not null`,
     sql`${identifier('translation_of', dialect)} ${uuidColumn(dialect)}`,
     sql`${identifier('version', dialect)} ${integerColumn()} not null`,
@@ -346,6 +352,11 @@ function indexStatements(
     // the hot path of the whole product, not only of the trash screen.
     sql`create index ${identifier(indexName(name, 'trash'), dialect)}
         on ${table} (${identifier('deleted_at', dialect)})`,
+    // The review queue's whole read path (L37 task 3): "everything pending",
+    // "everything assigned to me" and "my own submissions" all filter on
+    // these two columns together.
+    sql`create index ${identifier(indexName(name, 'review'), dialect)}
+        on ${table} (${identifier('review_state', dialect)}, ${identifier('assigned_reviewer', dialect)})`,
   ]
 
   for (const [field, definition] of Object.entries(collection.fields)) {

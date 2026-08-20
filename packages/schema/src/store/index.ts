@@ -53,8 +53,12 @@ export {
   versionsTable,
 } from './naming.js'
 export { withReadOnlyStore } from './read-only.js'
+export type { ReviewTransitionRule } from './review-transitions.js'
+export { nextReviewState, REVIEW_TRANSITION_TABLE } from './review-transitions.js'
 export type { ScheduledPublishEnqueueOptions } from './scheduled-publish-enqueue.js'
 export { withScheduledPublishEnqueue } from './scheduled-publish-enqueue.js'
+export type { Schema21MigrationOptions } from './schema-2-1-migration.js'
+export { schema21Migration } from './schema-2-1-migration.js'
 export type { Schema2MigrationOptions } from './schema-2-migration.js'
 export { schema2Migration } from './schema-2-migration.js'
 export type { SearchIndexingOptions } from './search-indexing.js'

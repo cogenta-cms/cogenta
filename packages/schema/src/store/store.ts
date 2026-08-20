@@ -13,12 +13,15 @@ import {
   type ContentStatus,
   DEFAULT_TRASH_RETAIN_DAYS,
   type Provenance,
+  type ReviewState,
+  type ReviewTransition,
 } from '../types.js'
 import { isColumnless } from './columns.js'
 import { type Cursor, decodeCursor, encodeCursor } from './cursor.js'
 import { type ContentDiff, diffContent } from './diff.js'
 import { joinFragments, valueList } from './fragments.js'
 import { blocksTable, columnFor, entriesTable, relationTable, versionsTable } from './naming.js'
+import { nextReviewState } from './review-transitions.js'
 import { relationsOf } from './tables.js'
 import type {
   BlockZones,
@@ -124,6 +127,27 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
       readonly publishedAt?: Date | string | number
     },
   ): Promise<ContentEntry<TValues>>
+  /**
+   * Sends an entry into the review queue (`schema@2.1`, ADR-0027).
+   *
+   * Legal from `none` (a fresh entry never reviewed) or `changes-requested`
+   * (sent back, and now resubmitted). Throws `CONTENT_REVIEW_TRANSITION_INVALID`
+   * for anything else — a pending or already-approved entry cannot be
+   * resubmitted out from under a reviewer.
+   */
+  submitForReview(
+    id: string,
+    input?: { readonly reviewerId?: string | null; readonly by?: string | null },
+  ): Promise<ContentEntry<TValues>>
+  /** Approves a pending entry. **Not** publication — `publish()` remains the action that makes it public. */
+  approveReview(id: string, input?: { readonly by?: string | null }): Promise<ContentEntry<TValues>>
+  /** Sends a pending entry back to its author. */
+  requestReviewChanges(
+    id: string,
+    input?: { readonly by?: string | null },
+  ): Promise<ContentEntry<TValues>>
+  /** Sets — or clears, with `null` — who is expected to review this entry next. */
+  assignReviewer(id: string, reviewerId: string | null): Promise<ContentEntry<TValues>>
   history(id: string, options?: TrashOptions): Promise<readonly VersionSummary[]>
   readVersion(id: string, version: number): Promise<ContentEntry<TValues> | null>
   restore(id: string, version: number, input?: UpdateInput<TValues>): Promise<ContentEntry<TValues>>
@@ -535,6 +559,8 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       updatedBy: nullableText(row['updated_by']),
       status,
       deletedAt: nullableText(row['deleted_at']),
+      reviewState: (nullableText(row['review_state']) ?? 'none') as ReviewState,
+      assignedReviewer: nullableText(row['assigned_reviewer']),
       locale: text(row['locale']),
       translationOf: nullableText(row['translation_of']),
       version: Number(overrides.version ?? row['version']),
@@ -799,6 +825,50 @@ export function createContentStore<TValues extends ContentValues = ContentValues
     return encodeCursor({ field: order.field, direction: order.direction, value, id: entry.id })
   }
 
+  // ------------------------------------------------------------- workflow
+
+  /**
+   * `submit`/`approve`/`requestChanges` all refuse on a collection that never
+   * turned the workflow on (`schema@2.1`, ADR-0027) — the whole point of
+   * making it opt-in per collection rather than a global switch: a
+   * single-editor site that never declares `workflow: { enabled: true }`
+   * behaves exactly as it did before this field existed, including here.
+   */
+  function assertWorkflowEnabled(verb: string): void {
+    if (collection.workflow?.enabled === true) return
+    throw new CogentaError({
+      code: 'CONTENT_WORKFLOW_DISABLED',
+      message: `"${collection.name}" has no editorial workflow to ${verb}.`,
+      hint: "Declare workflow: { enabled: true } on this collection's definition to turn it on.",
+      details: { collection: collection.name },
+    })
+  }
+
+  async function applyReviewTransition(
+    id: string,
+    transition: ReviewTransition,
+    by: string | null,
+  ): Promise<ContentEntry<TValues>> {
+    return db.transaction(
+      async (tx) => {
+        assertWorkflowEnabled(transition === 'approve' ? 'approve' : 'request changes on')
+        const row = await loadRow(tx, id)
+        if (row === null) throw notFound(collection.name, id)
+        const current = (nullableText(row['review_state']) ?? 'none') as ReviewState
+        const to = nextReviewState(transition, current, { collection: collection.name, id })
+
+        const system: Record<string, unknown> = { review_state: to, updated_at: stamp() }
+        if (by !== null) system['updated_by'] = by
+        await writeLiveColumns(tx, id, {}, system)
+
+        const after = await loadRow(tx, id)
+        if (after === null) throw notFound(collection.name, id)
+        return { ...(await liveEntry(tx, after)), state: 'working' as const }
+      },
+      { immediate: true },
+    )
+  }
+
   // ------------------------------------------------------------------- API
 
   /**
@@ -837,6 +907,7 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       'created_by',
       'updated_by',
       'status',
+      'review_state',
       'locale',
       'translation_of',
       'version',
@@ -850,6 +921,7 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       author,
       author,
       status,
+      'none' satisfies ReviewState,
       input.locale ?? defaultLocale,
       input.translationOf ?? null,
       1,
@@ -1184,6 +1256,26 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         predicates.push(sql`${identifier('status', dialect)} = ${'published'}`)
       }
 
+      if (listOptions.reviewState !== undefined) {
+        predicates.push(sql`${identifier('review_state', dialect)} = ${listOptions.reviewState}`)
+      }
+
+      if (listOptions.assignedReviewer !== undefined) {
+        predicates.push(
+          listOptions.assignedReviewer === null
+            ? sql`${identifier('assigned_reviewer', dialect)} is null`
+            : sql`${identifier('assigned_reviewer', dialect)} = ${listOptions.assignedReviewer}`,
+        )
+      }
+
+      if (listOptions.createdBy !== undefined) {
+        predicates.push(
+          listOptions.createdBy === null
+            ? sql`${identifier('created_by', dialect)} is null`
+            : sql`${identifier('created_by', dialect)} = ${listOptions.createdBy}`,
+        )
+      }
+
       if (listOptions.locale !== undefined) {
         predicates.push(sql`${identifier('locale', dialect)} = ${listOptions.locale}`)
       }
@@ -1338,6 +1430,51 @@ export function createContentStore<TValues extends ContentValues = ContentValues
           } else {
             await writeLiveColumns(tx, id, {}, { status, updated_at: stamp() })
           }
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          return { ...(await liveEntry(tx, after)), state: 'working' as const }
+        },
+        { immediate: true },
+      ),
+
+    submitForReview: async (id, submitOptions) =>
+      db.transaction(
+        async (tx) => {
+          assertWorkflowEnabled('submit')
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+          const current = (nullableText(row['review_state']) ?? 'none') as ReviewState
+          const to = nextReviewState('submit', current, { collection: collection.name, id })
+
+          const system: Record<string, unknown> = { review_state: to, updated_at: stamp() }
+          if (submitOptions?.by !== undefined) system['updated_by'] = submitOptions.by
+          if (submitOptions?.reviewerId !== undefined) {
+            system['assigned_reviewer'] = submitOptions.reviewerId
+          }
+          await writeLiveColumns(tx, id, {}, system)
+
+          const after = await loadRow(tx, id)
+          if (after === null) throw notFound(collection.name, id)
+          return { ...(await liveEntry(tx, after)), state: 'working' as const }
+        },
+        { immediate: true },
+      ),
+
+    approveReview: async (id, approveOptions) =>
+      applyReviewTransition(id, 'approve', approveOptions?.by ?? null),
+
+    requestReviewChanges: async (id, requestOptions) =>
+      applyReviewTransition(id, 'requestChanges', requestOptions?.by ?? null),
+
+    assignReviewer: async (id, reviewerId) =>
+      db.transaction(
+        async (tx) => {
+          assertWorkflowEnabled('assign a reviewer for')
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+
+          await writeLiveColumns(tx, id, {}, { assigned_reviewer: reviewerId, updated_at: stamp() })
 
           const after = await loadRow(tx, id)
           if (after === null) throw notFound(collection.name, id)

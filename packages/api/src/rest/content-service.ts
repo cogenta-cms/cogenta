@@ -1,12 +1,14 @@
 import { CogentaError } from '@cogenta/core'
 import {
   type CollectionDefinition,
+  type ContentAction,
   type ContentDiff,
   type ContentEntry,
   type ContentStore,
   type CreateInput,
   type DuplicateInput,
   type EntryState,
+  normalisePermissionRule,
   type RouteMatch,
   resolveUrl,
   type UpdateInput,
@@ -152,6 +154,40 @@ export interface ContentService {
     input: DuplicateInput,
     options: ReadOptions,
   ): Promise<SerialisedEntry>
+  /**
+   * Sends an entry into the review queue (`schema@2.1`, ADR-0027). Guarded by
+   * `update` — same as the store: submitting your own finished work is
+   * ordinary authoring, not a distinct permission.
+   */
+  submit(
+    context: AccessContext,
+    name: string,
+    id: string,
+    input: { readonly reviewerId?: string | null },
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
+  /** Approves a pending entry. Guarded by `publish` — **not** publication itself. */
+  approve(
+    context: AccessContext,
+    name: string,
+    id: string,
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
+  /** Sends a pending entry back to its author. Guarded by `publish`, same reasoning as `approve`. */
+  requestChanges(
+    context: AccessContext,
+    name: string,
+    id: string,
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
+  /** Sets — or clears — who is expected to review an entry next. Guarded by `update`. */
+  assignReviewer(
+    context: AccessContext,
+    name: string,
+    id: string,
+    reviewerId: string | null,
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
   history(context: AccessContext, name: string, id: string): Promise<readonly VersionSummary[]>
   /** Every live entry of the translation family `id` belongs to (ADR-0014) — itself included, one per locale. */
   translations(
@@ -208,6 +244,32 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     const created = options.storeFor(target)
     stores.set(target.name, created)
     return created
+  }
+
+  /**
+   * `permissions.assert`, aware of a rule's `own: true` clause (`schema@2.1`,
+   * ADR-0027).
+   *
+   * Reads the entry first **only** when the rule actually needs it — a
+   * collection that never declares `own` pays nothing extra, same as before
+   * this existed. `existing` lets a caller that already has the row (a
+   * transition that just read it for its own reasons) skip a second read.
+   */
+  async function assertOwnAware(
+    target: CollectionDefinition,
+    action: ContentAction,
+    context: AccessContext,
+    id: string,
+    existing?: ContentEntry | null,
+  ): Promise<void> {
+    const rule = normalisePermissionRule(target.permissions[action])
+    if (!rule.own) {
+      permissions.assert(action, target, context)
+      return
+    }
+    const entry =
+      existing !== undefined ? existing : await store(target).read(id, { state: 'working' })
+    permissions.assert(action, target, context, entry?.createdBy ?? null)
   }
 
   function notFound(): CogentaError {
@@ -454,7 +516,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
 
     update: async (context, name, id, input, readOptions) => {
       const target = collection(name)
-      permissions.assert('update', target, context)
+      await assertOwnAware(target, 'update', context, id)
 
       const entry = await store(target).update(id, input)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
@@ -462,7 +524,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
 
     remove: async (context, name, id) => {
       const target = collection(name)
-      permissions.assert('delete', target, context)
+      await assertOwnAware(target, 'delete', context, id)
 
       const removed = await store(target).delete(id)
       if (!removed) throw notFound()
@@ -505,6 +567,41 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       permissions.assert('publish', target, context)
 
       const entry = await store(target).unpublish(id, input)
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    submit: async (context, name, id, input, readOptions) => {
+      const target = collection(name)
+      await assertOwnAware(target, 'update', context, id)
+
+      const entry = await store(target).submitForReview(id, {
+        by: context.actor.id,
+        ...(input.reviewerId === undefined ? {} : { reviewerId: input.reviewerId }),
+      })
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    approve: async (context, name, id, readOptions) => {
+      const target = collection(name)
+      permissions.assert('publish', target, context)
+
+      const entry = await store(target).approveReview(id, { by: context.actor.id })
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    requestChanges: async (context, name, id, readOptions) => {
+      const target = collection(name)
+      permissions.assert('publish', target, context)
+
+      const entry = await store(target).requestReviewChanges(id, { by: context.actor.id })
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    assignReviewer: async (context, name, id, reviewerId, readOptions) => {
+      const target = collection(name)
+      await assertOwnAware(target, 'update', context, id)
+
+      const entry = await store(target).assignReviewer(id, reviewerId)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
     },
 

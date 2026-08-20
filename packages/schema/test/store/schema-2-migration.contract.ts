@@ -18,6 +18,7 @@ import {
   taxonomyTable,
   versionsTable,
 } from '../../src/store/naming.js'
+import { schema21Migration } from '../../src/store/schema-2-1-migration.js'
 import { schema2Migration } from '../../src/store/schema-2-migration.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createTaxonomyStore } from '../../src/store/taxonomy-store.js'
@@ -163,10 +164,17 @@ export function runSchema2MigrationContract(
       }
     }
 
+    // `createContentStore` targets the *current* shape (`schema@2.1`), so a
+    // test that exercises the live store after migrating up has to bring the
+    // table all the way there — `schema2Migration` on its own only proves the
+    // 1.0 → 2.0 step, which is still exactly what most of this file checks.
     const migrator = () =>
       createMigrator({
         db,
-        migrations: [schema2Migration({ collections: [article], taxonomies: [category] })],
+        migrations: [
+          schema2Migration({ collections: [article], taxonomies: [category] }),
+          schema21Migration({ collections: [article] }),
+        ],
       })
 
     /** A destructive migration demands both, in both directions. */
@@ -249,7 +257,7 @@ export function runSchema2MigrationContract(
       const trashed = await store.create({ values: { title: 'Jeté' } })
       await store.delete(trashed.id)
 
-      await migrator().down(confirmed)
+      await migrator().down({ ...confirmed, steps: 2 })
 
       expect(await columnExists(entriesTable(article.name), 'deleted_at')).toBe(false)
       expect(await tableExists(taxonomyTable(category.name))).toBe(false)
@@ -266,7 +274,7 @@ export function runSchema2MigrationContract(
 
     it('can be applied again after a rollback, ending where it started', async () => {
       await migrator().up(confirmed)
-      await migrator().down(confirmed)
+      await migrator().down({ ...confirmed, steps: 2 })
       await migrator().up(confirmed)
 
       expect(await columnExists(entriesTable(article.name), 'deleted_at')).toBe(true)

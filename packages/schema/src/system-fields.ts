@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { CONTENT_STATUSES, PROVENANCE_KINDS } from './types.js'
+import { CONTENT_STATUSES, PROVENANCE_KINDS, REVIEW_STATES } from './types.js'
 
 /**
  * Contract A § "Champs système". Present on every entry of every collection,
@@ -22,6 +22,8 @@ export const SYSTEM_FIELD_NAMES = [
   'updatedBy',
   'status',
   'deletedAt',
+  'reviewState',
+  'assignedReviewer',
   'locale',
   'translationOf',
   'version',
@@ -54,6 +56,9 @@ export const systemFieldsSchema = z.object({
   status: z.enum(CONTENT_STATUSES),
   /** Contract A § "Champs système" (`schema@2.0`): orthogonal to `status`. */
   deletedAt: z.iso.datetime({ offset: true }).nullable(),
+  /** Contract A § "Champs système" (`schema@2.1`, ADR-0027): orthogonal to `status`. */
+  reviewState: z.enum(REVIEW_STATES),
+  assignedReviewer: z.string().min(1).nullable(),
   /** Contract A § i18n: one entry per locale (ADR-0014). */
   locale: z.string().min(1),
   /** The source entry of a translation family, or `null` on the source itself. */
@@ -81,6 +86,14 @@ export const SYSTEM_FIELD_DESCRIPTORS: readonly SystemFieldDescriptor[] = [
   { name: 'updatedBy', type: 'id', nullable: true, readOnly: true },
   { name: 'status', type: 'enum', nullable: false, readOnly: true, values: CONTENT_STATUSES },
   { name: 'deletedAt', type: 'datetime', nullable: true, readOnly: true },
+  {
+    name: 'reviewState',
+    type: 'enum',
+    nullable: false,
+    readOnly: true,
+    values: REVIEW_STATES,
+  },
+  { name: 'assignedReviewer', type: 'id', nullable: true, readOnly: true },
   { name: 'locale', type: 'string', nullable: false, readOnly: true },
   { name: 'translationOf', type: 'id', nullable: true, readOnly: true },
   { name: 'version', type: 'number', nullable: false, readOnly: true },

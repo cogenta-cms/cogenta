@@ -60,6 +60,7 @@
     "commerceCoupons": "Coupons",
     "commerceSubscriptions": "Abonnements",
     "redirects": "Redirections",
+    "review": "File de relecture",
     "trash": "Corbeille",
     "assistantChat": "Interroger le site",
     "duplicates": "Doublons",
@@ -218,7 +219,27 @@
     "scheduleError": "Impossible de programmer la publication de cette entrée.",
     "duplicateButton": "Dupliquer",
     "duplicating": "Duplication…",
-    "duplicateError": "Impossible de dupliquer cette entrée."
+    "duplicateError": "Impossible de dupliquer cette entrée.",
+    "workflow": {
+      "stateLabel": "Relecture :",
+      "state": {
+        "none": "Non soumis",
+        "pending": "En attente de relecture",
+        "changes-requested": "Modifications demandées",
+        "approved": "Approuvé"
+      },
+      "reviewerLabel": "Relecteur :",
+      "reviewerUnassigned": "Non assigné",
+      "submitButton": "Soumettre à relecture",
+      "submitted": "Soumis à relecture.",
+      "submitError": "Impossible de soumettre cette entrée à relecture.",
+      "approveButton": "Approuver",
+      "approved": "Approuvé.",
+      "approveError": "Impossible d'approuver cette entrée.",
+      "requestChangesButton": "Demander des modifications",
+      "changesRequested": "Modifications demandées.",
+      "requestChangesError": "Impossible de demander des modifications sur cette entrée."
+    }
   },
   "media": {
     "heading": "Médiathèque",
@@ -371,6 +392,31 @@
     "webhooksUnsigned": "Non signé — l'envoi est désactivé tant qu'aucun secret n'est défini.",
     "webhooksHistoryUnavailable": "Aucun historique de livraison n'est encore conservé — les livraisons sont journalisées, pas stockées.",
     "readOnlyNote": "Ces réglages viennent du fichier de configuration de ce site, pas de la base de données. Modifiez cogenta.config.mjs et redémarrez le serveur pour les changer."
+  },
+  "review": {
+    "heading": "File de relecture",
+    "tabAssigned": "Assignées à moi",
+    "tabPending": "Toutes en attente",
+    "tabMine": "Mes soumissions",
+    "empty": "Rien ici.",
+    "loadError": "Impossible de charger la file de relecture.",
+    "entry": "Entrée",
+    "author": "Auteur",
+    "collection": "Collection",
+    "submittedAt": "Soumis",
+    "age": "Âge",
+    "state": "État",
+    "actions": "Actions",
+    "open": "Ouvrir",
+    "approve": "Approuver",
+    "requestChanges": "Demander des modifications",
+    "approveError": "Impossible d'approuver cette entrée.",
+    "requestChangesError": "Impossible de demander des modifications sur cette entrée.",
+    "ageDays_one": "{{count}} jour",
+    "ageDays_other": "{{count}} jours",
+    "ageToday": "Aujourd'hui",
+    "pendingBadge": "{{count}} en attente de relecture",
+    "pendingBadge_other": "{{count}} en attente de relecture"
   },
   "trash": {
     "heading": "Corbeille",

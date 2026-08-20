@@ -1,8 +1,9 @@
-import type { ComponentType, CSSProperties, JSX } from 'react'
+import { type ComponentType, type CSSProperties, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
+import { countPendingReview } from '../routes/review.js'
 import {
   AgentsIcon,
   AuditIcon,
@@ -57,6 +58,32 @@ export function AppShell(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
+  const token = auth.state.status === 'authenticated' ? auth.state.token : null
+
+  // The review queue's pending count — "what makes a queue get worked" (fiche
+  // 35 task 3's own reasoning for a nav badge). `null` while unknown or on a
+  // server with no reviewable collection, which the badge treats the same as
+  // zero: nothing to show, not an error to render.
+  const [pendingReview, setPendingReview] = useState<number>(0)
+
+  useEffect(() => {
+    if (token === null) return
+    let cancelled = false
+    const refresh = (): void => {
+      void countPendingReview(token).then((count) => {
+        if (!cancelled) setPendingReview(count)
+      })
+    }
+    refresh()
+    // Refreshed rather than fetched once: a badge that only updates on a full
+    // reload would tell an editor a queue is empty for as long as the tab has
+    // been open, which is worse than not showing a number at all.
+    const interval = setInterval(refresh, 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [token])
 
   return (
     <div className="app-shell">
@@ -104,6 +131,14 @@ export function AppShell(): JSX.Element {
                 <NavLink to={item.to} end={item.to === '/'}>
                   <Icon className="size-4 shrink-0" />
                   <span>{t(item.labelKey)}</span>
+                  {item.to === '/review' && pendingReview > 0 && (
+                    <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-destructive-foreground">
+                      <span aria-hidden="true">{pendingReview}</span>
+                      <span className="sr-only">
+                        {t('review.pendingBadge', { count: pendingReview })}
+                      </span>
+                    </span>
+                  )}
                 </NavLink>
               </li>
             )

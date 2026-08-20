@@ -45,6 +45,23 @@ export const CONTENT_STATUSES = ['draft', 'scheduled', 'published', 'archived'] 
 
 export type ContentStatus = (typeof CONTENT_STATUSES)[number]
 
+/**
+ * The editorial workflow's state, orthogonal to `status` (`schema@2.1`,
+ * ADR-0027) — exactly as `deletedAt` is orthogonal to it since ADR-0022.
+ *
+ * `approved` is **not** `published`: approving authorises, publishing is
+ * still the `publish` action. Confounding the two would publish by surprise
+ * and would remove the control the `publish` permission grants.
+ */
+export const REVIEW_STATES = ['none', 'pending', 'changes-requested', 'approved'] as const
+
+export type ReviewState = (typeof REVIEW_STATES)[number]
+
+/** The three transitions the server-side table recognises. Closed set. */
+export const REVIEW_TRANSITIONS = ['submit', 'approve', 'requestChanges'] as const
+
+export type ReviewTransition = (typeof REVIEW_TRANSITIONS)[number]
+
 export const PROVENANCE_KINDS = ['human', 'assisted', 'generated'] as const
 
 export type Provenance = (typeof PROVENANCE_KINDS)[number]
@@ -111,7 +128,50 @@ export interface CollectionTrash {
 /** Days a trashed entry is kept when the collection says nothing. */
 export const DEFAULT_TRASH_RETAIN_DAYS = 30
 
-export type CollectionPermissions = Readonly<Partial<Record<ContentAction, readonly string[]>>>
+/**
+ * One action's grant.
+ *
+ * The plain array form is the whole of contract A before `schema@2.1` and
+ * stays valid: this is a strictly additive change (ADR-0027), the same
+ * nature as `tools@1.1`'s `document.extract`. The object form adds `own`,
+ * for "this role may act on its own entries only" — a real clause in the
+ * block rather than a `'author:own'` role-name convention, which would
+ * reproduce the class of silent typo bug the L10 sitemap 500 was.
+ */
+export type CollectionPermissionRule =
+  | readonly string[]
+  | { readonly roles: readonly string[]; readonly own?: boolean }
+
+export type CollectionPermissions = Readonly<
+  Partial<Record<ContentAction, CollectionPermissionRule>>
+>
+
+/** `CollectionPermissionRule`, always read back out as `{ roles, own }`. */
+export interface NormalisedPermissionRule {
+  readonly roles: readonly string[]
+  readonly own: boolean
+}
+
+const EMPTY_RULE: NormalisedPermissionRule = { roles: [], own: false }
+
+/** The one place either form of a `CollectionPermissionRule` is unpacked. */
+export function normalisePermissionRule(
+  rule: CollectionPermissionRule | undefined,
+): NormalisedPermissionRule {
+  if (rule === undefined) return EMPTY_RULE
+  if (Array.isArray(rule)) return { roles: rule, own: false }
+  const object = rule as { readonly roles: readonly string[]; readonly own?: boolean }
+  return { roles: object.roles, own: object.own === true }
+}
+
+/**
+ * The editorial workflow, opt-in per collection (`schema@2.1`, ADR-0027) —
+ * never a global switch, so it stays consistent with permissions already
+ * being declared per collection, and a single-editor site sees nothing new.
+ */
+export interface CollectionWorkflow {
+  readonly enabled: boolean
+}
 
 export interface CollectionDefinition {
   readonly name: string
@@ -123,6 +183,8 @@ export interface CollectionDefinition {
    * all, so `delete()` is the hard delete `purge()` performs.
    */
   readonly trash?: CollectionTrash | false
+  /** Absent or `{ enabled: false }` means no workflow: `submit`/`approve`/`requestChanges` all refuse. */
+  readonly workflow?: CollectionWorkflow
   readonly fields: Readonly<Record<string, FieldDefinition>>
   readonly indexes?: readonly (readonly string[])[]
   readonly permissions: CollectionPermissions
@@ -200,6 +262,15 @@ export interface SystemFields {
    * in the repository stays exhaustive.
    */
   readonly deletedAt: string | null
+  /**
+   * The editorial workflow's state, `'none'` while it was never entered
+   * (`schema@2.1`, ADR-0027). Orthogonal to `status`, exactly as `deletedAt`
+   * is — a client written before this field existed reads exactly the
+   * `status` values it always did, unaware `reviewState` exists at all.
+   */
+  readonly reviewState: ReviewState
+  /** Who is expected to review this entry next, or `null`. Set at submission or chosen by an editor. */
+  readonly assignedReviewer: string | null
   readonly locale: string
   readonly translationOf: string | null
   readonly version: number

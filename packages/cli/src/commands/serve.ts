@@ -38,6 +38,7 @@ import {
   createPermissionLayer,
   createRedirectRouter,
   createRestRouter,
+  createReviewRouter,
   createSearchRouter,
   createSitePlanRouter,
   createSuspiciousActivitySource,
@@ -58,6 +59,7 @@ import {
   type RestRequest,
   type RestResponse,
   type RestRouter,
+  type ReviewRouter,
   resolveActor,
   type SearchRouter,
   type SitePlanRouter,
@@ -324,6 +326,8 @@ interface Site {
   readonly auditRouter: AuditRouter
   /** `GET /api/search` — the full-text index, reachable for the first time (L10 task 3). */
   readonly searchRouter: SearchRouter
+  /** `GET /api/review` — the editorial workflow's review queue (`schema@2.1`, ADR-0027). */
+  readonly reviewRouter: ReviewRouter
   /**
    * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`).
    *
@@ -873,6 +877,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       permissions,
       defaultLocale: site.defaultLocale,
     }),
+    // The review queue (`schema@2.1`, ADR-0027, fiche 37 task 3).
+    reviewRouter: createReviewRouter({ collections, permissions, storeFor }),
     securityAlerts:
       options.onSecurityEvent == null
         ? null
@@ -1726,6 +1732,15 @@ export function createRequestListener(
       if (url.pathname === '/api/search') {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.searchRouter.handle(request, context))
+        return
+      }
+
+      // The review queue (`schema@2.1`, ADR-0027, fiche 37 task 3) — its own
+      // router, same reasoning as search: it decides which collections are
+      // in scope for this actor and this tab, never this layer.
+      if (url.pathname === '/api/review') {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.reviewRouter.handle(request, context))
         return
       }
 

@@ -1,5 +1,10 @@
 import { CogentaError } from '@cogenta/core'
-import type { CollectionDefinition, ContentAction, TaxonomyDefinition } from '@cogenta/schema'
+import {
+  type CollectionDefinition,
+  type ContentAction,
+  normalisePermissionRule,
+  type TaxonomyDefinition,
+} from '@cogenta/schema'
 import type { AccessContext, AccessDecision, PermissionLayer, PreviewGrant } from '../types.js'
 
 /**
@@ -58,7 +63,7 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     action: ContentAction,
     collection: CollectionDefinition,
   ): readonly string[] {
-    return collection.permissions[action] ?? []
+    return normalisePermissionRule(collection.permissions[action]).roles
   }
 
   /**
@@ -89,8 +94,18 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     action: ContentAction,
     collection: CollectionDefinition,
     context: AccessContext,
+    /**
+     * Who the entry belongs to, for a rule declaring `own: true`
+     * (`schema@2.1`, ADR-0027). Left out for a route with no single entry in
+     * play (`create`, a list) or when the caller has not looked the entry up
+     * — an `own` rule then simply cannot be satisfied, which is the safe
+     * failure: nobody is granted access on the strength of an owner nobody
+     * checked.
+     */
+    ownerId?: string | null,
   ): AccessDecision {
-    const allowedRoles = grantedRoles(action, collection)
+    const rule = normalisePermissionRule(collection.permissions[action])
+    const allowedRoles = rule.roles
 
     // Deny by default: a collection that never mentions an action grants it to
     // nobody. An unlisted action is an omission, and an omission must not open
@@ -109,8 +124,18 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     }
 
     const held = heldRoles(context)
-    for (const role of allowedRoles) {
-      if (held.has(role)) return { allowed: true }
+    // `own: true` narrows every role the rule lists, uniformly — it is not
+    // "some roles own-scoped, others not" (a per-role split is deliberately
+    // out of scope, ADR-0027's stated renunciation). An actor's own id has
+    // to be known and match the entry's owner, or the grant does not apply.
+    const isOwner =
+      !rule.own ||
+      (context.actor.id !== null && ownerId !== undefined && context.actor.id === ownerId)
+
+    if (isOwner) {
+      for (const role of allowedRoles) {
+        if (held.has(role)) return { allowed: true }
+      }
     }
 
     if (action === 'read' && activePreview(collection, context) !== undefined) {
@@ -119,7 +144,9 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
 
     return {
       allowed: false,
-      reason: `"${action}" on "${collection.name}" requires one of: ${allowedRoles.join(', ')}`,
+      reason: rule.own
+        ? `"${action}" on "${collection.name}" requires one of: ${allowedRoles.join(', ')}, and only on an entry you created`
+        : `"${action}" on "${collection.name}" requires one of: ${allowedRoles.join(', ')}`,
     }
   }
 
@@ -175,7 +202,10 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     taxonomy: TaxonomyDefinition,
     context: AccessContext,
   ): AccessDecision {
-    const allowedRoles = taxonomy.permissions[action] ?? []
+    // A term has no author, so `own` (`schema@2.1`) has no meaning here —
+    // `normalisePermissionRule` reads only `.roles`, the same as every other
+    // caller that does not carry an entry to compare against.
+    const allowedRoles = normalisePermissionRule(taxonomy.permissions[action]).roles
     if (allowedRoles.length === 0) {
       return {
         allowed: false,
@@ -217,8 +247,8 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     can,
     canReadUnpublished,
     canTerm,
-    assert: (action, collection, context): void => {
-      refuse(can(action, collection, context), context, {
+    assert: (action, collection, context, ownerId): void => {
+      refuse(can(action, collection, context, ownerId), context, {
         action,
         collection: collection.name,
       })
@@ -275,8 +305,8 @@ function assertDeclaredRoles(
 ): void {
   const unknown: string[] = []
   for (const collection of collections) {
-    for (const [action, roles] of Object.entries(collection.permissions)) {
-      for (const role of roles ?? []) {
+    for (const [action, rule] of Object.entries(collection.permissions)) {
+      for (const role of normalisePermissionRule(rule).roles) {
         if (!declaredRoles.has(role)) unknown.push(`${collection.name}.${action}: "${role}"`)
       }
     }

@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useRef } from 'react'
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../ui/cn.js'
 import type { PreviewHandlers } from './preview-dom.js'
@@ -21,9 +21,17 @@ import { VIEWPORT_WIDTHS } from './viewports.js'
  *   round trip in between, so what an editor is looking at is what
  *   `POST /api/builder/render` produced and nothing else.
  *
- * The frame is a real viewport, so the responsive sizes below are real too: a
- * page at 375 CSS pixels resolves the theme's own media queries at 375 CSS
- * pixels. Nothing here scales, crops or simulates.
+ * The frame is a real viewport, so the responsive sizes are real too: a page
+ * at 375 CSS pixels resolves the theme's own media queries at 375 CSS pixels
+ * — including "Ordinateur", now a real 1440, not "whatever room the panel
+ * has" (L20 audit point 10). The iframe's own `width` is never touched by
+ * scaling: only a `transform: scale()` shrinks how it *paints* when that real
+ * width would not fit the panel, exactly the way a device-preview tool zooms
+ * out rather than lying about the viewport it is emulating. Scrollable
+ * overflow is computed from an element's *painted* (post-transform) box, not
+ * its layout box (CSS Transforms, §"Overflow"), which is what lets this avoid
+ * the panel's own scrollbar without ever reporting a narrower page to the
+ * theme than the mode names.
  */
 export function PreviewFrame({
   html,
@@ -42,7 +50,12 @@ export function PreviewFrame({
 }): JSX.Element {
   const { t } = useTranslation()
   const frame = useRef<HTMLIFrameElement | null>(null)
+  const container = useRef<HTMLDivElement | null>(null)
   const dispose = useRef<(() => void) | null>(null)
+  // 1 until proven otherwise: never scale up past the real size, and start
+  // from "fits" so a viewport whose width is already available (or a test
+  // environment with no real layout) never shows a needless shrink.
+  const [scale, setScale] = useState(1)
 
   // The handlers are read through a ref so that a parent re-render — which
   // happens on every keystroke of an inline edit — does not tear down and
@@ -79,8 +92,41 @@ export function PreviewFrame({
     if (doc !== null) setChromeVisible(doc, chromeVisible)
   }, [chromeVisible])
 
+  // Recomputes the scale whenever the target width or the panel's own real
+  // width can have changed. `ResizeObserver` is the primary source (the
+  // panel resizes with the window and with the side columns around it,
+  // neither of which fires any React state change on its own); the `resize`
+  // listener is the fallback for an environment without it. A same-turn call
+  // covers the very first render.
+  useEffect(() => {
+    const el = container.current
+    const target = VIEWPORT_WIDTHS[viewport]
+
+    function recompute(): void {
+      if (el === null) return
+      const style = window.getComputedStyle(el)
+      const horizontalPadding =
+        Number.parseFloat(style.paddingLeft || '0') + Number.parseFloat(style.paddingRight || '0')
+      const available = el.clientWidth - horizontalPadding
+      setScale(available > 0 && target > available ? available / target : 1)
+    }
+
+    recompute()
+    window.addEventListener('resize', recompute)
+    const observer =
+      el !== null && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(recompute) : null
+    observer?.observe(el as HTMLDivElement)
+    return () => {
+      window.removeEventListener('resize', recompute)
+      observer?.disconnect()
+    }
+  }, [viewport])
+
   return (
-    <div className="flex justify-center overflow-auto rounded-lg border border-border bg-muted p-4">
+    <div
+      ref={container}
+      className="flex justify-center overflow-auto rounded-lg border border-border bg-muted p-4"
+    >
       <iframe
         ref={frame}
         // The document is the site's own HTML, produced by the site's own
@@ -91,10 +137,19 @@ export function PreviewFrame({
         srcDoc={html ?? ''}
         onLoad={wire}
         className={cn(
-          'h-[70vh] w-full border-0 bg-white transition-[max-width] duration-200',
+          // `shrink-0`: this is a flex item, and a flex item shrinks by
+          // default. That would quietly narrow the iframe's own *layout*
+          // width to fit the panel — the exact lie about the viewport this
+          // component exists to avoid. The `transform` below is the only
+          // thing allowed to change how this paints.
+          'h-[70vh] shrink-0 border-0 bg-white transition-transform duration-200',
           'rounded-md shadow-card',
         )}
-        style={{ maxWidth: VIEWPORT_WIDTHS[viewport] }}
+        style={{
+          width: VIEWPORT_WIDTHS[viewport],
+          transform: scale === 1 ? undefined : `scale(${scale})`,
+          transformOrigin: 'top center',
+        }}
       />
       {html === null && <p className="sr-only">{t('builder.previewLoading')}</p>}
     </div>

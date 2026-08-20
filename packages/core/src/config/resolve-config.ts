@@ -209,5 +209,14 @@ export function resolveConfig(
             taxId: config.billing.taxId,
             footer: config.billing.footer,
           }),
+    scheduler: Object.freeze({
+      mode: config.scheduler.mode,
+    }),
+    backup: Object.freeze({
+      enabled: config.backup.enabled,
+      intervalHours: config.backup.intervalHours,
+      keep: config.backup.keep,
+      dir: config.backup.dir,
+    }),
   })
 }

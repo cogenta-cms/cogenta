@@ -82,6 +82,28 @@ describe('createAnalyticsStore — recordEvent', () => {
   })
 })
 
+describe('createAnalyticsStore — purgeSalts', () => {
+  it('deletes salts older than retainDays, keeping newer ones', async () => {
+    const db = await testDb()
+    let clock = Date.UTC(2026, 0, 1, 12, 0, 0)
+    const store = createAnalyticsStore(db, () => clock)
+
+    // Mints one salt per day for five distinct days.
+    for (let day = 0; day < 5; day += 1) {
+      await store.recordEvent({ path: '/', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+      clock += 24 * 60 * 60 * 1000
+    }
+
+    // `clock` now sits on day 5 (0-indexed): days 0-1 are more than 3 days
+    // old, days 2-4 are not.
+    const purged = await store.purgeSalts(3)
+    expect(purged).toBe(2)
+
+    // A second purge at the same instant has nothing left to remove.
+    expect(await store.purgeSalts(3)).toBe(0)
+  })
+})
+
 describe('createAnalyticsStore — getSummary', () => {
   it('breaks views down by day', async () => {
     const db = await testDb()

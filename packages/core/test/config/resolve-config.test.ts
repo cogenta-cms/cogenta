@@ -317,6 +317,40 @@ describe('resolveConfig — notFoundLog (fiche 12 task 1)', () => {
   })
 })
 
+describe('resolveConfig — scheduler and backup (fiche 28)', () => {
+  it('defaults the scheduler clock to internal, and backups to off', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    expect(config.scheduler.mode).toBe('internal')
+    expect(config.backup).toEqual({
+      enabled: false,
+      intervalHours: 24,
+      keep: 10,
+      dir: '.cogenta/backups',
+    })
+  })
+
+  it('lets a shared-hosting site switch to an external cron', () => {
+    const config = resolveConfig({ ...minimal, scheduler: { mode: 'external-cron' } }, noEnv)
+
+    expect(config.scheduler.mode).toBe('external-cron')
+  })
+
+  it('lets a site turn scheduled backups on and tune them', () => {
+    const config = resolveConfig(
+      { ...minimal, backup: { enabled: true, intervalHours: 6, keep: 3, dir: 'my-backups' } },
+      noEnv,
+    )
+
+    expect(config.backup).toEqual({
+      enabled: true,
+      intervalHours: 6,
+      keep: 3,
+      dir: 'my-backups',
+    })
+  })
+})
+
 describe('resolveConfig — security (L10 task 6)', () => {
   it('leaves CORS off, CSP absent and HSTS at zero when nothing is configured', () => {
     const config = resolveConfig(minimal, noEnv)

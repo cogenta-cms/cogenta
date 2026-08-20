@@ -9,6 +9,7 @@ import type {
   JobId,
   JobState,
   JobStatus,
+  ListJobsOptions,
   QueueConfig,
   QueueDriver,
   QueueDriverOptions,
@@ -63,11 +64,15 @@ interface BullmqJobLike {
   moveToCompleted(returnValue: unknown, token: string, fetchNext?: boolean): Promise<unknown>
   moveToFailed(error: Error, token: string, fetchNext?: boolean): Promise<unknown>
   remove(): Promise<void>
+  /** bullmq's own re-queue: moves a `failed` job back to `waiting` with a fresh attempt count. */
+  retry(state?: 'failed' | 'completed'): Promise<void>
 }
 
 interface BullmqQueueLike {
   add(name: string, data: unknown, options?: BullmqAddOptionsLike): Promise<BullmqJobLike>
   getJob(id: string): Promise<BullmqJobLike | undefined>
+  /** `types` is bullmq's own vocabulary: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'paused'. */
+  getJobs(types: readonly string[], start?: number, end?: number): Promise<BullmqJobLike[]>
   getBackend(): BullmqBackendLike
   close(): Promise<void>
 }
@@ -168,9 +173,36 @@ function toJobStatus(state: string): JobStatus {
   }
 }
 
+/** The inverse of `toJobStatus`, for `getJobs`'s type filter. `cancelled` has no bullmq state of its own — it lives only in the tombstone hash, so `list()` never asks bullmq for it directly. */
+function fromJobStatus(status: JobStatus): string {
+  switch (status) {
+    case 'completed':
+      return 'completed'
+    case 'failed':
+      return 'failed'
+    case 'running':
+      return 'active'
+    default:
+      return 'waiting'
+  }
+}
+
 /** The payload is wrapped so a bare `null`, string or number survives the trip. */
 interface JobEnvelope {
   readonly payload: unknown
+}
+
+async function toJobState(job: BullmqJobLike): Promise<JobState> {
+  const failedReason = job.failedReason
+  return {
+    id: encodeJobId(job.name, job.id ?? ''),
+    name: job.name,
+    status: toJobStatus(await job.getState()),
+    attempt: job.attemptsMade,
+    maxAttempts: job.opts.attempts ?? DEFAULT_MAX_ATTEMPTS,
+    runAt: job.timestamp + job.delay,
+    lastError: failedReason === undefined || failedReason === '' ? undefined : failedReason,
+  }
 }
 
 export interface BullmqQueueOptions extends QueueDriverOptions {
@@ -398,16 +430,41 @@ export function createBullmqQueue(options: BullmqQueueOptions): QueueDriver {
       const job = await queueFor(parsed.name).getJob(parsed.jobId)
       if (job === undefined) return null
 
-      const failedReason = job.failedReason
-      return {
-        id,
-        name: job.name,
-        status: toJobStatus(await job.getState()),
-        attempt: job.attemptsMade,
-        maxAttempts: job.opts.attempts ?? DEFAULT_MAX_ATTEMPTS,
-        runAt: job.timestamp + job.delay,
-        lastError: failedReason === undefined || failedReason === '' ? undefined : failedReason,
-      }
+      return toJobState(job)
+    },
+
+    // Only names this driver has actually touched (processed or enqueued
+    // through it) can be searched — bullmq shards jobs by queue name, and
+    // there is no global "every name that ever existed" index to scan.
+    // `cogenta serve` builds one long-lived driver per queue, so this
+    // covers everything a real deployment enqueues.
+    list: async (listOptions: ListJobsOptions = {}): Promise<readonly JobState[]> => {
+      const names = new Set<string>([...handlers.keys(), ...queues.keys()])
+      const types =
+        listOptions.status === undefined
+          ? (['waiting', 'delayed', 'active', 'completed', 'failed'] as const)
+          : ([fromJobStatus(listOptions.status)] as const)
+
+      const perQueue = await Promise.all(
+        [...names].map((name) => queueFor(name).getJobs([...types], 0, 200)),
+      )
+
+      const states = await Promise.all(perQueue.flat().map((job) => toJobState(job)))
+
+      states.sort((a, b) => b.runAt - a.runAt)
+      return states.slice(0, listOptions.limit ?? 50)
+    },
+
+    retry: async (id: JobId): Promise<boolean> => {
+      const parsed = decodeJobId(id)
+      if (parsed === null) return false
+
+      const job = await queueFor(parsed.name).getJob(parsed.jobId)
+      if (job === undefined) return false
+      if (toJobStatus(await job.getState()) !== 'failed') return false
+
+      await job.retry('failed')
+      return true
     },
 
     close: async (): Promise<void> => {

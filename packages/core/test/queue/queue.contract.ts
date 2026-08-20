@@ -309,6 +309,65 @@ export function runQueueContract(name: string, create: () => Promise<QueueContra
       })
     })
 
+    describe('listing and retrying', () => {
+      it('lists jobs across every status', async () => {
+        queue.process('ok', async () => undefined)
+        queue.process('bad', async () => {
+          throw new Error('nope')
+        })
+
+        const okId = await queue.enqueue({ name: 'ok' })
+        const badId = await queue.enqueue({ name: 'bad', maxAttempts: 1 })
+        await queue.tick()
+
+        const all = await queue.list()
+        const ids = all.map((state) => state.id)
+        expect(ids).toContain(okId)
+        expect(ids).toContain(badId)
+      })
+
+      it('narrows the list to one status', async () => {
+        queue.process('always-fails-2', async () => {
+          throw new Error('nope')
+        })
+        const id = await queue.enqueue({ name: 'always-fails-2', maxAttempts: 1 })
+        await queue.tick()
+
+        const failed = await queue.list({ status: 'failed' })
+        expect(failed.map((state) => state.id)).toContain(id)
+
+        const completed = await queue.list({ status: 'completed' })
+        expect(completed.map((state) => state.id)).not.toContain(id)
+      })
+
+      it('retries a failed job, resetting its attempt count', async () => {
+        let attempts = 0
+        queue.process('retry-me', async () => {
+          attempts += 1
+          throw new Error('still nope')
+        })
+        const id = await queue.enqueue({ name: 'retry-me', maxAttempts: 1 })
+        await queue.tick()
+        expect((await queue.status(id))?.status).toBe('failed')
+
+        expect(await queue.retry(id)).toBe(true)
+        expect((await queue.status(id))?.status).toBe('pending')
+
+        await queue.tick()
+        expect(attempts).toBe(2)
+      })
+
+      it('is a no-op, not an error, retrying a job that is not failed', async () => {
+        queue.process('never-fails', async () => undefined)
+        const id = await queue.enqueue({ name: 'never-fails' })
+        await queue.tick()
+        expect((await queue.status(id))?.status).toBe('completed')
+
+        expect(await queue.retry(id)).toBe(false)
+        expect(await queue.retry('no-such-job')).toBe(false)
+      })
+    })
+
     describe('concurrency — the L0 acceptance criterion', () => {
       it('never lets two workers process the same job', async () => {
         // Real workers, real backing store, no mock. This is the one property no

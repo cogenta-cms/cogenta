@@ -883,6 +883,42 @@ export function runContentStoreContract(
         expect(working?.publishedAt).toBe(publishAt.toISOString())
       })
 
+      it('claims a scheduled entry for publication, atomically', async () => {
+        const entry = await articles.create({ values: { title: 'Claimed' } })
+        await articles.unpublish(entry.id, {
+          status: 'scheduled',
+          publishedAt: new Date(clock.getTime() + 3600_000),
+        })
+
+        const claimed = await articles.claimForScheduledPublish(entry.id)
+        expect(claimed?.status).toBe('published')
+        expect(await articles.read(entry.id)).not.toBeNull()
+      })
+
+      it('claims nothing for an entry that is not scheduled', async () => {
+        const draft = await articles.create({ values: { title: 'Still a draft' } })
+        expect(await articles.claimForScheduledPublish(draft.id)).toBeNull()
+        expect((await articles.read(draft.id, { state: 'working' }))?.status).toBe('draft')
+
+        const alreadyPublished = await articles.create({ values: { title: 'Already out' } })
+        await articles.publish(alreadyPublished.id)
+        expect(await articles.claimForScheduledPublish(alreadyPublished.id)).toBeNull()
+      })
+
+      it('claims a scheduled entry only once — a second claim is a no-op, not an error', async () => {
+        const entry = await articles.create({ values: { title: 'Once' } })
+        await articles.unpublish(entry.id, {
+          status: 'scheduled',
+          publishedAt: new Date(clock.getTime() + 3600_000),
+        })
+
+        const first = await articles.claimForScheduledPublish(entry.id)
+        const second = await articles.claimForScheduledPublish(entry.id)
+
+        expect(first?.status).toBe('published')
+        expect(second).toBeNull()
+      })
+
       it('refuses to schedule an entry with no date', async () => {
         const entry = await articles.create({ values: { title: 'No date' } })
 

@@ -158,6 +158,17 @@ export interface CogentaConfigInput {
     /** Legal footer printed on every invoice page: payment terms, mentions. */
     readonly footer?: string
   }
+  /** The scheduled-task clock (fiche 28 task 5). `'internal'` by default — see the schema comment for what `'external-cron'` changes. */
+  readonly scheduler?: {
+    readonly mode?: 'internal' | 'external-cron'
+  }
+  /** Scheduled full-site backups (fiche 28 task 1). Off by default. */
+  readonly backup?: {
+    readonly enabled?: boolean
+    readonly intervalHours?: number
+    readonly keep?: number
+    readonly dir?: string
+  }
 }
 
 /**
@@ -282,6 +293,17 @@ export interface CogentaConfig {
         readonly footer: string | undefined
       }
     | undefined
+  /** The scheduled-task clock (fiche 28 task 5). Resolved, defaults applied. */
+  readonly scheduler: {
+    readonly mode: 'internal' | 'external-cron'
+  }
+  /** Scheduled full-site backups (fiche 28 task 1). Resolved, defaults applied. */
+  readonly backup: {
+    readonly enabled: boolean
+    readonly intervalHours: number
+    readonly keep: number
+    readonly dir: string
+  }
 }
 
 /** A read-only view of the process environment. */

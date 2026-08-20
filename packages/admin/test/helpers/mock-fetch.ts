@@ -417,6 +417,12 @@ export function installMockFetch(
       readonly deviceBreakdown?: readonly { device: string; views: number }[]
       readonly dailyViews?: readonly { day: string; views: number }[]
     }
+    /** `GET /api/scheduled-tasks`'s `mode` (fiche 28 task 5) — `'internal'` by default. */
+    readonly scheduledTasksMode?: 'internal' | 'external-cron'
+    /** Overrides `GET /api/scheduled-tasks`'s task list (fiche 28 task 2) — a publish/trash-purge pair by default. */
+    readonly scheduledTasks?: readonly Readonly<Record<string, unknown>>[]
+    /** Seeds `GET /api/scheduled-tasks/queue` (fiche 28 task 2) — empty by default. */
+    readonly scheduledTasksQueue?: readonly Readonly<Record<string, unknown>>[]
     /** Seeds the 404 log (fiche 12 task 1) — empty by default, like a freshly started site. */
     readonly notFound?: readonly {
       readonly path: string
@@ -1820,6 +1826,84 @@ export function installMockFetch(
           data: {
             database: { status: 'degraded', driver: 'sqlite', tier: 'degraded' },
             storage: { status: 'degraded', driver: 'local', tier: 'degraded' },
+          },
+        })
+      }
+
+      if (url.endsWith('/api/scheduled-tasks') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read scheduled tasks.' },
+          })
+        }
+        return json(200, {
+          data: {
+            mode: options.scheduledTasksMode ?? 'internal',
+            tasks: options.scheduledTasks ?? [
+              {
+                name: 'publish',
+                description: 'Scheduled publication',
+                intervalMs: 60_000,
+                destructive: false,
+                lastRun: {
+                  id: 'run-1',
+                  taskName: 'publish',
+                  startedAt: 1_772_500_000_000,
+                  finishedAt: 1_772_500_000_100,
+                  durationMs: 100,
+                  outcome: 'success',
+                  summary: '2 published',
+                  error: null,
+                  triggeredBy: 'schedule',
+                  actor: null,
+                },
+                nextRunAt: 1_772_500_060_000,
+                overdue: false,
+                recentRuns: [],
+              },
+              {
+                name: 'trash-purge',
+                description: 'Trash purge',
+                intervalMs: 60_000,
+                destructive: true,
+                lastRun: null,
+                nextRunAt: 1_772_500_060_000,
+                overdue: true,
+                recentRuns: [],
+              },
+            ],
+          },
+        })
+      }
+
+      if (url.endsWith('/api/scheduled-tasks/queue') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read the job queue.' },
+          })
+        }
+        return json(200, { data: { jobs: options.scheduledTasksQueue ?? [] } })
+      }
+
+      if (/\/api\/scheduled-tasks\/[^/]+\/run$/u.test(url) && method === 'POST') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may run a scheduled task.' },
+          })
+        }
+        const name = url.match(/\/api\/scheduled-tasks\/([^/]+)\/run$/u)?.[1] ?? ''
+        return json(200, {
+          data: {
+            id: 'run-manual',
+            taskName: name,
+            startedAt: 1_772_500_100_000,
+            finishedAt: 1_772_500_100_050,
+            durationMs: 50,
+            outcome: 'success',
+            summary: name === 'trash-purge' ? '5 purged' : '2 published',
+            error: null,
+            triggeredBy: 'manual',
+            actor: user.id,
           },
         })
       }

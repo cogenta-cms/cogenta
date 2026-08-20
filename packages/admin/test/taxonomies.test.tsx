@@ -56,7 +56,10 @@ afterEach(() => {
 
 async function goToTaxonomies(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Taxonomies' }))
+  // The "Taxonomies" nav link only renders once the schema has loaded far
+  // enough to know a taxonomy is declared — wait for it rather than assuming
+  // it's already there right after the dashboard heading.
+  fireEvent.click(await screen.findByRole('link', { name: 'Taxonomies' }))
   await screen.findByRole('heading', { name: 'Taxonomies' })
 }
 

@@ -47,11 +47,13 @@ describe('the preview/apply/undo import screen', () => {
 
   it('does not show the preview import card to a role below admin', async () => {
     signIn(['editor'])
+    // The "Import" nav item is itself role-gated to admin (fiche 35) and
+    // never renders for this role — go straight to the route, the same way
+    // a bookmarked URL would, and assert the screen's own gate refuses.
+    window.history.pushState(null, '', '/import')
     render(<App />)
 
-    await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Import' }))
-
+    expect(await screen.findByRole('alert')).toBeDefined()
     expect(screen.queryByRole('heading', { name: 'Importer depuis un fichier' })).toBeNull()
   })
 })

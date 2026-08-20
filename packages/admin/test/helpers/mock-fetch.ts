@@ -709,6 +709,20 @@ export function installMockFetch(
   const planDecisions: Record<string, 'accepted' | 'rejected'> = {}
   let planAppliedAt: string | undefined
 
+  interface MockImportRun {
+    readonly id: string
+    readonly source: string
+    readonly status: 'analyzed' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+    readonly createdAt: string
+    readonly updatedAt: string
+    readonly analysis: unknown
+    readonly mapping: unknown
+    readonly progress: { readonly processed: number; readonly total: number }
+    readonly report: unknown
+    readonly error: string | null
+  }
+  const importPreviewRuns = new Map<string, MockImportRun>()
+
   let notices = [...(options.notices ?? [])]
 
   // Account state, per `installMockFetch()` call: the signed-in user plus
@@ -2376,6 +2390,71 @@ export function installMockFetch(
             warnings: ['Media "old-logo.png" was imported with a synthesised alt text; review it.'],
           },
         })
+      }
+
+      if (url.includes('/api/import/runs') || url.includes('/api/import/analyze')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may import content.' },
+          })
+        }
+
+        if (url.includes('/api/import/analyze') && method === 'POST') {
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            source?: string
+            filename?: string
+            data?: string
+          }
+          if (body.filename === undefined || body.data === undefined) {
+            return json(400, {
+              error: { code: 'CONTENT_INVALID', message: 'This request names no file.' },
+            })
+          }
+          const run: MockImportRun = {
+            id: 'run-1',
+            source: body.source ?? 'csv',
+            status: 'analyzed',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            analysis: { totalRecords: 3 },
+            mapping: { targetCollection: 'page', fields: { title: 'title' } },
+            progress: { processed: 0, total: 3 },
+            report: null,
+            error: null,
+          }
+          importPreviewRuns.set(run.id, run)
+          return json(200, { data: run })
+        }
+
+        const runMatch = /\/api\/import\/runs\/([^/?]+)(?:\/(apply|cancel))?/u.exec(url)
+        if (runMatch === null) {
+          return json(200, { data: [...importPreviewRuns.values()] })
+        }
+        const [, runId, action] = runMatch
+        const run = runId === undefined ? undefined : importPreviewRuns.get(runId)
+        if (run === undefined) {
+          return json(404, {
+            error: { code: 'IMPORT_RUN_NOT_FOUND', message: `No import run "${runId}" exists.` },
+          })
+        }
+        if (action === 'apply' && method === 'POST') {
+          const updated = {
+            ...run,
+            status: 'done' as const,
+            report: {
+              imported: run.status === 'done' ? 0 : 3,
+              resumedSkips: run.status === 'done' ? 3 : 0,
+            },
+          }
+          importPreviewRuns.set(run.id, updated)
+          return json(200, { data: updated })
+        }
+        if (action === 'cancel' && method === 'POST') {
+          const updated = { ...run, status: 'cancelled' as const }
+          importPreviewRuns.set(run.id, updated)
+          return json(200, { data: updated })
+        }
+        return json(200, { data: run })
       }
 
       if (url.includes('/api/agents')) {

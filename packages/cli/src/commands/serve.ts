@@ -149,7 +149,21 @@ import {
   type SecretHygieneReport,
   type StorageDriver,
 } from '@cogenta/core'
-import { importWordPress } from '@cogenta/import'
+import {
+  analyzeGeneric,
+  analyzeJson,
+  analyzeWordPress,
+  applyGeneric,
+  applyJson,
+  createImportTrackingStore,
+  csvToRecords,
+  type FieldMapping,
+  feedToRecords,
+  type ImportRun,
+  importWordPress,
+  parseJsonImport,
+  undoImport,
+} from '@cogenta/import'
 import {
   createMarketplaceCatalog,
   createMarketplaceInstaller,
@@ -964,6 +978,193 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     return { purged, perCollection }
   }
 
+  // ---- Import: preview/apply/status/undo (fiche 25) ---------------------
+  //
+  // `storeFor` above is reused unchanged: an imported entry goes through the
+  // exact same read-only guard, search index and lifecycle event wiring as
+  // one typed by hand in the admin. `importTracking` owns two tables of its
+  // own (`cogenta_import_runs`/`cogenta_import_items`, never a field on
+  // contract A — see `@cogenta/import`'s `tracking.ts`), which is what makes
+  // a resumed `apply` skip what an earlier, interrupted attempt already
+  // wrote, and what `undoImport` reads to trash exactly what one run
+  // created.
+  const importTracking = createImportTrackingStore({ db })
+
+  /** The raw uploaded text, kept in the site's own storage driver (never the database — a WXR export can be tens of megabytes, well past what a portable `text` column promises across all three dialects) so `apply` can read it back after `analyze`, possibly in a different request. */
+  async function storeImportSource(runId: string, text: string): Promise<void> {
+    await storage.put(`imports/${runId}/source.txt`, Buffer.from(text, 'utf8'), {
+      contentType: 'text/plain; charset=utf-8',
+    })
+  }
+
+  async function readImportSource(runId: string): Promise<string> {
+    const stream = await storage.get(`imports/${runId}/source.txt`)
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(chunk as Buffer)
+    return Buffer.concat(chunks).toString('utf8')
+  }
+
+  function storeForName(name: string): ContentStore | undefined {
+    const collection = collections.find((c) => c.name === name)
+    return collection === undefined ? undefined : storeFor(collection)
+  }
+
+  async function analyzeImportSource(input: {
+    readonly source: 'wordpress' | 'csv' | 'json' | 'rss'
+    readonly text: string
+    readonly createdBy: string | null
+    readonly targetCollection?: string
+  }): Promise<ImportRun> {
+    if (input.source === 'wordpress') {
+      const analysis = analyzeWordPress(input.text)
+      const run = await importTracking.createRun({
+        source: 'wordpress',
+        createdBy: input.createdBy,
+        analysis,
+      })
+      await storeImportSource(run.id, input.text)
+      return run
+    }
+
+    if (input.source === 'json') {
+      const records = parseJsonImport(input.text)
+      const analysis = analyzeJson(records, collections)
+      const run = await importTracking.createRun({
+        source: 'json',
+        createdBy: input.createdBy,
+        analysis,
+        total: records.length,
+      })
+      await storeImportSource(run.id, input.text)
+      return run
+    }
+
+    // CSV and RSS/Atom share the generic engine and need one target
+    // collection to propose a mapping against — the caller's choice if
+    // given, the site's first declared collection otherwise, so a preview
+    // is never blocked on a decision the mapping screen can still change.
+    const target =
+      (input.targetCollection === undefined
+        ? undefined
+        : collections.find((c) => c.name === input.targetCollection)) ?? collections[0]
+    if (target === undefined) {
+      throw new CogentaError({
+        code: 'IMPORT_MAPPING_INVALID',
+        message: 'This site declares no collection to import into.',
+        hint: 'Add a collection to the schema before importing.',
+      })
+    }
+    const records = input.source === 'csv' ? csvToRecords(input.text) : feedToRecords(input.text)
+    const analysis = analyzeGeneric(records, target)
+    const run = await importTracking.createRun({
+      source: input.source,
+      createdBy: input.createdBy,
+      analysis,
+      mapping: analysis.proposedMapping,
+      total: records.length,
+    })
+    await storeImportSource(run.id, input.text)
+    return run
+  }
+
+  async function applyImportRun(input: {
+    readonly runId: string
+    readonly mapping?: unknown
+  }): Promise<ImportRun> {
+    const run = await importTracking.getRun(input.runId)
+    if (run === null) {
+      throw new CogentaError({
+        code: 'IMPORT_RUN_NOT_FOUND',
+        message: `No import run "${input.runId}" exists.`,
+        hint: 'Analyze a source first — the response names the runId to apply.',
+        details: { id: input.runId },
+      })
+    }
+
+    const text = await readImportSource(input.runId)
+    await importTracking.updateRun(input.runId, { status: 'running' })
+
+    try {
+      if (run.source === 'wordpress') {
+        const report = await importWordPress(text, {
+          db,
+          storage,
+          tracking: importTracking,
+          runId: input.runId,
+        })
+        return await importTracking.updateRun(input.runId, {
+          status: 'done',
+          report,
+          progress: { processed: run.progress.total, total: run.progress.total },
+        })
+      }
+
+      if (run.source === 'json') {
+        const records = parseJsonImport(text)
+        const report = await applyJson({
+          records,
+          collections,
+          storeFor: (collection) => storeFor(collection),
+          tracking: importTracking,
+          runId: input.runId,
+          createdBy: run.createdBy,
+        })
+        return await importTracking.updateRun(input.runId, {
+          status: 'done',
+          report,
+          progress: { processed: report.imported + report.resumedSkips, total: run.progress.total },
+        })
+      }
+
+      // csv / rss
+      const records = run.source === 'csv' ? csvToRecords(text) : feedToRecords(text)
+      const mapping = (input.mapping ?? run.mapping) as FieldMapping | null
+      if (mapping === null) {
+        throw new CogentaError({
+          code: 'IMPORT_MAPPING_INVALID',
+          message:
+            'This run has no field mapping — analyze proposed one, but it was never confirmed.',
+          hint: 'Send { "mapping": { "targetCollection": "...", "fields": { ... } } } to apply.',
+        })
+      }
+      const report = await applyGeneric({
+        records,
+        mapping,
+        collections,
+        storeFor: (collection) => storeFor(collection),
+        tracking: importTracking,
+        runId: input.runId,
+        createdBy: run.createdBy,
+      })
+      return await importTracking.updateRun(input.runId, {
+        status: 'done',
+        report,
+        mapping,
+        progress: { processed: report.imported + report.resumedSkips, total: run.progress.total },
+      })
+    } catch (error) {
+      await importTracking.updateRun(input.runId, {
+        status: 'failed',
+        error: isCogentaError(error) ? error.message : String(error),
+      })
+      throw error
+    }
+  }
+
+  async function cancelImportRun(runId: string): Promise<ImportRun> {
+    await undoImport({ tracking: importTracking, runId, storeFor: storeForName })
+    const run = await importTracking.getRun(runId)
+    if (run === null) {
+      throw new CogentaError({
+        code: 'IMPORT_RUN_NOT_FOUND',
+        message: `No import run "${runId}" exists.`,
+        hint: 'Only a run that has been analyzed can be cancelled.',
+        details: { id: runId },
+      })
+    }
+    return run
+  }
+
   // The publish half of scheduling: re-reads the entry before acting, so an
   // entry edited back to `draft` — or already published by hand — before its
   // hour comes is left alone rather than redone by a job still sitting in
@@ -1481,6 +1682,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // reimplemented here (R9: this package gains no dependency on it, only
       // `@cogenta/cli` does, which already had one for the terminal command).
       runWordPressImport: (xml) => importWordPress(xml, { db, storage }),
+      analyze: analyzeImportSource,
+      apply: applyImportRun,
+      getRun: (id) => importTracking.getRun(id),
+      listRuns: () => importTracking.listRuns(),
+      cancel: cancelImportRun,
     }),
     mediaStore,
     storage,

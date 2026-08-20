@@ -3,21 +3,35 @@ import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 
 /**
- * `/api/import/wordpress` — the admin's counterpart to `cogenta import
- * wordpress` on a terminal.
+ * `/api/import` — the admin's counterpart to `cogenta import wordpress` on a
+ * terminal, extended (fiche 25) into a real preview/apply/status/undo flow
+ * for four sources: WordPress WXR, CSV, a Cogenta JSON export, and RSS/Atom.
  *
- * The import logic is not duplicated here: `runWordPressImport` is injected,
- * the same shape rule `MediaRouterOptions.images` already follows for the
- * same reason — `@cogenta/import`'s real `importWordPress` (real database
- * writes, real media downloads through the site's own storage driver) is
- * called unchanged, and this package never gains a dependency on it. The
- * caller (`@cogenta/cli`'s `assembleSite`) is what closes over the site's
- * `db` and `storage`.
+ * The import logic is not duplicated here: every real step —
+ * `analyzeWordPress`/`importWordPress`, `parseCsv`/`applyGeneric`,
+ * `parseJsonImport`/`applyJson`, `feedToRecords`/`applyGeneric`,
+ * `undoImport` — lives in `@cogenta/import` and is injected, the same shape
+ * rule `MediaRouterOptions.images` already follows for the same reason: this
+ * package never gains a dependency on it, and the caller (`@cogenta/cli`'s
+ * `assembleSite`) is what closes over the site's `db`, `storage` and
+ * collections.
+ *
+ * **Two phases, never one.** `POST /analyze` reads the uploaded file and
+ * writes nothing; it returns a `runId` and a preview report. `POST
+ * /runs/:id/apply` is the only route that writes, and it is safe to call
+ * again on the same `runId` — a resumed apply after an interruption skips
+ * what it already recorded rather than duplicating it (fiche 25 task 3).
+ * `POST /runs/:id/cancel` trashes everything that run created (task 4); it
+ * never calls `purge`, so an over-eager cancel is itself reversible from the
+ * corbeille.
  *
  * Admin-only, checked before anything else — an import writes content,
- * media, redirects and even auth users (one per WordPress author), so it
- * gets the same door as everything else that changes the shape of a site.
+ * media, redirects and even auth users, so it gets the same door as
+ * everything else that changes the shape of a site.
  */
+
+export const IMPORT_SOURCES = ['wordpress', 'csv', 'json', 'rss'] as const
+export type ImportSourceLike = (typeof IMPORT_SOURCES)[number]
 
 export interface ImportSkippedItemLike {
   readonly type: string
@@ -49,9 +63,40 @@ export interface ImportReportLike {
   readonly warnings: readonly string[]
 }
 
+/** Structurally `@cogenta/import`'s `ImportRun` — the run record a client polls. */
+export interface ImportRunLike {
+  readonly id: string
+  readonly source: string
+  readonly status: string
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly analysis: unknown
+  readonly mapping: unknown
+  readonly progress: { readonly processed: number; readonly total: number }
+  readonly report: unknown
+  readonly error: string | null
+}
+
 export interface ImportRouterOptions {
-  /** Runs the real WordPress importer against this site's database and storage. */
+  /** Runs the real WordPress importer against this site's database and storage, one-shot (legacy route, still supported). */
   runWordPressImport(xml: string): Promise<ImportReportLike>
+  /** Analyzes an uploaded file of the given source, without writing anything. */
+  readonly analyze?: (input: {
+    readonly source: ImportSourceLike
+    readonly text: string
+    readonly createdBy: string | null
+    /** CSV/RSS only: which collection to propose a field mapping against. Ignored by WordPress and JSON, whose targets are not a single caller choice. */
+    readonly targetCollection?: string
+  }) => Promise<ImportRunLike>
+  /** Applies a previously analyzed run — resumable, safe to call again on the same id. */
+  readonly apply?: (input: {
+    readonly runId: string
+    readonly mapping?: unknown
+  }) => Promise<ImportRunLike>
+  readonly getRun?: (runId: string) => Promise<ImportRunLike | null>
+  readonly listRuns?: () => Promise<readonly ImportRunLike[]>
+  /** Trashes everything a run created. */
+  readonly cancel?: (runId: string) => Promise<ImportRunLike>
   /** Mount point. `/api/import` by default. */
   readonly basePath?: string
 }
@@ -65,7 +110,7 @@ const DEFAULT_BASE_PATH = '/api/import'
 /**
  * Base64 grows bytes by roughly a third (the same accounting
  * `site-plan-router.ts` uses for its own uploads), so this bounds the decoded
- * WXR document to ~30 MB — comfortably past a real WordPress export, and
+ * document to ~30 MB — comfortably past a real WordPress export, and
  * checked on the string itself, before anything decodes it.
  */
 const MAX_BASE64_CHARS = 40 * 1024 * 1024
@@ -111,7 +156,15 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Import routes are /api/import/wordpress.',
+    hint: 'Import routes are /api/import/wordpress, /api/import/analyze, /api/import/runs and /api/import/runs/{id}/apply|cancel.',
+  })
+}
+
+function notAvailable(feature: string): CogentaError {
+  return new CogentaError({
+    code: 'IMPORT_SOURCE_INVALID',
+    message: `This server was not started with ${feature} wired in.`,
+    hint: 'This is a caller configuration gap, not something the request can fix.',
   })
 }
 
@@ -135,14 +188,14 @@ function requireUpload(body: unknown): { readonly filename: string; readonly dat
     throw new CogentaError({
       code: 'DOCUMENT_TOO_LARGE',
       message: `"${record.filename}" is larger than this route accepts.`,
-      hint: 'WordPress can split a large export into several files from Tools → Export — import them one at a time.',
+      hint: 'Split a large export into several files and import them one at a time.',
       details: { filename: record.filename },
     })
   }
   return { filename: record.filename, data: record.data }
 }
 
-function decodeXml(filename: string, base64: string): string {
+function decodeText(filename: string, base64: string): string {
   const buffer = Buffer.from(base64, 'base64')
   // A non-base64 string decodes to *something* rather than throwing (the
   // same round-trip check `media-router.ts` uses), so length is the only
@@ -158,8 +211,83 @@ function decodeXml(filename: string, base64: string): string {
   return buffer.toString('utf8')
 }
 
+function isImportSource(value: unknown): value is ImportSourceLike {
+  return typeof value === 'string' && (IMPORT_SOURCES as readonly string[]).includes(value)
+}
+
 export function createImportRouter(options: ImportRouterOptions): ImportRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
+
+  async function handleAnalyze(request: RestRequest, actor: Actor): Promise<RestResponse> {
+    if (request.method.toUpperCase() !== 'POST') return methodNotAllowed(['POST'])
+    if (options.analyze === undefined) throw notAvailable('preview/apply')
+
+    const body = request.body as { source?: unknown; targetCollection?: unknown } | undefined
+    if (!isImportSource(body?.source)) {
+      throw new CogentaError({
+        code: 'IMPORT_SOURCE_INVALID',
+        message: 'This request names no valid import source.',
+        hint: `Set "source" to one of: ${IMPORT_SOURCES.join(', ')}.`,
+      })
+    }
+    const { filename, data } = requireUpload(request.body)
+    const text = decodeText(filename, data)
+    const run = await options.analyze({
+      source: body.source,
+      text,
+      createdBy: actor.id,
+      ...(typeof body.targetCollection === 'string'
+        ? { targetCollection: body.targetCollection }
+        : {}),
+    })
+    return jsonResponse(200, { data: run })
+  }
+
+  async function handleListRuns(request: RestRequest): Promise<RestResponse> {
+    if (request.method.toUpperCase() !== 'GET') return methodNotAllowed(['GET'])
+    if (options.listRuns === undefined) throw notAvailable('preview/apply')
+    const runs = await options.listRuns()
+    return jsonResponse(200, { data: runs })
+  }
+
+  async function handleRun(
+    request: RestRequest,
+    runId: string,
+    action: string | undefined,
+  ): Promise<RestResponse> {
+    if (action === undefined) {
+      if (request.method.toUpperCase() !== 'GET') return methodNotAllowed(['GET'])
+      if (options.getRun === undefined) throw notAvailable('preview/apply')
+      const run = await options.getRun(runId)
+      if (run === null) {
+        throw new CogentaError({
+          code: 'IMPORT_RUN_NOT_FOUND',
+          message: `No import run "${runId}" exists.`,
+          hint: 'Analyze a source first — the response names the runId to apply, poll or cancel.',
+          details: { id: runId },
+        })
+      }
+      return jsonResponse(200, { data: run })
+    }
+
+    if (request.method.toUpperCase() !== 'POST') return methodNotAllowed(['POST'])
+
+    if (action === 'apply') {
+      if (options.apply === undefined) throw notAvailable('preview/apply')
+      const body = request.body as { mapping?: unknown } | undefined
+      const run = await options.apply({
+        runId,
+        ...(body?.mapping === undefined ? {} : { mapping: body.mapping }),
+      })
+      return jsonResponse(200, { data: run })
+    }
+    if (action === 'cancel') {
+      if (options.cancel === undefined) throw notAvailable('undo')
+      const run = await options.cancel(runId)
+      return jsonResponse(200, { data: run })
+    }
+    throw noRoute()
+  }
 
   return {
     handle: async (request, actor) => {
@@ -167,15 +295,32 @@ export function createImportRouter(options: ImportRouterOptions): ImportRouter {
         requireAdmin(actor)
 
         const segments = segmentsOf(request.path, basePath)
-        if (segments === null || segments.length !== 1 || segments[0] !== 'wordpress') {
-          throw noRoute()
-        }
-        if (request.method.toUpperCase() !== 'POST') return methodNotAllowed(['POST'])
+        if (segments === null) throw noRoute()
 
-        const { filename, data } = requireUpload(request.body)
-        const xml = decodeXml(filename, data)
-        const report = await options.runWordPressImport(xml)
-        return jsonResponse(200, { data: report })
+        // Legacy one-shot route, unchanged.
+        if (segments.length === 1 && segments[0] === 'wordpress') {
+          if (request.method.toUpperCase() !== 'POST') return methodNotAllowed(['POST'])
+          const { filename, data } = requireUpload(request.body)
+          const xml = decodeText(filename, data)
+          const report = await options.runWordPressImport(xml)
+          return jsonResponse(200, { data: report })
+        }
+
+        // Awaited, not merely returned: a rejection from any of these must
+        // land in this function's own `catch` below, not escape as an
+        // unhandled rejection past a `return somePromise` that nothing here
+        // ever awaits.
+        if (segments.length === 1 && segments[0] === 'analyze')
+          return await handleAnalyze(request, actor)
+        if (segments.length === 1 && segments[0] === 'runs') return await handleListRuns(request)
+        if (segments.length === 2 && segments[0] === 'runs') {
+          return await handleRun(request, segments[1] as string, undefined)
+        }
+        if (segments.length === 3 && segments[0] === 'runs') {
+          return await handleRun(request, segments[1] as string, segments[2])
+        }
+
+        throw noRoute()
       } catch (error) {
         return errorResponse(error)
       }

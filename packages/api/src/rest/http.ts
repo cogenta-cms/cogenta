@@ -298,6 +298,17 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // one an admin is otherwise permitted to make — ADR-0010's rule, applied
   // to the theme file rather than the schema file.
   THEME_EXPORT_NOT_ALLOWED: 409,
+
+  // Import (fiche 25): preview/apply/undo, CSV, RSS/Atom.
+  IMPORT_RUN_NOT_FOUND: 404,
+  IMPORT_SOURCE_INVALID: 400,
+  IMPORT_ALREADY_APPLIED: 409,
+  IMPORT_MAPPING_INVALID: 400,
+  IMPORT_MEDIA_URL_UNSAFE: 400,
+  IMPORT_CSV_INVALID: 400,
+  IMPORT_FEED_INVALID: 400,
+  IMPORT_WXR_PARSE_FAILED: 400,
+  IMPORT_WXR_UNSAFE_DOCUMENT: 400,
 }
 
 export function statusFor(code: ErrorCode): number {

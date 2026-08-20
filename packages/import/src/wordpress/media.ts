@@ -1,5 +1,7 @@
+import { lookup } from 'node:dns/promises'
 import { basename } from 'node:path'
 import type { CreateMediaInput, MediaAsset, MediaStore, StorageDriver } from '@cogenta/core'
+import { assertPublicUrl } from '../ssrf.js'
 
 export interface MediaDownloadFailure {
   readonly url: string
@@ -12,12 +14,24 @@ export interface MediaImportResult {
   readonly failed: readonly MediaDownloadFailure[]
 }
 
+/**
+ * Caps on the outbound side of an import (pièges connus: SSRF, and a
+ * multi-gigabyte "media" response tying up the process). Both are limits a
+ * real WordPress export can comfortably stay under; a file or count beyond
+ * them is reported as a failure per item, never a reason to abort the run.
+ */
+const MAX_MEDIA_BYTES = 50 * 1024 * 1024
+const MAX_MEDIA_ITEMS = 5000
+const FETCH_TIMEOUT_MS = 15_000
+
 export interface DownloadAndStoreMediaOptions {
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
   readonly createdBy: string | null
   /** Injected for tests — real `fetch` by default. */
   readonly fetchImpl?: typeof fetch
+  /** Injected for tests — real `dns.lookup` by default. */
+  readonly lookupImpl?: typeof lookup
 }
 
 function filenameFrom(url: string): string {
@@ -54,16 +68,45 @@ export async function downloadAndStoreMedia(
   const imported: MediaAsset[] = []
   const failed: MediaDownloadFailure[] = []
 
-  for (const url of new Set(urls)) {
+  const distinct = [...new Set(urls)]
+  const overflow = distinct.slice(MAX_MEDIA_ITEMS)
+  for (const url of overflow) {
+    failed.push({
+      url,
+      reason: `More than ${MAX_MEDIA_ITEMS} distinct media URLs; this one was not fetched.`,
+    })
+  }
+
+  for (const url of distinct.slice(0, MAX_MEDIA_ITEMS)) {
     try {
-      const response = await doFetch(url)
+      await assertPublicUrl(url, { lookupImpl: options.lookupImpl ?? lookup })
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+      let response: Response
+      try {
+        response = await doFetch(url, { signal: controller.signal })
+      } finally {
+        clearTimeout(timeout)
+      }
       if (!response.ok) {
         failed.push({ url, reason: `HTTP ${response.status}` })
         continue
       }
+
+      const declaredLength = Number(response.headers.get('content-length') ?? '')
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_MEDIA_BYTES) {
+        failed.push({ url, reason: `Larger than the ${MAX_MEDIA_BYTES} byte limit.` })
+        continue
+      }
+
       const mimeType =
         response.headers.get('content-type')?.split(';')[0]?.trim() ?? 'application/octet-stream'
       const buffer = Buffer.from(await response.arrayBuffer())
+      if (buffer.byteLength > MAX_MEDIA_BYTES) {
+        failed.push({ url, reason: `Larger than the ${MAX_MEDIA_BYTES} byte limit.` })
+        continue
+      }
       const filename = filenameFrom(url)
       const storageKey = `imports/wordpress/${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`
 

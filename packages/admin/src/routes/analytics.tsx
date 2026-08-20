@@ -19,14 +19,52 @@ const CHART_HEIGHT = 160
 const CHART_PADDING = 24
 
 /**
+ * The server only returns rows for days that actually had a view
+ * (`packages/analytics/src/store.ts`'s `group by substr(at, 1, 10)`), so a
+ * quiet period arrives as a sparse array — one entry for a whole 30-day
+ * window is common on a small or brand-new site. Filling in every day of
+ * `[since, until]` with zero views before it ever reaches the chart is what
+ * makes `barWidth` divide the plot into one slot per real day instead of
+ * stretching the one data point it was given across the whole width.
+ */
+function fillDailyViews(
+  since: string,
+  until: string,
+  data: AnalyticsSummary['dailyViews'],
+): AnalyticsSummary['dailyViews'] {
+  const viewsByDay = new Map(data.map((point) => [point.day, point.views]))
+  const start = new Date(`${since.slice(0, 10)}T00:00:00Z`)
+  const end = new Date(`${until.slice(0, 10)}T00:00:00Z`)
+  const days: { day: string; views: number }[] = []
+  for (
+    let cursor = start;
+    cursor.getTime() <= end.getTime();
+    cursor = new Date(cursor.getTime() + 86_400_000)
+  ) {
+    const day = cursor.toISOString().slice(0, 10)
+    days.push({ day, views: viewsByDay.get(day) ?? 0 })
+  }
+  return days
+}
+
+/**
  * A hand-built SVG bar chart of daily page views — no charting library
  * (R9: zero new dependency for something this small). Bars rather than a
  * line because the data is a small, discrete number of days, and a bar's
  * height is legible without hovering for a tooltip this static export
  * cannot offer anyway.
  */
-function DailyViewsChart({ data }: { readonly data: AnalyticsSummary['dailyViews'] }): JSX.Element {
+function DailyViewsChart({
+  since,
+  until,
+  data: rawData,
+}: {
+  readonly since: string
+  readonly until: string
+  readonly data: AnalyticsSummary['dailyViews']
+}): JSX.Element {
   const { t } = useTranslation()
+  const data = fillDailyViews(since, until, rawData)
   if (data.length === 0) {
     return <p>{t('analytics.noData')}</p>
   }
@@ -307,7 +345,11 @@ export function AnalyticsRoute(): JSX.Element {
 
           <section aria-labelledby="analytics-chart-heading">
             <h2 id="analytics-chart-heading">{t('analytics.chartHeading')}</h2>
-            <DailyViewsChart data={summary.dailyViews} />
+            <DailyViewsChart
+              since={summary.since}
+              until={summary.until}
+              data={summary.dailyViews}
+            />
           </section>
 
           <section aria-labelledby="analytics-pages-heading">

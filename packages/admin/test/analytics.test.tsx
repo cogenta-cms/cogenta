@@ -93,7 +93,10 @@ describe('analytics dashboard', () => {
 
     render(<App />)
     await goToAnalytics()
-    await screen.findByText(/5/)
+    // Wait for the real data to load rather than matching `/5/` loosely —
+    // the daily-views chart now renders one zero-filled `<title>` per day of
+    // the period (e.g. "2026-03-05: 0"), so a bare digit match is ambiguous.
+    await screen.findByRole('heading', { name: 'Totaux' })
 
     const sevenDayButton = screen.getByRole('button', { name: '7 jours' })
     fireEvent.click(sevenDayButton)
@@ -175,6 +178,26 @@ describe('analytics dashboard', () => {
       'textContent',
       expect.stringContaining('précéder'),
     )
+  })
+
+  it('draws one bar per day of the selected period, not one per data point', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      // The mock server's default window is 2026-03-01..2026-03-08 (8 days),
+      // but only one of those days actually had a view — a sparse server
+      // response is the normal case for a quiet or new site.
+      analyticsSummary: { totalViews: 3, dailyViews: [{ day: '2026-03-04', views: 3 }] },
+    })
+
+    render(<App />)
+    await goToAnalytics()
+
+    const chart = await screen.findByRole('img', { name: 'Diagramme en barres des vues par jour' })
+    // One <rect> per calendar day in the period, zero-filled where the
+    // server sent nothing — not a single bar stretched across the width.
+    expect(chart.querySelectorAll('rect')).toHaveLength(8)
   })
 
   it('states what the system does not do', async () => {

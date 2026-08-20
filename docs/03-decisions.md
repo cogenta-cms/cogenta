@@ -1117,3 +1117,65 @@ en commandes vivantes, ce qui est précisément ce qu'une administration fiscale
   d'argent dans une table dont le site possède la définition.
 - **Stripe comme seule passerelle, sans interface de driver.** Écarté par R1, sans
   discussion possible : c'est la règle que ce projet n'a jamais pliée en quinze lots.
+## ADR-0025 — Les commentaires vivent dans un contrat F séparé
+
+**Statut** : Acté
+
+**Contexte** — La fiche 15 ouvre un domaine de données entièrement absent : aucun commentaire de visiteur n'existe nulle part dans le code, alors que l'import WordPress (`@cogenta/import`, L9) perd silencieusement ceux d'un WXR importé, et qu'`assist.moderate` (`@cogenta/agents`, L18) existe déjà avec une union fermée `none`/`review` — un modérateur assisté sans rien à modérer. Un commentaire est un contenu textuel écrit par un tiers, exactement le type d'objet que le contrat A sait modéliser : la tentation est de le déclarer comme une collection ordinaire, avec `published`/`draft` détournés en approuvé/en attente.
+
+**Décision** — Le vocabulaire des commentaires est un **contrat F (`comments@1.0`)**, distinct du contrat A, servi par un nouveau paquet `@cogenta/comments`. Le contrat A ne monte pas de version pour cette fiche.
+
+Concrètement : un commentaire porte l'identité de sa cible (`collection`, `entryId`, `locale`), un auteur (compte **ou** nom + e-mail + site pour un visiteur anonyme), un corps en **texte brut uniquement** (jamais de HTML — R3, première défense contre le XSS stocké), un statut de modération propre (`pending`/`approved`/`spam`/`trash`), un `parent` pour le fil, et des métadonnées de modération avec l'adresse IP **hachée** (jamais en clair — RGPD). `POST /api/comments` est une route publique en écriture — la première du CMS — avec limitation de débit obligatoire par IP et par cible dès la première version, champ piège, délai minimal, et statut initial configurable. Vocabulaire de permissions propre au contrat F, distinct des cinq actions du contrat A. Pas de bloc `comments` au contrat B, figé : le fil est rendu par le gabarit de page, comme `/search` en L10.
+
+**Justification** — Trois faits, sur le modèle d'ADR-0024 :
+
+1. **ADR-0014 forkerait un commentaire par langue.** Un commentaire n'a pas de famille de traduction — il est écrit une fois, dans la langue de son auteur, jamais rédigé puis traduit.
+2. **`published`/`draft` n'a pas le sens d'« approuvé »/« en attente ».** `published` signifie, dans tout le reste du contrat A, « visible sur sa propre route, indexable, avec SEO » — un commentaire n'a ni route ni existence indépendante de l'entrée qu'il commente. Le détourner ferait mentir le champ pour toute collection qui l'inspecte.
+3. **Le volume et le modèle de menace sont d'un autre ordre.** Un blog peut avoir cent fois plus de commentaires que d'articles, et c'est la seule route publique en écriture du CMS — rate limiting, honeypot, anti-spam sont des préoccupations que le contrat A n'a aucune raison de porter pour les 39 autres collections qui n'ont jamais reçu d'écriture anonyme.
+
+**Conséquences** — Nouveau paquet `@cogenta/comments`, migration réversible testée sur les trois bases. Un commentaire ne bénéficie pas gratuitement de l'historique de versions ni du CRUD généré pour les collections du contrat A — tout est réécrit spécifiquement (même redondance assumée par ADR-0024 pour le commerce). Passage obligatoire par `security-reviewer` avant fusion, vu la route publique en écriture.
+
+**Renoncement assumé** — Un commentaire n'a ni brouillon, ni traduction, ni corbeille au sens d'ADR-0022 (une suppression est directe, avec rétention/purge configurable sur son propre modèle, pas la corbeille du contenu).
+
+**Écarté** — (a) Collection ordinaire du contrat A avec `status` détourné : écarté, `published` mentirait sur ce qu'il signifie partout ailleurs, et le contrat A apprendrait un auteur qui n'est pas un compte pour un seul type de collection.
+
+---
+
+## ADR-0026 — Les formulaires vivent dans un contrat G séparé ; route dédiée avant bloc
+
+**Statut** : Acté
+
+**Contexte** — La fiche 16 constate qu'un site Cogenta publié n'a aujourd'hui aucun moyen d'être contacté. Les briques existent séparément (`@cogenta/channels` sait notifier par e-mail/Slack/Discord/webhook signé ; le contrat A sait modéliser des données structurées) mais rien ne les relie. Trois questions se posent : où vit la définition d'un formulaire, comment il arrive sur une page alors que le contrat B est figé, et si les soumissions sont stockées.
+
+**Décision** — Le vocabulaire des formulaires est un **contrat G (`forms@1.0`)**, distinct du contrat A, servi par un nouveau paquet `@cogenta/forms`. Une définition de formulaire porte un nom, un libellé, une liste de champs typés (texte, texte long, e-mail, téléphone, nombre, date, choix simple/multiple, **consentement** — pas de champ fichier en première version, pour ne pas ouvrir la surface téléversement/antivirus sans besoin prouvé). Une soumission porte les valeurs, un statut (`nouveau`/`lu`/`archivé`/`indésirable`), l'IP **hachée**, le référent, et le texte de consentement **tel qu'il était au moment du recueil**, horodaté — c'est ce texte qui a valeur probante, pas celui d'aujourd'hui. Rétention configurable avec purge automatique, sur le modèle exact `retainDays`/`purgeExpired()` d'ADR-0022, appliqué aux soumissions et non au contenu. `POST /api/forms/{name}/submit` est la deuxième route publique en écriture du CMS, avec les mêmes exigences que le contrat F (limitation de débit, honeypot, validation serveur complète indépendante du client) et doit fonctionner **sans JavaScript** (`POST` HTML classique). Arrivée sur une page : une **route dédiée**, rendue par le gabarit comme `/search` en L10, livrée en premier ; une **RFC contrat B** pour un bloc `form` référençant un formulaire par id est ouverte en parallèle, sans bloquer cette fiche.
+
+**Justification** — Même raisonnement qu'ADR-0024 et ADR-0025 : une soumission est un fait constaté (elle arrive, elle ne se rédige pas), sans traduction ni brouillon ni version, avec un volume et un modèle de menace (route publique en écriture, accusé de réception qui peut devenir un relais de spam) que le contrat A n'a aucune raison de porter.
+
+**Conséquences** — Nouveau paquet `@cogenta/forms`, migration réversible trois bases. Le constructeur de formulaire dans l'admin réutilise le répéteur de champs de la fiche 03 plutôt que d'en écrire un second. Notifications via l'adaptateur e-mail existant de `@cogenta/channels`, jamais un second transport. Le contenu d'une soumission est de la donnée (R8) : balisé comme telle si un canal où un agent lit le reçoit.
+
+**Renoncement assumé** — Tant que la RFC contrat B n'aboutit pas, un formulaire n'est utilisable que sur ses propres routes dédiées, pas embarqué dans une page de contenu arbitraire. Les champs conditionnels et les pièces jointes sont hors périmètre de cette première version.
+
+**Écarté** — (a) Collection du contrat A avec champs en `json` : écarté, cela rejoue exactement le problème que la fiche 03 a déjà résolu — une structure typée dans un champ `json` libre est le mauvais outil.
+
+---
+
+## ADR-0027 — Le workflow éditorial est un `reviewState` orthogonal à `status` ; permission par propriétaire ajoutée au contrat A (`schema@2.1`)
+
+**Statut** : Acté
+
+**Contexte** — Les fiches 37 (workflow éditorial) et 19 tâche 5 (permission « ses propres contenus ») partagent le même besoin non résolu. `ContentStatus` (`draft`/`scheduled`/`published`/`archived`) est une union fermée **figée** du contrat A ; y ajouter `pending` casserait tout `switch` exhaustif chez un client headless écrit avant ce lot. Le contrat A n'exprime par ailleurs aucune permission par propriétaire : ses cinq actions sont par collection, jamais par entrée — un contributeur peut aujourd'hui modifier l'article d'un autre pendant sa relecture.
+
+**Décision** — Le contrat A monte en **`schema@2.1`**, montée mineure et strictement additive (même nature que `tools@1.1` pour `document.extract`) :
+
+1. **`reviewState` orthogonal à `status`**, exactement comme `deletedAt` l'est depuis ADR-0022 : `none`/`pending`/`changes-requested`/`approved`, ignoré par défaut par toute lecture existante, jamais lu ni écrit par un client qui l'ignore. Approuver n'est **pas** publier — `approved` autorise, `publish` reste l'action qui rend visible ; les confondre publierait par surprise.
+2. **Table de transitions fermée côté serveur** (`submit`/`approve`/`request-changes`), chacune avec sa permission requise ; l'écran ne la duplique jamais. Nouvelles routes `POST .../submit`, `.../approve`, `.../request-changes` — jamais un second sens sur un verbe existant, la règle qu'ADR-0022 a posée pour `purge`.
+3. **Permission par propriétaire** : une clause `own: true` explicite dans le bloc `permissions` d'une action du contrat A (ex. `update: { roles: ['author'], own: true }`), validée par `validateCollectionSet` au même titre que le reste du bloc — plutôt qu'une convention de rôle en chaîne libre (`author:own`), qui reproduirait la classe de bug silencieux qu'a produite le sitemap 500 de L10 : une faute de frappe non détectée.
+4. Workflow activable **par collection**, jamais un interrupteur global — cohérent avec les permissions déjà déclarées par collection ; un site d'une seule personne n'en voit rien.
+
+**Justification** — ADR-0022 a déjà prouvé, avec `deletedAt`, qu'un champ orthogonal se glisse dans ce modèle sans casser aucun lecteur existant ; sa règle de filtrage par défaut (ignoré sauf opt-in explicite) est directement transposable à `reviewState`. Un test de compatibilité (« un client qui lit `status` avant ce lot obtient exactement les mêmes valeurs ») est exigé, pas supposé — même standard que la migration up/down/up d'ADR-0022.
+
+**Conséquences** — `packages/schema` gagne la table de transitions et `reviewState` ; migration réversible testée sur les trois bases ; `PermissionLayer` interprète `own` en comparant l'acteur à l'auteur de l'entrée. `contract-guardian` doit relire ce changement, le contrat A étant touché. Note de migration pour tout client headless qui lit le contrat A.
+
+**Renoncement assumé** — `reviewState` reste à quatre valeurs fixes, pas un workflow multi-étapes configurable (option (c) écartée pour cette raison précise) ; la permission par propriétaire couvre « ses propres entrées », pas une délégation hiérarchique (un chef d'équipe voyant les entrées de son équipe) — hors périmètre.
+
+**Écarté** — (a) Ajouter `pending` à `ContentStatus` : casse tout `switch` exhaustif, l'argument même qui a fait pencher pour `deletedAt` orthogonal en ADR-0022. (c) Table de workflow séparée : plus flexible mais l'état devient invisible dans une lecture directe d'entrée. (d) Taxonomie « état éditorial » : zéro contrat touché, mais aucune règle de transition ni permission propre — un contributeur pourrait s'auto-approuver.

@@ -3793,6 +3793,23 @@ export function installMockFetch(
           .split('/')
           .filter((segment) => segment !== '')
 
+        // permissions (fiche 19's read-only matrix)
+        if (segments[0] === 'permissions' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            permissions: [
+              'commerce.read',
+              'commerce.catalog.write',
+              'commerce.order.write',
+              'commerce.payment.settle',
+              'commerce.order.refund',
+              'commerce.invoice.issue',
+            ],
+            roles: COMMERCE_ROLES,
+          })
+        }
+
         // products
         if (segments[0] === 'products' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')

@@ -214,6 +214,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'accounts',
     visibleWhen: { kind: 'role', role: 'admin' },
   },
+  {
+    to: '/roles',
+    labelKey: 'nav.roles',
+    group: 'accounts',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
 
   // Ops — everything an admin uses to keep the site running, none of it
   // meaningful to any other role.

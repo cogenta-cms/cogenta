@@ -16,6 +16,9 @@ import {
   updateUser,
 } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { grantsForRole, knownRoleNames } from '../schema/permissions.js'
+import { useSchema } from '../schema/schema-context.js'
+import type { SchemaDocument } from '../schema/types.js'
 import {
   Button,
   Card,
@@ -36,6 +39,7 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { ACTION_KEY } from './roles.js'
 
 /**
  * The four role names every new site is offered, whether or not any account
@@ -84,8 +88,10 @@ function parseSortChoice(value: SortChoice): {
  * never have authored anything either (`UserStore.delete`'s doc comment).
  */
 export function UsersRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
+  const schemaState = useSchema()
+  const schema = schemaState.status === 'ready' ? schemaState.schema : null
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
@@ -757,6 +763,11 @@ export function UsersRoute(): JSX.Element {
             </p>
           )}
 
+          <RoleGrantsSummary
+            roles={combineRoles(newRoleSet, newCustomRole)}
+            schema={schema}
+            locale={i18n.language}
+          />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setCreating(false)}>
               {t('common.cancel')}
@@ -797,6 +808,11 @@ export function UsersRoute(): JSX.Element {
               />
             )}
           </Field>
+          <RoleGrantsSummary
+            roles={combineRoles(editRoleSet, editCustomRole)}
+            schema={schema}
+            locale={i18n.language}
+          />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setEditing(null)}>
               {t('common.cancel')}
@@ -959,6 +975,69 @@ export function SessionList({
         </ul>
       </CardBody>
     </Card>
+  )
+}
+
+/**
+ * Fiche 19 task 2 — "cocher contributor affiche la liste exacte de ce que
+ * cela autorise". Computed live from the schema this admin actually loaded
+ * (`grantsForRole`), never a description written by hand that could drift
+ * from what `cogenta.schema.*` really says on this site.
+ *
+ * Also carries the other half of the task: a role selected here that no
+ * collection or taxonomy names anywhere is flagged — the one thing this
+ * screen can catch that a generic role list cannot, and the exact bug
+ * "editeur" typed instead of "editor" would otherwise cause silently.
+ */
+function RoleGrantsSummary({
+  roles,
+  schema,
+  locale,
+}: {
+  readonly roles: readonly string[]
+  readonly schema: SchemaDocument | null
+  readonly locale: string
+}): JSX.Element | null {
+  const { t } = useTranslation()
+
+  if (schema === null || roles.length === 0) return null
+
+  const known = new Set(knownRoleNames(schema))
+  const unknown = roles.filter((role) => !known.has(role))
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
+      <p className="m-0 text-xs font-medium leading-5 text-foreground">
+        {t('users.roleGrantsHeading')}
+      </p>
+      {roles.map((role) => {
+        const grants = grantsForRole(role, schema, locale)
+        return (
+          <div key={role}>
+            <p className="m-0 text-sm font-semibold text-foreground">
+              {t(`roles.${role}`, { defaultValue: role })}
+            </p>
+            {grants.length === 0 ? (
+              <p className="m-0 text-xs text-muted-foreground">{t('users.roleGrantsNone')}</p>
+            ) : (
+              <ul className="m-0 flex list-none flex-col gap-0.5 p-0 pl-3 text-xs text-muted-foreground">
+                {grants.map((grant) => (
+                  <li key={`${grant.subjectKind}-${grant.name}`}>
+                    {grant.label}: {grant.actions.map((action) => t(ACTION_KEY[action])).join(', ')}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      })}
+      {unknown.length > 0 && (
+        <Notice tone="warning">
+          <p className="m-0">{t('users.unknownRoleWarning', { roles: unknown.join(', ') })}</p>
+        </Notice>
+      )}
+      <p className="m-0 text-xs text-muted-foreground">{t('users.roleGrantsLoadNote')}</p>
+    </div>
   )
 }
 

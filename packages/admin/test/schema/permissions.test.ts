@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { canPerform, readableCollections } from '../../src/schema/permissions.js'
-import type { CollectionSummary } from '../../src/schema/types.js'
+import {
+  canPerform,
+  grantsForRole,
+  knownRoleNames,
+  readableCollections,
+  taxonomyLabel,
+} from '../../src/schema/permissions.js'
+import type { CollectionSummary, SchemaDocument, TaxonomySummary } from '../../src/schema/types.js'
 
 const ARTICLE: CollectionSummary = {
   name: 'article',
@@ -67,5 +73,92 @@ describe('readableCollections', () => {
       fields: [],
     }
     expect(readableCollections([closed], ['viewer'])).toEqual([])
+  })
+})
+
+const CATEGORY: TaxonomySummary = {
+  name: 'category',
+  labels: { singular: { en: 'Category', fr: 'Catégorie' }, plural: { en: 'Categories' } },
+  hierarchical: true,
+  permissions: { read: ['public'], create: ['editor'], update: ['editor'] },
+}
+
+const SCHEMA: SchemaDocument = {
+  contract: 'schema@2.0',
+  collections: [ARTICLE, MEMO],
+  taxonomies: [CATEGORY],
+}
+
+describe('taxonomyLabel', () => {
+  it('prefers the plural label in the requested locale', () => {
+    expect(taxonomyLabel(CATEGORY, 'en')).toBe('Categories')
+  })
+
+  it('falls back to the singular label when no plural was declared for that locale', () => {
+    expect(taxonomyLabel(CATEGORY, 'fr')).toBe('Catégorie')
+  })
+
+  it('falls back to any present translation, then to the raw name, rather than throwing', () => {
+    const noEnglish: TaxonomySummary = {
+      ...CATEGORY,
+      labels: { singular: { fr: 'Étiquette' } },
+    }
+    expect(taxonomyLabel(noEnglish, 'en')).toBe('Étiquette')
+    expect(taxonomyLabel({ ...noEnglish, labels: { singular: {} } }, 'en')).toBe('category')
+  })
+})
+
+describe('knownRoleNames', () => {
+  it('collects every role any collection or taxonomy names, deduplicated and sorted', () => {
+    expect(knownRoleNames(SCHEMA)).toEqual(['admin', 'editor'])
+  })
+
+  it('excludes `public` — a magic marker, never an account role', () => {
+    expect(knownRoleNames(SCHEMA)).not.toContain('public')
+  })
+
+  it('tolerates a schema with no taxonomies at all', () => {
+    expect(knownRoleNames({ collections: [ARTICLE, MEMO] })).toEqual(['admin', 'editor'])
+  })
+})
+
+describe('grantsForRole', () => {
+  it('lists every collection and taxonomy a role gets something on, and exactly what — including a public read it never had to be named for', () => {
+    expect(grantsForRole('editor', SCHEMA, 'en')).toEqual([
+      {
+        subjectKind: 'collection',
+        name: 'article',
+        label: 'Articles',
+        actions: ['read', 'create', 'update', 'publish'],
+      },
+      {
+        subjectKind: 'collection',
+        name: 'memo',
+        label: 'Memos',
+        actions: ['read', 'create', 'update'],
+      },
+      {
+        subjectKind: 'taxonomy',
+        name: 'category',
+        label: 'Categories',
+        actions: ['read', 'create', 'update'],
+      },
+    ])
+  })
+
+  it('a role named nowhere still gets whatever is open to public, and nothing else', () => {
+    expect(grantsForRole('translator', SCHEMA, 'en')).toEqual([
+      { subjectKind: 'collection', name: 'article', label: 'Articles', actions: ['read'] },
+      { subjectKind: 'taxonomy', name: 'category', label: 'Categories', actions: ['read'] },
+    ])
+  })
+
+  it('returns an empty list for a role that unlocks nothing at all, on a site with no public grants', () => {
+    const closed: SchemaDocument = {
+      contract: 'schema@2.0',
+      collections: [{ ...ARTICLE, permissions: { read: ['admin'] } }],
+      taxonomies: [],
+    }
+    expect(grantsForRole('translator', closed, 'en')).toEqual([])
   })
 })

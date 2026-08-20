@@ -1,6 +1,7 @@
 import { type FormEvent, type JSX, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import { getAnalyticsPageStats, type PageStats } from '../api/analytics-client.js'
 import { ApiError } from '../api/client.js'
 import type { BlockZones, ContentBlock, Entry } from '../api/content-client.js'
 import {
@@ -136,6 +137,37 @@ function routeParams(
 }
 
 /**
+ * The path a published entry would be served at — a small, local mirror of
+ * `packages/schema`'s own `buildPath` (this browser bundle cannot import a
+ * Node package), used only to ask `/api/analytics/page` "how is this page
+ * doing" (fiche 27 task 2). `null` when the collection has no route, or a
+ * `:param` it needs (most often the slug) has no value yet.
+ */
+function analyticsPathFor(
+  collection: { readonly routing?: { readonly pattern: string; readonly locale?: boolean } },
+  id: string,
+  values: Readonly<Record<string, unknown>>,
+  locale: string,
+): string | null {
+  const routing = collection.routing
+  if (routing === undefined) return null
+
+  const segments: string[] = []
+  for (const segment of routing.pattern.split('/').filter((part) => part.length > 0)) {
+    if (!segment.startsWith(':')) {
+      segments.push(segment)
+      continue
+    }
+    const name = segment.slice(1)
+    const value = name === 'id' ? id : values[name]
+    if (typeof value !== 'string' || value.length === 0) return null
+    segments.push(encodeURIComponent(value))
+  }
+  if (routing.locale === true) segments.unshift(encodeURIComponent(locale))
+  return `/${segments.join('/')}`
+}
+
+/**
  * One route for both "new" (`/collections/:name/new`) and "edit"
  * (`/collections/:name/:id`) — the form itself does not care which, only
  * whether there was an entry to load first.
@@ -204,6 +236,8 @@ export function EntryEditRoute(): JSX.Element {
    * being told "someone else edited this" with nothing to act on.
    */
   const [staleWrite, setStaleWrite] = useState<Entry | null>(null)
+  /** Views/trend/rank for this entry over the last 30 days (fiche 27 task 2) — `null` while loading or not applicable. */
+  const [pageStats, setPageStats] = useState<PageStats | null>(null)
 
   useEffect(() => {
     if (isNew) {
@@ -239,6 +273,26 @@ export function EntryEditRoute(): JSX.Element {
             entry.publishedAt === null ? '' : toDatetimeLocalValue(entry.publishedAt),
           )
 
+          // Views/trend/rank over the last 30 days (fiche 27 task 2), only for
+          // an actor who can already see the site-wide dashboard — the same
+          // `admin` gate `/api/analytics/summary` enforces server-side, this
+          // just avoids issuing a request that would only be refused. Fetched
+          // once, from what the server just confirmed, rather than on every
+          // keystroke in the form.
+          if (roles.includes('admin') && collection !== undefined) {
+            const path = analyticsPathFor(collection, entry.id, entry.values, entry.locale)
+            if (path !== null) {
+              getAnalyticsPageStats(token, path, { days: 30 })
+                .then((stats) => {
+                  if (!cancelled) setPageStats(stats)
+                })
+                .catch(() => {
+                  // A page nobody has visited, or a stats fetch that failed —
+                  // the sidebar simply omits the card either way.
+                })
+            }
+          }
+
           const loaded: AutosaveSnapshot = { values: entry.values, blocks: entry.blocks }
           setBaseline(loaded)
 
@@ -263,7 +317,7 @@ export function EntryEditRoute(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [isNew, token, name, id, newTranslation, t])
+  }, [isNew, token, name, id, newTranslation, t, collection, roles])
 
   /**
    * Resolves `createdBy`/`updatedBy` to an email (task 4).
@@ -1022,6 +1076,40 @@ export function EntryEditRoute(): JSX.Element {
                 </details>
               </CardBody>
             </Card>
+
+            {/* Views over the last 30 days, trend, and rank on the site
+                (fiche 27 task 2) — the audience of this article, visible
+                while updating it. Renders nothing at all until a stats fetch
+                actually resolves: a silent card for "not applicable" is
+                quieter than a false zero. */}
+            {!isNew && pageStats !== null && (
+              <Card>
+                <CardBody className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-foreground">
+                    {t('entryEdit.analyticsHeading')}
+                  </span>
+                  <span>
+                    {t('entryEdit.analyticsViews', { views: pageStats.views })}
+                    {pageStats.changePercent !== null && (
+                      <>
+                        {' '}
+                        ({pageStats.changePercent >= 0 ? '+' : ''}
+                        {Math.round(pageStats.changePercent * 10) / 10}%{' '}
+                        {t('entryEdit.analyticsVsPrevious')})
+                      </>
+                    )}
+                  </span>
+                  {pageStats.rank !== null && (
+                    <span className="text-muted-foreground text-xs">
+                      {t('entryEdit.analyticsRank', {
+                        rank: pageStats.rank,
+                        total: pageStats.rankedPages,
+                      })}
+                    </span>
+                  )}
+                </CardBody>
+              </Card>
+            )}
           </aside>
 
           <div className="flex min-w-0 flex-col gap-4 lg:order-1">

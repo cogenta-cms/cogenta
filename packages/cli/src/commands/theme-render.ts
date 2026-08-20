@@ -322,7 +322,7 @@ function collectRichTextAssets(blocks: readonly VocabularyBlock[]): RichTextAsse
   return { media: [...media], links }
 }
 
-function entryTitle(entry: ContentEntry): string {
+export function entryTitle(entry: ContentEntry): string {
   const value = entry.values.title
   return typeof value === 'string' && value.trim() !== '' ? value : entry.id
 }
@@ -534,7 +534,7 @@ async function fetchOne(
  * site with no page at that path still 404s honestly, exactly like every
  * other unmatched path.
  */
-async function resolveEntry(
+export async function resolveEntry(
   pathname: string,
   options: ThemeRenderOptions,
   context: AccessContext,

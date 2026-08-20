@@ -130,6 +130,180 @@ describe('GET /api/analytics/summary', () => {
     )
     expect(response.status).toBe(400)
   })
+
+  it('accepts a custom ?since=&?until= date range', async () => {
+    const response = await router.handle(
+      {
+        method: 'GET',
+        path: '/api/analytics/summary',
+        query: { since: '2026-01-01', until: '2026-01-31' },
+      },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as { data: { since: string; until: string } }
+    expect(body.data.since).toBe(new Date('2026-01-01').toISOString())
+    expect(body.data.until).toBe(new Date('2026-01-31').toISOString())
+  })
+
+  it('rejects "since" given without "until"', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: { since: '2026-01-01' } },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects "since" after "until"', async () => {
+    const response = await router.handle(
+      {
+        method: 'GET',
+        path: '/api/analytics/summary',
+        query: { since: '2026-01-31', until: '2026-01-01' },
+      },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects a custom range spanning more than the maximum window', async () => {
+    const response = await router.handle(
+      {
+        method: 'GET',
+        path: '/api/analytics/summary',
+        query: { since: '2020-01-01', until: '2026-01-01' },
+      },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('reports the previous-period comparison', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as {
+      data: { previousTotalViews: number; viewsChangePercent: number | null }
+    }
+    expect(body.data.previousTotalViews).toBe(0)
+    expect(body.data.viewsChangePercent).toBeNull()
+  })
+
+  it('enriches top pages with a title and edit link when resolvePage is wired in', async () => {
+    const enrichedRouter = createAnalyticsRouter({
+      store,
+      siteHost: 'my-site.example',
+      now: () => Date.UTC(2026, 0, 15, 12, 0, 0),
+      resolvePage: async (path) =>
+        path === '/popular'
+          ? { title: 'Popular page', editHref: '/admin/collections/page/abc' }
+          : undefined,
+    })
+    await store.recordEvent({ path: '/popular', ip: '203.0.113.7', userAgent: 'Mozilla/5.0' })
+
+    const response = await enrichedRouter.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as {
+      data: { topPages: readonly { path: string; title?: string; editHref?: string }[] }
+    }
+    const popular = body.data.topPages.find((page) => page.path === '/popular')
+    expect(popular?.title).toBe('Popular page')
+    expect(popular?.editHref).toBe('/admin/collections/page/abc')
+
+    // The original entry, unresolved, still comes back — bare path, no crash.
+    const original = body.data.topPages.find((page) => page.path === '/popular')
+    expect(original).toBeDefined()
+  })
+
+  it('reports the configured retention when the caller wires one in', async () => {
+    const withRetention = createAnalyticsRouter({
+      store,
+      now: () => Date.UTC(2026, 0, 15, 12, 0, 0),
+      retainDays: 400,
+    })
+    const response = await withRetention.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as { data: { retentionDays: number | null } }
+    expect(body.data.retentionDays).toBe(400)
+  })
+
+  it('reports no retention when the caller wired none in', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as { data: { retentionDays: number | null } }
+    expect(body.data.retentionDays).toBeNull()
+  })
+
+  it('keeps the bare path when resolvePage cannot place it', async () => {
+    const enrichedRouter = createAnalyticsRouter({
+      store,
+      now: () => Date.UTC(2026, 0, 15, 12, 0, 0),
+      resolvePage: async () => undefined,
+    })
+    const response = await enrichedRouter.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as {
+      data: { topPages: readonly { path: string; title?: string }[] }
+    }
+    expect(body.data.topPages[0]?.title).toBeUndefined()
+  })
+})
+
+describe('GET /api/analytics/page', () => {
+  beforeEach(async () => {
+    await store.recordEvent({
+      path: '/popular',
+      ip: '203.0.113.5',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+    })
+  })
+
+  it('refuses anyone below admin', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/page', query: { path: '/popular' } },
+      { actor: EDITOR, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('requires a ?path=', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/page', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('reports views and rank for one page', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/page', query: { path: '/popular', days: '30' } },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as { data: { path: string; views: number; rank: number | null } }
+    expect(body.data.path).toBe('/popular')
+    expect(body.data.views).toBe(1)
+    expect(body.data.rank).toBe(1)
+  })
+
+  it('reports a null rank for a page never visited', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/page', query: { path: '/never-visited' } },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as { data: { views: number; rank: number | null } }
+    expect(body.data.views).toBe(0)
+    expect(body.data.rank).toBeNull()
+  })
 })
 
 describe('unknown route', () => {

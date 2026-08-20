@@ -185,7 +185,7 @@ export function DashboardRoute(): JSX.Element {
   useEffect(() => {
     if (token === null || !isAdmin) return
     let cancelled = false
-    getAnalyticsSummary(token, DASHBOARD_WINDOW_DAYS)
+    getAnalyticsSummary(token, { days: DASHBOARD_WINDOW_DAYS })
       .then((result) => {
         if (!cancelled) setAnalytics(result)
       })

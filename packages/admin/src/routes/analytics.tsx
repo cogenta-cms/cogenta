@@ -1,8 +1,15 @@
-import { type JSX, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { type AnalyticsSummary, getAnalyticsSummary } from '../api/analytics-client.js'
+import { Link } from 'react-router'
+import {
+  type AnalyticsSummary,
+  type AnalyticsWindow,
+  getAnalyticsSummary,
+} from '../api/analytics-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { downloadCsv, toCsv } from '../lib/csv.js'
+import { Button, Input, Label } from '../ui/index.js'
 
 const WINDOW_OPTIONS = [7, 30, 90] as const
 type WindowDays = (typeof WINDOW_OPTIONS)[number]
@@ -70,10 +77,69 @@ function DailyViewsChart({ data }: { readonly data: AnalyticsSummary['dailyViews
   )
 }
 
+/** `+12.3%`, `−4.0%`, or a worded fallback when there is nothing to compare against (fiche 27 task 1). */
+function ChangeBadge({
+  percent,
+  previous,
+}: {
+  readonly percent: number | null
+  readonly previous: number
+}): JSX.Element {
+  const { t } = useTranslation()
+  if (percent === null) {
+    return (
+      <span className="text-muted-foreground text-sm">
+        {previous === 0 ? t('analytics.changeNew') : t('analytics.changeNoComparison')}
+      </span>
+    )
+  }
+  const rounded = Math.round(percent * 10) / 10
+  const sign = rounded > 0 ? '+' : ''
+  return (
+    <span
+      className={
+        rounded >= 0 ? 'text-sm font-medium text-success' : 'text-sm font-medium text-danger'
+      }
+    >
+      {sign}
+      {rounded}% {t('analytics.changeVsPrevious')}
+    </span>
+  )
+}
+
+/** Today's date, `YYYY-MM-DD`, for an `<input type="date">` max attribute — never a future range. */
+function todayValue(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function csvFromSummary(summary: AnalyticsSummary): string {
+  const rows: string[][] = [
+    ['Cogenta analytics', `${summary.since} — ${summary.until}`],
+    [],
+    ['Metric', 'Value'],
+    ['Total views', String(summary.totalViews)],
+    ['Unique visitors', String(summary.uniqueVisitors)],
+    ['Previous period views', String(summary.previousTotalViews)],
+    [],
+    ['Page', 'Views'],
+    ...summary.topPages.map((page) => [page.path, String(page.views)]),
+    [],
+    ['Referrer', 'Views'],
+    ...summary.topReferrers.map((referrer) => [referrer.domain, String(referrer.views)]),
+    [],
+    ['Day', 'Views'],
+    ...summary.dailyViews.map((point) => [point.day, String(point.views)]),
+  ]
+  return toCsv(rows)
+}
+
 /**
- * L10 analytics gap. `@cogenta/analytics`'s self-hosted, cookie-free
- * page-view data, restricted to `admin` — the server-side route already
- * refuses anyone else with 403, this only avoids issuing the request.
+ * L10 analytics gap, expanded by fiche 27: pages, referrers, a period
+ * comparison, a custom date range, CSV export, the site's retention setting,
+ * and an explicit statement of what this system does not do (task 5).
+ * `@cogenta/analytics`'s self-hosted, cookie-free page-view data, restricted
+ * to `admin` — the server-side route already refuses anyone else with 403,
+ * this only avoids issuing the request.
  */
 export function AnalyticsRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -83,16 +149,24 @@ export function AnalyticsRoute(): JSX.Element {
   const isAdmin = roles.includes('admin')
 
   const [days, setDays] = useState<WindowDays>(30)
+  /** A confirmed custom range — `null` means "use `days` instead" (task 1). */
+  const [customRange, setCustomRange] = useState<{ since: string; until: string } | null>(null)
+  const [sinceInput, setSinceInput] = useState('')
+  const [untilInput, setUntilInput] = useState('')
+  const [rangeError, setRangeError] = useState<string | null>(null)
+
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const window: AnalyticsWindow = customRange ?? { days }
 
   useEffect(() => {
     if (token === null || !isAdmin) return
     let cancelled = false
     setLoading(true)
     setError(null)
-    getAnalyticsSummary(token, days)
+    getAnalyticsSummary(token, window)
       .then((result) => {
         if (!cancelled) setSummary(result)
       })
@@ -107,7 +181,41 @@ export function AnalyticsRoute(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [token, isAdmin, days, t])
+    // `window` is derived from `days`/`customRange` each render; comparing its
+    // two possible shapes here would need a deep-equality check for no real
+    // benefit, so the two source values are the actual dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isAdmin, days, customRange, t])
+
+  function chooseWindow(option: WindowDays): void {
+    setCustomRange(null)
+    setDays(option)
+  }
+
+  function applyCustomRange(event: FormEvent): void {
+    event.preventDefault()
+    setRangeError(null)
+    if (sinceInput === '' || untilInput === '') {
+      setRangeError(t('analytics.rangeBothRequired'))
+      return
+    }
+    if (sinceInput >= untilInput) {
+      setRangeError(t('analytics.rangeOrderInvalid'))
+      return
+    }
+    setCustomRange({
+      since: new Date(sinceInput).toISOString(),
+      until: new Date(untilInput).toISOString(),
+    })
+  }
+
+  function exportCsv(): void {
+    if (summary === null) return
+    downloadCsv(
+      `cogenta-analytics-${summary.since.slice(0, 10)}-${summary.until.slice(0, 10)}.csv`,
+      csvFromSummary(summary),
+    )
+  }
 
   if (!isAdmin) {
     return (
@@ -123,19 +231,50 @@ export function AnalyticsRoute(): JSX.Element {
       <h1 id="analytics-heading">{t('analytics.heading')}</h1>
       <p>{t('analytics.privacyNote')}</p>
 
+      {/* What this system does not do (task 5) — a guarantee, shown, not just true. */}
+      <ul aria-label={t('analytics.limitsHeading')}>
+        <li>{t('analytics.limitNoCrossSite')}</li>
+        <li>{t('analytics.limitNoPersistentId')}</li>
+        <li>{t('analytics.limitNoProfile')}</li>
+        <li>{t('analytics.limitNoSharing')}</li>
+      </ul>
+
       <fieldset>
         <legend>{t('analytics.windowLabel')}</legend>
         {WINDOW_OPTIONS.map((option) => (
           <button
             key={option}
             type="button"
-            aria-pressed={days === option}
-            onClick={() => setDays(option)}
+            aria-pressed={customRange === null && days === option}
+            onClick={() => chooseWindow(option)}
           >
             {option} {t('analytics.days')}
           </button>
         ))}
       </fieldset>
+
+      <form onSubmit={applyCustomRange} aria-label={t('analytics.customRangeLabel')}>
+        <Label htmlFor="analytics-since">{t('analytics.rangeSince')}</Label>
+        <Input
+          id="analytics-since"
+          type="date"
+          value={sinceInput}
+          max={todayValue()}
+          onChange={(event) => setSinceInput(event.target.value)}
+        />
+        <Label htmlFor="analytics-until">{t('analytics.rangeUntil')}</Label>
+        <Input
+          id="analytics-until"
+          type="date"
+          value={untilInput}
+          max={todayValue()}
+          onChange={(event) => setUntilInput(event.target.value)}
+        />
+        <Button type="submit" variant="secondary">
+          {t('analytics.rangeApply')}
+        </Button>
+        {rangeError !== null && <p role="alert">{rangeError}</p>}
+      </form>
 
       {error !== null && <p role="alert">{error}</p>}
       {loading && <p>{t('common.loading')}</p>}
@@ -146,12 +285,24 @@ export function AnalyticsRoute(): JSX.Element {
             <h2 id="analytics-totals-heading">{t('analytics.totalsHeading')}</h2>
             <ul>
               <li>
-                {t('analytics.totalViews')}: {summary.totalViews}
+                {t('analytics.totalViews')}: {summary.totalViews}{' '}
+                <ChangeBadge
+                  percent={summary.viewsChangePercent}
+                  previous={summary.previousTotalViews}
+                />
               </li>
               <li>
                 {t('analytics.uniqueVisitors')}: {summary.uniqueVisitors}
               </li>
             </ul>
+            <Button type="button" variant="secondary" onClick={exportCsv}>
+              {t('analytics.exportCsv')}
+            </Button>
+            <p className="text-muted-foreground text-sm">
+              {summary.retentionDays === null
+                ? t('analytics.retentionUnknown')
+                : t('analytics.retentionNote', { days: summary.retentionDays })}
+            </p>
           </section>
 
           <section aria-labelledby="analytics-chart-heading">
@@ -174,7 +325,16 @@ export function AnalyticsRoute(): JSX.Element {
                 <tbody>
                   {summary.topPages.map((page) => (
                     <tr key={page.path}>
-                      <td>{page.path}</td>
+                      <td>
+                        {page.editHref !== undefined ? (
+                          <Link to={page.editHref}>{page.title ?? page.path}</Link>
+                        ) : (
+                          page.path
+                        )}
+                        {page.title !== undefined && (
+                          <span className="text-muted-foreground text-xs"> ({page.path})</span>
+                        )}
+                      </td>
                       <td>{page.views}</td>
                     </tr>
                   ))}

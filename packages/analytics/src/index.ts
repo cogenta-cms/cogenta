@@ -13,6 +13,8 @@ export type {
   CountedPath,
   CountedReferrer,
   DailyViews,
+  PageStats,
+  PageStatsOptions,
   RecordEventInput,
   RecordEventResult,
   SummaryOptions,

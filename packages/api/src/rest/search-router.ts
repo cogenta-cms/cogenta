@@ -1,6 +1,15 @@
 import { CogentaError } from '@cogenta/core'
-import type { CollectionDefinition, ContentStatus, SearchDriver, SearchHit } from '@cogenta/schema'
-import { CONTENT_STATUSES } from '@cogenta/schema'
+import {
+  buildExcerpt,
+  CONTENT_STATUSES,
+  type CollectionDefinition,
+  type ContentStatus,
+  queryTokens,
+  type SearchDriver,
+  type SearchHit,
+  searchDocumentFor,
+} from '@cogenta/schema'
+import type { ContentGateway } from '../graphql/gateway.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import {
@@ -11,6 +20,19 @@ import {
   type RestResponse,
 } from './http.js'
 import { single } from './query.js'
+
+/**
+ * A `SearchHit` plus the two things the driver's own storage cannot answer:
+ * an excerpt in real casing and accents (task 3), and the timestamps a search
+ * results page needs to sort or filter by date — `SearchHit` has neither, on
+ * purpose, since the index only ever stores the folded, extracted text.
+ */
+export interface SearchResultHit extends SearchHit {
+  readonly excerpt: string
+  readonly highlights: readonly { readonly start: number; readonly end: number }[]
+  readonly createdAt: string | null
+  readonly updatedAt: string | null
+}
 
 /**
  * `GET /api/search` — the full-text index, finally reachable (L10 task 3).
@@ -46,6 +68,19 @@ export interface SearchRouterOptions {
   readonly defaultLocale?: string
   /** Mount point. `/api/search` by default. */
   readonly basePath?: string
+  /**
+   * Reads the live entry behind each hit to build its excerpt (task 3).
+   *
+   * Optional, and deliberately so: the route still answers without it — every
+   * existing caller of `createSearchRouter` keeps compiling and every prior
+   * test keeps passing — it only gains an `excerpt`/`highlights`/timestamps
+   * of `''`/`[]`/`null`. Re-reading through the gateway rather than the index
+   * itself is the point: the index stores folded text for matching, never the
+   * cased, accented prose a result list should show (`buildExcerpt`'s own
+   * comment), and the gateway is the one place that already knows how to ask
+   * a `ContentStore` for one entry under this exact actor's permissions.
+   */
+  readonly gateway?: ContentGateway
 }
 
 export interface SearchRouter {
@@ -178,10 +213,56 @@ export function createSearchRouter(options: SearchRouterOptions): SearchRouter {
     const readable = new Set(scope.map((target) => target.name))
     const hits: readonly SearchHit[] = results.hits.filter((hit) => readable.has(hit.collection))
 
+    const tokens = queryTokens(text)
+    const enriched = await Promise.all(hits.map((hit) => enrich(hit, tokens, context)))
+
     return jsonResponse(200, {
-      data: hits,
+      data: enriched,
       page: { hasMore: results.hasMore, nextOffset: results.nextOffset },
     })
+  }
+
+  /**
+   * A hit as the wire sends it: `excerpt`/`highlights` from the live entry
+   * when a `gateway` was supplied, `''`/`[]`/`null` otherwise or when the
+   * entry has since become unreadable — a hit the index has not caught up to
+   * yet is not this route's failure to report.
+   */
+  async function enrich(
+    hit: SearchHit,
+    tokens: readonly string[],
+    context: AccessContext,
+  ): Promise<SearchResultHit> {
+    const empty: SearchResultHit = {
+      ...hit,
+      excerpt: '',
+      highlights: [],
+      createdAt: null,
+      updatedAt: null,
+    }
+    if (options.gateway === undefined) return empty
+
+    let entry: Awaited<ReturnType<ContentGateway['read']>>
+    try {
+      entry = await options.gateway.read(hit.collection, hit.id, context)
+    } catch {
+      // A permission the index-scope check already granted can still be
+      // refused a second time by the gateway's own entry-level grant logic
+      // (a one-entry grant revoked since the hit was indexed, say) — that is
+      // this entry quietly missing an excerpt, never the whole search failing.
+      return empty
+    }
+    if (entry === null) return empty
+
+    const document = searchDocumentFor(collection(hit.collection), entry)
+    const { text: excerpt, matches } = buildExcerpt(document.body, tokens)
+    return {
+      ...hit,
+      excerpt,
+      highlights: matches,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+    }
   }
 
   return {

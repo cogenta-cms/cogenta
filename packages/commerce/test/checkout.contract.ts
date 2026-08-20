@@ -247,6 +247,26 @@ export function runCheckoutContract(label: string, open: () => Promise<CheckoutF
       expect(reread?.lines[0]?.quantity).toBe(3)
     })
 
+    it('finds an order by a substring of its reference or its email (fiche 36 task 4)', async () => {
+      const variant = await seed(shop, 1000, 10)
+      const first = await checkout(shop, variant, null, 'reims-buyer@example.com')
+      const second = await checkout(shop, variant, null, 'other@example.test')
+      if (first.kind !== 'placed' || second.kind !== 'placed') {
+        throw new Error('expected both orders to be placed')
+      }
+
+      const byEmail = await shop.orders.list({ search: 'reims-buyer' })
+      expect(byEmail.map((order) => order.id)).toEqual([first.order.id])
+
+      const byReference = await shop.orders.list({
+        search: first.order.reference.slice(0, 6).toLowerCase(),
+      })
+      expect(byReference.map((order) => order.id)).toContain(first.order.id)
+      expect(byReference.map((order) => order.id)).not.toContain(second.order.id)
+
+      expect((await shop.orders.list({ search: 'no-such-order' })).length).toBe(0)
+    })
+
     it('issues gapless invoice numbers that survive a round trip', async () => {
       const invoices = createInvoiceStore(db, {
         orders: shop.orders,

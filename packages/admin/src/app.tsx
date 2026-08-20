@@ -30,6 +30,7 @@ import { ProfileRoute } from './routes/profile.js'
 import { RedirectsRoute } from './routes/redirects.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
 import { ScheduledRoute } from './routes/scheduled.js'
+import { SearchRoute } from './routes/search.js'
 import { SeoRoute } from './routes/seo.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
@@ -97,6 +98,7 @@ export function App(): JSX.Element {
               <Route path="redirects" element={<RedirectsRoute />} />
               <Route path="seo" element={<SeoRoute />} />
               <Route path="translations" element={<TranslationsRoute />} />
+              <Route path="search" element={<SearchRoute />} />
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
               <Route path="health" element={<HealthRoute />} />
               <Route path="tools" element={<ToolsRoute />} />

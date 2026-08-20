@@ -4,18 +4,25 @@ import {
   useCallback,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
+import { listOrders } from '../api/commerce-client.js'
+import { listMarketplaceItems } from '../api/marketplace-client.js'
 import { listMedia } from '../api/media-client.js'
+import { listMenus } from '../api/menu-client.js'
 import { searchContent } from '../api/search-client.js'
+import { listTerms } from '../api/taxonomy-client.js'
 import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { canPerform } from '../schema/permissions.js'
+import { formatMinor } from '../commerce/money.js'
+import { canPerform, canPerformOnTerms } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { matchesQuery } from '../search/fold.js'
+import { parseInlineFilters } from '../search/inline-filters.js'
+import { recentSearches, rememberSearch } from '../search/recent-searches.js'
 import { useTheme } from '../theme/theme-context.js'
 import { Input } from '../ui/index.js'
 import { NAV_ITEMS } from './nav-items.js'
@@ -24,216 +31,391 @@ import { chromeStatusOrFallback, useChromeStatus } from './shell-status-context.
 import { NEXT_MODE } from './theme-toggle.js'
 
 /**
- * The admin's global search — L11 task 4.
+ * The admin's global search — L11 task 4, extended by fiche 35 task 5
+ * (command-palette actions, gated by the same nav visibility every sidebar
+ * entry already obeys) and fiche 36 (more sources, inline filters, recent
+ * searches, a full results page).
  *
- * Three real endpoints, called in parallel from the browser rather than one
- * aggregated server route: `/api/search` already covers content, media and
- * accounts have no full-text index of their own (just a `q` substring filter
- * added alongside this component, see `media-router.ts`/`users-router.ts`),
- * and accounts are admin-only in the first place. A route that fanned all
- * three out server-side would still need to make three separate calls
- * internally and would add a fourth permission surface for no real benefit —
- * an accepted scope trade-off, not an oversight.
- *
- * Every result the popover can show already passed the same permission check
- * the screen it links to would apply on its own: `/api/search` filters by
- * what the actor may read, `/api/media` requires a signed-in actor (checked
- * before this component ever calls it), and `/api/users` is only called at
- * all when the signed-in actor holds the `admin` role — nothing here widens
- * what any of those routes already allow (R4).
+ * Independent endpoints, called in parallel from the browser rather than one
+ * aggregated server route: the reasoning from L11 still holds, and each new
+ * source (task 4) keeps its own permission gate rather than widening an
+ * existing one — a source an actor may not read is never called at all,
+ * never called-then-filtered. The call count is now content, media, users,
+ * up to three taxonomies, menus, orders, extensions and a static settings
+ * list — eight at most, still under the five-to-six threshold the plan names
+ * as the point to reopen "no aggregated route" (fiche 36 §7), but close
+ * enough that a ninth source should revisit it rather than add a ninth call.
  */
 
 const DEBOUNCE_MS = 300
 const GROUP_LIMIT = 5
+const MAX_TAXONOMIES_SEARCHED = 3
 
 interface ResultItem {
   readonly id: string
   readonly label: string
   readonly sublabel: string
-  /** Navigates here on selection — mutually exclusive with `onSelect`. */
   readonly href?: string
-  /** Runs on selection instead of navigating — "toggle the theme", "sign out". */
-  readonly onSelect?: () => void
+  run?(): void
 }
 
 interface ResultGroup {
-  readonly key: 'actions' | 'content' | 'media' | 'users'
+  readonly key: string
   readonly titleKey: string
   readonly items: readonly ResultItem[]
 }
 
+const SETTINGS_DESTINATIONS: readonly { readonly to: string; readonly labelKey: string }[] = [
+  { to: '/settings', labelKey: 'nav.settings' },
+  { to: '/ops-settings', labelKey: 'nav.opsSettings' },
+  { to: '/api-keys', labelKey: 'nav.apiKeys' },
+  { to: '/redirects', labelKey: 'nav.redirects' },
+]
+
 export function GlobalSearch(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const auth = useAuth()
-  const schemaState = useSchema()
+  const schema = useSchema()
   const chromeState = useChromeStatus()
   const theme = useTheme()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
-  const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
+  const isAdmin = roles.includes('admin')
+  const isSignedIn = roles.length > 0
 
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [groups, setGroups] = useState<readonly ResultGroup[]>([])
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [announcement, setAnnouncement] = useState('')
 
   const rootRef = useRef<HTMLDivElement>(null)
   const listboxId = useId()
   const inputId = useId()
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
 
   const flatItems = groups.flatMap((group) => group.items)
 
-  const collections = schemaState.status === 'ready' ? schemaState.schema.collections : null
+  const collections = schema.status === 'ready' ? schema.schema.collections : null
   const taxonomiesPresent =
-    schemaState.status === 'ready' ? (schemaState.schema.taxonomies?.length ?? 0) > 0 : null
+    schema.status === 'ready' ? (schema.schema.taxonomies?.length ?? 0) > 0 : null
   const chrome = chromeStatusOrFallback(chromeState)
 
-  /**
-   * The palette's "actions" (fiche 35 task 5): "go to …" for every nav entry
-   * this actor can currently see, "create a …" for every collection this
-   * actor may create in, plus "toggle the theme" and "sign out" — the four
-   * kinds the fiche names. Independent of the query text: filtered against
-   * it below, the same way the three search groups already are.
-   */
-  const actionPool = useMemo<readonly ResultItem[]>(() => {
-    const actions: ResultItem[] = []
+  const actionsFor = useCallback(
+    (freeText: string): readonly ResultItem[] => {
+      const actions: ResultItem[] = []
 
-    for (const item of NAV_ITEMS) {
-      const visible = isNavItemVisible(item.visibleWhen, {
-        roles,
-        collections,
-        taxonomiesPresent,
-        assistantTools: chromeState.status === 'ready' ? chrome.assistantTools : null,
-        commerceActive: chromeState.status === 'ready' ? chrome.shellStatus.commerceActive : null,
-      })
-      if (!visible) continue
-      actions.push({
-        id: `action:goto:${item.to}`,
-        label: t('globalSearch.actions.goTo', { target: t(item.labelKey) }),
-        sublabel: t(item.labelKey),
-        href: item.to,
-      })
-    }
+      // Gated by the same visibility every sidebar entry already obeys
+      // (fiche 35 task 5): the palette must never offer "go to X" for a
+      // screen this actor cannot currently see.
+      for (const item of NAV_ITEMS) {
+        const visible = isNavItemVisible(item.visibleWhen, {
+          roles,
+          collections,
+          taxonomiesPresent,
+          assistantTools: chromeState.status === 'ready' ? chrome.assistantTools : null,
+          commerceActive: chromeState.status === 'ready' ? chrome.shellStatus.commerceActive : null,
+        })
+        if (!visible) continue
+        const label = t('globalSearch.actions.goTo', { name: t(item.labelKey) })
+        if (!matchesQuery(label, freeText) && !matchesQuery(t(item.labelKey), freeText)) continue
+        actions.push({
+          id: `go-to:${item.to}`,
+          label,
+          sublabel: t('globalSearch.actions.goToHint'),
+          run: () => navigate(item.to),
+        })
+      }
 
-    for (const collection of collections ?? []) {
-      if (!canPerform('create', collection, roles)) continue
-      actions.push({
-        id: `action:create:${collection.name}`,
-        label: t('globalSearch.actions.create', { target: collection.labels.singular }),
-        sublabel: collection.labels.singular,
-        href: `/collections/${encodeURIComponent(collection.name)}/new`,
-      })
-    }
+      if (schema.status === 'ready') {
+        for (const collection of schema.schema.collections) {
+          if (!canPerform('create', collection, roles)) continue
+          const label = t('globalSearch.actions.create', { name: collection.labels.singular })
+          if (
+            !matchesQuery(label, freeText) &&
+            !matchesQuery(collection.labels.singular, freeText)
+          ) {
+            continue
+          }
+          actions.push({
+            id: `create:${collection.name}`,
+            label,
+            sublabel: t('globalSearch.actions.createHint'),
+            run: () => navigate(`/collections/${encodeURIComponent(collection.name)}/new`),
+          })
+        }
+      }
 
-    actions.push({
-      id: 'action:toggle-theme',
-      label: t('globalSearch.actions.toggleTheme'),
-      sublabel: t(`theme.${theme.mode}`),
-      onSelect: () => theme.setMode(NEXT_MODE[theme.mode]),
-    })
+      const themeLabel = t('globalSearch.actions.toggleTheme')
+      if (matchesQuery(themeLabel, freeText)) {
+        actions.push({
+          id: 'toggle-theme',
+          label: themeLabel,
+          sublabel: t('globalSearch.actions.commandHint'),
+          run: () => theme.setMode(NEXT_MODE[theme.mode]),
+        })
+      }
 
-    actions.push({
-      id: 'action:logout',
-      label: t('globalSearch.actions.logout'),
-      sublabel: '',
-      onSelect: () => void auth.logout(),
-    })
+      const logoutLabel = t('globalSearch.actions.logout')
+      if (matchesQuery(logoutLabel, freeText)) {
+        actions.push({
+          id: 'logout',
+          label: logoutLabel,
+          sublabel: t('globalSearch.actions.commandHint'),
+          run: () => void auth.logout(),
+        })
+      }
 
-    return actions
-  }, [roles, collections, taxonomiesPresent, chromeState, chrome, theme, auth, t])
+      return actions.slice(0, GROUP_LIMIT + 3)
+    },
+    [t, navigate, schema, roles, theme, auth, collections, taxonomiesPresent, chromeState, chrome],
+  )
 
   const runSearch = useCallback(
-    async (text: string) => {
-      if (token === null || text.trim().length === 0) {
+    async (raw: string) => {
+      if (token === null || raw.trim().length === 0) {
         setGroups([])
         return
       }
 
-      const [contentResult, mediaResult, usersResult] = await Promise.allSettled([
-        searchContent(token, text, { limit: GROUP_LIMIT }),
-        listMedia(token, { q: text, limit: GROUP_LIMIT }),
-        isAdmin ? listUsers(token, { q: text }) : Promise.resolve([]),
-      ])
-
+      const parsed = parseInlineFilters(raw)
+      const freeText = parsed.text.trim()
       const next: ResultGroup[] = []
 
-      // Actions rank above search results (fiche 35 task 5: "les actions
-      // s'ajoutent au-dessus") — matched by a case-insensitive substring of
-      // either the action's own label ("Aller à Corbeille") or the thing it
-      // names ("Corbeille"), so typing either the verb or the destination
-      // finds it.
-      const needle = text.trim().toLowerCase()
-      const matchingActions = actionPool
-        .filter(
-          (action) =>
-            action.label.toLowerCase().includes(needle) ||
-            action.sublabel.toLowerCase().includes(needle),
-        )
-        .slice(0, GROUP_LIMIT)
-      if (matchingActions.length > 0) {
-        next.push({
-          key: 'actions',
-          titleKey: 'globalSearch.groups.actions',
-          items: matchingActions,
-        })
+      const actions = actionsFor(freeText.length > 0 ? freeText : raw)
+      if (actions.length > 0) {
+        next.push({ key: 'actions', titleKey: 'globalSearch.groups.actions', items: actions })
       }
 
-      if (contentResult.status === 'fulfilled' && contentResult.value.hits.length > 0) {
-        next.push({
-          key: 'content',
-          titleKey: 'globalSearch.groups.content',
-          items: contentResult.value.hits.map((hit) => ({
-            id: `content:${hit.collection}:${hit.id}`,
-            label: hit.title.trim().length > 0 ? hit.title : hit.id,
-            sublabel: hit.collection,
-            href: `/collections/${encodeURIComponent(hit.collection)}/${encodeURIComponent(hit.id)}`,
-          })),
+      // A filter with nothing left to search for (e.g. just "status:draft")
+      // still searches — an empty free text is a valid, if broad, query for
+      // every source below except content, whose route requires `q`.
+      if (freeText.length > 0) {
+        const readableTaxonomies =
+          schema.status === 'ready'
+            ? (schema.schema.taxonomies ?? []).filter((taxonomy) =>
+                canPerformOnTerms('read', taxonomy, roles),
+              )
+            : []
+
+        const [
+          contentResult,
+          mediaResult,
+          usersResult,
+          menusResult,
+          ordersResult,
+          marketplaceResult,
+          ...taxonomyResults
+        ] = await Promise.allSettled([
+          searchContent(token, freeText, {
+            limit: GROUP_LIMIT,
+            ...(parsed.status === undefined ? {} : { status: parsed.status }),
+            ...(parsed.collection === undefined ? {} : { collections: [parsed.collection] }),
+            ...(parsed.locale === undefined ? {} : { locale: parsed.locale }),
+          }),
+          listMedia(token, { q: freeText, limit: GROUP_LIMIT }),
+          isAdmin ? listUsers(token, { q: freeText }) : Promise.resolve([]),
+          isSignedIn ? listMenus(token) : Promise.resolve([]),
+          isSignedIn ? listOrders(token, undefined, freeText) : Promise.resolve({ orders: [] }),
+          isAdmin ? listMarketplaceItems(token, { q: freeText }) : Promise.resolve([]),
+          ...readableTaxonomies
+            .slice(0, MAX_TAXONOMIES_SEARCHED)
+            .map((taxonomy) => listTerms(token, taxonomy.name)),
+        ])
+
+        if (contentResult.status === 'fulfilled' && contentResult.value.hits.length > 0) {
+          next.push({
+            key: 'content',
+            titleKey: 'globalSearch.groups.content',
+            items: contentResult.value.hits.map((hit) => ({
+              id: `content:${hit.collection}:${hit.id}`,
+              label: hit.title.trim().length > 0 ? hit.title : hit.id,
+              sublabel: hit.collection,
+              href: `/collections/${encodeURIComponent(hit.collection)}/${encodeURIComponent(hit.id)}`,
+            })),
+          })
+        }
+
+        if (mediaResult.status === 'fulfilled' && mediaResult.value.items.length > 0) {
+          next.push({
+            key: 'media',
+            titleKey: 'globalSearch.groups.media',
+            items: mediaResult.value.items.slice(0, GROUP_LIMIT).map((asset) => ({
+              id: `media:${asset.id}`,
+              label: asset.filename,
+              sublabel: asset.kind,
+              href: '/media',
+            })),
+          })
+        }
+
+        if (usersResult.status === 'fulfilled' && usersResult.value.length > 0) {
+          next.push({
+            key: 'users',
+            titleKey: 'globalSearch.groups.users',
+            items: usersResult.value.slice(0, GROUP_LIMIT).map((user) => ({
+              id: `users:${user.id}`,
+              label: user.email,
+              sublabel: user.roles.join(', '),
+              href: '/users',
+            })),
+          })
+        }
+
+        if (menusResult.status === 'fulfilled') {
+          const matched = menusResult.value.filter((menu) => matchesQuery(menu.label, freeText))
+          if (matched.length > 0) {
+            next.push({
+              key: 'menus',
+              titleKey: 'globalSearch.groups.menus',
+              items: matched.slice(0, GROUP_LIMIT).map((menu) => ({
+                id: `menu:${menu.id}`,
+                label: menu.label,
+                sublabel: menu.locale,
+                href: '/menus',
+              })),
+            })
+          }
+        }
+
+        if (ordersResult.status === 'fulfilled' && ordersResult.value.orders.length > 0) {
+          next.push({
+            key: 'orders',
+            titleKey: 'globalSearch.groups.orders',
+            items: ordersResult.value.orders.slice(0, GROUP_LIMIT).map((order) => ({
+              id: `order:${order.id}`,
+              label: order.reference,
+              sublabel: `${order.email} — ${formatMinor(order.totalMinor, order.currency)}`,
+              href: `/commerce/orders/${encodeURIComponent(order.id)}`,
+            })),
+          })
+        }
+
+        if (marketplaceResult.status === 'fulfilled' && marketplaceResult.value.length > 0) {
+          next.push({
+            key: 'extensions',
+            titleKey: 'globalSearch.groups.extensions',
+            items: marketplaceResult.value.slice(0, GROUP_LIMIT).map((item) => ({
+              id: `marketplace:${item.id}`,
+              label: item.displayName,
+              sublabel: item.kind,
+              href: '/marketplace',
+            })),
+          })
+        }
+
+        const termItems: ResultItem[] = []
+        readableTaxonomies.slice(0, MAX_TAXONOMIES_SEARCHED).forEach((taxonomy, index) => {
+          const result = taxonomyResults[index]
+          if (result === undefined || result.status !== 'fulfilled') return
+          // No server-side `q` on `/api/taxonomies/{name}` (unlike media and
+          // marketplace) — a term list is small enough per taxonomy that
+          // filtering the already-fetched tree client-side costs nothing extra.
+          const matched = result.value.filter((term) => {
+            const label = term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug
+            return matchesQuery(label, freeText) || matchesQuery(term.slug, freeText)
+          })
+          for (const term of matched.slice(0, GROUP_LIMIT)) {
+            const label = term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug
+            termItems.push({
+              id: `term:${taxonomy.name}:${term.id}`,
+              label,
+              sublabel: taxonomy.labels.singular[i18n.language] ?? taxonomy.name,
+              href: '/taxonomies',
+            })
+          }
         })
+        if (termItems.length > 0) {
+          next.push({
+            key: 'taxonomies',
+            titleKey: 'globalSearch.groups.taxonomies',
+            items: termItems.slice(0, GROUP_LIMIT),
+          })
+        }
+
+        if (isAdmin) {
+          const settingsMatches = SETTINGS_DESTINATIONS.filter((destination) =>
+            matchesQuery(t(destination.labelKey), freeText),
+          )
+          if (settingsMatches.length > 0) {
+            next.push({
+              key: 'settings',
+              titleKey: 'globalSearch.groups.settings',
+              items: settingsMatches.map((destination) => ({
+                id: `settings:${destination.to}`,
+                label: t(destination.labelKey),
+                sublabel: t('globalSearch.groups.settings'),
+                href: destination.to,
+              })),
+            })
+          }
+        }
       }
 
-      if (mediaResult.status === 'fulfilled' && mediaResult.value.items.length > 0) {
-        next.push({
-          key: 'media',
-          titleKey: 'globalSearch.groups.media',
-          items: mediaResult.value.items.slice(0, GROUP_LIMIT).map((asset) => ({
-            id: `media:${asset.id}`,
-            label: asset.filename,
-            sublabel: asset.kind,
-            href: '/media',
-          })),
-        })
-      }
-
-      if (usersResult.status === 'fulfilled' && usersResult.value.length > 0) {
-        next.push({
-          key: 'users',
-          titleKey: 'globalSearch.groups.users',
-          items: usersResult.value.slice(0, GROUP_LIMIT).map((user) => ({
-            id: `users:${user.id}`,
-            label: user.email,
-            sublabel: user.roles.join(', '),
-            href: '/users',
-          })),
-        })
-      }
+      // Always reachable, always last: the free text may be empty (a filter
+      // alone, e.g. "status:draft") and this is still where "see everything"
+      // belongs.
+      next.push({
+        key: 'view-all',
+        titleKey: 'globalSearch.groups.more',
+        items: [
+          {
+            id: 'view-all',
+            label: t('globalSearch.actions.viewAllResults', { query: raw }),
+            sublabel: t('globalSearch.actions.viewAllResultsHint'),
+            run: () => {
+              rememberSearch(raw)
+              navigate(`/search?q=${encodeURIComponent(raw)}`)
+            },
+          },
+        ],
+      })
 
       setGroups(next)
       setActiveIndex(-1)
+      const resultCount = next.reduce(
+        (sum, group) => sum + (group.key === 'view-all' ? 0 : group.items.length),
+        0,
+      )
+      setAnnouncement(t('globalSearch.resultsAnnouncement', { count: resultCount }))
     },
-    [token, isAdmin, actionPool],
+    [token, isAdmin, isSignedIn, actionsFor, schema, roles, i18n.language, t, navigate],
   )
 
   // Debounced on every keystroke; `onKeyDown` below runs it immediately on
   // Enter instead of waiting the extra 300ms out.
   useEffect(() => {
-    if (query.trim().length === 0) {
-      setGroups([])
-      return
-    }
+    if (query.trim().length === 0) return
     const timer = window.setTimeout(() => void runSearch(query), DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
   }, [query, runSearch])
+
+  // The default palette (task 1): actions and recent searches, visible the
+  // moment the box opens, before anything is typed — the "half of a command
+  // palette that costs no request" the plan asks for.
+  useEffect(() => {
+    if (!open || query.trim().length > 0) return
+    const actions = actionsFor('')
+    const recent = recentSearches()
+    const next: ResultGroup[] = []
+    if (recent.length > 0) {
+      next.push({
+        key: 'recent',
+        titleKey: 'globalSearch.groups.recent',
+        items: recent.map((entry) => ({
+          id: `recent:${entry}`,
+          label: entry,
+          sublabel: t('globalSearch.actions.recentHint'),
+          run: () => setQuery(entry),
+        })),
+      })
+    }
+    if (actions.length > 0) {
+      next.push({ key: 'actions', titleKey: 'globalSearch.groups.actions', items: actions })
+    }
+    setGroups(next)
+  }, [open, query, actionsFor, t])
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent): void {
@@ -245,42 +427,72 @@ export function GlobalSearch(): JSX.Element {
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [])
 
+  // `⌘K` / `Ctrl+K` from anywhere (task 1) — except while typing in some
+  // other field, so it never steals a keystroke from an entry form. Typing
+  // inside this component's own input is not "some other field": the
+  // shortcut still opens (harmlessly, it already is) rather than being
+  // silently eaten.
+  useEffect(() => {
+    function onGlobalKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return
+
+      const active = document.activeElement
+      const ownInput = document.getElementById(inputId)
+      const isEditable =
+        active instanceof HTMLElement &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.tagName === 'SELECT' ||
+          active.isContentEditable)
+
+      if (isEditable && active !== ownInput) return
+
+      event.preventDefault()
+      if (active !== ownInput) restoreFocusRef.current = active as HTMLElement | null
+      setOpen(true)
+      document.getElementById(inputId)?.focus()
+    }
+    window.addEventListener('keydown', onGlobalKeyDown)
+    return () => window.removeEventListener('keydown', onGlobalKeyDown)
+  }, [inputId])
+
   const select = useCallback(
     (item: ResultItem) => {
       setOpen(false)
       setQuery('')
       setGroups([])
-      if (item.onSelect !== undefined) item.onSelect()
-      else if (item.href !== undefined) navigate(item.href)
+      if (query.trim().length > 0) rememberSearch(query)
+      if (item.run !== undefined) {
+        item.run()
+        return
+      }
+      if (item.href !== undefined) navigate(item.href)
     },
-    [navigate],
+    [navigate, query],
   )
 
-  // `⌘K`/`Ctrl+K` opens this same search, enriched with actions (fiche 35
-  // task 5) — a global listener rather than one scoped to this component's
-  // own tree, so the shortcut works from anywhere in the admin, the way a
-  // command palette is expected to.
-  useEffect(() => {
-    function onGlobalKeyDown(event: globalThis.KeyboardEvent): void {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setOpen(true)
-        document.getElementById(inputId)?.focus()
-      }
-    }
-    document.addEventListener('keydown', onGlobalKeyDown)
-    return () => document.removeEventListener('keydown', onGlobalKeyDown)
-  }, [inputId])
+  function closeAndRestoreFocus(): void {
+    setOpen(false)
+    const target = restoreFocusRef.current
+    restoreFocusRef.current = null
+    target?.focus()
+  }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (event.key === 'Escape') {
-      setOpen(false)
+      closeAndRestoreFocus()
       return
     }
     if (event.key === 'Enter') {
       event.preventDefault()
       if (activeIndex >= 0 && activeIndex < flatItems.length) {
         select(flatItems[activeIndex] as ResultItem)
+      } else if (query.trim().length > 0) {
+        rememberSearch(query)
+        navigate(`/search?q=${encodeURIComponent(query)}`)
+        setOpen(false)
+        setQuery('')
+        setGroups([])
       } else {
         void runSearch(query)
       }
@@ -299,7 +511,7 @@ export function GlobalSearch(): JSX.Element {
     }
   }
 
-  const showPopover = open && query.trim().length > 0 && flatItems.length > 0
+  const showPopover = open && groups.length > 0
 
   return (
     <div ref={rootRef} className="app-shell__search relative w-full max-w-sm">
@@ -323,6 +535,11 @@ export function GlobalSearch(): JSX.Element {
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
       />
+      {announcement !== '' && (
+        <div className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </div>
+      )}
       {showPopover && (
         <div
           id={listboxId}
@@ -335,9 +552,11 @@ export function GlobalSearch(): JSX.Element {
             // grouping — `<fieldset>` would be the wrong element here.
             // biome-ignore lint/a11y/useSemanticElements: see comment above.
             <div key={group.key} role="group" aria-label={t(group.titleKey)}>
-              <div className="px-3 pt-2 pb-1 font-sans text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {t(group.titleKey)}
-              </div>
+              {group.key !== 'view-all' && (
+                <div className="px-3 pt-2 pb-1 font-sans text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t(group.titleKey)}
+                </div>
+              )}
               {group.items.map((item) => {
                 const index = flatItems.indexOf(item)
                 const active = index === activeIndex

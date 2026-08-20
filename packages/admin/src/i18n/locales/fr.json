@@ -208,20 +208,77 @@
   },
   "globalSearch": {
     "label": "Recherche globale",
-    "placeholder": "Rechercher du contenu, des médias, des utilisateurs…",
+    "placeholder": "Rechercher du contenu, des médias, des utilisateurs… (⌘K)",
     "resultsLabel": "Résultats de recherche",
+    "resultsAnnouncement_one": "{{count}} résultat",
+    "resultsAnnouncement_other": "{{count}} résultats",
+    "menuUnassigned": "Non affecté à un emplacement",
     "groups": {
       "actions": "Actions",
       "content": "Contenu",
       "media": "Médias",
-      "users": "Utilisateurs"
+      "users": "Utilisateurs",
+      "recent": "Recherches récentes",
+      "menus": "Menus",
+      "orders": "Commandes",
+      "extensions": "Extensions",
+      "taxonomies": "Termes",
+      "settings": "Réglages",
+      "more": "Plus"
     },
     "actions": {
-      "goTo": "Aller à : {{target}}",
-      "create": "Créer : {{target}}",
-      "toggleTheme": "Basculer le thème",
-      "logout": "Se déconnecter"
+      "goTo": "Aller à {{name}}",
+      "goToHint": "Naviguer",
+      "create": "Créer un(e) {{name}}",
+      "createHint": "Nouvelle entrée",
+      "toggleTheme": "Basculer le thème clair / sombre",
+      "logout": "Se déconnecter",
+      "commandHint": "Commande",
+      "recentHint": "Recherche récente",
+      "viewAllResults": "Voir tous les résultats pour « {{query}} »",
+      "viewAllResultsHint": "Ouvrir la page de résultats complète"
     }
+  },
+  "searchPage": {
+    "title": "Recherche",
+    "heading": "Résultats pour « {{query}} »",
+    "headingEmpty": "Recherche",
+    "placeholder": "Tapez une recherche…",
+    "resultsCount_one": "{{count}} résultat",
+    "resultsCount_other": "{{count}} résultats",
+    "noResults": "Aucun résultat pour « {{query}} ».",
+    "typeToSearch": "Tapez un terme ci-dessus, ou utilisez un filtre comme status:draft.",
+    "sortLabel": "Trier par",
+    "sortRelevance": "Pertinence",
+    "sortDate": "Dernière modification",
+    "filters": {
+      "collection": "Collection",
+      "collectionAny": "Toutes les collections",
+      "status": "Statut",
+      "statusAny": "Tous les statuts",
+      "locale": "Langue",
+      "localeAny": "Toutes les langues",
+      "period": "Période",
+      "periodAny": "Toute période",
+      "periodWeek": "Dernière semaine",
+      "periodMonth": "Dernier mois",
+      "periodYear": "Dernière année"
+    },
+    "tabs": {
+      "all": "Tout",
+      "content": "Contenu",
+      "media": "Médias",
+      "users": "Utilisateurs",
+      "menus": "Menus",
+      "orders": "Commandes",
+      "extensions": "Extensions",
+      "taxonomies": "Termes",
+      "semantic": "Par le sens"
+    },
+    "semanticIntro": "Alimentée par l'index vectoriel du site — des résultats grossiers, puisqu'il indexe un seul fragment par entrée et qu'aucun fournisseur d'embeddings distant n'est configuré. La recherche lexicale ci-dessus reste la voie principale (R2).",
+    "semanticEmpty": "Rien n'est revenu pour cette question.",
+    "semanticAsk": "Demander",
+    "loadError": "Impossible de charger les résultats de recherche."
   },
   "login": {
     "heading": "Connexion à Cogenta",

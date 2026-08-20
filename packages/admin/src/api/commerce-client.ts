@@ -284,12 +284,19 @@ export async function deleteVariant(token: string, id: string): Promise<void> {
   })
 }
 
+/** `q` finds an order by a substring of its reference or its customer email (fiche 36 task 4). */
 export function listOrders(
   token: string,
   status?: OrderStatus,
+  q?: string,
 ): Promise<{ readonly orders: readonly Order[] }> {
-  const query = status === undefined ? '' : `?status=${encodeURIComponent(status)}`
-  return requestBody(`/api/commerce/orders${query}`, { headers: authHeader(token) })
+  const params = new URLSearchParams()
+  if (status !== undefined) params.set('status', status)
+  if (q !== undefined && q.trim() !== '') params.set('q', q)
+  const query = params.toString()
+  return requestBody(`/api/commerce/orders${query === '' ? '' : `?${query}`}`, {
+    headers: authHeader(token),
+  })
 }
 
 export function readOrder(

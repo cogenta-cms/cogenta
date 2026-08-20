@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { extractBlockText, extractRichText, searchDocumentFor } from '../../src/search/extract.js'
+import {
+  buildExcerpt,
+  extractBlockText,
+  extractRichText,
+  searchDocumentFor,
+} from '../../src/search/extract.js'
+import { queryTokens } from '../../src/search/text.js'
 import type { ContentEntry } from '../../src/store/types.js'
 import type { CollectionDefinition } from '../../src/types.js'
 
@@ -196,5 +202,60 @@ describe('searchDocumentFor', () => {
 
     expect(document.title).toBe('')
     expect(document.body).toBe('')
+  })
+})
+
+describe('buildExcerpt', () => {
+  it('windows around the first match, keeping the original casing and accents', () => {
+    const body =
+      'La cathédrale de Reims a été restaurée après un chantier de dix ans, ' +
+      "et l'atelier de vitraux a repris tout le mois de janvier."
+    const { text, matches } = buildExcerpt(body, queryTokens('restauree'))
+
+    // The stored body is condensed but never folded — so the excerpt keeps
+    // "cathédrale" and "restaurée" exactly as an editor typed them.
+    expect(text).toContain('restaurée')
+    expect(matches.length).toBe(1)
+    const match = matches[0] as { start: number; end: number }
+    expect(text.slice(match.start, match.end)).toBe('restaurée')
+  })
+
+  it('matches a query term as a prefix, the same rule every FTS driver applies', () => {
+    const { matches } = buildExcerpt(
+      'Le chantier de restauration a commencé.',
+      queryTokens('resta'),
+    )
+    expect(matches.length).toBe(1)
+  })
+
+  it('returns the opening of the text, unmarked, when nothing matches', () => {
+    const { text, matches } = buildExcerpt(
+      'Un texte sans rapport avec la recherche.',
+      queryTokens('cathedrale'),
+    )
+    expect(matches).toEqual([])
+    expect(text.startsWith('Un texte sans rapport')).toBe(true)
+  })
+
+  it('marks every match inside the window, not only the first', () => {
+    const body = 'restauration restauration restauration restauration restauration'
+    const { matches } = buildExcerpt(body, queryTokens('restauration'))
+    expect(matches.length).toBeGreaterThan(1)
+  })
+
+  it('never turns the excerpt into markup — the caller escapes it at render (R3/R8)', () => {
+    // A query term that happens to sit inside text an editor pasted straight
+    // from an attacker-controlled import: the excerpt is still plain text,
+    // with no tag ever synthesised around a match.
+    const body = 'Un commentaire dit : <script>alert(1)</script> et rien de plus.'
+    const { text } = buildExcerpt(body, queryTokens('script'))
+    expect(text).not.toMatch(/<mark|<b>|<strong/u)
+    expect(text).toContain('<script>alert(1)</script>')
+  })
+
+  it('returns no matches and a bounded opening when there are no query tokens', () => {
+    const { text, matches } = buildExcerpt('Un texte quelconque.'.repeat(20), [])
+    expect(matches).toEqual([])
+    expect(text.length).toBeLessThanOrEqual(200)
   })
 })

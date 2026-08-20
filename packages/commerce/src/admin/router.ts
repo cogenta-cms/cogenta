@@ -287,14 +287,16 @@ export function createCommerceAdminRouter(
         if (segments[0] === 'orders' && segments.length === 1 && method === 'GET') {
           permissions.assert('commerce.read', actor)
           const status = request.query?.status
+          const q = request.query?.q
           return {
             status: 200,
             body: {
-              orders: await options.orders.list(
-                (ORDER_STATUSES as readonly string[]).includes(status ?? '')
+              orders: await options.orders.list({
+                ...((ORDER_STATUSES as readonly string[]).includes(status ?? '')
                   ? { status: status as OrderStatus }
-                  : {},
-              ),
+                  : {}),
+                ...(q === undefined || q === '' ? {} : { search: q }),
+              }),
             },
           }
         }

@@ -125,7 +125,7 @@ export type {
   ScheduledTasksRouterOptions,
 } from './scheduled-tasks-router.js'
 export { createScheduledTasksRouter } from './scheduled-tasks-router.js'
-export type { SearchRouter, SearchRouterOptions } from './search-router.js'
+export type { SearchResultHit, SearchRouter, SearchRouterOptions } from './search-router.js'
 export { createSearchRouter } from './search-router.js'
 export type { SeoDiagnostics, SeoRouter, SeoRouterOptions } from './seo-router.js'
 export { createSeoRouter } from './seo-router.js'

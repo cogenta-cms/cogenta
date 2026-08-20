@@ -121,7 +121,7 @@ describe('createScheduledTaskRegistry', () => {
     })
 
     // Never run before: both are due immediately.
-    expect((await registry.tick(clock)).ran.sort()).toEqual(['fast', 'slow'])
+    expect([...(await registry.tick(clock)).ran].sort()).toEqual(['fast', 'slow'])
     expect(fastRuns).toBe(1)
     expect(slowRuns).toBe(1)
 

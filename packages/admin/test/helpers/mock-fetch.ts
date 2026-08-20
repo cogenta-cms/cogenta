@@ -654,6 +654,43 @@ export function installMockFetch(
      * invitation path opts in explicitly.
      */
     readonly invitationEmailAvailable?: boolean
+    /**
+     * `true` (the default) mocks a site with an `AgentRegistry` mounted, the
+     * way this suite always has. `false` reproduces the real, honest shape
+     * of `cogenta serve` today (L20 audit §1 point 5): no registry is ever
+     * constructed, so `GET /api/agents` 404s through the generic
+     * content-router fallback — the exact response `agents.tsx` must degrade
+     * gracefully from instead of showing the raw wire text.
+     */
+    readonly agentsRegistryMounted?: boolean
+    /**
+     * What `GET /api/health-report` answers with — the "Santé" screen's
+     * driver diagnostics (fiche 24 task 1). A single `database` check with no
+     * `reasonCode` by default, so a test that never touches this screen does
+     * not have to think about it; L20 audit §1 point 12's regression test
+     * overrides `checks` to exercise every translated reason.
+     */
+    readonly healthReport?: {
+      readonly checks?: readonly {
+        readonly need: string
+        readonly status: 'ok' | 'degraded' | 'down'
+        readonly driver: string
+        readonly tier: string
+        readonly reason: string
+        readonly reasonCode?: {
+          readonly code: 'named' | 'first-available' | 'fallback'
+          readonly skipped: readonly {
+            readonly driver: string
+            readonly tier: string
+            readonly reasonCode: 'not-available' | 'not-available-error' | 'failed-to-start'
+            readonly detail?: string
+          }[]
+        }
+        readonly message?: string
+      }[]
+      readonly notes?: readonly string[]
+      readonly problems?: readonly string[]
+    }
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -2905,10 +2942,109 @@ export function installMockFetch(
         return json(200, { data: run })
       }
 
+      if (url.endsWith('/api/health-report') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may read the health report.',
+            },
+          })
+        }
+        return json(200, {
+          data: {
+            node: '22.0.0',
+            platform: 'linux',
+            arch: 'x64',
+            configPath: '/site/cogenta.config.mjs',
+            site: undefined,
+            checks: options.healthReport?.checks ?? [
+              {
+                need: 'database',
+                status: 'ok',
+                driver: 'sqlite',
+                tier: 'degraded',
+                reason: 'first available driver',
+                message: undefined,
+              },
+            ],
+            notes: options.healthReport?.notes ?? [],
+            problems: options.healthReport?.problems ?? [],
+          },
+        })
+      }
+
+      if (url.endsWith('/api/migrations-status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read migration status.' },
+          })
+        }
+        return json(200, { data: { items: [] } })
+      }
+
+      if (url.endsWith('/api/audit-integrity') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read audit integrity.' },
+          })
+        }
+        return json(200, {
+          data: { ok: true, checkedAt: '2026-03-01T00:00:00.000Z', error: undefined },
+        })
+      }
+
+      if (url.endsWith('/api/disk-usage') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read disk usage.' },
+          })
+        }
+        return json(200, { data: { available: false } })
+      }
+
+      if (url.endsWith('/api/error-log') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may read the error log.' },
+          })
+        }
+        return json(200, { data: { entries: [] } })
+      }
+
+      if (url.endsWith('/api/maintenance') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may read maintenance state.',
+            },
+          })
+        }
+        return json(200, {
+          data: {
+            enabled: false,
+            message: null,
+            updatedAt: '2026-03-01T00:00:00.000Z',
+            updatedBy: null,
+          },
+        })
+      }
+
       if (url.includes('/api/agents')) {
         if (!user.roles.includes('admin')) {
           return json(403, {
             error: { code: 'FORBIDDEN', message: 'Only the admin role may manage agents.' },
+          })
+        }
+        // No `AgentRegistry` is ever constructed unless a caller opts in
+        // (R2-honest, documented throughout `CLAUDE.md`) — the real
+        // `cogenta serve` therefore never mounts `/api/agents` by default,
+        // and the request falls through to the generic content-router 404.
+        // L20 audit §1 point 5's regression test opts into that real shape.
+        if (options.agentsRegistryMounted === false) {
+          return json(404, {
+            error: { code: 'CONTENT_NOT_FOUND', message: 'No route matches this path.' },
           })
         }
         const agentMatch = /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history))?/u.exec(

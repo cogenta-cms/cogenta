@@ -114,6 +114,44 @@ describe('the forms builder', () => {
     })
   })
 
+  it('pre-fills "Name" from "Label" while typing, until "Name" is edited directly (L20 audit point 11/18)', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToForms()
+    await screen.findByText('Aucun formulaire.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouveau formulaire' }))
+    await screen.findByRole('heading', { name: 'Nouveau formulaire' })
+
+    const nameInput = screen.getByLabelText('Nom') as HTMLInputElement
+    fireEvent.change(screen.getByLabelText('Libellé'), { target: { value: 'Contact Us' } })
+    expect(nameInput.value).toBe('contact-us')
+
+    // Typing further in the label keeps overwriting the derived name…
+    fireEvent.change(screen.getByLabelText('Libellé'), { target: { value: 'Contact Us!' } })
+    expect(nameInput.value).toBe('contact-us')
+
+    // …until the admin edits "Name" directly, which must stick from then on.
+    fireEvent.change(nameInput, { target: { value: 'reach-us' } })
+    fireEvent.change(screen.getByLabelText('Libellé'), { target: { value: 'Something else' } })
+    expect(nameInput.value).toBe('reach-us')
+  })
+
+  it('shows a clear success confirmation after creating and after saving a form', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToForms()
+    await screen.findByText('Aucun formulaire.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouveau formulaire' }))
+    await screen.findByRole('heading', { name: 'Nouveau formulaire' })
+    fireEvent.change(screen.getByLabelText('Libellé'), { target: { value: 'Contact us' } })
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'contact' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('« Contact us » a été créé.')).toBeDefined()
+  })
+
   it('deletes a form after a second confirming click', async () => {
     signedIn(['admin'], { forms: [CONTACT_FORM] })
     render(<App />)

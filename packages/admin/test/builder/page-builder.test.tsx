@@ -186,13 +186,41 @@ describe('the page builder, driven the way an editor drives it', () => {
     expect(desktop.getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('shrinks the frame to a real width, so the theme’s own media queries apply', async () => {
+  it('lays the frame out at a real width, so the theme’s own media queries apply (L20 audit point 10)', async () => {
     const { container } = render(<Harness />)
     const frame = container.querySelector('iframe')
-    expect(frame?.style.maxWidth).toBe('100%')
+    // "Ordinateur" is a real desktop width — never a percentage of whatever
+    // room the panel happens to have — so the theme's own desktop media
+    // queries see a genuine desktop viewport, not a guess.
+    expect(frame?.style.width).toBe('1440px')
 
     fireEvent.click(screen.getByRole('button', { name: 'Mobile' }))
-    expect(frame?.style.maxWidth).toBe('375px')
+    expect(frame?.style.width).toBe('375px')
+  })
+
+  it('never lets the frame report a narrower layout width than its real target, even scaled down', async () => {
+    const { container } = render(<Harness />)
+    const wrapper = container.querySelector('.overflow-auto') as HTMLElement
+    const frame = container.querySelector('iframe') as HTMLIFrameElement
+
+    // A panel narrower than "Ordinateur"'s real 1440px target (L20 audit
+    // point 10) — jsdom never lays anything out for real, so the width has
+    // to be forced the same way a real, narrow admin window would produce it.
+    Object.defineProperty(wrapper, 'clientWidth', { configurable: true, value: 720 })
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    } as CSSStyleDeclaration)
+    fireEvent(window, new Event('resize'))
+
+    // The frame's own *layout* width — what the theme's media queries
+    // resolve against — must still read the real, unscaled 1440.
+    expect(frame.style.width).toBe('1440px')
+    // Only the display shrinks, and it shrinks enough to actually fit —
+    // this is what stands between the panel and a horizontal scrollbar.
+    expect(frame.style.transform).toBe('scale(0.5)')
+
+    vi.restoreAllMocks()
   })
 
   it('re-renders the page after an edit, with the edited list', async () => {

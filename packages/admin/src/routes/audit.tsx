@@ -13,6 +13,7 @@ import {
   runAuditIntegrityCheck,
 } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
+import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   Button,
@@ -42,8 +43,15 @@ function isoStartOfDay(daysAgo: number): string {
 }
 
 /** L2 task 14 / fiche 21: a consultable, filterable view over `@cogenta/auth`'s hash-chained audit log — read-only, `admin` only (the API refuses everyone else with 403). */
+/** Same local pattern `collection-list.tsx` already uses: `Intl.DateTimeFormat` in the admin's own language, falling back to the raw string on an unparseable date rather than throwing. */
+function formatDateTime(iso: string, locale: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed)
+}
+
 export function AuditRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -70,6 +78,9 @@ export function AuditRoute(): JSX.Element {
   const [detail, setDetail] = useState<AuditEntryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
+
+  /** Actor ids resolved to an email, same best-effort pattern `version-history.tsx` and `trash.tsx` already use — a 403 (impossible here, this route is already admin-only) or a deleted account just leaves the id showing. */
+  const [actorNames, setActorNames] = useState<ReadonlyMap<string, string>>(new Map())
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -109,6 +120,22 @@ export function AuditRoute(): JSX.Element {
   useEffect(() => {
     void loadIntegrity()
   }, [loadIntegrity])
+
+  useEffect(() => {
+    if (token === null || !isAdmin) {
+      setActorNames(new Map())
+      return
+    }
+    let cancelled = false
+    listUsers(token)
+      .then((users) => {
+        if (!cancelled) setActorNames(new Map(users.map((user) => [user.id, user.email])))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [token, isAdmin])
 
   function submitFilters(event: FormEvent): void {
     event.preventDefault()
@@ -345,8 +372,14 @@ export function AuditRoute(): JSX.Element {
             <TableBody>
               {entries.map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell>{entry.at}</TableCell>
-                  <TableCell>{entry.actorId ?? '—'}</TableCell>
+                  <TableCell>
+                    <span title={entry.at}>{formatDateTime(entry.at, i18n.language)}</span>
+                  </TableCell>
+                  <TableCell>
+                    {entry.actorId === null
+                      ? '—'
+                      : (actorNames.get(entry.actorId) ?? entry.actorId)}
+                  </TableCell>
                   <TableCell>{entry.actorRoles.join(', ')}</TableCell>
                   <TableCell>{entry.action}</TableCell>
                   <TableCell>{entry.collection ?? '—'}</TableCell>
@@ -442,12 +475,14 @@ function IntegrityPanel({
 }
 
 function EntryDetail({ detail }: { readonly detail: AuditEntryDetail }): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { entry } = detail
 
   return (
     <dl className="flex flex-col gap-3 text-sm">
-      <Row label={t('audit.detailDate')}>{entry.at}</Row>
+      <Row label={t('audit.detailDate')}>
+        <span title={entry.at}>{formatDateTime(entry.at, i18n.language)}</span>
+      </Row>
       <Row label={t('audit.detailActor')}>
         {detail.actorLabel ?? entry.actorId ?? t('audit.detailSystemActor')}
       </Row>

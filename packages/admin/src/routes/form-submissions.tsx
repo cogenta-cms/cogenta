@@ -15,6 +15,7 @@ import {
 } from '../api/forms-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { downloadCsv, toCsv } from '../lib/csv.js'
+import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
   Field,
@@ -49,6 +50,7 @@ export function FormSubmissionsRoute(): JSX.Element {
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
+  const refreshChromeStatus = useRefreshChromeStatus()
   const [searchParams, setSearchParams] = useSearchParams()
   const headingId = useId()
 
@@ -110,6 +112,10 @@ export function FormSubmissionsRoute(): JSX.Element {
     try {
       await bulkSubmissionAction(token, [...selected], action)
       await load()
+      // L20 audit point 15: the sidebar's "Submissions" badge is fetched
+      // once per session — without this, marking read/archived/spam here
+      // left it showing a stale unread count.
+      refreshChromeStatus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('formSubmissions.bulkError'))
     }
@@ -120,6 +126,7 @@ export function FormSubmissionsRoute(): JSX.Element {
     try {
       await markSubmissionStatus(token, id, status)
       await load()
+      refreshChromeStatus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('formSubmissions.markError'))
     }

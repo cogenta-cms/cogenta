@@ -289,6 +289,68 @@ describe('multilingual editing', () => {
   })
 })
 
+describe('the "Assistant" and "Traductions" accordions when their feature is off (L20 audit point 16)', () => {
+  it('shows a fallback message instead of an empty panel, with no AI provider and one locale', async () => {
+    // The default `installMockFetch()` from `beforeEach`: no `assistant`
+    // option means `available: false`, and no `siteLocales` option means a
+    // single (or absent) locale — both accordions have nothing real to show.
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    await screen.findByText(
+      "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
+    )
+    expect(
+      screen.getByText(
+        "Ce site n'a qu'une seule langue configurée : il n'y a pas de traduction à gérer ici.",
+      ),
+    ).toBeDefined()
+  })
+
+  it('shows the real assistant and translation switcher instead, once both are actually available', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      siteLocales: ['en', 'fr'],
+      assistant: {
+        available: true,
+        tools: [
+          {
+            tool: 'assist.rewrite',
+            label: 'Rewrite',
+            description: 'Rewrite a passage.',
+            cost: 'medium',
+            needs: [],
+          },
+        ],
+      },
+    })
+
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    await screen.findByRole('button', { name: 'Rewrite' })
+    expect(
+      screen.queryByText(
+        "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
+      ),
+    ).toBeNull()
+
+    await screen.findByRole('heading', { name: 'Traductions' })
+    expect(
+      screen.queryByText(
+        "Ce site n'a qu'une seule langue configurée : il n'y a pas de traduction à gérer ici.",
+      ),
+    ).toBeNull()
+  })
+})
+
 describe('creating a new entry', () => {
   it('shows the "Nouveau" link for a role that can create, and lands on the new entry after saving', async () => {
     render(<App />)

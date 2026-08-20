@@ -125,7 +125,12 @@ describe('the trash screen', () => {
     // `serve-trash.test.ts` for the server-side proof). No such record
     // exists for "Thrown away" in this fixture, which must read honestly
     // empty rather than inventing an author.
-    expect(within(rowFor('A note nobody kept')).getByText('user-1')).toBeDefined()
+    //
+    // L20 audit point 13: the actor id (`user-1`) is resolved to its email
+    // the same best-effort way `version-history.tsx` already resolves
+    // `createdBy`/`updatedBy` — the raw id is what this column showed before
+    // the fix.
+    expect(await within(rowFor('A note nobody kept')).findByText('alice@example.com')).toBeDefined()
     expect(within(rowFor('Thrown away')).getByText('—')).toBeDefined()
   })
 
@@ -144,6 +149,29 @@ describe('the trash screen', () => {
     })
     expect(screen.getByText('Still referenced elsewhere')).toBeDefined()
     expect(screen.getByText('A note nobody kept')).toBeDefined()
+  })
+
+  it('refreshes the sidebar status (L20 audit point 15) after a restore, not just once per session', async () => {
+    signedIn(['editor'])
+    render(<App />)
+    await goToTrash()
+    await screen.findByText('Thrown away')
+
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    const shellStatusCalls = (): number =>
+      fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status')).length
+
+    const before = shellStatusCalls()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(within(rowFor('Thrown away')).getByRole('button', { name: 'Restaurer' }))
+    await waitFor(() => {
+      expect(screen.queryByText('Thrown away')).toBeNull()
+    })
+
+    await waitFor(() => {
+      expect(shellStatusCalls()).toBeGreaterThan(before)
+    })
   })
 
   it('opens the design system modal before purging, never globalThis.confirm()', async () => {

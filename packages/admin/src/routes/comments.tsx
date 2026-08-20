@@ -15,6 +15,7 @@ import {
 } from '../api/comments-client.js'
 import { ModerationCheck } from '../assist/moderation-check.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import { cn } from '../ui/cn.js'
 import {
   Button,
@@ -58,6 +59,7 @@ export function CommentsRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const refreshChromeStatus = useRefreshChromeStatus()
 
   const [tab, setTab] = useState<CommentStatus>('pending')
   const [search, setSearch] = useState('')
@@ -96,6 +98,10 @@ export function CommentsRoute(): JSX.Element {
     try {
       await fn()
       await load()
+      // L20 audit point 15: the sidebar's "Comments" badge is fetched once
+      // per session — without this, approving/spamming/trashing here left
+      // it showing a stale count until the next full reload.
+      refreshChromeStatus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('comments.actionError'))
     } finally {

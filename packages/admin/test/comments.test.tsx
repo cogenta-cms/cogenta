@@ -84,6 +84,28 @@ describe('the comment moderation queue', () => {
     })
   })
 
+  it('refreshes the sidebar status (L20 audit point 15) after approving a comment', async () => {
+    render(<App />)
+    await goToComments()
+
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    const shellStatusCalls = (): number =>
+      fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status')).length
+
+    const before = shellStatusCalls()
+    expect(before).toBeGreaterThan(0)
+
+    const row = screen.getByText(/A perfectly ordinary comment/u).closest('tr') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'Approuver' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText(/A perfectly ordinary comment/u)).toBeNull()
+    })
+    await waitFor(() => {
+      expect(shellStatusCalls()).toBeGreaterThan(before)
+    })
+  })
+
   it('bulk-marks selected comments as spam', async () => {
     render(<App />)
     await goToComments()

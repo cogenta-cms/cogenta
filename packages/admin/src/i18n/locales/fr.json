@@ -638,7 +638,9 @@
     "confirmLeaveDiscard": "Quitter sans enregistrer",
     "confirmLeaveSave": "Enregistrer",
     "assistantSectionLabel": "Assistant",
+    "assistantSectionEmpty": "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
     "translationsSectionLabel": "Traductions",
+    "translationsSectionEmpty": "Ce site n'a qu'une seule langue configurée : il n'y a pas de traduction à gérer ici.",
     "historySectionLabel": "Historique",
     "workflow": {
       "stateLabel": "Relecture :",

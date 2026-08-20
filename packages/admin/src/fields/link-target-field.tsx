@@ -31,7 +31,7 @@ export interface LinkTargetFieldProps {
 function isEntryTarget(
   value: LinkTargetValue,
 ): value is { readonly collection: string; readonly id: string } {
-  return value !== null && 'collection' in value
+  return value != null && 'collection' in value
 }
 
 export function LinkTargetField({

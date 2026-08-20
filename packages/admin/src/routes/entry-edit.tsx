@@ -2,6 +2,7 @@ import { type FormEvent, type JSX, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { getAnalyticsPageStats, type PageStats } from '../api/analytics-client.js'
+import { getAssistCapabilities } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
 import { getEntryCommentSettings, setEntryCommentSettings } from '../api/comments-client.js'
 import type {
@@ -266,6 +267,34 @@ export function EntryEditRoute(): JSX.Element {
   const [workflowBusy, setWorkflowBusy] = useState(false)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+  /**
+   * Whether the assistant has anything to show at all (L20 audit point 16).
+   * `AssistantPanel`/`ClassifyPanel`/`ModerationCheck`/`FaqSchemaPanel` each
+   * render `null` on their own when there is no AI provider — correct for
+   * them individually, but it left the "Assistant" accordion opening on a
+   * blank panel with no explanation. `null` while the one capability check
+   * below is in flight, so the accordion says nothing rather than flashing
+   * an empty-state message it is about to retract.
+   */
+  const [assistAvailable, setAssistAvailable] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (token === null) {
+      setAssistAvailable(false)
+      return
+    }
+    let cancelled = false
+    getAssistCapabilities(token)
+      .then((capabilities) => {
+        if (!cancelled) setAssistAvailable(capabilities.available)
+      })
+      .catch(() => {
+        if (!cancelled) setAssistAvailable(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   useEffect(() => {
     if (isNew) {
@@ -1469,8 +1498,15 @@ export function EntryEditRoute(): JSX.Element {
       {canWrite && token !== null && assistFields.length > 0 && (
         <details className="entry-form__group">
           <summary>{t('entryEdit.assistantSectionLabel')}</summary>
-          {/* L18 task 3. Renders nothing at all on a site with no AI provider —
-              the assistant exists to help with an edit, never to gate it. */}
+          {/* L20 audit point 16: each panel below still renders nothing on
+              its own when there is no AI provider (L18 task 3's rule, kept
+              exactly as written) — this message only fills the gap that left
+              the accordion opening on a blank panel with no explanation. */}
+          {assistAvailable === false && (
+            <Notice tone="info" live="off">
+              <p>{t('entryEdit.assistantSectionEmpty')}</p>
+            </Notice>
+          )}
           <AssistantPanel
             token={token}
             fields={assistFields}
@@ -1513,14 +1549,23 @@ export function EntryEditRoute(): JSX.Element {
       {!isNew && id !== undefined && token !== null && (
         <details className="entry-form__group">
           <summary>{t('entryEdit.translationsSectionLabel')}</summary>
-          <TranslationSwitcher
-            token={token}
-            collection={name}
-            entryId={id}
-            currentLocale={locale}
-            locales={siteLocales}
-            currentValues={values}
-          />
+          {/* L20 audit point 16: `TranslationSwitcher` itself renders nothing
+              on a site with fewer than two locales — this fills the same gap
+              as the assistant message above, for the same reason. */}
+          {siteLocales.length < 2 ? (
+            <Notice tone="info" live="off">
+              <p>{t('entryEdit.translationsSectionEmpty')}</p>
+            </Notice>
+          ) : (
+            <TranslationSwitcher
+              token={token}
+              collection={name}
+              entryId={id}
+              currentLocale={locale}
+              locales={siteLocales}
+              currentValues={values}
+            />
+          )}
         </details>
       )}
 

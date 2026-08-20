@@ -17,9 +17,13 @@ afterEach(() => {
 
 async function goToArticles(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
+  // The "Contenus" nav link is schema-gated (fiche 35's `collectionAction`
+  // visibility condition), so it only appears once the schema fetch that
+  // `<App/>` kicks off on mount resolves — `findByRole` polls for it rather
+  // than assuming it is already there the instant the dashboard heading is.
+  fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
   await screen.findByRole('heading', { name: 'Contenus' })
-  fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
 }
 
 describe('CollectionListRoute', () => {

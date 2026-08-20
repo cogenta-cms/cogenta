@@ -20,7 +20,7 @@ describe('CollectionsRoute', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByRole('heading', { name: 'Contenus' })
 
     expect(await screen.findByText('Articles')).toBeDefined()
@@ -30,7 +30,7 @@ describe('CollectionsRoute', () => {
   it("shows a real entry count per collection, reusing task 4's ?counts=1 (fiche 01 task 7)", async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByRole('heading', { name: 'Contenus' })
 
     // MOCK_ENTRIES holds exactly two `article` entries.
@@ -40,7 +40,7 @@ describe('CollectionsRoute', () => {
   it('creates a new entry in one click from the collections screen (fiche 01 task 7)', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByRole('heading', { name: 'Contenus' })
 
     // More than one readable, createable collection is on screen (`article`

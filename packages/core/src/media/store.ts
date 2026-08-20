@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { type DatabaseHandle, identifier, limit, sql } from '../db/index.js'
 import { CogentaError } from '../errors/index.js'
 import type {
@@ -7,13 +7,26 @@ import type {
   ListMediaOptions,
   MediaAsset,
   MediaPage,
+  MediaSortField,
   MediaStore,
+  ReplaceMediaInput,
   UpdateMediaInput,
 } from './types.js'
 
 const TABLE = 'cogenta_media'
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
+
+/**
+ * Tags are stored as one delimited text column rather than a join table or a
+ * dialect's own JSON type: SQLite, Postgres and MySQL disagree on JSON
+ * containment operators (`@>`, `JSON_CONTAINS`, `json_each`), and a
+ * materialised-path-style delimited string (the same portability trade
+ * ADR-0006 already made for taxonomies) turns "has this tag" into one `LIKE`
+ * every dialect answers identically. `\u0001` rather than a comma: a tag is
+ * free text an editor typed, and a comma is a character they might type too.
+ */
+const TAG_DELIMITER = '\u0001'
 
 export interface DatabaseMediaStoreOptions {
   readonly db: DatabaseHandle
@@ -32,8 +45,31 @@ interface MediaRow {
   decorative_justification: string | null
   focal: string | null
   storage_key: string
+  tags: string | null
+  content_hash: string | null
   created_at: string
   created_by: string | null
+}
+
+/** Every caller that predates tagging/replace still gets a stable, non-empty value. */
+function defaultContentHash(storageKey: string): string {
+  return createHash('sha256').update(storageKey).digest('hex').slice(0, 16)
+}
+
+function serializeTags(tags: readonly string[]): string {
+  const cleaned = tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)
+  if (cleaned.length === 0) return ''
+  return `${TAG_DELIMITER}${cleaned.join(TAG_DELIMITER)}${TAG_DELIMITER}`
+}
+
+function parseTags(raw: string | null): readonly string[] {
+  if (raw === null || raw.length === 0) return []
+  return raw.split(TAG_DELIMITER).filter((tag) => tag.length > 0)
+}
+
+/** Escapes `\`, `%` and `_` so a tag containing them cannot widen its own `LIKE` filter. */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/gu, (char) => `\\${char}`)
 }
 
 function rowToAsset(row: MediaRow): MediaAsset {
@@ -50,6 +86,11 @@ function rowToAsset(row: MediaRow): MediaAsset {
     decorativeJustification: row.decorative_justification,
     focal: row.focal === null ? null : (JSON.parse(row.focal) as FocalPoint),
     storageKey: row.storage_key,
+    tags: parseTags(row.tags),
+    contentHash:
+      row.content_hash === null || row.content_hash === ''
+        ? defaultContentHash(row.storage_key)
+        : row.content_hash,
     createdAt: row.created_at,
     createdBy: row.created_by,
   }
@@ -90,15 +131,31 @@ function validateAltPolicy(alt: string, decorative: boolean, justification: stri
   }
 }
 
-function encodeCursor(row: { createdAt: string; id: string }): string {
-  return Buffer.from(`${row.createdAt}|${row.id}`, 'utf8').toString('base64url')
+const SORT_COLUMNS: Readonly<Record<MediaSortField, string>> = {
+  createdAt: 'created_at',
+  filename: 'filename',
+  size: 'size',
 }
 
-function decodeCursor(cursor: string): { createdAt: string; id: string } | null {
+/** The cursor value in the *comparable* JS type for its column — a string for text columns, a number for the numeric `size` column. */
+function sortValueOf(field: MediaSortField, row: MediaRow): string | number {
+  if (field === 'size') return Number(row.size)
+  if (field === 'filename') return row.filename
+  return row.created_at
+}
+
+function encodeCursor(field: MediaSortField, value: string | number, id: string): string {
+  return Buffer.from(`${field}|${String(value)}|${id}`, 'utf8').toString('base64url')
+}
+
+function decodeCursor(
+  field: MediaSortField,
+  cursor: string,
+): { readonly value: string | number; readonly id: string } | null {
   try {
-    const [createdAt, id] = Buffer.from(cursor, 'base64url').toString('utf8').split('|')
-    if (createdAt === undefined || id === undefined) return null
-    return { createdAt, id }
+    const [cursorField, rawValue, id] = Buffer.from(cursor, 'base64url').toString('utf8').split('|')
+    if (cursorField !== field || rawValue === undefined || id === undefined) return null
+    return { value: field === 'size' ? Number(rawValue) : rawValue, id }
   } catch {
     return null
   }
@@ -142,7 +199,50 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       )
       .catch(() => undefined) // already there
 
+    // Fiche 11: tags and a replace-tracking content hash, added to a table
+    // sites may already have (L2/L10). No portable "add column if not
+    // exists" across all three dialects (SQLite has none at all), so — the
+    // same pattern `@cogenta/auth`'s `tables.ts` uses for its own
+    // after-the-fact columns — this is a `try`, not a check.
+    await db
+      .query(sql`alter table ${table} add column ${identifier('tags', db.dialect)} text`)
+      .catch(() => undefined)
+    await db
+      .query(
+        sql`alter table ${table} add column ${identifier('content_hash', db.dialect)} varchar(64)`,
+      )
+      .catch(() => undefined)
+    await db
+      .query(
+        sql`create index ${identifier('cogenta_media_filename', db.dialect)}
+            on ${table} (filename, id)`,
+      )
+      .catch(() => undefined)
+    await db
+      .query(
+        sql`create index ${identifier('cogenta_media_size', db.dialect)}
+            on ${table} (size, id)`,
+      )
+      .catch(() => undefined)
+
     ready = true
+  }
+
+  function filtersFor(listOptions: {
+    readonly kind?: ListMediaOptions['kind']
+    readonly tag?: string
+    readonly from?: string
+    readonly to?: string
+  }) {
+    const kindFilter = listOptions.kind === undefined ? sql`` : sql`and kind = ${listOptions.kind}`
+    const tagFilter =
+      listOptions.tag === undefined || listOptions.tag.trim().length === 0
+        ? sql``
+        : sql`and tags like ${`%${TAG_DELIMITER}${escapeLikePattern(listOptions.tag.trim())}${TAG_DELIMITER}%`} escape '\\'`
+    const fromFilter =
+      listOptions.from === undefined ? sql`` : sql`and created_at >= ${listOptions.from}`
+    const toFilter = listOptions.to === undefined ? sql`` : sql`and created_at <= ${listOptions.to}`
+    return sql`${kindFilter} ${tagFilter} ${fromFilter} ${toFilter}`
   }
 
   return {
@@ -156,16 +256,18 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
 
       const id = input.id ?? randomUUID()
       const createdAt = new Date().toISOString()
+      const tags = input.tags ?? []
+      const contentHash = input.contentHash ?? defaultContentHash(input.storageKey)
 
       await db.query(sql`
         insert into ${table}
           (id, kind, filename, mime_type, size, width, height, alt, decorative,
-           decorative_justification, focal, storage_key, created_at, created_by)
+           decorative_justification, focal, storage_key, tags, content_hash, created_at, created_by)
         values
           (${id}, ${input.kind}, ${input.filename}, ${input.mimeType}, ${input.size},
            ${input.width ?? null}, ${input.height ?? null}, ${alt}, ${decorative},
            ${justification}, ${input.focal === undefined || input.focal === null ? null : JSON.stringify(input.focal)},
-           ${input.storageKey}, ${createdAt}, ${input.createdBy ?? null})`)
+           ${input.storageKey}, ${serializeTags(tags)}, ${contentHash}, ${createdAt}, ${input.createdBy ?? null})`)
 
       return {
         id,
@@ -180,6 +282,8 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
         decorativeJustification: justification,
         focal: input.focal ?? null,
         storageKey: input.storageKey,
+        tags,
+        contentHash,
         createdAt,
         createdBy: input.createdBy ?? null,
       }
@@ -196,31 +300,51 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       await ensureTable()
 
       const pageSize = Math.min(listOptions.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
-      const cursor = listOptions.cursor === undefined ? null : decodeCursor(listOptions.cursor)
+      const sortField = listOptions.sort ?? 'createdAt'
+      const direction = listOptions.direction ?? 'desc'
+      const sortColumn = identifier(SORT_COLUMNS[sortField], db.dialect)
+      const cmp = direction === 'desc' ? sql`<` : sql`>`
+      const order = direction === 'desc' ? sql`desc` : sql`asc`
 
-      const kindFilter =
-        listOptions.kind === undefined ? sql`` : sql`and kind = ${listOptions.kind}`
+      const cursor =
+        listOptions.cursor === undefined ? null : decodeCursor(sortField, listOptions.cursor)
+
+      const filters = filtersFor(listOptions)
       const cursorFilter =
         cursor === null
           ? sql``
-          : sql`and (created_at < ${cursor.createdAt}
-                 or (created_at = ${cursor.createdAt} and id < ${cursor.id}))`
+          : sql`and (${sortColumn} ${cmp} ${cursor.value}
+                 or (${sortColumn} = ${cursor.value} and id ${cmp} ${cursor.id}))`
 
       const result = await db.query<MediaRow>(sql`
         select * from ${table}
-        where 1 = 1 ${kindFilter} ${cursorFilter}
-        order by created_at desc, id desc
+        where 1 = 1 ${filters} ${cursorFilter}
+        order by ${sortColumn} ${order}, id ${order}
         limit ${limit(pageSize + 1)}`)
 
       const hasMore = result.rows.length > pageSize
-      const page = result.rows.slice(0, pageSize).map(rowToAsset)
-      const last = page[page.length - 1]
+      const rows = result.rows.slice(0, pageSize)
+      const page = rows.map(rowToAsset)
+      const lastRow = rows[rows.length - 1]
 
       return {
         items: page,
         hasMore,
-        nextCursor: hasMore && last !== undefined ? encodeCursor(last) : null,
+        nextCursor:
+          hasMore && lastRow !== undefined
+            ? encodeCursor(sortField, sortValueOf(sortField, lastRow), lastRow.id)
+            : null,
       }
+    },
+
+    count: async (
+      listOptions: Omit<ListMediaOptions, 'limit' | 'cursor'> = {},
+    ): Promise<number> => {
+      await ensureTable()
+      const filters = filtersFor(listOptions)
+      const result = await db.query<{ c: number | string }>(sql`
+        select count(*) as c from ${table} where 1 = 1 ${filters}`)
+      return Number(result.rows[0]?.c ?? 0)
     },
 
     update: async (id: string, input: UpdateMediaInput): Promise<MediaAsset> => {
@@ -244,12 +368,15 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
             ? null
             : JSON.stringify(input.focal)
 
+      const tags = input.tags === undefined ? current.tags : serializeTags(input.tags)
+
       await db.query(sql`
         update ${table}
         set alt = ${alt},
             decorative = ${decorative},
             decorative_justification = ${justification},
-            focal = ${focal}
+            focal = ${focal},
+            tags = ${tags}
         where id = ${id}`)
 
       return rowToAsset({
@@ -258,6 +385,34 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
         decorative,
         decorative_justification: justification,
         focal,
+        tags,
+      })
+    },
+
+    replace: async (id: string, input: ReplaceMediaInput): Promise<MediaAsset> => {
+      await ensureTable()
+      const existing = await db.query<MediaRow>(sql`select * from ${table} where id = ${id}`)
+      const current = existing.rows[0]
+      if (current === undefined) throw notFound(id)
+
+      await db.query(sql`
+        update ${table}
+        set mime_type = ${input.mimeType},
+            size = ${input.size},
+            width = ${input.width ?? null},
+            height = ${input.height ?? null},
+            storage_key = ${input.storageKey},
+            content_hash = ${input.contentHash}
+        where id = ${id}`)
+
+      return rowToAsset({
+        ...current,
+        mime_type: input.mimeType,
+        size: input.size,
+        width: input.width ?? null,
+        height: input.height ?? null,
+        storage_key: input.storageKey,
+        content_hash: input.contentHash,
       })
     },
 

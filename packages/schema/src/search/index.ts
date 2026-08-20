@@ -13,7 +13,7 @@ import type { SearchDriver } from './types.js'
  * state it asks for are the only ones it can be given.
  */
 
-export { extractBlockText, extractRichText, searchDocumentFor } from './extract.js'
+export { extractBlockText, extractRichText, searchDocumentFor, titleOf } from './extract.js'
 export type { MysqlSearchOptions } from './mysql.js'
 export { createMysqlSearch } from './mysql.js'
 export type { PostgresSearchOptions } from './postgres.js'

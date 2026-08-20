@@ -80,6 +80,16 @@ export interface MediaAsset {
   readonly url?: string | undefined
   /** Video only: the still shown before playback. */
   readonly poster?: string | undefined
+  /**
+   * A short, stable digest of the current bytes (fiche 11 task 4). Folded
+   * into every `/_image` URL as `&v=` when present. `/_image?id=…` is
+   * otherwise a stable URL under a year-long `Cache-Control: immutable`
+   * (L10 task 5) — replacing the original in place (`MediaStore.replace`)
+   * changes nothing a visitor's browser already cached until the URL itself
+   * changes too. Absent is fully backward compatible: no `&v=` is added,
+   * exactly today's behaviour. Added in `theme@1.2`.
+   */
+  readonly version?: string | undefined
 }
 
 export interface Size {

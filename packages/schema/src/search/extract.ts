@@ -144,7 +144,7 @@ function extractZones(zones: BlockZones): string {
  */
 const TITLE_FIELD_PRIORITY = ['title', 'name', 'label'] as const
 
-function titleOf(collection: CollectionDefinition, entry: ContentEntry): string {
+export function titleOf(collection: CollectionDefinition, entry: ContentEntry): string {
   for (const name of TITLE_FIELD_PRIORITY) {
     const field = collection.fields[name]
     if (field?.kind !== 'text') continue

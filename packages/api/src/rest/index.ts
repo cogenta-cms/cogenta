@@ -81,6 +81,8 @@ export type {
 export { createMediaRouter, variantKeyFor } from './media-router.js'
 export type { MenuItemHealth, MenuRouter, MenuRouterOptions } from './menu-router.js'
 export { createMenuRouter } from './menu-router.js'
+export type { MultipartFile, MultipartFormData } from './multipart.js'
+export { extractBoundary, isMultipartFormData, parseMultipartFormData } from './multipart.js'
 export type { NotFoundRouter, NotFoundRouterOptions } from './not-found-router.js'
 export { createNotFoundRouter } from './not-found-router.js'
 export type { OpsStatusRouter, OpsStatusRouterOptions, TrashStatus } from './ops-status-router.js'

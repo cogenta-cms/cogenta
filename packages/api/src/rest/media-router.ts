@@ -1,14 +1,21 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   CogentaError,
   describeContainer,
+  type FocalPoint,
+  hasGpsData,
   MEDIA_KINDS,
   type MediaAsset,
   type MediaKind,
+  type MediaSortField,
   type MediaStore,
+  readExif,
   type StorageDriver,
   sniffImageFormat,
+  stripGpsFromJpeg,
 } from '@cogenta/core'
+import type { CollectionDefinition, ContentStore, MediaUsageReport } from '@cogenta/schema'
+import { findMediaUsage } from '@cogenta/schema'
 import { z } from 'zod'
 import type { Actor } from '../types.js'
 import {
@@ -18,10 +25,12 @@ import {
   type RestRequest,
   type RestResponse,
 } from './http.js'
+import { isMultipartFormData, type MultipartFile, type MultipartFormData } from './multipart.js'
 import { single } from './query.js'
 
 /**
- * `/api/media` — upload, list, read, edit and delete media assets.
+ * `/api/media` — upload, list, read, edit, replace, tag and delete media
+ * assets (fiche 11 — the media library rewrite).
  *
  * Every route here requires an authenticated actor (`actor.id !== null`):
  * there is no per-collection permission model for media the way there is for
@@ -29,12 +38,14 @@ import { single } from './query.js'
  * tightened once L4's agent tool permissions land (contract C already names
  * `media.read`/`media.write` scopes for that).
  *
- * Uploads travel as JSON with the file base64-encoded, not multipart: the
- * REST transport's own contract is "a request in, a body already parsed by
- * the transport" (`http.ts`), and staying inside that contract avoids a
- * multipart parser (a new dependency, R9) and a change to how every other
- * route's body reaches this layer, at the cost of ~33% more bytes on the
- * wire — an acceptable trade for an admin-only upload path.
+ * **Two upload transports, both live.** `multipart/form-data` is the real
+ * one (fiche 11 task 1) — a `FormData` upload streams to the server without
+ * the ~33% base64 inflation the JSON path pays, and is what every admin
+ * upload uses from here on. The legacy JSON-with-base64-`data` body (L2's
+ * original shape) is still accepted: nothing forces an existing headless
+ * client that POSTs plain JSON to learn multipart, and refusing it would be
+ * a breaking change this rewrite does not need to make. `upload()` tells
+ * the two apart structurally (`isMultipartFormData`), not by header.
  */
 
 /** The intrinsic size of an image, in its own pixels. */
@@ -80,6 +91,27 @@ export interface MediaImageProcessor {
   variantNames(intrinsic: ImageSize): readonly string[]
 }
 
+/**
+ * What `GET /api/media/{id}/usage` and the bulk-delete warning need: a
+ * bounded scan across the site's real content (`@cogenta/schema`'s
+ * `findMediaUsage`, fiche 11 task 3). Optional, the same way
+ * `TaxonomyUsageSource` is optional on `createTaxonomyRouter` — a caller
+ * with no collections wired still gets a working media library, just with
+ * every usage check answering "nothing found" rather than "not checked".
+ */
+export interface MediaUsageSource {
+  readonly collections: readonly CollectionDefinition[]
+  readonly storeFor: (collection: CollectionDefinition) => ContentStore
+  /** Caps one usage scan. Defaults to `findMediaUsage`'s own default (5000). */
+  readonly maxEntries?: number
+}
+
+/** What the admin shows *before* a file picker opens (fiche 11 task 1). */
+export interface MediaUploadLimits {
+  readonly maxUploadBytes?: number
+  readonly acceptedMimeTypes?: readonly string[]
+}
+
 export interface MediaRouterOptions {
   readonly store: MediaStore
   readonly storage: StorageDriver
@@ -90,6 +122,9 @@ export interface MediaRouterOptions {
    * uploads and serves originals exactly as before.
    */
   readonly images?: MediaImageProcessor
+  /** Wires `GET .../usage` and the informed-deletion warning. Absent: usage always reports empty. */
+  readonly usage?: MediaUsageSource
+  readonly limits?: MediaUploadLimits
   /** Mount point. `/api/media` by default. */
   readonly basePath?: string
 }
@@ -100,15 +135,36 @@ export interface MediaRouter {
 
 const DEFAULT_BASE_PATH = '/api/media'
 
-// Base64 costs ~33% more bytes than the original, so this bounds the decoded
-// size to roughly 15MB — generous for a web image, small enough that a
-// request body is never the resource exhaustion vector.
-const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+/**
+ * The default cap on a *decoded* upload, whichever transport carried it.
+ *
+ * Generous enough for a real photo report or a short video, small enough
+ * that a request body is never the resource-exhaustion vector — and
+ * configurable per site via `MediaRouterOptions.limits`, since what a shared
+ * host's own body-size limit allows varies (fiche 11 task 1: "limites lues
+ * depuis la configuration").
+ */
+const DEFAULT_MAX_UPLOAD_BYTES = 250 * 1024 * 1024
+
+const DEFAULT_ACCEPTED_MIME_TYPES: readonly string[] = [
+  'image/avif',
+  'image/webp',
+  'image/jpeg',
+  'image/png',
+  'video/mp4',
+  'video/webm',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'application/pdf',
+]
 
 // How many of the most recent assets `q` scans in memory. `MediaStore.list`
 // has no substring filter of its own; this bounds the cost of one without a
 // migration, at the price of never finding an old asset outside this window.
 const MEDIA_SEARCH_SCAN_LIMIT = 200
+
+const MEDIA_SORT_FIELDS: readonly MediaSortField[] = ['createdAt', 'filename', 'size']
 
 const focalSchema = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })
 
@@ -121,6 +177,9 @@ const uploadSchema = z.object({
   decorative: z.boolean().optional(),
   decorativeJustification: z.string().max(2000).optional(),
   focal: focalSchema.optional(),
+  tags: z.array(z.string().min(1).max(100)).max(50).optional(),
+  /** Strips EXIF GPS coordinates from a JPEG original. Defaults to `true` — see the module doc. */
+  stripGps: z.boolean().optional(),
 })
 
 const updateSchema = z.object({
@@ -128,6 +187,16 @@ const updateSchema = z.object({
   decorative: z.boolean().optional(),
   decorativeJustification: z.string().max(2000).nullable().optional(),
   focal: focalSchema.nullable().optional(),
+  tags: z.array(z.string().min(1).max(100)).max(50).optional(),
+})
+
+const bulkIdsSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+})
+
+const bulkTagSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+  tag: z.string().min(1).max(100),
 })
 
 function decode<TSchema extends z.ZodType>(schema: TSchema, body: unknown): z.infer<TSchema> {
@@ -164,7 +233,28 @@ function sanitiseFilename(filename: string): string {
   return cleaned.length === 0 ? 'file' : cleaned
 }
 
-function decodeBase64(data: string): Buffer {
+/** `kind` from a MIME type — the same three-way split the admin's own client-side helper uses. */
+function mediaKindFromMime(mimeType: string): MediaKind {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'file'
+}
+
+/** A short, stable digest of the bytes actually stored — never the declared type or filename, which say nothing about a replace. */
+function hashBytes(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex').slice(0, 16)
+}
+
+function tooLargeError(maxBytes: number): CogentaError {
+  return new CogentaError({
+    code: 'MEDIA_INVALID',
+    message: `The file is larger than the ${Math.floor(maxBytes / (1024 * 1024))}MB this route accepts.`,
+    hint: 'Upload a smaller file, or ask an operator to raise the configured limit.',
+  })
+}
+
+function decodeBase64(data: string, maxBytes: number): Buffer {
   const buffer = Buffer.from(data, 'base64')
   // A non-base64 string decodes to *something* rather than throwing, so the
   // only reliable check is round-tripping it back and comparing lengths.
@@ -175,13 +265,7 @@ function decodeBase64(data: string): Buffer {
       hint: 'Encode the file contents as base64 before sending them.',
     })
   }
-  if (buffer.length > MAX_UPLOAD_BYTES) {
-    throw new CogentaError({
-      code: 'MEDIA_INVALID',
-      message: `The file is larger than the ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))}MB this route accepts.`,
-      hint: 'Upload a smaller file.',
-    })
-  }
+  if (buffer.length > maxBytes) throw tooLargeError(maxBytes)
   return buffer
 }
 
@@ -244,9 +328,92 @@ export function variantKeyFor(id: string, name: string): string {
   return `media/${id}/variants/${sanitiseFilename(name)}`
 }
 
+/** What every upload path (multipart or legacy JSON) converges on before the shared write logic runs. */
+interface NormalisedUpload {
+  readonly kind: MediaKind
+  readonly filename: string
+  readonly mimeType: string
+  readonly bytes: Buffer
+  readonly alt: string
+  readonly decorative: boolean
+  readonly decorativeJustification: string | undefined
+  readonly focal: FocalPoint | undefined
+  readonly tags: readonly string[]
+  readonly stripGps: boolean
+}
+
+function parseFocalField(raw: string): FocalPoint | undefined {
+  if (raw.trim().length === 0) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new CogentaError({
+      code: 'MEDIA_INVALID',
+      message: 'The "focal" field is not valid JSON.',
+      hint: 'Send `{"x":0..1,"y":0..1}` as a JSON string.',
+    })
+  }
+  const result = focalSchema.safeParse(parsed)
+  if (!result.success) {
+    throw new CogentaError({
+      code: 'MEDIA_INVALID',
+      message: 'The "focal" field is not a usable focal point.',
+      hint: 'Send `{"x":0..1,"y":0..1}`.',
+    })
+  }
+  return result.data
+}
+
+function parseBooleanField(raw: string | undefined, fallback: boolean): boolean {
+  if (raw === undefined) return fallback
+  return raw === 'true' || raw === '1'
+}
+
+function normaliseMultipartUpload(form: MultipartFormData): NormalisedUpload {
+  const file = form.files.find((candidate: MultipartFile) => candidate.fieldName === 'file')
+  if (file === undefined) {
+    throw new CogentaError({
+      code: 'MEDIA_INVALID',
+      message: 'No file part named "file" was found in the upload.',
+      hint: 'Send the file under a field named "file" in the multipart body.',
+    })
+  }
+
+  const kindField = form.fields['kind']
+  const kind =
+    kindField !== undefined && (MEDIA_KINDS as readonly string[]).includes(kindField)
+      ? (kindField as MediaKind)
+      : mediaKindFromMime(file.mimeType)
+
+  const tagsField = form.fields['tags']
+  const tags =
+    tagsField === undefined || tagsField.trim().length === 0
+      ? []
+      : tagsField
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0)
+
+  return {
+    kind,
+    filename: file.filename,
+    mimeType: file.mimeType,
+    bytes: Buffer.from(file.data),
+    alt: form.fields['alt'] ?? '',
+    decorative: parseBooleanField(form.fields['decorative'], false),
+    decorativeJustification: form.fields['decorativeJustification'],
+    focal: form.fields['focal'] === undefined ? undefined : parseFocalField(form.fields['focal']),
+    tags,
+    stripGps: parseBooleanField(form.fields['stripGps'], true),
+  }
+}
+
 export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
   const { store, storage } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
+  const maxUploadBytes = options.limits?.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES
+  const acceptedMimeTypes = options.limits?.acceptedMimeTypes ?? DEFAULT_ACCEPTED_MIME_TYPES
 
   return {
     handle: async (request, actor) => {
@@ -260,21 +427,64 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
 
   async function route(request: RestRequest, actor: Actor): Promise<RestResponse> {
     const segments = segmentsOf(request.path, basePath)
-    if (segments === null || segments.length > 1) throw noRoute()
+    if (segments === null) throw noRoute()
 
     const method = request.method.toUpperCase()
-    const [id] = segments
 
-    if (id === undefined) {
+    if (segments.length === 0) {
       if (method === 'GET') return list(request, actor)
       if (method === 'POST') return upload(request, actor)
       return methodNotAllowed(['GET', 'POST'])
     }
 
-    if (method === 'GET') return read(id, actor)
-    if (method === 'PATCH' || method === 'PUT') return update(id, request, actor)
-    if (method === 'DELETE') return remove(id, actor)
-    return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
+    const [first, second] = segments
+
+    if (first === '-') {
+      if (second === 'limits') {
+        if (method !== 'GET') return methodNotAllowed(['GET'])
+        requireActor(actor)
+        return jsonResponse(200, { data: { maxUploadBytes, acceptedMimeTypes } })
+      }
+      if (second === 'bulk-delete') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return bulkDelete(request, actor)
+      }
+      if (second === 'bulk-tag') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return bulkTag(request, actor, 'add')
+      }
+      if (second === 'bulk-untag') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return bulkTag(request, actor, 'remove')
+      }
+      throw noRoute()
+    }
+
+    if (segments.length === 1) {
+      const [id] = segments as [string]
+      if (method === 'GET') return read(id, actor)
+      if (method === 'PATCH' || method === 'PUT') return update(id, request, actor)
+      if (method === 'DELETE') return remove(id, actor)
+      return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
+    }
+
+    if (segments.length === 2) {
+      const [id, sub] = segments as [string, string]
+      if (sub === 'usage') {
+        if (method !== 'GET') return methodNotAllowed(['GET'])
+        return usageOf(id, actor)
+      }
+      if (sub === 'exif') {
+        if (method !== 'GET') return methodNotAllowed(['GET'])
+        return exifOf(id, actor)
+      }
+      if (sub === 'replace') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return replace(id, request, actor)
+      }
+    }
+
+    throw noRoute()
   }
 
   async function list(request: RestRequest, actor: Actor): Promise<RestResponse> {
@@ -297,6 +507,32 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     }
     const cursor = single(request.query, 'after')
     const q = single(request.query, 'q')
+    const tag = single(request.query, 'tag')
+
+    const from = parseDateBound('from', single(request.query, 'from'))
+    const to = parseDateBound('to', single(request.query, 'to'))
+
+    const sortRaw = single(request.query, 'sort')
+    if (sortRaw !== undefined && !(MEDIA_SORT_FIELDS as readonly string[]).includes(sortRaw)) {
+      throw queryError(
+        'sort',
+        'is not a sort field',
+        `Use one of: ${MEDIA_SORT_FIELDS.join(', ')}.`,
+      )
+    }
+    const sort = sortRaw as MediaSortField | undefined
+    const directionRaw = single(request.query, 'direction')
+    if (directionRaw !== undefined && directionRaw !== 'asc' && directionRaw !== 'desc') {
+      throw queryError('direction', 'is not a sort direction', 'Use "asc" or "desc".')
+    }
+    const direction = directionRaw as 'asc' | 'desc' | undefined
+
+    const commonFilters = {
+      ...(kind === undefined ? {} : { kind: kind as MediaKind }),
+      ...(tag === undefined ? {} : { tag }),
+      ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
+    }
 
     // No dedicated index for media: `q` is a substring match on filename and
     // alt text, applied in memory over a bounded scan from the store. Good
@@ -305,10 +541,7 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     // engine, built for content, not for a handful of asset fields.
     if (q !== undefined && q.trim().length > 0) {
       const needle = q.trim().toLowerCase()
-      const scanned = await store.list({
-        ...(kind === undefined ? {} : { kind: kind as MediaKind }),
-        limit: MEDIA_SEARCH_SCAN_LIMIT,
-      })
+      const scanned = await store.list({ ...commonFilters, limit: MEDIA_SEARCH_SCAN_LIMIT })
       const matches = scanned.items.filter(
         (asset) =>
           asset.filename.toLowerCase().includes(needle) || asset.alt.toLowerCase().includes(needle),
@@ -316,29 +549,73 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
       const pageSize = limit ?? matches.length
       return jsonResponse(200, {
         data: matches.slice(0, pageSize),
-        page: { hasMore: false, nextCursor: null },
+        page: { hasMore: false, nextCursor: null, total: matches.length },
       })
     }
 
-    const page = await store.list({
-      ...(kind === undefined ? {} : { kind: kind as MediaKind }),
-      ...(limit === undefined ? {} : { limit }),
-      ...(cursor === undefined ? {} : { cursor }),
-    })
+    const [page, total] = await Promise.all([
+      store.list({
+        ...commonFilters,
+        ...(sort === undefined ? {} : { sort }),
+        ...(direction === undefined ? {} : { direction }),
+        ...(limit === undefined ? {} : { limit }),
+        ...(cursor === undefined ? {} : { cursor }),
+      }),
+      store.count(commonFilters),
+    ])
     return jsonResponse(200, {
       data: page.items,
-      page: { hasMore: page.hasMore, nextCursor: page.nextCursor },
+      page: { hasMore: page.hasMore, nextCursor: page.nextCursor, total },
     })
   }
 
   async function upload(request: RestRequest, actor: Actor): Promise<RestResponse> {
     requireActor(actor)
-    const input = decode(uploadSchema, request.body)
-    const bytes = decodeBase64(input.data)
+
+    const normalised = isMultipartFormData(request.body)
+      ? normaliseMultipartUpload(request.body)
+      : legacyJsonUpload(request.body)
+
+    return finishUpload(normalised, actor)
+  }
+
+  function legacyJsonUpload(body: unknown): NormalisedUpload {
+    const input = decode(uploadSchema, body)
+    const bytes = decodeBase64(input.data, maxUploadBytes)
+    return {
+      kind: input.kind,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      bytes,
+      alt: input.alt ?? '',
+      decorative: input.decorative ?? false,
+      decorativeJustification: input.decorativeJustification,
+      focal: input.focal,
+      tags: input.tags ?? [],
+      stripGps: input.stripGps ?? true,
+    }
+  }
+
+  async function finishUpload(input: NormalisedUpload, actor: Actor): Promise<RestResponse> {
+    if (input.bytes.length > maxUploadBytes) throw tooLargeError(maxUploadBytes)
+
     // For an image this is the type the *bytes* say, not the one the uploader
     // typed — the asset record and every response built from it use it, so a
     // disguised type cannot travel back out as a `Content-Type`.
-    const mimeType = verifyRealType(input.kind, bytes) ?? input.mimeType
+    const mimeType = verifyRealType(input.kind, input.bytes) ?? input.mimeType
+
+    // GPS scrub, before anything else touches the bytes (fiche 11 task 6):
+    // the stored original and every variant derived from it must carry
+    // neither, and this is the one point every upload path passes through.
+    let bytes = input.bytes
+    if (
+      input.stripGps &&
+      input.kind === 'image' &&
+      sniffImageFormat(bytes) === 'jpeg' &&
+      hasGpsData(bytes)
+    ) {
+      bytes = Buffer.from(stripGpsFromJpeg(bytes))
+    }
 
     const id = randomUUID()
     const storageKey = storageKeyFor(id, input.filename)
@@ -378,13 +655,15 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         mimeType,
         size: bytes.length,
         ...(intrinsic === null ? {} : { width: intrinsic.width, height: intrinsic.height }),
-        alt: input.alt ?? '',
-        ...(input.decorative === undefined ? {} : { decorative: input.decorative }),
+        alt: input.alt,
+        decorative: input.decorative,
         ...(input.decorativeJustification === undefined
           ? {}
           : { decorativeJustification: input.decorativeJustification }),
         ...(input.focal === undefined ? {} : { focal: input.focal }),
         storageKey,
+        tags: input.tags,
+        contentHash: hashBytes(bytes),
         createdBy: actor.id,
       })
     } catch (error) {
@@ -418,14 +697,163 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         ? {}
         : { decorativeJustification: input.decorativeJustification }),
       ...(input.focal === undefined ? {} : { focal: input.focal }),
+      ...(input.tags === undefined ? {} : { tags: input.tags }),
     })
     return jsonResponse(200, { data: asset })
+  }
+
+  /**
+   * `POST /api/media/{id}/replace` (fiche 11 task 4) — overwrites the file
+   * behind an id, keeping every reference to it working. Multipart-only:
+   * this is never the first upload of something, so the base64 fallback
+   * `upload()` keeps for headless clients has no equivalent need here.
+   */
+  async function replace(id: string, request: RestRequest, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const existing = await store.get(id)
+    if (existing === null) throw notFound(id)
+
+    if (!isMultipartFormData(request.body)) {
+      throw new CogentaError({
+        code: 'MEDIA_INVALID',
+        message: 'Replacing a file requires a multipart/form-data request.',
+        hint: 'Send the new file under a field named "file".',
+      })
+    }
+    const file = request.body.files.find((candidate) => candidate.fieldName === 'file')
+    if (file === undefined) {
+      throw new CogentaError({
+        code: 'MEDIA_INVALID',
+        message: 'No file part named "file" was found in the request.',
+        hint: 'Send the replacement file under a field named "file".',
+      })
+    }
+
+    let bytes = Buffer.from(file.data)
+    if (bytes.length > maxUploadBytes) throw tooLargeError(maxUploadBytes)
+
+    // A replace keeps the asset's identity, including its `kind` — a photo
+    // stays a photo. Swapping a video in over an image id would strand every
+    // page that renders it with `ctx.image()`, not `<video>`.
+    const declaredKind = mediaKindFromMime(file.mimeType)
+    if (declaredKind !== existing.kind) {
+      throw new CogentaError({
+        code: 'MEDIA_INVALID',
+        message: `This asset is a${existing.kind === 'image' ? 'n' : ''} ${existing.kind}; the replacement file is a${declaredKind === 'image' ? 'n' : ''} ${declaredKind}.`,
+        hint: 'Replace a file with another of the same kind, or delete and upload a new asset.',
+      })
+    }
+
+    const mimeType = verifyRealType(existing.kind, bytes) ?? file.mimeType
+    const stripGps = parseBooleanField(request.body.fields['stripGps'], true)
+    if (
+      stripGps &&
+      existing.kind === 'image' &&
+      sniffImageFormat(bytes) === 'jpeg' &&
+      hasGpsData(bytes)
+    ) {
+      bytes = Buffer.from(stripGpsFromJpeg(bytes))
+    }
+
+    // A new storage key, not an overwrite of the old one: `/_image` and
+    // `/api/media/{id}/file` are long-cached (L10 task 5's year-long
+    // `Cache-Control: immutable`), and `contentHash` — folded into every
+    // rendered `<img>` URL as `&v=` — is what actually busts that cache. A
+    // key that never changes would let the old bytes keep serving from any
+    // cache that already holds them, for up to a year, however hard the
+    // database row changed underneath it (the piège this task exists for).
+    const contentHash = hashBytes(bytes)
+    const storageKey = storageKeyFor(`${id}/${contentHash}`, file.filename)
+    await storage.put(storageKey, bytes, { contentType: mimeType })
+
+    const oldStorageKey = existing.storageKey
+    const oldVariantNames =
+      options.images !== undefined && existing.width !== null && existing.height !== null
+        ? options.images.variantNames({ width: existing.width, height: existing.height })
+        : []
+
+    let intrinsic: ImageSize | null = null
+    const written: string[] = []
+    if (options.images !== undefined && existing.kind === 'image') {
+      try {
+        intrinsic = await options.images.probe(bytes)
+        if (intrinsic !== null) {
+          for (const variant of await options.images.variants(bytes, intrinsic)) {
+            const key = variantKeyFor(id, variant.name)
+            await storage.put(key, Buffer.from(variant.bytes), {
+              contentType: variant.contentType,
+            })
+            written.push(key)
+          }
+        }
+      } catch {
+        for (const key of written) await storage.delete(key).catch(() => undefined)
+        written.length = 0
+      }
+    }
+
+    const updated = await store.replace(id, {
+      mimeType,
+      size: bytes.length,
+      ...(intrinsic === null ? {} : { width: intrinsic.width, height: intrinsic.height }),
+      storageKey,
+      contentHash,
+    })
+
+    // The old original and its old-size variants are no longer referenced by
+    // this asset's row; cleaning them up is what keeps a repeatedly replaced
+    // logo from leaking storage forever. Best-effort: an old blob a delete
+    // fails to remove is a storage cost, never a correctness problem — the
+    // row already points at the new key.
+    await storage.delete(oldStorageKey).catch(() => undefined)
+    for (const name of oldVariantNames) {
+      await storage.delete(variantKeyFor(id, name)).catch(() => undefined)
+    }
+
+    return jsonResponse(200, { data: updated })
+  }
+
+  /** `GET /api/media/{id}/exif` — read-only, image-only, JPEG-only (fiche 11 task 6). */
+  async function exifOf(id: string, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const asset = await store.get(id)
+    if (asset === null) throw notFound(id)
+    if (asset.kind !== 'image') return jsonResponse(200, { data: null })
+
+    const bytes = await readStorageBytes(storage, asset.storageKey)
+    const exif = readExif(bytes)
+    return jsonResponse(200, { data: exif })
+  }
+
+  /** `GET /api/media/{id}/usage` (fiche 11 task 3). */
+  async function usageOf(id: string, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const asset = await store.get(id)
+    if (asset === null) throw notFound(id)
+    return jsonResponse(200, { data: await scanUsage(id) })
+  }
+
+  async function scanUsage(id: string): Promise<MediaUsageReport> {
+    if (options.usage === undefined) {
+      return { matches: [], scannedEntries: 0, truncated: false }
+    }
+    return findMediaUsage(id, {
+      collections: options.usage.collections,
+      storeFor: options.usage.storeFor,
+      ...(options.usage.maxEntries === undefined ? {} : { maxEntries: options.usage.maxEntries }),
+    })
   }
 
   async function remove(id: string, actor: Actor): Promise<RestResponse> {
     requireActor(actor)
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
+    await deleteAssetFiles(asset)
+    await store.delete(id)
+    return jsonResponse(204, null)
+  }
+
+  async function deleteAssetFiles(asset: MediaAsset): Promise<void> {
     await storage.delete(asset.storageKey)
 
     // The renditions go with the original. Their names are recomputed from
@@ -435,13 +863,95 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     if (options.images !== undefined && asset.width !== null && asset.height !== null) {
       const names = options.images.variantNames({ width: asset.width, height: asset.height })
       for (const name of names) {
-        await storage.delete(variantKeyFor(id, name)).catch(() => undefined)
+        await storage.delete(variantKeyFor(asset.id, name)).catch(() => undefined)
+      }
+    }
+  }
+
+  /**
+   * `POST /api/media/-/bulk-delete` (fiche 11 task 3) — deletes every id it
+   * can, reporting the rest. Never a single all-or-nothing transaction: an
+   * admin selecting thirty assets should not lose the twenty-nine good
+   * deletions because one id was already gone.
+   */
+  async function bulkDelete(request: RestRequest, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(bulkIdsSchema, request.body)
+
+    const deleted: string[] = []
+    const failed: { id: string; code: string; message: string }[] = []
+
+    for (const id of input.ids) {
+      try {
+        const asset = await store.get(id)
+        if (asset === null) throw notFound(id)
+        await deleteAssetFiles(asset)
+        await store.delete(id)
+        deleted.push(id)
+      } catch (error) {
+        failed.push({
+          id,
+          code: error instanceof CogentaError ? error.code : 'INTERNAL',
+          message: error instanceof CogentaError ? error.message : 'Could not delete this asset.',
+        })
       }
     }
 
-    await store.delete(id)
-    return jsonResponse(204, null)
+    return jsonResponse(200, { data: { deleted, failed } })
   }
+
+  /** `POST /api/media/-/bulk-tag` and `.../bulk-untag` (fiche 11 task 5). */
+  async function bulkTag(
+    request: RestRequest,
+    actor: Actor,
+    mode: 'add' | 'remove',
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(bulkTagSchema, request.body)
+
+    const updated: MediaAsset[] = []
+    const failed: { id: string; code: string; message: string }[] = []
+
+    for (const id of input.ids) {
+      try {
+        const asset = await store.get(id)
+        if (asset === null) throw notFound(id)
+        const nextTags =
+          mode === 'add'
+            ? asset.tags.includes(input.tag)
+              ? asset.tags
+              : [...asset.tags, input.tag]
+            : asset.tags.filter((tag) => tag !== input.tag)
+        updated.push(await store.update(id, { tags: nextTags }))
+      } catch (error) {
+        failed.push({
+          id,
+          code: error instanceof CogentaError ? error.code : 'INTERNAL',
+          message: error instanceof CogentaError ? error.message : 'Could not tag this asset.',
+        })
+      }
+    }
+
+    return jsonResponse(200, { data: { updated, failed } })
+  }
+}
+
+/** Reads a `StorageDriver` object fully into memory — only ever for a single already-uploaded original, never a public path. */
+async function readStorageBytes(storage: StorageDriver, key: string): Promise<Buffer> {
+  const stream = await storage.get(key)
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) {
+    chunks.push(chunk as Buffer)
+  }
+  return Buffer.concat(chunks)
+}
+
+function parseDateBound(parameter: 'from' | 'to', raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined
+  if (Number.isNaN(Date.parse(raw))) {
+    throw queryError(parameter, 'is not a usable date', 'Pass an ISO 8601 date or date-time.')
+  }
+  return raw
 }
 
 function notFound(id: string): CogentaError {
@@ -457,7 +967,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'MEDIA_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Media routes are /api/media and /api/media/{id}.',
+    hint: 'Media routes are /api/media, /api/media/{id} and a handful of sub-resources — see the router source.',
   })
 }
 

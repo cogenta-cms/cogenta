@@ -1,7 +1,7 @@
 import type { DatabaseHandle } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { SearchDriver } from '../../src/search/types.js'
-import { withSearchIndexing } from '../../src/store/search-indexing.js'
+import { reindexAll, withSearchIndexing } from '../../src/store/search-indexing.js'
 import { type ContentStore, createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { CollectionDefinition } from '../../src/types.js'
@@ -142,6 +142,28 @@ export function runSearchIndexingContract(
 
       expect(await idsFor('alpaca')).toEqual([entry.id])
       expect(await idsFor('llama')).toEqual([])
+    })
+
+    it('reindexAll rebuilds the index for entries that predate the write path seeing them', async () => {
+      // The scenario the "Réindexer la recherche" tool (fiche 24 task 3)
+      // exists for: content written before the index ever heard about it —
+      // simulated here by writing directly through the unwrapped store, then
+      // clearing whatever the index does have, and proving `reindexAll` is
+      // what repopulates it, not another write.
+      const bare = createContentStore({ db: harness.db, collection: INDEXED_ARTICLE })
+      const first = await bare.create({ values: { title: 'Preexisting elephant', body: 'x' } })
+      await bare.publish(first.id)
+      const second = await bare.create({ values: { title: 'Preexisting giraffe', body: 'x' } })
+      await bare.publish(second.id)
+
+      await harness.index.clear()
+      expect(await idsFor('elephant')).toEqual([])
+
+      const count = await reindexAll(bare, { collection: INDEXED_ARTICLE, index: harness.index })
+
+      expect(count).toBe(2)
+      expect(await idsFor('elephant')).toEqual([first.id])
+      expect(await idsFor('giraffe')).toEqual([second.id])
     })
 
     it('a failing index never fails the content write, and reports through onError', async () => {

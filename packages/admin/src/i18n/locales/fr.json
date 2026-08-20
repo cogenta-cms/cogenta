@@ -169,7 +169,9 @@
     "settings": "Paramètres",
     "opsSettings": "Sécurité & webhooks",
     "sitePlan": "Plan du site",
-    "marketplace": "Marketplace"
+    "marketplace": "Marketplace",
+    "health": "Santé",
+    "tools": "Outils"
   },
   "shell": {
     "skipLink": "Aller au contenu principal",
@@ -260,6 +262,18 @@
         "title": "Une clé API expire bientôt",
         "body": "« {{name}} » expire dans {{days}} jour(s). Faites-la tourner avant, sinon tout ce qui l'utilise cessera de fonctionner sans prévenir.",
         "action": "Ouvrir les clés API"
+      }
+    },
+    "health": {
+      "migrations-pending": {
+        "title": "Une migration est en attente",
+        "body": "{{count}} migration(s) n'ont pas encore été appliquées. Tourner avec un schéma périmé peut produire des erreurs difficiles à comprendre.",
+        "action": "Ouvrir l'écran de santé"
+      },
+      "migrations-pending-destructive": {
+        "title": "Une migration est en attente",
+        "body": "{{count}} migration(s) n'ont pas encore été appliquées, et au moins une est destructive — elle ne sera pas appliquée depuis cet écran. Ouvrez l'écran de santé pour la commande exacte à lancer.",
+        "action": "Ouvrir l'écran de santé"
       }
     }
   },
@@ -1773,5 +1787,61 @@
     "compare": "Comparer",
     "loadError": "Impossible de charger les fiches. Réessayez.",
     "runError": "Impossible de lancer la détection de doublons. Réessayez."
+  },
+  "health": {
+    "heading": "Santé",
+    "loading": "Vérification…",
+    "loadError": "Impossible de charger le diagnostic.",
+    "errorTitle": "Une erreur est survenue",
+    "driversHeading": "Pilotes",
+    "driversIntro": "{{count}} problème(s) à corriger. Un pilote marqué « dégradé » est normal sur une installation neuve — cela signifie qu'aucun service externe (Redis, S3, …) n'est configuré, pas que quelque chose est cassé.",
+    "notesHeading": "Notes",
+    "problemsHeading": "Problèmes",
+    "migrationsHeading": "Migrations",
+    "migrationsSummary": "{{total}} migration(s) au total, {{pending}} en attente.",
+    "destructive": "destructive",
+    "applyButton": "Appliquer les migrations non destructives",
+    "applying": "Application…",
+    "applyError": "Impossible d'appliquer les migrations.",
+    "applyResult": "{{count}} migration(s) appliquée(s).",
+    "destructiveNotice": "{{count}} migration(s) en attente sont destructives et n'ont pas été appliquées. Prenez une sauvegarde vérifiée, puis lancez :",
+    "auditHeading": "Intégrité du journal d'audit",
+    "auditOk": "La chaîne d'audit est intacte.",
+    "auditFailed": "La chaîne d'audit n'a pas pu être vérifiée.",
+    "diskUsage": "Stockage local : {{free}} Go libres sur {{total}} Go.",
+    "errorLogHeading": "Erreurs serveur récentes",
+    "errorLogEmpty": "Rien à signaler récemment.",
+    "maintenanceHeading": "Mode maintenance",
+    "maintenanceIntro": "Sert un 503 avec une page d'attente à tout visiteur tant que c'est activé. Les comptes connectés et l'admin continuent de fonctionner, vous pouvez donc toujours le désactiver.",
+    "maintenanceOn": "Le mode maintenance est activé.",
+    "maintenanceOff": "Le mode maintenance est désactivé.",
+    "maintenanceMessageLabel": "Message affiché aux visiteurs",
+    "maintenanceMessagePlaceholder": "Nous effectuons une maintenance programmée. Revenez bientôt.",
+    "maintenanceTurnOn": "Activer le mode maintenance",
+    "maintenanceTurnOff": "Désactiver le mode maintenance",
+    "maintenanceError": "Impossible de modifier le mode maintenance."
+  },
+  "tools": {
+    "heading": "Outils",
+    "intro": "Des tâches de maintenance qui demanderaient sinon un terminal. Chacune s'exécute en arrière-plan — cet écran interroge l'avancement plutôt que d'attendre la requête.",
+    "errorTitle": "Une erreur est survenue",
+    "loadError": "Impossible de charger les outils.",
+    "runError": "Impossible de lancer cet outil.",
+    "runButton": "Lancer",
+    "reversibleYes": "Réversible",
+    "reversibleNo": "Non réversible",
+    "durationSeconds": "quelques secondes",
+    "durationMinutes": "quelques minutes",
+    "purgeCache": "Purger les caches",
+    "reindexSearch": "Réindexer la recherche",
+    "reindexVectors": "Réindexer les vecteurs",
+    "regenerateImages": "Régénérer les variantes d'images",
+    "checkLinks": "Vérifier les liens",
+    "testEmail": "Tester l'envoi d'e-mail",
+    "purgeTrash": "Vider la corbeille expirée",
+    "testEmailLabel": "Envoyer à",
+    "checkExternalLinks": "Vérifier aussi les liens externes (requêtes sortantes)",
+    "activeHeading": "Statut : {{status}}",
+    "historyHeading": "Exécutions récentes"
   }
 }

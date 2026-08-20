@@ -395,6 +395,11 @@ export const ERROR_CODES = [
   'SITE_SETTING_UNKNOWN',
   'SITE_SETTING_INVALID',
 
+  // Health, migrations and maintenance tools (fiche 24)
+  'MAINT_TOOL_UNKNOWN',
+  'MAINT_TOOL_RUN_NOT_FOUND',
+  'MAINT_TOOL_INPUT_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

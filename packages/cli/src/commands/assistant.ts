@@ -264,26 +264,70 @@ async function recordFor(
   }
 }
 
+/**
+ * Re-derives the indexed vector chunk(s) for one entry. Exported so a full
+ * rebuild (`reindexAllVectors`, and the "Reindex vectors" tool, fiche 24 task
+ * 3) reuses exactly what the write path does on every save, rather than a
+ * second copy of the published-only rule this indexer enforces.
+ */
+export async function reindexVectorEntry(
+  store: ContentStore,
+  options: VectorIndexingOptions,
+  id: string,
+): Promise<void> {
+  try {
+    const published = await store.read(id, { state: 'published' })
+    if (published === null) {
+      await options.store.remove([chunkIdFor(options.collection.name, id)])
+      return
+    }
+    const record = await recordFor(options, searchDocumentFor(options.collection, published))
+    if (record === null) {
+      await options.store.remove([chunkIdFor(options.collection.name, id)])
+      return
+    }
+    await options.store.upsert([record])
+  } catch (error) {
+    options.onError?.(error)
+  }
+}
+
+/**
+ * Walks every entry of a collection and re-derives its vector chunk. Unlike
+ * search's `reindexAll`, only the published face is ever indexed (see the
+ * doc comment on `recordFor`'s caller above) — a trashed-but-published entry
+ * is still indexed, since trash is orthogonal to `status` (ADR-0022).
+ */
+export async function reindexAllVectors(
+  store: ContentStore,
+  options: VectorIndexingOptions,
+  onProgress?: (count: number) => void,
+): Promise<number> {
+  let cursor: string | undefined
+  let count = 0
+  for (;;) {
+    const page = await store.list({
+      trashed: 'include',
+      limit: 100,
+      ...(cursor ? { cursor } : {}),
+    })
+    for (const entry of page.items) {
+      await reindexVectorEntry(store, options, entry.id)
+      count += 1
+      onProgress?.(count)
+    }
+    if (!page.hasMore || page.nextCursor === null) break
+    cursor = page.nextCursor
+  }
+  return count
+}
+
 export function withVectorIndexing(
   store: ContentStore,
   options: VectorIndexingOptions,
 ): ContentStore {
   async function reindex(id: string): Promise<void> {
-    try {
-      const published = await store.read(id, { state: 'published' })
-      if (published === null) {
-        await options.store.remove([chunkIdFor(options.collection.name, id)])
-        return
-      }
-      const record = await recordFor(options, searchDocumentFor(options.collection, published))
-      if (record === null) {
-        await options.store.remove([chunkIdFor(options.collection.name, id)])
-        return
-      }
-      await options.store.upsert([record])
-    } catch (error) {
-      options.onError?.(error)
-    }
+    await reindexVectorEntry(store, options, id)
   }
 
   async function after<TEntry extends { readonly id: string }>(entry: TEntry): Promise<TEntry> {

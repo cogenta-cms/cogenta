@@ -19,6 +19,7 @@ import { DashboardRoute } from './routes/dashboard.js'
 import { DuplicatesRoute } from './routes/duplicates.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
+import { HealthRoute } from './routes/health.js'
 import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
 import { MarketplaceRoute } from './routes/marketplace.js'
@@ -32,6 +33,7 @@ import { SeoRoute } from './routes/seo.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
 import { TaxonomiesRoute } from './routes/taxonomies.js'
+import { ToolsRoute } from './routes/tools.js'
 import { TranslationsRoute } from './routes/translations.js'
 import { TrashRoute } from './routes/trash.js'
 import { UsersRoute } from './routes/users.js'
@@ -92,6 +94,8 @@ export function App(): JSX.Element {
               <Route path="seo" element={<SeoRoute />} />
               <Route path="translations" element={<TranslationsRoute />} />
               <Route path="ops-settings" element={<OpsSettingsRoute />} />
+              <Route path="health" element={<HealthRoute />} />
+              <Route path="tools" element={<ToolsRoute />} />
               <Route path="trash" element={<TrashRoute />} />
               <Route path="assistant-chat" element={<AssistantChatRoute />} />
               <Route path="duplicates" element={<DuplicatesRoute />} />

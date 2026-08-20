@@ -44,6 +44,17 @@ export type {
 } from './lifecycle-events.js'
 export { withLifecycleEvents } from './lifecycle-events.js'
 export type {
+  MaintenanceState,
+  MaintenanceStore,
+  MaintenanceStoreOptions,
+  SetMaintenanceInput,
+} from './maintenance-store.js'
+export {
+  createMaintenanceStore,
+  ensureMaintenanceTable,
+  MAINTENANCE_TABLE,
+} from './maintenance-store.js'
+export type {
   CreateMenuInput,
   CreateMenuItemInput,
   ListMenusOptions,
@@ -82,7 +93,7 @@ export { withScheduledPublishEnqueue } from './scheduled-publish-enqueue.js'
 export type { Schema2MigrationOptions } from './schema-2-migration.js'
 export { schema2Migration } from './schema-2-migration.js'
 export type { SearchIndexingOptions } from './search-indexing.js'
-export { withSearchIndexing } from './search-indexing.js'
+export { reindexAll, reindexEntry, withSearchIndexing } from './search-indexing.js'
 export type {
   SiteSettingDefinition,
   SiteSettingGroup,

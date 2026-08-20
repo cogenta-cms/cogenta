@@ -170,7 +170,9 @@
     "settings": "Settings",
     "opsSettings": "Security & webhooks",
     "sitePlan": "Site plan",
-    "marketplace": "Marketplace"
+    "marketplace": "Marketplace",
+    "health": "Health",
+    "tools": "Tools"
   },
   "shell": {
     "skipLink": "Skip to main content",
@@ -261,6 +263,18 @@
         "title": "An API key expires soon",
         "body": "\"{{name}}\" expires in {{days}} day(s). Rotate it before then, or anything using it will start failing with no warning.",
         "action": "Open API keys"
+      }
+    },
+    "health": {
+      "migrations-pending": {
+        "title": "A migration is pending",
+        "body": "{{count}} migration(s) have not been applied yet. Running with a stale schema can produce errors that are hard to make sense of.",
+        "action": "Open the health screen"
+      },
+      "migrations-pending-destructive": {
+        "title": "A migration is pending",
+        "body": "{{count}} migration(s) have not been applied yet, and at least one is destructive — it will not be applied from this screen. Open the health screen for the exact command to run.",
+        "action": "Open the health screen"
       }
     }
   },
@@ -1774,5 +1788,61 @@
     "compare": "Compare",
     "loadError": "Could not load entries. Try again.",
     "runError": "Could not run duplicate detection. Try again."
+  },
+  "health": {
+    "heading": "Health",
+    "loading": "Checking…",
+    "loadError": "Could not load the health report.",
+    "errorTitle": "Something went wrong",
+    "driversHeading": "Drivers",
+    "driversIntro": "{{count}} problem(s) to fix. A driver marked \"degraded\" is expected on a fresh install — it means no external service (Redis, S3, …) is configured, not that something is broken.",
+    "notesHeading": "Notes",
+    "problemsHeading": "Problems",
+    "migrationsHeading": "Migrations",
+    "migrationsSummary": "{{total}} migration(s) total, {{pending}} pending.",
+    "destructive": "destructive",
+    "applyButton": "Apply the non-destructive migrations",
+    "applying": "Applying…",
+    "applyError": "Could not apply migrations.",
+    "applyResult": "{{count}} migration(s) applied.",
+    "destructiveNotice": "{{count}} pending migration(s) are destructive and were not applied. Take a verified backup, then run:",
+    "auditHeading": "Audit log integrity",
+    "auditOk": "The audit chain is intact.",
+    "auditFailed": "The audit chain could not be verified.",
+    "diskUsage": "Local storage: {{free}} GB free of {{total}} GB.",
+    "errorLogHeading": "Recent server errors",
+    "errorLogEmpty": "Nothing logged recently.",
+    "maintenanceHeading": "Maintenance mode",
+    "maintenanceIntro": "Serves a 503 with a wait page to every visitor while it is on. Signed-in accounts and the admin keep working, so you can always turn it back off.",
+    "maintenanceOn": "Maintenance mode is on.",
+    "maintenanceOff": "Maintenance mode is off.",
+    "maintenanceMessageLabel": "Message shown to visitors",
+    "maintenanceMessagePlaceholder": "We are performing scheduled maintenance. Please check back soon.",
+    "maintenanceTurnOn": "Turn maintenance mode on",
+    "maintenanceTurnOff": "Turn maintenance mode off",
+    "maintenanceError": "Could not change maintenance mode."
+  },
+  "tools": {
+    "heading": "Tools",
+    "intro": "Maintenance tasks that would otherwise need a terminal. Every one of them runs in the background — this screen polls for progress rather than waiting on the request.",
+    "errorTitle": "Something went wrong",
+    "loadError": "Could not load the tools.",
+    "runError": "Could not start this tool.",
+    "runButton": "Run",
+    "reversibleYes": "Reversible",
+    "reversibleNo": "Not reversible",
+    "durationSeconds": "a few seconds",
+    "durationMinutes": "a few minutes",
+    "purgeCache": "Purge caches",
+    "reindexSearch": "Reindex search",
+    "reindexVectors": "Reindex vectors",
+    "regenerateImages": "Regenerate image variants",
+    "checkLinks": "Check links",
+    "testEmail": "Test email delivery",
+    "purgeTrash": "Purge expired trash",
+    "testEmailLabel": "Send to",
+    "checkExternalLinks": "Also check external links (makes outbound requests)",
+    "activeHeading": "Run status: {{status}}",
+    "historyHeading": "Recent runs"
   }
 }

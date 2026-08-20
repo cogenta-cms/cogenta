@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { getAnalyticsPageStats, type PageStats } from '../api/analytics-client.js'
 import { ApiError } from '../api/client.js'
+import { getEntryCommentSettings, setEntryCommentSettings } from '../api/comments-client.js'
 import type { AssistApplied, BlockZones, ContentBlock, Entry } from '../api/content-client.js'
 import {
   createEntry,
@@ -211,6 +212,13 @@ export function EntryEditRoute(): JSX.Element {
   const [statusBusy, setStatusBusy] = useState(false)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+
+  // Discussion (fiche 15 task 5): a tri-state per-entry override —
+  // `null` inherits the collection/site default, `true`/`false` forces it —
+  // read and written through `@cogenta/comments`'s own settings store, never
+  // a field on the entry itself (contract A stays untouched, ADR-0025).
+  const [commentsEnabled, setCommentsEnabled] = useState<boolean | null>(null)
+  const [commentsSettingsBusy, setCommentsSettingsBusy] = useState(false)
   /** The entry's real `publishedAt`, as last confirmed by the server. */
   const [publishedAt, setPublishedAt] = useState<string | null>(null)
   /** The `datetime-local` input's own value — only ever sent on "Programmer". */
@@ -348,6 +356,25 @@ export function EntryEditRoute(): JSX.Element {
         })
     }
   }, [token, createdBy, updatedBy, authorNames])
+
+  // Discussion (fiche 15 task 5): the per-entry override, loaded once an
+  // entry actually exists — a not-yet-saved entry has nowhere to store one.
+  useEffect(() => {
+    if (token === null || isNew || id === undefined) return
+    let cancelled = false
+    getEntryCommentSettings(token, name, id)
+      .then((settings) => {
+        if (!cancelled) setCommentsEnabled(settings.enabled)
+      })
+      .catch(() => {
+        // Contract F unreachable or this actor lacks `comments.read` — the
+        // toggle stays at "inherit" rather than showing an error for a
+        // feature this screen only offers as a courtesy.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, isNew, id, name])
 
   function setFieldValue(field: string, value: unknown): void {
     setValues((current) => ({ ...current, [field]: value }))
@@ -1017,6 +1044,39 @@ export function EntryEditRoute(): JSX.Element {
                     {statusMessage}
                   </Notice>
                 )}
+              </Card>
+            )}
+
+            {/* Discussion (fiche 15 task 5, ADR-0025): a tri-state toggle,
+                never a plain checkbox — "inherit" has to stay expressible or
+                this control could only ever force an entry to disagree with
+                its collection, never simply follow it. Stored in
+                `@cogenta/comments`'s own per-entry table, not on the entry. */}
+            {!isNew && id !== undefined && token !== null && (
+              <Card>
+                <CardBody className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-foreground">
+                    {t('entryEdit.commentsLabel')}
+                  </span>
+                  <Select
+                    aria-label={t('entryEdit.commentsLabel')}
+                    value={commentsEnabled === null ? 'inherit' : String(commentsEnabled)}
+                    disabled={commentsSettingsBusy}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      const next = value === 'inherit' ? null : value === 'true'
+                      setCommentsSettingsBusy(true)
+                      setEntryCommentSettings(token, name, id, next)
+                        .then(() => setCommentsEnabled(next))
+                        .catch(() => undefined)
+                        .finally(() => setCommentsSettingsBusy(false))
+                    }}
+                  >
+                    <option value="inherit">{t('entryEdit.commentsInherit')}</option>
+                    <option value="true">{t('entryEdit.commentsOn')}</option>
+                    <option value="false">{t('entryEdit.commentsOff')}</option>
+                  </Select>
+                </CardBody>
               </Card>
             )}
 

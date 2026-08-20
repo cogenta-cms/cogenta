@@ -147,12 +147,29 @@ async function renderDraft(
   return { status: response.status, html: parsed.data.html }
 }
 
-/** Everything between `<body>` and `</body>` — what the iframe actually shows. */
+/**
+ * Everything between `<body>` and `</body>` — what the iframe actually
+ * shows — with the comment thread (fiche 15 task 6) stripped out.
+ *
+ * The builder preview deliberately never renders that section at all (see
+ * `serve.ts`'s own comment on the builder's render options): its form
+ * embeds a render timestamp (`_ts`, the anti-spam minimum-fill-delay field)
+ * that is legitimately different on every render, so comparing it
+ * byte-for-byte across two separate renders would be comparing two correct
+ * values against each other, not catching a real divergence. Stripping the
+ * whole section before comparing is what lets this test keep asserting real
+ * byte equality for everything it — and the builder — actually claims is
+ * identical.
+ */
 function bodyOf(html: string): string {
   const open = html.indexOf('<body>')
   const close = html.lastIndexOf('</body>')
   if (open === -1 || close === -1) throw new Error('no body in the rendered document')
-  return html.slice(open, close)
+  return html
+    .slice(open, close)
+    .split('\n')
+    .filter((line) => !line.includes('cg-comments') && line.trim() !== '')
+    .join('\n')
 }
 
 function headLines(html: string): readonly string[] {
@@ -196,6 +213,32 @@ describe('the page builder preview renders the real page, not a lookalike (L16 t
       expect(bodyOf(preview.html ?? '')).toBe(bodyOf(published))
       // And the same stylesheet link, so the same CSS renders those bytes.
       expect(preview.html).toContain('<link rel="stylesheet" href="/_cogenta/styles.css">')
+    } finally {
+      await server.stop()
+    }
+  }, 30_000)
+
+  it('never renders the comment thread in preview — the published page does', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const id = await seed(server.base, token)
+
+      const published = await (await fetch(`${server.base}/runs-itself`)).text()
+      expect(published).toContain('class="cg-comments"')
+
+      const preview = await renderDraft(server.base, token, {
+        collection: 'page',
+        entryId: id,
+        blocks: BLOCKS,
+      })
+      expect(preview.html).not.toContain('class="cg-comments"')
     } finally {
       await server.stop()
     }

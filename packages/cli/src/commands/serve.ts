@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFile, stat, statfs } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
@@ -108,6 +109,19 @@ import {
   ensurePreferenceTables,
 } from '@cogenta/channels'
 import {
+  type CommentSettingsStore,
+  type CommentStore,
+  type CommentsRequest,
+  type CommentsRouter,
+  createCommentPermissions,
+  createCommentRateLimiter,
+  createCommentSettingsStore,
+  createCommentStore,
+  createCommentsRouter,
+  effectiveEnabled,
+  ensureCommentsTables,
+} from '@cogenta/comments'
+import {
   type CommerceAdminRouter,
   type CommerceRequest,
   createCartStore,
@@ -217,6 +231,7 @@ import {
   withScheduledPublishEnqueue,
   withSearchIndexing,
 } from '@cogenta/schema'
+import type { PublicComment } from '@cogenta/theme-canonical'
 import type { GraphQLSchema } from 'graphql'
 import { sendInviteMail } from '../invite-mail.js'
 import type { Output, Writer } from '../output.js'
@@ -464,6 +479,15 @@ interface Site {
    * that never sells anything never pays for it (mirrors the taxonomy story).
    */
   readonly commerceRouter: CommerceAdminRouter
+  /**
+   * Contract F's own router (ADR-0025) — moderation queue AND the CMS's
+   * first public write route, `POST /api/comments`, both dispatched from
+   * one mount the way `commerceRouter` above already is.
+   */
+  readonly commentsRouter: CommentsRouter
+  /** Exposed directly, the same way `siteSettingsStore` is, so `theme-render.ts` can read the public thread for a page without an in-process HTTP round trip. */
+  readonly commentsStore: CommentStore
+  readonly commentsSettingsStore: CommentSettingsStore
   /** `/api/redirects` — admin-only management of the redirect table `cogenta serve` already applies to every public GET (audit follow-up to L10 task 2; extended by fiche 12 with editing, search, patterns and CSV import/export). */
   readonly redirectRouter: RedirectRouter
   /**
@@ -1117,6 +1141,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           storage,
           tracking: importTracking,
           runId: input.runId,
+          // Contract F (ADR-0025) — real status and threading, on posts and
+          // pages alike, the same store `/api/comments` itself writes
+          // through.
+          comments: commentsStore,
         })
         return await importTracking.updateRun(input.runId, {
           status: 'done',
@@ -1521,6 +1549,41 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           },
         })
 
+  // Contract F (ADR-0025) — a comment is not a collection entry, so its
+  // tables are created idempotently here the same way commerce's are above:
+  // a site that never receives a comment never pays for them.
+  await ensureCommentsTables(db)
+  const commentsStore = createCommentStore({ db })
+  const commentsSettingsStore = createCommentSettingsStore(db)
+  const commentsRateLimiter = createCommentRateLimiter(db)
+  const commentsPermissions = createCommentPermissions()
+  // Derived, never the raw signing key itself: `hashIp` mixes this secret
+  // into every hash, and a comment's IP hash living in the database is a
+  // different exposure than the JWT signing key living in the process
+  // environment — deriving keeps a leak of one from being a leak of both
+  // (R7: read once here, never re-read from the environment by the library).
+  const commentsIpHashSecret = createHash('sha256')
+    .update(`${options.signingKey}:comments-ip-hash`)
+    .digest('hex')
+  const commentsRouter = createCommentsRouter({
+    store: commentsStore,
+    settings: commentsSettingsStore,
+    rateLimiter: commentsRateLimiter,
+    permissions: commentsPermissions,
+    ipHashSecret: commentsIpHashSecret,
+    siteDefaults: async () => {
+      const [enabledSetting, moderationSetting] = await Promise.all([
+        siteSettingsStore.get('discussion.enabled', SITE_SETTINGS_SITE_SCOPE),
+        siteSettingsStore.get('discussion.moderationRequired', SITE_SETTINGS_SITE_SCOPE),
+      ])
+      return {
+        enabled: typeof enabledSetting?.value === 'boolean' ? enabledSetting.value : true,
+        moderationRequired:
+          typeof moderationSetting?.value === 'boolean' ? moderationSetting.value : true,
+      }
+    },
+  })
+
   await ensureAnalyticsTables(db)
   const analyticsStore = createAnalyticsStore(db)
   const siteHost = new URL(site.url).hostname
@@ -1648,6 +1711,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       },
       permissions: commercePermissions,
     }),
+    commentsRouter,
+    commentsStore,
+    commentsSettingsStore,
     redirectRouter: createRedirectRouter({ store: redirects, patterns: redirectPatterns }),
     redirectPatterns,
     notFoundLog,
@@ -1673,6 +1739,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       commerceCatalog,
       marketplaceCatalog,
       marketplaceInstaller,
+      comments: commentsStore,
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -1776,7 +1843,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // this function — `@cogenta/import`'s real importer, unchanged, never
       // reimplemented here (R9: this package gains no dependency on it, only
       // `@cogenta/cli` does, which already had one for the terminal command).
-      runWordPressImport: (xml) => importWordPress(xml, { db, storage }),
+      runWordPressImport: (xml) => importWordPress(xml, { db, storage, comments: commentsStore }),
       analyze: analyzeImportSource,
       apply: applyImportRun,
       getRun: (id) => importTracking.getRun(id),
@@ -1878,6 +1945,18 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   if (chunks.length === 0) return undefined
   const text = Buffer.concat(chunks).toString('utf8')
   if (text.trim().length === 0) return undefined
+
+  // `application/x-www-form-urlencoded` — the one body shape this server
+  // accepts besides JSON, needed for the public comment form (fiche 15 task
+  // 6): "sans JavaScript, le formulaire doit fonctionner (un POST HTML
+  // classique)". A real `<form method="post">` with no `enctype` sends
+  // exactly this content type; every other route on this server still only
+  // ever sends JSON, so this branch never fires for them.
+  const contentType = req.headers['content-type'] ?? ''
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    return Object.fromEntries(new URLSearchParams(text))
+  }
+
   try {
     return JSON.parse(text)
   } catch {
@@ -1924,6 +2003,71 @@ function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): Comme
     method: req.method ?? 'GET',
     path: url.pathname,
     query,
+    ...(body === undefined ? {} : { body }),
+  }
+}
+
+/**
+ * `CommentsRequest`'s own adapter, carrying the two fields the public write
+ * route needs that no other router does: the caller's IP (hashed inside
+ * `@cogenta/comments`, never here — R7-adjacent: this layer reads it once
+ * off the socket and hands it to the one function allowed to hash it) and
+ * the user agent, both purely informational for the moderation queue.
+ */
+/**
+ * The public thread for one entry (fiche 15 task 6) — resolves the same
+ * inheritance chain (`effectiveEnabled`) the public POST route enforces, so
+ * "may I comment here" never disagrees between the form and the page that
+ * renders it.
+ */
+async function commentsForEntry(
+  site: Site,
+  collection: string,
+  entryId: string,
+  // A comment is not localised (ADR-0025) — every comment on an entry shows
+  // regardless of which translation a visitor is reading, so this parameter
+  // exists only to match `ThemeRenderOptions['comments']['forEntry']`'s
+  // signature, not because it is read here.
+  _locale: string | null,
+): Promise<{ readonly open: boolean; readonly items: readonly PublicComment[] }> {
+  const [entrySettings, collectionSettings, enabledSetting, comments] = await Promise.all([
+    site.commentsSettingsStore.getEntry(collection, entryId),
+    site.commentsSettingsStore.getCollection(collection),
+    site.siteSettingsStore.get('discussion.enabled', SITE_SETTINGS_SITE_SCOPE),
+    site.commentsStore.listApprovedForEntry(collection, entryId),
+  ])
+  const siteDefault = typeof enabledSetting?.value === 'boolean' ? enabledSetting.value : true
+  const open = effectiveEnabled(entrySettings, collectionSettings, siteDefault)
+  return {
+    open,
+    items: comments.map((comment) => ({
+      id: comment.id,
+      parentId: comment.parentId,
+      authorName: comment.authorName,
+      authorUrl: comment.authorUrl,
+      body: comment.body,
+      createdAt: comment.createdAt,
+    })),
+  }
+}
+
+function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
+  const query: Record<string, string | undefined> = {}
+  for (const key of url.searchParams.keys()) {
+    query[key] = url.searchParams.get(key) ?? undefined
+  }
+  const forwardedFor = req.headers['x-forwarded-for']
+  const ip =
+    (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0]?.trim()) ??
+    req.socket.remoteAddress ??
+    null
+  const userAgent = req.headers['user-agent']
+  return {
+    method: req.method ?? 'GET',
+    path: url.pathname,
+    query,
+    ip,
+    userAgent: Array.isArray(userAgent) ? (userAgent[0] ?? null) : (userAgent ?? null),
     ...(body === undefined ? {} : { body }),
   }
 }
@@ -2851,6 +2995,35 @@ export function createRequestListener(
         return
       }
 
+      // Contract F (ADR-0025): the moderation queue AND
+      // `POST /api/comments`, the CMS's first public write route. The
+      // router itself decides whether an actor is needed at all — an
+      // anonymous `context.actor` reaches the public POST branch exactly the
+      // way `resolveActor` already resolves it for any unauthenticated
+      // request, so nothing special happens here beyond routing the request.
+      if (url.pathname.startsWith('/api/comments')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toCommentsRequest(req, url, body)
+        const response = await site.commentsRouter.handle(request, context.actor)
+        // The one shape besides JSON this router ever answers with: a 303
+        // redirect back to the page a no-JS `<form>` posted from
+        // (`response.headers.location`, set only when the submission carried
+        // `redirectTo`). No body follows a redirect.
+        if (response.headers?.['location'] !== undefined) {
+          res.writeHead(response.status, response.headers)
+          res.end()
+          return
+        }
+        res.writeHead(response.status, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(
+          response.body === null || response.body === undefined
+            ? undefined
+            : JSON.stringify(response.body),
+        )
+        return
+      }
+
       if (url.pathname.startsWith('/api/media')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -3283,6 +3456,18 @@ export function createRequestListener(
               // that would not itself become a body difference.
               analyticsBeacon: {},
               menuRouter: site.menuRouter,
+              // `comments` deliberately absent here, unlike the public render
+              // below: the thread's own form embeds a render timestamp
+              // (`_ts`, the minimum-fill-delay field, fiche 15 task 6) that
+              // cannot be identical across two separate renders no matter
+              // how close together they happen — comparing it byte-for-byte
+              // against the published page would be comparing two different
+              // legitimate values, not catching a real divergence. The page
+              // builder edits blocks; the visitor comment thread is not one
+              // of them, so the preview simply does not render it — the same
+              // reasoning that already keeps `adminBar` out of this render.
+              // `theme-render-fidelity`-style byte equality still holds for
+              // everything this preview *does* claim to show.
             },
             context,
           )
@@ -3436,6 +3621,11 @@ export function createRequestListener(
               SITE_SETTINGS_SITE_SCOPE,
             )
             return typeof setting?.value === 'string' ? setting.value : null
+          },
+          comments: {
+            action: '/api/comments',
+            forEntry: (commentCollection: string, entryId: string, locale: string | null) =>
+              commentsForEntry(site, commentCollection, entryId, locale),
           },
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)

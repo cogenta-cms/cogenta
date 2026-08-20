@@ -440,6 +440,18 @@ export const ERROR_CODES = [
   'THEME_NO_PROVIDER',
   'THEME_EXPORT_NOT_ALLOWED',
 
+  // Comments — contract F, visitor comments (fiche 15, ADR-0025)
+  'COMMENT_NOT_FOUND',
+  'COMMENT_BODY_INVALID',
+  'COMMENT_AUTHOR_INVALID',
+  'COMMENT_TARGET_INVALID',
+  'COMMENT_TARGET_CLOSED',
+  'COMMENT_PARENT_INVALID',
+  'COMMENT_PARENT_TOO_DEEP',
+  'COMMENT_STATUS_INVALID',
+  'COMMENT_RATE_LIMITED',
+  'COMMENT_SPAM_DETECTED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

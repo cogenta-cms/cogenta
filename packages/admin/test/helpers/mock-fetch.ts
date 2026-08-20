@@ -498,7 +498,19 @@ export function installMockFetch(
       readonly commerceOrdersPending?: number | null
       readonly commerceActive?: boolean
       readonly marketplaceUpdates?: number | null
+      readonly commentsPending?: number | null
     }
+    /** Seeds `/api/comments` (fiche 15) — the moderation queue's initial rows. */
+    readonly comments?: readonly {
+      readonly id: string
+      readonly collection: string
+      readonly entryId: string
+      readonly authorName: string
+      readonly authorEmail: string
+      readonly body: string
+      readonly status: 'pending' | 'approved' | 'spam' | 'trash'
+      readonly createdAt?: string
+    }[]
     /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
     readonly analyticsSummary?: {
       readonly totalViews?: number
@@ -650,6 +662,50 @@ export function installMockFetch(
       uiType: 'number',
       scope: 'site',
       value: 10,
+    },
+    // Discussion (fiche 15 task 5, ADR-0025) — mirrors
+    // packages/schema/src/store/site-settings-registry.ts's `discussion` group.
+    'discussion.enabled': {
+      group: 'discussion',
+      order: 0,
+      uiType: 'boolean',
+      scope: 'site',
+      value: true,
+    },
+    'discussion.moderationRequired': {
+      group: 'discussion',
+      order: 1,
+      uiType: 'boolean',
+      scope: 'site',
+      value: true,
+    },
+    'discussion.allowAnonymous': {
+      group: 'discussion',
+      order: 2,
+      uiType: 'boolean',
+      scope: 'site',
+      value: true,
+    },
+    'discussion.autoCloseDays': {
+      group: 'discussion',
+      order: 3,
+      uiType: 'number',
+      scope: 'site',
+      value: 0,
+    },
+    'discussion.maxNestingDepth': {
+      group: 'discussion',
+      order: 4,
+      uiType: 'number',
+      scope: 'site',
+      value: 5,
+    },
+    'discussion.notifyEmail': {
+      group: 'discussion',
+      order: 5,
+      uiType: 'email',
+      scope: 'site',
+      value: '',
     },
     'media.maxUploadSizeMb': {
       group: 'media',
@@ -1407,6 +1463,56 @@ export function installMockFetch(
     lastSeen: number
     lastReferrer: string | null
   }[] = options.notFound === undefined ? [] : [...options.notFound]
+
+  interface CommentFixture {
+    id: string
+    collection: string
+    entryId: string
+    locale: string | null
+    parentId: string | null
+    userId: string | null
+    authorName: string
+    authorEmail: string
+    authorUrl: string | null
+    body: string
+    status: 'pending' | 'approved' | 'spam' | 'trash'
+    ipHash: string | null
+    userAgent: string | null
+    moderation: { flagged: boolean | null; severity: string | null; reason: string | null }
+    provenance: string
+    createdAt: string
+    updatedAt: string
+    moderatedAt: string | null
+    moderatedBy: string | null
+  }
+  const comments: CommentFixture[] = (options.comments ?? []).map((seed) => {
+    return {
+      id: seed.id,
+      collection: seed.collection,
+      entryId: seed.entryId,
+      locale: null,
+      parentId: null,
+      userId: null,
+      authorName: seed.authorName,
+      authorEmail: seed.authorEmail,
+      authorUrl: null,
+      body: seed.body,
+      status: seed.status,
+      ipHash: null,
+      userAgent: null,
+      moderation: { flagged: null, severity: null, reason: null },
+      provenance: 'human',
+      createdAt: seed.createdAt ?? '2026-01-01T00:00:00.000Z',
+      updatedAt: seed.createdAt ?? '2026-01-01T00:00:00.000Z',
+      moderatedAt: null,
+      moderatedBy: null,
+    }
+  })
+  let commentSettings: Record<
+    string,
+    { enabled: boolean | null; moderationRequired: boolean | null }
+  > = {}
+  let entryCommentSettings: Record<string, boolean | null> = {}
 
   let mediaCounter = 0
   const media: {
@@ -4946,6 +5052,143 @@ export function installMockFetch(
         })
       }
 
+      // `/api/comments` (fiche 15, ADR-0025) — the moderation queue. This
+      // router does not wrap its body in `{ data }` (`comments-client.ts`'s
+      // own comment explains why), so every branch here returns the bare
+      // shape the real `@cogenta/comments` router would.
+      if (url.includes('/api/comments')) {
+        const afterBase = url.split('/api/comments')[1] ?? ''
+        const [pathPart, queryPart] = afterBase.split('?')
+        const segments = (pathPart ?? '').split('/').filter((segment) => segment !== '')
+        const params = new URLSearchParams(queryPart ?? '')
+
+        if (segments.length === 0 && method === 'GET') {
+          const status = params.get('status')
+          const q = params.get('q')?.toLowerCase()
+          let filtered = comments.filter((c) => (status === null ? true : c.status === status))
+          if (q !== undefined && q !== null && q !== '') {
+            filtered = filtered.filter(
+              (c) =>
+                c.authorName.toLowerCase().includes(q) ||
+                c.authorEmail.toLowerCase().includes(q) ||
+                c.body.toLowerCase().includes(q),
+            )
+          }
+          return json(200, { items: filtered, total: filtered.length })
+        }
+
+        if (segments.length === 1 && segments[0] === 'counts' && method === 'GET') {
+          return json(200, {
+            pending: comments.filter((c) => c.status === 'pending').length,
+            approved: comments.filter((c) => c.status === 'approved').length,
+            spam: comments.filter((c) => c.status === 'spam').length,
+            trash: comments.filter((c) => c.status === 'trash').length,
+          })
+        }
+
+        if (segments.length === 1 && segments[0] === 'bulk' && method === 'POST') {
+          const ids = (body.ids as string[] | undefined) ?? []
+          const status = body.status as CommentFixture['status']
+          let updated = 0
+          for (const c of comments) {
+            if (ids.includes(c.id)) {
+              c.status = status
+              updated += 1
+            }
+          }
+          return json(200, { updated })
+        }
+
+        if (segments.length === 2 && segments[0] === 'settings' && segments[1] === 'collection') {
+          const collection =
+            params.get('collection') ?? (body.collection as string | undefined) ?? ''
+          if (method === 'GET') {
+            const current = commentSettings[collection] ?? {
+              enabled: null,
+              moderationRequired: null,
+            }
+            return json(200, { collection, ...current })
+          }
+          if (method === 'PUT') {
+            const current = commentSettings[collection] ?? {
+              enabled: null,
+              moderationRequired: null,
+            }
+            const next = {
+              enabled: typeof body.enabled === 'boolean' ? body.enabled : current.enabled,
+              moderationRequired:
+                typeof body.moderationRequired === 'boolean'
+                  ? body.moderationRequired
+                  : current.moderationRequired,
+            }
+            commentSettings = { ...commentSettings, [collection]: next }
+            return json(200, { collection, ...next })
+          }
+        }
+
+        if (segments.length === 2 && segments[0] === 'settings' && segments[1] === 'entry') {
+          const collection =
+            params.get('collection') ?? (body.collection as string | undefined) ?? ''
+          const entryId = params.get('entryId') ?? (body.entryId as string | undefined) ?? ''
+          const key = `${collection}:${entryId}`
+          if (method === 'GET') {
+            return json(200, { collection, entryId, enabled: entryCommentSettings[key] ?? null })
+          }
+          if (method === 'PUT') {
+            const enabled = body.enabled as boolean | null
+            entryCommentSettings = { ...entryCommentSettings, [key]: enabled }
+            return json(200, { collection, entryId, enabled })
+          }
+        }
+
+        if (segments.length === 2 && segments[1] === 'status' && method === 'POST') {
+          const found = comments.find((c) => c.id === segments[0])
+          if (found === undefined) {
+            return json(404, { error: { code: 'COMMENT_NOT_FOUND', message: 'Not found.' } })
+          }
+          found.status = body.status as CommentFixture['status']
+          found.moderatedAt = '2026-01-02T00:00:00.000Z'
+          found.moderatedBy = user.id
+          return json(200, found)
+        }
+
+        if (segments.length === 2 && segments[1] === 'reply' && method === 'POST') {
+          const parent = comments.find((c) => c.id === segments[0])
+          if (parent === undefined) {
+            return json(404, { error: { code: 'COMMENT_NOT_FOUND', message: 'Not found.' } })
+          }
+          const reply: CommentFixture = {
+            id: `reply-${comments.length + 1}`,
+            collection: parent.collection,
+            entryId: parent.entryId,
+            locale: parent.locale,
+            parentId: parent.id,
+            userId: user.id,
+            authorName: body.authorName as string,
+            authorEmail: body.authorEmail as string,
+            authorUrl: null,
+            body: body.body as string,
+            status: 'approved',
+            ipHash: null,
+            userAgent: null,
+            moderation: { flagged: null, severity: null, reason: null },
+            provenance: 'human',
+            createdAt: '2026-01-02T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            moderatedAt: null,
+            moderatedBy: null,
+          }
+          comments.push(reply)
+          return json(201, reply)
+        }
+
+        if (segments.length === 1 && method === 'DELETE') {
+          const index = comments.findIndex((c) => c.id === segments[0])
+          if (index !== -1) comments.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
+      }
+
       // `GET /api/shell-status` (fiche 35 task 3) — the sidebar's one
       // aggregated read for badges and feature flags. Defaults to a quiet
       // site (nothing trashed, no shop, no marketplace item installed) so
@@ -4957,6 +5200,8 @@ export function installMockFetch(
           commerceOrdersPending: user.roles.length > 0 ? 0 : null,
           commerceActive: false,
           marketplaceUpdates: user.roles.includes('admin') ? 0 : null,
+          commentsPending:
+            user.roles.length > 0 ? comments.filter((c) => c.status === 'pending').length : null,
         }
         return json(200, { data: { ...defaults, ...options.shellStatus } })
       }

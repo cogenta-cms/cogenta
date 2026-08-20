@@ -1,4 +1,5 @@
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
+import type { CommentStatus, CommentStore } from '@cogenta/comments'
 import { createDatabaseMediaStore, type DatabaseHandle, type StorageDriver } from '@cogenta/core'
 import {
   buildPath,
@@ -25,7 +26,7 @@ import {
 import { downloadAndStoreMedia } from './media.js'
 import { parseWxr } from './parse.js'
 import { type ConversionReport, emptyReport, type UnconvertedItem } from './report.js'
-import type { WxrItem } from './types.js'
+import type { WxrComment, WxrItem } from './types.js'
 
 export interface ImportWordPressOptions {
   readonly db: DatabaseHandle
@@ -45,6 +46,52 @@ export interface ImportWordPressOptions {
    */
   readonly tracking?: ImportTrackingStore
   readonly runId?: string
+  /**
+   * Fiche 15 task 7 (ADR-0025): when given, every importable WordPress
+   * comment is written through contract F's own store — real status
+   * (approved/pending/spam/trash, from `wp:comment_approved`, not just the
+   * `'1'` this importer used to keep), real threading (`wp:comment_parent`),
+   * on both posts *and* pages (pages were silently skipped entirely before
+   * this option existed — a real, independent bug, not something this
+   * fiche introduced).
+   *
+   * Absent keeps the pre-fiche-15 behaviour: only approved (`'1'`) comments,
+   * only on posts, written into the synthetic `comment` collection
+   * (`collections.ts`'s `wpComment`) — kept for a caller that has not wired
+   * `@cogenta/comments` yet. A caller SHOULD pass this; `cogenta import
+   * wordpress` (the CLI) always does.
+   */
+  readonly comments?: CommentStore
+}
+
+/** `wp:comment_approved`'s four real values, mapped to contract F's own vocabulary. Anything else (WordPress has used `'hold'` too) degrades to `pending` rather than being silently dropped. */
+function wpApprovedToStatus(approved: string): CommentStatus {
+  if (approved === '1') return 'approved'
+  if (approved === 'spam') return 'spam'
+  if (approved === 'trash') return 'trash'
+  return 'pending'
+}
+
+/**
+ * WordPress's classic comment form allowed a small set of inline tags
+ * (`<a>`, `<em>`, `<strong>`, …) that contract F refuses outright (R3, first
+ * line of defense against stored XSS — `CommentStore.create` has no
+ * escape hatch for "a little HTML is fine"). Rather than drop such a
+ * comment, its markup is stripped to plain text and the loss is reported —
+ * the same "degrade and report, never lose silently" contract every other
+ * step of this importer already follows.
+ */
+function stripHtmlToPlainText(html: string): string {
+  return html
+    .replace(/<[^>]*>/gu, '')
+    .replace(/&nbsp;/giu, ' ')
+    .replace(/&amp;/giu, '&')
+    .replace(/&lt;/giu, '<')
+    .replace(/&gt;/giu, '>')
+    .replace(/&quot;/giu, '"')
+    .replace(/&#0?39;/giu, "'")
+    .replace(/\s+/gu, ' ')
+    .trim()
 }
 
 const APPROVED = '1'
@@ -353,11 +400,125 @@ export async function importWordPress(
     })
   }
 
+  /**
+   * All of one item's comments, real threading resolved before a reply is
+   * written (a reply needs its parent's *new* id, not its WordPress one).
+   * Processed in waves — every comment whose parent is already resolved (or
+   * top-level) goes this pass, repeat until nothing is left or nothing
+   * progressed. A WXR's own comments are almost always one level deep, so
+   * this is normally one or two waves; a comment whose parent never
+   * resolves (a broken export) is reported and imported top-level rather
+   * than dropped.
+   */
+  async function importCommentsForEntry(
+    comments: readonly WxrComment[],
+    entryCollection: string,
+    entryId: string,
+    itemTitle: string,
+  ): Promise<void> {
+    const store = options.comments
+    if (store === undefined || comments.length === 0) return
+
+    const byWpId = new Map(comments.map((comment) => [comment.id, comment]))
+    const resolvedId = new Map<string, string>()
+    const pending = new Set(comments.map((comment) => comment.id))
+
+    while (pending.size > 0) {
+      let progressed = false
+      for (const wpId of [...pending]) {
+        const comment = byWpId.get(wpId)
+        if (comment === undefined) {
+          pending.delete(wpId)
+          continue
+        }
+        const wpParent = comment.parentId
+        const topLevel = wpParent === '' || wpParent === '0'
+        const parentStillPending = !topLevel && !resolvedId.has(wpParent) && byWpId.has(wpParent)
+        if (parentStillPending) {
+          // Its parent is still in this same wave — try again next pass.
+          continue
+        }
+        // A parent id that names no comment anywhere in this export (a
+        // broken export, or one the parser skipped) — imported top-level
+        // rather than dropped, and reported so the loss is visible.
+        const parentTrulyMissing = !topLevel && !resolvedId.has(wpParent) && !byWpId.has(wpParent)
+        if (parentTrulyMissing) {
+          acc.warnings.push(
+            `Comment ${comment.id} on "${itemTitle}" replies to parent comment ${wpParent}, which does not exist in this export; imported as top-level instead.`,
+          )
+        }
+
+        const plainText = stripHtmlToPlainText(comment.content)
+        if (plainText !== comment.content.trim()) {
+          acc.warnings.push(
+            `Comment ${comment.id} on "${itemTitle}" contained HTML, which contract F does not store (R3); it was reduced to plain text.`,
+          )
+        }
+        if (plainText.length === 0) {
+          acc.warnings.push(
+            `Comment ${comment.id} on "${itemTitle}" had no text content once stripped; skipped.`,
+          )
+          pending.delete(wpId)
+          progressed = true
+          continue
+        }
+
+        const email =
+          comment.authorEmail.trim().length > 0
+            ? comment.authorEmail.trim()
+            : `${
+                (comment.author || 'anonymous')
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/gu, '.')
+                  .replace(/^\.+|\.+$/gu, '') || 'anonymous'
+              }@imported.invalid`
+
+        try {
+          const created = await store.create({
+            collection: entryCollection,
+            entryId,
+            parentId: topLevel ? null : (resolvedId.get(wpParent) ?? null),
+            author: { name: comment.author || 'Anonymous', email },
+            body: plainText,
+            status: wpApprovedToStatus(comment.approved),
+            provenance: 'human',
+          })
+          resolvedId.set(wpId, created.id)
+          acc.imported.comments += 1
+          await record('comment', wpId, created.id)
+        } catch (error) {
+          acc.warnings.push(
+            `Comment ${comment.id} on "${itemTitle}" could not be imported: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+        pending.delete(wpId)
+        progressed = true
+      }
+      if (!progressed) break
+    }
+
+    // Reachable only by a genuine cycle (A replies to B, B replies to A) —
+    // every other case above already resolved or reported its comment and
+    // removed it from `pending`. Skipped rather than imported top-level:
+    // unlike a missing parent, there is no honest single choice for which
+    // one to break the cycle at.
+    for (const wpId of pending) {
+      acc.warnings.push(
+        `Comment ${wpId} on "${itemTitle}" is part of a reply cycle in the export and was skipped.`,
+      )
+    }
+  }
+
   for (const item of posts) {
     const id = await writeEntry(item, postStore, 'post')
     if (id !== null) {
       acc.imported.posts += 1
       await record('post', item.postId, id)
+
+      if (options.comments !== undefined) {
+        await importCommentsForEntry(item.comments, wpPost.name, id, item.title)
+        continue
+      }
 
       for (const comment of item.comments) {
         if (comment.approved !== APPROVED) continue
@@ -382,6 +543,25 @@ export async function importWordPress(
     if (id !== null) {
       acc.imported.pages += 1
       await record('page', item.postId, id)
+
+      // A real, independent bug (fiche 15 task 7's own instruction to check
+      // what this importer does today): WordPress allows comments on a
+      // page exactly as it does on a post, and this loop never imported a
+      // single one. Fixed here for the real store path. The legacy
+      // synthetic `comment` collection (`collections.ts`'s `wpComment`)
+      // cannot be fixed the same way: its `post` field is a hard `relation`
+      // to the `post` collection specifically (contract A, `onDelete:
+      // 'cascade'`), so writing a page's id there is not a bug fix, it is a
+      // foreign-key violation waiting to happen — the real reason to prefer
+      // the `comments` option instead of extending a model that was never
+      // built to hold this.
+      if (options.comments !== undefined) {
+        await importCommentsForEntry(item.comments, wpPage.name, id, item.title)
+      } else if (item.comments.length > 0) {
+        acc.warnings.push(
+          `"${item.title}" has ${item.comments.length} comment(s) that were not imported: the legacy comment model only supports comments on posts. Pass a \`comments\` store to import them.`,
+        )
+      }
     }
   }
 

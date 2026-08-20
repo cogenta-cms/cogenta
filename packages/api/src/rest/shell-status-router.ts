@@ -58,6 +58,16 @@ export interface CommerceCatalogLike {
   listProducts(options: { readonly limit?: number }): Promise<readonly unknown[]>
 }
 
+/**
+ * Structural, exactly like `CommerceOrdersLike` above and for the same
+ * reason: `@cogenta/api` has never depended on a domain package, and
+ * contract F (ADR-0025) is one. `counts().pending` is `CommentStore`'s own
+ * method, called as-is.
+ */
+export interface CommentsQueueLike {
+  counts(): Promise<{ readonly pending: number }>
+}
+
 export interface ShellStatus {
   /** Trashed entries across every trash-enabled collection this actor may see the trash of. */
   readonly trash: number
@@ -67,6 +77,8 @@ export interface ShellStatus {
   readonly commerceActive: boolean
   /** `null` when marketplace is unmounted, or this actor is not `admin` (the only role that can act on an update). */
   readonly marketplaceUpdates: number | null
+  /** Comments awaiting moderation (ADR-0025). `null` when this actor holds no role at all — the same courtesy `commerceOrdersPending` already applies. */
+  readonly commentsPending: number | null
 }
 
 export interface ShellStatusRouterOptions {
@@ -79,6 +91,8 @@ export interface ShellStatusRouterOptions {
   /** Both present together, or both absent — a marketplace with a catalogue and no installer (or the reverse) cannot answer "updates". */
   readonly marketplaceCatalog?: MarketplaceCatalogLike
   readonly marketplaceInstaller?: MarketplaceInstallerLike
+  /** Absent on a site with no comments (never true — contract F is always mounted — but structural like the rest of this options bag). */
+  readonly comments?: CommentsQueueLike
   /** Mount point. `/api/shell-status` by default. */
   readonly path?: string
 }
@@ -116,6 +130,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
         commerceOrdersPending: null,
         commerceActive: false,
         marketplaceUpdates: null,
+        commentsPending: null,
       }
       return jsonResponse(200, { data: empty })
     }
@@ -125,8 +140,17 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
       commerceOrdersPending: await ordersPending(context),
       commerceActive: await catalogueHasProducts(),
       marketplaceUpdates: await pendingMarketplaceUpdates(context),
+      commentsPending: await commentsPending(context),
     }
     return jsonResponse(200, { data: status })
+  }
+
+  async function commentsPending(context: AccessContext): Promise<number | null> {
+    const comments = options.comments
+    if (comments === undefined) return null
+    if (context.actor.roles.length === 0) return null
+    const counts = await comments.counts()
+    return counts.pending
   }
 
   async function trashCount(context: AccessContext): Promise<number> {

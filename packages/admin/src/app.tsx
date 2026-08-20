@@ -11,6 +11,7 @@ import { AssistantRoute } from './routes/assistant.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
+import { CommentsRoute } from './routes/comments.js'
 import { CommerceCouponsRoute } from './routes/commerce-coupons.js'
 import { CommerceOrderRoute } from './routes/commerce-order-detail.js'
 import { CommerceOrdersRoute } from './routes/commerce-orders.js'
@@ -123,6 +124,7 @@ export function App(): JSX.Element {
               <Route path="users" element={<UsersRoute />} />
               <Route path="api-keys" element={<ApiKeysRoute />} />
               <Route path="roles" element={<RolesRoute />} />
+              <Route path="comments" element={<CommentsRoute />} />
               <Route path="profile" element={<ProfileRoute />} />
               <Route path="settings" element={<SettingsRoute />} />
               <Route path="site-plan" element={<SitePlanRoute />} />

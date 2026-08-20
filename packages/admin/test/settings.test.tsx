@@ -121,13 +121,19 @@ describe('the site settings screen', () => {
     expect(screen.getByText(/lecture seule/)).toBeDefined()
   })
 
-  it('shows the Discussion tab as a placeholder, not applicable until fiche 15', async () => {
+  it('shows the site-wide discussion defaults, editable (fiche 15 task 5)', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToSettings()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Discussion' }))
-    expect(await screen.findByText(/Sans objet pour l'instant/)).toBeDefined()
+    const checkbox = await screen.findByLabelText('Autoriser les commentaires')
+    expect((checkbox as HTMLInputElement).checked).toBe(true)
+
+    fireEvent.click(checkbox)
+    await waitFor(() => {
+      expect((checkbox as HTMLInputElement).checked).toBe(false)
+    })
   })
 
   it('shows the cookie banner message only once the banner is enabled', async () => {

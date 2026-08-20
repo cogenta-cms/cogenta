@@ -153,6 +153,7 @@ describe('the shell status route, end to end', () => {
       commerceOrdersPending: null,
       commerceActive: false,
       marketplaceUpdates: null,
+      commentsPending: null,
     })
   })
 

@@ -60,6 +60,13 @@ export {
 } from './permissions/review.js'
 export { ensurePluginTables, PERMISSION_TABLES } from './permissions/tables.js'
 export type {
+  PluginRunObservation,
+  PluginRunOutcome,
+  PluginUsageRecord,
+  PluginUsageStore,
+} from './permissions/usage.js'
+export { createPluginUsageStore } from './permissions/usage.js'
+export type {
   MarketplaceCatalog,
   MarketplaceCatalogEntry,
   MarketplaceCatalogFilter,

@@ -811,3 +811,35 @@ de détail des sessions (famille de navigateur + type d'appareil seulement,
 jamais l'OS ni la version) a été tranché pour rester strictement au-dessus de
 la règle « pas d'IP en clair » de la fiche sans en dire plus qu'un WHOIS de
 navigateur ne dirait déjà.
+
+## 14. Fiche 29 — extensions et marketplace : parc installé, sans consommateur réel de `runPlugin`
+
+`@cogenta/plugins` gagne un vrai `PluginUsageStore` (tâche 3, `permissions/usage.ts`)
+que `runPlugin` alimente à chaque appel avec une durée réellement mesurée
+(`IsolatedRunResult.durationMs`, chronométrée côté hôte autour de `runIsolated`) et
+l'issue réelle (succès, erreur, timeout, mémoire, crash). Le point honnête à garder en
+tête : **rien dans ce dépôt n'appelle `runPlugin`**, ni `cogenta serve`, ni aucun autre
+appelant réel — même constat R2-honnête que « aucun `AgentRegistry` vivant n'existe nulle
+part dans ce dépôt », répété depuis L5. L'écran « Extensions installées » (tâche 1) lit
+donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
+bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
+d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt
+que d'inventer une donnée.
+
+Deux autres refus honnêtes, cohérents avec `loader.ts`'s propre commentaire : (1) la
+vérification de compatibilité de version Cogenta (tâche 5, `MARKETPLACE_ENGINE_INCOMPATIBLE`)
+n'est appliquée que si l'appelant configure un vrai `engineVersion` — `cogenta serve` ne
+le fait jamais aujourd'hui, faute d'un vrai schéma de version Cogenta (même constat que
+`loadPlugin`'s propre `NO_REAL_ENGINE_VERSION_YET`), donc l'écran affiche « Non vérifiée »
+plutôt qu'un faux refus systématique ; (2) le signal « N mises à jour disponibles »
+existant déjà (`shell-status-router.ts`, comparaison naïve `changelog[0].version`) n'a pas
+été dupliqué — `/api/marketplace/updates` calcule la même chose plus précisément (résolution
+réelle du manifeste courant via `preview()`, comparaison semver réelle) uniquement pour
+l'écran « Extensions installées », qui en a besoin pour décider quoi grouper.
+
+**Postgres/MySQL/MariaDB non exécutés cette session** (Docker indisponible, même
+contrainte d'environnement que les sections précédentes) — les nouvelles tables
+(`cogenta_plugin_usage`, la colonne `enabled` de `cogenta_marketplace_installs`) suivent
+le même idiome `create table if not exists` / `alter table ... add column ... default`
+déjà utilisé partout ailleurs dans `@cogenta/plugins`, jamais exécuté contre les deux
+autres dialectes ici.

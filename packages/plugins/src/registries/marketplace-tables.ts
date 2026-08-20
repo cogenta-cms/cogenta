@@ -42,6 +42,20 @@ export async function ensureMarketplaceTables(db: DatabaseHandle): Promise<void>
       signature_verified ${t255} not null,
       installed_by ${t255},
       installed_at ${t255} not null,
-      updated_at ${t255} not null
+      updated_at ${t255} not null,
+      enabled ${t255} not null default 'true'
     )`)
+
+  // Fiche 29 task 1 — "activer/désactiver" as a real, separate column, not
+  // a schema migration: `create table if not exists` never re-runs on an
+  // existing table, so a pre-fiche-29 install row (created before this
+  // column existed) needs it added explicitly, `default` applying only to
+  // rows the `insert` itself creates. Every dialect here supports `add
+  // column ... default` (SQLite since 3.35 for `default`-only columns,
+  // Postgres and MySQL/MariaDB unconditionally) — same portable
+  // best-effort idiom `createIndexIfMissing` already uses for "already
+  // there, not an error".
+  await db
+    .query(sql`alter table ${installs} add column enabled ${t255} not null default 'true'`)
+    .catch(() => undefined)
 }

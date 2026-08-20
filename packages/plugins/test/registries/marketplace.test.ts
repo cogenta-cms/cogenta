@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CogentaError, type DatabaseHandle } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  createPluginDisableStore,
+  type PluginDisableStore,
+} from '../../src/permissions/disabled.js'
 import { createPluginGrantStore, type PluginGrantStore } from '../../src/permissions/grants.js'
+import { createPluginUsageStore, type PluginUsageStore } from '../../src/permissions/usage.js'
 import {
   createMarketplaceCatalog,
   createMarketplaceInstaller,
@@ -56,6 +61,8 @@ describe('marketplace catalog and installer (L17)', () => {
   let dir: string
   let db: DatabaseHandle
   let grantStore: PluginGrantStore
+  let disableStore: PluginDisableStore
+  let usageStore: PluginUsageStore
   let publicKey: string
   let privateKey: string
 
@@ -63,6 +70,8 @@ describe('marketplace catalog and installer (L17)', () => {
     dir = await mkdtemp(join(tmpdir(), 'cogenta-marketplace-'))
     db = await testDb()
     grantStore = createPluginGrantStore(db)
+    disableStore = createPluginDisableStore(db)
+    usageStore = createPluginUsageStore(db)
     ;({ publicKey, privateKey } = generateSigningKeyPair())
   })
 
@@ -70,8 +79,14 @@ describe('marketplace catalog and installer (L17)', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  function installer(): MarketplaceInstaller {
-    return createMarketplaceInstaller(db, { trustedPublicKeys: [publicKey], grantStore })
+  function installer(engineVersion?: string): MarketplaceInstaller {
+    return createMarketplaceInstaller(db, {
+      trustedPublicKeys: [publicKey],
+      grantStore,
+      disableStore,
+      usageStore,
+      ...(engineVersion === undefined ? {} : { engineVersion }),
+    })
   }
 
   describe('createMarketplaceCatalog', () => {
@@ -380,6 +395,128 @@ describe('marketplace catalog and installer (L17)', () => {
       await expect(installer().update(entry, 'user-1')).rejects.toMatchObject({
         code: 'MARKETPLACE_NOT_INSTALLED',
       })
+    })
+  })
+
+  describe('fiche 29 — activate/deactivate (task 1)', () => {
+    it('a freshly installed item is enabled by default, and can be toggled', async () => {
+      const pluginDir = await writePlugin(dir, { sign: { privateKey } })
+      const entry: MarketplaceCatalogEntry = {
+        id: 'item-1',
+        kind: 'plugin',
+        displayName: 'Trusted Plugin',
+        description: '',
+        category: 'General',
+        reference: pluginDir,
+      }
+      const record = await installer().install(entry, 'user-1')
+      expect(record.enabled).toBe(true)
+
+      const deactivated = await installer().deactivate('item-1')
+      expect(deactivated.enabled).toBe(false)
+      expect((await installer().get('item-1'))?.enabled).toBe(false)
+
+      const reactivated = await installer().activate('item-1')
+      expect(reactivated.enabled).toBe(true)
+    })
+
+    it('toggling an item that is not installed refuses honestly', async () => {
+      await expect(installer().activate('ghost')).rejects.toMatchObject({
+        code: 'MARKETPLACE_NOT_INSTALLED',
+      })
+    })
+  })
+
+  describe('fiche 29 — engine compatibility (task 5)', () => {
+    it('without a configured Cogenta version, install never fabricates a refusal', async () => {
+      const pluginDir = await writePlugin(dir, { sign: { privateKey } })
+      const entry: MarketplaceCatalogEntry = {
+        id: 'item-1',
+        kind: 'plugin',
+        displayName: 'Trusted Plugin',
+        description: '',
+        category: 'General',
+        reference: pluginDir,
+      }
+      // No `engineVersion` configured — installer() defaults to none.
+      await expect(installer().install(entry, 'user-1')).resolves.toMatchObject({
+        pluginVersion: '1.0.0',
+      })
+      const preview = await installer().preview(entry)
+      expect(preview.engineCompatible).toBeNull()
+      expect(preview.latestVersion).toBe('1.0.0')
+      expect(preview.source).toBe('registry')
+    })
+
+    it('refuses to install a plugin incompatible with a configured Cogenta version', async () => {
+      const pluginDir = await writePlugin(dir, { sign: { privateKey } }) // engine: ^1.0.0
+      const entry: MarketplaceCatalogEntry = {
+        id: 'item-1',
+        kind: 'plugin',
+        displayName: 'Trusted Plugin',
+        description: '',
+        category: 'General',
+        reference: pluginDir,
+      }
+      await expect(installer('2.0.0').install(entry, 'user-1')).rejects.toMatchObject({
+        code: 'MARKETPLACE_ENGINE_INCOMPATIBLE',
+      })
+      expect(await installer('2.0.0').list()).toHaveLength(0)
+    })
+
+    it('installs when the configured Cogenta version satisfies the engine range', async () => {
+      const pluginDir = await writePlugin(dir, { sign: { privateKey } }) // engine: ^1.0.0
+      const entry: MarketplaceCatalogEntry = {
+        id: 'item-1',
+        kind: 'plugin',
+        displayName: 'Trusted Plugin',
+        description: '',
+        category: 'General',
+        reference: pluginDir,
+      }
+      const record = await installer('1.4.0').install(entry, 'user-1')
+      expect(record.pluginVersion).toBe('1.0.0')
+      const preview = await installer('1.4.0').preview(entry)
+      expect(preview.engineCompatible).toBe(true)
+    })
+  })
+
+  describe('fiche 29 — uninstall with data removal (task 4)', () => {
+    async function installWithGrantAndUsage(): Promise<MarketplaceCatalogEntry> {
+      const pluginDir = await writePlugin(dir, { sign: { privateKey } })
+      const entry: MarketplaceCatalogEntry = {
+        id: 'item-1',
+        kind: 'plugin',
+        displayName: 'Trusted Plugin',
+        description: '',
+        category: 'General',
+        reference: pluginDir,
+      }
+      await installer().install(entry, 'user-1')
+      await grantStore.grant('marketplace-plugin', 'content.read')
+      await usageStore.recordRun('marketplace-plugin', { durationMs: 10, ok: true })
+      await disableStore.disable('marketplace-plugin', 'crash', 'boom')
+      return entry
+    }
+
+    it('a plain uninstall leaves grants, usage and the disable record untouched', async () => {
+      await installWithGrantAndUsage()
+      await installer().uninstall('item-1')
+
+      expect(await installer().get('item-1')).toBeNull()
+      expect(await grantStore.listGrants('marketplace-plugin')).toHaveLength(1)
+      expect(await usageStore.getUsage('marketplace-plugin')).not.toBeNull()
+      expect(await disableStore.isDisabled('marketplace-plugin')).not.toBeNull()
+    })
+
+    it('removeData: true also revokes grants, clears usage and the disable record', async () => {
+      await installWithGrantAndUsage()
+      await installer().uninstall('item-1', { removeData: true })
+
+      expect(await installer().get('item-1')).toBeNull()
+      expect(await grantStore.listGrants('marketplace-plugin')).toHaveLength(0)
+      expect(await usageStore.getUsage('marketplace-plugin')).toBeNull()
+      expect(await disableStore.isDisabled('marketplace-plugin')).toBeNull()
     })
   })
 

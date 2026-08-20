@@ -931,6 +931,7 @@ export function installMockFetch(
       displayName: 'SEO Helper',
       description: 'Suggests meta descriptions for your pages.',
       category: 'SEO',
+      author: 'Cogenta',
       screenshots: ['https://example.test/seo-helper.png'],
       changelog: [{ version: '1.0.0', notes: 'First release.' }],
       capabilities: ['content.read'],
@@ -994,6 +995,7 @@ export function installMockFetch(
     installedBy: string | null
     installedAt: string
     updatedAt: string
+    enabled: boolean
   }
   const marketplaceInstalls = new Map<string, MarketplaceInstallRow>([
     // Pre-installed at the *previous* version, so the first `update` call in
@@ -1012,6 +1014,7 @@ export function installMockFetch(
         installedBy: user.id,
         installedAt: '2026-02-01T00:00:00.000Z',
         updatedAt: '2026-02-01T00:00:00.000Z',
+        enabled: true,
       },
     ],
   ])
@@ -1371,11 +1374,18 @@ export function installMockFetch(
       // that would widen capabilities is a real 409 with
       // `MARKETPLACE_UPDATE_REQUIRES_APPROVAL` until `confirmPendingPermissions`
       // is sent — the two refusals this admin screen exists to never hide.
+      const marketplaceInstalledMatch = /\/api\/marketplace\/installed(?:\?.*)?$/u.exec(url)
+      const marketplaceUpdatesMatch = /\/api\/marketplace\/updates(\/apply)?(?:\?.*)?$/u.exec(url)
       const marketplaceMatch =
-        /\/api\/marketplace\/items(?:\/([^/?]+))?(?:\/(install|update|uninstall))?(?:\?.*)?$/u.exec(
+        /\/api\/marketplace\/items(?:\/([^/?]+))?(?:\/(install|update|uninstall|activate|deactivate))?(?:\?.*)?$/u.exec(
           url,
         )
-      if (marketplaceMatch !== null && url.includes('/api/marketplace')) {
+      if (
+        (marketplaceInstalledMatch !== null ||
+          marketplaceUpdatesMatch !== null ||
+          marketplaceMatch !== null) &&
+        url.includes('/api/marketplace')
+      ) {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
@@ -1385,6 +1395,90 @@ export function installMockFetch(
               code: 'FORBIDDEN',
               message: 'Only the admin role may browse or install marketplace items.',
             },
+          })
+        }
+
+        // Fiche 29 tasks 1-2 — the "installed extensions" and "updates"
+        // summary endpoints. Kept deliberately simple in this mock (no
+        // usage/disabled data, matching the real router's honest "null
+        // means never measured/never violated" default): the real
+        // enrichment logic is proved server-side, not re-implemented here.
+        if (marketplaceInstalledMatch !== null && method === 'GET') {
+          const data = Array.from(marketplaceInstalls.values()).map((record) => {
+            const entry = MARKETPLACE_CATALOG.find((candidate) => candidate.id === record.itemId)
+            const latestVersion = entry?.changelog.at(-1)?.version ?? null
+            const updateAvailable = latestVersion !== null && latestVersion !== record.pluginVersion
+            return {
+              itemId: record.itemId,
+              kind: record.kind,
+              displayName: record.displayName,
+              pluginName: record.pluginName,
+              pluginVersion: record.pluginVersion,
+              signatureVerified: record.signatureVerified,
+              installedBy: record.installedBy,
+              installedAt: record.installedAt,
+              updatedAt: record.updatedAt,
+              enabled: record.enabled,
+              disabled: null,
+              usage: null,
+              latestVersion,
+              updateAvailable,
+              updateRequiresApproval: updateAvailable,
+              grantedCapabilities: [],
+            }
+          })
+          return json(200, { data })
+        }
+
+        if (marketplaceUpdatesMatch !== null) {
+          const applying = marketplaceUpdatesMatch[1] === '/apply'
+          const withUpdate = Array.from(marketplaceInstalls.values())
+            .map((record) => {
+              const entry = MARKETPLACE_CATALOG.find((candidate) => candidate.id === record.itemId)
+              const latestVersion = entry?.changelog.at(-1)?.version ?? null
+              return { record, entry, latestVersion }
+            })
+            .filter(
+              ({ latestVersion, record }) =>
+                latestVersion !== null && latestVersion !== record.pluginVersion,
+            )
+
+          if (!applying) {
+            if (method !== 'GET')
+              return json(405, { error: { code: 'QUERY_INVALID', message: '' } })
+            return json(200, {
+              data: {
+                count: withUpdate.length,
+                items: withUpdate.map(({ record, latestVersion }) => ({
+                  itemId: record.itemId,
+                  displayName: record.displayName,
+                  currentVersion: record.pluginVersion,
+                  latestVersion,
+                  requiresApproval: true,
+                })),
+              },
+            })
+          }
+
+          if (method !== 'POST') return json(405, { error: { code: 'QUERY_INVALID', message: '' } })
+          // Every mock update widens permissions (the fixture's only stories
+          // are "plain" or "widening") — a grouped apply always skips them,
+          // exactly like the real server would.
+          return json(200, {
+            data: {
+              applied: [],
+              skipped: withUpdate.map(({ record }) => ({
+                itemId: record.itemId,
+                reason: 'requires_approval',
+              })),
+              failed: [],
+            },
+          })
+        }
+
+        if (marketplaceMatch === null) {
+          return json(404, {
+            error: { code: 'MARKETPLACE_ITEM_NOT_FOUND', message: 'No such marketplace item.' },
           })
         }
         const [, rawId, action] = marketplaceMatch
@@ -1473,6 +1567,7 @@ export function installMockFetch(
             installedBy: user.id,
             installedAt: timestamp,
             updatedAt: timestamp,
+            enabled: true,
           }
           marketplaceInstalls.set(entry.id, record)
           return json(201, { data: record })
@@ -1508,7 +1603,20 @@ export function installMockFetch(
 
         if (action === 'uninstall' && (method === 'POST' || method === 'DELETE')) {
           marketplaceInstalls.delete(entry.id)
-          return json(200, { data: { id: entry.id, uninstalled: true } })
+          return json(200, {
+            data: { id: entry.id, uninstalled: true, dataRemoved: body.removeData === true },
+          })
+        }
+
+        if ((action === 'activate' || action === 'deactivate') && method === 'POST') {
+          if (installed === null) {
+            return json(404, {
+              error: { code: 'MARKETPLACE_NOT_INSTALLED', message: 'Not installed.' },
+            })
+          }
+          const updated: MarketplaceInstallRow = { ...installed, enabled: action === 'activate' }
+          marketplaceInstalls.set(entry.id, updated)
+          return json(200, { data: updated })
         }
       }
 

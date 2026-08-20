@@ -4,6 +4,7 @@ import type { PluginManifest } from '../manifest.js'
 import type { PluginDisableStore, PluginViolationReason } from '../permissions/disabled.js'
 import type { PluginGrant } from '../permissions/grants.js'
 import { resolveGrantedCapabilities } from '../permissions/resolve.js'
+import type { PluginUsageStore } from '../permissions/usage.js'
 import type { CapabilityHandler } from './capabilities.js'
 import type {
   WorkerGuestMessage,
@@ -63,6 +64,12 @@ export interface IsolatedRunResult {
   readonly ok: boolean
   readonly value?: unknown
   readonly error?: string
+  /**
+   * Real wall-clock milliseconds the worker spent from spawn to settling —
+   * the one "already measured" resource figure fiche 29 task 3 exposes.
+   * Always set, success or failure, so a caller can accumulate it either way.
+   */
+  readonly durationMs: number
   /**
    * Set only when `ok` is `false` — classifies WHY the worker failed, so a
    * caller (task 6's disable policy) can tell "the plugin's own code threw a
@@ -166,14 +173,16 @@ export async function runIsolated(
     stderr: false,
   })
 
+  const startedAt = Date.now()
+
   return await new Promise<IsolatedRunResult>((resolve) => {
     let settled = false
-    const finish = (result: IsolatedRunResult): void => {
+    const finish = (result: Omit<IsolatedRunResult, 'durationMs'>): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       void worker.terminate()
-      resolve(result)
+      resolve({ ...result, durationMs: Date.now() - startedAt })
     }
 
     const timer = setTimeout(() => {
@@ -228,6 +237,14 @@ export interface RunPluginOptions extends Omit<RunIsolatedOptions, 'grantedCapab
   readonly disableStore: PluginDisableStore
   /** Fired synchronously right after a violation is recorded — the real "avec alerte" half of "tué et désactivé, avec alerte". */
   readonly onPluginDisabled?: (event: PluginDisabledEvent) => void
+  /**
+   * Fiche 29 task 3 — when present, every real run (success or failure) is
+   * accumulated here. Optional, like `siblings` on `createContentStore`
+   * (ADR-0022's reasoning applies the same way): most existing callers of
+   * `runPlugin` have no usage screen to feed, and requiring a store they
+   * have no use for would be a needless breaking change.
+   */
+  readonly usageStore?: PluginUsageStore
 }
 
 /**
@@ -272,6 +289,15 @@ export async function runPlugin(
       reason: result.reason,
       at: new Date().toISOString(),
       ...(result.error === undefined ? {} : { details: result.error }),
+    })
+  }
+
+  if (options.usageStore !== undefined) {
+    await options.usageStore.recordRun(manifest.name, {
+      durationMs: result.durationMs,
+      ok: result.ok,
+      ...(result.reason === undefined ? {} : { reason: result.reason }),
+      ...(result.error === undefined ? {} : { error: result.error }),
     })
   }
 

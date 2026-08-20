@@ -14,7 +14,7 @@ async function loadFixture(name: string): Promise<string> {
 describe('runIsolated', () => {
   it('runs a trivial script and returns its value', async () => {
     const result = await runIsolated('1 + 1')
-    expect(result).toEqual({ ok: true, value: 2 })
+    expect(result).toMatchObject({ ok: true, value: 2 })
   })
 
   it('reports a thrown error rather than crashing the host', async () => {
@@ -135,6 +135,6 @@ describe('runIsolated — env isolation', () => {
     // that intentionally exposed a restricted process-like object would
     // still have nothing real to read from.
     const result = await runIsolated('typeof process')
-    expect(result).toEqual({ ok: true, value: 'undefined' })
+    expect(result).toMatchObject({ ok: true, value: 'undefined' })
   })
 })

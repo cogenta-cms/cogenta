@@ -152,6 +152,8 @@ import {
   createMarketplaceInstaller,
   createPluginDisableStore,
   createPluginGrantStore,
+  createPluginUsageStore,
+  describeCapability,
   ensureMarketplaceTables,
   ensurePluginTables,
   type MarketplaceCatalogEntry,
@@ -1011,17 +1013,27 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensurePluginTables(db)
   await ensureMarketplaceTables(db)
   const marketplaceGrants = createPluginGrantStore(db)
-  const marketplaceCatalog = createMarketplaceCatalog(options.marketplace?.catalog ?? [])
-  const marketplaceInstaller = createMarketplaceInstaller(db, {
-    grantStore: marketplaceGrants,
-    ...(options.marketplace?.trustedPublicKeys === undefined
-      ? {}
-      : { trustedPublicKeys: options.marketplace.trustedPublicKeys }),
-  })
   // `ensurePluginTables` above already creates the disabled-plugins table —
   // this is the first thing that ever reads it back (fiche 38 task 1's
   // `plugin-disabled` notice source).
   const pluginDisabled = createPluginDisableStore(db)
+  // Fiche 29 task 3 — accumulated real per-run duration/outcome. Nothing in
+  // `cogenta serve` actually calls `runPlugin` yet (no live `AgentRegistry`
+  // exists anywhere in this repo, the same R2-honest gap already noted for
+  // L5/L7/L9/L8) — this store exists and is wired into the marketplace
+  // router regardless, so the "installed extensions" screen has a real,
+  // testable place to read from the moment a real execution pipeline lands,
+  // rather than a second wiring pass.
+  const pluginUsage = createPluginUsageStore(db)
+  const marketplaceCatalog = createMarketplaceCatalog(options.marketplace?.catalog ?? [])
+  const marketplaceInstaller = createMarketplaceInstaller(db, {
+    grantStore: marketplaceGrants,
+    disableStore: pluginDisabled,
+    usageStore: pluginUsage,
+    ...(options.marketplace?.trustedPublicKeys === undefined
+      ? {}
+      : { trustedPublicKeys: options.marketplace.trustedPublicKeys }),
+  })
 
   // Fiche 38 task 2: what has ever been shown to each person, resolved or
   // not — the half of the notice mechanism `NoticeDismissalStore` was never
@@ -1127,10 +1139,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ),
     )
     const label =
-      typeof entry.values['title'] === 'string'
-        ? entry.values['title']
-        : typeof entry.values['name'] === 'string'
-          ? entry.values['name']
+      typeof entry.values.title === 'string'
+        ? entry.values.title
+        : typeof entry.values.name === 'string'
+          ? entry.values.name
           : entryId
     let route: string | null = null
     if (collection.routing !== undefined) {
@@ -1284,6 +1296,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     marketplaceRouter: createMarketplaceRouter({
       catalog: marketplaceCatalog,
       installer: marketplaceInstaller,
+      disableStore: pluginDisabled,
+      usageStore: pluginUsage,
+      grantStore: marketplaceGrants,
+      describeCapability,
     }),
     menuRouter: createMenuRouter({
       store: menuStore,
@@ -2024,9 +2040,9 @@ function jsonError(res: ServerResponse, status: number, code: string, message: s
 function rateLimitHeaders(
   details: Readonly<Record<string, unknown>> | undefined,
 ): Record<string, string> {
-  const limit = typeof details?.['limit'] === 'number' ? details['limit'] : undefined
-  const remaining = typeof details?.['remaining'] === 'number' ? details['remaining'] : undefined
-  const resetAt = typeof details?.['resetAt'] === 'number' ? details['resetAt'] : undefined
+  const limit = typeof details?.limit === 'number' ? details.limit : undefined
+  const remaining = typeof details?.remaining === 'number' ? details.remaining : undefined
+  const resetAt = typeof details?.resetAt === 'number' ? details.resetAt : undefined
   const retryAfterSeconds =
     resetAt === undefined ? 60 : Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))
 

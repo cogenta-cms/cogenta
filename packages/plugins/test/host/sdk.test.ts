@@ -52,7 +52,7 @@ describe('plugin SDK — real capability-gated methods through the real isolated
       handlers,
     })
 
-    expect(result).toEqual({ ok: true, value: 'Real content' })
+    expect(result).toMatchObject({ ok: true, value: 'Real content' })
   })
 
   it('"content.read" is genuinely absent from the sandbox SDK when not granted — not present-but-refusing', async () => {
@@ -64,7 +64,7 @@ describe('plugin SDK — real capability-gated methods through the real isolated
       handlers: { 'content.read': createContentReadHandler((id) => store.read(id)) },
     })
 
-    expect(result).toEqual({ ok: true, value: false })
+    expect(result).toMatchObject({ ok: true, value: false })
   })
 
   it('"http.fetch" granted for one domain succeeds for that domain and is refused for another, re-verified host-side', async () => {
@@ -78,7 +78,7 @@ describe('plugin SDK — real capability-gated methods through the real isolated
       `sdk.http.fetch({ url: 'https://api.example.com/data' }).then((r) => r.status)`,
       { grantedCapabilities: ['http.fetch:api.example.com'], handlers },
     )
-    expect(allowed).toEqual({ ok: true, value: 200 })
+    expect(allowed).toMatchObject({ ok: true, value: 200 })
     expect(fetchImpl).toHaveBeenCalledTimes(1)
 
     const refused = await runIsolated(
@@ -114,7 +114,7 @@ describe('plugin SDK — real capability-gated methods through the real isolated
         // tight under CPU contention; give this one real room.
         { grantedCapabilities: granted, handlers, timeoutMs: 5000 },
       )
-      expect(writeThenRead).toEqual({ ok: true, value: 'hello from plugin' })
+      expect(writeThenRead).toMatchObject({ ok: true, value: 'hello from plugin' })
 
       const escapeAttempt = await runIsolated(
         `sdk.storage.write({ key: 'plugins/demo/../other-plugin/secret.txt', content: 'x' })

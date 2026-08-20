@@ -10,6 +10,7 @@ import {
 export const PERMISSION_TABLES = {
   grants: 'cogenta_plugin_grants',
   disabled: 'cogenta_plugin_disabled',
+  usage: 'cogenta_plugin_usage',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -56,6 +57,24 @@ export async function ensurePluginTables(db: DatabaseHandle): Promise<void> {
       reason ${t255} not null,
       details ${t512},
       disabled_at ${t255} not null
+    )`)
+
+  // Fiche 29 task 3 — one accumulated row per plugin (`../permissions/usage.js`).
+  const usage = identifier(PERMISSION_TABLES.usage, d)
+  const tInt = unsafeRaw(d === 'sqlite' ? 'integer' : 'bigint')
+  await db.query(sql`
+    create table if not exists ${usage} (
+      plugin_name ${t255} not null primary key,
+      call_count ${tInt} not null,
+      total_duration_ms ${tInt} not null,
+      error_count ${tInt} not null,
+      timeout_count ${tInt} not null,
+      memory_count ${tInt} not null,
+      crash_count ${tInt} not null,
+      last_run_at ${t255} not null,
+      last_duration_ms ${tInt} not null,
+      last_outcome ${t255} not null,
+      last_error ${t512}
     )`)
 }
 

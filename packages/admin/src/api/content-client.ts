@@ -330,11 +330,21 @@ export interface VersionSummary {
 
 export type ChangeKind = 'added' | 'removed' | 'changed'
 
+/** A word-level diff op — `packages/schema/src/store/diff.ts`'s `WordChange`. */
+export type WordOp = 'equal' | 'added' | 'removed'
+
+export interface WordChange {
+  readonly op: WordOp
+  readonly text: string
+}
+
 export interface FieldChange {
   readonly field: string
   readonly change: ChangeKind
   readonly before: unknown
   readonly after: unknown
+  /** Word-level diff of `before`/`after`, when both are plain text (`enrichWordDiffs`). */
+  readonly words?: readonly WordChange[]
 }
 
 export interface BlockChange {

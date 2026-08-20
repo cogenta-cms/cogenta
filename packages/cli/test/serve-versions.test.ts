@@ -168,6 +168,193 @@ describe('cogenta serve — history, diff and restore, the calls the admin makes
     }
   })
 
+  it('compares two arbitrary versions, neither the oldest nor the live one (fiche 06 task 1)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ values: { title: 'v1', slug: 'arbitrary-compare' } }),
+        })
+      ).json()) as { data: Entry }
+      const id = created.data.id
+
+      for (const title of ['v2', 'v3', 'v4', 'v5']) {
+        await fetch(`${server.base}/api/content/page/${id}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ values: { title } }),
+        })
+      }
+
+      const history = (await (
+        await fetch(`${server.base}/api/content/page/${id}/history`, { headers })
+      ).json()) as { data: readonly VersionSummary[] }
+      // Five versions: neither v3 nor v5 is the oldest (v1) or necessarily live.
+      const middleFrom = history.data.find((v) => v.version === 2)
+      const middleTo = history.data.find((v) => v.version === 4)
+      if (middleFrom === undefined || middleTo === undefined) {
+        throw new Error('expected versions 2 and 4 in the history')
+      }
+
+      const diff = (await (
+        await fetch(
+          `${server.base}/api/content/page/${id}/diff?from=${middleFrom.version}&to=${middleTo.version}`,
+          { headers },
+        )
+      ).json()) as { data: ContentDiff }
+      expect(diff.data.changed).toBe(true)
+      const titleChange = diff.data.fields.find((change) => change.field === 'title')
+      expect(titleChange).toMatchObject({ before: 'v2', after: 'v4' })
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('reports a word-level diff for a changed text field (fiche 06 task 3)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            values: { title: 'The quick brown fox', slug: 'word-diff' },
+          }),
+        })
+      ).json()) as { data: Entry }
+      const id = created.data.id
+
+      await fetch(`${server.base}/api/content/page/${id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ values: { title: 'The quick red fox' } }),
+      })
+
+      const history = (await (
+        await fetch(`${server.base}/api/content/page/${id}/history`, { headers })
+      ).json()) as { data: readonly VersionSummary[] }
+      const oldest = history.data.at(-1)
+      const live = history.data.find((v) => v.live)
+      if (oldest === undefined || live === undefined) throw new Error('no history to work from')
+
+      const diff = (await (
+        await fetch(
+          `${server.base}/api/content/page/${id}/diff?from=${oldest.version}&to=${live.version}`,
+          { headers },
+        )
+      ).json()) as {
+        data: {
+          readonly fields: readonly {
+            readonly field: string
+            readonly words?: readonly { readonly op: string; readonly text: string }[]
+          }[]
+        }
+      }
+      const titleChange = diff.data.fields.find((change) => change.field === 'title')
+      expect(titleChange?.words).toBeDefined()
+      const removed = titleChange?.words?.filter((word) => word.op === 'removed').map((w) => w.text)
+      const added = titleChange?.words?.filter((word) => word.op === 'added').map((w) => w.text)
+      expect(removed).toEqual(['brown'])
+      expect(added).toEqual(['red'])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('restores an earlier version, then undoes the restore by restoring the version that was live before it', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ values: { title: 'First title', slug: 'undo-restore' } }),
+        })
+      ).json()) as { data: Entry }
+      const id = created.data.id
+
+      await fetch(`${server.base}/api/content/page/${id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ values: { title: 'Second title' } }),
+      })
+
+      const beforeRestore = (await (
+        await fetch(`${server.base}/api/content/page/${id}/history`, { headers })
+      ).json()) as { data: readonly VersionSummary[] }
+      const liveBeforeRestore = beforeRestore.data.find((v) => v.live)
+      const oldest = beforeRestore.data.at(-1)
+      if (liveBeforeRestore === undefined || oldest === undefined) {
+        throw new Error('no history to work from')
+      }
+
+      await fetch(`${server.base}/api/content/page/${id}/restore`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ version: oldest.version }),
+      })
+
+      const afterRestore = (await (
+        await fetch(`${server.base}/api/content/page/${id}?state=working`, { headers })
+      ).json()) as { data: Entry }
+      expect(afterRestore.data.values.title).toBe('First title')
+
+      // The undo: restore the version that was live right before the restore.
+      // It is exactly what `VersionHistory`'s "Undo" action does, and it must
+      // still be in the history — restoring never destroys anything (R6).
+      const undone = (await (
+        await fetch(`${server.base}/api/content/page/${id}/restore`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ version: liveBeforeRestore.version }),
+        })
+      ).json()) as { data: Entry }
+      expect(undone.data.values.title).toBe('Second title')
+
+      const readBack = (await (
+        await fetch(`${server.base}/api/content/page/${id}?state=working`, { headers })
+      ).json()) as { data: Entry }
+      expect(readBack.data.values.title).toBe('Second title')
+
+      // Both restores are real, separate versions — nothing was rewound.
+      const finalHistory = (await (
+        await fetch(`${server.base}/api/content/page/${id}/history`, { headers })
+      ).json()) as { data: readonly VersionSummary[] }
+      expect(finalHistory.data.length).toBeGreaterThanOrEqual(4)
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('refuses history, diff and restore to an actor who may not read drafts', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

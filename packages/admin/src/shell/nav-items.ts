@@ -176,17 +176,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // AI — reduced to nothing (the whole group hidden) on a site with no
   // provider configured, per R2: the CMS works without AI, and this sidebar
   // does not dangle a link to a screen that can only ever say so.
+  //
+  // Fiche 30 task 2 consolidates chat and duplicate detection under one
+  // "Assistant" overview screen (tabs, not separate nav entries) — the tabs
+  // (AssistantChatRoute/DuplicatesRoute) keep their own capability check and
+  // disappear on their own, so the umbrella nav entry itself is not gated on
+  // one specific tool.
   {
-    to: '/assistant-chat',
-    labelKey: 'nav.assistantChat',
+    to: '/assistant',
+    labelKey: 'nav.assistant',
     group: 'ai',
-    visibleWhen: { kind: 'assistantTool', tool: 'assist.chat' },
-  },
-  {
-    to: '/duplicates',
-    labelKey: 'nav.duplicates',
-    group: 'ai',
-    visibleWhen: { kind: 'assistantTool', tool: 'assist.find_duplicates' },
+    visibleWhen: { kind: 'anyRole' },
   },
   {
     to: '/agents',

@@ -1,5 +1,5 @@
 import type { ChatRequest, ChatResponse, ProviderClient } from '@cogenta/agents'
-import { createAssistToolset } from '@cogenta/agents'
+import { createAssistToolset, createAssistUsageTracker } from '@cogenta/agents'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import { createPermissionLayer } from '../../src/access/index.js'
@@ -259,5 +259,67 @@ describe('POST /api/assistant/run', () => {
     )
 
     expect(response.status).toBe(404)
+  })
+})
+
+describe('assistant usage and budget (fiche 30 task 3)', () => {
+  it('reports usage and the configured model alongside the tool list', async () => {
+    const usage = createAssistUsageTracker({ limits: { monthlyTokenLimit: 1000 } })
+    const router = routerWith(
+      createAssistToolset({
+        provider: provider('a rewritten sentence'),
+        site: { name: SITE.name, locales: SITE.locales },
+        usage,
+      }) as AssistToolsetLike,
+    )
+
+    await router.handle(post({ tool: 'assist.rewrite', input: { text: 'hello there' } }), EDITOR)
+    const response = await router.handle(get(), EDITOR)
+
+    expect(data(response)['model']).toBe('fake-1')
+    expect(data(response)['usage']).toMatchObject({
+      tokensThisMonth: 2,
+      byTool: [{ tool: 'assist.rewrite', calls: 1, tokens: 2 }],
+    })
+  })
+
+  it('refuses to run a tool once the monthly cap is reached, before the provider is called', async () => {
+    let providerCalls = 0
+    const capped = createAssistUsageTracker({ limits: { monthlyTokenLimit: 1 } })
+    capped.record('assist.rewrite', { inputTokens: 1, outputTokens: 1 })
+    const router = routerWith(
+      createAssistToolset({
+        provider: {
+          name: 'fake',
+          model: 'fake-1',
+          chat: async (): Promise<ChatResponse> => {
+            providerCalls += 1
+            return {
+              content: 'unreachable',
+              toolCalls: [],
+              stopReason: 'end_turn',
+              usage: { inputTokens: 1, outputTokens: 1 },
+            }
+          },
+        },
+        site: { name: SITE.name, locales: SITE.locales },
+        usage: capped,
+      }) as AssistToolsetLike,
+    )
+
+    const response = await router.handle(
+      post({ tool: 'assist.rewrite', input: { text: 'hello there' } }),
+      EDITOR,
+    )
+
+    expect(response.status).toBe(429)
+    expect(errorCode(response)).toBe('ASSIST_BUDGET_EXCEEDED')
+    expect(providerCalls).toBe(0)
+  })
+
+  it('never appears at all with no usage tracker configured', async () => {
+    const response = await configured().handle(get(), EDITOR)
+
+    expect(data(response)['usage']).toBeUndefined()
   })
 })

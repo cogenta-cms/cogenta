@@ -23,6 +23,8 @@ const ASSET: MediaAsset = {
   decorativeJustification: null,
   focal: null,
   storageKey: 'media/m1',
+  tags: [],
+  contentHash: 'sha256:deadbeef',
   createdAt: '2026-01-01T00:00:00.000Z',
   createdBy: 'user-1',
 }
@@ -32,7 +34,9 @@ function fakeStore(overrides: Partial<MediaStore> = {}): MediaStore {
     create: vi.fn(async () => ASSET),
     get: vi.fn(async () => ASSET),
     list: vi.fn(async () => ({ items: [ASSET], nextCursor: null, hasMore: false })),
+    count: vi.fn(async () => 1),
     update: vi.fn(async () => ({ ...ASSET, alt: 'Updated alt' })),
+    replace: vi.fn(async () => ASSET),
     delete: vi.fn(async () => undefined),
     ...overrides,
   }

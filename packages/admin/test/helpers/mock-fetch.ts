@@ -318,6 +318,7 @@ export function installMockFetch(
      */
     readonly assistant?: {
       readonly available: boolean
+      readonly reason?: string
       readonly tools?: readonly {
         readonly tool: string
         readonly label: string
@@ -325,6 +326,27 @@ export function installMockFetch(
         readonly cost: string
         readonly needs: readonly string[]
       }[]
+      /** Fiche 30 task 3. */
+      readonly model?: string
+      readonly usage?: {
+        readonly tokensThisMonth: number
+        readonly limit?: number
+        readonly percentUsed?: number
+        readonly nearLimit: boolean
+        readonly overLimit: boolean
+        readonly byTool: readonly {
+          readonly tool: string
+          readonly calls: number
+          readonly tokens: number
+        }[]
+      }
+      /** Fiche 30 task 6. */
+      readonly vector?: {
+        readonly driver: string
+        readonly dimensions: number
+        readonly count: number
+        readonly lastIndexedAt: string | null
+      }
     }
     /** `POST /api/assistant/run`'s answer, keyed by tool name — what each test's scripted provider "said". */
     readonly assistantRun?: Readonly<Record<string, unknown>>
@@ -4599,7 +4621,14 @@ export function installMockFetch(
       if (url.endsWith('/api/assistant') && method === 'GET') {
         const assistant = options.assistant ?? { available: false, tools: [] }
         return json(200, {
-          data: { available: assistant.available, tools: assistant.tools ?? [] },
+          data: {
+            available: assistant.available,
+            tools: assistant.tools ?? [],
+            ...(assistant.reason === undefined ? {} : { reason: assistant.reason }),
+            ...(assistant.model === undefined ? {} : { model: assistant.model }),
+            ...(assistant.usage === undefined ? {} : { usage: assistant.usage }),
+            ...(assistant.vector === undefined ? {} : { vector: assistant.vector }),
+          },
         })
       }
 

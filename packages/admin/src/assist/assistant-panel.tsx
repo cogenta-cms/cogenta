@@ -36,8 +36,8 @@ export interface AssistantPanelProps {
   readonly fields: readonly AssistField[]
   readonly locale: string
   readonly siteLocales: readonly string[]
-  /** Called when the editor accepts a suggestion. The panel never applies one itself. */
-  onApply(field: string, text: string): void
+  /** Called when the editor accepts a suggestion, naming which tool produced it (fiche 30 task 5's audit trail). The panel never applies one itself. */
+  onApply(field: string, text: string, tool: string): void
 }
 
 interface RunState {
@@ -222,7 +222,7 @@ export function AssistantPanel({
                       type="button"
                       size="sm"
                       onClick={() => {
-                        if (field !== undefined) onApply(field.name, candidate)
+                        if (field !== undefined) onApply(field.name, candidate, result.tool)
                       }}
                     >
                       {t('assist.use')}

@@ -390,6 +390,9 @@ export const ERROR_CODES = [
   'ASSIST_UNAVAILABLE',
   'ASSIST_RESPONSE_INVALID',
 
+  // Agents — assistant usage/budget (fiche 30 task 3)
+  'ASSIST_BUDGET_EXCEEDED',
+
   // Marketplace — catalog and one-click install (L17)
   'MARKETPLACE_ITEM_NOT_FOUND',
   'MARKETPLACE_KIND_UNSUPPORTED',

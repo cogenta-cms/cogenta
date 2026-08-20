@@ -1,5 +1,6 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import {
   type AgentHistoryEntry,
   type AgentSummary,
@@ -29,7 +30,17 @@ import {
   TableRow,
 } from '../ui/index.js'
 
-/** L5 task 9: état, autonomie, budget, historique, traces — read from `@cogenta/agents`' registry via `/api/agents`, admin only. */
+/**
+ * L5 task 9: état, autonomie, budget, historique, traces — read from `@cogenta/agents`' registry via `/api/agents`, admin only.
+ *
+ * **Fiche 30 task 1.** No `AgentRegistry` runs anywhere in this codebase —
+ * enabling an agent here writes a stored configuration flag that nothing
+ * reads back to actually run one. The table below is real (it reads and
+ * writes that stored configuration, and the toggle really does persist), but
+ * it configures a capability that does not exist yet. The banner says so in
+ * plain language, every time this screen renders, so nobody can look at this
+ * table and believe an agent is executing.
+ */
 export function AgentsRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -109,6 +120,15 @@ export function AgentsRoute(): JSX.Element {
       <h1 id="agents-heading" className="m-0 text-xl leading-7 font-semibold">
         {t('agents.heading')}
       </h1>
+
+      <Notice tone="warning" live="off" title={t('agents.runtimeNoticeTitle')}>
+        <p className="m-0">{t('agents.runtimeNoticeBody')}</p>
+        <p className="m-0 mt-2">
+          <Link to="/assistant">{t('agents.runtimeNoticeAssistantLink')}</Link>
+          {' — '}
+          {t('agents.runtimeNoticeDocs')}
+        </p>
+      </Notice>
 
       {error !== null && (
         <Notice tone="danger" live="assertive">

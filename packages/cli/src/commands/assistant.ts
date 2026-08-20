@@ -1,6 +1,8 @@
 import {
   type AssistToolset,
+  type AssistUsageTracker,
   createAssistToolset,
+  createAssistUsageTracker,
   createHashingEmbeddingProvider,
   createImageProviderRegistry,
   createProviderRegistry,
@@ -35,12 +37,29 @@ import { searchDocumentFor } from '@cogenta/schema'
  * serving a site (R2).
  */
 
+/**
+ * What the vector index looks like right now — fiche 30 task 6, "l'index
+ * vectoriel est invisible". `count`/`lastIndexedAt` are read on demand, never
+ * cached beyond the process, so the admin panel is never stale by more than
+ * one request.
+ */
+export interface AssistantVectorInfo {
+  readonly driver: string
+  readonly dimensions: number
+  count(): Promise<number>
+  lastIndexedAt(): string | null
+  /** `withVectorIndexing` calls this after each successful write — not exported for anything else to call. */
+  noteIndexed(): void
+}
+
 export interface AssistantAssembly {
   readonly toolset: AssistToolset
   /** Absent when semantic search is not available on this site. */
   readonly search?: SemanticSearch
   /** Absent for the same reason. Used to keep the index in step with the content. */
   readonly vectors?: { readonly store: VectorStore; readonly embeddings: EmbeddingProvider }
+  /** Absent when there is no vector store at all — same condition as `vectors`, but the toolset already has its own view of driver/dimensions so this is not derived from it. */
+  readonly vectorInfo?: AssistantVectorInfo
   /** What `cogenta serve` prints on startup. Always truthful about what is off. */
   readonly summary: string
   dispose(): Promise<void>
@@ -177,22 +196,52 @@ export async function buildAssistant(options: BuildAssistantOptions): Promise<As
           ...(options.fullText === undefined ? {} : { fullText: options.fullText }),
         })
 
+  // Fiche 30 task 3. Only present when a text provider is present — a site
+  // with no AI provider has nothing to meter (R2), and `createAssistToolset`
+  // itself would drop a tracker handed to it anyway once `runtime` is
+  // `undefined`, so building one unconditionally would just be dead weight.
+  const usage: AssistUsageTracker | undefined =
+    provider === undefined
+      ? undefined
+      : createAssistUsageTracker({
+          limits: { monthlyTokenLimit: config.assistant.monthlyTokenLimit },
+        })
+
   const toolset = createAssistToolset({
     site: { name: config.site.name, locales: config.site.locales },
     ...(provider === undefined ? {} : { provider }),
     ...(images === undefined ? {} : { imageProvider: images }),
     ...(search === undefined ? {} : { search }),
     ...(store === undefined || embeddings === undefined ? {} : { vectors: { store, embeddings } }),
+    ...(usage === undefined ? {} : { usage }),
   })
 
   const summary = toolset.available
     ? `assistant: ${toolset.tools.length} tool(s), text provider: ${provider?.name ?? 'none'}, image provider: ${images?.name ?? 'none'}, vector driver: ${vectorDriver}`
     : 'assistant: off (no AI provider configured)'
 
+  // Fiche 30 task 6. Only when there is a real store — `vectorDriver` stays
+  // `'none'` and `store` stays `undefined` on a site with no embedder, and an
+  // "index" with no store to count is not a real state to report.
+  let lastIndexedAt: string | null = null
+  const vectorInfo: AssistantVectorInfo | undefined =
+    store === undefined || embeddings === undefined
+      ? undefined
+      : {
+          driver: vectorDriver,
+          dimensions: embeddings.dimensions,
+          count: () => store.count(),
+          lastIndexedAt: () => lastIndexedAt,
+          noteIndexed: () => {
+            lastIndexedAt = new Date().toISOString()
+          },
+        }
+
   return {
     toolset,
     ...(search === undefined ? {} : { search }),
     ...(store === undefined || embeddings === undefined ? {} : { vectors: { store, embeddings } }),
+    ...(vectorInfo === undefined ? {} : { vectorInfo }),
     summary,
     dispose: async () => {
       await disposeVectors?.()
@@ -223,6 +272,8 @@ export interface VectorIndexingOptions {
   readonly store: VectorStore
   readonly embeddings: EmbeddingProvider
   readonly onError?: (error: unknown) => void
+  /** Fiche 30 task 6's "dernière indexation" — called once per successful reindex (upsert or removal alike), never on failure. */
+  readonly onIndexed?: () => void
 }
 
 /** The chunk id an entry's single document occupies. One chunk per entry, for now — see the note in `reindexEntry`. */
@@ -279,14 +330,17 @@ export async function reindexVectorEntry(
     const published = await store.read(id, { state: 'published' })
     if (published === null) {
       await options.store.remove([chunkIdFor(options.collection.name, id)])
+      options.onIndexed?.()
       return
     }
     const record = await recordFor(options, searchDocumentFor(options.collection, published))
     if (record === null) {
       await options.store.remove([chunkIdFor(options.collection.name, id)])
+      options.onIndexed?.()
       return
     }
     await options.store.upsert([record])
+    options.onIndexed?.()
   } catch (error) {
     options.onError?.(error)
   }
@@ -346,6 +400,7 @@ export function withVectorIndexing(
       const removed = await store.delete(id)
       try {
         await options.store.remove([chunkIdFor(options.collection.name, id)])
+        options.onIndexed?.()
       } catch (error) {
         options.onError?.(error)
       }

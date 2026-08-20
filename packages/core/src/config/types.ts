@@ -180,6 +180,10 @@ export interface CogentaConfigInput {
     readonly keep?: number
     readonly dir?: string
   }
+  /** The writing assistant's spending cap (fiche 30 task 3). Absent means the default cap applies — never "unlimited". */
+  readonly assistant?: {
+    readonly monthlyTokenLimit?: number
+  }
 }
 
 /**
@@ -318,6 +322,10 @@ export interface CogentaConfig {
     readonly intervalHours: number
     readonly keep: number
     readonly dir: string
+  }
+  /** The writing assistant's spending cap (fiche 30 task 3), always resolved — never absent. */
+  readonly assistant: {
+    readonly monthlyTokenLimit: number
   }
 }
 

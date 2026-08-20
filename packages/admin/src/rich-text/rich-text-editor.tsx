@@ -20,6 +20,7 @@ import { clearSlashQuery, slashQueryAt, toggleBlock } from './commands.js'
 import { portableTextToSlate, slateToPortableText } from './convert.js'
 import { ImageInsertModal } from './image-picker.js'
 import type { RichTextDocument } from './portable-text.js'
+import { RichTextSelectionAssist } from './selection-assist.js'
 import type { RichTextSession } from './session.js'
 import { filterSlashItems, SlashMenu, type SlashMenuItem } from './slash-menu.js'
 import { RichTextToolbar } from './toolbar.js'
@@ -232,6 +233,7 @@ export function RichTextEditor({
         <div className="flex items-start gap-2">
           <div className="flex-1">
             <RichTextToolbar disabled={disabled} session={session} />
+            <RichTextSelectionAssist disabled={disabled} />
           </div>
           <button
             type="button"

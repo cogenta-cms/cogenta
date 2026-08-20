@@ -7,7 +7,7 @@ import { AgentsRoute } from './routes/agents.js'
 import { AnalyticsRoute } from './routes/analytics.js'
 import { ApiKeysRoute } from './routes/api-keys.js'
 import { AppearanceRoute } from './routes/appearance.js'
-import { AssistantChatRoute } from './routes/assistant-chat.js'
+import { AssistantRoute } from './routes/assistant.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
@@ -17,7 +17,6 @@ import { CommerceOrdersRoute } from './routes/commerce-orders.js'
 import { CommerceProductsRoute } from './routes/commerce-products.js'
 import { CommerceSubscriptionsRoute } from './routes/commerce-subscriptions.js'
 import { DashboardRoute } from './routes/dashboard.js'
-import { DuplicatesRoute } from './routes/duplicates.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
 import { HealthRoute } from './routes/health.js'
@@ -106,8 +105,7 @@ export function App(): JSX.Element {
               <Route path="tools" element={<ToolsRoute />} />
               <Route path="scheduled" element={<ScheduledRoute />} />
               <Route path="trash" element={<TrashRoute />} />
-              <Route path="assistant-chat" element={<AssistantChatRoute />} />
-              <Route path="duplicates" element={<DuplicatesRoute />} />
+              <Route path="assistant" element={<AssistantRoute />} />
               <Route path="media" element={<MediaRoute />} />
               <Route path="import" element={<ImportRoute />} />
               <Route path="audit" element={<AuditRoute />} />

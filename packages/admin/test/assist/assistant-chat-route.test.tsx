@@ -30,23 +30,16 @@ const CHAT_TOOL = {
 }
 
 describe('the "ask the site" chat screen', () => {
-  it('does not appear in the nav, and does not render, on a site with no AI provider', async () => {
+  it('does not render, on a site with no AI provider — the whole assistant screen explains why instead', async () => {
     signedIn()
-    const { unmount } = render(<App />)
+    render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    // Without a provider, `assistantTools` resolves to `[]`, so the "IA"
-    // group has no visible item and the whole group — including this
-    // entry — is absent (fiche 35), not merely a dead link.
-    expect(screen.queryByRole('link', { name: 'Interroger le site' })).toBeNull()
-    unmount()
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
 
-    // And the route itself refuses to render for whoever still has the URL.
-    window.history.pushState(null, '', '/assistant-chat')
-    render(<App />)
-    await screen.findByRole('navigation', { name: 'Navigation principale' })
-
+    await screen.findByText("Aucun fournisseur IA n'est configuré")
     expect(screen.queryByRole('heading', { name: 'Interroger le site' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Interroger le site' })).toBeNull()
   })
 
   it('answers a question with the real citations retrieval found', async () => {
@@ -71,7 +64,8 @@ describe('the "ask the site" chat screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Interroger le site' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
     await screen.findByRole('heading', { name: 'Interroger le site' })
 
     fireEvent.change(screen.getByLabelText('Votre question'), {

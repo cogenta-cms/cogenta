@@ -63,11 +63,43 @@ export interface AssistCapabilityLike {
   readonly needs: readonly string[]
 }
 
+/** Structural mirror of `@cogenta/agents`' `AssistUsageSnapshot` (fiche 30 task 3). */
+export interface AssistUsageSnapshotLike {
+  readonly tokensThisMonth: number
+  readonly limit?: number
+  readonly percentUsed?: number
+  readonly nearLimit: boolean
+  readonly overLimit: boolean
+  readonly byTool: readonly {
+    readonly tool: string
+    readonly calls: number
+    readonly tokens: number
+  }[]
+}
+
+/** Structural mirror of `@cogenta/agents`' `AssistUsageTracker`. */
+export interface AssistUsageTrackerLike {
+  checkBudget(): { readonly allowed: boolean }
+  usage(): AssistUsageSnapshotLike
+}
+
 export interface AssistToolsetLike {
   readonly available: boolean
   readonly reason?: string
   readonly tools: readonly AssistToolLike[]
   readonly capabilities: readonly AssistCapabilityLike[]
+  /** The text model in use, when a provider is configured — fed to the admin so a `provenanceDetail.model` can be recorded on save. */
+  readonly model?: string
+  /** Absent when no provider is configured — there is nothing to meter (R2). */
+  readonly usage?: AssistUsageTrackerLike
+}
+
+/** Structural mirror of `@cogenta/cli`'s `AssistantVectorInfo` (fiche 30 task 6), minus `noteIndexed` — a read-only view is all this route needs. */
+export interface AssistVectorInfoLike {
+  readonly driver: string
+  readonly dimensions: number
+  count(): Promise<number>
+  lastIndexedAt(): string | null
 }
 
 export interface AssistantRouterOptions {
@@ -81,6 +113,8 @@ export interface AssistantRouterOptions {
   readonly basePath?: string
   /** How long one suggestion may take before it is cancelled. */
   readonly timeoutMs?: number
+  /** Absent when the site has no vector store — fiche 30 task 6's "l'index vectoriel est invisible". */
+  readonly vectorInfo?: AssistVectorInfoLike
 }
 
 export interface AssistantRouter {
@@ -138,14 +172,27 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
     })
   }
 
-  function capabilities(): RestResponse {
+  async function capabilities(): Promise<RestResponse> {
     // 200, always. "No provider configured" is an answer, not a failure — the
     // whole degradation story of this lot depends on this not being an error.
+    const vector =
+      options.vectorInfo === undefined
+        ? undefined
+        : {
+            driver: options.vectorInfo.driver,
+            dimensions: options.vectorInfo.dimensions,
+            count: await options.vectorInfo.count(),
+            lastIndexedAt: options.vectorInfo.lastIndexedAt(),
+          }
+
     return jsonResponse(200, {
       data: {
         available: options.toolset.available,
         ...(options.toolset.reason === undefined ? {} : { reason: options.toolset.reason }),
         tools: options.toolset.capabilities,
+        ...(options.toolset.model === undefined ? {} : { model: options.toolset.model }),
+        ...(options.toolset.usage === undefined ? {} : { usage: options.toolset.usage.usage() }),
+        ...(vector === undefined ? {} : { vector }),
       },
     })
   }
@@ -158,6 +205,18 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
         code: 'ASSIST_UNAVAILABLE',
         message: 'No AI provider is configured for this site.',
         hint: 'Everything else works as usual. Configure an AI provider to switch the assistant on.',
+      })
+    }
+
+    // Checked before the tool is even resolved: a site over its monthly cap
+    // refuses cleanly rather than spending one more token to find out which
+    // tool was asked for (fiche 30 task 3 — "un plafond qui refuse est
+    // indispensable").
+    if (options.toolset.usage !== undefined && !options.toolset.usage.checkBudget().allowed) {
+      throw new CogentaError({
+        code: 'ASSIST_BUDGET_EXCEEDED',
+        message: "This site's monthly assistant budget has been reached.",
+        hint: 'Everything else works as usual. Raise assistant.monthlyTokenLimit, or wait for next month.',
       })
     }
 

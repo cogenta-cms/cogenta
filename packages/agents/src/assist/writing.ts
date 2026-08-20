@@ -93,6 +93,7 @@ export function createRewriteTool(
     async execute(input, ctx) {
       const text = await runtime.complete({
         agent: agentOf(recipe),
+        tool: 'assist.rewrite',
         instruction: [
           'Rewrite the passage in the DATA block.',
           input.goal === undefined ? 'Improve its clarity and flow.' : `Goal: ${input.goal}`,
@@ -145,6 +146,7 @@ export function createProofreadTool(
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
+          tool: 'assist.proofread',
           instruction: [
             'Proofread the text in the DATA block.',
             localeLine(input.locale),
@@ -199,6 +201,7 @@ export function createSummariseTool(
     async execute(input, ctx) {
       const text = await runtime.complete({
         agent: agentOf(recipe),
+        tool: 'assist.summarise',
         instruction: [
           'Summarise the text in the DATA block.',
           `Use at most ${input.maxWords ?? 80} words.`,
@@ -248,6 +251,7 @@ export function createTranslateTool(
     async execute(input, ctx) {
       const text = await runtime.complete({
         agent: agentOf(recipe),
+        tool: 'assist.translate',
         instruction: [
           `Translate the text in the DATA block into ${input.targetLocale}.`,
           input.sourceLocale === undefined ? '' : `The source language is ${input.sourceLocale}.`,
@@ -308,6 +312,7 @@ export function createMetaDescriptionTool(
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
+          tool: 'assist.meta_description',
           instruction: [
             'Write three meta descriptions for the page whose content is in the DATA block.',
             localeLine(input.locale),
@@ -364,6 +369,7 @@ export function createTitleTool(runtime: AssistRuntime): ToolDefinition<TitlesIn
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
+          tool: 'assist.titles',
           instruction: [
             `Write ${count} candidate titles for the page whose content is in the DATA block.`,
             localeLine(input.locale),
@@ -417,6 +423,7 @@ export function createTagsTool(runtime: AssistRuntime): ToolDefinition<TagsInput
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
+          tool: 'assist.tags',
           instruction: [
             `Propose at most ${input.count ?? 6} tags for the content in the DATA block.`,
             localeLine(input.locale),
@@ -489,6 +496,7 @@ export function createAltTextTool(
     async execute(input, ctx) {
       const text = await runtime.complete({
         agent: agentOf(recipe),
+        tool: 'assist.alt_text',
         instruction: [
           'Propose alt text for an image that appears in the content in the DATA block.',
           localeLine(input.locale),

@@ -219,5 +219,8 @@ export function resolveConfig(
       keep: config.backup.keep,
       dir: config.backup.dir,
     }),
+    assistant: Object.freeze({
+      monthlyTokenLimit: config.assistant.monthlyTokenLimit,
+    }),
   })
 }

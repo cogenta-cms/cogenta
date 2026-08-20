@@ -239,3 +239,120 @@ describe('cogenta serve — /api/assistant with no AI provider configured (R2)',
     expect(((await found.json()) as { data: unknown[] }).data.length).toBeGreaterThan(0)
   })
 })
+
+describe('cogenta serve — vector index visibility (fiche 30 task 6)', () => {
+  it('reports the driver, dimensions and a growing count with no AI provider at all', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'editor@example.com',
+      'correct horse battery staple',
+    )
+
+    const before = await fetch(`${server.base}/api/assistant`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const beforeBody = (await before.json()) as {
+      data: {
+        vector?: { driver: string; dimensions: number; count: number; lastIndexedAt: string | null }
+        usage?: unknown
+        model?: unknown
+      }
+    }
+    expect(beforeBody.data.vector).toMatchObject({ count: 0, lastIndexedAt: null })
+    expect(beforeBody.data.vector?.driver).toBeTruthy()
+    expect(beforeBody.data.vector?.dimensions).toBeGreaterThan(0)
+    // No usage tracker exists without a text provider — nothing to meter (R2).
+    expect(beforeBody.data.usage).toBeUndefined()
+    expect(beforeBody.data.model).toBeUndefined()
+
+    const created = await fetch(`${server.base}/api/content/page`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: { title: 'Rose window', slug: 'rose-window' } }),
+    })
+    const id = ((await created.json()) as { data: { id: string } }).data.id
+    await fetch(`${server.base}/api/content/page/${id}/publish`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    const after = await fetch(`${server.base}/api/assistant`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const afterBody = (await after.json()) as {
+      data: { vector?: { count: number; lastIndexedAt: string | null } }
+    }
+    expect(afterBody.data.vector?.count).toBe(1)
+    expect(afterBody.data.vector?.lastIndexedAt).not.toBeNull()
+  })
+})
+
+describe('cogenta serve — assistant traceability on save (fiche 30 task 5)', () => {
+  it('records an accepted suggestion in the audit log, distinct from an ordinary edit', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin', 'editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const created = await fetch(`${server.base}/api/content/page`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: { title: 'Original title', slug: 'assisted-page' } }),
+    })
+    const id = ((await created.json()) as { data: { id: string } }).data.id
+
+    // An ordinary edit — no assist metadata.
+    await fetch(`${server.base}/api/content/page/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: { title: 'A human-typed title' } }),
+    })
+
+    // A save that includes an accepted suggestion.
+    await fetch(`${server.base}/api/content/page/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        values: { title: 'An assistant-suggested title' },
+        provenance: 'assisted',
+        provenanceDetail: { agent: 'assist.rewrite', at: new Date().toISOString() },
+        assistApplied: [{ field: 'title', tool: 'assist.rewrite' }],
+      }),
+    })
+
+    const entry = await fetch(`${server.base}/api/content/page/${id}?state=working`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const entryBody = (await entry.json()) as { data: { provenance: string } }
+    expect(entryBody.data.provenance).toBe('assisted')
+
+    const audit = await fetch(`${server.base}/api/audit?collection=page`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const entries = (
+      (await audit.json()) as {
+        data: readonly {
+          readonly action: string
+          readonly entryId: string | null
+          readonly diff: Readonly<Record<string, unknown>> | null
+        }[]
+      }
+    ).data
+
+    const updates = entries.filter((row) => row.action === 'content.update' && row.entryId === id)
+    expect(updates).toHaveLength(2)
+    const [assisted, plain] = [...updates].sort(
+      (a, b) =>
+        Number('_assistApplied' in (b.diff ?? {})) - Number('_assistApplied' in (a.diff ?? {})),
+    )
+    expect(assisted?.diff?.['_assistApplied']).toEqual([{ field: 'title', tool: 'assist.rewrite' }])
+    expect(plain?.diff?.['_assistApplied']).toBeUndefined()
+  })
+})

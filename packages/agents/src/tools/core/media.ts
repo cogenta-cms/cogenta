@@ -19,6 +19,8 @@ const MediaAssetSchema = z.object({
   decorativeJustification: z.string().nullable(),
   focal: FocalPointSchema.nullable(),
   storageKey: z.string(),
+  tags: z.array(z.string()),
+  contentHash: z.string(),
   createdAt: z.string(),
   createdBy: z.string().nullable(),
 }) satisfies z.ZodType<MediaAsset>

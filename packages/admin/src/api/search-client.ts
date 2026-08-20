@@ -21,6 +21,18 @@ export interface SearchHit {
    * queries.
    */
   readonly score: number
+  /**
+   * Prose around the first match, in the entry's real casing and accents —
+   * `''` when the server had no gateway to build one, or the entry has since
+   * become unreadable (fiche 36 task 3). Never HTML: render it through
+   * `HighlightedExcerpt`, never `dangerouslySetInnerHTML` (R3/R8).
+   */
+  readonly excerpt: string
+  /** Offsets, inside `excerpt`, of the substrings that matched a query term. */
+  readonly highlights: readonly { readonly start: number; readonly end: number }[]
+  /** `null` under the same conditions as `excerpt`. */
+  readonly createdAt: string | null
+  readonly updatedAt: string | null
 }
 
 export interface SearchResults {

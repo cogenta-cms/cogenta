@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
-import type { CollectionDefinition, SearchDriver, SearchHit } from '@cogenta/schema'
+import type { CollectionDefinition, ContentStore, SearchDriver, SearchHit } from '@cogenta/schema'
 import {
   createContentStore,
   createSchemaTables,
@@ -11,8 +11,13 @@ import {
 } from '@cogenta/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createPermissionLayer } from '../../src/access/index.js'
+import { createContentGateway } from '../../src/graphql/gateway.js'
 import type { RestResponse } from '../../src/rest/http.js'
-import { createSearchRouter, type SearchRouter } from '../../src/rest/search-router.js'
+import {
+  createSearchRouter,
+  type SearchResultHit,
+  type SearchRouter,
+} from '../../src/rest/search-router.js'
 import type { AccessContext, Actor } from '../../src/types.js'
 import { ANONYMOUS } from '../../src/types.js'
 
@@ -165,5 +170,93 @@ describe('GET /api/search', () => {
     })
     expect(response.status).toBe(405)
     expect(response.headers['allow']).toBe('GET')
+  })
+})
+
+describe('GET /api/search — excerpts (task 3)', () => {
+  let directory: string
+  let db: DatabaseHandle
+  let index: SearchDriver
+  let router: SearchRouter
+
+  const ask = async (
+    query: Readonly<Record<string, string>>,
+    context: AccessContext = { actor: ANONYMOUS },
+  ): Promise<RestResponse> => router.handle({ method: 'GET', path: '/api/search', query }, context)
+
+  const dataOf = (response: RestResponse): readonly SearchResultHit[] =>
+    (response.body as { data: readonly SearchResultHit[] }).data ?? []
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'cogenta-search-excerpt-'))
+    db = await createSqliteHandle({ url: join(directory, 'search.db') })
+    await createSchemaTables(db, COLLECTIONS)
+    index = await createSqliteSearch({ db })
+
+    const stores = new Map<string, ContentStore>()
+    for (const collection of COLLECTIONS) {
+      const store = withSearchIndexing(createContentStore({ db, collection }), {
+        collection,
+        index,
+      })
+      stores.set(collection.name, store)
+    }
+
+    const article = stores.get('search_article') as ContentStore
+    const published = await article.create({
+      values: {
+        title: 'Cathédrale de Reims',
+      },
+    })
+    await article.publish(published.id)
+
+    const permissions = createPermissionLayer({ collections: COLLECTIONS })
+    const gateway = createContentGateway({ collections: COLLECTIONS, stores, permissions })
+
+    router = createSearchRouter({
+      index,
+      collections: COLLECTIONS,
+      permissions,
+      defaultLocale: 'en',
+      gateway,
+    })
+  })
+
+  afterEach(async () => {
+    await db.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  it("names why the hit matched, in the live entry's real casing", async () => {
+    const response = await ask({ q: 'reims' })
+    expect(response.status).toBe(200)
+    const [hit] = dataOf(response)
+    expect(hit?.excerpt).toContain('Reims')
+    expect(hit?.highlights.length).toBeGreaterThan(0)
+  })
+
+  it('carries the entry timestamps a results page needs to sort by date', async () => {
+    const response = await ask({ q: 'reims' })
+    const [hit] = dataOf(response)
+    expect(typeof hit?.createdAt).toBe('string')
+    expect(typeof hit?.updatedAt).toBe('string')
+  })
+
+  it('still answers without an excerpt when no gateway was supplied', async () => {
+    const bare = createSearchRouter({
+      index,
+      collections: COLLECTIONS,
+      permissions: createPermissionLayer({ collections: COLLECTIONS }),
+      defaultLocale: 'en',
+    })
+    const response = await bare.handle({
+      method: 'GET',
+      path: '/api/search',
+      query: { q: 'reims' },
+    })
+    const [hit] = dataOf(response)
+    expect(hit?.excerpt).toBe('')
+    expect(hit?.highlights).toEqual([])
+    expect(hit?.createdAt).toBeNull()
   })
 })

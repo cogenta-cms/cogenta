@@ -95,7 +95,7 @@ export type { RedirectRouter, RedirectRouterOptions } from './redirect-router.js
 export { createRedirectRouter } from './redirect-router.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
-export type { SearchRouter, SearchRouterOptions } from './search-router.js'
+export type { SearchResultHit, SearchRouter, SearchRouterOptions } from './search-router.js'
 export { createSearchRouter } from './search-router.js'
 export type {
   AppliedPlanReport,

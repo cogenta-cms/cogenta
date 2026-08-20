@@ -872,6 +872,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       collections,
       permissions,
       defaultLocale: site.defaultLocale,
+      // Real excerpts (fiche 36 task 3): the gateway is already built above
+      // with the same stores and permissions REST/GraphQL use.
+      gateway,
     }),
     securityAlerts:
       options.onSecurityEvent == null

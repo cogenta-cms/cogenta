@@ -1,6 +1,6 @@
 import type { BlockZones, ContentBlock, ContentEntry } from '../store/types.js'
 import type { CollectionDefinition } from '../types.js'
-import { condense } from './text.js'
+import { condense, foldText } from './text.js'
 import type { SearchDocument } from './types.js'
 
 /**
@@ -197,4 +197,75 @@ export function searchDocumentFor(
     title,
     body: condense(parts.join(' ')),
   }
+}
+
+/** One run of characters inside an excerpt that matched a query term. */
+export interface ExcerptMatch {
+  readonly start: number
+  readonly end: number
+}
+
+export interface Excerpt {
+  readonly text: string
+  readonly matches: readonly ExcerptMatch[]
+}
+
+/** Letters and digits, the same boundary `tokenize` (`text.ts`) uses. */
+const WORD_PATTERN = /[\p{L}\p{N}]+/gu
+
+/** Characters kept on each side of the first match — enough prose to show why a
+ * result matched without turning the result list into a wall of text. */
+const EXCERPT_RADIUS = 80
+
+/** No match found: the caller still gets a real opening, not a raw cutoff of `body`. */
+const EXCERPT_FALLBACK_LENGTH = 200
+
+/**
+ * A window of prose around the first query term found in `text`, with the
+ * offsets of every match **inside that window** — never inside the full text,
+ * which the caller has already thrown away by the time it renders anything.
+ *
+ * `text` is expected to be the *display* text — `SearchDocument.body`, which
+ * `searchDocumentFor` builds with `condense` but never `foldText` (only the
+ * three drivers fold it, at the point they hand it to their own engine, for
+ * matching). That is what lets an excerpt keep real casing and accents while
+ * still being found by a folded, prefix-matching query: each candidate word is
+ * folded here, once, only to decide whether it counts as a match — never to
+ * change what is shown (fiche 36, task 3).
+ */
+export function buildExcerpt(text: string, tokens: readonly string[]): Excerpt {
+  if (tokens.length === 0 || text.length === 0) {
+    return { text: text.slice(0, EXCERPT_FALLBACK_LENGTH), matches: [] }
+  }
+
+  const words: ExcerptMatch[] = []
+  for (const match of text.matchAll(WORD_PATTERN)) {
+    words.push({ start: match.index, end: match.index + match[0].length })
+  }
+
+  // The same rule the FTS5/tsquery/boolean-mode drivers all express: a term
+  // matches a word that starts with it, not only a word equal to it.
+  function isHit(word: ExcerptMatch): boolean {
+    const folded = foldText(text.slice(word.start, word.end))
+    return tokens.some((token) => folded.startsWith(token))
+  }
+
+  const hits = words.filter(isHit)
+  if (hits.length === 0) {
+    return { text: text.slice(0, EXCERPT_FALLBACK_LENGTH), matches: [] }
+  }
+
+  const anchor = hits[0] as ExcerptMatch
+  const windowStart = Math.max(0, anchor.start - EXCERPT_RADIUS)
+  const windowEnd = Math.min(text.length, anchor.end + EXCERPT_RADIUS)
+
+  const prefix = windowStart > 0 ? '… ' : ''
+  const suffix = windowEnd < text.length ? ' …' : ''
+  const shift = prefix.length - windowStart
+
+  const matches = hits
+    .filter((word) => word.start >= windowStart && word.end <= windowEnd)
+    .map((word) => ({ start: word.start + shift, end: word.end + shift }))
+
+  return { text: `${prefix}${text.slice(windowStart, windowEnd)}${suffix}`, matches }
 }

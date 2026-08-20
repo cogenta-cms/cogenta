@@ -57,6 +57,37 @@ async function renderSignedIn(): Promise<void> {
   await screen.findByLabelText('Recherche globale')
 }
 
+function stubEditorFetch(
+  handler: (url: string, init: RequestInit | undefined) => Response | null,
+): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/api/auth/session')) {
+        return jsonResponse({
+          data: { id: 'user-2', email: 'editor@example.com', roles: ['editor'] },
+        })
+      }
+      const found = handler(url, init)
+      if (found !== null) return found
+      throw new Error(`Unexpected fetch: ${url}`)
+    }),
+  )
+}
+
+async function renderSignedInAsEditor(): Promise<void> {
+  localStorage.setItem('cogenta.session.token', 'editor-token')
+  render(
+    <MemoryRouter>
+      <AuthProvider>
+        <GlobalSearch />
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+  await screen.findByLabelText('Recherche globale')
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
   localStorage.clear()
@@ -208,5 +239,64 @@ describe('GlobalSearch', () => {
 
     fireEvent.mouseDown(document.body)
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('opens from anywhere on Ctrl/Cmd+K', async () => {
+    stubAuthenticatedFetch(() => null)
+    await renderSignedIn()
+
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Recherche globale'))
+  })
+
+  it('ignores the shortcut while typing in some other field (task 1)', async () => {
+    stubAuthenticatedFetch(() => null)
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <div>
+            <label htmlFor="unrelated-field">Unrelated field</label>
+            <input id="unrelated-field" />
+          </div>
+          <GlobalSearch />
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    const search = await screen.findByLabelText('Recherche globale')
+    const other = screen.getByLabelText('Unrelated field')
+    other.focus()
+    expect(document.activeElement).toBe(other)
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(document.activeElement).toBe(other)
+    expect(document.activeElement).not.toBe(search)
+  })
+
+  it('never calls /api/users for a non-admin actor (non-regression)', async () => {
+    const calledUrls: string[] = []
+    stubEditorFetch((url) => {
+      calledUrls.push(url)
+      if (url.includes('/api/search')) {
+        return jsonResponse({ data: [], page: { hasMore: false, nextOffset: null } })
+      }
+      if (url.includes('/api/media')) {
+        return jsonResponse({ data: [], page: { hasMore: false, nextCursor: null } })
+      }
+      if (url.includes('/api/menus')) return jsonResponse({ data: [] })
+      if (url.includes('/api/commerce/orders')) return jsonResponse({ orders: [] })
+      return null
+    })
+    await renderSignedInAsEditor()
+
+    fireEvent.change(screen.getByLabelText('Recherche globale'), { target: { value: 'anything' } })
+    await waitFor(() => expect(calledUrls.some((url) => url.includes('/api/search'))).toBe(true), {
+      timeout: 2000,
+    })
+
+    expect(calledUrls.some((url) => url.includes('/api/users'))).toBe(false)
+    expect(calledUrls.some((url) => url.includes('/api/marketplace'))).toBe(false)
   })
 })

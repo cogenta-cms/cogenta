@@ -5,6 +5,7 @@ import {
   limit,
   newId,
   type SqlExecutor,
+  type SqlFragment,
   sql,
 } from '@cogenta/core'
 import type { CartStore } from '../cart/store.js'
@@ -49,6 +50,13 @@ export interface OrderStoreDependencies {
 export interface OrderListOptions {
   readonly status?: OrderStatus
   readonly customerId?: string
+  /**
+   * A substring of the reference or the email, folded to lower case (fiche 36
+   * task 4 — the admin's global search finds an order "by number and email").
+   * Mirrors `CustomerStore.list`'s own `search` option, the established
+   * pattern for this kind of filter in this package.
+   */
+  readonly search?: string
   readonly limit?: number
   readonly offset?: number
 }
@@ -385,14 +393,22 @@ export function createOrderStore(
     },
 
     list: async (options) => {
-      let statement = sql`select * from ${orders}`
-      if (options?.status !== undefined && options.customerId !== undefined) {
-        statement = sql`${statement} where status = ${options.status} and customer_id = ${options.customerId}`
-      } else if (options?.status !== undefined) {
-        statement = sql`${statement} where status = ${options.status}`
-      } else if (options?.customerId !== undefined) {
-        statement = sql`${statement} where customer_id = ${options.customerId}`
+      const conditions: SqlFragment[] = []
+      if (options?.status !== undefined) conditions.push(sql`status = ${options.status}`)
+      if (options?.customerId !== undefined) {
+        conditions.push(sql`customer_id = ${options.customerId}`)
       }
+      const search = options?.search?.trim().toLowerCase()
+      if (search !== undefined && search !== '') {
+        conditions.push(
+          sql`(lower(reference) like ${`%${search}%`} or lower(email) like ${`%${search}%`})`,
+        )
+      }
+
+      let statement = sql`select * from ${orders}`
+      conditions.forEach((condition, index) => {
+        statement = sql`${statement} ${index === 0 ? sql`where` : sql`and`} ${condition}`
+      })
       statement = sql`${statement} order by placed_at desc, id desc limit ${limit(options?.limit ?? 100)} offset ${limit(options?.offset ?? 0)}`
 
       const result = await db.query<OrderRow>(statement)

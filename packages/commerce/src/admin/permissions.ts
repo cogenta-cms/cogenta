@@ -65,6 +65,14 @@ export interface CommercePermissionLayer {
   can(permission: CommercePermission, actor: CommerceActor): boolean
   /** Throws `FORBIDDEN`, or `UNAUTHENTICATED` when nobody is signed in. */
   assert(permission: CommercePermission, actor: CommerceActor): void
+  /**
+   * Which roles this layer actually grants which permission — `DEFAULT_COMMERCE_ROLES`
+   * unless `CommercePermissionOptions.roles` overrode it. Read-only, and
+   * exposed so a permissions screen (fiche 19) can render the truth this
+   * layer enforces instead of re-embedding `DEFAULT_COMMERCE_ROLES` by hand,
+   * which would silently go stale the day a site actually overrides `roles`.
+   */
+  readonly roles: Readonly<Record<string, readonly CommercePermission[]>>
 }
 
 export interface CommercePermissionOptions {
@@ -87,6 +95,7 @@ export function createCommercePermissions(
 
   return {
     can,
+    roles,
     assert: (permission, actor) => {
       if (can(permission, actor)) return
 

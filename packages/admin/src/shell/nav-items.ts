@@ -35,6 +35,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/marketplace', labelKey: 'nav.marketplace' },
   { to: '/users', labelKey: 'nav.users' },
   { to: '/api-keys', labelKey: 'nav.apiKeys' },
+  { to: '/roles', labelKey: 'nav.roles' },
   { to: '/profile', labelKey: 'nav.profile' },
   { to: '/settings', labelKey: 'nav.settings' },
   { to: '/ops-settings', labelKey: 'nav.opsSettings' },

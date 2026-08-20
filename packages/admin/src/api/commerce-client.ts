@@ -422,3 +422,13 @@ export async function fetchInvoicePdf(token: string, orderId: string): Promise<B
   }
   return response.blob()
 }
+
+// ---- permissions --------------------------------------------------------------
+
+/** Contract E's own permission vocabulary, and which roles this site actually grants each one — fiche 19's permission matrix. */
+export function getCommercePermissions(token: string): Promise<{
+  readonly permissions: readonly string[]
+  readonly roles: Readonly<Record<string, readonly string[]>>
+}> {
+  return requestBody('/api/commerce/permissions', { headers: authHeader(token) })
+}

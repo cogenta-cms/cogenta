@@ -28,6 +28,7 @@ import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
 import { RedirectsRoute } from './routes/redirects.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
+import { RolesRoute } from './routes/roles.js'
 import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
 import { TaxonomiesRoute } from './routes/taxonomies.js'
@@ -95,6 +96,7 @@ export function App(): JSX.Element {
               <Route path="agents" element={<AgentsRoute />} />
               <Route path="users" element={<UsersRoute />} />
               <Route path="api-keys" element={<ApiKeysRoute />} />
+              <Route path="roles" element={<RolesRoute />} />
               <Route path="profile" element={<ProfileRoute />} />
               <Route path="settings" element={<SettingsRoute />} />
               <Route path="site-plan" element={<SitePlanRoute />} />

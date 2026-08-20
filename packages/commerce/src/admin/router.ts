@@ -8,7 +8,7 @@ import { ORDER_STATUSES, type OrderStatus } from '../order/types.js'
 import type { PaymentStore } from '../payment/store.js'
 import type { SubscriptionStore } from '../subscription/store.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
-import { COMMERCE_ANONYMOUS } from './permissions.js'
+import { COMMERCE_ANONYMOUS, COMMERCE_PERMISSIONS } from './permissions.js'
 
 /**
  * The shop's back office, as a transport-free router.
@@ -163,6 +163,21 @@ export function createCommerceAdminRouter(
           .split('/')
           .filter((segment) => segment !== '')
         const method = request.method.toUpperCase()
+
+        // ---- permissions ----------------------------------------------------
+        // Read-only, and deliberately not gated behind a write permission: it
+        // describes the vocabulary and the role grants this very layer
+        // enforces (fiche 19's permission matrix), never anything that could
+        // itself move money or edit the catalogue.
+        if (segments.length === 1 && segments[0] === 'permissions') {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return {
+              status: 200,
+              body: { permissions: COMMERCE_PERMISSIONS, roles: permissions.roles },
+            }
+          }
+        }
 
         // ---- products -----------------------------------------------------
         if (segments[0] === 'products' && segments.length === 1) {

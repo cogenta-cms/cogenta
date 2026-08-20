@@ -478,4 +478,35 @@ describe('the shop, end to end', () => {
     }
     expect(afterCancelBody.subscriptions.map((s) => s.id)).toContain(subscription.id)
   })
+
+  it('serves the permission vocabulary and role grants for fiche 19 s permission matrix', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['admin'])
+
+    const response = await fetch(`${server.base}/api/commerce/permissions`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      permissions: readonly string[]
+      roles: Readonly<Record<string, readonly string[]>>
+    }
+    expect(body.permissions).toContain('commerce.order.refund')
+    expect(body.roles.admin).toContain('commerce.order.refund')
+    // `viewer` may look at the shop but never move money — the exact
+    // distinction the permission matrix exists to make visible.
+    expect(body.roles.viewer).toEqual(['commerce.read'])
+  })
+
+  it('refuses the permission vocabulary to a role that cannot even read the shop', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['subscriber'])
+
+    const response = await fetch(`${server.base}/api/commerce/permissions`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(403)
+  })
 })

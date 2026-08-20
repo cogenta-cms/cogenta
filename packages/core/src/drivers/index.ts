@@ -4,9 +4,12 @@ export type {
   Driver,
   DriverChoice,
   DriverSelection,
+  DriverSelectionReason,
+  DriverSelectionReasonCode,
   DriverTier,
   HealthReport,
   HealthStatus,
   SkippedDriver,
+  SkipReasonCode,
 } from './types.js'
 export { DRIVER_TIERS } from './types.js'

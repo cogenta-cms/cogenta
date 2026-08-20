@@ -2528,7 +2528,8 @@
     "questionLabel": "Votre question",
     "ask": "Demander",
     "asking": "En cours…",
-    "error": "L'assistant n'a pas pu répondre. Réessayez."
+    "error": "L'assistant n'a pas pu répondre. Réessayez.",
+    "unavailable": "Cet outil (« Interroger le site ») n'est pas activé sur ce site — vérifiez la configuration des outils de l'assistant."
   },
   "assistant": {
     "heading": "Assistant",
@@ -2589,6 +2590,12 @@
     "errorTitle": "Une erreur est survenue",
     "driversHeading": "Pilotes",
     "driversIntro": "{{count}} problème(s) à corriger. Un pilote marqué « dégradé » est normal sur une installation neuve — cela signifie qu'aucun service externe (Redis, S3, …) n'est configuré, pas que quelque chose est cassé.",
+    "reasonNamed": "configuré explicitement",
+    "reasonFirstAvailable": "premier pilote disponible",
+    "reasonFallback": "après repli sur : {{skipped}}",
+    "skipNotAvailable": "{{driver}} indisponible",
+    "skipNotAvailableError": "{{driver}} indisponible : {{detail}}",
+    "skipFailedToStart": "{{driver}} n'a pas pu démarrer : {{detail}}",
     "notesHeading": "Notes",
     "problemsHeading": "Problèmes",
     "migrationsHeading": "Migrations",

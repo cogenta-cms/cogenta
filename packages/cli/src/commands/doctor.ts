@@ -7,10 +7,12 @@ import {
   createRateLimitRegistry,
   createStorageRegistry,
   type DriverSelection,
+  type DriverSelectionReason,
   type DriverTier,
   isCogentaError,
   type Logger,
   loadConfig,
+  type SkipReasonCode,
 } from '@cogenta/core'
 import type { Output } from '../output.js'
 
@@ -20,8 +22,16 @@ export interface DoctorCheck {
   readonly driver: string
   readonly tier: DriverTier
   readonly reason: string
+  /** Same information as `reason`, as a stable code a translated UI (the admin's "Santé" screen) can look up instead of showing English prose (L20 audit §1 point 12). */
+  readonly reasonCode: DriverSelectionReason
   readonly message: string | undefined
-  readonly skipped: readonly { driver: string; tier: DriverTier; reason: string }[]
+  readonly skipped: readonly {
+    driver: string
+    tier: DriverTier
+    reason: string
+    reasonCode: SkipReasonCode
+    detail?: string
+  }[]
 }
 
 export interface DoctorReport {
@@ -114,6 +124,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
         driver: selection.driver,
         tier: selection.tier,
         reason: selection.requested ? 'named in the configuration' : selection.reason,
+        reasonCode: selection.reasonCode,
         message: health.message,
         skipped: selection.skipped,
       })

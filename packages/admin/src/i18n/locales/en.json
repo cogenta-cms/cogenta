@@ -2526,7 +2526,8 @@
     "questionLabel": "Your question",
     "ask": "Ask",
     "asking": "Asking…",
-    "error": "The assistant could not answer. Try again."
+    "error": "The assistant could not answer. Try again.",
+    "unavailable": "This tool (\"Ask the site\") is not enabled on this site — check the assistant's tool configuration."
   },
   "assistant": {
     "heading": "Assistant",
@@ -2587,6 +2588,12 @@
     "errorTitle": "Something went wrong",
     "driversHeading": "Drivers",
     "driversIntro": "{{count}} problem(s) to fix. A driver marked \"degraded\" is expected on a fresh install — it means no external service (Redis, S3, …) is configured, not that something is broken.",
+    "reasonNamed": "explicitly configured",
+    "reasonFirstAvailable": "first available driver",
+    "reasonFallback": "after falling back from: {{skipped}}",
+    "skipNotAvailable": "{{driver}} not available",
+    "skipNotAvailableError": "{{driver}} not available: {{detail}}",
+    "skipFailedToStart": "{{driver}} failed to start: {{detail}}",
     "notesHeading": "Notes",
     "problemsHeading": "Problems",
     "migrationsHeading": "Migrations",

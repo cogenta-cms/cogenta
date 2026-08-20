@@ -53,6 +53,7 @@ import {
   createRestRouter,
   createReviewRouter,
   createScheduledPublishFailedSource,
+  createScheduledTasksRouter,
   createSearchRouter,
   createSeoRouter,
   createShellStatusRouter,
@@ -88,6 +89,7 @@ import {
   type ReviewRouter,
   resolveActor,
   roleState,
+  type ScheduledTasksRouter,
   type SearchRouter,
   type SeoRouter,
   type ShellStatusRouter,
@@ -213,6 +215,7 @@ import {
   createRedirectPatternStore,
   createRedirectStore,
   createScheduledPublishFailureStore,
+  createScheduledTaskRegistry,
   createSchemaTables,
   createSearchIndex,
   createSiteSettingsStore,
@@ -227,6 +230,7 @@ import {
   type RedirectPatternStore,
   type RedirectStore,
   registerScheduledPublishing,
+  type ScheduledTaskRegistry,
   type SchemaDocument,
   type SearchDriver,
   SITE_SETTINGS_SITE_SCOPE,
@@ -2807,6 +2811,16 @@ async function loadRenderMedia(
 export interface RuntimeExtras {
   readonly healthRouter: HealthRouter
   readonly toolsRouter: ToolsRouter
+  /**
+   * The "Tâches planifiées" screen (fiche 28 task 2). Optional for the same
+   * pragmatic reason `Site.agentsRouter` is: a caller that builds a bare
+   * `Site` by hand (tests included) goes on working unchanged with this
+   * omitted — `GET /api/scheduled-tasks` then simply does not exist, rather
+   * than 500ing on a registry nobody constructed. `cogenta serve` always
+   * passes one (L20 audit §1 point 6: before this it never did, so the
+   * screen's own two requests 404'd against no route at all).
+   */
+  readonly scheduledTasksRouter?: ScheduledTasksRouter
   readonly maintenance: MaintenanceStore
   readonly errorLog: ErrorLog
   readonly siteName: string
@@ -3260,6 +3274,19 @@ export function createRequestListener(
         const body = req.method === 'POST' ? await readBody(req) : undefined
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await extras.toolsRouter.handle(request, context))
+        return
+      }
+
+      // The "Tâches planifiées" screen (fiche 28 task 2, L20 audit §1 point
+      // 6). Same shape as the two routes above: admin-only, a thin
+      // read-through the router itself enforces.
+      if (
+        extras?.scheduledTasksRouter !== undefined &&
+        url.pathname.startsWith('/api/scheduled-tasks')
+      ) {
+        const body = req.method === 'POST' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await extras.scheduledTasksRouter.handle(request, context))
         return
       }
 
@@ -4358,10 +4385,99 @@ export async function runServe(options: ServeOptions): Promise<number> {
     listRuns: () => toolRunner.listRuns(),
   })
 
+  // "Tâches planifiées" (fiche 28 task 2, L20 audit §1 point 6): the registry
+  // and its router already existed (`@cogenta/schema`, `@cogenta/api`) —
+  // `cogenta serve` never actually constructed either, so `GET
+  // /api/scheduled-tasks` 404'd through the generic content-route "no route
+  // matches this path" for every admin that opened the screen. This registers
+  // the same seven recurring jobs the raw `setInterval`s below used to run
+  // blind, so "run now"/history/next-run in the admin reflect the real thing
+  // rather than nothing at all.
+  const scheduledTaskRegistry: ScheduledTaskRegistry = createScheduledTaskRegistry({
+    db: site.db,
+    logger,
+  })
+  scheduledTaskRegistry.register({
+    name: 'scheduled-publish',
+    description: 'Publish entries whose scheduled time has come, and drain the tools queue.',
+    intervalMs: options.scheduledPublishTickMs ?? SCHEDULED_PUBLISH_TICK_MS,
+    run: async () => {
+      const published = await site.tickScheduledPublishing()
+      await toolsQueue.tick()
+      return { summary: `${published} published` }
+    },
+  })
+  scheduledTaskRegistry.register({
+    name: 'not-found-purge',
+    description: "Purge 404 log entries past the site's retention window.",
+    intervalMs: options.notFoundPurgeTickMs ?? NOT_FOUND_PURGE_TICK_MS,
+    run: async () => ({ summary: `${await site.tickNotFoundPurge()} purged` }),
+  })
+  scheduledTaskRegistry.register({
+    name: 'audit-integrity',
+    description: 'Verify the audit log hash chain has not been tampered with.',
+    intervalMs: options.auditIntegrityTickMs ?? AUDIT_INTEGRITY_TICK_MS,
+    run: async () => {
+      await site.checkAuditIntegrity()
+      return undefined
+    },
+  })
+  scheduledTaskRegistry.register({
+    name: 'trash-purge',
+    description: "Permanently delete trashed content past the site's retention window.",
+    intervalMs: options.trashPurgeTickMs ?? TRASH_PURGE_TICK_MS,
+    destructive: true,
+    run: async () => {
+      const result = await site.tickTrashPurge()
+      return { summary: `${result.purged} purged` }
+    },
+  })
+  scheduledTaskRegistry.register({
+    name: 'forms-purge',
+    description: "Purge form submissions past each form's own GDPR retention window.",
+    intervalMs: options.formsPurgeTickMs ?? FORMS_PURGE_TICK_MS,
+    run: async () => ({ summary: `${await site.tickFormsPurge()} purged` }),
+  })
+  scheduledTaskRegistry.register({
+    name: 'channel-notifications',
+    description: 'Flush any due grouped notification to its channel.',
+    intervalMs: options.channelNotificationTickMs ?? CHANNEL_NOTIFICATION_TICK_MS,
+    run: async () => ({ summary: `${(await site.tickChannelNotifications()).length} sent` }),
+  })
+  scheduledTaskRegistry.register({
+    name: 'analytics-purge',
+    description: "Purge page-view events past the site's configured retention window.",
+    intervalMs: options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
+    run: async () => ({ summary: `${await site.tickAnalyticsPurge()} purged` }),
+  })
+
+  const scheduledTasksRouter = createScheduledTasksRouter({
+    registry: scheduledTaskRegistry,
+    queue: toolsQueue,
+    mode: 'internal',
+    onManualRun: ({ taskName, outcome, actorId }) => {
+      // Best-effort, same as every other audit write in this file (e.g.
+      // `recordAuditExportAudit`) — a failed journal entry must not undo the
+      // task run it is describing. `assertAdmin` inside the router already
+      // guarantees the caller holds `admin`.
+      void site.auth.audit
+        .record({
+          actorId,
+          actorRoles: ['admin'],
+          action: 'scheduled_task.run',
+          diff: { taskName, outcome },
+        })
+        .catch((error: unknown) => {
+          logger.error('scheduled task audit record failed', { error: String(error) })
+        })
+    },
+  })
+
   const server = createServer(
     createRequestListener(site, logger, {
       healthRouter,
       toolsRouter,
+      scheduledTasksRouter,
       maintenance: maintenanceStore,
       errorLog,
       siteName: loaded.config.site.name,
@@ -4387,132 +4503,38 @@ export async function runServe(options: ServeOptions): Promise<number> {
   out.detail(assistant.summary)
   options.onListening?.({ port: boundPort, host })
 
-  // Scheduled publication (task 1): a first tick right away catches up on
-  // anything that came due while the process was down, then one every
-  // `SCHEDULED_PUBLISH_TICK_MS` for as long as this server runs. A failed
-  // tick is logged, never fatal — a scheduling hiccup must not take the
-  // whole site down.
-  // The maintenance tools' queue rides the same clock — no durable worker
-  // exists (R1), so this `setInterval` *is* the drain for its degraded
-  // (database) driver too, exactly as it already is for scheduled
-  // publication.
-  const runScheduledPublishTick = (): void => {
-    // Sequenced, not fired concurrently: both ticks open a transaction on
-    // the *same* database connection, and starting one before the other
-    // has committed is what a single SQLite connection cannot do.
-    site
-      .tickScheduledPublishing()
-      .catch((error: unknown) => {
-        logger.error('scheduled publish tick failed', { error: String(error) })
-      })
-      .then(() =>
-        toolsQueue.tick().catch((error: unknown) => {
-          logger.error('tools queue tick failed', { error: String(error) })
-        }),
-      )
-  }
-  runScheduledPublishTick()
-  const scheduledPublishTimer = setInterval(
-    runScheduledPublishTick,
+  // The seven recurring jobs above (scheduled publication, the tools queue
+  // drain riding along with it, the 404 log purge, audit integrity, the
+  // trash sweep, forms GDPR retention, channel notification flush, analytics
+  // retention) are now all `scheduledTaskRegistry` entries rather than seven
+  // independent `setInterval`s: one heartbeat drives `registry.tick()`,
+  // which itself decides which tasks are actually due against the interval
+  // each was registered with above — the same cadence as before, since the
+  // heartbeat is at least as frequent as the fastest of the seven. A single
+  // failed tick is logged by the registry's own `execute()`, never fatal.
+  const scheduledTasksHeartbeatMs = Math.min(
     options.scheduledPublishTickMs ?? SCHEDULED_PUBLISH_TICK_MS,
-  )
-  // Never keeps the process alive on its own: a `signal`-driven shutdown with
-  // no open connections must still be able to exit.
-  scheduledPublishTimer.unref()
-
-  // The 404 log's own purge (fiche 12 task 1): a bound on how long a tracked
-  // path is kept, independent of `maxPaths`'s bound on how many are. Same
-  // shape as scheduled publication — one tick now, one every
-  // `NOT_FOUND_PURGE_TICK_MS` after, never fatal.
-  const runNotFoundPurgeTick = (): void => {
-    site.tickNotFoundPurge().catch((error: unknown) => {
-      logger.error('not-found log purge failed', { error: String(error) })
-    })
-  }
-  runNotFoundPurgeTick()
-  const notFoundPurgeTimer = setInterval(
-    runNotFoundPurgeTick,
     options.notFoundPurgeTickMs ?? NOT_FOUND_PURGE_TICK_MS,
-  )
-  notFoundPurgeTimer.unref()
-
-  // Audit integrity (fiche 21 task 3): same shape as the tick above — a
-  // first check right away (so a broken chain is found on startup, not only
-  // after the first full day), then one every `AUDIT_INTEGRITY_TICK_MS`.
-  // This is the "vérification planifiée" the fiche asks for: nobody has to
-  // press "verify now" for a tampered row to surface.
-  const runAuditIntegrityTick = (): void => {
-    site.checkAuditIntegrity().catch((error: unknown) => {
-      logger.error('audit integrity check failed', { error: String(error) })
-    })
-  }
-  runAuditIntegrityTick()
-  const auditIntegrityTimer = setInterval(
-    runAuditIntegrityTick,
     options.auditIntegrityTickMs ?? AUDIT_INTEGRITY_TICK_MS,
-  )
-  auditIntegrityTimer.unref()
-
-  // Trash auto-purge (fiche 07 task 5): same shape as scheduled publication —
-  // one tick now, one every `TRASH_PURGE_TICK_MS` after, never fatal. Before
-  // this, `purgeExpired()` existed and was tested but nothing ever called
-  // it, so a site's trash grew forever despite the promise `trash.retainDays`
-  // makes.
-  const runTrashPurgeTick = (): void => {
-    site.tickTrashPurge().catch((error: unknown) => {
-      logger.error('trash purge tick failed', { error: String(error) })
-    })
-  }
-  runTrashPurgeTick()
-  const trashPurgeTimer = setInterval(
-    runTrashPurgeTick,
     options.trashPurgeTickMs ?? TRASH_PURGE_TICK_MS,
-  )
-  trashPurgeTimer.unref()
-
-  // Forms GDPR retention (fiche 16 task 7): same shape as the trash sweep
-  // above — a first sweep right away, then daily, never fatal.
-  const runFormsPurgeTick = (): void => {
-    site.tickFormsPurge().catch((error: unknown) => {
-      logger.error('forms purge tick failed', { error: String(error) })
-    })
-  }
-  runFormsPurgeTick()
-  const formsPurgeTimer = setInterval(
-    runFormsPurgeTick,
     options.formsPurgeTickMs ?? FORMS_PURGE_TICK_MS,
-  )
-  formsPurgeTimer.unref()
-
-  // Channel notification flush (fiche 38 task 3) — same shape as the tick
-  // above: run once immediately, then on its own interval, never fatal.
-  const runChannelNotificationTick = (): void => {
-    site.tickChannelNotifications().catch((error: unknown) => {
-      logger.error('channel notification flush failed', { error: String(error) })
-    })
-  }
-  runChannelNotificationTick()
-  const channelNotificationTimer = setInterval(
-    runChannelNotificationTick,
     options.channelNotificationTickMs ?? CHANNEL_NOTIFICATION_TICK_MS,
-  )
-  channelNotificationTimer.unref()
-
-  // Analytics retention (fiche 27 task 3): same shape as the scheduled-publish
-  // tick above — a first sweep right away, then one every
-  // `ANALYTICS_PURGE_TICK_MS` for as long as this process runs. A failed sweep
-  // is logged, never fatal: a retention hiccup must not take the site down.
-  const runAnalyticsPurgeTick = (): void => {
-    site.tickAnalyticsPurge().catch((error: unknown) => {
-      logger.error('analytics purge tick failed', { error: String(error) })
-    })
-  }
-  runAnalyticsPurgeTick()
-  const analyticsPurgeTimer = setInterval(
-    runAnalyticsPurgeTick,
     options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
   )
-  analyticsPurgeTimer.unref()
+  const runScheduledTasksHeartbeat = (): void => {
+    // Sequenced, not concurrent: `registry.tick()` already runs its due
+    // tasks one at a time for exactly this reason (see its own comment) —
+    // two heartbeats overlapping would open two transactions on the same
+    // SQLite connection.
+    scheduledTaskRegistry.tick().catch((error: unknown) => {
+      logger.error('scheduled tasks heartbeat failed', { error: String(error) })
+    })
+  }
+  runScheduledTasksHeartbeat()
+  const scheduledTasksTimer = setInterval(runScheduledTasksHeartbeat, scheduledTasksHeartbeatMs)
+  // Never keeps the process alive on its own: a `signal`-driven shutdown with
+  // no open connections must still be able to exit.
+  scheduledTasksTimer.unref()
 
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
@@ -4523,12 +4545,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.signal.addEventListener('abort', () => resolve(), { once: true })
   })
 
-  clearInterval(scheduledPublishTimer)
-  clearInterval(notFoundPurgeTimer)
-  clearInterval(auditIntegrityTimer)
-  clearInterval(trashPurgeTimer)
-  clearInterval(channelNotificationTimer)
-  clearInterval(analyticsPurgeTimer)
+  clearInterval(scheduledTasksTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

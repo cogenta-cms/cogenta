@@ -1,4 +1,4 @@
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, type DriverSelectionReason } from '@cogenta/core'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
@@ -23,6 +23,8 @@ export interface HealthDoctorCheck {
   readonly driver: string
   readonly tier: string
   readonly reason: string
+  /** Same information as `reason`, as a stable code the admin's translated "Santé" screen looks up instead of showing English prose (L20 audit §1 point 12). Optional so a caller built against the pre-fiche shape still type-checks. */
+  readonly reasonCode?: DriverSelectionReason
   readonly message: string | undefined
 }
 

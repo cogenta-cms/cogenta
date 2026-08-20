@@ -61,6 +61,24 @@ describe('agents', () => {
     expect(await screen.findByText('Désactivé')).toBeDefined()
   })
 
+  it('degrades to the empty state instead of showing the raw 404 wire text, when no registry is mounted', async () => {
+    // L20 audit §1 point 5: no `AgentRegistry` is ever constructed unless a
+    // caller opts in, so `GET /api/agents` genuinely 404s through the
+    // generic content-router fallback on a real `cogenta serve` — this must
+    // read as the already-honest banner above, never as a second, scarier
+    // "No route matches this path." error underneath it.
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'], agentsRegistryMounted: false })
+
+    render(<App />)
+    await goToAgents()
+
+    expect(await screen.findByText('Aucun agent configuré.')).toBeDefined()
+    expect(screen.queryByText(/No route matches this path/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('shows traces and history for the selected agent', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)

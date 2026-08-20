@@ -42,6 +42,35 @@ describe('the "ask the site" chat screen', () => {
     expect(screen.queryByRole('tab', { name: 'Interroger le site' })).toBeNull()
   })
 
+  it('says the tool is off rather than rendering a blank panel when a provider is configured but assist.chat is not', async () => {
+    // L20 audit §1 point 4: a provider is configured (so the tab exists to
+    // click at all) but the enabled toolset does not include `assist.chat` —
+    // this must not read as a broken, empty tab.
+    signedIn({
+      assistant: {
+        available: true,
+        tools: [
+          {
+            tool: 'assist.find_duplicates',
+            label: 'Find duplicates',
+            description: 'Detect near-duplicate content.',
+            cost: 'low',
+            needs: ['entryId'],
+          },
+        ],
+      },
+    })
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
+
+    await screen.findByRole('heading', { name: 'Interroger le site' })
+    expect(await screen.findByText(/n'est pas activé sur ce site/)).toBeDefined()
+    expect(screen.queryByLabelText('Votre question')).toBeNull()
+  })
+
   it('answers a question with the real citations retrieval found', async () => {
     signedIn({
       assistant: { available: true, tools: [CHAT_TOOL] },

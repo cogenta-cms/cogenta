@@ -17,16 +17,19 @@ import { useSchema } from '../schema/schema-context.js'
  * panel has no way to collect (see that file's own comment). This route is
  * that surface.
  *
- * Same degradation rule as everywhere else in this lot (R2): `GET
- * /api/assistant` is asked once, and this screen renders nothing at all —
- * not an error, not an upsell — unless `assist.chat` is actually in the list
- * the server sent back.
+ * Same degradation rule as the standalone-nav-entry days (R2): `GET
+ * /api/assistant` is asked once, and until `assist.chat` is confirmed absent
+ * from the list the server sent back, nothing is claimed either way.
  *
- * Fiche 30 task 2: this is no longer a standalone nav entry. It is mounted
- * as the "Chat" tab of `routes/assistant.tsx`, unchanged otherwise — the
- * component still runs its own independent capability check and disappears
- * on its own if `assist.chat` specifically is missing, even while the rest
- * of the assistant screen renders.
+ * Fiche 30 task 2: this is no longer a standalone nav entry, it is mounted as
+ * the "Interroger le site" tab of `routes/assistant.tsx`. That parent already
+ * guarantees `capabilities.available` (no provider at all renders its own
+ * notice before any tab exists to click) — but a provider can still be
+ * configured with `assist.chat` specifically switched off, and that tab must
+ * say so rather than render as a blank panel indistinguishable from a bug
+ * (L20 audit, §1 point 4). So this component keeps its own independent
+ * capability check, and shows an honest state for all three outcomes: still
+ * checking, confirmed unavailable, and available.
  *
  * The answer's citations are the whole security argument of the underlying
  * tool: the model only ever names 1-based indices into passages retrieval
@@ -80,7 +83,25 @@ export function AssistantChatRoute(): JSX.Element | null {
     void load()
   }, [load])
 
-  if (available !== true || token === null) return null
+  if (token === null) return null
+
+  if (available === null) {
+    return (
+      <section aria-labelledby="assistant-chat-heading">
+        <h1 id="assistant-chat-heading">{t('assistChat.heading')}</h1>
+        <p>{t('common.loading')}</p>
+      </section>
+    )
+  }
+
+  if (available === false) {
+    return (
+      <section aria-labelledby="assistant-chat-heading">
+        <h1 id="assistant-chat-heading">{t('assistChat.heading')}</h1>
+        <p role="status">{t('assistChat.unavailable')}</p>
+      </section>
+    )
+  }
 
   async function ask(event: FormEvent): Promise<void> {
     event.preventDefault()

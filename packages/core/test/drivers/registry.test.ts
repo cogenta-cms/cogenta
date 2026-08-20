@@ -215,7 +215,27 @@ describe('driver selection — the result is explained', () => {
     const selection = await harness.registry.select({})
 
     expect(selection.skipped).toEqual([
-      { driver: 'redis', tier: 'optimal', reason: expect.stringContaining('not available') },
+      {
+        driver: 'redis',
+        tier: 'optimal',
+        reason: expect.stringContaining('not available'),
+        reasonCode: 'not-available',
+      },
+    ])
+  })
+
+  it('carries the same "why" as a stable code, for a caller that translates rather than shows English prose', async () => {
+    // L20 audit §1 point 12: the admin's "Santé" screen looks this up in its
+    // own locale files instead of displaying `reason`'s English sentence
+    // verbatim inside a French-language screen.
+    harness.registry.register(fakeDriver({ name: 'redis', tier: 'optimal', available: false }))
+    harness.registry.register(fakeDriver({ name: 'file', tier: 'degraded' }))
+
+    const selection = await harness.registry.select({})
+
+    expect(selection.reasonCode.code).toBe('fallback')
+    expect(selection.reasonCode.skipped).toEqual([
+      expect.objectContaining({ driver: 'redis', tier: 'optimal', reasonCode: 'not-available' }),
     ])
   })
 

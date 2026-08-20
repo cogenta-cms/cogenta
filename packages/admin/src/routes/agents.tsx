@@ -64,7 +64,20 @@ export function AgentsRoute(): JSX.Element {
     try {
       setAgents(await listAgents(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agents.loadError'))
+      // `CONTENT_NOT_FOUND` here means exactly what the banner above already
+      // says in plain language: no `AgentRegistry` is constructed on this
+      // site, so `/api/agents` is never mounted (`packages/cli/src/commands/
+      // serve.ts`'s `site.agentsRouter`) and the request falls through to the
+      // generic "no route matches this path" 404. That is expected and
+      // already explained — showing its raw wire text as a second, separate
+      // error would just contradict the honest banner with a scary one, so
+      // this one specific case degrades to the same empty state as a site
+      // with no agents configured at all, rather than surfacing an error.
+      if (caught instanceof ApiError && caught.code === 'CONTENT_NOT_FOUND') {
+        setAgents([])
+      } else {
+        setError(caught instanceof ApiError ? caught.message : t('agents.loadError'))
+      }
     } finally {
       setLoading(false)
     }

@@ -34,10 +34,34 @@ export interface Driver<TInstance, TConfig> {
   health(): Promise<HealthReport>
 }
 
+/**
+ * Why one driver was skipped in favour of trying the next, as a stable code
+ * rather than a sentence — `reason` on `SkippedDriver` is still a plain
+ * English sentence (built once, here, for `cogenta doctor`'s terminal
+ * output, which has never been localized), but a translated caller (the
+ * admin's "Santé" screen) needs something it can look up in its own
+ * `i18n` locale files instead of showing English prose inside a French
+ * screen. `detail`, when present, is the underlying driver's own error
+ * text — inherently untranslatable, shown as-is the way any exception
+ * message is.
+ */
+export type SkipReasonCode = 'not-available' | 'not-available-error' | 'failed-to-start'
+
 export interface SkippedDriver {
   readonly driver: string
   readonly tier: DriverTier
   readonly reason: string
+  readonly reasonCode: SkipReasonCode
+  readonly detail?: string
+}
+
+/** Why a `DriverSelection` picked the driver it did — the stable-code counterpart of `DriverSelection.reason` (see `SkipReasonCode`'s own comment). */
+export type DriverSelectionReasonCode = 'named' | 'first-available' | 'fallback'
+
+export interface DriverSelectionReason {
+  readonly code: DriverSelectionReasonCode
+  /** Only meaningful for `code === 'fallback'` — the drivers tried, in order, before this one. */
+  readonly skipped: readonly SkippedDriver[]
 }
 
 /**
@@ -54,6 +78,8 @@ export interface DriverSelection<TInstance> {
   /** True when the configuration named this driver, rather than leaving it to us. */
   readonly requested: boolean
   readonly reason: string
+  /** Same information as `reason`, as a stable code a translated UI can look up instead of showing English prose. */
+  readonly reasonCode: DriverSelectionReason
   readonly skipped: readonly SkippedDriver[]
   dispose(): Promise<void>
   health(): Promise<HealthReport>

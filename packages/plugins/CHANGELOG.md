@@ -1,5 +1,111 @@
 # @cogenta/plugins
 
+## 0.3.0
+
+### Minor Changes
+
+- [`562c9c1`](https://github.com/cogenta-cms/cogenta/commit/562c9c1ee4d52b3e7f624e3b54ae033c2bd01e1c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the "Apparence" admin screen (fiche 14) — the CMS's most-differentiating
+  feature, AI skin generation, was previously exposed only through the CLI.
+  
+  - `@cogenta/render` gains `mergeSkinTokens` (`SkinTokenOverrides`): overlays a
+    partial token tree onto a complete base skin, group by group, key by key.
+  - `@cogenta/schema` gains `createThemeStore`/`ensureThemeTable` — one row of
+    theme overrides (a partial token overlay, additional CSS, and four identity
+    media references), the database half of the two-source-of-truth design
+    task 0 settles on: `theme.tokens.json` stays the versioned file default,
+    the database holds what an `admin` changed from the admin screen.
+  - `@cogenta/plugins`'s `SkinGalleryEntry` now carries the accepted skin's real
+    `tokens` (`null` for a rejected entry) — needed to render a swatch or apply
+    a gallery skin, previously only metadata.
+  - `@cogenta/api` gains `createThemeRouter` (`GET/PUT/DELETE /api/theme[/overrides]`,
+    `GET /api/theme/skins`, `POST /api/theme/skins/:id/apply`,
+    `POST /api/theme/generate`, `POST /api/theme/export`), plus the
+    `SKIN_*`/`THEME_*` error-code → HTTP-status mappings it needs.
+  - `@cogenta/cli` wires it all into `cogenta serve`/`dev`: `resolveStyles()`
+    recomputes the served stylesheet on every request (file tokens merged with
+    saved overrides plus additional CSS), which is what makes a saved change
+    visible on the very next page view instead of only after a restart — the
+    "hot swap" contract D already promised for the file alone. A new
+    `POST /api/theme/preview` route renders the real home page with a candidate
+    overlay nobody has saved yet, the same iframe-on-the-real-render decision
+    L16 made for the page builder. Exporting the merged tokens back into
+    `theme.tokens.json` is gated to `cogenta dev` only, mirroring the
+    ADR-0010 rule L19's site-plan applier already uses for the schema file.
+  
+  R2 verified: without an LLM provider, `GET /api/theme` reports
+  `aiAvailable: false` and the admin's AI section does not render at all — no
+  error, no dead link. R6 verified: an AI-generated candidate or a chosen
+  gallery skin is never applied automatically; a save is always a separate,
+  explicit action.
+
+- [`6e5df34`](https://github.com/cogenta-cms/cogenta/commit/6e5df34e6f428c36712bc80e76c37d0cd7e33b1c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 29 — the marketplace gains a real "installed extensions" screen: what
+  runs, in which version, with which permissions, and how it's been behaving.
+  
+  **Breaking, in the pre-alpha sense already established for this project (no
+  package has ever used `major`, and one would jump straight to `1.0.0`,
+  contradicting "pre-alpha"; the breaking shape is called out here instead):**
+  `@cogenta/plugins`' `MarketplaceInstallRecord` gains a required `enabled`
+  field, and `MarketplacePreview` gains required `engineCompatible`,
+  `latestVersion` and `source` fields — anyone constructing these shapes by
+  hand (a test double, a custom `MarketplaceInstaller` implementation) needs
+  those fields too. `MarketplaceInstaller` gains two new required methods,
+  `activate`/`deactivate`, and `uninstall`'s signature grows an optional
+  `{ removeData?: boolean }` second argument. `@cogenta/api`'s
+  `marketplace-router.ts` mirrors the same shapes structurally, as it always
+  has.
+  
+  New, additive:
+  
+  - `@cogenta/plugins`: `createPluginUsageStore` (`permissions/usage.ts`) —
+    accumulates real per-run duration, call count, and outcome (ok / error /
+    timeout / memory / crash) per plugin, fed by `runPlugin` when given a
+    `usageStore` option. `IsolatedRunResult` gains a real, always-present
+    `durationMs`. `PluginGrantStore` gains `revokeAll`. The marketplace
+    installer gains a manual `enabled` toggle (`activate`/`deactivate`,
+    independent of `PluginDisableStore`'s automatic timeout/memory/crash
+    disable), an `engineVersion` option that refuses an incompatible install
+    or update with the new `MARKETPLACE_ENGINE_INCOMPATIBLE` code (only once a
+    caller actually configures a real Cogenta version — the placeholder
+    default never fabricates a refusal), and `uninstall(id, { removeData:
+    true })`, which also revokes grants and clears the disable/usage records.
+    `MarketplaceCatalogEntry` gains an optional `author`, and
+    `MarketplaceChangelogEntry` an optional `releasedAt`.
+  - `@cogenta/api`: `GET /api/marketplace/installed` (capabilities, disabled
+    state, usage, update availability, per item), `GET /api/marketplace/updates`
+    and `POST /api/marketplace/updates/apply` (grouped update that always
+    skips — never silently applies — anything that would widen permissions),
+    `POST /api/marketplace/items/{id}/activate` and `.../deactivate`,
+    `POST .../uninstall` now accepts `{ removeData: boolean }` in its body.
+  - `@cogenta/core`: new `MARKETPLACE_ENGINE_INCOMPATIBLE` error code, mapped
+    to a `422` in `@cogenta/api`'s `statusFor`.
+  
+  Honest limitation, not an oversight: nothing in this repository actually
+  calls `runPlugin` yet (no live `AgentRegistry` exists anywhere, the same
+  R2-honest gap already noted since L5) — the new usage store is real, tested
+  end to end, and wired into `cogenta serve`, but stays empty on a real
+  deployment until a real plugin-execution pipeline lands. The installed
+  extensions screen says "never run yet" rather than inventing a number.
+
+- [`46572ba`](https://github.com/cogenta-cms/cogenta/commit/46572bae836b8182c2a3563e8f0e2da74d7e82ee) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the admin notification center (fiche 38): a bell with an unread count, filterable
+  by severity/period, bulk mark-as-read; new notice sources (plugin auto-disabled,
+  scheduled publication failed); channel-bridged notices reusing `@cogenta/channels`'
+  existing message formats, grouping and identity-linking (no second mechanism); and a
+  per-severity channel routing settings screen.
+  
+  `@cogenta/schema` gains `scheduled-publish-failures` store used by the new notice
+  source. `@cogenta/api` gains a real `@cogenta/channels` dependency, new notice-router
+  routes for channel settings and notice history, and a `plugin-disabled`/
+  `scheduled-publish-failed` notice source pair. `@cogenta/plugins` exposes disabled-state
+  data the new notice source reads. `@cogenta/channels`' preference types gain the field
+  the settings screen needs.
+
+### Patch Changes
+
+- Updated dependencies [[`54ca689`](https://github.com/cogenta-cms/cogenta/commit/54ca6894449fcdd29ff76eef4514cda7c081f483), [`0692713`](https://github.com/cogenta-cms/cogenta/commit/06927130c15f7bc95ea97839cb50f67de87bd668), [`36744d3`](https://github.com/cogenta-cms/cogenta/commit/36744d3bc8e74a39fa6c68bdd78804fad1d8f069), [`0ca8a79`](https://github.com/cogenta-cms/cogenta/commit/0ca8a797288624a3c4d53ca0942687d9e570b186), [`c392e24`](https://github.com/cogenta-cms/cogenta/commit/c392e24880a29388fc63a08388042bf163817619), [`562c9c1`](https://github.com/cogenta-cms/cogenta/commit/562c9c1ee4d52b3e7f624e3b54ae033c2bd01e1c), [`edf5623`](https://github.com/cogenta-cms/cogenta/commit/edf562389652c4f6afb58d6e3f166de233d063e2), [`db307e0`](https://github.com/cogenta-cms/cogenta/commit/db307e068f4d029d98526c74d0ab9d56e531b73b), [`49815b9`](https://github.com/cogenta-cms/cogenta/commit/49815b95ad87cd37e7781cbb5a726327226259dd), [`122da7a`](https://github.com/cogenta-cms/cogenta/commit/122da7ad20396966b4d44538b0842f8efb9b7621), [`2fb2101`](https://github.com/cogenta-cms/cogenta/commit/2fb210109824f000788d512fef748f1066f65551), [`0e90b32`](https://github.com/cogenta-cms/cogenta/commit/0e90b32c19247430987e84cc1fd0be57e1ad4f3e), [`d0bfa1d`](https://github.com/cogenta-cms/cogenta/commit/d0bfa1d71166adfb0c66a296c4cf490ddd58a218), [`95acedf`](https://github.com/cogenta-cms/cogenta/commit/95acedf48920dba08e443e56ca4464bcfd394d34), [`6e5df34`](https://github.com/cogenta-cms/cogenta/commit/6e5df34e6f428c36712bc80e76c37d0cd7e33b1c), [`bebbab8`](https://github.com/cogenta-cms/cogenta/commit/bebbab881761fb86a28cdbbcb95b5960429f2a29), [`4513a71`](https://github.com/cogenta-cms/cogenta/commit/4513a71a15dfa7a716bf9c8fcd02f93df927f230), [`54409f3`](https://github.com/cogenta-cms/cogenta/commit/54409f3ff4640518d5d4149bef73a29142ba0d0a), [`2285720`](https://github.com/cogenta-cms/cogenta/commit/2285720ae29de05e96a8d776fd5ae14f2fe4fd0d), [`2c1af5d`](https://github.com/cogenta-cms/cogenta/commit/2c1af5d8ec08b460ba80a2228ceca6f4ff89eef2), [`745ebd8`](https://github.com/cogenta-cms/cogenta/commit/745ebd8f80ea94d916a370af0f9615e6565c0d00)]:
+  - @cogenta/core@0.5.0
+  - @cogenta/agents@0.3.0
+  - @cogenta/render@0.2.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/auth",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Identity, sessions and credentials: password, TOTP and WebAuthn, plus the append-only audit log.",
   "license": "MPL-2.0",
   "type": "module",

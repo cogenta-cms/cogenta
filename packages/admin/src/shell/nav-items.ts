@@ -75,6 +75,7 @@ export type NavBadgeKey =
   | 'marketplaceUpdates'
   | 'reviewPending'
   | 'commentsPending'
+  | 'formSubmissionsUnread'
 
 export interface NavItem {
   readonly to: string
@@ -145,6 +146,19 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'content',
     visibleWhen: { kind: 'collectionAction', action: 'delete', trashableOnly: true },
     badge: 'trash',
+  },
+  {
+    to: '/forms',
+    labelKey: 'nav.forms',
+    group: 'content',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    to: '/form-submissions',
+    labelKey: 'nav.formSubmissions',
+    group: 'content',
+    visibleWhen: { kind: 'role', role: 'admin' },
+    badge: 'formSubmissionsUnread',
   },
 
   // Appearance — fiche 14 adds the theme/appearance screen itself; the

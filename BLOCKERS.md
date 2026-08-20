@@ -941,3 +941,56 @@ convertis en `<br>` (cela demanderait de fabriquer un enfant HTML par ligne dans
 dédié). `white-space: pre-wrap` en CSS du thème réglerait l'essentiel visuellement sans
 toucher au rendu HTML — non fait, aucune feuille de style de `@cogenta/theme-canonical`
 n'a été touchée par cette fiche.
+
+## 17. Fiche 16 — Formulaires : Postgres/MySQL/MariaDB non exécutés, une demande refusée
+
+Les sept tâches de `docs/plans/16-formulaires.md` sont faites et testées (SQLite :
+`@cogenta/forms` 51/51 — nouveau paquet, `@cogenta/api` 975/975 (dont 27 nouveaux dans
+`forms-router.test.ts` et 2 dans `shell-status-router.test.ts`), `@cogenta/cli` — voir le
+rapport de session pour le décompte complet du paquet, `@cogenta/admin` 858/860, les deux
+échecs restants confirmés préexistants et non liés à cette fiche : `notice-board.test.tsx`
+échoue de façon intermittente sous `pnpm vitest run` complet, mais passe systématiquement
+en isolation (reconfirmé deux fois cette session), la même famille de flaky déjà
+documentée pour ce paquet sous forte parallélisation).
+
+**Postgres/MySQL/MariaDB non exécutés cette session** (Docker indisponible, constat
+répété — `docker version` échoue à joindre `dockerDesktopLinuxEngine`, comme pour les
+fiches 12/15/18/34). `packages/forms/test/integration/forms.test.ts` existe, suit
+exactement le même patron que `@cogenta/commerce`'s `test/integration/catalog.test.ts`
+(skip bruyant nommant la variable manquante pour chacune des trois bases) et se skippe
+pour les trois. `@cogenta/forms`'s `ensureFormsTables` réutilise le DDL déjà éprouvé de
+`ensureCommerceTables` (mêmes types de colonnes par dialecte, même garde `create index`
+pour MySQL avant 8.0.29), donc le risque réel de dialecte est bas, mais reste non prouvé
+sur les deux autres bases.
+
+**Une demande de la fiche a été refusée, pas contournée : le « bloc `search` »-like
+mécanisme demandé pour les formulaires (un bloc contrat B référençant un formulaire par
+id) n'a pas été construit.** ADR-0026 le dit elle-même : le contrat B est figé et
+AGENTS.md exige une RFC avant tout nouveau bloc. La route dédiée (`GET /forms/{name}`)
+rend le même service sans y toucher ; la RFC contrat B reste à ouvrir séparément, comme
+l'ADR le prévoit explicitement (« ouverte en parallèle, sans bloquer cette fiche »).
+
+**Deux limites assumées, nommées dans l'ADR, pas des oublis** : pas de champ `file`
+(surface téléversement/antivirus non ouverte sans besoin prouvé) ; pas de champs
+conditionnels (doublerait la complexité du constructeur et du rendu pour un besoin que le
+formulaire de contact de référence n'a pas).
+
+**Revue de sécurité faite manuellement sur la route publique, un vrai problème trouvé et
+corrigé avant le premier commit** : `forms-router.ts` lisait d'abord l'IP du client depuis
+l'en-tête `X-Forwarded-For` de la requête pour construire la clé du limiteur de débit —
+un en-tête que l'appelant contrôle entièrement tant qu'aucun proxy de confiance ne le
+réécrit, ce qui aurait permis de contourner la limite « cinq soumissions par dix minutes »
+en changeant simplement cette valeur à chaque requête. Corrigé pour lire l'adresse résolue
+par le transport (`clientIpOf`, `req.socket.remoteAddress` — exactement la même
+discipline, et le même commentaire, que `AnalyticsRequestContext` de fiche 27 applique
+déjà) ; un test dédié (« a spoofed X-Forwarded-For cannot bypass the rate limit ») le
+prouve.
+
+**`security-reviewer` lancé avant fusion, un second constat trouvé et corrigé** : une
+injection de formule CSV (CWE-1236, sévérité moyenne) dans l'export CSV des soumissions —
+une valeur de champ fournie par un visiteur anonyme et commençant par `=`/`+`/`-`/`@`
+s'écrivait telle quelle dans le CSV, où Excel/Sheets la lit comme une formule vive à
+l'ouverture. Corrigé dans `packages/admin/src/lib/csv.ts` (préfixe `'` avant le
+guillemetage RFC 4180 — la mitigation standard), ce qui bénéficie à tout appelant
+partagé (export de soumissions, export de liste de collection), pas seulement aux
+formulaires. Un second constat, faible et informationnel, n'était pas bloquant.

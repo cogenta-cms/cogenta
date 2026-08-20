@@ -89,6 +89,8 @@ export interface ShellStatus {
   readonly reviewPending: number | null
   /** Comments awaiting moderation (ADR-0025). `null` when this actor holds no role at all — the same courtesy `commerceOrdersPending` already applies. */
   readonly commentsPending: number | null
+  /** Unread form submissions (contract G, fiche 16 task 4's nav badge). `null` for an actor holding no role — the same courtesy as `commerceOrdersPending`. */
+  readonly formSubmissionsUnread: number | null
 }
 
 export interface ShellStatusRouterOptions {
@@ -105,6 +107,8 @@ export interface ShellStatusRouterOptions {
   readonly reviewQueue?: ReviewQueueLike
   /** Absent on a site with no comments (never true — contract F is always mounted — but structural like the rest of this options bag). */
   readonly comments?: CommentsQueueLike
+  /** Absent only in a test harness that does not care — every real site always has one (forms tables are always created, unlike commerce's). */
+  readonly forms?: { countUnread(): Promise<number> }
   /** Mount point. `/api/shell-status` by default. */
   readonly path?: string
 }
@@ -144,6 +148,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
         marketplaceUpdates: null,
         reviewPending: null,
         commentsPending: null,
+        formSubmissionsUnread: null,
       }
       return jsonResponse(200, { data: empty })
     }
@@ -155,6 +160,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
       marketplaceUpdates: await pendingMarketplaceUpdates(context),
       reviewPending: await reviewPending(context),
       commentsPending: await commentsPending(context),
+      formSubmissionsUnread: await formSubmissionsUnread(context),
     }
     return jsonResponse(200, { data: status })
   }
@@ -165,6 +171,13 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
     if (context.actor.roles.length === 0) return null
     const counts = await comments.counts()
     return counts.pending
+  }
+
+  /** Same courtesy-only shape as `ordersPending`: `admin` sees the real count, everyone else `null` — a form definition names no per-role reader today. */
+  async function formSubmissionsUnread(context: AccessContext): Promise<number | null> {
+    if (options.forms === undefined) return null
+    if (!context.actor.roles.includes('admin')) return null
+    return options.forms.countUnread()
   }
 
   async function trashCount(context: AccessContext): Promise<number> {

@@ -17,6 +17,8 @@ export interface ShellStatus {
   readonly reviewPending: number | null
   /** Comments in `pending` moderation (contract F, ADR-0025). `null` when no collection has comments enabled. */
   readonly commentsPending: number | null
+  /** Unread form submissions (contract G, ADR-0026, fiche 16). */
+  readonly formSubmissionsUnread: number | null
 }
 
 export function getShellStatus(token: string): Promise<ShellStatus> {

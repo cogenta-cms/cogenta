@@ -1,0 +1,210 @@
+import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
+import { HONEYPOT_FIELD, TIMESTAMP_FIELD } from '@cogenta/forms'
+import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import { STYLESHEET_PATH } from './theme-render.js'
+
+/**
+ * `GET /forms/{name}` — the "route dédiée" ADR-0026 chose over a contract B
+ * block for a form's first arrival on a page (a bloc `form` RFC is left open
+ * in parallel, per the ADR). Modelled directly on `search-page.ts`: real,
+ * server-rendered HTML, no client framework, styled by the same joined
+ * skin+theme stylesheet every other public page uses.
+ *
+ * The one thing this file must get right that `search-page.ts` never had to:
+ * re-displaying a **failed** submission's own values and per-field errors
+ * accessibly (`aria-invalid`, `aria-describedby`) — fiche 16's own
+ * acceptance criterion, "une saisie refusée n'efface pas ce que le visiteur
+ * a tapé". `createRequestListener` (`serve.ts`) calls `renderFormPage` again
+ * with the just-submitted values whenever `POST /api/forms/{name}/submit`
+ * answers anything but success.
+ */
+
+export interface FormPageSite {
+  readonly name: string
+  readonly url: string
+  readonly defaultLocale: string
+}
+
+export interface FormPageOptions {
+  readonly site: FormPageSite
+  /** `null` when neither the skin nor the theme stylesheet could be loaded. */
+  readonly styles: string | null
+  readonly now: () => number
+}
+
+export interface FormPageState {
+  /** `?submitted=1` — the default confirmation view, when the form has no `redirectTo`. */
+  readonly submitted?: boolean
+  readonly errorMessage?: string | null
+  readonly errorField?: string | null
+  /** The visitor's own values, from the request that just failed — never lost. */
+  readonly values?: Readonly<Record<string, unknown>>
+}
+
+function labelFor(field: FormFieldDefinition): string {
+  return field.label + (field.required ? ' *' : '')
+}
+
+function fieldValueText(state: FormPageState, name: string): string {
+  const raw = state.values?.[name]
+  if (Array.isArray(raw)) return raw.join(', ')
+  return typeof raw === 'string' ? raw : ''
+}
+
+function checkedValues(state: FormPageState, name: string): readonly string[] {
+  const raw = state.values?.[name]
+  if (Array.isArray(raw)) return raw.map(String)
+  return typeof raw === 'string' && raw !== '' ? [raw] : []
+}
+
+function fieldHasError(state: FormPageState, field: FormFieldDefinition): boolean {
+  return state.errorField === field.name
+}
+
+function fieldWrapper(field: FormFieldDefinition, hasError: boolean, input: string): string {
+  const id = `cg-form-field-${field.name}`
+  const errorId = `${id}-error`
+  return `<div class="cg-form__field">
+<label for="${id}">${escapeHtmlText(labelFor(field))}</label>
+${input}
+${field.help !== undefined ? `<p class="cg-form__help">${escapeHtmlText(field.help)}</p>` : ''}
+${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">This field needs your attention.</p>` : ''}
+</div>`
+}
+
+function renderField(field: FormFieldDefinition, state: FormPageState): string {
+  const hasError = fieldHasError(state, field)
+  const id = `cg-form-field-${field.name}`
+  const errorId = `${id}-error`
+  const describedBy = hasError ? ` aria-describedby="${errorId}"` : ''
+  const invalid = ` aria-invalid="${hasError ? 'true' : 'false'}"`
+  const required = field.required ? ' required' : ''
+  const name = escapeHtmlAttribute(field.name)
+
+  let input: string
+  switch (field.kind) {
+    case 'text':
+    case 'email':
+    case 'phone':
+    case 'date': {
+      const type =
+        field.kind === 'email'
+          ? 'email'
+          : field.kind === 'phone'
+            ? 'tel'
+            : field.kind === 'date'
+              ? 'date'
+              : 'text'
+      input = `<input type="${type}" id="${id}" name="${name}"${required}${invalid}${describedBy} value="${escapeHtmlAttribute(fieldValueText(state, field.name))}">`
+      break
+    }
+    case 'number': {
+      input = `<input type="number" id="${id}" name="${name}"${required}${invalid}${describedBy} value="${escapeHtmlAttribute(fieldValueText(state, field.name))}">`
+      break
+    }
+    case 'longText': {
+      input = `<textarea id="${id}" name="${name}"${required}${invalid}${describedBy} rows="5">${escapeHtmlText(fieldValueText(state, field.name))}</textarea>`
+      break
+    }
+    case 'choiceSingle': {
+      const options = (field.choices ?? [])
+        .map((choice) => {
+          const selected = fieldValueText(state, field.name) === choice ? ' selected' : ''
+          return `<option value="${escapeHtmlAttribute(choice)}"${selected}>${escapeHtmlText(choice)}</option>`
+        })
+        .join('')
+      input = `<select id="${id}" name="${name}"${required}${invalid}${describedBy}><option value="">—</option>${options}</select>`
+      break
+    }
+    case 'choiceMulti': {
+      const checked = checkedValues(state, field.name)
+      input = (field.choices ?? [])
+        .map((choice, index) => {
+          const choiceId = `${id}-${index}`
+          const isChecked = checked.includes(choice) ? ' checked' : ''
+          return `<label class="cg-form__choice"><input type="checkbox" id="${choiceId}" name="${name}" value="${escapeHtmlAttribute(choice)}"${isChecked}> ${escapeHtmlText(choice)}</label>`
+        })
+        .join('')
+      break
+    }
+    case 'consent': {
+      const isChecked = fieldValueText(state, field.name) === 'true' ? ' checked' : ''
+      return `<div class="cg-form__field cg-form__field--consent">
+<label><input type="checkbox" id="${id}" name="${name}" value="true"${required}${invalid}${describedBy}${isChecked}> ${escapeHtmlText(field.consentText ?? field.label)}</label>
+${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">Consent is required to submit this form.</p>` : ''}
+</div>`
+    }
+    default: {
+      input = ''
+    }
+  }
+
+  return fieldWrapper(field, hasError, input)
+}
+
+function confirmationPage(definition: FormDefinition, options: FormPageOptions): string {
+  return shell(
+    definition.label,
+    `<div class="cg-form__confirmation" role="status"><p>${escapeHtmlText(definition.confirmationMessage)}</p></div>`,
+    options,
+  )
+}
+
+function shell(title: string, body: string, options: FormPageOptions): string {
+  return `<!doctype html>
+<html lang="${escapeHtmlAttribute(options.site.defaultLocale)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtmlText(title)} — ${escapeHtmlText(options.site.name)}</title>
+${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
+</head>
+<body>
+<main class="cg-main" id="cg-main">
+<h1 class="cg-page__title">${escapeHtmlText(title)}</h1>
+${body}
+</main>
+</body>
+</html>
+`
+}
+
+/**
+ * The whole page: the form itself, or its confirmation view under
+ * `?submitted=1` when the form has no `redirectTo` of its own.
+ */
+export function renderFormPage(
+  definition: FormDefinition,
+  state: FormPageState,
+  options: FormPageOptions,
+): string {
+  if (state.submitted === true) return confirmationPage(definition, options)
+
+  const errorBanner =
+    state.errorMessage != null
+      ? `<p class="cg-form__error" role="alert">${escapeHtmlText(state.errorMessage)}</p>`
+      : ''
+
+  const fields = definition.fields.map((field) => renderField(field, state)).join('\n')
+
+  const body = `${errorBanner}
+<form class="cg-form" method="post" action="/api/forms/${encodeURIComponent(definition.name)}/submit">
+${fields}
+<div class="cg-form__honeypot" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
+<label for="cg-form-hp">Leave this field empty</label>
+<input type="text" id="cg-form-hp" name="${HONEYPOT_FIELD}" tabindex="-1" autocomplete="off" value="">
+</div>
+<input type="hidden" name="${TIMESTAMP_FIELD}" value="${options.now()}">
+<button type="submit">Send</button>
+</form>`
+
+  return shell(definition.label, body, options)
+}
+
+export function renderFormNotFoundPage(options: FormPageOptions): string {
+  return shell(
+    'Not found',
+    '<p>This form does not exist, or is not accepting submissions.</p>',
+    options,
+  )
+}

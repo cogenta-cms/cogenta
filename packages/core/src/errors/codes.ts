@@ -457,6 +457,19 @@ export const ERROR_CODES = [
   'COMMENT_RATE_LIMITED',
   'COMMENT_SPAM_DETECTED',
 
+  // Forms — contract G (ADR-0026, fiche 16): definitions and submissions.
+  'FORM_UNKNOWN',
+  'FORM_NAME_TAKEN',
+  'FORM_DEFINITION_INVALID',
+  'FORM_SUBMISSION_NOT_FOUND',
+  'FORM_SUBMISSION_INVALID',
+  'FORM_DISABLED',
+  'FORM_RATE_LIMITED',
+  'FORM_HONEYPOT_TRIGGERED',
+  'FORM_SUBMITTED_TOO_FAST',
+  'FORM_CONSENT_REQUIRED',
+  'FORM_AUTORESPONDER_RATE_LIMITED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

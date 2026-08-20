@@ -45,6 +45,7 @@
     "@cogenta/commerce": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/export": "workspace:*",
+    "@cogenta/forms": "workspace:*",
     "@cogenta/import": "workspace:*",
     "@cogenta/plugins": "workspace:*",
     "@cogenta/render": "workspace:*",

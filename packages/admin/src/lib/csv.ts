@@ -1,3 +1,6 @@
+/** The characters a spreadsheet reads as "this cell is a formula" when they open a cell's value. */
+const FORMULA_LEADING_CHARS = new Set(['=', '+', '-', '@'])
+
 /**
  * A minimal CSV writer, hand-rolled rather than a dependency (R9 — this is a
  * handful of lines, not a case for a library).
@@ -5,12 +8,20 @@
  * Escaping follows RFC 4180: a field containing a comma, a double quote or a
  * line break is wrapped in double quotes, and any double quote inside it is
  * doubled. Every other field is written as-is.
+ *
+ * A value whose first character reads as a spreadsheet formula (`=`, `+`,
+ * `-`, `@`) is prefixed with a single quote first — the standard CSV/formula
+ * injection mitigation (CWE-1236). Without it, an anonymous-visitor-supplied
+ * field (a form submission, say) exported to CSV and opened in Excel or
+ * Sheets can execute as a live formula, up to remote-content or DDE
+ * execution depending on the application and its settings.
  */
 export function csvField(value: string): string {
-  if (/[",\n\r]/u.test(value)) {
-    return `"${value.replace(/"/gu, '""')}"`
+  const guarded = FORMULA_LEADING_CHARS.has(value.charAt(0)) ? `'${value}` : value
+  if (/[",\n\r]/u.test(guarded)) {
+    return `"${guarded.replace(/"/gu, '""')}"`
   }
-  return value
+  return guarded
 }
 
 /** Rows of plain strings, joined into one CSV document with CRLF line endings (RFC 4180). */

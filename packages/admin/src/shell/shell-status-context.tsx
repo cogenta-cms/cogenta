@@ -35,6 +35,7 @@ const FALLBACK: ChromeStatus = {
     marketplaceUpdates: null,
     reviewPending: null,
     commentsPending: null,
+    formSubmissionsUnread: null,
   },
   assistantTools: [],
 }

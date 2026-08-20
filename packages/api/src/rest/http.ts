@@ -53,6 +53,11 @@ export interface RestErrorBody {
 const FIELD_NAMING_CODES: ReadonlySet<ErrorCode> = new Set([
   'CONTENT_INVALID',
   'CONTENT_SLUG_INVALID',
+  // Forms (ADR-0026): lets the public, no-JavaScript page mark exactly the
+  // one field that failed with `aria-invalid`/`aria-describedby`, rather
+  // than a form-wide error banner a screen reader user has to hunt for.
+  'FORM_SUBMISSION_INVALID',
+  'FORM_CONSENT_REQUIRED',
 ])
 
 function fieldOf(error: CogentaError): string | undefined {
@@ -319,6 +324,24 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   IMPORT_FEED_INVALID: 400,
   IMPORT_WXR_PARSE_FAILED: 400,
   IMPORT_WXR_UNSAFE_DOCUMENT: 400,
+
+  // Forms — contract G (ADR-0026, fiche 16).
+  FORM_UNKNOWN: 404,
+  FORM_SUBMISSION_NOT_FOUND: 404,
+  FORM_NAME_TAKEN: 409,
+  FORM_DEFINITION_INVALID: 400,
+  FORM_SUBMISSION_INVALID: 400,
+  FORM_CONSENT_REQUIRED: 400,
+  // A well-formed request the form's own current state refuses — the same
+  // shape as `CONTENT_READ_ONLY`, not a malformed request.
+  FORM_DISABLED: 409,
+  FORM_RATE_LIMITED: 429,
+  // Both look identical to whoever (or whatever) triggered them: a plain
+  // rejection, never a signal that names *why* — telling a bot precisely
+  // which defence it tripped only helps it route around that one next time.
+  FORM_HONEYPOT_TRIGGERED: 400,
+  FORM_SUBMITTED_TOO_FAST: 400,
+  FORM_AUTORESPONDER_RATE_LIMITED: 429,
 }
 
 export function statusFor(code: ErrorCode): number {

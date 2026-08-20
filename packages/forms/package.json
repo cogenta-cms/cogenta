@@ -1,7 +1,7 @@
 {
-  "name": "@cogenta/api",
-  "version": "1.1.0",
-  "description": "REST and GraphQL over the content engine, on one permission layer.",
+  "name": "@cogenta/forms",
+  "version": "0.1.0",
+  "description": "Contract G: form definitions and submissions (ADR-0026).",
   "license": "MPL-2.0",
   "type": "module",
   "sideEffects": false,
@@ -24,7 +24,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cogenta-cms/cogenta.git",
-    "directory": "packages/api"
+    "directory": "packages/forms"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -33,22 +33,10 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
-    "@cogenta/analytics": "workspace:*",
-    "@cogenta/auth": "workspace:*",
     "@cogenta/channels": "workspace:*",
-    "@cogenta/core": "workspace:*",
-    "@cogenta/forms": "workspace:*",
-    "@cogenta/schema": "workspace:*",
-    "@cogenta/blocks": "workspace:*",
-    "@cogenta/seo": "workspace:*",
-    "@simplewebauthn/server": "catalog:",
-    "graphql": "catalog:",
-    "zod": "catalog:"
+    "@cogenta/core": "workspace:*"
   },
   "devDependencies": {
-    "@cogenta/agents": "workspace:*",
-    "@cogenta/plugins": "workspace:*",
-    "@cogenta/render": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

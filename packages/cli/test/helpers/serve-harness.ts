@@ -115,6 +115,8 @@ export interface StartServerOptions {
   readonly auditIntegrityTickMs?: number
   /** Overrides the daily cadence `runServe` sweeps the trash on — see `ServeOptions.trashPurgeTickMs` (fiche 07 task 5). */
   readonly trashPurgeTickMs?: number
+  /** Overrides the daily cadence `runServe` purges expired form submissions on — see `ServeOptions.formsPurgeTickMs` (fiche 16 task 7). */
+  readonly formsPurgeTickMs?: number
 }
 
 export async function startServer(
@@ -155,6 +157,9 @@ export async function startServer(
     ...(options.trashPurgeTickMs === undefined
       ? {}
       : { trashPurgeTickMs: options.trashPurgeTickMs }),
+    ...(options.formsPurgeTickMs === undefined
+      ? {}
+      : { formsPurgeTickMs: options.formsPurgeTickMs }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

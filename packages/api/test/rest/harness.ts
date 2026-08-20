@@ -142,10 +142,19 @@ export interface Harness {
   dispose(): Promise<void>
 }
 
-export async function createHarness(options: { readonly siteUrl?: string } = {}): Promise<Harness> {
+export async function createHarness(
+  options: {
+    readonly siteUrl?: string
+    /** Overrides the fixture set — used by suites that need a collection the shared fixtures do not declare. */
+    readonly collections?: readonly CollectionDefinition[]
+    /** Extra role names, for a suite whose fixture grants a role outside the four shipped ones. */
+    readonly roles?: readonly string[]
+  } = {},
+): Promise<Harness> {
+  const collections = options.collections ?? COLLECTIONS
   const directory = await mkdtemp(join(tmpdir(), 'cogenta-rest-'))
   const db = await createSqliteHandle({ url: join(directory, 'rest.db') })
-  await createSchemaTables(db, COLLECTIONS)
+  await createSchemaTables(db, collections)
 
   const stores = new Map<string, ContentStore>()
   const store = (collection: CollectionDefinition): ContentStore => {
@@ -154,7 +163,7 @@ export async function createHarness(options: { readonly siteUrl?: string } = {})
     // `siblings` is what lets `delete()` enforce `restrict` in application
     // code now that trashing is an UPDATE (ADR-0022). The real runtime passes
     // the whole set, so the tests must too.
-    const created = createContentStore({ db, collection, siblings: COLLECTIONS })
+    const created = createContentStore({ db, collection, siblings: collections })
     stores.set(collection.name, created)
     return created
   }
@@ -163,8 +172,11 @@ export async function createHarness(options: { readonly siteUrl?: string } = {})
   await redirects.ensureTable()
 
   const service = createContentService({
-    collections: COLLECTIONS,
-    permissions: createPermissionLayer({ collections: COLLECTIONS }),
+    collections,
+    permissions: createPermissionLayer({
+      collections,
+      ...(options.roles === undefined ? {} : { roles: options.roles }),
+    }),
     storeFor: store,
     routing: { locales: LOCALES, defaultLocale: DEFAULT_LOCALE, redirects },
   })

@@ -57,6 +57,8 @@ export type NavCondition =
     }
   /** The site declares at least one taxonomy. */
   | { readonly kind: 'taxonomiesPresent' }
+  /** At least one collection turned `workflow: { enabled: true }` on (`schema@2.1`, ADR-0027). */
+  | { readonly kind: 'workflowPresent' }
   /** An AI provider is configured and offers this specific tool. */
   | { readonly kind: 'assistantTool'; readonly tool: string }
   /**
@@ -67,7 +69,7 @@ export type NavCondition =
   | { readonly kind: 'commerceActiveOrAdmin' }
 
 /** Field names of `@cogenta/api`'s `ShellStatus` — kept identical so a badge item can index it directly. */
-export type NavBadgeKey = 'trash' | 'commerceOrdersPending' | 'marketplaceUpdates'
+export type NavBadgeKey = 'trash' | 'commerceOrdersPending' | 'marketplaceUpdates' | 'reviewPending'
 
 export interface NavItem {
   readonly to: string
@@ -94,6 +96,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Content — open by default, the six entries every role that can see
   // anything at all sees first.
   { to: '/', labelKey: 'nav.dashboard', group: 'content', visibleWhen: { kind: 'always' } },
+  {
+    to: '/review',
+    labelKey: 'nav.review',
+    group: 'content',
+    visibleWhen: { kind: 'workflowPresent' },
+    badge: 'reviewPending',
+  },
   {
     to: '/collections',
     labelKey: 'nav.collections',

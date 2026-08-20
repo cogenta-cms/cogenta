@@ -64,6 +64,7 @@ describe('the shell status transport', () => {
       commerceOrdersPending: null,
       commerceActive: false,
       marketplaceUpdates: null,
+      reviewPending: null,
     })
   })
 
@@ -250,6 +251,35 @@ describe('the shell status transport', () => {
     // Only `theme-a` moved (1.0.0 installed, 2.0.0 in the catalogue) —
     // `skin-b` is already current.
     expect(dataOf<{ marketplaceUpdates: number }>(response).marketplaceUpdates).toBe(1)
+  })
+
+  it('answers null review-pending when no collection turned the workflow on', async () => {
+    const router = createShellStatusRouter({ content: emptyContent })
+    const response = await router.handle(request(), { actor: ADMIN })
+    expect(dataOf<{ reviewPending: number | null }>(response).reviewPending).toBe(null)
+  })
+
+  it('reads the pending count from the review queue, scoped to this actor', async () => {
+    const reviewQueue = {
+      handle: async (queueRequest: RestRequest, context?: { actor: Actor }) => {
+        expect(queueRequest.path).toBe('/api/review')
+        expect(queueRequest.query['scope']).toBe('pending')
+        expect(context?.actor).toEqual(ADMIN)
+        return { status: 200, body: { data: [{ collection: 'article', entry: {} }] } }
+      },
+    }
+    const router = createShellStatusRouter({ content: emptyContent, reviewQueue })
+    const response = await router.handle(request(), { actor: ADMIN })
+    expect(dataOf<{ reviewPending: number }>(response).reviewPending).toBe(1)
+  })
+
+  it('answers null review-pending when the queue itself refuses this actor', async () => {
+    const reviewQueue = {
+      handle: async () => ({ status: 403, body: { error: { code: 'FORBIDDEN' } } }),
+    }
+    const router = createShellStatusRouter({ content: emptyContent, reviewQueue })
+    const response = await router.handle(request(), { actor: EDITOR })
+    expect(dataOf<{ reviewPending: number | null }>(response).reviewPending).toBe(null)
   })
 
   it('answers 404 for an unrelated path', async () => {

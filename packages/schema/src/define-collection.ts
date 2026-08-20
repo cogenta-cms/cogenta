@@ -76,6 +76,7 @@ function collectIssues(definition: CollectionDefinition): SchemaIssue[] {
   checkPermissions(definition, issues)
   checkVersioning(definition, issues)
   checkTrash(definition, issues)
+  checkWorkflow(definition, issues)
 
   return issues
 }
@@ -321,7 +322,7 @@ function checkPermissions(definition: CollectionDefinition, issues: SchemaIssue[
     return
   }
 
-  for (const [action, roles] of Object.entries(permissions)) {
+  for (const [action, rule] of Object.entries(permissions)) {
     if (!ACTION_SET.has(action)) {
       issues.push({
         path: `permissions.${action}`,
@@ -329,18 +330,72 @@ function checkPermissions(definition: CollectionDefinition, issues: SchemaIssue[
       })
       continue
     }
+
+    // The plain-array form (`readonly string[]`) and the object form
+    // (`{ roles, own? }`, `schema@2.1`, ADR-0027) are both valid — the object
+    // form is strictly additive, so nothing written before it breaks.
+    const roles = Array.isArray(rule) ? rule : (rule as { roles?: unknown } | undefined)?.roles
+
+    if (!Array.isArray(rule) && (typeof rule !== 'object' || rule === null)) {
+      issues.push({
+        path: `permissions.${action}`,
+        message: 'must be a list of role names, or { roles, own? }',
+      })
+      continue
+    }
+
     if (!Array.isArray(roles)) {
-      issues.push({ path: `permissions.${action}`, message: 'must be a list of role names' })
+      issues.push({ path: `permissions.${action}.roles`, message: 'must be a list of role names' })
       continue
     }
     for (const role of roles) {
       if (typeof role !== 'string' || role === '') {
         issues.push({
-          path: `permissions.${action}`,
+          path: `permissions.${action}.roles`,
           message: 'role names must be non-empty strings',
         })
       }
     }
+
+    if (!Array.isArray(rule) && 'own' in rule) {
+      const own = (rule as { own?: unknown }).own
+      if (own !== undefined && typeof own !== 'boolean') {
+        issues.push({ path: `permissions.${action}.own`, message: 'must be a boolean' })
+      }
+      // A brand-new entry has no owner yet: "own" is meaningless on `create`,
+      // and every actor who may create already creates their own entry.
+      if (own === true && action === 'create') {
+        issues.push({
+          path: `permissions.${action}.own`,
+          message:
+            "'own' has no meaning on 'create': a new entry has no owner to compare against yet",
+        })
+      }
+      // `assertOwnAware` (packages/api/src/rest/content-service.ts) only
+      // resolves and forwards an entry's ownerId for `update`/`delete`
+      // (ADR-0027's own worked examples). `read`/`list` and the
+      // publish/unpublish/approve/request-changes family call
+      // `permissions.assert` without an ownerId — and `PermissionLayer.can`
+      // treats a missing ownerId as "not the owner" whenever `own` is set,
+      // so declaring `own: true` here would silently lock every actor,
+      // including admin, out of the action. Reject at validation time
+      // rather than let a site discover this as a mysterious 403.
+      if (own === true && (action === 'read' || action === 'publish')) {
+        issues.push({
+          path: `permissions.${action}.own`,
+          message: `'own' is not yet supported on '${action}': only 'update' and 'delete' resolve an entry's owner today`,
+        })
+      }
+    }
+  }
+}
+
+/** `workflow: { enabled: true }` is the only shape; absent means off (`schema@2.1`, ADR-0027). */
+function checkWorkflow(definition: CollectionDefinition, issues: SchemaIssue[]): void {
+  const workflow = definition.workflow
+  if (workflow === undefined) return
+  if (typeof workflow !== 'object' || workflow === null || typeof workflow.enabled !== 'boolean') {
+    issues.push({ path: 'workflow', message: 'must be { enabled: boolean }' })
   }
 }
 

@@ -13,6 +13,8 @@ export interface ShellStatus {
   readonly commerceOrdersPending: number | null
   readonly commerceActive: boolean
   readonly marketplaceUpdates: number | null
+  /** `null` when no collection turned `workflow: { enabled: true }` on (`schema@2.1`, ADR-0027, fiche 37). */
+  readonly reviewPending: number | null
 }
 
 export function getShellStatus(token: string): Promise<ShellStatus> {

@@ -1,4 +1,4 @@
-import type { CollectionDefinition } from '@cogenta/schema'
+import { type CollectionDefinition, normalisePermissionRule } from '@cogenta/schema'
 
 /**
  * Which roles are sensitive enough that a second factor is *recommended*.
@@ -28,7 +28,9 @@ const ALWAYS_SENSITIVE_ROLES = new Set(['admin'])
 export function sensitiveRoles(collections: readonly CollectionDefinition[]): ReadonlySet<string> {
   const roles = new Set(ALWAYS_SENSITIVE_ROLES)
   for (const collection of collections) {
-    for (const role of collection.permissions.publish ?? []) roles.add(role)
+    for (const role of normalisePermissionRule(collection.permissions.publish).roles) {
+      roles.add(role)
+    }
   }
   return roles
 }

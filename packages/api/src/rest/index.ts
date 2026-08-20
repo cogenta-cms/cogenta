@@ -118,6 +118,13 @@ export {
 } from './query.js'
 export type { RedirectRouter, RedirectRouterOptions } from './redirect-router.js'
 export { createRedirectRouter } from './redirect-router.js'
+export type {
+  ReviewQueueItem,
+  ReviewQueueScope,
+  ReviewRouter,
+  ReviewRouterOptions,
+} from './review-router.js'
+export { createReviewRouter } from './review-router.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
 export type {

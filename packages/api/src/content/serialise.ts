@@ -29,6 +29,9 @@ export interface SerialisedEntry {
    * still reads `published` here, which is what makes restoring it honest.
    */
   readonly deletedAt: string | null
+  /** The editorial workflow's state (`schema@2.1`, ADR-0027). `'none'` on a collection that never turned it on. */
+  readonly reviewState: ContentEntry['reviewState']
+  readonly assignedReviewer: string | null
   readonly state: EntryState
   readonly version: number
   readonly createdAt: string
@@ -98,6 +101,8 @@ function projectionOf(
     locale: entry.locale,
     status: entry.status,
     deletedAt: entry.deletedAt,
+    reviewState: entry.reviewState,
+    assignedReviewer: entry.assignedReviewer,
     state: entry.state,
     version: entry.version,
     createdAt: entry.createdAt,

@@ -1,5 +1,10 @@
 import { knownRoleNames, PUBLIC_ROLE, taxonomyLabel } from './permissions.js'
-import type { CollectionPermissions, ContentAction, SchemaDocument } from './types.js'
+import {
+  type CollectionPermissions,
+  type ContentAction,
+  normalisePermissionRule,
+  type SchemaDocument,
+} from './types.js'
 
 /**
  * Fiche 19 task 3 — the diagnostics section, described as "la partie la plus
@@ -41,7 +46,7 @@ function subjectAnomalies(
   routed: boolean,
 ): PermissionAnomaly[] {
   const anomalies: PermissionAnomaly[] = []
-  const readRoles = permissions.read ?? []
+  const readRoles = normalisePermissionRule(permissions.read).roles
 
   if (readRoles.length === 0) {
     // Invisible to everyone, including `admin` — `canPerform` denies an
@@ -67,7 +72,7 @@ function subjectAnomalies(
   }
 
   const publicWriteActions = WRITE_ACTIONS.filter((action) =>
-    (permissions[action] ?? []).includes(PUBLIC_ROLE),
+    normalisePermissionRule(permissions[action]).roles.includes(PUBLIC_ROLE),
   )
   if (publicWriteActions.length > 0) {
     anomalies.push({

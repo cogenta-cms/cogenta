@@ -11,6 +11,9 @@
 > **Figé en `schema@2.0` le 2026-08-16** (ADR-0022 — taxonomies natives et corbeille,
 > les deux en une seule montée majeure). Toute modification incompatible impose une
 > montée de version majeure et une note de migration.
+> **Monté en `schema@2.1` le 2026-08-20** (ADR-0027 — workflow éditorial et
+> permission par propriétaire), montée **mineure et strictement additive** : voir
+> « Champs système » et « Permissions » ci-dessous.
 
 ### Définition d'un type
 
@@ -72,6 +75,8 @@ entre environnements possible sans réécrire les clés étrangères.
 id · createdAt · updatedAt · createdBy · updatedBy
 status: draft | scheduled | published | archived
 deletedAt: string | null
+reviewState: none | pending | changes-requested | approved
+assignedReviewer: string | null
 locale · translationOf · version
 provenance: human | assisted | generated
 provenanceDetail: { agent, model, at, prompt? }
@@ -89,6 +94,23 @@ explicitement la corbeille la voit. `delete()` écrit `deletedAt` ; `purge()` es
 `DELETE` SQL réel ; `untrash()` annule la mise à la corbeille. Une fenêtre de purge se
 déclare par collection sur le modèle de `versioning.keep` : `trash: { retainDays: 30 }`,
 `false` pour revenir à une suppression dure immédiate.
+
+**`reviewState` (`schema@2.1`, ADR-0027) est orthogonal à `status`, exactement comme
+`deletedAt`.** Ignoré par défaut par toute lecture existante : un client qui lit
+`status` et ignore le reste du contrat obtient exactement les mêmes valeurs qu'avant
+cette montée. `'none'` tant que l'entrée n'est jamais entrée dans le workflow.
+`approved` **n'est pas** `published` — approuver autorise, publier reste l'action
+`publish`. Trois transitions, table fermée côté serveur :
+
+```
+submit          none | changes-requested → pending           (action: update)
+approve         pending → approved                            (action: publish)
+requestChanges  pending → changes-requested                    (action: publish)
+```
+
+Le workflow est **optionnel par collection** : `workflow: { enabled: true }` sur
+`defineCollection()`. Absent, une collection se comporte exactement comme avant
+`schema@2.1` — aucune route de transition n'y répond (`CONTENT_WORKFLOW_DISABLED`).
 
 ### Internationalisation
 
@@ -212,6 +234,23 @@ silencieux.
 Le rattachement des rôles aux utilisateurs relève de l'authentification (lot L2). Les
 permissions des agents relèvent du contrat C et n'utilisent pas ce vocabulaire.
 
+**Permission par propriétaire (`schema@2.1`, ADR-0027).** Chaque grant reste soit une
+liste de rôles (la forme d'avant 2.1, toujours valide), soit `{ roles, own?: boolean }` :
+
+```ts
+permissions: {
+  read:   ['public'],
+  update: { roles: ['author'], own: true },   // « ses propres entrées », jamais celles d'un autre
+  publish: ['editor'],
+}
+```
+
+`own: true` s'applique **uniformément** à tous les rôles listés pour cette action — pas
+un mélange par rôle, et pas de sens sur `create` (une entrée neuve n'a pas encore de
+propriétaire ; refusé à la définition). `PermissionLayer.can()`/`.assert()` comparent
+alors l'acteur au `createdBy` de l'entrée ; sans cette information, l'accès est refusé
+par défaut.
+
 ### Migrations
 
 Le schéma génère les migrations. Une migration porte : une version, une direction
@@ -228,6 +267,19 @@ existant est majeure.
 `purge()`/`untrash()`, et ajout de `defineTaxonomy()`/`f.taxonomy()`. `status` n'a pas
 changé. Migration réversible ; le `down` supprime `deletedAt` et perd la corbeille —
 sans coût aujourd'hui, le projet n'ayant encore aucun site en production.
+
+`schema@2.0 → 2.1` (ADR-0027, 2026-08-20) : ajout des champs système `reviewState`
+(orthogonal à `status`, exactement comme `deletedAt`) et `assignedReviewer` ; nouvelles
+méthodes `ContentStore.submitForReview()`/`approveReview()`/`requestReviewChanges()`/
+`assignReviewer()` ; nouvelles routes REST `POST .../submit`, `.../approve`,
+`.../request-changes`, `.../assign-reviewer` ; `CollectionPermissionRule` gagne la
+forme `{ roles, own? }` en plus de la liste de rôles (toujours valide) ; nouveau champ
+optionnel `workflow: { enabled: boolean }` sur `defineCollection()`. **Strictement
+additive** : `status` n'a pas changé, aucune signature existante n'a bougé, un client
+qui ne lit que `status` obtient exactement les mêmes valeurs qu'avant (prouvé par test
+de compatibilité). Migration réversible ; non destructive — le `down` supprime les deux
+colonnes, sans coût aujourd'hui puisqu'aucun site en production n'a de véritable
+historique de relecture à perdre.
 
 ---
 

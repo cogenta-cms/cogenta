@@ -12,7 +12,30 @@
 
 export type ContentAction = 'read' | 'create' | 'update' | 'delete' | 'publish'
 
-export type CollectionPermissions = Readonly<Partial<Record<ContentAction, readonly string[]>>>
+/**
+ * One action's grant. The object form adds `own: true` (`schema@2.1`,
+ * ADR-0027) — "this role may act on its own entries only" — the plain array
+ * form is what a pre-2.1 server always sent, and stays valid: additive, not
+ * a breaking shape change.
+ */
+export type CollectionPermissionRule =
+  | readonly string[]
+  | { readonly roles: readonly string[]; readonly own?: boolean }
+
+export type CollectionPermissions = Readonly<
+  Partial<Record<ContentAction, CollectionPermissionRule>>
+>
+
+/** `CollectionPermissionRule`, always read back out as `{ roles, own }`. Mirrors `@cogenta/schema`'s own helper. */
+export function normalisePermissionRule(rule: CollectionPermissionRule | undefined): {
+  readonly roles: readonly string[]
+  readonly own: boolean
+} {
+  if (rule === undefined) return { roles: [], own: false }
+  if (Array.isArray(rule)) return { roles: rule, own: false }
+  const object = rule as { readonly roles: readonly string[]; readonly own?: boolean }
+  return { roles: object.roles, own: object.own === true }
+}
 
 export const FIELD_KINDS = [
   'text',
@@ -72,6 +95,13 @@ export interface CollectionSummary {
    * older than 2.0 does not send it, and the admin must still start.
    */
   readonly trash?: { readonly retainDays: number } | false
+  /**
+   * The editorial workflow, opt-in per collection (`schema@2.1`, ADR-0027).
+   * Absent — a server older than 2.1, or a collection that never turned it
+   * on — means "no workflow": the review queue and the editor's workflow
+   * controls show nothing for it.
+   */
+  readonly workflow?: { readonly enabled: boolean }
 }
 
 /** A taxonomy as `/api/schema` describes it (`schema@2.0`, ADR-0022). */

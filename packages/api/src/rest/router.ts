@@ -6,9 +6,11 @@ import type { SerialisedEntry } from '../content/index.js'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import {
+  parseAssignReviewerBody,
   parseCreateBody,
   parseDuplicateBody,
   parseRestoreBody,
+  parseSubmitBody,
   parseUnpublishBody,
   parseUpdateBody,
 } from './body.js'
@@ -49,6 +51,10 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   POST   /{collection}/{id}/preview      mint a preview link
  *   GET    /{collection}/{id}/translations the entry's translation family (ADR-0014)
  *   GET    /{collection}/-/translation-matrix  translation dashboard (fiche 10)
+ *   POST   /{collection}/{id}/submit          send into the review queue (schema@2.1, ADR-0027)
+ *   POST   /{collection}/{id}/approve         approve a pending entry — not publication
+ *   POST   /{collection}/{id}/request-changes send a pending entry back to its author
+ *   POST   /{collection}/{id}/assign-reviewer set — or clear — who reviews next
  *
  * A GET on `/{collection}/{id}` or `/-/by-path` also accepts `?preview=` —
  * a token minted by the route above, unlocking exactly the one entry it
@@ -453,6 +459,47 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         })
       }
 
+      // Editorial workflow (`schema@2.1`, ADR-0027). Each transition is its
+      // own POST on its own path — never a second verb on `publish` or
+      // `update` — the same lesson ADR-0022 already drew for `purge`.
+      case 'submit': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const input = parseSubmitBody(request.body)
+        const entry = await service.submit(context, name, id, input, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'approve': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const entry = await service.approve(context, name, id, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'request-changes': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const entry = await service.requestChanges(context, name, id, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'assign-reviewer': {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const reviewerId = parseAssignReviewerBody(request.body)
+        const entry = await service.assignReviewer(context, name, id, reviewerId, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
       default:
         throw noRoute()
     }
@@ -502,7 +549,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|unpublish|duplicate|untrash|purge|history|diff|restore|preview|translations}.',
+    hint: 'Content routes are /{collection}, /{collection}/{id} and /{collection}/{id}/{publish|unpublish|duplicate|untrash|purge|history|diff|restore|preview|translations|submit|approve|request-changes|assign-reviewer}.',
   })
 }
 

@@ -44,6 +44,8 @@ export function isNavItemVisible(condition: NavCondition, ctx: NavVisibilityCont
     }
     case 'taxonomiesPresent':
       return ctx.taxonomiesPresent === true
+    case 'workflowPresent':
+      return ctx.collections !== null && ctx.collections.some((c) => c.workflow?.enabled === true)
     case 'assistantTool':
       return ctx.assistantTools !== null && ctx.assistantTools.includes(condition.tool)
     case 'commerceActiveOrAdmin':

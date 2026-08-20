@@ -173,6 +173,7 @@
     "redirects": "Redirections",
     "seo": "SEO",
     "translations": "Traductions",
+    "review": "File de relecture",
     "trash": "Corbeille",
     "assistant": "Assistant",
     "audit": "Journal d'audit",
@@ -584,7 +585,27 @@
     "confirmLeaveSave": "Enregistrer",
     "assistantSectionLabel": "Assistant",
     "translationsSectionLabel": "Traductions",
-    "historySectionLabel": "Historique"
+    "historySectionLabel": "Historique",
+    "workflow": {
+      "stateLabel": "Relecture :",
+      "state": {
+        "none": "Non soumis",
+        "pending": "En attente de relecture",
+        "changes-requested": "Modifications demandées",
+        "approved": "Approuvé"
+      },
+      "reviewerLabel": "Relecteur :",
+      "reviewerUnassigned": "Non assigné",
+      "submitButton": "Soumettre à relecture",
+      "submitted": "Soumis à relecture.",
+      "submitError": "Impossible de soumettre cette entrée à relecture.",
+      "approveButton": "Approuver",
+      "approved": "Approuvé.",
+      "approveError": "Impossible d'approuver cette entrée.",
+      "requestChangesButton": "Demander des modifications",
+      "changesRequested": "Modifications demandées.",
+      "requestChangesError": "Impossible de demander des modifications sur cette entrée."
+    }
   },
   "media": {
     "heading": "Médiathèque",
@@ -983,6 +1004,31 @@
     "envFileOk": "Les permissions du fichier .env semblent correctement restreintes.",
     "envFileUnknown": "Impossible de vérifier les permissions du fichier .env sur cette plateforme.",
     "envFileNone": "Aucun fichier .env trouvé à côté de la configuration."
+  },
+  "review": {
+    "heading": "File de relecture",
+    "tabAssigned": "Assignées à moi",
+    "tabPending": "Toutes en attente",
+    "tabMine": "Mes soumissions",
+    "empty": "Rien ici.",
+    "loadError": "Impossible de charger la file de relecture.",
+    "entry": "Entrée",
+    "author": "Auteur",
+    "collection": "Collection",
+    "submittedAt": "Soumis",
+    "age": "Âge",
+    "state": "État",
+    "actions": "Actions",
+    "open": "Ouvrir",
+    "approve": "Approuver",
+    "requestChanges": "Demander des modifications",
+    "approveError": "Impossible d'approuver cette entrée.",
+    "requestChangesError": "Impossible de demander des modifications sur cette entrée.",
+    "ageDays_one": "{{count}} jour",
+    "ageDays_other": "{{count}} jours",
+    "ageToday": "Aujourd'hui",
+    "pendingBadge": "{{count}} en attente de relecture",
+    "pendingBadge_other": "{{count}} en attente de relecture"
   },
   "trash": {
     "heading": "Corbeille",

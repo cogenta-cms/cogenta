@@ -58,6 +58,14 @@ export interface CommerceCatalogLike {
   listProducts(options: { readonly limit?: number }): Promise<readonly unknown[]>
 }
 
+/** `ReviewRouter` (`review-router.ts`), structural for the same reason commerce/marketplace are. */
+export interface ReviewQueueLike {
+  handle(
+    request: RestRequest,
+    context?: AccessContext,
+  ): Promise<{ readonly status: number; readonly body: unknown }>
+}
+
 export interface ShellStatus {
   /** Trashed entries across every trash-enabled collection this actor may see the trash of. */
   readonly trash: number
@@ -67,6 +75,8 @@ export interface ShellStatus {
   readonly commerceActive: boolean
   /** `null` when marketplace is unmounted, or this actor is not `admin` (the only role that can act on an update). */
   readonly marketplaceUpdates: number | null
+  /** `null` when no collection has the editorial workflow on (`schema@2.1`, ADR-0027, fiche 37). */
+  readonly reviewPending: number | null
 }
 
 export interface ShellStatusRouterOptions {
@@ -79,6 +89,8 @@ export interface ShellStatusRouterOptions {
   /** Both present together, or both absent — a marketplace with a catalogue and no installer (or the reverse) cannot answer "updates". */
   readonly marketplaceCatalog?: MarketplaceCatalogLike
   readonly marketplaceInstaller?: MarketplaceInstallerLike
+  /** Absent on a site where no collection has `workflow: { enabled: true }` — `reviewPending` then stays `null`. */
+  readonly reviewQueue?: ReviewQueueLike
   /** Mount point. `/api/shell-status` by default. */
   readonly path?: string
 }
@@ -116,6 +128,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
         commerceOrdersPending: null,
         commerceActive: false,
         marketplaceUpdates: null,
+        reviewPending: null,
       }
       return jsonResponse(200, { data: empty })
     }
@@ -125,6 +138,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
       commerceOrdersPending: await ordersPending(context),
       commerceActive: await catalogueHasProducts(),
       marketplaceUpdates: await pendingMarketplaceUpdates(context),
+      reviewPending: await reviewPending(context),
     }
     return jsonResponse(200, { data: status })
   }
@@ -174,6 +188,18 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
     if (catalogue === undefined) return false
     const rows = await catalogue.listProducts({ limit: 1 })
     return rows.length > 0
+  }
+
+  async function reviewPending(context: AccessContext): Promise<number | null> {
+    const queue = options.reviewQueue
+    if (queue === undefined) return null
+    const response = await queue.handle(
+      { method: 'GET', path: '/api/review', query: { scope: 'pending' } },
+      context,
+    )
+    if (response.status !== 200) return null
+    const body = response.body as { readonly data?: readonly unknown[] } | undefined
+    return body?.data?.length ?? null
   }
 
   async function pendingMarketplaceUpdates(context: AccessContext): Promise<number | null> {

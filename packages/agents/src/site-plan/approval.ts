@@ -1,6 +1,6 @@
 import { CogentaError } from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
-import type { CollectionDefinition } from '@cogenta/schema'
+import { type CollectionDefinition, normalisePermissionRule } from '@cogenta/schema'
 import type { DemoEntry, ProposedPage, SitePlanDraft } from './types.js'
 
 /**
@@ -178,11 +178,13 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
  * inside a rationale sentence that never mentioned it.
  */
 function describePermissions(permissions: CollectionDefinition['permissions']): string {
-  const entries = Object.entries(permissions).filter(
-    ([, roles]) => roles !== undefined && roles.length > 0,
-  ) as readonly [string, readonly string[]][]
+  const entries = Object.entries(permissions)
+    .map(([action, rule]) => [action, normalisePermissionRule(rule)] as const)
+    .filter(([, rule]) => rule.roles.length > 0)
   if (entries.length === 0) return 'none granted'
-  return entries.map(([action, roles]) => `${action}: ${roles.join(', ')}`).join('; ')
+  return entries
+    .map(([action, rule]) => `${action}: ${rule.roles.join(', ')}${rule.own ? ' (own only)' : ''}`)
+    .join('; ')
 }
 
 function allItems(sections: readonly PlanSection[]): readonly PlanItem[] {

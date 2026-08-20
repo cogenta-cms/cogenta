@@ -3,14 +3,23 @@ import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { getAnalyticsPageStats, type PageStats } from '../api/analytics-client.js'
 import { ApiError } from '../api/client.js'
-import type { AssistApplied, BlockZones, ContentBlock, Entry } from '../api/content-client.js'
+import type {
+  AssistApplied,
+  BlockZones,
+  ContentBlock,
+  Entry,
+  ReviewState,
+} from '../api/content-client.js'
 import {
+  approveReview,
   createEntry,
   deleteEntry,
   duplicateEntry,
   getEntry,
   issuePreview,
   publishEntry,
+  requestReviewChanges,
+  submitForReview,
   unpublishEntry,
   updateEntry,
 } from '../api/content-client.js'
@@ -184,6 +193,7 @@ export function EntryEditRoute(): JSX.Element {
 
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
+  const actorId = auth.state.status === 'authenticated' ? auth.state.user.id : null
   const collection =
     schema.status === 'ready' ? schema.schema.collections.find((c) => c.name === name) : undefined
   const siteLocales = schema.status === 'ready' ? (schema.schema.site?.locales ?? []) : []
@@ -225,6 +235,8 @@ export function EntryEditRoute(): JSX.Element {
    * Who created/last touched this entry — the entry envelope's own
    * `createdBy`/`updatedBy` (`Entry`, not `Entry['values']`: these are
    * system fields the store maintains, never something a form field writes).
+   * Also what `own: true` (`schema@2.1`, ADR-0027) compares the signed-in
+   * actor against.
    */
   const [createdBy, setCreatedBy] = useState<string | null>(null)
   const [updatedBy, setUpdatedBy] = useState<string | null>(null)
@@ -240,6 +252,12 @@ export function EntryEditRoute(): JSX.Element {
   const [pageStats, setPageStats] = useState<PageStats | null>(null)
   /** Fiche 30 task 5: every assistant suggestion accepted since the last save — cleared on save, not on discard, since a save is the only thing that turns "accepted" into a real audit entry. */
   const [assistApplied, setAssistApplied] = useState<readonly AssistApplied[]>([])
+  /** The editorial workflow's state (`schema@2.1`, ADR-0027) — `'none'` on a collection that never turned it on. */
+  const [reviewState, setReviewState] = useState<ReviewState>('none')
+  const [assignedReviewer, setAssignedReviewer] = useState<string | null>(null)
+  const [workflowBusy, setWorkflowBusy] = useState(false)
+  const [workflowError, setWorkflowError] = useState<string | null>(null)
+  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (isNew) {
@@ -271,6 +289,8 @@ export function EntryEditRoute(): JSX.Element {
           setLoadedUpdatedAt(entry.updatedAt)
           setCreatedBy(entry.createdBy)
           setUpdatedBy(entry.updatedBy)
+          setReviewState(entry.reviewState)
+          setAssignedReviewer(entry.assignedReviewer)
           setScheduleInput(
             entry.publishedAt === null ? '' : toDatetimeLocalValue(entry.publishedAt),
           )
@@ -616,6 +636,67 @@ export function EntryEditRoute(): JSX.Element {
     }
   }
 
+  /**
+   * The three editorial-workflow transitions (`schema@2.1`, ADR-0027). Each
+   * hits its own route — never a second meaning for `publish`/`update` — and
+   * the server's transition table is the real guard; this only reflects what
+   * it answers back.
+   */
+  async function submitReview(): Promise<void> {
+    if (token === null || id === undefined) return
+    setWorkflowBusy(true)
+    setWorkflowError(null)
+    setWorkflowMessage(null)
+    try {
+      const entry = await submitForReview(token, name, id)
+      setReviewState(entry.reviewState)
+      setAssignedReviewer(entry.assignedReviewer)
+      setWorkflowMessage(t('entryEdit.workflow.submitted'))
+    } catch (caught) {
+      setWorkflowError(
+        caught instanceof ApiError ? caught.message : t('entryEdit.workflow.submitError'),
+      )
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
+  async function approveReviewNow(): Promise<void> {
+    if (token === null || id === undefined) return
+    setWorkflowBusy(true)
+    setWorkflowError(null)
+    setWorkflowMessage(null)
+    try {
+      const entry = await approveReview(token, name, id)
+      setReviewState(entry.reviewState)
+      setWorkflowMessage(t('entryEdit.workflow.approved'))
+    } catch (caught) {
+      setWorkflowError(
+        caught instanceof ApiError ? caught.message : t('entryEdit.workflow.approveError'),
+      )
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
+  async function requestChangesNow(): Promise<void> {
+    if (token === null || id === undefined) return
+    setWorkflowBusy(true)
+    setWorkflowError(null)
+    setWorkflowMessage(null)
+    try {
+      const entry = await requestReviewChanges(token, name, id)
+      setReviewState(entry.reviewState)
+      setWorkflowMessage(t('entryEdit.workflow.changesRequested'))
+    } catch (caught) {
+      setWorkflowError(
+        caught instanceof ApiError ? caught.message : t('entryEdit.workflow.requestChangesError'),
+      )
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
   /** Copies the working state into a new draft, then opens it — never the source. */
   async function duplicate(): Promise<void> {
     if (token === null || id === undefined) return
@@ -663,11 +744,24 @@ export function EntryEditRoute(): JSX.Element {
   }
 
   const requiredAction = isNew ? 'create' : 'update'
-  const canWrite = collection !== undefined && canPerform(requiredAction, collection, roles)
+  // A new entry has no owner yet, so `own: true` never applies to `create`
+  // (rejected outright at schema definition time) — `isOwner` only matters
+  // for the update path, where it is "this actor wrote it".
+  const isOwner = isNew || (actorId !== null && actorId === createdBy)
+  const canWrite =
+    collection !== undefined && canPerform(requiredAction, collection, roles, isOwner)
   const canPublish = collection !== undefined && canPerform('publish', collection, roles)
   /** Duplicating produces a new entry, so it is gated the same as creating one. */
   const canDuplicate = collection !== undefined && canPerform('create', collection, roles)
   const canTrash = collection !== undefined && canPerform('delete', collection, roles)
+  /**
+   * The editorial workflow (`schema@2.1`, ADR-0027) — absent on a server
+   * older than 2.1, or a collection that never turned it on. The UI hides
+   * what the server would refuse; the server is still the one enforcing it.
+   */
+  const workflowEnabled = collection?.workflow?.enabled === true
+  const canSubmitReview = workflowEnabled && !isNew && canWrite
+  const canReview = workflowEnabled && !isNew && canPublish
   /**
    * Scheduling needs somewhere to put the date: the store refuses
    * `unpublish(id, { status: 'scheduled' })` on a collection that never
@@ -956,6 +1050,24 @@ export function EntryEditRoute(): JSX.Element {
                     </Button>
                   )}
 
+                  {/* The button that used to simply not exist for a contributor:
+                      without `publish`, there was no way at all to signal "this is
+                      ready" — a silent dead end (`schema@2.1`, ADR-0027, fiche 37
+                      task 4). Legal to press from `none` or `changes-requested`
+                      only, mirroring the server's own transition table. */}
+                  {!canPublish &&
+                    canSubmitReview &&
+                    (reviewState === 'none' || reviewState === 'changes-requested') && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        disabled={workflowBusy}
+                        onClick={() => void submitReview()}
+                      >
+                        {t('entryEdit.workflow.submitButton')}
+                      </Button>
+                    )}
+
                   {/* Scheduling: `@cogenta/schema`'s queue-based scheduler is now
                       registered by `cogenta serve` (every 60s, plus once at
                       startup), so this really publishes the entry once its date
@@ -1015,6 +1127,62 @@ export function EntryEditRoute(): JSX.Element {
                 {statusMessage !== null && (
                   <Notice tone="success" live="polite">
                     {statusMessage}
+                  </Notice>
+                )}
+              </Card>
+            )}
+
+            {/* The workflow sidebar: state, assigned reviewer, and the contextual
+                approve/request-changes pair a reviewer gets (`schema@2.1`,
+                ADR-0027, fiche 37 tasks 2 and 4). Shown only on a collection that
+                turned the workflow on — a site that never does sees none of this. */}
+            {workflowEnabled && !isNew && id !== undefined && (canSubmitReview || canReview) && (
+              <Card className="entry-form__status">
+                <CardBody className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      {t('entryEdit.workflow.stateLabel')}
+                    </span>
+                    <strong>{t(`entryEdit.workflow.state.${reviewState}`)}</strong>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      {t('entryEdit.workflow.reviewerLabel')}
+                    </span>
+                    <span>{assignedReviewer ?? t('entryEdit.workflow.reviewerUnassigned')}</span>
+                  </div>
+
+                  {canReview && reviewState === 'pending' && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        disabled={workflowBusy}
+                        onClick={() => void approveReviewNow()}
+                      >
+                        {t('entryEdit.workflow.approveButton')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={workflowBusy}
+                        onClick={() => void requestChangesNow()}
+                      >
+                        {t('entryEdit.workflow.requestChangesButton')}
+                      </Button>
+                    </div>
+                  )}
+                </CardBody>
+
+                {workflowError !== null && (
+                  <Notice tone="danger" live="assertive">
+                    {workflowError}
+                  </Notice>
+                )}
+                {workflowMessage !== null && (
+                  <Notice tone="success" live="polite">
+                    {workflowMessage}
                   </Notice>
                 )}
               </Card>

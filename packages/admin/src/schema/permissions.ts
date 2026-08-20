@@ -1,4 +1,5 @@
 import type { CollectionSummary, ContentAction, SchemaDocument, TaxonomySummary } from './types.js'
+import { normalisePermissionRule } from './types.js'
 
 /** Every actor holds this — a collection readable by `public` is readable by everyone. */
 export const PUBLIC_ROLE = 'public'
@@ -30,11 +31,19 @@ export function canPerform(
   action: ContentAction,
   collection: CollectionSummary,
   roles: readonly string[],
+  /**
+   * Whether the actor asking is the entry's own author — only ever
+   * meaningful when the rule declares `own: true` (`schema@2.1`, ADR-0027).
+   * Left out (the default) for a route with no single entry in view: a
+   * list, or a "may I create at all" question.
+   */
+  isOwner = false,
 ): boolean {
-  const allowedRoles = collection.permissions[action] ?? []
-  if (allowedRoles.length === 0) return false
-  if (allowedRoles.includes(PUBLIC_ROLE)) return true
-  return roles.some((role) => allowedRoles.includes(role))
+  const rule = normalisePermissionRule(collection.permissions[action])
+  if (rule.roles.length === 0) return false
+  if (rule.roles.includes(PUBLIC_ROLE)) return !rule.own || isOwner
+  if (rule.own && !isOwner) return false
+  return roles.some((role) => rule.roles.includes(role))
 }
 
 /**
@@ -50,7 +59,7 @@ export function canPerformOnTerms(
   taxonomy: TaxonomySummary,
   roles: readonly string[],
 ): boolean {
-  const allowedRoles = taxonomy.permissions[action] ?? []
+  const allowedRoles = normalisePermissionRule(taxonomy.permissions[action]).roles
   if (allowedRoles.length === 0) return false
   if (allowedRoles.includes(PUBLIC_ROLE)) return true
   return roles.some((role) => allowedRoles.includes(role))
@@ -94,8 +103,8 @@ export function knownRoleNames(
 ): readonly string[] {
   const names = new Set<string>()
   const collect = (permissions: CollectionSummary['permissions']): void => {
-    for (const roles of Object.values(permissions)) {
-      for (const role of roles ?? []) {
+    for (const rule of Object.values(permissions)) {
+      for (const role of normalisePermissionRule(rule).roles) {
         if (role !== PUBLIC_ROLE) names.add(role)
       }
     }

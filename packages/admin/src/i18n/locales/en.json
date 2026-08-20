@@ -174,6 +174,7 @@
     "redirects": "Redirects",
     "seo": "SEO",
     "translations": "Translations",
+    "review": "Review queue",
     "trash": "Trash",
     "assistant": "Assistant",
     "audit": "Audit log",
@@ -585,7 +586,27 @@
     "confirmLeaveSave": "Save",
     "assistantSectionLabel": "Assistant",
     "translationsSectionLabel": "Translations",
-    "historySectionLabel": "History"
+    "historySectionLabel": "History",
+    "workflow": {
+      "stateLabel": "Review:",
+      "state": {
+        "none": "Not submitted",
+        "pending": "Pending review",
+        "changes-requested": "Changes requested",
+        "approved": "Approved"
+      },
+      "reviewerLabel": "Reviewer:",
+      "reviewerUnassigned": "Unassigned",
+      "submitButton": "Submit for review",
+      "submitted": "Submitted for review.",
+      "submitError": "Could not submit this entry for review.",
+      "approveButton": "Approve",
+      "approved": "Approved.",
+      "approveError": "Could not approve this entry.",
+      "requestChangesButton": "Request changes",
+      "changesRequested": "Changes requested.",
+      "requestChangesError": "Could not request changes on this entry."
+    }
   },
   "media": {
     "heading": "Media library",
@@ -984,6 +1005,31 @@
     "envFileOk": "The .env file's permissions look correctly restricted.",
     "envFileUnknown": "Could not check the .env file's permissions on this platform.",
     "envFileNone": "No .env file found next to the config."
+  },
+  "review": {
+    "heading": "Review queue",
+    "tabAssigned": "Assigned to me",
+    "tabPending": "All pending",
+    "tabMine": "My submissions",
+    "empty": "Nothing here.",
+    "loadError": "Could not load the review queue.",
+    "entry": "Entry",
+    "author": "Author",
+    "collection": "Collection",
+    "submittedAt": "Submitted",
+    "age": "Age",
+    "state": "State",
+    "actions": "Actions",
+    "open": "Open",
+    "approve": "Approve",
+    "requestChanges": "Request changes",
+    "approveError": "Could not approve this entry.",
+    "requestChangesError": "Could not request changes on this entry.",
+    "ageDays_one": "{{count}} day",
+    "ageDays_other": "{{count}} days",
+    "ageToday": "Today",
+    "pendingBadge": "{{count}} pending review",
+    "pendingBadge_other": "{{count}} pending reviews"
   },
   "trash": {
     "heading": "Trash",

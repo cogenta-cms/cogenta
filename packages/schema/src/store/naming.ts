@@ -93,6 +93,8 @@ export const SYSTEM_COLUMNS = [
   'updated_by',
   'status',
   'deleted_at',
+  'review_state',
+  'assigned_reviewer',
   'locale',
   'translation_of',
   'version',

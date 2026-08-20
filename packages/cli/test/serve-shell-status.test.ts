@@ -58,6 +58,19 @@ async function project(): Promise<string> {
       delete: ['editor'],
     },
   },
+  {
+    name: 'wf_article',
+    labels: { singular: 'Workflow article', plural: 'Workflow articles' },
+    workflow: { enabled: true },
+    fields: { title: { kind: 'text', required: true, options: { max: 200 } } },
+    permissions: {
+      read: ['public'],
+      create: ['editor'],
+      update: ['editor'],
+      publish: ['admin'],
+      delete: ['admin'],
+    },
+  },
 ]
 `,
     'utf8',
@@ -137,6 +150,7 @@ interface ShellStatusBody {
     readonly commerceOrdersPending: number | null
     readonly commerceActive: boolean
     readonly marketplaceUpdates: number | null
+    readonly reviewPending: number | null
   }
 }
 
@@ -153,6 +167,7 @@ describe('the shell status route, end to end', () => {
       commerceOrdersPending: null,
       commerceActive: false,
       marketplaceUpdates: null,
+      reviewPending: null,
     })
   })
 
@@ -234,6 +249,37 @@ describe('the shell status route, end to end', () => {
     // An empty configured catalogue: reachable and answered as a real
     // number (nothing installed, so nothing has an update), not `null`.
     expect(adminBody.data.marketplaceUpdates).toBe(0)
+  })
+
+  it('reports the real review-pending count once an entry is submitted, over the real review router', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    // `wf_article`: `editor` creates/submits, `admin` holds `publish` — the
+    // permission the review queue's `pending` scope gates on.
+    const editorToken = await signIn(root, server.base, ['editor'])
+    const adminToken = await signIn(root, server.base, ['admin'])
+
+    const zero = await fetch(`${server.base}/api/shell-status`, {
+      headers: { authorization: `Bearer ${adminToken}` },
+    })
+    expect(((await zero.json()) as ShellStatusBody).data.reviewPending).toBe(0)
+
+    const created = await fetch(`${server.base}/api/content/wf_article`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${editorToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ values: { title: 'Draft awaiting review' } }),
+    })
+    const entryId = ((await created.json()) as { data: { id: string } }).data.id
+
+    await fetch(`${server.base}/api/content/wf_article/${entryId}/submit`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${editorToken}` },
+    })
+
+    const after = await fetch(`${server.base}/api/shell-status`, {
+      headers: { authorization: `Bearer ${adminToken}` },
+    })
+    expect(((await after.json()) as ShellStatusBody).data.reviewPending).toBe(1)
   })
 
   it('refuses a write method', async () => {

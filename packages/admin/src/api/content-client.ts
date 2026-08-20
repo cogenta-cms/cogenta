@@ -17,6 +17,9 @@ export interface ContentBlock {
 /** Block zones of an entry, keyed by the name of the `blocks` field. */
 export type BlockZones = Readonly<Record<string, readonly ContentBlock[]>>
 
+/** `reviewState` — `schema@2.1`'s editorial workflow (ADR-0027). Orthogonal to `status`. */
+export type ReviewState = 'none' | 'pending' | 'changes-requested' | 'approved'
+
 export interface Entry {
   readonly id: string
   readonly status: string
@@ -27,6 +30,9 @@ export interface Entry {
    * gives back.
    */
   readonly deletedAt: string | null
+  /** `'none'` on a collection that never turned the workflow on (`schema@2.1`, ADR-0027). */
+  readonly reviewState: ReviewState
+  readonly assignedReviewer: string | null
   readonly version: number
   readonly createdAt: string
   readonly updatedAt: string
@@ -562,6 +568,59 @@ export interface CollectionCounts {
  */
 export function getContentSummary(token: string): Promise<readonly CollectionCounts[]> {
   return request('/api/content/-/summary', { headers: authHeader(token) })
+}
+
+/** Sends the entry into the review queue (`schema@2.1`, ADR-0027). `reviewerId` is optional — chosen now, or later via `assignReviewer`. */
+export function submitForReview(
+  token: string,
+  collection: string,
+  id: string,
+  reviewerId?: string | null,
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/submit`,
+    {
+      method: 'POST',
+      headers: authHeader(token),
+      ...(reviewerId === undefined ? {} : { body: JSON.stringify({ reviewerId }) }),
+    },
+  )
+}
+
+/** Approves a pending entry. **Not** publication — `publishEntry` remains the action that makes it public. */
+export function approveReview(token: string, collection: string, id: string): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/approve`,
+    {
+      method: 'POST',
+      headers: authHeader(token),
+    },
+  )
+}
+
+/** Sends a pending entry back to its author. */
+export function requestReviewChanges(
+  token: string,
+  collection: string,
+  id: string,
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/request-changes`,
+    { method: 'POST', headers: authHeader(token) },
+  )
+}
+
+/** Sets — or clears, with `null` — who is expected to review this entry next. */
+export function assignReviewer(
+  token: string,
+  collection: string,
+  id: string,
+  reviewerId: string | null,
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/assign-reviewer`,
+    { method: 'POST', headers: authHeader(token), body: JSON.stringify({ reviewerId }) },
+  )
 }
 
 /** Copies the entry's working state into a new draft — never the published face. */

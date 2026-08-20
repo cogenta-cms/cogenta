@@ -62,6 +62,10 @@ const unpublishSchema = z.object({
 
 const duplicateSchema = z.object({ values: valuesSchema.optional() })
 
+const submitSchema = z.object({ reviewerId: z.string().min(1).nullable().optional() })
+
+const assignReviewerSchema = z.object({ reviewerId: z.string().min(1).nullable() })
+
 export function parseCreateBody(body: unknown, actor: Actor): CreateInput {
   const parsed = decode(createSchema, body)
 
@@ -115,6 +119,17 @@ export function parseUnpublishBody(body: unknown): {
 export function parseDuplicateBody(body: unknown): { readonly values?: ContentValues } {
   const parsed = decode(duplicateSchema, body)
   return parsed.values === undefined ? {} : { values: parsed.values }
+}
+
+/** `POST .../submit` (`schema@2.1`, ADR-0027) — a reviewer chosen at submission is optional. */
+export function parseSubmitBody(body: unknown): { readonly reviewerId?: string | null } {
+  const parsed = decode(submitSchema, body)
+  return parsed.reviewerId === undefined ? {} : { reviewerId: parsed.reviewerId }
+}
+
+/** `POST .../assign-reviewer` — `reviewerId: null` clears the assignment. */
+export function parseAssignReviewerBody(body: unknown): string | null {
+  return decode(assignReviewerSchema, body).reviewerId
 }
 
 type ProvenanceDetail = NonNullable<CreateInput['provenanceDetail']>

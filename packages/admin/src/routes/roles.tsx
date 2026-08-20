@@ -17,7 +17,12 @@ import {
   taxonomyLabel,
 } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
-import type { CollectionSummary, ContentAction, TaxonomySummary } from '../schema/types.js'
+import {
+  type CollectionSummary,
+  type ContentAction,
+  normalisePermissionRule,
+  type TaxonomySummary,
+} from '../schema/types.js'
 import {
   Card,
   CardBody,
@@ -314,7 +319,7 @@ function ByCollectionMatrix({
               <TableCell className="font-medium">{collection.labels.plural}</TableCell>
               {ALL_CONTENT_ACTIONS.map((action) => (
                 <TableCell key={action} className="text-sm">
-                  {(collection.permissions[action] ?? []).join(', ') || '—'}
+                  {normalisePermissionRule(collection.permissions[action]).roles.join(', ') || '—'}
                 </TableCell>
               ))}
             </TableRow>
@@ -329,7 +334,7 @@ function ByCollectionMatrix({
               </TableCell>
               {ALL_CONTENT_ACTIONS.map((action) => (
                 <TableCell key={action} className="text-sm">
-                  {(taxonomy.permissions[action] ?? []).join(', ') || '—'}
+                  {normalisePermissionRule(taxonomy.permissions[action]).roles.join(', ') || '—'}
                 </TableCell>
               ))}
             </TableRow>

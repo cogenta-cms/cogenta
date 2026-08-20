@@ -107,6 +107,31 @@ export const MOCK_SCHEMA = {
         },
       ],
     },
+    // The editorial workflow (`schema@2.1`, ADR-0027): `update` is
+    // `own: true` for `contributor`, so this is also the fixture the
+    // owner-permission tests exercise.
+    {
+      name: 'wf-article',
+      labels: { singular: 'Workflow article', plural: 'Workflow articles' },
+      workflow: { enabled: true },
+      permissions: {
+        read: ['public'],
+        create: ['contributor'],
+        update: { roles: ['contributor'], own: true },
+        publish: ['editor'],
+      },
+      fields: [
+        {
+          name: 'title',
+          kind: 'text',
+          required: true,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: {},
+        },
+      ],
+    },
   ],
 }
 
@@ -498,7 +523,10 @@ export function installMockFetch(
       readonly commerceOrdersPending?: number | null
       readonly commerceActive?: boolean
       readonly marketplaceUpdates?: number | null
+      readonly reviewPending?: number | null
     }
+    /** Seeds `wf-article`'s one entry at a given review state (`schema@2.1`, ADR-0027) — default `'none'`. */
+    readonly wfEntryReviewState?: 'none' | 'pending' | 'changes-requested' | 'approved'
     /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
     readonly analyticsSummary?: {
       readonly totalViews?: number
@@ -825,6 +853,45 @@ export function installMockFetch(
       }
     }
     return merged
+  }
+
+  // The editorial workflow's one entry (`schema@2.1`, ADR-0027), stateful per
+  // `installMockFetch()` call for the same reason the site-plan fixture below
+  // is: a submit → approve cycle has to be a real sequence a test can watch,
+  // not three independent stateless answers.
+  let wfEntry: {
+    id: string
+    status: string
+    version: number
+    createdAt: string
+    updatedAt: string
+    locale: string
+    translationOf: string | null
+    deletedAt: string | null
+    publishedAt: string | null
+    reviewState: 'none' | 'pending' | 'changes-requested' | 'approved'
+    assignedReviewer: string | null
+    createdBy: string | null
+    values: { title: string }
+    blocks: Record<string, unknown>
+  } = {
+    id: 'wf-entry-1',
+    status: 'draft',
+    version: 1,
+    createdAt: '2026-01-05T00:00:00.000Z',
+    updatedAt: '2026-01-05T00:00:00.000Z',
+    locale: 'en',
+    translationOf: null,
+    deletedAt: null,
+    publishedAt: null,
+    reviewState: 'none',
+    assignedReviewer: null,
+    createdBy: 'user-1',
+    values: { title: 'Workflow draft' },
+    blocks: {},
+  }
+  if (options.wfEntryReviewState !== undefined) {
+    wfEntry = { ...wfEntry, reviewState: options.wfEntryReviewState }
   }
 
   // L19 site plans, stateful per `installMockFetch()` call: decisions merge
@@ -3675,6 +3742,92 @@ export function installMockFetch(
         return json(200, { data: rows })
       }
 
+      // The editorial workflow's four transition routes (`schema@2.1`,
+      // ADR-0027) — each its own path, mirroring the real router exactly
+      // (never a second meaning for an existing verb).
+      const workflowMatch =
+        /\/api\/content\/([^/?]+)\/([^/?]+)\/(submit|approve|request-changes|assign-reviewer)$/u.exec(
+          url,
+        )
+      if (workflowMatch !== null && method === 'POST') {
+        const [, collection, id, action] = workflowMatch
+        if (collection !== 'wf-article' || id !== wfEntry.id) {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
+        }
+        const permissions = MOCK_SCHEMA.collections.find(
+          (c) => c.name === 'wf-article',
+        )?.permissions
+        const updateRoles = ((permissions?.update as { roles?: readonly string[] })?.roles ??
+          []) as readonly string[]
+        const publishRoles = (permissions?.publish ?? []) as readonly string[]
+
+        if (action === 'submit') {
+          if (!updateRoles.some((role) => user.roles.includes(role))) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: update on wf-article.' },
+            })
+          }
+          if (wfEntry.reviewState !== 'none' && wfEntry.reviewState !== 'changes-requested') {
+            return json(409, {
+              error: {
+                code: 'CONTENT_REVIEW_TRANSITION_INVALID',
+                message: 'This entry cannot be submitted for review right now.',
+              },
+            })
+          }
+          wfEntry = {
+            ...wfEntry,
+            reviewState: 'pending',
+            assignedReviewer: (body.reviewerId as string | undefined) ?? wfEntry.assignedReviewer,
+          }
+          return json(200, { data: wfEntry })
+        }
+
+        if (action === 'approve' || action === 'request-changes') {
+          if (!publishRoles.some((role) => user.roles.includes(role))) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: publish on wf-article.' },
+            })
+          }
+          if (wfEntry.reviewState !== 'pending') {
+            return json(409, {
+              error: {
+                code: 'CONTENT_REVIEW_TRANSITION_INVALID',
+                message: 'This entry is not waiting for review.',
+              },
+            })
+          }
+          wfEntry = {
+            ...wfEntry,
+            reviewState: action === 'approve' ? 'approved' : 'changes-requested',
+          }
+          return json(200, { data: wfEntry })
+        }
+
+        if (action === 'assign-reviewer') {
+          if (!updateRoles.some((role) => user.roles.includes(role))) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: update on wf-article.' },
+            })
+          }
+          wfEntry = { ...wfEntry, assignedReviewer: (body.reviewerId as string | null) ?? null }
+          return json(200, { data: wfEntry })
+        }
+      }
+
+      if (url.startsWith('/api/review') && method === 'GET') {
+        const parsed = new URL(url, 'http://localhost')
+        const scope = parsed.searchParams.get('scope') ?? 'pending'
+        const item = { collection: 'wf-article', entry: wfEntry }
+        const inScope =
+          scope === 'pending'
+            ? wfEntry.reviewState === 'pending'
+            : scope === 'assigned'
+              ? wfEntry.reviewState === 'pending' && wfEntry.assignedReviewer === user.id
+              : wfEntry.reviewState !== 'none' && wfEntry.createdBy === user.id
+        return json(200, { data: inScope ? [item] : [] })
+      }
+
       const contentMatch = /\/api\/content\/([^/?]+)(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
       if (contentMatch !== null) {
         const [, collection, id] = contentMatch
@@ -3797,6 +3950,38 @@ export function installMockFetch(
             return json(200, { data: noteTrash, page: { hasMore: false, nextCursor: null } })
           }
           return json(200, { data: [], page: { hasMore: false, nextCursor: null } })
+        }
+
+        if (collection === 'wf-article' && id !== undefined && method === 'GET') {
+          if (id !== wfEntry.id) {
+            return json(404, {
+              error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+            })
+          }
+          return json(200, { data: wfEntry })
+        }
+
+        if (collection === 'wf-article' && id !== undefined && method === 'PATCH') {
+          if (id !== wfEntry.id) {
+            return json(404, {
+              error: { code: 'CONTENT_NOT_FOUND', message: 'No entry with that id.' },
+            })
+          }
+          const updateRoles = ((
+            MOCK_SCHEMA.collections.find((c) => c.name === 'wf-article')?.permissions.update as {
+              roles?: readonly string[]
+            }
+          )?.roles ?? []) as readonly string[]
+          if (
+            !updateRoles.some((role) => user.roles.includes(role)) ||
+            wfEntry.createdBy !== user.id
+          ) {
+            return json(403, {
+              error: { code: 'FORBIDDEN', message: 'Access denied: update on wf-article.' },
+            })
+          }
+          wfEntry = { ...wfEntry, values: { ...wfEntry.values, ...body.values } }
+          return json(200, { data: wfEntry })
         }
       }
 
@@ -4957,6 +5142,7 @@ export function installMockFetch(
           commerceOrdersPending: user.roles.length > 0 ? 0 : null,
           commerceActive: false,
           marketplaceUpdates: user.roles.includes('admin') ? 0 : null,
+          reviewPending: null,
         }
         return json(200, { data: { ...defaults, ...options.shellStatus } })
       }

@@ -40,11 +40,19 @@ export type AccessDecision =
   | { readonly allowed: false; readonly reason: string }
 
 export interface PermissionLayer {
-  /** May this actor perform this action on this collection at all? */
+  /**
+   * May this actor perform this action on this collection at all?
+   *
+   * `ownerId` is the entry's `createdBy` — needed only when the collection's
+   * rule for this action declares `own: true` (`schema@2.1`, ADR-0027).
+   * Omit it for `create` or a list, where there is no single entry's owner
+   * to compare against.
+   */
   can(
     action: ContentAction,
     collection: CollectionDefinition,
     context: AccessContext,
+    ownerId?: string | null,
   ): AccessDecision
 
   /**
@@ -58,7 +66,12 @@ export interface PermissionLayer {
   canReadUnpublished(collection: CollectionDefinition, context: AccessContext): AccessDecision
 
   /** Throws `CogentaError` with `code: 'FORBIDDEN'` when the decision is a refusal. */
-  assert(action: ContentAction, collection: CollectionDefinition, context: AccessContext): void
+  assert(
+    action: ContentAction,
+    collection: CollectionDefinition,
+    context: AccessContext,
+    ownerId?: string | null,
+  ): void
 
   /**
    * May this actor act on the **terms** of a taxonomy (`schema@2.0`)?

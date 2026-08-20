@@ -95,13 +95,14 @@ interface PostedComment {
 async function postComment(
   base: string,
   values: Readonly<Record<string, string>>,
+  headers: Readonly<Record<string, string>> = {},
 ): Promise<{
   readonly status: number
   readonly body: PostedComment | { readonly error: { readonly code: string } }
 }> {
   const response = await fetch(`${base}/api/comments`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify({
       collection: 'page',
       entryId: 'unused',
@@ -198,6 +199,28 @@ describe('cogenta serve — POST /api/comments (fiche 15, ADR-0025)', () => {
       let lastStatus = 0
       for (let i = 0; i < 8; i += 1) {
         const posted = await postComment(server.base, { entryId: `entry-${i}` })
+        lastStatus = posted.status
+      }
+      expect(lastStatus).toBe(429)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('rate limiting cannot be defeated by spoofing a fresh X-Forwarded-For per request', async () => {
+    // toCommentsRequest() keys the rate limiter on the real socket address
+    // only -- a client claiming a different x-forwarded-for on every
+    // request must not get a fresh quota each time.
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      let lastStatus = 0
+      for (let i = 0; i < 8; i += 1) {
+        const posted = await postComment(
+          server.base,
+          { entryId: `entry-spoof-${i}` },
+          { 'x-forwarded-for': `203.0.${i}.${i}` },
+        )
         lastStatus = posted.status
       }
       expect(lastStatus).toBe(429)

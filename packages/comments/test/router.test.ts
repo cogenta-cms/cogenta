@@ -156,6 +156,18 @@ describe('CommentsRouter — public POST /api/comments', () => {
     expect(response.headers).toBeUndefined()
   })
 
+  it('refuses a redirectTo carrying a tab, which a browser strips before it becomes //evil.example', async () => {
+    // "/\t/evil.example" is neither "//" nor "/\\" as a raw string, so a
+    // check narrower than "any ASCII control character" would accept it --
+    // but a real URL parser strips the tab first and the value resolves to
+    // a protocol-relative "//evil.example", a genuine open redirect.
+    const response = await router.handle(
+      baseRequest({ body: validForm({ redirectTo: '/\t/evil.example' }), ip: '203.0.113.73' }),
+    )
+    expect(response.status).toBe(201)
+    expect(response.headers).toBeUndefined()
+  })
+
   it('refuses a redirectTo carrying CR/LF, which would otherwise split the HTTP response', async () => {
     const response = await router.handle(
       baseRequest({

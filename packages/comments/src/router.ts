@@ -158,7 +158,16 @@ function readOptionalString(body: Record<string, unknown>, key: string): string 
 function isSafeRedirectPath(value: string): boolean {
   if (!value.startsWith('/')) return false
   if (value.startsWith('//') || value.startsWith('/\\')) return false
-  if (/[\r\n]/u.test(value)) return false
+  // Not just CR/LF: a browser URL parser strips every ASCII control
+  // character (tab included) before it ever looks at the string, so a
+  // tab-containing value reads as safe here yet resolves to a
+  // protocol-relative URL once actually navigated to -- a real open
+  // redirect a narrower CR/LF-only check missed. Walk char codes rather
+  // than embed raw control bytes in a regex literal.
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i)
+    if (code <= 0x1f || code === 0x7f) return false
+  }
   return true
 }
 

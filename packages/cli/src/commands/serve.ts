@@ -2056,11 +2056,14 @@ function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): Comme
   for (const key of url.searchParams.keys()) {
     query[key] = url.searchParams.get(key) ?? undefined
   }
-  const forwardedFor = req.headers['x-forwarded-for']
-  const ip =
-    (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0]?.trim()) ??
-    req.socket.remoteAddress ??
-    null
+  // The connecting socket's address only — never `x-forwarded-for`, a
+  // client-supplied header this server has no trusted-proxy list to
+  // validate. Trusting it here would let a single attacker rotate a
+  // fake IP per request to defeat the per-IP rate limit and, worse, the
+  // "already has an approved comment from this IP" auto-approve rule
+  // (`clientIpOf`'s own comment explains why analytics can afford to be
+  // wrong here and moderation cannot).
+  const ip = clientIpOf(req)
   const userAgent = req.headers['user-agent']
   return {
     method: req.method ?? 'GET',

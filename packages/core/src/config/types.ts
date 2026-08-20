@@ -9,6 +9,8 @@ export const EMBEDDINGS_PROVIDERS = ['local', 'openai'] as const
 export const IMAGE_GENERATION_PROVIDERS = ['openai', 'stability'] as const
 /** Where embeddings are kept (L18 tasks 1/5). `auto` lets the registry choose, optimal first. */
 export const VECTOR_DRIVERS = ['auto', 'pgvector', 'file', 'memory'] as const
+/** Contract E's payment gateway (fiche 34 task 3). `auto` prefers Stripe when a key is configured, falling back to bank transfer (R1). */
+export const PAYMENT_DRIVERS = ['auto', 'stripe', 'manual'] as const
 
 export type DatabaseDriverName = (typeof DATABASE_DRIVERS)[number]
 export type CacheDriverName = (typeof CACHE_DRIVERS)[number]
@@ -18,6 +20,7 @@ export type StorageDriverName = (typeof STORAGE_DRIVERS)[number]
 export type EmbeddingsProvider = (typeof EMBEDDINGS_PROVIDERS)[number]
 export type ImageGenerationProvider = (typeof IMAGE_GENERATION_PROVIDERS)[number]
 export type VectorDriverName = (typeof VECTOR_DRIVERS)[number]
+export type PaymentDriverName = (typeof PAYMENT_DRIVERS)[number]
 
 /**
  * What a user writes in `cogenta.config.ts`. Everything but `site` and
@@ -184,6 +187,24 @@ export interface CogentaConfigInput {
   readonly assistant?: {
     readonly monthlyTokenLimit?: number
   }
+  /**
+   * Which payment gateway a shop uses (contract E, fiche 34 task 3).
+   *
+   * There is no `secretKey` or `webhookSecret` field here, on purpose (rule
+   * R7): Stripe's credentials come from `COGENTA_PAYMENT_STRIPE_SECRET_KEY`
+   * and `COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET` only, and the admin payment
+   * screen shows their *presence*, never their value. `testMode` is a
+   * declared intent an operator sets deliberately — it does not infer test
+   * vs. live from the shape of the key, so a shop that switches Stripe modes
+   * without updating this flag gets a loud, visible mismatch rather than a
+   * silent one.
+   */
+  readonly payment?: {
+    readonly driver?: PaymentDriverName
+    readonly testMode?: boolean
+    /** Shown to the shopper by the bank-transfer driver. Free text, per site. Not a secret. */
+    readonly manualInstructions?: string
+  }
 }
 
 /**
@@ -326,6 +347,16 @@ export interface CogentaConfig {
   /** The writing assistant's spending cap (fiche 30 task 3), always resolved — never absent. */
   readonly assistant: {
     readonly monthlyTokenLimit: number
+  }
+  /** Contract E's payment gateway (fiche 34 task 3), always resolved — never absent (a shop with no key still takes bank transfers, R1/R2). */
+  readonly payment: {
+    readonly driver: PaymentDriverName
+    readonly testMode: boolean
+    readonly manualInstructions: string | undefined
+    /** `undefined` until `COGENTA_PAYMENT_STRIPE_SECRET_KEY` is set. Never round-tripped to any admin response — only its presence is. */
+    readonly stripeSecretKey: string | undefined
+    /** `undefined` until `COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET` is set. */
+    readonly stripeWebhookSecret: string | undefined
   }
 }
 

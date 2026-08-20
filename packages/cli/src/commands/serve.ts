@@ -117,13 +117,14 @@ import {
   createCouponStore,
   createCustomerStore,
   createInvoiceStore,
-  createManualPaymentGateway,
   createOrderStore,
+  createPaymentRegistry,
   createPaymentStore,
   createShippingStore,
   createSubscriptionStore,
   createTaxStore,
   ensureCommerceTables,
+  type PaymentConfig,
 } from '@cogenta/commerce'
 import {
   type CogentaConfig,
@@ -783,6 +784,14 @@ interface AssembleSiteOptions {
    * made-up seller address.
    */
   readonly billing?: CogentaConfig['billing']
+  /**
+   * Contract E's payment gateway choice (fiche 34 task 3), always resolved
+   * (`CogentaConfig['payment']` is never absent, unlike `billing`) — a shop
+   * with no key still takes bank transfers (R1/R2). Only a test harness that
+   * does not care about the payment-drivers screen omits this, and
+   * `assembleSite` then falls back to bank transfer with nothing configured.
+   */
+  readonly payment?: CogentaConfig['payment']
   /** See `Site.requestQuota` (fiche 20 task 3). Absent means no quota is enforced — only test harnesses omit it. */
   readonly requestQuota?: RateLimitDriver
   /**
@@ -1460,11 +1469,29 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     customers: commerceCustomers,
     coupons: commerceCoupons,
   })
-  // The manual/bank-transfer driver: the one payment gateway that needs no
-  // provider keys, so a shop is sellable before anyone configures Stripe
-  // (mirrors R1 — a real degraded implementation, not a stub).
+  // Contract E's payment gateway (fiche 34 task 3) — the same registry
+  // pattern as cache/queue/storage (R1): Stripe is `optimal` and answers only
+  // with a real key that Stripe itself accepts, bank transfer is `degraded`
+  // and always answers, so a shop is sellable before anyone configures
+  // Stripe. `select()` never throws here (`payment.driver` defaults to
+  // `'auto'`, and the degraded driver always resolves), unlike database or
+  // storage where a named-but-unreachable driver is fatal on purpose.
+  const paymentConfig: PaymentConfig = {
+    driver: options.payment?.driver ?? 'auto',
+    ...(options.payment?.stripeSecretKey === undefined
+      ? {}
+      : { secretKey: options.payment.stripeSecretKey }),
+    ...(options.payment?.stripeWebhookSecret === undefined
+      ? {}
+      : { webhookSecret: options.payment.stripeWebhookSecret }),
+    ...(options.payment?.manualInstructions === undefined
+      ? {}
+      : { transferInstructions: options.payment.manualInstructions }),
+  }
+  const paymentRegistry = createPaymentRegistry({ logger })
+  const paymentSelection = await paymentRegistry.select(paymentConfig)
   const commercePayments = createPaymentStore(db, {
-    gateway: createManualPaymentGateway(),
+    gateway: paymentSelection.instance,
     orders: commerceOrders,
   })
   const commercePermissions = createCommercePermissions()
@@ -1608,7 +1635,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       payments: commercePayments,
       coupons: commerceCoupons,
       subscriptions: commerceSubscriptions,
+      tax: commerceTax,
+      shipping: commerceShipping,
       ...(commerceInvoices === undefined ? {} : { invoices: commerceInvoices }),
+      payment: {
+        registry: paymentRegistry,
+        config: paymentConfig,
+        testMode: options.payment?.testMode ?? true,
+        // Informational only — see `router.ts`'s own comment: no inbound
+        // route answers this path yet (deferred, `BLOCKERS.md`).
+        webhookUrl: `${site.url.replace(/\/+$/u, '')}/api/commerce/payments/webhook`,
+      },
       permissions: commercePermissions,
     }),
     redirectRouter: createRedirectRouter({ store: redirects, patterns: redirectPatterns }),
@@ -3769,6 +3806,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     notFoundLog: loaded.config.notFoundLog,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
+    payment: loaded.config.payment,
     configStatus: buildConfigStatus(loaded.config, loaded.secretHygiene),
     pendingMigrations: {
       countPending: async () => (await migrator.status()).filter((item) => !item.applied).length,

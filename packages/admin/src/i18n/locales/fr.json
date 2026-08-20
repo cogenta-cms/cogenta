@@ -165,6 +165,10 @@
     "commerceOrders": "Commandes",
     "commerceCoupons": "Coupons",
     "commerceSubscriptions": "Abonnements",
+    "commerceSettings": "Réglages boutique",
+    "commerceTax": "Taxes",
+    "commerceShipping": "Livraison",
+    "commercePayment": "Paiement",
     "appearance": "Apparence",
     "redirects": "Redirections",
     "seo": "SEO",
@@ -1380,6 +1384,48 @@
           "label": "Note de rétention des données",
           "help": "Affichée aux visiteurs, purement informative — rien ici ne change ce qui est réellement conservé."
         }
+      },
+      "commerce": {
+        "currency": {
+          "label": "Devise par défaut",
+          "help": "Code ISO 4217 à trois lettres, ex. EUR."
+        },
+        "priceDisplay": {
+          "label": "Affichage des prix",
+          "help": "Les prix du catalogue sont affichés TTC ou HT."
+        },
+        "countriesServed": {
+          "label": "Pays servis",
+          "help": "Codes à deux lettres séparés par des virgules, ex. « FR, BE, LU ». Laisser vide pour servir tous les pays."
+        },
+        "minOrderSubtotalMinor": {
+          "label": "Commande minimum (unités mineures)",
+          "help": "0 signifie aucun minimum. Les montants sont en unités mineures — 500 vaut 5,00 dans une devise à deux décimales."
+        },
+        "allowBackorderDefault": {
+          "label": "Autoriser la vente à découvert par défaut",
+          "help": "Le réglage propre à chaque variante peut toujours l'emporter."
+        },
+        "tosPagePath": {
+          "label": "Page des conditions générales de vente",
+          "help": "Un chemin relatif au site vers une vraie entrée de contenu publiée, ex. /cgv."
+        },
+        "returnPolicyPagePath": {
+          "label": "Page de politique de retour",
+          "help": "Un chemin relatif au site vers une vraie entrée de contenu publiée, ex. /retours."
+        },
+        "invoiceSeriesPrefix": {
+          "label": "Préfixe de série de facture",
+          "help": "Ajouté devant la série basée sur l'année, ex. « AC » + « 2026 » = série « AC2026 ». Lettres, chiffres et tirets uniquement."
+        },
+        "invoicePaymentTerms": {
+          "label": "Conditions de paiement",
+          "help": "Imprimées sur chaque facture, ex. « Paiement à 30 jours »."
+        },
+        "invoiceLanguage": {
+          "label": "Langue de la facture",
+          "help": "Un code de langue court, ex. « fr » ou « en »."
+        }
       }
     }
   },
@@ -1721,6 +1767,136 @@
       "year_one": "{{count}} an",
       "year_other": "{{count}} ans"
     }
+  },
+  "commerceTax": {
+    "heading": "Taxes",
+    "description": "Zones et taux, résolus par spécificité — la règle la plus précise l'emporte toujours, quel que soit l'ordre de création.",
+    "adminOnly": "Seul un administrateur peut configurer les taxes.",
+    "newButton": "Nouvelle règle",
+    "newHeading": "Nouvelle règle de taxe",
+    "close": "Fermer",
+    "tableLabel": "Règles de taxe",
+    "nameColumn": "Nom",
+    "zoneColumn": "Zone",
+    "rateColumn": "Taux",
+    "priorityColumn": "Priorité",
+    "priorityHint": "La valeur la plus haute l'emporte à spécificité égale.",
+    "actionsColumn": "Actions",
+    "delete": "Supprimer",
+    "empty": "Aucune règle de taxe pour l'instant — aucune vente n'est taxée tant qu'une règle n'est pas ajoutée.",
+    "loadError": "Impossible de charger les règles de taxe.",
+    "createError": "Impossible de créer cette règle de taxe.",
+    "deleteError": "Impossible de supprimer cette règle de taxe.",
+    "rateInvalid": "Entrez un taux entre 0 et 100.",
+    "ratePercent": "Taux (%)",
+    "includedInPrice": "Inclus dans le prix catalogue (TTC)",
+    "createButton": "Créer la règle",
+    "everywhere": "Partout",
+    "ttc": "TTC",
+    "ht": "HT",
+    "simCountry": "Pays",
+    "countryHint": "Code ISO à deux lettres, ex. « FR ». Laisser vide pour « partout ».",
+    "simRegion": "Région",
+    "simCategory": "Catégorie de taxe",
+    "simAmount": "Montant",
+    "amountInvalid": "Entrez un montant valide.",
+    "simulatorHeading": "Simulateur",
+    "simulatorHint": "Appelle le résolveur exact utilisé par une vraie commande — le résultat ne peut jamais différer de celui du paiement.",
+    "simulateButton": "Simuler",
+    "simulateError": "Impossible d'exécuter la simulation.",
+    "appliedRule": "Règle appliquée",
+    "noRuleApplied": "Aucune règle ne correspond — cette vente serait non taxée.",
+    "wonBecause": "la correspondance la plus spécifique pour cette zone et cette catégorie",
+    "rateApplied": "Taux appliqué",
+    "taxAmount": "Montant de la taxe"
+  },
+  "commerceShipping": {
+    "heading": "Livraison",
+    "description": "Zones et méthodes. Une méthode nommant un transporteur retombe toujours sur son tarif stocké si l'API du courrier ne répond pas.",
+    "adminOnly": "Seul un administrateur peut configurer la livraison.",
+    "newButton": "Nouvelle méthode",
+    "newHeading": "Nouvelle méthode de livraison",
+    "close": "Fermer",
+    "tableLabel": "Méthodes de livraison",
+    "labelColumn": "Libellé",
+    "zoneColumn": "Zone",
+    "kindColumn": "Type",
+    "rateColumn": "Tarif",
+    "carrierColumn": "Transporteur",
+    "carrierHint": "Nom d'un pilote transporteur enregistré. Laisser vide pour un tarif stocké simple.",
+    "actionsColumn": "Actions",
+    "delete": "Supprimer",
+    "empty": "Aucune méthode de livraison pour l'instant — rien ne peut être livré tant qu'une méthode n'est pas ajoutée.",
+    "loadError": "Impossible de charger les méthodes de livraison.",
+    "createError": "Impossible de créer cette méthode de livraison.",
+    "deleteError": "Impossible de supprimer cette méthode de livraison.",
+    "amountInvalid": "Entrez un montant valide.",
+    "amountColumn": "Montant",
+    "perKgColumn": "Par kilogramme",
+    "freeOverColumn": "Gratuit au-delà de",
+    "freeOverHint": "Sous-total de commande au-delà duquel cette méthode est gratuite. Laisser vide pour ne jamais l'être.",
+    "createButton": "Créer la méthode",
+    "everywhere": "Partout",
+    "free": "Gratuit",
+    "freeOver": "gratuit au-delà de {{amount}}",
+    "storedRate": "Tarif stocké",
+    "carrierWithFallback": "{{carrier}} — retombe sur le tarif stocké si l'API ne répond pas",
+    "kind": {
+      "flat": "Forfait",
+      "by_weight": "Par poids",
+      "free": "Gratuit"
+    },
+    "simulatorHeading": "Simulateur",
+    "simWeight": "Poids (g)",
+    "simSubtotal": "Sous-total de commande",
+    "simulateButton": "Simuler",
+    "simulateError": "Impossible d'exécuter la simulation.",
+    "noQuotes": "Aucune méthode ne dessert cette adresse."
+  },
+  "commercePayment": {
+    "heading": "Paiement",
+    "description": "Quels moyens de paiement sont actifs et joignables. Jamais la valeur d'une clé — seulement sa présence.",
+    "adminOnly": "Seul un administrateur peut configurer le paiement.",
+    "loadError": "Impossible de charger les moyens de paiement.",
+    "testError": "Impossible de tester cette connexion.",
+    "testModeOn": "Mode test activé",
+    "testModeOnHint": "Aucun argent réel ne circule. Désactivez payment.testMode dans la configuration du serveur quand vous êtes prêt à encaisser réellement.",
+    "testModeOff": "Mode production",
+    "testModeOffHint": "Cette boutique encaisse de l'argent réel.",
+    "driver": {
+      "stripe": "Stripe",
+      "manual": "Virement bancaire"
+    },
+    "active": "Actif",
+    "tier": "Niveau : {{tier}}",
+    "tierName": {
+      "optimal": "optimal",
+      "degraded": "dégradé (aucun service externe requis)"
+    },
+    "keyPresent": "Identifiants configurés sur ce serveur ✓",
+    "keyAbsent": "Aucun identifiant configuré",
+    "settlesOffline": "Réglé par une personne, depuis un relevé bancaire.",
+    "settlesOnline": "Réglé automatiquement par le prestataire.",
+    "testConnection": "Tester la connexion",
+    "testing": "Test en cours…",
+    "testOk": "Connecté.",
+    "testFailed": "Échec de la connexion.",
+    "empty": "Aucun moyen de paiement enregistré.",
+    "webhookHeading": "Webhook",
+    "webhookNone": "Non configuré sur ce site.",
+    "webhookNotWired": "Ce serveur ne reçoit pas encore les événements de webhook entrants — configurez-le chez votre prestataire seulement une fois le support annoncé."
+  },
+  "commerceSettings": {
+    "heading": "Réglages de la boutique",
+    "description": "Devise, affichage des prix, et modèle de facture de la boutique.",
+    "adminOnly": "Seul un administrateur peut modifier les réglages de la boutique.",
+    "generalHeading": "Général",
+    "legalHeading": "Pages légales",
+    "legalHint": "Les CGV et la politique de retour sont de vraies entrées de contenu publiées — indiquez ici le chemin de chacune, pour qu'un client arrive toujours sur une vraie page.",
+    "invoiceHeading": "Modèle de facture",
+    "invoiceHint": "L'identité du vendeur (nom légal, adresse, numéro de TVA) reste dans la configuration du serveur — ce sont ici les mentions qu'un commerçant change sans redéployer.",
+    "seriesWarning": "Changer le préfixe de série en cours d'exercice comptable pose un problème comptable : le numéro séquentiel lui-même ne repart jamais à zéro, mais un nouveau préfixe se lit comme une série différente pour un auditeur. Confirmez avec votre comptable avant de le changer une fois l'exercice commencé.",
+    "invoicePreviewHint": "Pour prévisualiser une vraie facture, ouvrez une commande qui en a déjà une et utilisez son propre bouton « Télécharger la facture »."
   },
   "commerceOrderDetail": {
     "back": "← Retour aux commandes",

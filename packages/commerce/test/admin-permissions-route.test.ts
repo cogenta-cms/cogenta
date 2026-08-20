@@ -41,6 +41,8 @@ describe('GET /api/commerce/permissions', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions(),
     })
 
@@ -62,6 +64,8 @@ describe('GET /api/commerce/permissions', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions({
         roles: { admin: COMMERCE_PERMISSIONS, packer: ['commerce.read', 'commerce.order.write'] },
       }),
@@ -86,6 +90,8 @@ describe('GET /api/commerce/permissions', () => {
       customers: shop.customers,
       payments: shop.payments,
       coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
       permissions: createCommercePermissions(),
     })
 

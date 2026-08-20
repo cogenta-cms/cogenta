@@ -4,6 +4,7 @@ import {
   DATABASE_DRIVERS,
   EMBEDDINGS_PROVIDERS,
   IMAGE_GENERATION_PROVIDERS,
+  PAYMENT_DRIVERS,
   QUEUE_DRIVERS,
   RATE_LIMIT_DRIVERS,
   STORAGE_DRIVERS,
@@ -279,6 +280,23 @@ const assistantSchema = z.strictObject({
   monthlyTokenLimit: z.number().int().positive().default(1_000_000),
 })
 
+/**
+ * Contract E's payment gateway choice (fiche 34 task 3).
+ *
+ * No `secretKey` or `webhookSecret` field, on purpose (rule R7, same shape as
+ * `llmSchema`'s missing `apiKey`): Stripe's credentials come from
+ * `COGENTA_PAYMENT_STRIPE_SECRET_KEY`/`COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET`
+ * only, and `SECRET_KEYS` (`env.ts`) refuses either one written here before
+ * this schema is even parsed. `testMode` defaults `true`: a shop that has not
+ * deliberately flipped it to production cannot silently start taking real
+ * money, matching the fiche's "le mode test doit être criant".
+ */
+const paymentSchema = z.strictObject({
+  driver: z.enum(PAYMENT_DRIVERS).default('auto'),
+  testMode: z.boolean().default(true),
+  manualInstructions: nonEmpty.optional(),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -300,6 +318,7 @@ export const configSchema = z.strictObject({
   scheduler: schedulerSchema.prefault({}),
   backup: backupSchema.prefault({}),
   assistant: assistantSchema.prefault({}),
+  payment: paymentSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

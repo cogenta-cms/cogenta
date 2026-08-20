@@ -543,21 +543,16 @@ tourné :
 
 **À faire** : `pnpm services:up` puis `pnpm -F @cogenta/commerce test:integration`.
 
-## 4. Pas d'écrans React pour la boutique — **choix de périmètre, pas un oubli**
+## 4. Pas d'écrans React pour la boutique — **levé (fiches 15/34)**
 
-Le lot demande « CRUD admin basique » pour les produits. Ce qui est livré est un routeur
-sans transport (`createCommerceAdminRouter`) avec le vocabulaire de permissions du
-contrat E, testé rôle par rôle — c'est-à-dire toute la partie qui porte une décision de
-sécurité.
-
-Les écrans eux-mêmes ne sont pas écrits : `packages/admin` reçoit son design system dans
-le **L11**, et écrire maintenant des formulaires qui seront refaits dans quelques jours
-coûterait deux fois. Le routeur est prêt à être branché derrière eux.
-
-Conséquence à connaître : `@cogenta/commerce` n'est branché nulle part aujourd'hui.
-`cogenta serve` ne monte pas le routeur commerce, et rien dans `create-cogenta` ne
-propose une boutique. C'est du câblage, pas de la capacité manquante — mais tant qu'il
-n'est pas fait, la boutique n'est atteignable que par du code appelant.
+Le lot demandait « CRUD admin basique » pour les produits. Ce constat n'est plus à jour :
+les écrans produits/commandes/coupons/abonnements/factures (fiche 15) puis les écrans de
+réglages boutique — taxes, livraison, paiement, réglages généraux, modèle de facture
+(fiche 34) — sont tous écrits, dans `packages/admin`, sur le design system livré par L11.
+`cogenta serve` monte `createCommerceAdminRouter` sous `/api/commerce` depuis la fiche
+15 ; la fiche 34 y ajoute les routes de configuration et branche pour la première fois le
+vrai registre de pilotes de paiement (`createPaymentRegistry`), au lieu du gateway manuel
+en dur — voir § 15 ci-dessous pour le détail et ce qui y reste ouvert.
 
 ## 5. Pas de blocs de vitrine — **hors périmètre, à confirmer**
 
@@ -843,3 +838,57 @@ contrainte d'environnement que les sections précédentes) — les nouvelles tab
 le même idiome `create table if not exists` / `alter table ... add column ... default`
 déjà utilisé partout ailleurs dans `@cogenta/plugins`, jamais exécuté contre les deux
 autres dialectes ici.
+
+## 15. Fiche 34 — réglages de la boutique : ce qui reste ouvert
+
+Écrans réels pour les taxes, la livraison, le paiement, les réglages généraux et le
+modèle de facture — les cinq tâches de la fiche. Réutilise entièrement les magasins déjà
+testés de `@cogenta/commerce` (`TaxStore`, `ShippingStore`, le registre de paiement) :
+aucune seconde implémentation de la résolution par spécificité ou du repli transporteur,
+le simulateur de chaque écran appelle le vrai résolveur. Les réglages généraux (devise,
+affichage TTC/HT, pays servis, minimum de commande, mentions de facture) et les deux
+pages légales (CGV, politique de retour — des **chemins vers de vraies entrées**, jamais
+des champs de texte) passent par le registre `SITE_SETTINGS_REGISTRY` de la fiche 23,
+étendu d'un groupe `commerce` — aucune nouvelle table, aucun nouveau routeur pour ça.
+
+**Décision prise, pas actée par ADR (la fiche dit explicitement qu'aucune n'est
+requise)** : le nom du pilote de paiement (`payment.driver`) et le mode test
+(`payment.testMode`) vivent dans `cogenta.config.mjs`/l'environnement, au même titre que
+`cache.driver` ou `database.driver` — une sélection de pilote est une décision
+d'infrastructure, jamais un réglage éditorial. La clé secrète Stripe et son secret de
+webhook (`COGENTA_PAYMENT_STRIPE_SECRET_KEY`/`COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET`)
+suivent exactement le chemin de `llm.apiKey` : absentes du schéma de configuration,
+refusées si elles apparaissent dans le fichier (`CONFIG_SECRET_IN_FILE`), injectées après
+coup depuis l'environnement seul. L'écran de paiement n'affiche que la **présence** —
+`driver.available(config)`, jamais la valeur — et un bouton « tester la connexion » qui
+appelle réellement `init()` puis `health()` du pilote choisi.
+
+**`cogenta serve` sélectionne maintenant un vrai pilote de paiement** (avant cette fiche
+le gateway manuel était câblé en dur, sans jamais consulter le registre) — changement de
+comportement réel : un site qui configure `COGENTA_PAYMENT_STRIPE_SECRET_KEY` prend
+désormais Stripe pour de vrai, plutôt que du virement quoi qu'il arrive.
+
+**Ce qui n'est délibérément pas construit** : aucune route n'accepte encore le webhook
+Stripe entrant (`POST /api/commerce/payments/webhook`). `@cogenta/commerce`'s
+`PaymentStore.handleWebhook` existe et est déjà testé (vérification de signature en temps
+constant, fenêtre de fraîcheur) — ce qui manque est uniquement le branchement HTTP, qui
+suppose de faire passer le corps **brut** (non JSON-parsé) jusqu'à cette fonction. Le
+lecteur de corps partagé de `cogenta serve` (`readBody`, utilisé par des dizaines de
+routes) parse tout en JSON ; y ajouter un chemin texte brut pour une seule route est un
+changement transverse que je n'ai pas voulu faire sous pression de cette seule fiche.
+L'écran affiche l'URL qu'il faudrait déclarer chez Stripe, avec une note honnête disant
+qu'aucun événement n'est encore reçu — jamais une fausse promesse. **Prochain pas
+recommandé** : une petite fiche dédiée « recevoir les webhooks entrants » (paiement, et
+potentiellement d'autres transporteurs), qui touche `cogenta serve` lui-même plutôt que
+cette seule fiche de réglages.
+
+**Postgres/MySQL/MariaDB non exécutés cette session** (Docker indisponible, constat
+répété depuis L15) — les routes ajoutées ne créent aucune nouvelle table (`TaxStore` et
+`ShippingStore` existaient déjà et sont testées SQLite uniquement depuis L15 ; cette
+fiche n'y touche pas), donc aucun risque de DDL nouveau non vérifié, mais la même absence
+de preuve sur les deux autres dialectes s'applique.
+
+**Bac à sable Stripe réel jamais testé** — même limite que L15 § 2 : `stripePaymentDriver`
+répond honnêtement « non joignable » sans clé réelle (couvert par le test « refuses
+unreachable Stripe as not ok »), mais aucune session n'a testé le bouton « tester la
+connexion » contre un vrai compte Stripe.

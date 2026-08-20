@@ -222,5 +222,12 @@ export function resolveConfig(
     assistant: Object.freeze({
       monthlyTokenLimit: config.assistant.monthlyTokenLimit,
     }),
+    payment: Object.freeze({
+      driver: config.payment.driver,
+      testMode: config.payment.testMode,
+      manualInstructions: config.payment.manualInstructions,
+      stripeSecretKey: secrets.paymentStripeSecretKey,
+      stripeWebhookSecret: secrets.paymentStripeWebhookSecret,
+    }),
   })
 }

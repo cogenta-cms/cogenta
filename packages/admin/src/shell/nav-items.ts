@@ -172,6 +172,33 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'commerce',
     visibleWhen: { kind: 'commerceActiveOrAdmin' },
   },
+  // Store settings (fiche 34) — financial and legal configuration, `admin`
+  // only regardless of whether the shop is active yet: setting up tax and
+  // payment is what an admin does *before* the first sale, not after.
+  {
+    to: '/commerce/settings',
+    labelKey: 'nav.commerceSettings',
+    group: 'commerce',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    to: '/commerce/tax',
+    labelKey: 'nav.commerceTax',
+    group: 'commerce',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    to: '/commerce/shipping',
+    labelKey: 'nav.commerceShipping',
+    group: 'commerce',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    to: '/commerce/payment',
+    labelKey: 'nav.commercePayment',
+    group: 'commerce',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
 
   // AI — reduced to nothing (the whole group hidden) on a site with no
   // provider configured, per R2: the CMS works without AI, and this sidebar

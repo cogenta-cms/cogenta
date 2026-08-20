@@ -479,6 +479,8 @@ describe('the shop, end to end', () => {
     expect(afterCancelBody.subscriptions.map((s) => s.id)).toContain(subscription.id)
   })
 
+  // ---- fiche 19: permission matrix ---------------------------------------
+
   it('serves the permission vocabulary and role grants for fiche 19 s permission matrix', async () => {
     const root = await project()
     const server = await startServer(root)
@@ -508,5 +510,190 @@ describe('the shop, end to end', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.status).toBe(403)
+  })
+
+  // ---- fiche 34: store settings ------------------------------------------
+
+  it('configures the four French VAT rates and the simulator confirms them, over a real server', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['admin'])
+    const authHeaders = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+
+    await fetch(`${server.base}/api/commerce/tax/rules`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        name: 'Standard',
+        country: 'FR',
+        taxCategory: 'standard',
+        rateBp: 2000,
+      }),
+    })
+    await fetch(`${server.base}/api/commerce/tax/rules`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        name: 'Super-reduced (books)',
+        country: 'FR',
+        taxCategory: 'super-reduced',
+        rateBp: 550,
+      }),
+    })
+
+    // "un livre est à 5,5 % et un ordinateur à 20 %" — the fiche's own
+    // acceptance test for this task.
+    const book = await fetch(`${server.base}/api/commerce/tax/simulate`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ country: 'FR', taxCategory: 'super-reduced', amountMinor: 2000 }),
+    })
+    expect(book.status).toBe(200)
+    expect(((await book.json()) as { outcome: { rateBp: number } }).outcome.rateBp).toBe(550)
+
+    const computer = await fetch(`${server.base}/api/commerce/tax/simulate`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ country: 'FR', taxCategory: 'standard', amountMinor: 100_000 }),
+    })
+    expect(computer.status).toBe(200)
+    expect(((await computer.json()) as { outcome: { rateBp: number } }).outcome.rateBp).toBe(2000)
+  })
+
+  it('configures a shipping method and quotes it back through the simulator', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['admin'])
+    const authHeaders = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+
+    const created = await fetch(`${server.base}/api/commerce/shipping/methods`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ label: 'Standard', currency: 'EUR', amountMinor: 490 }),
+    })
+    expect(created.status).toBe(201)
+
+    const quote = await fetch(`${server.base}/api/commerce/shipping/simulate`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ currency: 'EUR', subtotalMinor: 1000 }),
+    })
+    expect(quote.status).toBe(200)
+    const quotes = ((await quote.json()) as { quotes: readonly { label: string }[] }).quotes
+    expect(quotes).toEqual([expect.objectContaining({ label: 'Standard', amountMinor: 490 })])
+
+    const list = await fetch(`${server.base}/api/commerce/shipping/methods`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const listBody = (await list.json()) as { methods: readonly { label: string }[] }
+    expect(listBody.methods).toHaveLength(1)
+  })
+
+  it('lists the payment drivers with presence only, never a key', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['admin'])
+
+    const response = await fetch(`${server.base}/api/commerce/payment/drivers`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      drivers: readonly { name: string; configured: boolean }[]
+      testMode: boolean
+      webhookUrl: string | null
+    }
+    expect(body.drivers.map((d) => d.name).sort()).toEqual(['manual', 'stripe'])
+    expect(body.drivers.find((d) => d.name === 'manual')?.configured).toBe(true)
+    // No Stripe key was configured on this test site.
+    expect(body.drivers.find((d) => d.name === 'stripe')?.configured).toBe(false)
+    // Test mode is on by default — "le mode test doit être criant".
+    expect(body.testMode).toBe(true)
+    expect(body.webhookUrl).toContain('/api/commerce/payments/webhook')
+    expect(JSON.stringify(body)).not.toMatch(/sk_(live|test)_/u)
+  })
+
+  it('tests the bank-transfer connection, which always succeeds with no external service', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['admin'])
+
+    const response = await fetch(
+      `${server.base}/api/commerce/payment/drivers/manual/test-connection`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      },
+    )
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { ok: boolean }).ok).toBe(true)
+  })
+
+  it('refuses store-settings routes to a role with no commerce permission at all', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const token = await signIn(root, server.base, ['subscriber'])
+
+    const tax = await fetch(`${server.base}/api/commerce/tax/rules`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(tax.status).toBe(403)
+
+    const shipping = await fetch(`${server.base}/api/commerce/shipping/methods`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(shipping.status).toBe(403)
+
+    const payment = await fetch(`${server.base}/api/commerce/payment/drivers`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(payment.status).toBe(403)
+  })
+
+  it('reads and writes the general commerce settings and the invoice template through /api/settings, admin only', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const admin = await signIn(root, server.base, ['admin'])
+    const viewer = await signIn(root, server.base, ['viewer'])
+
+    const list = await fetch(`${server.base}/api/settings`)
+    expect(list.status).toBe(200)
+    const listBody = (await list.json()) as {
+      data: readonly { key: string; value: unknown; group: string }[]
+    }
+    const currency = listBody.data.find((setting) => setting.key === 'commerce.currency')
+    expect(currency).toMatchObject({ value: 'EUR', group: 'commerce' })
+    const tosPath = listBody.data.find((setting) => setting.key === 'commerce.tosPagePath')
+    expect(tosPath).toMatchObject({ value: '' })
+
+    const refused = await fetch(`${server.base}/api/settings`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${viewer}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'commerce.priceDisplay', value: 'ht' }),
+    })
+    expect(refused.status).toBe(403)
+
+    const write = await fetch(`${server.base}/api/settings`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${admin}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'commerce.priceDisplay', value: 'ht' }),
+    })
+    expect(write.status).toBe(200)
+
+    const invoicePrefix = await fetch(`${server.base}/api/settings`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${admin}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'commerce.invoiceSeriesPrefix', value: 'AC' }),
+    })
+    expect(invoicePrefix.status).toBe(200)
+
+    const reread = await fetch(`${server.base}/api/settings`)
+    const rereadBody = (await reread.json()) as { data: readonly { key: string; value: unknown }[] }
+    expect(rereadBody.data.find((setting) => setting.key === 'commerce.priceDisplay')?.value).toBe(
+      'ht',
+    )
+    expect(
+      rereadBody.data.find((setting) => setting.key === 'commerce.invoiceSeriesPrefix')?.value,
+    ).toBe('AC')
   })
 })

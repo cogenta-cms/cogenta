@@ -12,7 +12,13 @@ import { authHeader, request } from './http.js'
  * reads `/api/schema`.
  */
 
-export type SiteSettingGroup = 'general' | 'reading' | 'discussion' | 'media' | 'privacy'
+export type SiteSettingGroup =
+  | 'general'
+  | 'reading'
+  | 'discussion'
+  | 'media'
+  | 'privacy'
+  | 'commerce'
 export type SiteSettingScope = 'site' | 'locale'
 
 export interface SiteSetting {
@@ -20,6 +26,7 @@ export interface SiteSetting {
   readonly group: SiteSettingGroup
   readonly order: number
   readonly uiType: string
+  readonly options: readonly { readonly value: string; readonly label: string }[] | undefined
   readonly scope: SiteSettingScope
   readonly locale: string | null
   readonly value: unknown

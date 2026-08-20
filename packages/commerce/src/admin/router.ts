@@ -1,4 +1,4 @@
-import { CogentaError, isCogentaError } from '@cogenta/core'
+import { CogentaError, type DriverRegistry, isCogentaError } from '@cogenta/core'
 import type { CatalogStore } from '../catalog/store.js'
 import { COUPON_KINDS, type CouponKind, type CouponStore } from '../coupon/store.js'
 import type { CustomerStore } from '../customer/store.js'
@@ -6,7 +6,10 @@ import type { InvoiceStore } from '../invoice/store.js'
 import type { OrderStore } from '../order/store.js'
 import { ORDER_STATUSES, type OrderStatus } from '../order/types.js'
 import type { PaymentStore } from '../payment/store.js'
+import type { PaymentConfig, PaymentGateway } from '../payment/types.js'
+import { SHIPPING_KINDS, type ShippingKind, type ShippingStore } from '../shipping/store.js'
 import type { SubscriptionStore } from '../subscription/store.js'
+import { type TaxStore, taxFor } from '../tax/store.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
 import { COMMERCE_ANONYMOUS, COMMERCE_PERMISSIONS } from './permissions.js'
 
@@ -40,6 +43,23 @@ export interface CommerceResponse {
   readonly body: unknown
 }
 
+/**
+ * What the payment-drivers screen (fiche 34 task 3) needs to answer "which
+ * gateway is active, is a key present, and does it actually work" — never the
+ * key itself. `registry` is the same shape `cogenta doctor` already reads
+ * from for cache/queue/storage; `config` is the resolved (never file-literal)
+ * `PaymentConfig` so `available()`/`init()` can be asked for real, and
+ * `testMode` is shown as-is: whether the shop is in production is a fact the
+ * screen states, never infers from the shape of a key.
+ */
+export interface CommercePaymentAdminOptions {
+  readonly registry: DriverRegistry<PaymentGateway, PaymentConfig>
+  readonly config: PaymentConfig
+  readonly testMode: boolean
+  /** Where a caller would point the provider's dashboard, informational until a real inbound endpoint exists. */
+  readonly webhookUrl: string
+}
+
 export interface CommerceAdminRouterOptions {
   readonly catalog: CatalogStore
   readonly orders: OrderStore
@@ -49,6 +69,12 @@ export interface CommerceAdminRouterOptions {
   readonly invoices?: InvoiceStore
   /** Absent on a site that never wires subscriptions — the routes then answer 404. */
   readonly subscriptions?: SubscriptionStore
+  /** Tax zones/rates (fiche 34 task 1) — reuses the already-tested resolver, never a second implementation. */
+  readonly tax: TaxStore
+  /** Shipping zones/methods (fiche 34 task 2). */
+  readonly shipping: ShippingStore
+  /** Absent only in a test that does not care about the payment-drivers screen. */
+  readonly payment?: CommercePaymentAdminOptions
   readonly permissions: CommercePermissionLayer
   readonly basePath?: string
 }
@@ -87,6 +113,11 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_REFUND_EXCEEDS_PAYMENT: 400,
   COMMERCE_PAYMENT_UNSUPPORTED: 400,
   COMMERCE_PAYMENT_SIGNATURE_INVALID: 403,
+  // The driver registry's own vocabulary (fiche 34 task 3's "tester la
+  // connexion") — a bad gateway on the far side, never this server's fault.
+  DRIVER_UNAVAILABLE: 502,
+  DRIVER_UNKNOWN: 502,
+  DRIVER_INIT_FAILED: 502,
 }
 
 function errorResponse(error: unknown): CommerceResponse {
@@ -131,6 +162,21 @@ function readString(body: Record<string, unknown>, key: string): string {
     })
   }
   return value
+}
+
+function readOptionalString(body: Record<string, unknown>, key: string): string | undefined {
+  const value = body[key]
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined
+}
+
+function readOptionalInt(body: Record<string, unknown>, key: string): number | undefined {
+  const value = body[key]
+  return typeof value === 'number' && Number.isInteger(value) ? value : undefined
+}
+
+function readOptionalBool(body: Record<string, unknown>, key: string): boolean | undefined {
+  const value = body[key]
+  return typeof value === 'boolean' ? value : undefined
 }
 
 function readInt(body: Record<string, unknown>, key: string): number {
@@ -549,6 +595,232 @@ export function createCommerceAdminRouter(
                   ? await subscriptions.resume(id)
                   : await subscriptions.cancel(id)
             return { status: 200, body: updated }
+          }
+        }
+
+        // ---- tax (fiche 34 task 1) ------------------------------------------
+        if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: { rules: await options.tax.listRules() } }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const taxCategory = readOptionalString(body, 'taxCategory')
+            const includedInPrice = readOptionalBool(body, 'includedInPrice')
+            const priority = readOptionalInt(body, 'priority')
+            const active = readOptionalBool(body, 'active')
+            return {
+              status: 201,
+              body: await options.tax.createRule({
+                name: readString(body, 'name'),
+                rateBp: readInt(body, 'rateBp'),
+                country: readOptionalString(body, 'country') ?? null,
+                region: readOptionalString(body, 'region') ?? null,
+                ...(taxCategory === undefined ? {} : { taxCategory }),
+                ...(includedInPrice === undefined ? {} : { includedInPrice }),
+                ...(priority === undefined ? {} : { priority }),
+                ...(active === undefined ? {} : { active }),
+              }),
+            }
+          }
+        }
+
+        if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 3) {
+          if (method === 'DELETE') {
+            permissions.assert('commerce.catalog.write', actor)
+            await options.tax.deleteRule(segments[2] ?? '')
+            return { status: 204, body: null }
+          }
+        }
+
+        // A simulator that calls the exact resolver the checkout uses, never a
+        // second implementation of "which rule wins" (fiche 34 § pièges) — the
+        // whole point is that the screen can never show a different answer
+        // than the one an order actually gets.
+        if (segments[0] === 'tax' && segments[1] === 'simulate' && segments.length === 2) {
+          if (method === 'POST') {
+            permissions.assert('commerce.read', actor)
+            const body = readObject(request.body)
+            const country = readOptionalString(body, 'country')
+            const zone =
+              country === undefined
+                ? null
+                : { country, region: readOptionalString(body, 'region') ?? null }
+            const rule = await options.tax.resolve(
+              zone,
+              readOptionalString(body, 'taxCategory') ?? 'standard',
+            )
+            const outcome = taxFor(readInt(body, 'amountMinor'), rule)
+            return { status: 200, body: { rule, outcome } }
+          }
+        }
+
+        // ---- shipping (fiche 34 task 2) --------------------------------------
+        if (segments[0] === 'shipping' && segments[1] === 'methods' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: { methods: await options.shipping.listMethods() } }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const kind = readOptionalString(body, 'kind')
+            if (kind !== undefined && !(SHIPPING_KINDS as readonly string[]).includes(kind)) {
+              throw new CogentaError({
+                code: 'COMMERCE_SHIPPING_METHOD_UNKNOWN',
+                message: `"${kind}" is not a shipping kind.`,
+                hint: `Use one of: ${SHIPPING_KINDS.join(', ')}.`,
+              })
+            }
+            const amountMinor = readOptionalInt(body, 'amountMinor')
+            const perKgMinor = readOptionalInt(body, 'perKgMinor')
+            const position = readOptionalInt(body, 'position')
+            const active = readOptionalBool(body, 'active')
+            return {
+              status: 201,
+              body: await options.shipping.createMethod({
+                label: readString(body, 'label'),
+                currency: readString(body, 'currency'),
+                ...(kind === undefined ? {} : { kind: kind as ShippingKind }),
+                country: readOptionalString(body, 'country') ?? null,
+                region: readOptionalString(body, 'region') ?? null,
+                ...(amountMinor === undefined ? {} : { amountMinor }),
+                ...(perKgMinor === undefined ? {} : { perKgMinor }),
+                freeOverMinor: readOptionalInt(body, 'freeOverMinor') ?? null,
+                carrier: readOptionalString(body, 'carrier') ?? null,
+                ...(position === undefined ? {} : { position }),
+                ...(active === undefined ? {} : { active }),
+              }),
+            }
+          }
+        }
+
+        if (segments[0] === 'shipping' && segments[1] === 'methods' && segments.length === 3) {
+          if (method === 'DELETE') {
+            permissions.assert('commerce.catalog.write', actor)
+            await options.shipping.deleteMethod(segments[2] ?? '')
+            return { status: 204, body: null }
+          }
+        }
+
+        // Same discipline as the tax simulator: calls `available()`, the exact
+        // function checkout uses to price and offer methods, never a
+        // reimplementation. A method naming a carrier always reports it, so
+        // the screen can say "carrier rate, falls back to the stored rate if
+        // the courier's API does not answer" without guessing at runtime
+        // whether the fallback fired for *this* simulated shipment.
+        if (segments[0] === 'shipping' && segments[1] === 'simulate' && segments.length === 2) {
+          if (method === 'POST') {
+            permissions.assert('commerce.read', actor)
+            const body = readObject(request.body)
+            const country = readOptionalString(body, 'country')
+            const zone =
+              country === undefined
+                ? null
+                : { country, region: readOptionalString(body, 'region') ?? null }
+            const basis = {
+              weightGrams: readOptionalInt(body, 'weightGrams') ?? 0,
+              subtotalMinor: readOptionalInt(body, 'subtotalMinor') ?? 0,
+              currency: readString(body, 'currency'),
+            }
+            return { status: 200, body: { quotes: await options.shipping.available(zone, basis) } }
+          }
+        }
+
+        // ---- payment (fiche 34 task 3) ---------------------------------------
+        // Presence and health only, never a key's value (fiche 34 § pièges:
+        // "un écran de paiement est une fuite de clé en puissance").
+        if (segments[0] === 'payment' && segments[1] === 'drivers' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.payment === undefined) {
+              return { status: 200, body: { drivers: [], testMode: true, webhookUrl: null } }
+            }
+            const { registry, config } = options.payment
+            const drivers = await Promise.all(
+              registry.list().map(async (driver) => ({
+                name: driver.name,
+                tier: driver.tier,
+                settlesOffline: driver.name === 'manual',
+                // "Configured" never means "reachable" — a key can be present
+                // and wrong. `available()` is the same probe the registry uses
+                // to choose a driver at startup, called again here on demand.
+                configured: await driver.available(config).catch(() => false),
+                selected:
+                  (config.driver ?? 'auto') === 'auto' ? undefined : config.driver === driver.name,
+              })),
+            )
+            return {
+              status: 200,
+              body: {
+                drivers,
+                testMode: options.payment.testMode,
+                webhookUrl: options.payment.webhookUrl,
+              },
+            }
+          }
+        }
+
+        // "Bouton tester la connexion" — actually calls the driver, and
+        // returns whatever it says, error included, rather than a boolean.
+        if (
+          segments[0] === 'payment' &&
+          segments[1] === 'drivers' &&
+          segments[3] === 'test-connection' &&
+          segments.length === 4
+        ) {
+          if (method === 'POST') {
+            permissions.assert('commerce.read', actor)
+            if (options.payment === undefined) {
+              throw new CogentaError({
+                code: 'COMMERCE_PAYMENT_UNSUPPORTED',
+                message: 'Payment is not configured on this site.',
+                hint: 'Pass a `payment` option to createCommerceAdminRouter.',
+              })
+            }
+            const name = segments[2] ?? ''
+            const driver = options.payment.registry.list().find((entry) => entry.name === name)
+            if (driver === undefined) {
+              throw new CogentaError({
+                code: 'DRIVER_UNKNOWN',
+                message: `No payment driver named "${name}".`,
+                hint: `Available: ${options.payment.registry
+                  .list()
+                  .map((entry) => entry.name)
+                  .join(', ')}.`,
+              })
+            }
+            const reachable = await driver.available(options.payment.config)
+            if (!reachable) {
+              return {
+                status: 200,
+                body: {
+                  ok: false,
+                  message: `${name} is not reachable with the credentials configured on this server.`,
+                },
+              }
+            }
+            try {
+              // `health()` reports on whatever `init()` last set up — see
+              // `stripePaymentDriver`'s own comment — so the two are always
+              // called back to back, never `health()` alone.
+              await driver.init(options.payment.config)
+              const health = await driver.health()
+              return {
+                status: 200,
+                body: { ok: health.status === 'ok', message: health.message ?? null },
+              }
+            } catch (error) {
+              return {
+                status: 200,
+                body: {
+                  ok: false,
+                  message: error instanceof Error ? error.message : String(error),
+                },
+              }
+            }
           }
         }
 

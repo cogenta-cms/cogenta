@@ -16,7 +16,7 @@ afterEach(() => {
 })
 
 describe('App, signed in', () => {
-  it('renders the dashboard by default, with the skip link and every nav item', async () => {
+  it('renders the dashboard by default, with the skip link and the Content group open', async () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Tableau de bord' })).toBeDefined()
@@ -24,9 +24,23 @@ describe('App, signed in', () => {
       screen.getByRole('link', { name: 'Aller au contenu principal' }).getAttribute('href'),
     ).toBe('#main-content')
 
-    for (const label of ['Tableau de bord', 'Contenus', 'Médiathèque', "Journal d'audit"]) {
+    // The Content group is open by default (fiche 35 §8) and every one of
+    // its entries is open to an `editor` — the default role this whole file
+    // signs in as.
+    for (const label of ['Tableau de bord', 'Contenus', 'Médiathèque']) {
       expect(screen.getByRole('link', { name: label })).toBeDefined()
     }
+  })
+
+  it('hides an admin-only entry from an editor, and shows it to an admin (fiche 35 task 1)', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    expect(screen.queryByRole('link', { name: "Journal d'audit" })).toBeNull()
+
+    installMockFetch({ roles: ['admin'] })
+    render(<App />)
+    await screen.findAllByRole('heading', { name: 'Tableau de bord' })
+    expect(screen.getByRole('link', { name: "Journal d'audit" })).toBeDefined()
   })
 
   it('marks the current section as the active link', async () => {

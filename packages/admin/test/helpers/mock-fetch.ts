@@ -192,6 +192,13 @@ export function installMockFetch(
       signed: boolean
       disabledForMissingSecret: boolean
     }
+    /** Overrides for `GET /api/shell-status` (fiche 35 task 3) — badges and feature flags, quiet-site defaults otherwise. */
+    readonly shellStatus?: {
+      readonly trash?: number
+      readonly commerceOrdersPending?: number | null
+      readonly commerceActive?: boolean
+      readonly marketplaceUpdates?: number | null
+    }
     /** What `GET /api/analytics/summary` answers with. All-zero by default, like a site nobody has visited yet. */
     readonly analyticsSummary?: {
       readonly totalViews?: number
@@ -2462,6 +2469,21 @@ export function installMockFetch(
             disabledForMissingSecret: false,
           },
         })
+      }
+
+      // `GET /api/shell-status` (fiche 35 task 3) — the sidebar's one
+      // aggregated read for badges and feature flags. Defaults to a quiet
+      // site (nothing trashed, no shop, no marketplace item installed) so
+      // that the vast majority of tests that never care about it see the
+      // sidebar in its plainest, most predictable shape.
+      if (url.endsWith('/api/shell-status') && method === 'GET') {
+        const defaults = {
+          trash: 0,
+          commerceOrdersPending: user.roles.length > 0 ? 0 : null,
+          commerceActive: false,
+          marketplaceUpdates: user.roles.includes('admin') ? 0 : null,
+        }
+        return json(200, { data: { ...defaults, ...options.shellStatus } })
       }
 
       if (url.endsWith('/api/assistant') && method === 'GET') {

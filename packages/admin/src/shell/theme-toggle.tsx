@@ -13,7 +13,8 @@ import { Button } from '../ui/index.js'
  * without a second control to inspect it.
  */
 
-const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
+/** Exported for the command palette (fiche 35 task 5): "toggle the theme" cycles through the exact same three modes, in the exact same order, as clicking this button. */
+export const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
   system: 'light',
   light: 'dark',
   dark: 'system',

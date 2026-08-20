@@ -98,6 +98,15 @@ export { createRestRouter } from './router.js'
 export type { SearchRouter, SearchRouterOptions } from './search-router.js'
 export { createSearchRouter } from './search-router.js'
 export type {
+  CommerceCatalogLike,
+  CommerceOrdersLike,
+  ContentListProviderLike,
+  ShellStatus,
+  ShellStatusRouter,
+  ShellStatusRouterOptions,
+} from './shell-status-router.js'
+export { createShellStatusRouter } from './shell-status-router.js'
+export type {
   AppliedPlanReport,
   PlanDecisionsLike,
   PlanItemLike,

@@ -170,6 +170,22 @@ export interface ThemeRenderOptions {
    * was wired.
    */
   readonly menuRouter?: MenuRouter
+  /**
+   * Fiche 35 task 6: a thin bar rendered for an authenticated visitor of the
+   * *public* site, linking straight back into the admin. `false`/absent by
+   * default — set only by `cogenta serve`'s plain page-GET dispatch, never
+   * by the page builder's own preview render (`renderDraftPage`): the
+   * builder's own fidelity test (`serve-builder.test.ts`) asserts its
+   * `<body>` is byte-for-byte identical to the published page's, and an
+   * authenticated preview carrying a bar the anonymous published fetch
+   * never sees would be exactly the difference that test exists to catch.
+   *
+   * Still gated a second time, inside the renderer, on the actor actually
+   * being authenticated (`context.actor.id !== null`) — an anonymous
+   * visitor never sees it and the page never carries the extra markup for
+   * one, whatever this flag says.
+   */
+  readonly adminBar?: boolean
 }
 
 /**
@@ -301,6 +317,33 @@ function renderMenuLinks(links: readonly ResolvedMenuLink[] | null): string {
     })
     .join('')
   return `<ul class="cg-menu">${items}</ul>`
+}
+
+/**
+ * The public-site admin bar (fiche 35 task 6) — WordPress's most-used
+ * shortcut, in the three links this codebase can actually back today:
+ * straight into the admin shell, to editing this exact entry, and to
+ * starting a new one in the same collection.
+ *
+ * Plain `<a href>`s and one scoped `<style>` block, nothing else: the
+ * theme's own zero-executable-client-JavaScript policy (`serve.test.ts`,
+ * "no executable client JavaScript anywhere on the page") applies to this
+ * markup exactly as it does to the rest of the page — there is no `onclick`,
+ * no toggle, nothing that needs a script to work.
+ */
+function renderAdminBar(collectionName: string, entryId: string): string {
+  const collection = encodeURIComponent(collectionName)
+  const entry = encodeURIComponent(entryId)
+  return `<div class="cg-admin-bar" role="navigation" aria-label="Cogenta admin">
+<style>
+.cg-admin-bar{display:flex;gap:1rem;align-items:center;padding:0.4rem 1rem;background:#1a1a1a;color:#fff;font:500 0.8125rem/1.4 system-ui,sans-serif;position:sticky;top:0;z-index:1000}
+.cg-admin-bar a{color:#fff;text-decoration:none;opacity:0.85}
+.cg-admin-bar a:hover,.cg-admin-bar a:focus-visible{opacity:1;text-decoration:underline}
+</style>
+<a href="/admin">Cogenta Admin</a>
+<a href="/admin/collections/${collection}/${entry}">Edit this page</a>
+<a href="/admin/collections/${collection}/new">New</a>
+</div>`
 }
 
 async function fetchOne(
@@ -639,6 +682,15 @@ async function renderEntryPage(
 
   const siteName = escapeAttribute(options.site.name)
 
+  // Precaution 1 of 3 (fiche 35 task 6): only ever rendered for an actor
+  // this request's own `resolveActor` actually authenticated — the flag
+  // alone (set for every request on this path, anonymous included) is not
+  // the gate, this check is.
+  const adminBar =
+    options.adminBar === true && context.actor.id !== null
+      ? renderAdminBar(collection.name, entry.id)
+      : ''
+
   // The navigation menus (audit follow-up to L13's menu system): `main` in
   // the header, `footer` in the footer — see `ThemeRenderOptions.menuRouter`
   // for the convention and why it lives here rather than in contract A/D.
@@ -667,6 +719,7 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
+${adminBar}
 <header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
 ${bodyHtml}
 <footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}</div></footer>

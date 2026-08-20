@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -13,7 +14,14 @@ import { listMedia } from '../api/media-client.js'
 import { searchContent } from '../api/search-client.js'
 import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { canPerform } from '../schema/permissions.js'
+import { useSchema } from '../schema/schema-context.js'
+import { useTheme } from '../theme/theme-context.js'
 import { Input } from '../ui/index.js'
+import { NAV_ITEMS } from './nav-items.js'
+import { isNavItemVisible } from './nav-visibility.js'
+import { chromeStatusOrFallback, useChromeStatus } from './shell-status-context.js'
+import { NEXT_MODE } from './theme-toggle.js'
 
 /**
  * The admin's global search — L11 task 4.
@@ -42,11 +50,14 @@ interface ResultItem {
   readonly id: string
   readonly label: string
   readonly sublabel: string
-  readonly href: string
+  /** Navigates here on selection — mutually exclusive with `onSelect`. */
+  readonly href?: string
+  /** Runs on selection instead of navigating — "toggle the theme", "sign out". */
+  readonly onSelect?: () => void
 }
 
 interface ResultGroup {
-  readonly key: 'content' | 'media' | 'users'
+  readonly key: 'actions' | 'content' | 'media' | 'users'
   readonly titleKey: string
   readonly items: readonly ResultItem[]
 }
@@ -55,7 +66,11 @@ export function GlobalSearch(): JSX.Element {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const auth = useAuth()
+  const schemaState = useSchema()
+  const chromeState = useChromeStatus()
+  const theme = useTheme()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
 
   const [query, setQuery] = useState('')
@@ -68,6 +83,65 @@ export function GlobalSearch(): JSX.Element {
   const inputId = useId()
 
   const flatItems = groups.flatMap((group) => group.items)
+
+  const collections = schemaState.status === 'ready' ? schemaState.schema.collections : null
+  const taxonomiesPresent =
+    schemaState.status === 'ready' ? (schemaState.schema.taxonomies?.length ?? 0) > 0 : null
+  const chrome = chromeStatusOrFallback(chromeState)
+
+  /**
+   * The palette's "actions" (fiche 35 task 5): "go to …" for every nav entry
+   * this actor can currently see, "create a …" for every collection this
+   * actor may create in, plus "toggle the theme" and "sign out" — the four
+   * kinds the fiche names. Independent of the query text: filtered against
+   * it below, the same way the three search groups already are.
+   */
+  const actionPool = useMemo<readonly ResultItem[]>(() => {
+    const actions: ResultItem[] = []
+
+    for (const item of NAV_ITEMS) {
+      const visible = isNavItemVisible(item.visibleWhen, {
+        roles,
+        collections,
+        taxonomiesPresent,
+        assistantTools: chromeState.status === 'ready' ? chrome.assistantTools : null,
+        commerceActive: chromeState.status === 'ready' ? chrome.shellStatus.commerceActive : null,
+      })
+      if (!visible) continue
+      actions.push({
+        id: `action:goto:${item.to}`,
+        label: t('globalSearch.actions.goTo', { target: t(item.labelKey) }),
+        sublabel: t(item.labelKey),
+        href: item.to,
+      })
+    }
+
+    for (const collection of collections ?? []) {
+      if (!canPerform('create', collection, roles)) continue
+      actions.push({
+        id: `action:create:${collection.name}`,
+        label: t('globalSearch.actions.create', { target: collection.labels.singular }),
+        sublabel: collection.labels.singular,
+        href: `/collections/${encodeURIComponent(collection.name)}/new`,
+      })
+    }
+
+    actions.push({
+      id: 'action:toggle-theme',
+      label: t('globalSearch.actions.toggleTheme'),
+      sublabel: t(`theme.${theme.mode}`),
+      onSelect: () => theme.setMode(NEXT_MODE[theme.mode]),
+    })
+
+    actions.push({
+      id: 'action:logout',
+      label: t('globalSearch.actions.logout'),
+      sublabel: '',
+      onSelect: () => void auth.logout(),
+    })
+
+    return actions
+  }, [roles, collections, taxonomiesPresent, chromeState, chrome, theme, auth, t])
 
   const runSearch = useCallback(
     async (text: string) => {
@@ -83,6 +157,27 @@ export function GlobalSearch(): JSX.Element {
       ])
 
       const next: ResultGroup[] = []
+
+      // Actions rank above search results (fiche 35 task 5: "les actions
+      // s'ajoutent au-dessus") — matched by a case-insensitive substring of
+      // either the action's own label ("Aller à Corbeille") or the thing it
+      // names ("Corbeille"), so typing either the verb or the destination
+      // finds it.
+      const needle = text.trim().toLowerCase()
+      const matchingActions = actionPool
+        .filter(
+          (action) =>
+            action.label.toLowerCase().includes(needle) ||
+            action.sublabel.toLowerCase().includes(needle),
+        )
+        .slice(0, GROUP_LIMIT)
+      if (matchingActions.length > 0) {
+        next.push({
+          key: 'actions',
+          titleKey: 'globalSearch.groups.actions',
+          items: matchingActions,
+        })
+      }
 
       if (contentResult.status === 'fulfilled' && contentResult.value.hits.length > 0) {
         next.push({
@@ -126,7 +221,7 @@ export function GlobalSearch(): JSX.Element {
       setGroups(next)
       setActiveIndex(-1)
     },
-    [token, isAdmin],
+    [token, isAdmin, actionPool],
   )
 
   // Debounced on every keystroke; `onKeyDown` below runs it immediately on
@@ -155,10 +250,27 @@ export function GlobalSearch(): JSX.Element {
       setOpen(false)
       setQuery('')
       setGroups([])
-      navigate(item.href)
+      if (item.onSelect !== undefined) item.onSelect()
+      else if (item.href !== undefined) navigate(item.href)
     },
     [navigate],
   )
+
+  // `⌘K`/`Ctrl+K` opens this same search, enriched with actions (fiche 35
+  // task 5) — a global listener rather than one scoped to this component's
+  // own tree, so the shortcut works from anywhere in the admin, the way a
+  // command palette is expected to.
+  useEffect(() => {
+    function onGlobalKeyDown(event: globalThis.KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setOpen(true)
+        document.getElementById(inputId)?.focus()
+      }
+    }
+    document.addEventListener('keydown', onGlobalKeyDown)
+    return () => document.removeEventListener('keydown', onGlobalKeyDown)
+  }, [inputId])
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (event.key === 'Escape') {

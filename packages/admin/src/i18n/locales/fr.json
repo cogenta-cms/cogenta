@@ -72,14 +72,33 @@
     "settings": "Paramètres",
     "opsSettings": "Sécurité & webhooks",
     "sitePlan": "Plan du site",
-    "marketplace": "Marketplace"
+    "marketplace": "Marketplace",
+    "groups": {
+      "content": "Contenu",
+      "appearance": "Apparence",
+      "commerce": "Boutique",
+      "ai": "IA",
+      "accounts": "Comptes",
+      "ops": "Exploitation",
+      "settings": "Réglages"
+    }
+  },
+  "breadcrumb": {
+    "newEntry": "Nouveau",
+    "editEntry": "Modifier"
   },
   "shell": {
     "skipLink": "Aller au contenu principal",
     "brand": "Cogenta",
     "logout": "Se déconnecter",
     "nav": "Navigation principale",
-    "footer": "Administration Cogenta"
+    "footer": "Administration Cogenta",
+    "breadcrumb": "Fil d'Ariane",
+    "openNav": "Ouvrir la navigation",
+    "collapseSidebar": "Replier la barre latérale",
+    "expandSidebar": "Déplier la barre latérale",
+    "badgeCount": "{{count}} élément",
+    "badgeCount_other": "{{count}} éléments"
   },
   "theme": {
     "toggleLabel": "Thème de couleur : {{mode}}. Activer pour changer.",
@@ -92,9 +111,16 @@
     "placeholder": "Rechercher du contenu, des médias, des utilisateurs…",
     "resultsLabel": "Résultats de recherche",
     "groups": {
+      "actions": "Actions",
       "content": "Contenu",
       "media": "Médias",
       "users": "Utilisateurs"
+    },
+    "actions": {
+      "goTo": "Aller à : {{target}}",
+      "create": "Créer : {{target}}",
+      "toggleTheme": "Basculer le thème",
+      "logout": "Se déconnecter"
     }
   },
   "login": {

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
+import { NotificationCenter } from '../notices/notification-center.js'
 import {
   AgentsIcon,
   AuditIcon,
@@ -72,6 +73,7 @@ export function AppShell(): JSX.Element {
         </span>
         {email !== null && <GlobalSearch />}
         <div className="app-shell__account">
+          {email !== null && <NotificationCenter />}
           <ThemeToggle />
           {email !== null && (
             <>

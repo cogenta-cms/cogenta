@@ -209,3 +209,11 @@ export const InfoIcon = icon(
     <circle cx="10" cy="6.6" r="0.15" fill="currentColor" stroke="currentColor" />
   </>,
 )
+
+/** The notification centre's trigger (fiche 38 task 2). */
+export const BellIcon = icon(
+  <>
+    <path d="M5 15v-4.5a5 5 0 0110 0V15l1.5 2h-13z" />
+    <path d="M8.3 17.5a1.8 1.8 0 003.4 0" />
+  </>,
+)

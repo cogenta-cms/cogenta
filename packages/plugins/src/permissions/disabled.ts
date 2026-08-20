@@ -26,6 +26,14 @@ export interface PluginDisableStore {
 
   /** The real gate `runPlugin` checks before ever spawning a worker. */
   isDisabled(pluginName: string): Promise<PluginDisabledRecord | null>
+
+  /**
+   * Every plugin currently disabled, newest first — what fiche 38's
+   * `plugin-disabled` admin notice reads. Separate from `isDisabled` (which
+   * answers "is this one plugin blocked") because the notice has to answer
+   * "is anything blocked at all" without knowing plugin names in advance.
+   */
+  listDisabled(): Promise<readonly PluginDisabledRecord[]>
 }
 
 interface DisabledRow {
@@ -65,6 +73,18 @@ export function createPluginDisableStore(
         details: row.details,
         disabledAt: row.disabled_at,
       }
+    },
+
+    async listDisabled() {
+      const result = await db.query<DisabledRow>(
+        sql`select * from ${disabled} order by disabled_at desc`,
+      )
+      return result.rows.map((row) => ({
+        pluginName: row.plugin_name,
+        reason: row.reason as PluginViolationReason,
+        details: row.details,
+        disabledAt: row.disabled_at,
+      }))
     },
   }
 }

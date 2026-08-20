@@ -35,6 +35,7 @@
   "dependencies": {
     "@cogenta/analytics": "workspace:*",
     "@cogenta/auth": "workspace:*",
+    "@cogenta/channels": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/blocks": "workspace:*",

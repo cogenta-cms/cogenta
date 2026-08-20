@@ -133,6 +133,8 @@
   },
   "notices": {
     "dismiss": "Hide this recommendation",
+    "see-more_one": "See {{count}} more",
+    "see-more_other": "See {{count}} more",
     "security": {
       "mfa-recommended": {
         "title": "Turn on two-factor verification",
@@ -144,6 +146,51 @@
         "body": "{{attempts}} sign-in attempts failed across {{subjects}} account(s) in the last 15 minutes. They are already being slowed down. Check the audit log, and make sure the accounts involved have strong passwords and a second factor. This disappears on its own once the attempts stop.",
         "action": "Open the audit log"
       }
+    },
+    "plugin": {
+      "disabled": {
+        "timeout": {
+          "title": "A plugin was disabled: it ran too long",
+          "body": "\"{{plugin}}\" was stopped and disabled after exceeding its time limit. It will not run again until you re-enable it."
+        },
+        "memory": {
+          "title": "A plugin was disabled: it used too much memory",
+          "body": "\"{{plugin}}\" was stopped and disabled after exceeding its memory limit. It will not run again until you re-enable it."
+        },
+        "crash": {
+          "title": "A plugin was disabled: it crashed",
+          "body": "\"{{plugin}}\" was stopped and disabled after its worker crashed. It will not run again until you re-enable it."
+        },
+        "action": "Open plugins"
+      }
+    },
+    "content": {
+      "schedule-failed": {
+        "title": "A scheduled publication failed",
+        "body": "An entry in \"{{collection}}\" ({{locale}}) was due to publish but its scheduled publication failed. It stays unpublished until you fix and re-save it.",
+        "action": "Open the entry"
+      }
+    }
+  },
+  "notifications": {
+    "trigger_one": "Notifications, {{count}} unread",
+    "trigger_other": "Notifications, {{count}} unread",
+    "title": "Notifications",
+    "empty": "Nothing here yet.",
+    "close": "Close notifications",
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark read",
+    "filterSeverity": "Filter by severity",
+    "allSeverities": "All severities",
+    "severity": {
+      "info": "Info",
+      "success": "Success",
+      "warning": "Warning",
+      "danger": "Critical"
+    },
+    "status": {
+      "active": "Active",
+      "resolved": "Resolved"
     }
   },
   "collections": {

@@ -12,6 +12,9 @@ export const CHANNEL_EVENT_TYPES = [
   'seo-report',
   'performance-report',
   'content-report',
+  // Added by fiche 38 (`@cogenta/api`'s notice-to-channel bridge) — additive,
+  // by-the-bottom growth of an open taxonomy, not a contract change.
+  'admin-notice',
 ] as const
 
 export type ChannelEventType = (typeof CHANNEL_EVENT_TYPES)[number]

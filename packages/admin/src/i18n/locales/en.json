@@ -138,6 +138,51 @@
     "slashMenuLabel": "Insert",
     "slashMenuEmpty": "No matching insertion."
   },
+  "comments": {
+    "heading": "Comments",
+    "description": "Visitor comments awaiting moderation, and the ones already decided.",
+    "signedOut": "Sign in to see the moderation queue.",
+    "loadError": "The moderation queue could not be loaded.",
+    "actionError": "That action could not be completed.",
+    "searchLabel": "Search",
+    "searchPlaceholder": "Author, e-mail or body…",
+    "selectAll": "Select all",
+    "selectOne": "Select comment by {{author}}",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "empty": "No comments here.",
+    "total_one": "{{count}} comment",
+    "total_other": "{{count}} comments",
+    "flagged": "Flagged by the assistant — {{severity}}",
+    "purgeConfirm": "Permanently delete this comment? This cannot be undone.",
+    "replyLabel": "Reply",
+    "replySubmit": "Post reply",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "spam": "Spam",
+      "trash": "Trash"
+    },
+    "bulkAction": {
+      "approved": "Approve",
+      "spam": "Mark spam",
+      "trash": "Move to trash"
+    },
+    "action": {
+      "approve": "Approve",
+      "spam": "Mark spam",
+      "trash": "Trash",
+      "reply": "Reply",
+      "purge": "Delete permanently"
+    },
+    "column": {
+      "excerpt": "Comment",
+      "author": "Author",
+      "target": "On",
+      "date": "Date",
+      "actions": "Actions"
+    }
+  },
   "richTextAssist": {
     "button": "Assist",
     "needsSelection": "Select some text first.",
@@ -162,6 +207,7 @@
     "import": "Import",
     "taxonomies": "Taxonomies",
     "menus": "Menus",
+    "comments": "Comments",
     "commerceProducts": "Products",
     "commerceOrders": "Orders",
     "commerceCoupons": "Coupons",
@@ -532,6 +578,10 @@
     "autosaveRestore": "Restore them",
     "autosaveDiscard": "Discard them",
     "statusLabel": "Status:",
+    "commentsLabel": "Comments",
+    "commentsInherit": "Use the collection/site default",
+    "commentsOn": "Always allow",
+    "commentsOff": "Always disallow",
     "status": {
       "draft": "Draft",
       "scheduled": "Scheduled",
@@ -1391,7 +1441,7 @@
     "notFoundPathNote": "Kept in the config file on purpose — a custom 404 page ships with the deploy that wrote it, the same as a route change would.",
     "mediaFormatsLabel": "Image variants produced",
     "mediaFormatsValue": "WebP, at a fixed set of widths — built into the image pipeline, not editable here.",
-    "discussionPlaceholder": "Not applicable yet: Cogenta has no comment system today (see fiche 15). This tab is a placeholder for it.",
+    "discussionNote": "These are the site-wide defaults. A collection or a single entry can still turn comments off, or require moderation, from that collection's settings or the entry editor.",
     "noCookieByDefault": "Cogenta sets no cookie of its own. Turn this on only if this site adds one (an embed, an analytics script) — a banner nobody needs is worse than none.",
     "advancedLink": "Security, webhooks and infrastructure (read-only)",
     "advancedNote": "Everything there comes from cogenta.config.mjs. Edit the file and restart the server to change it.",
@@ -1416,6 +1466,26 @@
           "help": "The path served at /, e.g. /home. Leave empty to keep the default (/home)."
         },
         "postsPerPage": { "label": "Items per page", "help": "" }
+      },
+      "discussion": {
+        "enabled": {
+          "label": "Allow comments",
+          "help": "Site-wide default. A collection or an entry can still turn this off."
+        },
+        "moderationRequired": { "label": "Comments must be approved before showing", "help": "" },
+        "allowAnonymous": {
+          "label": "Allow comments from visitors without an account",
+          "help": ""
+        },
+        "autoCloseDays": {
+          "label": "Auto-close comments after (days)",
+          "help": "0 disables auto-close."
+        },
+        "maxNestingDepth": { "label": "Maximum reply depth", "help": "" },
+        "notifyEmail": {
+          "label": "Notify this address of new comments",
+          "help": "Leave empty to disable e-mail notifications."
+        }
       },
       "media": {
         "maxUploadSizeMb": { "label": "Maximum upload size (MB)", "help": "" }

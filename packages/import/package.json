@@ -34,6 +34,7 @@
   "dependencies": {
     "@cogenta/auth": "workspace:*",
     "@cogenta/blocks": "workspace:*",
+    "@cogenta/comments": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/schema": "workspace:*"
   },

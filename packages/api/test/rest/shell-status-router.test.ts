@@ -65,6 +65,7 @@ describe('the shell status transport', () => {
       commerceActive: false,
       marketplaceUpdates: null,
       reviewPending: null,
+      commentsPending: null,
     })
   })
 
@@ -280,6 +281,30 @@ describe('the shell status transport', () => {
     const router = createShellStatusRouter({ content: emptyContent, reviewQueue })
     const response = await router.handle(request(), { actor: EDITOR })
     expect(dataOf<{ reviewPending: number | null }>(response).reviewPending).toBe(null)
+  })
+
+  it('answers null comments pending when contract F is unmounted', async () => {
+    const router = createShellStatusRouter({ content: emptyContent })
+    const response = await router.handle(request(), { actor: ADMIN })
+    expect(dataOf<{ commentsPending: number | null }>(response).commentsPending).toBe(null)
+  })
+
+  it('answers null comments pending for an actor with no role', async () => {
+    const router = createShellStatusRouter({
+      content: emptyContent,
+      comments: { counts: async () => ({ pending: 3 }) },
+    })
+    const response = await router.handle(request(), { actor: { id: 'u1', roles: [] } })
+    expect(dataOf<{ commentsPending: number | null }>(response).commentsPending).toBe(null)
+  })
+
+  it('reports the pending comment count when contract F is mounted', async () => {
+    const router = createShellStatusRouter({
+      content: emptyContent,
+      comments: { counts: async () => ({ pending: 5 }) },
+    })
+    const response = await router.handle(request(), { actor: EDITOR })
+    expect(dataOf<{ commentsPending: number }>(response).commentsPending).toBe(5)
   })
 
   it('answers 404 for an unrelated path', async () => {

@@ -66,6 +66,16 @@ export interface ReviewQueueLike {
   ): Promise<{ readonly status: number; readonly body: unknown }>
 }
 
+/**
+ * Structural, exactly like `CommerceOrdersLike` above and for the same
+ * reason: `@cogenta/api` has never depended on a domain package, and
+ * contract F (ADR-0025) is one. `counts().pending` is `CommentStore`'s own
+ * method, called as-is.
+ */
+export interface CommentsQueueLike {
+  counts(): Promise<{ readonly pending: number }>
+}
+
 export interface ShellStatus {
   /** Trashed entries across every trash-enabled collection this actor may see the trash of. */
   readonly trash: number
@@ -77,6 +87,8 @@ export interface ShellStatus {
   readonly marketplaceUpdates: number | null
   /** `null` when no collection has the editorial workflow on (`schema@2.1`, ADR-0027, fiche 37). */
   readonly reviewPending: number | null
+  /** Comments awaiting moderation (ADR-0025). `null` when this actor holds no role at all — the same courtesy `commerceOrdersPending` already applies. */
+  readonly commentsPending: number | null
 }
 
 export interface ShellStatusRouterOptions {
@@ -91,6 +103,8 @@ export interface ShellStatusRouterOptions {
   readonly marketplaceInstaller?: MarketplaceInstallerLike
   /** Absent on a site where no collection has `workflow: { enabled: true }` — `reviewPending` then stays `null`. */
   readonly reviewQueue?: ReviewQueueLike
+  /** Absent on a site with no comments (never true — contract F is always mounted — but structural like the rest of this options bag). */
+  readonly comments?: CommentsQueueLike
   /** Mount point. `/api/shell-status` by default. */
   readonly path?: string
 }
@@ -129,6 +143,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
         commerceActive: false,
         marketplaceUpdates: null,
         reviewPending: null,
+        commentsPending: null,
       }
       return jsonResponse(200, { data: empty })
     }
@@ -139,8 +154,17 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
       commerceActive: await catalogueHasProducts(),
       marketplaceUpdates: await pendingMarketplaceUpdates(context),
       reviewPending: await reviewPending(context),
+      commentsPending: await commentsPending(context),
     }
     return jsonResponse(200, { data: status })
+  }
+
+  async function commentsPending(context: AccessContext): Promise<number | null> {
+    const comments = options.comments
+    if (comments === undefined) return null
+    if (context.actor.roles.length === 0) return null
+    const counts = await comments.counts()
+    return counts.pending
   }
 
   async function trashCount(context: AccessContext): Promise<number> {

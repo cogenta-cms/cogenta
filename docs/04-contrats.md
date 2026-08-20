@@ -835,6 +835,75 @@ commande ou la représentation d'un montant est majeur.
 
 ---
 
+## Contrat F — Commentaires
+
+> **Acté (ADR-0025), non figé.** Ce contrat repose sur l'**ADR-0025**, actée dans
+> `docs/03-decisions.md`, sur le même modèle qu'ADR-0024 pour le commerce. Il n'est
+> **délibérément pas figé** au moment de sa création : la fiche 15 est son premier et
+> seul consommateur.
+
+### Pourquoi un contrat séparé et pas une extension du contrat A
+
+Trois faits, sur le modèle d'ADR-0024 :
+
+- **ADR-0014** forkerait un commentaire par langue. Un commentaire n'a pas de famille de
+  traduction — il est écrit une fois, dans la langue de son auteur.
+- **`published`/`draft` n'a pas le sens d'« approuvé »/« en attente ».** `published`
+  signifie, dans tout le reste du contrat A, « visible sur sa propre route, indexable,
+  avec SEO » — un commentaire n'a ni route ni existence indépendante de l'entrée qu'il
+  commente.
+- **Le volume et le modèle de menace sont d'un autre ordre.** `POST /api/comments` est la
+  première route publique en écriture du CMS ; rate limiting, honeypot et anti-spam sont
+  des préoccupations que le contrat A n'a aucune raison de porter pour les collections
+  qui n'ont jamais reçu d'écriture anonyme.
+
+### Objets
+
+```
+Comment   cible (collection, entryId, locale), auteur (compte OU nom+e-mail+site),
+          corps en texte brut uniquement, statut (pending|approved|spam|trash),
+          parentId (fil), ipHash (jamais l'IP en clair), provenance
+```
+
+Un commentaire ne porte ni `status` de contenu au sens du contrat A, ni `version`, ni
+`translationOf`, ni corbeille au sens d'ADR-0022 (une suppression est directe, avec
+rétention/purge configurable sur son propre modèle). Il ne passe jamais par
+`ContentStore`.
+
+### Corps : texte brut, sans exception
+
+R3 s'applique ici en premier lieu : le corps d'un commentaire n'accepte **aucune balise
+HTML**, refusée à l'écriture (`CommentStore.create`), et rendu via l'arbre `h()`/`text()`
+de `@cogenta/theme-canonical` (pas d'échappatoire `raw()` dans ce paquet). Si un
+formatage est un jour voulu, il se dérive du texte brut à l'affichage — jamais stocké.
+
+### Permissions
+
+Le contrat F déclare **son propre vocabulaire**, dans son espace de noms :
+
+```
+comments.read   comments.moderate   comments.reply   comments.purge   comments.settings
+```
+
+`comments.purge` est distinct de `comments.moderate` (destructif — une vraie suppression,
+pas une mise à la corbeille) et `comments.settings` distinct des deux (change ce qui est
+permis, pas un commentaire lui-même).
+
+### Route publique en écriture
+
+`POST /api/comments` — sans acteur requis, avec dès la première version : limitation de
+débit par IP et par cible (`collection:entryId`), champ piège, délai minimal de
+remplissage, heuristiques anti-spam sans IA. Un `<form method=post>` sans JavaScript
+obtient une redirection `303` vers sa propre page (`redirectTo`, validée contre la
+redirection ouverte et l'injection de réponse HTTP) plutôt qu'un corps JSON brut.
+
+### Versionnement
+
+`comments@1.0` (ADR-0025, non figé — voir le bandeau en tête de section). Ajouter un
+champ optionnel est mineur ; changer le sens d'un statut ou la forme du fil est majeur.
+
+---
+
 ## Format d'export et de sauvegarde (fiche 26)
 
 > **Documenté ici par décision du plan de la fiche 26** (« le format d'export est un

@@ -24,6 +24,7 @@ export default {
         'plugins',
         'fleet',
         'commerce',
+        'comments',
         'analytics',
         'db',
         'cache',

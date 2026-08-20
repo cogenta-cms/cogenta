@@ -34,6 +34,7 @@ const FALLBACK: ChromeStatus = {
     commerceActive: false,
     marketplaceUpdates: null,
     reviewPending: null,
+    commentsPending: null,
   },
   assistantTools: [],
 }

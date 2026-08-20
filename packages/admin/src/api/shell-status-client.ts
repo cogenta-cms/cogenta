@@ -15,6 +15,8 @@ export interface ShellStatus {
   readonly marketplaceUpdates: number | null
   /** `null` when no collection turned `workflow: { enabled: true }` on (`schema@2.1`, ADR-0027, fiche 37). */
   readonly reviewPending: number | null
+  /** Comments in `pending` moderation (contract F, ADR-0025). `null` when no collection has comments enabled. */
+  readonly commentsPending: number | null
 }
 
 export function getShellStatus(token: string): Promise<ShellStatus> {

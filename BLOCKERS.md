@@ -892,3 +892,52 @@ de preuve sur les deux autres dialectes s'applique.
 répond honnêtement « non joignable » sans clé réelle (couvert par le test « refuses
 unreachable Stripe as not ok »), mais aucune session n'a testé le bouton « tester la
 connexion » contre un vrai compte Stripe.
+
+## 16. Fiche 15 — Commentaires : ce qui reste ouvert
+
+Contrat F (`comments@1.0`, ADR-0025), nouveau paquet `@cogenta/comments`, les 7 tâches
+faites : modèle/magasin, `POST /api/comments` (première route publique en écriture du
+CMS, limitation de débit + honeypot + délai minimal + heuristiques anti-spam),
+modération assistée en réutilisant `assist.moderate` tel quel (`ModerationCheck`,
+`packages/admin/src/assist/moderation-check.tsx`, jamais un second chemin de décision),
+réglages `discussion.*` (site) + par collection/entrée (magasin propre à
+`@cogenta/comments`, hors du registre `SITE_SETTINGS_REGISTRY`, qui est site/locale
+uniquement), rendu public (`renderCommentsSection`, arbre `h()`/`text()` sans
+échappatoire `raw()`), et import WordPress réel.
+
+**Postgres/MySQL/MariaDB non exécutés cette session** (Docker indisponible, même
+contrainte que toutes les fiches précédentes) — `packages/comments/test/integration/tables.test.ts`
+existe (même schéma de test que `@cogenta/commerce` : squelette `describe.skip` nommant
+la variable manquante) mais n'a tourné que sur SQLite.
+
+**`security-reviewer` non invocable dans cet environnement d'exécution** : la fiche exige
+explicitement le passage par ce sous-agent avant fusion, vu la route publique en
+écriture. Cette session tournait comme sous-agent autonome sans l'outil `Task` qui
+permet de lancer un sous-agent nommé du projet — impossible à contourner honnêtement, pas
+une case cochée en apparence. À la place, une relecture manuelle ciblée sur
+`POST /api/comments` a été faite et a trouvé **deux vraies vulnérabilités, corrigées** :
+(1) une redirection ouverte via `redirectTo` — `startsWith('//')` seul ne suffit pas, un
+`redirectTo` commençant par `/\` peut être normalisé en hôte relatif au protocole par
+certains navigateurs ; (2) une injection de réponse HTTP — `redirectTo` finit dans l'en-
+tête `Location`, donc un CR/LF non filtré y aurait permis d'injecter un second en-tête.
+Les deux sont maintenant refusés par `isSafeRedirectPath` (`packages/comments/src/router.ts`),
+testés. **Un vrai `security-reviewer` doit repasser dessus avant toute fusion réelle** —
+cette relecture manuelle n'a pas la même profondeur que le sous-agent dédié du projet.
+
+**Aperçu du constructeur de page (L16) ne montre jamais le fil de commentaires** —
+décision délibérée, pas un oubli : le champ anti-spam `_ts` du formulaire est un
+horodatage de rendu, légitimement différent à chaque appel, donc le comparer octet pour
+octet entre l'aperçu et la page publiée (le test de fidélité de L16) comparerait deux
+valeurs également correctes plutôt que de détecter une vraie divergence. Le
+constructeur de page édite des blocs ; le fil de commentaires n'en est pas un, donc
+l'aperçu ne le montre simplement pas — `serve-builder.test.ts` porte maintenant un test
+dédié qui nomme cette différence explicitement, sur le même modèle que la différence
+`noindex` déjà documentée là pour le SEO.
+
+**Formatage du corps d'un commentaire au rendu public** : `renderCommentsSection` rend le
+corps comme un seul `<p>` texte brut — les retours à la ligne d'un visiteur ne sont pas
+convertis en `<br>` (cela demanderait de fabriquer un enfant HTML par ligne dans l'arbre
+`h()`, ce que le temps de cette session n'a pas permis de peaufiner proprement avec test
+dédié). `white-space: pre-wrap` en CSS du thème réglerait l'essentiel visuellement sans
+toucher au rendu HTML — non fait, aucune feuille de style de `@cogenta/theme-canonical`
+n'a été touchée par cette fiche.

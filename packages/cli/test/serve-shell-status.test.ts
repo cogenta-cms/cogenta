@@ -151,6 +151,7 @@ interface ShellStatusBody {
     readonly commerceActive: boolean
     readonly marketplaceUpdates: number | null
     readonly reviewPending: number | null
+    readonly commentsPending: number | null
   }
 }
 
@@ -168,6 +169,7 @@ describe('the shell status route, end to end', () => {
       commerceActive: false,
       marketplaceUpdates: null,
       reviewPending: null,
+      commentsPending: null,
     })
   })
 

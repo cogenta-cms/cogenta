@@ -210,6 +210,81 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     writeRoles: ADMIN_ONLY,
   },
 
+  // Discussion (fiche 15 task 5, ADR-0025) — the site-wide defaults every
+  // collection and every entry inherit from unless it has its own override.
+  // Per-collection and per-entry overrides do NOT live here: this registry
+  // is site/locale scoped only, with no notion of "per collection" — they
+  // live in `@cogenta/comments`'s own `CommentSettingsStore` instead (see
+  // its module comment for why), which reads `discussion.enabled` and
+  // `discussion.moderationRequired` as the bottom of its own inheritance
+  // chain (`effectiveEnabled`/`effectiveModerationRequired`).
+  {
+    key: 'discussion.enabled',
+    group: 'discussion',
+    order: 0,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'discussion.moderationRequired',
+    group: 'discussion',
+    order: 1,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // On by default: a comment nobody moderated appearing on a live page is
+    // the surprise a new site owner least wants (fiche 15's own comparison
+    // to WordPress, which ships the same default).
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'discussion.allowAnonymous',
+    group: 'discussion',
+    order: 2,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'discussion.autoCloseDays',
+    group: 'discussion',
+    order: 3,
+    uiType: 'number',
+    scope: 'site',
+    // 0 means "never auto-close" — not every site wants an expiry, and 0 is
+    // a clearer way to say that than a second boolean that could disagree
+    // with this number.
+    schema: z.number().int().min(0).max(3650),
+    defaultValue: 0,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'discussion.maxNestingDepth',
+    group: 'discussion',
+    order: 4,
+    uiType: 'number',
+    scope: 'site',
+    schema: z.number().int().min(1).max(10),
+    defaultValue: 5,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'discussion.notifyEmail',
+    group: 'discussion',
+    order: 5,
+    uiType: 'email',
+    scope: 'site',
+    schema: emailOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
   // Media
   {
     key: 'media.maxUploadSizeMb',

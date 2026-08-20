@@ -24,7 +24,9 @@ import {
   type FetchedEntries,
   type LinkTargetInput,
   type PageContent,
+  type PublicComment,
   type RenderContext,
+  renderCommentsSection,
   renderPage,
   serialize,
   type ContentEntry as ThemeContentEntry,
@@ -210,6 +212,29 @@ export interface ThemeRenderOptions {
    * one, whatever this flag says.
    */
   readonly adminBar?: boolean
+  /**
+   * The comment thread and its submission form (fiche 15 task 6, ADR-0025).
+   * Rendered by `renderEntryPage` itself, after the page's own `<main>` —
+   * both `renderRequestedPage` (published) and `renderDraftPage` (preview)
+   * funnel through it, so the thread appears identically on both without a
+   * special case: it reads the same live, already-approved comments either
+   * way, which is exactly what keeps the L16 fidelity test's "byte for byte"
+   * claim true rather than needing an exception for this feature too.
+   *
+   * Absent means no comments section is rendered at all — the pre-fiche-15
+   * page, unchanged.
+   */
+  readonly comments?: {
+    /** `POST` target for the form — `/api/comments` on a real server. */
+    readonly action: string
+    /** Must match `CommentsRouterOptions.honeypotField` on the server side. Defaults to `website` on both. */
+    readonly honeypotField?: string
+    readonly forEntry: (
+      collection: string,
+      entryId: string,
+      locale: string | null,
+    ) => Promise<{ readonly open: boolean; readonly items: readonly PublicComment[] }>
+  }
 }
 
 /** The hardcoded fallback every blueprint's home page uses when no `reading.homePath` setting is stored. */
@@ -823,6 +848,31 @@ async function renderEntryPage(
   const node = renderPage(pageContent, themeContext, fetchedEntries as FetchedEntries)
   const bodyHtml = serialize(node)
 
+  // The comment thread and form (fiche 15 task 6) — a property of the route,
+  // not of the page's own blocks, so it is appended after `<main>` rather
+  // than folded into `renderPage`'s tree (see `ThemeRenderOptions.comments`'s
+  // own comment for why that also keeps the L16 fidelity test true).
+  const commentsOptions = options.comments
+  let commentsHtml = ''
+  if (commentsOptions !== undefined) {
+    const data = await commentsOptions.forEntry(collection.name, entry.id, entry.locale)
+    commentsHtml = serialize(
+      renderCommentsSection({
+        comments: data.items,
+        open: data.open,
+        action: commentsOptions.action,
+        collection: collection.name,
+        entryId: entry.id,
+        locale: entry.locale,
+        pagePath: pathname,
+        ...(commentsOptions.honeypotField === undefined
+          ? {}
+          : { honeypotField: commentsOptions.honeypotField }),
+        renderedAt: Date.now(),
+      }),
+    )
+  }
+
   // The head is `@cogenta/seo`'s, not this file's: title, description,
   // canonical, hreflang, Open Graph, Twitter Card and JSON-LD, all derived
   // from the real entry and the real collection (L10 task 1). Nothing here
@@ -924,6 +974,7 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 ${adminBar}
 <header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
 ${bodyHtml}
+${commentsHtml}
 <footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}</div></footer>
 ${analyticsBeaconTag(pathname, options.analyticsBeacon)}
 </body>

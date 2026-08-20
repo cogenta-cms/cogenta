@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
+import { createCommentStore, ensureCommentsTables } from '@cogenta/comments'
 import {
   createDatabaseRegistry,
   createLogger,
@@ -91,9 +92,18 @@ export async function runImport(options: ImportOptions): Promise<number> {
   }
 
   try {
-    const report = await withSite(options, logger, (db, storage) =>
-      importWordPress(xml, { db, storage }),
-    )
+    const report = await withSite(options, logger, async (db, storage) => {
+      // Contract F (ADR-0025): the CLI always passes a real comment store —
+      // `cogenta import wordpress` is the one caller of `importWordPress`
+      // this project ships, and a WordPress export with comments deserves
+      // to keep them with real status and threading, not the legacy
+      // synthetic collection (`ImportWordPressOptions.comments`'s own
+      // comment explains the fallback that exists only for a caller that
+      // has not wired this yet).
+      await ensureCommentsTables(db)
+      const comments = createCommentStore({ db })
+      return importWordPress(xml, { db, storage, comments })
+    })
 
     out.heading('WordPress import')
     out.line(formatConversionReport(report))

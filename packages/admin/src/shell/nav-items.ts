@@ -69,7 +69,12 @@ export type NavCondition =
   | { readonly kind: 'commerceActiveOrAdmin' }
 
 /** Field names of `@cogenta/api`'s `ShellStatus` — kept identical so a badge item can index it directly. */
-export type NavBadgeKey = 'trash' | 'commerceOrdersPending' | 'marketplaceUpdates' | 'reviewPending'
+export type NavBadgeKey =
+  | 'trash'
+  | 'commerceOrdersPending'
+  | 'marketplaceUpdates'
+  | 'reviewPending'
+  | 'commentsPending'
 
 export interface NavItem {
   readonly to: string
@@ -117,6 +122,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'taxonomiesPresent' },
   },
   { to: '/menus', labelKey: 'nav.menus', group: 'content', visibleWhen: { kind: 'always' } },
+  {
+    to: '/comments',
+    labelKey: 'nav.comments',
+    group: 'content',
+    // The real gate is `comments.read` (ADR-0025), checked server-side by
+    // `CommentsRouter` itself — `anyRole` here only decides whether the item
+    // shows at all, the same courtesy `assistant` already uses, since
+    // `NavCondition` has no member for a domain permission outside contract A.
+    visibleWhen: { kind: 'anyRole' },
+    badge: 'commentsPending',
+  },
   {
     to: '/translations',
     labelKey: 'nav.translations',

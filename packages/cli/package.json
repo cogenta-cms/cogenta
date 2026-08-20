@@ -41,6 +41,7 @@
     "@cogenta/auth": "workspace:*",
     "@cogenta/blocks": "workspace:*",
     "@cogenta/channels": "workspace:*",
+    "@cogenta/comments": "workspace:*",
     "@cogenta/commerce": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/export": "workspace:*",

@@ -137,6 +137,51 @@
     "slashMenuLabel": "Insérer",
     "slashMenuEmpty": "Aucune insertion correspondante."
   },
+  "comments": {
+    "heading": "Commentaires",
+    "description": "Les commentaires de visiteurs en attente de modération, et ceux déjà traités.",
+    "signedOut": "Connectez-vous pour voir la file de modération.",
+    "loadError": "La file de modération n'a pas pu être chargée.",
+    "actionError": "Cette action n'a pas pu être effectuée.",
+    "searchLabel": "Recherche",
+    "searchPlaceholder": "Auteur, e-mail ou contenu…",
+    "selectAll": "Tout sélectionner",
+    "selectOne": "Sélectionner le commentaire de {{author}}",
+    "selectedCount_one": "{{count}} sélectionné",
+    "selectedCount_other": "{{count}} sélectionnés",
+    "empty": "Aucun commentaire ici.",
+    "total_one": "{{count}} commentaire",
+    "total_other": "{{count}} commentaires",
+    "flagged": "Signalé par l'assistant — {{severity}}",
+    "purgeConfirm": "Supprimer définitivement ce commentaire ? Cette action est irréversible.",
+    "replyLabel": "Réponse",
+    "replySubmit": "Publier la réponse",
+    "status": {
+      "pending": "En attente",
+      "approved": "Approuvés",
+      "spam": "Indésirables",
+      "trash": "Corbeille"
+    },
+    "bulkAction": {
+      "approved": "Approuver",
+      "spam": "Marquer indésirable",
+      "trash": "Mettre à la corbeille"
+    },
+    "action": {
+      "approve": "Approuver",
+      "spam": "Indésirable",
+      "trash": "Corbeille",
+      "reply": "Répondre",
+      "purge": "Supprimer définitivement"
+    },
+    "column": {
+      "excerpt": "Commentaire",
+      "author": "Auteur",
+      "target": "Sur",
+      "date": "Date",
+      "actions": "Actions"
+    }
+  },
   "richTextAssist": {
     "button": "Assistant",
     "needsSelection": "Sélectionnez d'abord du texte.",
@@ -161,6 +206,7 @@
     "import": "Import",
     "taxonomies": "Taxonomies",
     "menus": "Menus",
+    "comments": "Commentaires",
     "commerceProducts": "Produits",
     "commerceOrders": "Commandes",
     "commerceCoupons": "Coupons",
@@ -531,6 +577,10 @@
     "autosaveRestore": "Les restaurer",
     "autosaveDiscard": "Les abandonner",
     "statusLabel": "Statut :",
+    "commentsLabel": "Commentaires",
+    "commentsInherit": "Utiliser le réglage de la collection/du site",
+    "commentsOn": "Toujours autoriser",
+    "commentsOff": "Toujours interdire",
     "status": {
       "draft": "Brouillon",
       "scheduled": "Programmé",
@@ -1390,7 +1440,7 @@
     "notFoundPathNote": "Reste volontairement dans le fichier de configuration — une page 404 personnalisée voyage avec le déploiement qui l'a écrite, comme le ferait un changement de route.",
     "mediaFormatsLabel": "Variantes d'image produites",
     "mediaFormatsValue": "WebP, à un ensemble fixe de largeurs — intégré au pipeline d'images, non modifiable ici.",
-    "discussionPlaceholder": "Sans objet pour l'instant : Cogenta n'a pas de système de commentaires aujourd'hui (voir fiche 15). Cet onglet est un emplacement réservé.",
+    "discussionNote": "Ce sont les réglages par défaut du site. Une collection ou une entrée peut toujours désactiver les commentaires, ou exiger la modération, depuis les réglages de cette collection ou la barre latérale de l'éditeur.",
     "noCookieByDefault": "Cogenta ne pose aucun cookie par défaut. N'activez ceci que si ce site en ajoute un (un widget intégré, un script de mesure d'audience) — un bandeau dont personne n'a besoin est pire que son absence.",
     "advancedLink": "Sécurité, webhooks et infrastructure (lecture seule)",
     "advancedNote": "Tout y vient de cogenta.config.mjs. Modifiez le fichier et redémarrez le serveur pour changer ces réglages.",
@@ -1415,6 +1465,29 @@
           "help": "Le chemin servi à /, ex. /home. Laisser vide pour garder le défaut (/home)."
         },
         "postsPerPage": { "label": "Éléments par page", "help": "" }
+      },
+      "discussion": {
+        "enabled": {
+          "label": "Autoriser les commentaires",
+          "help": "Réglage par défaut du site. Une collection ou une entrée peut toujours le désactiver."
+        },
+        "moderationRequired": {
+          "label": "Les commentaires doivent être approuvés avant affichage",
+          "help": ""
+        },
+        "allowAnonymous": {
+          "label": "Autoriser les commentaires de visiteurs sans compte",
+          "help": ""
+        },
+        "autoCloseDays": {
+          "label": "Fermer les commentaires après (jours)",
+          "help": "0 désactive la fermeture automatique."
+        },
+        "maxNestingDepth": { "label": "Profondeur maximale des réponses", "help": "" },
+        "notifyEmail": {
+          "label": "Notifier cette adresse des nouveaux commentaires",
+          "help": "Laisser vide pour désactiver la notification."
+        }
       },
       "media": {
         "maxUploadSizeMb": { "label": "Taille maximale de téléversement (Mo)", "help": "" }

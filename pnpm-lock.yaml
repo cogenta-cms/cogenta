@@ -465,6 +465,9 @@ importers:
       '@cogenta/channels':
         specifier: workspace:*
         version: link:../channels
+      '@cogenta/comments':
+        specifier: workspace:*
+        version: link:../comments
       '@cogenta/commerce':
         specifier: workspace:*
         version: link:../commerce
@@ -499,6 +502,19 @@ importers:
       '@cogenta/admin':
         specifier: workspace:*
         version: link:../admin
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@22.20.1)(jsdom@27.4.0)(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/comments:
+    dependencies:
+      '@cogenta/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -642,6 +658,9 @@ importers:
       '@cogenta/blocks':
         specifier: workspace:*
         version: link:../blocks
+      '@cogenta/comments':
+        specifier: workspace:*
+        version: link:../comments
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

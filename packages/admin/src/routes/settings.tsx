@@ -175,7 +175,9 @@ export function SettingsRoute(): JSX.Element {
             onSave={save}
           />
         )}
-        {tab === 'discussion' && <DiscussionTab />}
+        {tab === 'discussion' && (
+          <DiscussionTab settings={byTab.get('discussion') ?? []} onSave={save} />
+        )}
         {tab === 'media' && <MediaTab settings={byTab.get('media') ?? []} onSave={save} />}
         {tab === 'privacy' && <PrivacyTab settings={byTab.get('privacy') ?? []} onSave={save} />}
         {tab === 'advanced' && <AdvancedTab />}
@@ -337,12 +339,35 @@ function MediaTab({
   )
 }
 
-function DiscussionTab(): JSX.Element {
+/**
+ * Fiche 15 task 5 — the site-wide `discussion.*` defaults (ADR-0025). Every
+ * comment-enabled site starts here; a collection or a single entry can then
+ * override `enabled` (and a collection can override `moderationRequired`)
+ * from `/collections/:name` and the entry editor sidebar respectively —
+ * neither lives in this registry (see `SITE_SETTINGS_REGISTRY`'s own comment
+ * on the `discussion` group for why), so this tab only ever shows the site
+ * floor the rest of the inheritance chain falls back to.
+ */
+function DiscussionTab({
+  settings,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
   const { t } = useTranslation()
   return (
     <Card>
-      <CardBody>
-        <p className="m-0 text-sm text-muted-foreground">{t('settings.discussionPlaceholder')}</p>
+      <CardBody className="flex flex-col gap-4">
+        {settings.map((setting) => (
+          <SiteSettingsField
+            key={setting.key}
+            setting={setting}
+            canEdit
+            onSave={(value) => onSave(setting.key, value, null)}
+          />
+        ))}
+        <p className="m-0 text-xs text-muted-foreground">{t('settings.discussionNote')}</p>
       </CardBody>
     </Card>
   )

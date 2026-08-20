@@ -1,7 +1,7 @@
 import type { AccessContext, ContentGateway, SearchRouter } from '@cogenta/api'
 import { buildPath, type CollectionDefinition, type SearchHit } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
-import { STYLESHEET_PATH } from './theme-render.js'
+import { type PageChromeMenus, renderPageChrome } from './theme-render.js'
 
 /**
  * `GET /search?q=…` — the public half of L10 task 3.
@@ -35,6 +35,8 @@ export interface SearchPageOptions {
   }
   /** The joined skin+theme stylesheet `cogenta serve` serves at `STYLESHEET_PATH` (`theme-render.ts`'s `joinStyles`). `null` when neither could be loaded — served unstyled rather than refused. */
   readonly styles: string | null
+  /** Same menu wiring the rest of the public site uses (`theme-render.ts`). Absent renders an empty header/footer nav. */
+  readonly menus?: PageChromeMenus
 }
 
 interface ResolvedHit {
@@ -155,22 +157,26 @@ export async function renderSearchPage(
         ? ''
         : resultList(results)
 
-  return `<!doctype html>
-<html lang="${escapeHtmlAttribute(options.site.defaultLocale)}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${heading} — ${escapeHtmlText(options.site.name)}</title>
-<meta name="robots" content="noindex, follow" />
-${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
-</head>
-<body>
-<main class="cg-main" id="cg-main">
+  // The real site chrome (`renderPageChrome`, `theme-render.ts`) — the same
+  // skip link, header and footer every collection page renders, not a
+  // second, thinner `<html>` shell of this file's own (L20 audit, points
+  // 8-9): the stylesheet was always linked here, but the markup its
+  // selectors (`.cg-site-header`, the skip link, …) target was never on the
+  // page, which is what made it look unstyled.
+  return renderPageChrome(
+    {
+      site: options.site,
+      locale: options.site.defaultLocale,
+      styles: options.styles,
+      headHtml: `<title>${heading} — ${escapeHtmlText(options.site.name)}</title>
+<meta name="robots" content="noindex, follow" />`,
+      bodyHtml: `<main class="cg-main" id="cg-main">
 <h1 class="cg-page__title">${heading}</h1>
 ${searchForm(trimmed)}
 ${main}
-</main>
-</body>
-</html>
-`
+</main>`,
+      ...(options.menus === undefined ? {} : { menus: options.menus }),
+    },
+    context,
+  )
 }

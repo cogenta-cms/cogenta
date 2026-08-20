@@ -232,12 +232,24 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
       expect(emptyHtml).toContain('role="search"')
       expect(emptyHtml).toContain('name="q"')
 
+      // L20 audit, points 8-9: `/search` used to build its own thin `<html>`
+      // shell, carrying the stylesheet link but none of the markup the
+      // theme's own selectors target — the page loaded the stylesheet and
+      // still rendered unstyled. It now goes through the same
+      // `renderPageChrome` every collection page does.
+      expect(emptyHtml).toContain('class="cg-skip-link"')
+      expect(emptyHtml).toContain('name="color-scheme"')
+      expect(emptyHtml).toContain('class="cg-site-header"')
+      expect(emptyHtml).toContain('class="cg-site-footer"')
+      expect(emptyHtml).toContain('href="/_cogenta/styles.css"')
+
       const results = await fetch(`${server.base}/search?q=cathedral`)
       const html = await results.text()
       expect(html).toContain('href="/cathedral-windows"')
       expect(html).toContain('Cathedral windows')
       // A search results page is exactly what a crawler must not index.
       expect(html).toContain('<meta name="robots" content="noindex, follow" />')
+      expect(html).toContain('class="cg-site-header"')
     } finally {
       await server.stop()
     }

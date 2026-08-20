@@ -105,6 +105,17 @@ describe('cogenta serve — /api/forms and /forms/{name}', () => {
       expect(html).toContain('name="email"')
       expect(html).toContain('name="_gotcha"')
       expect(html).toContain('name="_ts"')
+
+      // L20 audit, points 8-9: `/forms/{name}` used to build its own thin
+      // `<html>` shell, carrying the stylesheet link but none of the markup
+      // the theme's own selectors target — the page loaded the stylesheet
+      // and still rendered unstyled. It now goes through the same
+      // `renderPageChrome` every collection page does.
+      expect(html).toContain('class="cg-skip-link"')
+      expect(html).toContain('name="color-scheme"')
+      expect(html).toContain('class="cg-site-header"')
+      expect(html).toContain('class="cg-site-footer"')
+      expect(html).toContain('href="/_cogenta/styles.css"')
     } finally {
       await server.stop()
     }

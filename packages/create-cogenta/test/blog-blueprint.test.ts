@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
-import { buildPath, createContentStore, matchPath } from '@cogenta/schema'
+import { buildPath, createContentStore, createSearchIndex, matchPath } from '@cogenta/schema'
 import {
   type FetchedEntries,
   type HtmlNode,
@@ -130,6 +130,42 @@ describe('scaffoldSite — blog blueprint', () => {
         'collectionList',
         'featureGrid',
       ])
+    } finally {
+      await selection.dispose()
+    }
+  })
+
+  // L20 audit, point 2: `seedBlogDemoContent` writes straight through
+  // `createContentStore`, never through the `withSearchIndexing`-wrapped
+  // store `cogenta serve` builds at startup — so a freshly scaffolded
+  // blueprint's demo posts were never indexed, and `/search` for a word
+  // plainly on the page found nothing. This proves the physical index
+  // `createSearchIndex` opens against the scaffolded database already has
+  // the seeded posts in it, without starting a server at all.
+  it('indexes the seeded demo posts for search, not only inserts them', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
+    dirs.push(targetDir)
+
+    await scaffoldSite({
+      targetDir,
+      siteName: 'My Blog',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'blog',
+    })
+
+    const logger = createLogger({ level: 'silent' })
+    const selection = await createDatabaseRegistry({ logger }).select({
+      driver: 'sqlite',
+      url: join(targetDir, '.cogenta', 'site.db'),
+    })
+    try {
+      const index = await createSearchIndex({ db: selection.instance })
+      const results = await index.search({ text: 'Cogenta', locale: 'en' })
+      expect(results.hits.length).toBeGreaterThan(0)
+      expect(results.hits.some((hit) => hit.collection === 'post')).toBe(true)
     } finally {
       await selection.dispose()
     }

@@ -3163,11 +3163,12 @@ export function createRequestListener(
             site: site.site,
             styles: await site.resolveStyles(),
             now: Date.now,
+            menus: { menuRouter: site.menuRouter },
           }
           const html =
             definition === null
-              ? renderFormNotFoundPage(formPageOptions)
-              : renderFormPage(
+              ? await renderFormNotFoundPage(formPageOptions, context)
+              : await renderFormPage(
                   definition,
                   {
                     errorMessage:
@@ -3179,6 +3180,7 @@ export function createRequestListener(
                         : {},
                   },
                   formPageOptions,
+                  context,
                 )
           res.writeHead(definition === null ? 404 : response.status, {
             'content-type': 'text/html; charset=utf-8',
@@ -3735,6 +3737,7 @@ export function createRequestListener(
             collections: site.collections,
             site: site.site,
             styles: await site.resolveStyles(),
+            menus: { menuRouter: site.menuRouter },
           },
           context,
         )
@@ -3758,14 +3761,16 @@ export function createRequestListener(
             site: site.site,
             styles: await site.resolveStyles(),
             now: Date.now,
+            menus: { menuRouter: site.menuRouter },
           }
           const html =
             definition === null || !definition.active
-              ? renderFormNotFoundPage(formPageOptions)
-              : renderFormPage(
+              ? await renderFormNotFoundPage(formPageOptions, context)
+              : await renderFormPage(
                   definition,
                   { submitted: url.searchParams.get('submitted') === '1' },
                   formPageOptions,
+                  context,
                 )
           res.writeHead(definition === null || !definition.active ? 404 : 200, {
             'content-type': 'text/html; charset=utf-8',

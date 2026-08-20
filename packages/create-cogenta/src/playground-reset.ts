@@ -1,6 +1,12 @@
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { CogentaError, type DatabaseHandle } from '@cogenta/core'
-import { createSchemaTables, dropSchemaTables } from '@cogenta/schema'
+import {
+  createContentStore,
+  createSchemaTables,
+  createSearchIndex,
+  dropSchemaTables,
+  reindexAll,
+} from '@cogenta/schema'
 import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 
 export interface ResetPlaygroundDataOptions {
@@ -49,5 +55,18 @@ export async function resetPlaygroundData(options: ResetPlaygroundDataOptions): 
       ? null
       : ((await createUserStore(options.db).byEmail(options.adminEmail))?.id ?? null)
 
-  await pack.seedDemoContent(options.db, options.defaultLocale ?? 'en', adminId)
+  const defaultLocale = options.defaultLocale ?? 'en'
+  await pack.seedDemoContent(options.db, defaultLocale, adminId)
+
+  // Same gap as the installer's own seed path (L20 audit, point 2): the pack
+  // writes straight through `createContentStore`, never through the
+  // `withSearchIndexing`-wrapped store `cogenta serve` builds at startup, so
+  // a reset playground's search index would otherwise still describe
+  // whatever content existed before the reset — or nothing at all, on a
+  // brand-new database.
+  const searchIndex = await createSearchIndex({ db: options.db })
+  for (const collection of pack.collections) {
+    const store = createContentStore({ db: options.db, collection, defaultLocale })
+    await reindexAll(store, { collection, index: searchIndex })
+  }
 }

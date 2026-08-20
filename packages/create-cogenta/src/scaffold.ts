@@ -16,6 +16,8 @@ import {
   type CollectionDefinition,
   createContentStore,
   createSchemaTables,
+  createSearchIndex,
+  reindexAll,
   validateCollectionSet,
 } from '@cogenta/schema'
 import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
@@ -341,6 +343,26 @@ export async function scaffoldSite(
         adminId: admin?.id ?? null,
         ...(answers.llm === undefined ? {} : { model: answers.llm.model }),
       })
+
+      // Both seed paths above write straight through `createContentStore`,
+      // never through the `withSearchIndexing`-wrapped store `cogenta serve`
+      // builds at startup (L20 audit, point 2) — so a freshly scaffolded
+      // site's demo content was never in the search index, and `/search`
+      // found nothing for words that were plainly on the page. Reindexing
+      // here, against the same physical index `createSearchIndex` creates on
+      // first use, means the index and the content it describes are never
+      // out of step from the moment a site exists.
+      if (merged.all.length > 0) {
+        const searchIndex = await createSearchIndex({ db: selection.instance })
+        for (const collection of merged.all) {
+          const store = createContentStore({
+            db: selection.instance,
+            collection,
+            defaultLocale: answers.defaultLocale,
+          })
+          await reindexAll(store, { collection, index: searchIndex })
+        }
+      }
     } finally {
       await selection.dispose()
     }

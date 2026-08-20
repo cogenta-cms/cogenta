@@ -37,6 +37,7 @@ import { previewPermalink } from '../lib/permalink.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { SeoPanel } from '../seo/seo-panel.js'
 import { Button, Card, CardBody, Input, Label, Modal, Notice, Select } from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
@@ -607,6 +608,24 @@ export function EntryEditRoute(): JSX.Element {
   const dirty = canWrite && !sameSnapshot({ values, blocks }, baseline)
   const blocker = useDirtyGuard(dirty)
 
+  /**
+   * The conventional SEO override fields (fiche 13, Task 0 § decision (a)) —
+   * ordinary fields a collection either declares or does not. When it does,
+   * `SeoPanel` below is their one editor, so `EntryForm` skips them rather
+   * than rendering them a second time among the collection's other fields —
+   * the exact same `skipFields` mechanism the visual builder already uses
+   * for the block zone it composes itself.
+   */
+  const SEO_FIELD_NAMES = ['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex', 'seoCanonical']
+  const seoFieldNames =
+    collection?.fields
+      .filter((field) => SEO_FIELD_NAMES.includes(field.name))
+      .map((field) => field.name) ?? []
+  const skipFields = new Set<string>([
+    ...(builderZone === null ? [] : [builderZone]),
+    ...seoFieldNames,
+  ])
+
   // Declared before the early returns below, because a hook cannot be
   // conditional. `enabled` is what actually turns it off while the entry is
   // still loading or the viewer may not write.
@@ -1037,7 +1056,7 @@ export function EntryEditRoute(): JSX.Element {
               onBlocksChange={setBlockZone}
               disabled={!canWrite}
               errors={errors}
-              {...(builderZone === null ? {} : { skipFields: new Set([builderZone]) })}
+              {...(skipFields.size === 0 ? {} : { skipFields })}
             />
 
             {builderZone !== null && token !== null && id !== undefined && (
@@ -1081,6 +1100,22 @@ export function EntryEditRoute(): JSX.Element {
           </div>
         </div>
       </form>
+
+      {/* Fiche 13 (SEO éditorial). Renders nothing at all when the collection
+          declares none of the conventional SEO fields (Task 0 § decision
+          (a)) — a self-contained component so this editor only ever composes
+          it, never re-implements it. */}
+      {canWrite && token !== null && seoFieldNames.length > 0 && (
+        <SeoPanel
+          token={token}
+          collection={collection}
+          entryId={id ?? null}
+          status={status}
+          values={values}
+          entryText={entryText}
+          onChange={setFieldValue}
+        />
+      )}
 
       {/* Below the fold, collapsed by default (task 1): none of this is
           needed to see or edit the entry's own content. */}

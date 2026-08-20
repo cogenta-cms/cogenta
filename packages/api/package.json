@@ -38,6 +38,7 @@
     "@cogenta/core": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/blocks": "workspace:*",
+    "@cogenta/seo": "workspace:*",
     "@simplewebauthn/server": "catalog:",
     "graphql": "catalog:",
     "zod": "catalog:"

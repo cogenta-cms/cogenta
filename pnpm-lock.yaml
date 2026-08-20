@@ -356,6 +356,9 @@ importers:
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema
+      '@cogenta/seo':
+        specifier: workspace:*
+        version: link:../seo
       '@simplewebauthn/server':
         specifier: 'catalog:'
         version: 13.3.2

@@ -23,6 +23,7 @@ export function ColorField({
   error,
 }: FieldProps<string>): JSX.Element {
   const { t } = useTranslation()
+  const pickerValue = /^#[0-9a-fA-F]{6}$/u.test(value) ? value : '#000000'
   const swatchValue = /^#([0-9a-fA-F]{3}){1,2}$/u.test(value) ? value : 'transparent'
   const invalid = error !== undefined && error !== null
 

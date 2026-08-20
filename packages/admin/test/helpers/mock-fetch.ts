@@ -2204,6 +2204,43 @@ export function installMockFetch(
         return json(200, { data: hits, page: { hasMore: false, nextOffset: null } })
       }
 
+      // The translation dashboard (fiche 10 task 1): a collection-scoped
+      // action, `-` where an entry id would be — see `router.ts`'s own doc
+      // comment for why that segment can never collide with a real id.
+      const matrixMatch = /\/api\/content\/([^/?]+)\/-\/translation-matrix(?:\?.*)?$/u.exec(url)
+      if (matrixMatch !== null && method === 'GET') {
+        const [, collection] = matrixMatch
+        if (collection === 'article') {
+          const roots = MOCK_ENTRIES.filter((entry) => entry.translationOf === null)
+          const items = roots.map((root) => ({
+            root,
+            cells: {
+              [root.locale]: {
+                id: root.id,
+                status: root.status,
+                updatedAt: root.updatedAt,
+                obsolete: false,
+              },
+              ...(root.id === 'entry-1'
+                ? {
+                    fr: {
+                      id: 'entry-1-fr',
+                      status: 'draft',
+                      updatedAt: '2026-01-15T00:00:00.000Z',
+                      // Deliberately true: this fixture is what proves the
+                      // dashboard renders task 2's signal as a fact, not
+                      // just as a state.
+                      obsolete: true,
+                    },
+                  }
+                : {}),
+            },
+          }))
+          return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+        }
+        return json(200, { data: [], page: { hasMore: false, nextCursor: null } })
+      }
+
       const versionMatch =
         /\/api\/content\/([^/?]+)\/([^/?]+)\/(history|diff|restore|preview|translations|publish|unpublish|duplicate)(?:\?.*)?$/u.exec(
           url,
@@ -3042,10 +3079,12 @@ export function installMockFetch(
           }
 
           const statusFilter = parsed.searchParams.get('status')
-          const items =
-            statusFilter === null
-              ? MOCK_ENTRIES
-              : MOCK_ENTRIES.filter((entry) => entry.status === statusFilter)
+          const localeFilter = parsed.searchParams.get('locale')
+          const items = MOCK_ENTRIES.filter(
+            (entry) =>
+              (statusFilter === null || entry.status === statusFilter) &&
+              (localeFilter === null || entry.locale === localeFilter),
+          )
           return json(200, { data: items, page: { hasMore: false, nextCursor: null }, ...counts })
         }
 

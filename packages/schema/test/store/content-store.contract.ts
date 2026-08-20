@@ -1101,6 +1101,34 @@ export function runContentStoreContract(
         expect(members.find((entry) => entry.locale === 'en')?.translationOf).toBe(source)
       })
 
+      it('batches the translations of many roots in one call (fiche 10 task 1)', async () => {
+        const { source: sourceA, translation: translationA } = await family()
+        const sourceB = await articles.create({
+          values: { title: 'Autre', slug: 'autre' },
+          locale: 'fr',
+          status: 'published',
+        })
+        const translationB = await articles.create({
+          values: { title: 'Other', slug: 'other' },
+          locale: 'en',
+          translationOf: sourceB.id,
+        })
+        // A lone root with no translation must contribute nothing, not an
+        // empty-but-present bucket.
+        const untranslated = await articles.create({
+          values: { title: 'Seul', slug: 'seul' },
+          locale: 'fr',
+        })
+
+        const found = await articles.translationsOfMany([sourceA, sourceB.id, untranslated.id])
+        expect(found.map((entry) => entry.id).sort()).toEqual(
+          [translationA, translationB.id].sort(),
+        )
+        expect(found.every((entry) => entry.translationOf !== null)).toBe(true)
+
+        expect(await articles.translationsOfMany([])).toEqual([])
+      })
+
       it('publishes one language while the other stays a draft', async () => {
         const { source, translation } = await family()
 

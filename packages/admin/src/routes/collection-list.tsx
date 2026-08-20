@@ -444,20 +444,30 @@ export function CollectionListRoute(): JSX.Element {
    */
   function exportCsv(): void {
     if (collection === undefined) return
+    const showLocale = siteLocales.length > 1
     const header = [
       t('collectionList.idColumn'),
       t('collectionList.titleColumn'),
       t('collectionList.statusColumn'),
+      ...(showLocale ? [t('collectionList.localeColumn')] : []),
       t('collectionList.createdColumn'),
       t('collectionList.updatedColumn'),
     ]
     const rows =
       hits !== null
-        ? hits.map((hit) => [hit.id, hit.title === '' ? hit.id : hit.title, hit.status, '', ''])
+        ? hits.map((hit) => [
+            hit.id,
+            hit.title === '' ? hit.id : hit.title,
+            hit.status,
+            ...(showLocale ? [''] : []),
+            '',
+            '',
+          ])
         : items.map((entry) => [
             entry.id,
             titleOf(entry, collection),
             entry.status,
+            ...(showLocale ? [entry.locale] : []),
             entry.createdAt,
             entry.updatedAt,
           ])
@@ -930,6 +940,9 @@ export function CollectionListRoute(): JSX.Element {
                     onSort={toggleSort}
                   />
                   <TableHeader>{t('collectionList.statusColumn')}</TableHeader>
+                  {siteLocales.length > 1 && (
+                    <TableHeader>{t('collectionList.localeColumn')}</TableHeader>
+                  )}
                   <SortableHeader
                     field="updatedAt"
                     label={t('collectionList.updatedColumn')}
@@ -969,6 +982,7 @@ export function CollectionListRoute(): JSX.Element {
                       </TableCell>
                       <TableCell>{entry.id}</TableCell>
                       <TableCell>{entry.status}</TableCell>
+                      {siteLocales.length > 1 && <TableCell>{entry.locale}</TableCell>}
                       <TableCell title={entry.updatedAt}>
                         {formatDateTime(entry.updatedAt)}
                       </TableCell>
@@ -1040,7 +1054,15 @@ export function CollectionListRoute(): JSX.Element {
                   )
                 })}
                 {items.length === 0 && (
-                  <TableEmpty colSpan={(canDelete ? 1 : 0) + 4 + activeExtraColumns.length + 1}>
+                  <TableEmpty
+                    colSpan={
+                      (canDelete ? 1 : 0) +
+                      4 +
+                      (siteLocales.length > 1 ? 1 : 0) +
+                      activeExtraColumns.length +
+                      1
+                    }
+                  >
                     {t('collectionList.noContent')}
                   </TableEmpty>
                 )}

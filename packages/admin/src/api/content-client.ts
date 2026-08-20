@@ -466,6 +466,52 @@ export function unpublishEntry(
   )
 }
 
+/** One cell of the translation dashboard's matrix (fiche 10 task 1) — absent when the key for a locale is missing. */
+export interface TranslationMatrixCell {
+  readonly id: string
+  readonly status: string
+  readonly updatedAt: string
+  /** Task 2: the source's `updatedAt` is later than this translation's. Always `false` on the root's own cell. */
+  readonly obsolete: boolean
+}
+
+/** One row of the matrix: a root entry (`translationOf: null`) and the state of its family, keyed by locale. */
+export interface TranslationMatrixEntry {
+  readonly root: Entry
+  readonly cells: Readonly<Record<string, TranslationMatrixCell>>
+}
+
+export interface TranslationMatrixPage {
+  readonly items: readonly TranslationMatrixEntry[]
+  readonly hasMore: boolean
+  readonly nextCursor: string | null
+}
+
+/**
+ * The translation dashboard's data: one row per root entry, every locale's
+ * state in one round trip — `GET /{collection}/-/translation-matrix`, a
+ * single server-side query and join (fiche 10's own "piège connu": never
+ * build this with one `getTranslations` call per row).
+ */
+export async function getTranslationMatrix(
+  token: string,
+  collection: string,
+  options: { readonly cursor?: string; readonly limit?: number } = {},
+): Promise<TranslationMatrixPage> {
+  const params = new URLSearchParams()
+  if (options.cursor !== undefined) params.set('after', options.cursor)
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  const query = params.toString()
+  const body = await requestBody<{
+    readonly data: readonly TranslationMatrixEntry[]
+    readonly page: { readonly hasMore: boolean; readonly nextCursor: string | null }
+  }>(
+    `/api/content/${encodeURIComponent(collection)}/-/translation-matrix${query === '' ? '' : `?${query}`}`,
+    { headers: authHeader(token) },
+  )
+  return { items: body.data, hasMore: body.page.hasMore, nextCursor: body.page.nextCursor }
+}
+
 /** Copies the entry's working state into a new draft — never the published face. */
 export function duplicateEntry(
   token: string,

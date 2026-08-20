@@ -47,6 +47,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   POST   /{collection}/{id}/restore      restore a version
  *   POST   /{collection}/{id}/preview      mint a preview link
  *   GET    /{collection}/{id}/translations the entry's translation family (ADR-0014)
+ *   GET    /{collection}/-/translation-matrix  translation dashboard (fiche 10)
  *
  * A GET on `/{collection}/{id}` or `/-/by-path` also accepts `?preview=` —
  * a token minted by the route above, unlocking exactly the one entry it
@@ -181,6 +182,12 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
 
     service.collection(name)
 
+    // A collection-scoped action rather than an entry-scoped one: `-` is
+    // reserved (no entry id is ever exactly that, ids are uuidv7), the same
+    // trick `/-/by-path` already uses one level up, so this cannot collide
+    // with a real `/{collection}/{id}`.
+    if (id === RESERVED_SEGMENT) return collectionRoute(request, context, method, name, action)
+
     if (id === undefined) {
       if (method === 'GET') {
         const query = parseListQuery(request.query, service.collection(name), service.limits)
@@ -290,6 +297,32 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         params: resolution.params,
       },
       meta: meta([resolution.entry], [resolution.collection]),
+    })
+  }
+
+  /**
+   * A collection-scoped action — no entry id, `-` in its place (fiche 10
+   * task 1). Only `translation-matrix` today.
+   */
+  async function collectionRoute(
+    request: RestRequest,
+    context: AccessContext,
+    method: string,
+    name: string,
+    action: string | undefined,
+  ): Promise<RestResponse> {
+    if (action !== 'translation-matrix') throw noRoute()
+    if (method !== 'GET') return methodNotAllowed(['GET'])
+
+    const query = parseListQuery(request.query, service.collection(name), service.limits)
+    const page = await service.translationMatrix(context, name, {
+      limit: query.limit,
+      sort: query.sort,
+      ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+    })
+    return jsonResponse(200, {
+      data: page.items,
+      page: { hasMore: page.hasMore, nextCursor: page.nextCursor },
     })
   }
 

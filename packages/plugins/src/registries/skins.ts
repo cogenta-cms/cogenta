@@ -22,6 +22,16 @@ export interface SkinGalleryEntry {
   readonly rejectionCode: string | null
   readonly rejectionReason: string | null
   readonly submittedAt: string
+  /**
+   * The token JSON the submitter sent, parsed back out — the caller that
+   * turns this into an admin-facing gallery card (fiche 14 task 1) needs
+   * more than a name and a verdict to actually render a swatch or apply the
+   * skin. `null` on a rejected entry: a rejected skin never made it past
+   * `validateSkin`, so nothing here can be trusted to be a well-shaped token
+   * tree, and offering it anyway would invite a caller to render or apply a
+   * skin the gate has already refused.
+   */
+  readonly tokens: Record<string, unknown> | null
 }
 
 export interface SkinGallery {
@@ -45,18 +55,24 @@ interface SkinRow {
   rejection_code: string | null
   rejection_reason: string | null
   submitted_at: string
+  tokens_json?: string
 }
 
 function toEntry(row: SkinRow): SkinGalleryEntry {
+  const status = row.status === 'accepted' ? 'accepted' : 'rejected'
   return {
     id: row.id,
     submitterId: row.submitter_id,
     displayName: row.display_name,
     description: row.description,
-    status: row.status === 'accepted' ? 'accepted' : 'rejected',
+    status,
     rejectionCode: row.rejection_code,
     rejectionReason: row.rejection_reason,
     submittedAt: row.submitted_at,
+    tokens:
+      status === 'accepted' && typeof row.tokens_json === 'string'
+        ? (JSON.parse(row.tokens_json) as Record<string, unknown>)
+        : null,
   }
 }
 
@@ -94,20 +110,21 @@ export function createSkinGallery(db: DatabaseHandle, now: () => number = Date.n
         status,
         rejectionCode,
         rejectionReason,
+        tokens: status === 'accepted' ? (input.tokens as Record<string, unknown>) : null,
         submittedAt,
       }
     },
 
     async listAccepted() {
       const result = await db.query<SkinRow>(sql`
-        select id, submitter_id, display_name, description, status, rejection_code, rejection_reason, submitted_at
+        select id, submitter_id, display_name, description, tokens_json, status, rejection_code, rejection_reason, submitted_at
         from ${skins} where status = 'accepted' order by submitted_at asc`)
       return result.rows.map(toEntry)
     },
 
     async get(id) {
       const result = await db.query<SkinRow>(sql`
-        select id, submitter_id, display_name, description, status, rejection_code, rejection_reason, submitted_at
+        select id, submitter_id, display_name, description, tokens_json, status, rejection_code, rejection_reason, submitted_at
         from ${skins} where id = ${id}`)
       const row = result.rows[0]
       return row === undefined ? null : toEntry(row)

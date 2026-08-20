@@ -374,6 +374,25 @@ export function installMockFetch(
       }
       readonly anomalies?: readonly { readonly code: string; readonly message: string }[]
     }
+    /** What `GET /api/theme` answers with (fiche 14) — a fixed, valid file skin, no override, no gallery and no AI by default. */
+    readonly theme?: {
+      readonly fileTokens?: Record<string, unknown> | null
+      readonly aiAvailable?: boolean
+      readonly exportAvailable?: boolean
+      readonly skins?: readonly {
+        readonly id: string
+        readonly displayName: string
+        readonly description: string | null
+        readonly submittedAt: string
+        readonly tokens: Record<string, unknown> | null
+      }[]
+      readonly generateCandidates?: readonly {
+        readonly id: string
+        readonly label: string
+        readonly rationale: string
+        readonly tokens: Record<string, unknown>
+      }[]
+    }
     /**
      * What `GET /api/config-status` answers with (fiche 23 task 5) — `null`
      * by default, the same "caller never wired a mirror" shape the real
@@ -583,6 +602,64 @@ export function installMockFetch(
       updatedAt: '2025-01-01T00:00:00.000Z',
       updatedBy: 'user-1',
     })
+  }
+
+  // `/api/theme` (fiche 14), stateful per `installMockFetch()` call: an
+  // override saved by one request is what the next `GET` reports back —
+  // the same "the screen's own round trip is what is under test" reasoning
+  // `siteSettingsWrites` above already follows.
+  const DEFAULT_THEME_TOKENS: Record<string, unknown> = {
+    color: {
+      bg: '#ffffff',
+      fg: '#16181d',
+      accent: '#1d4ed8',
+      accentFg: '#ffffff',
+      muted: '#f1f2f4',
+      mutedFg: '#4b5057',
+      border: '#d7dade',
+    },
+    font: {
+      sans: 'ui-sans-serif, system-ui, sans-serif',
+      serif: 'ui-serif, Georgia, serif',
+      mono: 'ui-monospace, SFMono-Regular, monospace',
+      scale: 1.25,
+      baseSize: '1rem',
+    },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '2px', md: '6px', lg: '12px' },
+    motion: { duration: '200ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 2px rgba(0, 0, 0, 0.06)', md: '0 6px 20px rgba(0, 0, 0, 0.12)' },
+  }
+  let themeOverrides: {
+    tokenOverrides: Record<string, unknown> | null
+    additionalCss: string | null
+    logoMediaId: string | null
+    logoDarkMediaId: string | null
+    faviconMediaId: string | null
+    shareImageMediaId: string | null
+    updatedAt: string
+    updatedBy: string | null
+  } = {
+    tokenOverrides: null,
+    additionalCss: null,
+    logoMediaId: null,
+    logoDarkMediaId: null,
+    faviconMediaId: null,
+    shareImageMediaId: null,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    updatedBy: null,
+  }
+  function themeEffectiveTokens(): Record<string, unknown> {
+    const file = options.theme?.fileTokens ?? DEFAULT_THEME_TOKENS
+    if (themeOverrides.tokenOverrides === null) return file
+    const merged: Record<string, unknown> = { ...file }
+    for (const [group, patch] of Object.entries(themeOverrides.tokenOverrides)) {
+      merged[group] = {
+        ...((file as Record<string, unknown>)[group] as Record<string, unknown> | undefined),
+        ...(patch as Record<string, unknown>),
+      }
+    }
+    return merged
   }
 
   // L19 site plans, stateful per `installMockFetch()` call: decisions merge
@@ -4192,6 +4269,127 @@ export function installMockFetch(
             anomalies: diagnostics?.anomalies ?? [],
           },
         })
+      }
+
+      // `/api/theme` (fiche 14) — the appearance screen. Admin-only, every route.
+      if (url.includes('/api/theme')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+
+        if (url.includes('/api/theme/preview') && method === 'POST') {
+          const tokens = (body as { tokens?: Record<string, unknown> } | undefined)?.tokens
+          const accent =
+            (tokens?.['color'] as Record<string, unknown> | undefined)?.['accent'] ??
+            (themeEffectiveTokens()['color'] as Record<string, unknown> | undefined)?.['accent']
+          return json(200, {
+            data: {
+              html: `<!doctype html><html><head><style>:root{--cogenta-color-accent:${String(accent)}}</style></head><body>preview</body></html>`,
+            },
+          })
+        }
+
+        if (url.includes('/api/theme/generate') && method === 'POST') {
+          if (options.theme?.aiAvailable !== true) {
+            return json(501, {
+              error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
+            })
+          }
+          return json(200, { data: { candidates: options.theme.generateCandidates ?? [] } })
+        }
+
+        if (url.includes('/api/theme/export') && method === 'POST') {
+          if (options.theme?.exportAvailable !== true) {
+            return json(409, {
+              error: {
+                code: 'THEME_EXPORT_NOT_ALLOWED',
+                message: 'This instance cannot write theme.tokens.json.',
+              },
+            })
+          }
+          return json(200, { data: { exported: true } })
+        }
+
+        const skinApplyMatch = /\/api\/theme\/skins\/([^/]+)\/apply$/.exec(url)
+        if (skinApplyMatch !== null && method === 'POST') {
+          const skin = (options.theme?.skins ?? []).find((entry) => entry.id === skinApplyMatch[1])
+          if (skin === undefined || skin.tokens === null) {
+            return json(404, {
+              error: { code: 'THEME_SKIN_NOT_FOUND', message: 'No such skin.' },
+            })
+          }
+          themeOverrides = { ...themeOverrides, tokenOverrides: skin.tokens, updatedBy: user.id }
+          return json(200, { data: themeOverrides })
+        }
+
+        if (url.includes('/api/theme/skins') && method === 'GET') {
+          return json(200, { data: options.theme?.skins ?? [] })
+        }
+
+        if (url.includes('/api/theme/overrides') && method === 'PUT') {
+          const input = body as {
+            tokenOverrides?: Record<string, unknown> | null
+            additionalCss?: string | null
+            logoMediaId?: string | null
+            logoDarkMediaId?: string | null
+            faviconMediaId?: string | null
+            shareImageMediaId?: string | null
+          }
+          themeOverrides = {
+            tokenOverrides:
+              input.tokenOverrides === undefined
+                ? themeOverrides.tokenOverrides
+                : input.tokenOverrides,
+            additionalCss:
+              input.additionalCss === undefined
+                ? themeOverrides.additionalCss
+                : input.additionalCss,
+            logoMediaId:
+              input.logoMediaId === undefined ? themeOverrides.logoMediaId : input.logoMediaId,
+            logoDarkMediaId:
+              input.logoDarkMediaId === undefined
+                ? themeOverrides.logoDarkMediaId
+                : input.logoDarkMediaId,
+            faviconMediaId:
+              input.faviconMediaId === undefined
+                ? themeOverrides.faviconMediaId
+                : input.faviconMediaId,
+            shareImageMediaId:
+              input.shareImageMediaId === undefined
+                ? themeOverrides.shareImageMediaId
+                : input.shareImageMediaId,
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            updatedBy: user.id,
+          }
+          return json(200, { data: themeOverrides })
+        }
+
+        if (url.includes('/api/theme/overrides') && method === 'DELETE') {
+          themeOverrides = {
+            tokenOverrides: null,
+            additionalCss: null,
+            logoMediaId: null,
+            logoDarkMediaId: null,
+            faviconMediaId: null,
+            shareImageMediaId: null,
+            updatedAt: '2026-01-03T00:00:00.000Z',
+            updatedBy: user.id,
+          }
+          return json(200, { data: themeOverrides })
+        }
+
+        if (method === 'GET') {
+          return json(200, {
+            data: {
+              fileTokens: options.theme?.fileTokens ?? DEFAULT_THEME_TOKENS,
+              effectiveTokens: themeEffectiveTokens(),
+              overrides: themeOverrides,
+              skins: options.theme?.skins ?? [],
+              aiAvailable: options.theme?.aiAvailable ?? false,
+              exportAvailable: options.theme?.exportAvailable ?? false,
+            },
+          })
+        }
       }
 
       if (url.includes('/api/config-status') && method === 'GET') {

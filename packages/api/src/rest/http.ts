@@ -278,6 +278,26 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   SCHEDULER_TASK_DUPLICATE: 409,
   SCHEDULER_QUEUE_JOB_NOT_FOUND: 404,
   SCHEDULER_QUEUE_JOB_NOT_RETRYABLE: 409,
+
+  // Theme (fiche 14) and the contract D skin validation it reuses
+  // (`@cogenta/render`'s `validateSkin`). Every `SKIN_*` code names a
+  // well-formed request whose resulting skin still fails contract D — 422,
+  // not 400: nothing about the request's *shape* was wrong.
+  SKIN_TOKEN_MISSING: 422,
+  SKIN_TOKEN_UNKNOWN: 422,
+  SKIN_TOKEN_INVALID: 422,
+  SKIN_CONTRAST_INSUFFICIENT: 422,
+  SKIN_SCALE_NOT_MONOTONIC: 422,
+  SKIN_MOTION_NOT_REDUCED: 422,
+  THEME_OVERRIDE_INVALID: 422,
+  THEME_SKIN_NOT_FOUND: 404,
+  // Same shape as `SITE_PLAN_NO_PROVIDER`: nothing is broken, this instance
+  // simply has no LLM provider configured (R2).
+  THEME_NO_PROVIDER: 501,
+  // Same shape as `CONTENT_READ_ONLY`: the write this instance refuses is
+  // one an admin is otherwise permitted to make — ADR-0010's rule, applied
+  // to the theme file rather than the schema file.
+  THEME_EXPORT_NOT_ALLOWED: 409,
 }
 
 export function statusFor(code: ErrorCode): number {

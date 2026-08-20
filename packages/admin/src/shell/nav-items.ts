@@ -122,8 +122,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     badge: 'trash',
   },
 
-  // Appearance — today just redirects and SEO; the fiche's own "Thème"/"Page
-  // builder" entries belong here the day L12/L16 land in this codebase.
+  // Appearance — fiche 14 adds the theme/appearance screen itself; the
+  // "Page builder" entry belongs here too, but it is reached from an entry
+  // rather than the sidebar (L16), so it has no nav item of its own.
+  {
+    to: '/appearance',
+    labelKey: 'nav.appearance',
+    group: 'appearance',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
   {
     to: '/redirects',
     labelKey: 'nav.redirects',

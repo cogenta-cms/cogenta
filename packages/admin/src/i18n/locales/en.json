@@ -155,6 +155,7 @@
     "commerceOrders": "Orders",
     "commerceCoupons": "Coupons",
     "commerceSubscriptions": "Subscriptions",
+    "appearance": "Appearance",
     "redirects": "Redirects",
     "seo": "SEO",
     "translations": "Translations",
@@ -1190,6 +1191,87 @@
       "todo": "To do",
       "shortcuts": "Shortcuts",
       "backups": "Backup status"
+    }
+  },
+  "appearance": {
+    "heading": "Appearance",
+    "description": "Change the site's colours, typography and identity without a terminal. Changes save as overrides on top of theme.tokens.json and apply on the next page view.",
+    "adminOnly": "Only the admin role may read or change the site's appearance.",
+    "loadError": "Could not load the current theme.",
+    "saveError": "This change could not be saved.",
+    "previewError": "The preview could not be rendered.",
+    "generateError": "No usable skin could be generated.",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "saveAction": "Save",
+    "resetAction": "Reset to file",
+    "exportAction": "Export to theme.tokens.json",
+    "applyAction": "Apply",
+    "chooseAction": "Choose",
+    "provenanceFileOnly": "Every value shown here comes from theme.tokens.json — nothing has been overridden yet.",
+    "provenanceOverridden": "Some values below are overrides saved in the database, on top of theme.tokens.json.",
+    "previewHeading": "Live preview",
+    "previewLoading": "Rendering preview…",
+    "contrastWarningHeading": "Some colour combinations fail WCAG 2.2 AA contrast:",
+    "contrastWarningLine": "{{foreground}} on {{background}} is {{ratio}}:1, needs {{required}}:1",
+    "additionalCssHeading": "Additional CSS",
+    "additionalCssLabel": "CSS, appended after the theme's own stylesheet",
+    "additionalCssNote": "Served as part of the site's own stylesheet, never as an inline <style> tag — this cannot force the Content-Security-Policy to allow inline styles.",
+    "identityHeading": "Identity",
+    "logoLabel": "Logo",
+    "logoDarkLabel": "Logo (dark mode)",
+    "faviconLabel": "Favicon",
+    "shareImageLabel": "Default share image",
+    "galleryHeading": "Skin gallery",
+    "galleryEmpty": "No skin has been submitted to this site's gallery yet.",
+    "aiHeading": "Generate a skin",
+    "aiDescriptionLabel": "Describe the design you want",
+    "aiDescriptionPlaceholder": "Warm, editorial, paper-like",
+    "aiGenerateAction": "Generate",
+    "aiGenerating": "Generating…",
+    "group": {
+      "color": "Colours",
+      "font": "Typography",
+      "space": "Spacing",
+      "radius": "Radius",
+      "motion": "Motion",
+      "shadow": "Shadow"
+    },
+    "token": {
+      "color": {
+        "bg": "Background",
+        "fg": "Text",
+        "accent": "Accent",
+        "accentFg": "Text on accent",
+        "muted": "Muted background",
+        "mutedFg": "Text on muted background",
+        "border": "Border"
+      },
+      "font": {
+        "sans": "Sans-serif stack",
+        "serif": "Serif stack",
+        "mono": "Monospace stack",
+        "scale": "Type scale ratio",
+        "baseSize": "Base size"
+      },
+      "space": {
+        "unit": "Spacing unit",
+        "density": "Density"
+      },
+      "radius": {
+        "sm": "Small",
+        "md": "Medium",
+        "lg": "Large"
+      },
+      "motion": {
+        "duration": "Duration",
+        "easing": "Easing",
+        "reduced": "Honours prefers-reduced-motion"
+      },
+      "shadow": {
+        "sm": "Small",
+        "md": "Medium"
+      }
     }
   },
   "settings": {

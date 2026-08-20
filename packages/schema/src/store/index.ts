@@ -158,6 +158,13 @@ export { createTaxonomyStore } from './taxonomy-store.js'
 export type { CountTaxonomyUsageOptions, TermUsage } from './taxonomy-usage.js'
 export { countTaxonomyUsage } from './taxonomy-usage.js'
 export type {
+  SetThemeOverridesInput,
+  ThemeOverridesState,
+  ThemeStore,
+  ThemeStoreOptions,
+} from './theme-store.js'
+export { createThemeStore, ensureThemeTable, THEME_TABLE } from './theme-store.js'
+export type {
   BlockZones,
   ContentBlock,
   ContentEntry,

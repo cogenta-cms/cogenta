@@ -6,6 +6,7 @@ import './i18n/index.js'
 import { AgentsRoute } from './routes/agents.js'
 import { AnalyticsRoute } from './routes/analytics.js'
 import { ApiKeysRoute } from './routes/api-keys.js'
+import { AppearanceRoute } from './routes/appearance.js'
 import { AssistantChatRoute } from './routes/assistant-chat.js'
 import { AuditRoute } from './routes/audit.js'
 import { CollectionListRoute } from './routes/collection-list.js'
@@ -95,6 +96,7 @@ export function App(): JSX.Element {
               <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
               <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
               <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
+              <Route path="appearance" element={<AppearanceRoute />} />
               <Route path="redirects" element={<RedirectsRoute />} />
               <Route path="seo" element={<SeoRoute />} />
               <Route path="translations" element={<TranslationsRoute />} />

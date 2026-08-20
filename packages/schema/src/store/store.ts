@@ -1041,6 +1041,28 @@ export function createContentStore<TValues extends ContentValues = ContentValues
           const row = await loadRow(tx, id)
           if (row === null) throw notFound(collection.name, id)
 
+          // Detection, not locking (fiche 02 task 7): compared with the exact
+          // same `text(row['updated_at'])` a caller's own `read()` handed back
+          // as `Entry.updatedAt` (line ~533 below), so two requests that loaded
+          // the same row compare equal, and a write that landed in between
+          // does not.
+          if (
+            input.expectedUpdatedAt !== undefined &&
+            input.expectedUpdatedAt !== text(row['updated_at'])
+          ) {
+            throw new CogentaError({
+              code: 'CONTENT_STALE_WRITE',
+              message: `"${id}" was changed by someone else since this write was loaded.`,
+              hint: 'Reload the entry, compare what changed, and reapply your edit.',
+              details: {
+                collection: collection.name,
+                id,
+                expected: input.expectedUpdatedAt,
+                actual: text(row['updated_at']),
+              },
+            })
+          }
+
           const working = await workingEntry(tx, row)
           const next = working.version + 1
           const author = input.updatedBy ?? nullableText(row['updated_by'])

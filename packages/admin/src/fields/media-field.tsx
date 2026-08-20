@@ -21,6 +21,7 @@ export function MediaField({
   value,
   onChange,
   disabled = false,
+  error: fieldError,
 }: FieldProps<unknown>): JSX.Element {
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
@@ -46,14 +47,14 @@ export function MediaField({
 
   if (token === null) {
     return (
-      <FieldWrapper id={id} field={field}>
+      <FieldWrapper id={id} field={field} error={fieldError ?? null}>
         <p>…</p>
       </FieldWrapper>
     )
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={fieldError ?? null}>
       <MediaPicker
         id={id}
         token={token}

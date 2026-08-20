@@ -1,6 +1,6 @@
 import { type JSX, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FieldWrapper } from './field-wrapper.js'
+import { FieldWrapper, fieldErrorId } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
 interface SelectChoice {
@@ -121,16 +121,18 @@ export function SelectField({
   value,
   onChange,
   disabled = false,
+  error,
 }: FieldProps<string | readonly string[]>): JSX.Element {
   const options = field.options as {
     readonly options: readonly SelectChoice[]
     readonly many?: boolean
   }
+  const invalid = error !== undefined && error !== null
 
   if (options.many === true) {
     const manyValue = Array.isArray(value) ? value : []
     return (
-      <FieldWrapper id={id} field={field}>
+      <FieldWrapper id={id} field={field} error={error ?? null}>
         <ManySelectField
           id={id}
           field={field}
@@ -151,12 +153,15 @@ export function SelectField({
       field={field}
       value={singleValue}
       onReset={() => onChange(field.default as string)}
+      error={error ?? null}
     >
       <select
         id={id}
         required={field.required}
         disabled={disabled}
         value={singleValue}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? fieldErrorId(id) : undefined}
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="" disabled hidden>

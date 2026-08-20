@@ -42,6 +42,11 @@ export const ERROR_CODES = [
   'REDIRECT_UNKNOWN',
   'CONTENT_SCHEDULE_INVALID',
   'CONTENT_READ_ONLY',
+  // Concurrent editing (fiche 02 task 7): a `PATCH` naming `expectedUpdatedAt`
+  // is refused when it no longer matches the live row — someone else's write
+  // landed first. Detection, not locking: no table, no TTL, no state that
+  // outlives the request.
+  'CONTENT_STALE_WRITE',
   // Trash (`schema@2.0`, ADR-0022). `restrict` is no longer enforced only by
   // the foreign key: trashing is not a DELETE, so the database cannot refuse.
   'CONTENT_REFERENCED',

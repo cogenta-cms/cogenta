@@ -43,6 +43,7 @@ export function RelationField({
   value,
   onChange,
   disabled = false,
+  error,
 }: FieldProps<unknown>): JSX.Element {
   const auth = useAuth()
   const schema = useSchema()
@@ -72,14 +73,14 @@ export function RelationField({
 
   if (token === null || schema.status === 'loading') {
     return (
-      <FieldWrapper id={id} field={field}>
+      <FieldWrapper id={id} field={field} error={error ?? null}>
         <p>…</p>
       </FieldWrapper>
     )
   }
 
   return (
-    <FieldWrapper id={id} field={field}>
+    <FieldWrapper id={id} field={field} error={error ?? null}>
       <EntryPicker
         id={id}
         token={token}

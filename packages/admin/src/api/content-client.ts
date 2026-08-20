@@ -30,6 +30,9 @@ export interface Entry {
   readonly version: number
   readonly createdAt: string
   readonly updatedAt: string
+  /** The account id that created/last updated this entry, or `null` — an entry seeded before accounts existed, say. Resolved to an email via `/api/users/{id}` (fiche 02 task 4). */
+  readonly createdBy: string | null
+  readonly updatedBy: string | null
   readonly locale: string
   /** The source entry's id, when this one is a translation of it (ADR-0014). */
   readonly translationOf: string | null
@@ -264,19 +267,37 @@ export function createEntry(
   })
 }
 
+export interface UpdateEntryOptions {
+  readonly blocks?: BlockZones
+  /**
+   * The `updatedAt` this write was loaded against (fiche 02 task 7).
+   *
+   * Passed straight through to `PATCH .../{id}`'s body — absent means "last
+   * write wins", exactly as before; present asks the server to refuse with
+   * `CONTENT_STALE_WRITE` if somebody else's write landed first.
+   */
+  readonly expectedUpdatedAt?: string
+}
+
 export function updateEntry(
   token: string,
   collection: string,
   id: string,
   values: Readonly<Record<string, unknown>>,
-  blocks?: BlockZones,
+  options: UpdateEntryOptions = {},
 ): Promise<Entry> {
   return request(
     `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?${NO_EXPANSION}`,
     {
       method: 'PATCH',
       headers: authHeader(token),
-      body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
+      body: JSON.stringify({
+        values,
+        ...(options.blocks === undefined ? {} : { blocks: options.blocks }),
+        ...(options.expectedUpdatedAt === undefined
+          ? {}
+          : { expectedUpdatedAt: options.expectedUpdatedAt }),
+      }),
     },
   )
 }

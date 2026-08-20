@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { FieldWrapper } from './field-wrapper.js'
+import { FieldWrapper, fieldErrorId } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
 /**
@@ -28,13 +28,16 @@ export function DatetimeField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<string>): JSX.Element {
+  const invalid = error !== undefined && error !== null
   return (
     <FieldWrapper
       id={id}
       field={field}
       value={value}
       onReset={() => onChange(field.default as string)}
+      error={error ?? null}
     >
       <input
         id={id}
@@ -42,6 +45,8 @@ export function DatetimeField({
         required={field.required}
         disabled={disabled}
         value={toLocalInputValue(value)}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? fieldErrorId(id) : undefined}
         onChange={(event) => onChange(fromLocalInputValue(event.target.value))}
       />
     </FieldWrapper>

@@ -295,3 +295,9 @@
   font-size: 0.75rem;
   color: var(--color-text-muted);
 }
+
+.field__word-count {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}

@@ -1,6 +1,6 @@
 import { type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FieldWrapper } from './field-wrapper.js'
+import { FieldWrapper, fieldErrorId } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
 /** V8's own `SyntaxError` message names a character offset, never a line — this turns that offset into the line an editor can actually go look at. */
@@ -26,19 +26,23 @@ export function JsonField({
   value,
   onChange,
   disabled,
+  error: fieldError,
 }: FieldProps<unknown>): JSX.Element {
   const { t } = useTranslation()
   const [text, setText] = useState(() => JSON.stringify(value, null, 2) ?? '')
-  const [error, setError] = useState<string | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const invalid = parseError !== null || (fieldError !== undefined && fieldError !== null)
 
   function handleChange(next: string): void {
     setText(next)
     try {
       onChange(JSON.parse(next))
-      setError(null)
+      setParseError(null)
     } catch (caught) {
       const line = lineOf(next, caught instanceof Error ? caught.message : '')
-      setError(line === null ? t('fields.jsonInvalid') : t('fields.jsonInvalidAtLine', { line }))
+      setParseError(
+        line === null ? t('fields.jsonInvalid') : t('fields.jsonInvalidAtLine', { line }),
+      )
     }
   }
 
@@ -47,7 +51,7 @@ export function JsonField({
       const formatted = JSON.stringify(JSON.parse(text), null, 2)
       setText(formatted)
       onChange(JSON.parse(formatted))
-      setError(null)
+      setParseError(null)
     } catch {
       // Nothing valid to format yet — leave the text exactly as the editor left it.
     }
@@ -61,8 +65,9 @@ export function JsonField({
       onReset={() => {
         onChange(field.default)
         setText(JSON.stringify(field.default, null, 2) ?? '')
-        setError(null)
+        setParseError(null)
       }}
+      error={fieldError ?? null}
     >
       <textarea
         id={id}
@@ -70,16 +75,17 @@ export function JsonField({
         disabled={disabled}
         value={text}
         onChange={(event) => handleChange(event.target.value)}
-        aria-invalid={error !== null}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? fieldErrorId(id) : undefined}
       />
       <div className="field__json-actions">
-        <button type="button" disabled={disabled || error !== null} onClick={format}>
+        <button type="button" disabled={disabled || parseError !== null} onClick={format}>
           {t('fields.jsonFormat')}
         </button>
       </div>
-      {error !== null && (
+      {parseError !== null && (
         <p role="alert" className="field__error">
-          {error}
+          {parseError}
         </p>
       )}
     </FieldWrapper>

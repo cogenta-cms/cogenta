@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { FieldWrapper } from './field-wrapper.js'
+import { FieldWrapper, fieldErrorId } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
 /**
@@ -13,8 +13,10 @@ export function SlugField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<string>): JSX.Element {
   const options = field.options as { readonly max?: number; readonly from?: string }
+  const invalid = error !== undefined && error !== null
 
   return (
     <FieldWrapper
@@ -22,6 +24,7 @@ export function SlugField({
       field={field}
       value={value}
       onReset={() => onChange(field.default as string)}
+      error={error ?? null}
     >
       <input
         id={id}
@@ -31,6 +34,8 @@ export function SlugField({
         maxLength={options.max}
         disabled={disabled}
         value={value}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? fieldErrorId(id) : undefined}
         onChange={(event) => onChange(event.target.value)}
       />
     </FieldWrapper>

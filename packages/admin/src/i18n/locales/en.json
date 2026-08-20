@@ -64,7 +64,8 @@
     "mediaDropHint": "Drop a file here to upload it.",
     "mediaDialogTitle": "Choose media",
     "mediaSearchLabel": "Search",
-    "mediaUploadToggle": "Upload a new file"
+    "mediaUploadToggle": "Upload a new file",
+    "wordCount": "{{count}} word(s) · ~{{minutes}} min read"
   },
   "entryPicker": {
     "unknownCollection": "This field points to a collection the schema no longer declares.",
@@ -309,7 +310,42 @@
     "scheduleError": "Could not schedule the publication of this entry.",
     "duplicateButton": "Duplicate",
     "duplicating": "Duplicating…",
-    "duplicateError": "Could not duplicate this entry."
+    "duplicateError": "Could not duplicate this entry.",
+    "validation": {
+      "required": "This field is required.",
+      "tooShort": "Enter at least {{min}} characters.",
+      "tooLong": "Enter at most {{max}} characters.",
+      "tooSmall": "Enter a value of at least {{min}}.",
+      "tooLarge": "Enter a value of at most {{max}}.",
+      "slugInvalid": "Use only lowercase letters, numbers and hyphens."
+    },
+    "publishValidationError": "Fill in the required fields before publishing.",
+    "trashButton": "Move to trash",
+    "trashing": "Moving to trash…",
+    "trashError": "Could not move this entry to the trash.",
+    "permalinkLabel": "Permalink",
+    "permalinkPending": "Fill in the fields this URL depends on to see a preview.",
+    "authorCreatedBy": "Created by {{author}}",
+    "authorUpdatedBy": "Last edited by {{author}}",
+    "shortcutsButton": "Keyboard shortcuts",
+    "shortcutSaveKeys": "⌘/Ctrl + S",
+    "shortcutSaveLabel": "Save",
+    "shortcutPreviewKeys": "⌘/Ctrl + Shift + P",
+    "shortcutPreviewLabel": "Preview",
+    "staleWriteTitle": "Someone else changed this entry",
+    "staleWriteBody": "It was changed since this screen loaded it. Reload their version, or keep your own changes and save over it.",
+    "staleWriteFieldDiffers": "\"{{field}}\" differs from your version",
+    "staleWriteReload": "Reload their version",
+    "staleWriteKeepMine": "Keep mine and save anyway",
+    "confirmLeaveTitle": "Leave without saving?",
+    "confirmLeaveBody": "You have unsaved changes. What would you like to do?",
+    "confirmLeaveBodyAutosaved": "Your changes are kept in this browser (autosaved at {{at}}), but not on the server yet. What would you like to do?",
+    "confirmLeaveCancel": "Cancel",
+    "confirmLeaveDiscard": "Leave without saving",
+    "confirmLeaveSave": "Save",
+    "assistantSectionLabel": "Assistant",
+    "translationsSectionLabel": "Translations",
+    "historySectionLabel": "History"
   },
   "media": {
     "heading": "Media library",
@@ -395,7 +431,11 @@
     "allTerms": "All",
     "columnsToggle": "Columns",
     "columnsLegend": "Extra columns",
-    "pageSizeLabel": "Per page"
+    "pageSizeLabel": "Per page",
+    "trashedMessage": "\"{{title}}\" was moved to the trash.",
+    "undoTrash": "Undo",
+    "undoingTrash": "Undoing…",
+    "undoTrashError": "Could not undo — the entry stays in the trash."
   },
   "taxonomies": {
     "heading": "Taxonomies",

@@ -1,6 +1,6 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   deleteEntry,
@@ -12,6 +12,7 @@ import {
   type SortDirection,
   type SortField,
   unpublishEntry,
+  untrashEntry,
 } from '../api/content-client.js'
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { listTerms, type Term } from '../api/taxonomy-client.js'
@@ -75,12 +76,19 @@ function renderFieldValue(value: unknown): string {
  * taxonomy term) live in the URL, never only in component state, so a link
  * pasted elsewhere reopens exactly the same filtered list.
  */
+/** What `entry-edit.tsx`'s "Mettre à la corbeille" hands this route in navigation state (fiche 02 task 4). */
+interface TrashedFlashState {
+  readonly trashed?: { readonly collection: string; readonly id: string; readonly title: string }
+}
+
 export function CollectionListRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
   const { name = '' } = useParams<{ name: string }>()
   const auth = useAuth()
   const schema = useSchema()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
 
@@ -132,6 +140,43 @@ export function CollectionListRoute(): JSX.Element {
   const [bulkRunning, setBulkRunning] = useState<BulkAction | null>(null)
   const [bulkReport, setBulkReport] = useState<BulkReport | null>(null)
   const [confirmTrash, setConfirmTrash] = useState(false)
+
+  /**
+   * "Mis à la corbeille" flash, with an immediate undo (fiche 02 task 4).
+   *
+   * Read once from `location.state` on arrival — never on every render, which
+   * would re-show it after the very next navigation reuses the same route
+   * component instance — and the history entry is replaced right away so a
+   * refresh, or the browser's back button, does not resurrect it.
+   */
+  const [trashedFlash, setTrashedFlash] = useState(
+    () => (location.state as TrashedFlashState | null)?.trashed ?? null,
+  )
+  const [untrashing, setUntrashing] = useState(false)
+  const [untrashError, setUntrashError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if ((location.state as TrashedFlashState | null)?.trashed === undefined) return
+    navigate(location.pathname, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function undoTrash(): Promise<void> {
+    if (token === null || trashedFlash === null) return
+    setUntrashing(true)
+    setUntrashError(null)
+    try {
+      await untrashEntry(token, trashedFlash.collection, trashedFlash.id)
+      setTrashedFlash(null)
+      await load()
+    } catch (caught) {
+      setUntrashError(
+        caught instanceof ApiError ? caught.message : t('collectionList.undoTrashError'),
+      )
+    } finally {
+      setUntrashing(false)
+    }
+  }
 
   const cursor = cursorStack[cursorStack.length - 1]
 
@@ -493,6 +538,33 @@ export function CollectionListRoute(): JSX.Element {
           </Link>
         )}
       </div>
+
+      {trashedFlash !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={() => setTrashedFlash(null)}
+          dismissLabel={t('common.cancel')}
+          actions={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={untrashing}
+              onClick={() => void undoTrash()}
+            >
+              {untrashing ? t('collectionList.undoingTrash') : t('collectionList.undoTrash')}
+            </Button>
+          }
+        >
+          <p>{t('collectionList.trashedMessage', { title: trashedFlash.title })}</p>
+        </Notice>
+      )}
+      {untrashError !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{untrashError}</p>
+        </Notice>
+      )}
 
       {/* Status tabs with real, server-computed counts (task 4) — replaces
           the old status `<select>`: this is the same one filter, just named

@@ -48,6 +48,8 @@ const updateSchema = z.object({
   blocks: zonesSchema.optional(),
   provenance: z.enum(PROVENANCE_KINDS).optional(),
   provenanceDetail: provenanceDetailSchema.nullable().optional(),
+  /** Optimistic concurrency by detection (fiche 02 task 7) — see `UpdateInput.expectedUpdatedAt`. */
+  expectedUpdatedAt: z.string().min(1).optional(),
 })
 
 const restoreSchema = z.object({ version: z.number().int().min(1) })
@@ -89,6 +91,9 @@ export function parseUpdateBody(body: unknown, actor: Actor): UpdateInput {
     ...(parsed.provenanceDetail === undefined
       ? {}
       : { provenanceDetail: compact(parsed.provenanceDetail) }),
+    ...(parsed.expectedUpdatedAt === undefined
+      ? {}
+      : { expectedUpdatedAt: parsed.expectedUpdatedAt }),
   }
 }
 

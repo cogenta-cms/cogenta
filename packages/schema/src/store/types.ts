@@ -105,6 +105,16 @@ export interface UpdateInput<TValues extends ContentValues = ContentValues>
   /** Replaces the whole zone. A zone left out is untouched. */
   readonly blocks?: BlockZones
   readonly updatedBy?: string | null
+  /**
+   * The `updatedAt` this write was loaded against (fiche 02 task 7).
+   *
+   * Optimistic concurrency by detection, not by locking: absent, this write
+   * behaves exactly as before (last write wins, silently). Present, `update()`
+   * refuses with `CONTENT_STALE_WRITE` when the live row's `updatedAt` no
+   * longer matches — somebody else's write landed first — rather than
+   * overwriting it without a word.
+   */
+  readonly expectedUpdatedAt?: string
 }
 
 export interface PublishInput {

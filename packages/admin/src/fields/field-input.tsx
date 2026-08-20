@@ -25,6 +25,8 @@ export interface FieldInputProps {
   readonly value: unknown
   onChange(value: unknown): void
   readonly disabled?: boolean
+  /** A client-side validation message for this field (fiche 02 task 3), or absent/null when it holds none. */
+  readonly error?: string | null
 }
 
 /**

@@ -3,10 +3,15 @@ import { useTranslation } from 'react-i18next'
 import type { SchemaField } from '../schema/types.js'
 import '../styles/fields.css'
 
+/** The id an error message for field `id` is rendered at — what a control's `aria-describedby` should point to (fiche 02 task 3). */
+export function fieldErrorId(id: string): string {
+  return `${id}-error`
+}
+
 /**
- * Label, required marker, help text, character counter and "reset to
- * default" — the pieces every field component shares, so a new field type
- * is a new input, not a new label (task 4).
+ * Label, required marker, help text, character counter, "reset to default"
+ * and validation error — the pieces every field component shares, so a new
+ * field type is a new input, not a new label (task 4).
  *
  * `value`/`onReset` are both optional and independent: the counter only
  * needs `value` (compared against `field.options.max`), the reset button
@@ -14,6 +19,11 @@ import '../styles/fields.css'
  * field kind with no simple notion of either — `blocks`, `media`, `relation`
  * — passes neither and gets neither, rather than a counter that always
  * reads "0/undefined" or a reset button that can never be truthfully enabled.
+ *
+ * The error is rendered here, once, rather than by each of the fifteen field
+ * components: `role="alert"` announces it the moment it appears, and its id
+ * (`fieldErrorId(id)`) is stable, so every field only has to point its own
+ * control's `aria-describedby` at it — never build the string twice.
  */
 export function FieldWrapper({
   id,
@@ -21,6 +31,7 @@ export function FieldWrapper({
   children,
   value,
   onReset,
+  error,
 }: {
   readonly id: string
   readonly field: SchemaField
@@ -29,6 +40,8 @@ export function FieldWrapper({
   readonly value?: unknown
   /** Present only when this field kind can meaningfully reset to `field.default`. */
   onReset?(): void
+  /** A validation message (fiche 02 task 3), or absent/null when the field currently holds none. */
+  readonly error?: string | null
 }): JSX.Element {
   const { t } = useTranslation()
   const label = field.admin?.label ?? field.name
@@ -66,6 +79,11 @@ export function FieldWrapper({
           aria-live="polite"
         >
           {t('fields.charCount', { count: length, max })}
+        </p>
+      )}
+      {error !== undefined && error !== null && (
+        <p id={fieldErrorId(id)} role="alert" className="field__error">
+          {error}
         </p>
       )}
       {field.admin?.help !== undefined && <p className="field__help">{field.admin.help}</p>}

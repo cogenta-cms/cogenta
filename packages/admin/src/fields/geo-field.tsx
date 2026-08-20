@@ -75,6 +75,7 @@ export function GeoField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<GeoValue | null>): JSX.Element {
   const { t } = useTranslation()
   const [showMap, setShowMap] = useState(false)
@@ -94,6 +95,7 @@ export function GeoField({
       field={field}
       value={value}
       onReset={() => onChange(field.default as GeoValue | null)}
+      error={error ?? null}
     >
       <div className="field__geo">
         <label htmlFor={`${id}-lat`}>{t('fields.geoLat')}</label>

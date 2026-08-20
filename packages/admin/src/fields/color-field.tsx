@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FieldWrapper } from './field-wrapper.js'
+import { FieldWrapper, fieldErrorId } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
 /**
@@ -20,10 +20,11 @@ export function ColorField({
   value,
   onChange,
   disabled,
+  error,
 }: FieldProps<string>): JSX.Element {
   const { t } = useTranslation()
-  const pickerValue = /^#[0-9a-fA-F]{6}$/u.test(value) ? value : '#000000'
   const swatchValue = /^#([0-9a-fA-F]{3}){1,2}$/u.test(value) ? value : 'transparent'
+  const invalid = error !== undefined && error !== null
 
   return (
     <FieldWrapper
@@ -31,6 +32,7 @@ export function ColorField({
       field={field}
       value={value}
       onReset={() => onChange(field.default as string)}
+      error={error ?? null}
     >
       <div className="field__color">
         <span
@@ -52,6 +54,8 @@ export function ColorField({
           required={field.required}
           disabled={disabled}
           value={value}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? fieldErrorId(id) : undefined}
           onChange={(event) => onChange(event.target.value)}
         />
       </div>

@@ -652,7 +652,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
 
     restore: async (context, name, id, version, readOptions) => {
       const target = collection(name)
-      permissions.assert('update', target, context)
+      await assertOwnAware(target, 'update', context, id)
 
       const entry = await store(target).restore(id, version)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })

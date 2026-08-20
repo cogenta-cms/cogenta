@@ -371,6 +371,21 @@ function checkPermissions(definition: CollectionDefinition, issues: SchemaIssue[
             "'own' has no meaning on 'create': a new entry has no owner to compare against yet",
         })
       }
+      // `assertOwnAware` (packages/api/src/rest/content-service.ts) only
+      // resolves and forwards an entry's ownerId for `update`/`delete`
+      // (ADR-0027's own worked examples). `read`/`list` and the
+      // publish/unpublish/approve/request-changes family call
+      // `permissions.assert` without an ownerId — and `PermissionLayer.can`
+      // treats a missing ownerId as "not the owner" whenever `own` is set,
+      // so declaring `own: true` here would silently lock every actor,
+      // including admin, out of the action. Reject at validation time
+      // rather than let a site discover this as a mysterious 403.
+      if (own === true && (action === 'read' || action === 'publish')) {
+        issues.push({
+          path: `permissions.${action}.own`,
+          message: `'own' is not yet supported on '${action}': only 'update' and 'delete' resolve an entry's owner today`,
+        })
+      }
     }
   }
 }

@@ -219,6 +219,26 @@ describe('the editorial workflow over REST', () => {
       )
       expect(response.status).toBe(403)
     })
+
+    it('own: true also gates /restore, an update action content-service.ts had missed', async () => {
+      const mine = await seed('À moi', asContributorA)
+      await harness.router.handle(
+        request('PATCH', `/wf_article/${mine}`, { body: { values: { title: 'À moi, v2' } } }),
+        asContributorA,
+      )
+
+      const foreignRestore = await harness.router.handle(
+        request('POST', `/wf_article/${mine}/restore`, { body: { version: 1 } }),
+        asContributorB,
+      )
+      expect(foreignRestore.status).toBe(403)
+
+      const ownRestore = await harness.router.handle(
+        request('POST', `/wf_article/${mine}/restore`, { body: { version: 1 } }),
+        asContributorA,
+      )
+      expect(ownRestore.status).toBe(200)
+    })
   })
 
   it('refuses every transition on a collection that never turned the workflow on', async () => {

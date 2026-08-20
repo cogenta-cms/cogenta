@@ -238,6 +238,53 @@ describe('defineCollection — the definition around the fields', () => {
       'versioning.keep',
     )
   })
+
+  it('accepts the object form { roles, own } on update and delete (schema@2.1, ADR-0027)', () => {
+    expect(() =>
+      defineCollection(
+        collection({
+          permissions: {
+            read: ['public'],
+            update: { roles: ['author'], own: true },
+            delete: { roles: ['author'], own: true },
+          },
+        }),
+      ),
+    ).not.toThrow()
+  })
+
+  it("refuses own: true on 'create', which has no owner yet to compare against", () => {
+    const error = rejectionOf(
+      collection({ permissions: { read: ['public'], create: { roles: ['author'], own: true } } }),
+    )
+
+    expect(error.message).toContain('permissions.create.own')
+    expect(error.message).toContain('create')
+  })
+
+  it.each(['read', 'publish'] as const)(
+    "refuses own: true on '%s', which the runtime does not resolve an owner for yet",
+    (action) => {
+      const error = rejectionOf(
+        collection({
+          permissions: { read: ['public'], [action]: { roles: ['author'], own: true } },
+        }),
+      )
+
+      expect(error.message).toContain(`permissions.${action}.own`)
+      expect(error.message).toContain('not yet supported')
+    },
+  )
+
+  it('refuses a non-boolean own', () => {
+    const error = rejectionOf(
+      collection({
+        permissions: { read: ['public'], update: { roles: ['author'], own: 'yes' } as never },
+      }),
+    )
+
+    expect(error.message).toContain('permissions.update.own')
+  })
 })
 
 describe('validateCollectionSet', () => {

@@ -20,10 +20,16 @@ describe('scheduled tasks', () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({ roles: ['editor'] })
+    // The "Exploitation" nav group is hidden for a role with no visible item
+    // in it (fiche 35): there is no link to click, so go straight to the
+    // route, the same way a bookmarked URL would — the route itself is what
+    // R4 says must still refuse.
+    window.history.pushState(null, '', '/scheduled')
 
     render(<App />)
-    await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Tâches planifiées' }))
+    // Wait for the shell itself (never a heading — the route renders nothing
+    // at all for this role) before asserting the absence.
+    await screen.findByRole('navigation', { name: 'Navigation principale' })
 
     expect(screen.queryByRole('heading', { name: 'Tâches planifiées' })).toBeNull()
   })

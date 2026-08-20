@@ -20,9 +20,12 @@ describe('agents', () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({ roles: ['editor'] })
+    // The whole "IA" nav group is hidden for a role that sees no item in it
+    // (fiche 35), so there is no link to click — go straight to the route,
+    // the same way an editor who once had this URL bookmarked would.
+    window.history.pushState(null, '', '/agents')
 
     render(<App />)
-    await goToAgents()
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',

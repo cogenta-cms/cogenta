@@ -338,7 +338,13 @@ describe('autosaving a draft in progress', () => {
   }
 
   it('keeps the draft in this browser on a timer, and sends nothing to the server', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
+    // Only `setInterval`/`Date` are faked, not `setTimeout`: the sidebar's
+    // "Contenus" entry only appears once the schema has loaded (fiche 35's
+    // role/feature-gated nav), and whatever real timer that resolution rides
+    // on needs to keep ticking for `openFirstArticle` below to find it.
+    // `useAutosave`'s own timer is a real `setInterval`, so faking just that
+    // still lets `advanceTimersByTimeAsync` below skip the wait.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
     try {
       await openFirstArticle()
 
@@ -362,7 +368,8 @@ describe('autosaving a draft in progress', () => {
   })
 
   it('drops the local copy once the entry is really saved', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
+    // Same narrowed fake-timer set as the previous test, same reason.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
     try {
       await openFirstArticle()
 

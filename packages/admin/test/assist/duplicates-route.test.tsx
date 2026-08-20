@@ -34,10 +34,12 @@ const DUPLICATES_TOOL = {
 describe('the duplicate-detection screen', () => {
   it('does not render on a site where the assistant toolset is off', async () => {
     signedIn()
+    // Without `assist.find_duplicates` in the toolset, the whole "IA" nav
+    // group has no visible item (fiche 35), so there is no link to click —
+    // go straight to the route, the same way a bookmarked URL would.
+    window.history.pushState(null, '', '/duplicates')
     render(<App />)
-
-    await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Doublons' }))
+    await screen.findByRole('navigation', { name: 'Navigation principale' })
 
     expect(screen.queryByRole('heading', { name: 'Détection de doublons' })).toBeNull()
   })

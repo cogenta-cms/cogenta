@@ -30,9 +30,12 @@ async function goToImport(): Promise<void> {
 describe('the WordPress import screen', () => {
   it('shows nothing to a role below admin', async () => {
     signIn(['editor'])
+    // The "Exploitation" nav group is hidden for a role with no visible item
+    // in it (fiche 35): there is no link to click, so go straight to the
+    // route, the same way a bookmarked URL would.
+    window.history.pushState(null, '', '/import')
 
     render(<App />)
-    await goToImport()
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',

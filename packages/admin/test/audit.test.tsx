@@ -20,9 +20,12 @@ describe('audit log', () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({ roles: ['editor'] })
+    // The "Exploitation" nav group is hidden for a role with no visible item
+    // in it (fiche 35): there is no link to click, so go straight to the
+    // route, the same way a bookmarked URL would.
+    window.history.pushState(null, '', '/audit')
 
     render(<App />)
-    await goToAudit()
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',

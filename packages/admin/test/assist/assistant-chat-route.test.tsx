@@ -32,12 +32,19 @@ const CHAT_TOOL = {
 describe('the "ask the site" chat screen', () => {
   it('does not appear in the nav, and does not render, on a site with no AI provider', async () => {
     signedIn()
-    render(<App />)
+    const { unmount } = render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    // The nav link stays (same convention as every other section); the
-    // screen itself is what disappears.
-    fireEvent.click(screen.getByRole('link', { name: 'Interroger le site' }))
+    // Without a provider, `assistantTools` resolves to `[]`, so the "IA"
+    // group has no visible item and the whole group — including this
+    // entry — is absent (fiche 35), not merely a dead link.
+    expect(screen.queryByRole('link', { name: 'Interroger le site' })).toBeNull()
+    unmount()
+
+    // And the route itself refuses to render for whoever still has the URL.
+    window.history.pushState(null, '', '/assistant-chat')
+    render(<App />)
+    await screen.findByRole('navigation', { name: 'Navigation principale' })
 
     expect(screen.queryByRole('heading', { name: 'Interroger le site' })).toBeNull()
   })

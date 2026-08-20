@@ -61,8 +61,11 @@ async function goToOpsSettings(): Promise<void> {
 describe('the security & webhooks screen', () => {
   it('tells a non-admin the screen is admin-only', async () => {
     signedIn(['editor'])
+    // The "Exploitation" nav group is hidden for a role with no visible item
+    // in it (fiche 35): there is no link to click, so go straight to the
+    // route, the same way a bookmarked URL would.
+    window.history.pushState(null, '', '/ops-settings')
     render(<App />)
-    await goToOpsSettings()
 
     expect(await screen.findByRole('alert')).toBeDefined()
   })

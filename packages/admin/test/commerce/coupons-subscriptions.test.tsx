@@ -88,9 +88,12 @@ describe('subscriptions', () => {
 
   it('refuses to cancel without commerce.order.write', async () => {
     signedInAs(['viewer'])
+    // The "Boutique" nav group only shows for an admin or once the shop has
+    // sold something (fiche 35); a plain viewer on a fresh fixture sees no
+    // link, so go straight to the route, the same way a bookmarked URL
+    // would.
+    window.history.pushState(null, '', '/commerce/subscriptions')
     render(<App />)
-    await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Abonnements' }))
     await screen.findByRole('heading', { name: 'Abonnements' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))

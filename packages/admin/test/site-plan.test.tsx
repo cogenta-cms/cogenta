@@ -41,9 +41,12 @@ async function openTheDraft(): Promise<void> {
 describe('the site plan screen', () => {
   it('shows nothing to a role below admin', async () => {
     signIn(['editor'])
+    // The whole "IA" nav group is hidden for a role that sees no item in it
+    // (fiche 35), so there is no link to click — go straight to the route,
+    // the same way a bookmarked URL would.
+    window.history.pushState(null, '', '/site-plan')
 
     render(<App />)
-    await goToSitePlan()
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',

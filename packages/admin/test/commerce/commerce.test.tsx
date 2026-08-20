@@ -100,8 +100,13 @@ describe('the product catalogue', () => {
 
   it('refuses an actor without catalog-write, never a UI-only gate', async () => {
     signedInAs(['viewer'])
+    // The "Boutique" nav group only shows for an admin or once the shop has
+    // sold something (fiche 35); a plain viewer on a fresh fixture sees no
+    // link, so go straight to the route, the same way a bookmarked URL
+    // would.
+    window.history.pushState(null, '', '/commerce/products')
     render(<App />)
-    await goToProducts()
+    await screen.findByRole('heading', { name: 'Produits' })
 
     expect(screen.queryByRole('button', { name: 'Nouveau produit' })).not.toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Nouveau produit' }))

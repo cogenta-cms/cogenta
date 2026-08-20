@@ -258,8 +258,12 @@ describe('the trash screen', () => {
 
   it('offers no collection at all to a role that may not delete', async () => {
     signedIn(['viewer'])
+    // The "Corbeille" nav item requires `delete` on at least one collection
+    // (fiche 35), so a viewer never sees the link — go straight to the
+    // route, the same way a bookmarked URL would.
+    window.history.pushState(null, '', '/trash')
     render(<App />)
-    await goToTrash()
+    await screen.findByRole('heading', { name: 'Corbeille' })
 
     expect(
       await screen.findByText("Aucune collection que vous puissiez supprimer n'a de corbeille."),

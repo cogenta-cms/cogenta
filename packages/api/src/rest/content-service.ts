@@ -64,6 +64,28 @@ export interface ContentPage {
   readonly hasMore: boolean
 }
 
+/**
+ * Per-status row counts for one readable collection (fiche 22 tâche 1's
+ * dashboard summary, and fiche 01 tâche 4's per-collection tabs — the same
+ * `ContentStore.count()` underneath both).
+ *
+ * `draft`/`scheduled`/`archived`/`trashed` are `null`, not `0`, for an actor
+ * who may not read this collection's unpublished rows or its trash — the
+ * same leak L1's own spec names: telling a role that cannot read drafts that
+ * there are exactly zero of them is itself information a `0` it can never
+ * see change would not be. `total` follows the same rule: it counts only
+ * what this actor could ever see.
+ */
+export interface CollectionCounts {
+  readonly collection: string
+  readonly total: number
+  readonly published: number
+  readonly draft: number | null
+  readonly scheduled: number | null
+  readonly archived: number | null
+  readonly trashed: number | null
+}
+
 export interface ReadOptions {
   readonly state: EntryState
   readonly depth: number
@@ -96,6 +118,17 @@ export interface ContentService {
     context: AccessContext,
     name: string,
   ): Promise<Readonly<Partial<Record<ContentStatus, number>>>>
+  /**
+   * Status counts for every collection this actor may read, in one call.
+   *
+   * Built for the dashboard's content summary widget (fiche 22 tâche 1): "one
+   * aggregated request for every collection, not one per collection" — the
+   * N+1 the fiche's own piège warns a per-widget-per-collection dashboard
+   * turns into on a twenty-collection site. Internally this still runs one
+   * `ContentStore.count()` per collection (each a single `GROUP BY`), but the
+   * caller pays for exactly one HTTP round trip.
+   */
+  summary(context: AccessContext): Promise<readonly CollectionCounts[]>
   read(
     context: AccessContext,
     name: string,
@@ -476,12 +509,45 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       const target = collection(name)
       permissions.assert('read', target, context)
 
-      const raw = await store(target).countByStatus()
-      if (permissions.canReadUnpublished(target, context).allowed) return raw
+      const raw = await store(target).count()
+      const byStatus: Readonly<Partial<Record<ContentStatus, number>>> = {
+        draft: raw.draft,
+        scheduled: raw.scheduled,
+        published: raw.published,
+        archived: raw.archived,
+      }
+      if (permissions.canReadUnpublished(target, context).allowed) return byStatus
 
       // Only the published count is safe to hand back — see the interface
       // comment above.
       return { published: raw.published }
+    },
+
+    summary: async (context) => {
+      const readable = options.collections.filter(
+        (candidate) => permissions.can('read', candidate, context).allowed,
+      )
+
+      return Promise.all(
+        readable.map(async (target): Promise<CollectionCounts> => {
+          const counts = await store(target).count()
+          // The same two gates `list()` itself applies to reach unpublished
+          // rows and the trash — a count is a read, and it must leak nothing
+          // a read could not already tell this actor.
+          const canUnpublished = permissions.canReadUnpublished(target, context).allowed
+          const canTrash = permissions.can('delete', target, context).allowed
+
+          return {
+            collection: target.name,
+            published: counts.published,
+            total: canUnpublished ? counts.total : counts.published,
+            draft: canUnpublished ? counts.draft : null,
+            scheduled: canUnpublished ? counts.scheduled : null,
+            archived: canUnpublished ? counts.archived : null,
+            trashed: canTrash ? counts.trashed : null,
+          }
+        }),
+      )
     },
 
     read: async (context, name, id, readOptions) => {

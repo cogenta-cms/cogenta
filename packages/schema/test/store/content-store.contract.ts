@@ -529,6 +529,56 @@ export function runContentStoreContract(
       })
     })
 
+    describe('count', () => {
+      it('groups live rows by status, and counts the trash separately', async () => {
+        const d1 = await articles.create({ values: { title: 'd1' } })
+        await articles.create({ values: { title: 'd2' } })
+        const published = await articles.create({ values: { title: 'p1' } })
+        await articles.publish(published.id)
+        const trashed = await articles.create({ values: { title: 't1' } })
+        await articles.delete(trashed.id)
+
+        const counts = await articles.count()
+        expect(counts).toEqual({
+          draft: 2,
+          scheduled: 0,
+          published: 1,
+          archived: 0,
+          trashed: 1,
+          total: 3,
+        })
+
+        // The trashed row must not haunt either side of the count: not among
+        // the live statuses, and not silently folded into the total.
+        expect(await articles.read(d1.id, { state: 'working' })).not.toBeNull()
+      })
+
+      it('reports every status at zero on an empty collection', async () => {
+        expect(await articles.count()).toEqual({
+          draft: 0,
+          scheduled: 0,
+          published: 0,
+          archived: 0,
+          trashed: 0,
+          total: 0,
+        })
+      })
+
+      it('excludes the trash from the status breakdown even when it grows', async () => {
+        const kept = await articles.create({ values: { title: 'kept' } })
+        for (let index = 0; index < 3; index += 1) {
+          const doomed = await articles.create({ values: { title: `doomed-${index}` } })
+          await articles.delete(doomed.id)
+        }
+
+        const counts = await articles.count()
+        expect(counts.draft).toBe(1)
+        expect(counts.trashed).toBe(3)
+        expect(counts.total).toBe(1)
+        expect(await articles.read(kept.id, { state: 'working' })).not.toBeNull()
+      })
+    })
+
     describe('duplication', () => {
       it('copies the values, the relations and the blocks into a new draft', async () => {
         const writer = await authors.create({ values: { name: 'Colette' } })
@@ -1035,15 +1085,18 @@ export function runContentStoreContract(
       })
     })
 
-    // Fiche 01 ("Liste de contenu"), task 4: a real `GROUP BY status`, never
-    // a client-side count of one page.
-    describe('countByStatus', () => {
+    // Fiche 01 ("Liste de contenu"), task 4, and fiche 22 ("Tableau de
+    // bord"), task 1: a real `GROUP BY status` plus a trash count, never a
+    // client-side count of one page — the two features share this method.
+    describe('count', () => {
       it('reports zero for every status on an empty collection', async () => {
-        expect(await articles.countByStatus()).toEqual({
+        expect(await articles.count()).toEqual({
           draft: 0,
           scheduled: 0,
           published: 0,
           archived: 0,
+          trashed: 0,
+          total: 0,
         })
       })
 
@@ -1057,24 +1110,30 @@ export function runContentStoreContract(
         })
         await articles.create({ values: { title: 'e' }, status: 'archived' })
 
-        expect(await articles.countByStatus()).toEqual({
+        expect(await articles.count()).toEqual({
           draft: 2,
           scheduled: 1,
           published: 1,
           archived: 1,
+          trashed: 0,
+          total: 5,
         })
       })
 
-      it('excludes a trashed entry, and counts it again once restored (ADR-0022)', async () => {
+      it('excludes a trashed entry from total, and counts it again once restored (ADR-0022)', async () => {
         const entry = await articles.create({ values: { title: 'a' }, status: 'published' })
-        expect((await articles.countByStatus()).published).toBe(1)
+        expect((await articles.count()).published).toBe(1)
 
         await articles.delete(entry.id)
-        expect((await articles.countByStatus()).published).toBe(0)
+        const trashed = await articles.count()
+        expect(trashed.published).toBe(0)
+        expect(trashed.trashed).toBe(1)
 
         await articles.untrash(entry.id)
         // Untrashing gives back exactly the status it went in with.
-        expect((await articles.countByStatus()).published).toBe(1)
+        const restored = await articles.count()
+        expect(restored.published).toBe(1)
+        expect(restored.trashed).toBe(0)
       })
     })
 

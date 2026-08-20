@@ -97,8 +97,9 @@ export function CollectionListRoute(): JSX.Element {
 
   const siteLocales = schema.status === 'ready' ? (schema.schema.site?.locales ?? []) : []
 
-  // Filters that must be reopenable from a shared link (fiche 01 task 5):
-  // read from the URL, never from component-only state.
+  // Filters that must be reopenable from a shared link (fiche 01 task 5,
+  // fiche 22's "un lien collé dans un chat rouvre exactement la même
+  // liste"): read from the URL, never from component-only state.
   const status = searchParams.get('status') ?? ''
   const localeFilter = searchParams.get('locale') ?? ''
   const updatedFrom = searchParams.get('updatedFrom') ?? ''

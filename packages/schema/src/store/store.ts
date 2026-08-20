@@ -9,7 +9,6 @@ import {
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import {
-  CONTENT_STATUSES,
   type CollectionDefinition,
   type ContentStatus,
   DEFAULT_TRASH_RETAIN_DAYS,
@@ -36,6 +35,7 @@ import type {
   ReadOptions,
   ResolveLocaleOptions,
   SortOrder,
+  StatusCounts,
   TrashFilter,
   TrashOptions,
   UpdateInput,
@@ -108,17 +108,11 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   purgeExpired(): Promise<PurgeReport>
   list(options?: ListOptions): Promise<Page<ContentEntry<TValues>>>
   /**
-   * How many live (non-trashed) rows this collection holds, grouped by
-   * `status` (fiche 01 "Liste de contenu", task 4).
-   *
-   * A real `GROUP BY status` rather than a client-side count of one page —
-   * the whole reason the fiche argues for this method to exist at all: a
-   * page-local count is wrong the moment there is a second page. Every
-   * status of contract A's closed set is always a key of the result, `0`
-   * when the collection holds none, so a caller never has to guess whether
-   * an absent key means zero or "not computed".
+   * Per-status row counts, and how many sit in the trash — one `GROUP BY` and
+   * one trash count, never a page walked client-side (fiche 01 tâche 4,
+   * fiche 22 tâche 1: the two features share this one implementation).
    */
-  countByStatus(): Promise<Readonly<Record<ContentStatus, number>>>
+  count(): Promise<StatusCounts>
   publish(
     id: string,
     input?: { readonly publishedBy?: string | null },
@@ -1295,26 +1289,40 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       }
     },
 
-    countByStatus: async () => {
-      const result = Object.fromEntries(CONTENT_STATUSES.map((status) => [status, 0])) as Record<
-        ContentStatus,
-        number
-      >
+    count: async () => {
+      const statusColumn = identifier('status', dialect)
+      const statusAlias = identifier('status', dialect)
+      const countAlias = identifier('n', dialect)
 
-      const found = await db.query<Row>(
-        sql`select ${identifier('status', dialect)} as status, count(*) as n from ${entries}
+      const grouped = await db.query<{ status: string; n: number | string }>(
+        sql`select ${statusColumn} as ${statusAlias}, count(*) as ${countAlias}
+            from ${entries}
             where ${deletedAt} is null
-            group by ${identifier('status', dialect)}`,
+            group by ${statusColumn}`,
+      )
+      const trashedResult = await db.query<{ n: number | string }>(
+        sql`select count(*) as ${countAlias} from ${entries} where ${deletedAt} is not null`,
       )
 
-      for (const row of found.rows) {
-        const status = text(row['status']) as ContentStatus
-        const raw = row['n']
-        const n = typeof raw === 'number' ? raw : Number(raw)
-        if (status in result && Number.isFinite(n)) result[status] = n
+      const byStatus: Record<ContentStatus, number> = {
+        draft: 0,
+        scheduled: 0,
+        published: 0,
+        archived: 0,
+      }
+      let total = 0
+      for (const row of grouped.rows) {
+        const status = text(row.status) as ContentStatus
+        const n = Number(row.n)
+        if (status in byStatus) byStatus[status] = n
+        total += n
       }
 
-      return result
+      return {
+        ...byStatus,
+        trashed: Number(trashedResult.rows[0]?.n ?? 0),
+        total,
+      }
     },
 
     publish: async (id, publishOptions) =>

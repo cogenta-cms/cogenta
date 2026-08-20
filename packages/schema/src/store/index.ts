@@ -156,6 +156,7 @@ export type {
   ResolveLocaleOptions,
   SortField,
   SortOrder,
+  StatusCounts,
   TrashFilter,
   TrashOptions,
   UpdateInput,

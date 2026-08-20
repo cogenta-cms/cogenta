@@ -189,6 +189,7 @@ export const MOCK_ENTRIES = [
     version: 1,
     createdAt: '2026-01-02T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
+    createdBy: USER.id,
     locale: 'en',
     translationOf: null,
     deletedAt: null,
@@ -3052,6 +3053,55 @@ export function installMockFetch(
             html: `<!doctype html><html lang="en"><head><title>Preview</title></head><body><main class="cg-main" id="cg-main">${sections}</main></body></html>`,
           },
         })
+      }
+
+      // The dashboard's content summary widget (fiche 22 tâche 1): one
+      // request across every readable collection, mirroring the real
+      // `GET /api/content/-/summary` — a role that may not read a
+      // collection's drafts or its trash gets `null` for those fields, never
+      // a fabricated `0`.
+      if (url.endsWith('/api/content/-/summary') && method === 'GET') {
+        const has = (allowed: readonly string[] | undefined): boolean =>
+          (allowed ?? []).some((role) => user.roles.includes(role))
+
+        const article = MOCK_SCHEMA.collections[0]
+        const articlePermissions = article?.permissions as Record<string, readonly string[]>
+        const canDraftArticle =
+          has(articlePermissions['create']) ||
+          has(articlePermissions['update']) ||
+          has(articlePermissions['delete']) ||
+          has(articlePermissions['publish'])
+        const canTrashArticle = has(articlePermissions['delete'])
+        const draftCount = MOCK_ENTRIES.filter((entry) => entry.status === 'draft').length
+        const publishedCount = MOCK_ENTRIES.filter((entry) => entry.status === 'published').length
+
+        const rows: unknown[] = [
+          {
+            collection: 'article',
+            published: publishedCount,
+            total: canDraftArticle ? MOCK_ENTRIES.length : publishedCount,
+            draft: canDraftArticle ? draftCount : null,
+            scheduled: canDraftArticle ? 0 : null,
+            archived: canDraftArticle ? 0 : null,
+            trashed: canTrashArticle ? trash.length : null,
+          },
+        ]
+
+        const memo = MOCK_SCHEMA.collections[1]
+        const memoPermissions = memo?.permissions as Record<string, readonly string[]>
+        if (has(memoPermissions['read'])) {
+          rows.push({
+            collection: 'secret-memo',
+            published: 0,
+            total: 0,
+            draft: has(memoPermissions['create']) ? 0 : null,
+            scheduled: has(memoPermissions['create']) ? 0 : null,
+            archived: has(memoPermissions['create']) ? 0 : null,
+            trashed: has(memoPermissions['delete']) ? 0 : null,
+          })
+        }
+
+        return json(200, { data: rows })
       }
 
       const contentMatch = /\/api\/content\/([^/?]+)(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)

@@ -1,12 +1,16 @@
 import { CogentaError } from '@cogenta/core'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from '../rest/http.js'
 import type { Actor } from '../types.js'
+import type { NoticeChannelBridge } from './channel-bridge.js'
 import type { NoticeDismissalStore } from './dismissals.js'
-import type { AdminNotice, NoticeSource } from './types.js'
+import type { NoticeHistoryEntry, NoticeHistoryStore } from './history.js'
+import type { AdminNotice, NoticeSeverity, NoticeSource } from './types.js'
 
 /**
- * `/api/notices` — what the admin shows the person who is signed in, and
- * `/api/notices/{id}/dismiss` to make one stop coming back.
+ * `/api/notices` — what the admin shows the person who is signed in,
+ * `/api/notices/{id}/dismiss` to make one stop coming back, and, since fiche
+ * 38 task 2, `/api/notices/history` (what has ever been shown, resolved or
+ * not) and `/api/notices/read` (mark it seen in the notification centre).
  *
  * There is no route that reads or writes anyone else's notices, and no
  * parameter that names an account: everything is scoped to the actor the bearer
@@ -17,6 +21,21 @@ import type { AdminNotice, NoticeSource } from './types.js'
 export interface NoticeRouterOptions {
   readonly sources: readonly NoticeSource[]
   readonly dismissals: NoticeDismissalStore
+  /**
+   * "On retrouve une notice rejetée dans l'historique" (fiche 38 task 2).
+   * Absent means `/api/notices/history` and `/api/notices/read` answer
+   * `CONTENT_NOT_FOUND` rather than pretending to keep one — a deployment
+   * that never wires a `NoticeHistoryStore` gets the exact behaviour it had
+   * before this task, not a silently empty history.
+   */
+  readonly history?: NoticeHistoryStore
+  /**
+   * "Les canaux de `@cogenta/channels` sont réellement utilisables depuis un
+   * site" (fiche 38 task 3). Fired, best-effort, for whatever `history.sync`
+   * reports as newly appeared on every `GET /`. Requires `history` — there
+   * is nothing to compare "new" against without it.
+   */
+  readonly channelBridge?: NoticeChannelBridge
   /** Mount point. `/api/notices` by default. */
   readonly basePath?: string
 }
@@ -72,8 +91,30 @@ function segmentsOf(path: string, basePath: string): string[] | null {
     .map((segment) => decodeURIComponent(segment))
 }
 
+function isNoticeSeverity(value: string): value is NoticeSeverity {
+  return value === 'info' || value === 'success' || value === 'warning' || value === 'danger'
+}
+
+function historyToJson(entry: NoticeHistoryEntry) {
+  return {
+    id: entry.id,
+    code: entry.code,
+    severity: entry.severity,
+    params: entry.params,
+    action:
+      entry.actionCode === null || entry.actionHref === null
+        ? undefined
+        : { code: entry.actionCode, href: entry.actionHref },
+    dismissible: entry.dismissible,
+    firstSeenAt: entry.firstSeenAt,
+    lastSeenAt: entry.lastSeenAt,
+    resolvedAt: entry.resolvedAt,
+    readAt: entry.readAt,
+  }
+}
+
 export function createNoticeRouter(options: NoticeRouterOptions): NoticeRouter {
-  const { sources, dismissals } = options
+  const { sources, dismissals, history, channelBridge } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
 
   /**
@@ -111,7 +152,64 @@ export function createNoticeRouter(options: NoticeRouterOptions): NoticeRouter {
           // for it: the source can change its mind about whether something may
           // be waved away, and an old row must not silence it for ever.
           const visible = found.filter((notice) => !notice.dismissible || !hidden.has(notice.id))
+
+          // History sees every notice a source currently emits — dismissed
+          // or not, exactly what "what happened while I was away" needs —
+          // never the filtered `visible` list. A dismissal hides a notice
+          // from the board without making it stop having existed.
+          if (history !== undefined) {
+            const changed = await history.sync(actor.id, found)
+            if (channelBridge !== undefined) {
+              await channelBridge.notifyNew(actor.id, changed).catch(() => undefined)
+            }
+          }
+
           return jsonResponse(200, { data: visible })
+        }
+
+        if (segments.length === 1 && segments[0] === 'history') {
+          if (method !== 'GET') return methodNotAllowed(['GET'])
+          if (actor.id === null) throw signedOut()
+          if (history === undefined) throw noRoute()
+
+          const severityParam = request.query['severity']
+          const severity = typeof severityParam === 'string' ? severityParam : undefined
+          if (severity !== undefined && !isNoticeSeverity(severity)) {
+            throw new CogentaError({
+              code: 'QUERY_INVALID',
+              message: `"${severity}" is not a notice severity.`,
+              hint: 'Use one of: info, success, warning, danger.',
+            })
+          }
+          const sinceParam = request.query['since']
+          const untilParam = request.query['until']
+
+          const entries = await history.list(actor.id, {
+            ...(severity === undefined ? {} : { severity }),
+            ...(typeof sinceParam === 'string' ? { since: sinceParam } : {}),
+            ...(typeof untilParam === 'string' ? { until: untilParam } : {}),
+          })
+          return jsonResponse(200, { data: entries.map(historyToJson) })
+        }
+
+        if (segments.length === 1 && segments[0] === 'read') {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          if (actor.id === null) throw signedOut()
+          if (history === undefined) throw noRoute()
+
+          const body =
+            typeof request.body === 'object' && request.body !== null
+              ? (request.body as Record<string, unknown>)
+              : {}
+          if (body['all'] === true) {
+            await history.markRead(actor.id, 'all')
+          } else {
+            const ids = Array.isArray(body['ids'])
+              ? body['ids'].filter((id): id is string => typeof id === 'string')
+              : []
+            await history.markRead(actor.id, ids)
+          }
+          return { status: 204, body: null, headers: {} }
         }
 
         if (segments.length === 2 && segments[1] === 'dismiss') {

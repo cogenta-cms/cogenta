@@ -332,3 +332,11 @@ export const FullscreenExitIcon = icon(
 )
 
 export const SlashIcon = icon(<path d="M13 3.5L7 16.5" />)
+
+/** The notification centre's trigger (fiche 38 task 2). */
+export const BellIcon = icon(
+  <>
+    <path d="M5 15v-4.5a5 5 0 0110 0V15l1.5 2h-13z" />
+    <path d="M8.3 17.5a1.8 1.8 0 003.4 0" />
+  </>,
+)

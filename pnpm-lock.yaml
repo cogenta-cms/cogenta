@@ -350,6 +350,9 @@ importers:
       '@cogenta/blocks':
         specifier: workspace:*
         version: link:../blocks
+      '@cogenta/channels':
+        specifier: workspace:*
+        version: link:../channels
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

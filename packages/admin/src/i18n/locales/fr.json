@@ -324,6 +324,8 @@
   },
   "notices": {
     "dismiss": "Masquer cette recommandation",
+    "see-more_one": "Voir {{count}} de plus",
+    "see-more_other": "Voir {{count}} de plus",
     "security": {
       "mfa-recommended": {
         "title": "Activez la vérification en deux étapes",
@@ -359,6 +361,51 @@
         "body": "{{count}} migration(s) n'ont pas encore été appliquées, et au moins une est destructive — elle ne sera pas appliquée depuis cet écran. Ouvrez l'écran de santé pour la commande exacte à lancer.",
         "action": "Ouvrir l'écran de santé"
       }
+    },
+    "plugin": {
+      "disabled": {
+        "timeout": {
+          "title": "Une extension a été désactivée : elle a dépassé le temps imparti",
+          "body": "« {{plugin}} » a été arrêtée et désactivée après avoir dépassé sa limite de temps. Elle ne s'exécutera plus tant que vous ne la réactivez pas."
+        },
+        "memory": {
+          "title": "Une extension a été désactivée : elle a consommé trop de mémoire",
+          "body": "« {{plugin}} » a été arrêtée et désactivée après avoir dépassé sa limite de mémoire. Elle ne s'exécutera plus tant que vous ne la réactivez pas."
+        },
+        "crash": {
+          "title": "Une extension a été désactivée : elle a planté",
+          "body": "« {{plugin}} » a été arrêtée et désactivée après que son worker a planté. Elle ne s'exécutera plus tant que vous ne la réactivez pas."
+        },
+        "action": "Ouvrir les extensions"
+      }
+    },
+    "content": {
+      "schedule-failed": {
+        "title": "Une publication programmée a échoué",
+        "body": "Une entrée de « {{collection}} » ({{locale}}) devait être publiée mais sa publication programmée a échoué. Elle reste non publiée tant que vous ne la corrigez pas.",
+        "action": "Ouvrir l'entrée"
+      }
+    }
+  },
+  "notifications": {
+    "trigger_one": "Notifications, {{count}} non lue",
+    "trigger_other": "Notifications, {{count}} non lues",
+    "title": "Notifications",
+    "empty": "Rien pour l'instant.",
+    "close": "Fermer les notifications",
+    "markAllRead": "Tout marquer comme lu",
+    "markRead": "Marquer comme lu",
+    "filterSeverity": "Filtrer par sévérité",
+    "allSeverities": "Toutes sévérités",
+    "severity": {
+      "info": "Info",
+      "success": "Succès",
+      "warning": "Avertissement",
+      "danger": "Critique"
+    },
+    "status": {
+      "active": "Active",
+      "resolved": "Résolue"
     }
   },
   "collections": {

@@ -185,6 +185,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
 
   AGENT_UNKNOWN: 404,
 
+  // Notice channel settings (fiche 38 tasks 3-4), reusing `@cogenta/channels`'
+  // own error codes rather than inventing new ones for the same failures.
+  CHANNEL_UNKNOWN: 404,
+  CHANNEL_PREFERENCES_INVALID: 400,
+
   // Site plans (L19). A missing draft is a 404; an undecided item and an
   // unknown decision id are both the caller's fault (400); "no provider
   // configured" is 501 rather than 500 — nothing is broken, this instance

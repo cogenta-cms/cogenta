@@ -37,14 +37,19 @@ import {
   createMenuRouter,
   createMfaRecommendationSource,
   createNotFoundRouter,
+  createNoticeChannelBridge,
+  createNoticeChannelSettingsRouter,
   createNoticeDismissalStore,
+  createNoticeHistoryStore,
   createNoticeRouter,
   createOpsStatusRouter,
   createPendingMigrationsSource,
   createPermissionLayer,
+  createPluginDisabledSource,
   createRecoveryCodeUsedNoticeSource,
   createRedirectRouter,
   createRestRouter,
+  createScheduledPublishFailedSource,
   createSearchRouter,
   createSeoRouter,
   createShellStatusRouter,
@@ -66,6 +71,7 @@ import {
   type MenuItemHealth,
   type MenuRouter,
   type NotFoundRouter,
+  type NoticeChannelSettingsRouter,
   type NoticeRouter,
   type OpsStatusRouter,
   type PermissionLayer,
@@ -88,7 +94,16 @@ import {
   variantKeyFor,
 } from '@cogenta/api'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
-import { createFileEmailTransport } from '@cogenta/channels'
+import {
+  type ChannelRegistry,
+  createChannelLinkStore,
+  createChannelRegistry,
+  createFileEmailTransport,
+  createNotificationDispatcher,
+  createPreferenceStore,
+  ensureChannelTables,
+  ensurePreferenceTables,
+} from '@cogenta/channels'
 import {
   type CommerceAdminRouter,
   type CommerceRequest,
@@ -135,6 +150,7 @@ import { importWordPress } from '@cogenta/import'
 import {
   createMarketplaceCatalog,
   createMarketplaceInstaller,
+  createPluginDisableStore,
   createPluginGrantStore,
   ensureMarketplaceTables,
   ensurePluginTables,
@@ -154,6 +170,7 @@ import {
   createNotFoundLogStore,
   createRedirectPatternStore,
   createRedirectStore,
+  createScheduledPublishFailureStore,
   createSchemaTables,
   createSearchIndex,
   createSiteSettingsStore,
@@ -462,6 +479,8 @@ interface Site {
   readonly shellStatusRouter: ShellStatusRouter
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
+  /** `/api/notices/channels/*` — fiche 38 tasks 3-4: linking a channel and its notification preferences. Always mounted; empty until an account links one. */
+  readonly noticeChannelSettingsRouter: NoticeChannelSettingsRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
   readonly securityAlerts: SecurityAlertWatch | null
   /** Account management from the admin instead of `cogenta users create` on a terminal (L11 task 3). */
@@ -564,6 +583,13 @@ interface Site {
    * test can call it directly instead of waiting a day.
    */
   readonly tickTrashPurge: () => Promise<TrashPurgeSummary>
+  /**
+   * Flushes whatever channel notifications fiche 38's notice-to-channel
+   * bridge queued for grouping or quiet hours (`@cogenta/channels`'
+   * `NotificationDispatcher.flushDue`, unchanged since L6). `runServe` calls
+   * this on its own `setInterval`, same shape as `tickScheduledPublishing`.
+   */
+  readonly tickChannelNotifications: () => Promise<readonly string[]>
   dispose(): Promise<void>
 }
 
@@ -708,6 +734,19 @@ interface AssembleSiteOptions {
    * already reads.
    */
   readonly configStatus: ConfigStatusInput
+  /**
+   * Live channel adapters for fiche 38's notice-to-channel bridge — the
+   * platform clients a deployer built with real credentials (a Telegram bot
+   * token, a Slack app token, …), the same way `options.onSecurityEvent` is
+   * this file's seam for an already-built sender rather than a place that
+   * constructs one. Absent means an empty `ChannelRegistry`: linking a
+   * channel and setting preferences on it still works (they only need the
+   * database); an actual send then fails with `CHANNEL_UNKNOWN`, which the
+   * bridge (`channel-bridge.ts`) always catches — a request never errors
+   * because of it, a message is simply never delivered (R1: no channel
+   * configured, no notification, never a broken CMS).
+   */
+  readonly channels?: { readonly registry?: ChannelRegistry }
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -755,6 +794,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // anti-abuse reasoning `maxPaths` exists for.
   const notFoundLog = createNotFoundLogStore({ db, maxPaths: options.notFoundLog.maxPaths })
   await notFoundLog.ensureTable()
+
+  // Fiche 38 task 1's last named source: a scheduled publication that throws
+  // (the handler below) is recorded here rather than only living in the
+  // queue driver's own retry bookkeeping, which nothing surfaces to an
+  // admin (`ScheduledPublishFailureStore`'s own doc comment says why).
+  const scheduledPublishFailures = createScheduledPublishFailureStore(db)
+  await scheduledPublishFailures.ensureTable()
 
   const stores = new Map<string, ContentStore>()
   const storeFor = (collection: CollectionDefinition): ContentStore => {
@@ -890,10 +936,38 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   registerScheduledPublishing(
     scheduledPublishQueue,
     async (publication) => {
-      const target = stores.get(publication.collection)
-      if (target === undefined) return
-      const entry = await target.read(publication.entryId, { state: 'working' })
-      if (entry?.status === 'scheduled') await target.publish(publication.entryId)
+      try {
+        const target = stores.get(publication.collection)
+        if (target === undefined) return
+        const entry = await target.read(publication.entryId, { state: 'working' })
+        if (entry?.status === 'scheduled') await target.publish(publication.entryId)
+        // A retry that finally lands must make the earlier attempts' failure
+        // disappear the same way a fixed migration or a re-enabled plugin
+        // does for their own notices — nothing left over to dismiss by hand.
+        await scheduledPublishFailures.clear(
+          publication.collection,
+          publication.entryId,
+          publication.locale,
+        )
+      } catch (error) {
+        // Recorded, then re-thrown: the queue's own retry/backoff (up to
+        // `maxAttempts`) must still run exactly as before — this notice
+        // source is a second, admin-visible witness of the same failure,
+        // never a replacement for the queue's own bookkeeping.
+        await scheduledPublishFailures
+          .record({
+            collection: publication.collection,
+            entryId: publication.entryId,
+            locale: publication.locale,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          .catch((recordError: unknown) =>
+            logger.error('failed to record a scheduled-publish failure', {
+              error: String(recordError),
+            }),
+          )
+        throw error
+      }
     },
     { logger },
   )
@@ -943,6 +1017,53 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.marketplace?.trustedPublicKeys === undefined
       ? {}
       : { trustedPublicKeys: options.marketplace.trustedPublicKeys }),
+  })
+  // `ensurePluginTables` above already creates the disabled-plugins table —
+  // this is the first thing that ever reads it back (fiche 38 task 1's
+  // `plugin-disabled` notice source).
+  const pluginDisabled = createPluginDisableStore(db)
+
+  // Fiche 38 task 2: what has ever been shown to each person, resolved or
+  // not — the half of the notice mechanism `NoticeDismissalStore` was never
+  // meant to be.
+  const noticeHistory = createNoticeHistoryStore(db)
+  await noticeHistory.ensureTable()
+
+  // Fiche 38 tasks 3-4: linking a channel to receive notices, and
+  // per-(person, channel) preferences. Both tables are database-only — they
+  // work with zero live channel adapters configured, which is the R1-honest
+  // default (`options.channels?.registry` is where a deployer plugs real
+  // ones in).
+  await ensureChannelTables(db)
+  await ensurePreferenceTables(db)
+  const channelLinks = createChannelLinkStore(db)
+  const channelPreferences = createPreferenceStore(db)
+  const channelRegistry = options.channels?.registry ?? createChannelRegistry([])
+  const channelDispatcher = createNotificationDispatcher({
+    db,
+    registry: channelRegistry,
+    linkStore: channelLinks,
+    preferenceStore: channelPreferences,
+    buildAdminUrl: () => `${site.url}/admin/notifications`,
+  })
+  const noticeChannelBridge = createNoticeChannelBridge({
+    dispatcher: channelDispatcher,
+    linkedChannelNames: async (userId) =>
+      (await channelLinks.listLinkedChannels(userId)).map((link) => link.channelName),
+    // Server-side wording for a channel message. The on-screen board
+    // translates the same `code`/`params` through i18next (ADR-0019); a
+    // channel message has no browser locale to read, so it renders in
+    // English — the same honest simplification `formats/report.ts`'s own
+    // callers already accept for anything built off-screen.
+    render: (entry) => ({
+      title: entry.code,
+      summary:
+        Object.keys(entry.params).length === 0
+          ? entry.code
+          : `${entry.code} (${Object.entries(entry.params)
+              .map(([key, value]) => `${key}: ${value}`)
+              .join(', ')})`,
+    }),
   })
 
   // Menus (navigation). Not schema-declared, so one fixed pair of tables
@@ -1235,8 +1356,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             logger,
           }),
     noticeRouter: createNoticeRouter({
-      // The seam is the array: a new recommendation is one more entry here
-      // and nothing else anywhere.
+      // The seam is the array (fiche 38 task 1): a new recommendation is one
+      // more entry here and nothing else anywhere — the router, the store
+      // and the admin board are all unaware how many there are.
       sources: [
         createMfaRecommendationSource({ collections, credentials: auth.credentials }),
         // The failed-sign-in table has been written to since L2 and read by
@@ -1261,8 +1383,29 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         ...(options.pendingMigrations === undefined
           ? []
           : [createPendingMigrationsSource(options.pendingMigrations)]),
+        // A plugin `@cogenta/plugins` killed for a timeout/memory/crash
+        // violation (L7 task 6) stayed disabled with nothing on screen
+        // saying so, until fiche 38.
+        createPluginDisabledSource({
+          listDisabled: () => pluginDisabled.listDisabled(),
+          pluginsHref: '/marketplace',
+        }),
+        // "Contenu programmé dont la publication a échoué" — fiche 38 task 1.
+        createScheduledPublishFailedSource({
+          listFailed: () => scheduledPublishFailures.list(),
+          entryHref: (record) => `/collections/${record.collection}/${record.entryId}`,
+        }),
       ],
       dismissals: noticeDismissals,
+      // Fiche 38 tasks 2-3: history for the notification centre, and the
+      // channel bridge that notifies whatever this person has linked —
+      // both optional on the router itself, both always supplied here.
+      history: noticeHistory,
+      channelBridge: noticeChannelBridge,
+    }),
+    noticeChannelSettingsRouter: createNoticeChannelSettingsRouter({
+      linkStore: channelLinks,
+      preferenceStore: channelPreferences,
     }),
     usersRouter: createUsersRouter({
       auth,
@@ -1318,6 +1461,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       })
     },
     tickTrashPurge,
+    tickChannelNotifications: () => channelDispatcher.flushDue(),
     dispose: async () => {
       await scheduledPublishQueue.close()
       await db.close()
@@ -2453,8 +2597,23 @@ export function createRequestListener(
         return
       }
 
+      if (url.pathname.startsWith('/api/notices/channels')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(
+          res,
+          await site.noticeChannelSettingsRouter.handle(request, context.actor),
+        )
+        return
+      }
+
       if (url.pathname.startsWith('/api/notices')) {
-        const request = toRestRequest(req, url, undefined)
+        // GET has no body; `POST .../{id}/dismiss` never reads one either,
+        // but `POST /api/notices/read` (fiche 38 task 2) does — same split
+        // as `/api/users` below, not a GET-only assumption any more.
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.noticeRouter.handle(request, context.actor))
         return
       }
@@ -2910,6 +3069,8 @@ export interface ServeOptions {
    * waiting a day for it.
    */
   readonly trashPurgeTickMs?: number
+  /** Overrides `CHANNEL_NOTIFICATION_TICK_MS`, for the same reason as `scheduledPublishTickMs`. */
+  readonly channelNotificationTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -2956,6 +3117,15 @@ const AUDIT_INTEGRITY_TICK_MS = 24 * 60 * 60 * 1000
  * screen advertises — `retainDays` itself is already measured in whole days.
  */
 const TRASH_PURGE_TICK_MS = 24 * 60 * 60 * 1000
+
+/**
+ * How often `runServe` flushes queued/grouped channel notifications (fiche
+ * 38 task 3, `NotificationDispatcher.flushDue`) — a quiet-hours deferral or
+ * an hourly/daily digest sits in `@cogenta/channels`' own pending table
+ * until this runs, the same R1-honest "no persistent worker" trade as
+ * scheduled publication above.
+ */
+const CHANNEL_NOTIFICATION_TICK_MS = 60_000
 
 /**
  * Builds `/api/config-status`'s answer (fiche 23 task 5) from what
@@ -3382,6 +3552,20 @@ export async function runServe(options: ServeOptions): Promise<number> {
   )
   trashPurgeTimer.unref()
 
+  // Channel notification flush (fiche 38 task 3) — same shape as the tick
+  // above: run once immediately, then on its own interval, never fatal.
+  const runChannelNotificationTick = (): void => {
+    site.tickChannelNotifications().catch((error: unknown) => {
+      logger.error('channel notification flush failed', { error: String(error) })
+    })
+  }
+  runChannelNotificationTick()
+  const channelNotificationTimer = setInterval(
+    runChannelNotificationTick,
+    options.channelNotificationTickMs ?? CHANNEL_NOTIFICATION_TICK_MS,
+  )
+  channelNotificationTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -3395,6 +3579,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   clearInterval(notFoundPurgeTimer)
   clearInterval(auditIntegrityTimer)
   clearInterval(trashPurgeTimer)
+  clearInterval(channelNotificationTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))

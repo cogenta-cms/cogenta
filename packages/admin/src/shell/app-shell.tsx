@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
+import { NotificationCenter } from '../notices/notification-center.js'
 import { useSchema } from '../schema/schema-context.js'
 import {
   AgentsIcon,
@@ -323,6 +324,7 @@ export function AppShell(): JSX.Element {
         )}
         {email !== null && <GlobalSearch />}
         <div className="app-shell__account">
+          {email !== null && <NotificationCenter />}
           <ThemeToggle />
           {email !== null && (
             <>

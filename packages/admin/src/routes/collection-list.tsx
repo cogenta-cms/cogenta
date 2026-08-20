@@ -1,6 +1,6 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   deleteEntry,
@@ -56,11 +56,18 @@ export function CollectionListRoute(): JSX.Element {
   const collection: CollectionSummary | undefined =
     schema.status === 'ready' ? schema.schema.collections.find((c) => c.name === name) : undefined
 
+  // Read once, on entry: this is not the full URL-synced filter fiche 01
+  // tâche 5 describes, only enough that a link landing here — the dashboard's
+  // content summary, in particular — opens already filtered, per that
+  // fiche's own critère ("un lien collé dans un chat rouvre exactement la
+  // même liste"). `useSearchParams` itself is not consulted again below.
+  const [initialSearchParams] = useSearchParams()
+
   const [sort, setSort] = useState<{ field: SortField; direction: SortDirection }>({
     field: 'updatedAt',
     direction: 'desc',
   })
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(() => initialSearchParams.get('status') ?? '')
   const [items, setItems] = useState<readonly Entry[]>([])
   const [cursorStack, setCursorStack] = useState<readonly (string | undefined)[]>([undefined])
   const [nextCursor, setNextCursor] = useState<string | null>(null)

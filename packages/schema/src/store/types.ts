@@ -140,6 +140,26 @@ export interface Page<T> {
   readonly hasMore: boolean
 }
 
+/**
+ * Per-status row counts for one collection, live rows and trash apart.
+ *
+ * The one shared implementation fiche 01 tâche 4 (per-collection status tabs)
+ * and fiche 22 tâche 1 (the dashboard's content summary widget) both build
+ * on: a `GROUP BY status` and a trash count, never a page scanned client-side
+ * — the piège both fiches name ("un compteur sur la page courante serait
+ * faux dès la deuxième page").
+ */
+export interface StatusCounts {
+  readonly draft: number
+  readonly scheduled: number
+  readonly published: number
+  readonly archived: number
+  /** Rows with `deletedAt` set — orthogonal to `status` (`schema@2.0`, ADR-0022). */
+  readonly trashed: number
+  /** `draft + scheduled + published + archived`. Trash is excluded, the same default every other read applies. */
+  readonly total: number
+}
+
 export interface VersionSummary {
   readonly version: number
   readonly status: ContentStatus

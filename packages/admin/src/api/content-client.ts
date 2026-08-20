@@ -30,6 +30,8 @@ export interface Entry {
   readonly version: number
   readonly createdAt: string
   readonly updatedAt: string
+  /** Who wrote this entry, when the server knows — never asserted by the client itself. */
+  readonly createdBy: string | null
   readonly locale: string
   /** The source entry's id, when this one is a translation of it (ADR-0014). */
   readonly translationOf: string | null
@@ -309,6 +311,35 @@ export function unpublishEntry(
       body: JSON.stringify({ status, ...(publishedAt === undefined ? {} : { publishedAt }) }),
     },
   )
+}
+
+/**
+ * Per-status row counts for one collection this actor may read — `GET
+ * /-/summary`'s wire shape (`@cogenta/api`'s `CollectionCounts`).
+ *
+ * `draft`/`scheduled`/`archived`/`trashed` are `null`, never `0`, for an
+ * actor the server did not grant draft or trash access on this collection —
+ * a fabricated `0` would itself be a claim about content this actor cannot
+ * see.
+ */
+export interface CollectionCounts {
+  readonly collection: string
+  readonly total: number
+  readonly published: number
+  readonly draft: number | null
+  readonly scheduled: number | null
+  readonly archived: number | null
+  readonly trashed: number | null
+}
+
+/**
+ * One request for every readable collection's status counts — the dashboard
+ * content summary widget (fiche 22 tâche 1). Never one request per
+ * collection: that is exactly the N+1 the fiche's own piège warns a
+ * dashboard turns into.
+ */
+export function getContentSummary(token: string): Promise<readonly CollectionCounts[]> {
+  return request('/api/content/-/summary', { headers: authHeader(token) })
 }
 
 /** Copies the entry's working state into a new draft — never the published face. */

@@ -35,6 +35,7 @@ import type {
   ReadOptions,
   ResolveLocaleOptions,
   SortOrder,
+  StatusCounts,
   TrashFilter,
   TrashOptions,
   UpdateInput,
@@ -106,6 +107,12 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   /** Purges what has sat in the trash longer than `trash.retainDays`. */
   purgeExpired(): Promise<PurgeReport>
   list(options?: ListOptions): Promise<Page<ContentEntry<TValues>>>
+  /**
+   * Per-status row counts, and how many sit in the trash — one `GROUP BY` and
+   * one trash count, never a page walked client-side (fiche 01 tâche 4,
+   * fiche 22 tâche 1: the two features share this one implementation).
+   */
+  count(): Promise<StatusCounts>
   publish(
     id: string,
     input?: { readonly publishedBy?: string | null },
@@ -1245,6 +1252,42 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         items,
         hasMore,
         nextCursor: hasMore && last !== undefined ? cursorFor(last, order) : null,
+      }
+    },
+
+    count: async () => {
+      const statusColumn = identifier('status', dialect)
+      const statusAlias = identifier('status', dialect)
+      const countAlias = identifier('n', dialect)
+
+      const grouped = await db.query<{ status: string; n: number | string }>(
+        sql`select ${statusColumn} as ${statusAlias}, count(*) as ${countAlias}
+            from ${entries}
+            where ${deletedAt} is null
+            group by ${statusColumn}`,
+      )
+      const trashedResult = await db.query<{ n: number | string }>(
+        sql`select count(*) as ${countAlias} from ${entries} where ${deletedAt} is not null`,
+      )
+
+      const byStatus: Record<ContentStatus, number> = {
+        draft: 0,
+        scheduled: 0,
+        published: 0,
+        archived: 0,
+      }
+      let total = 0
+      for (const row of grouped.rows) {
+        const status = text(row.status) as ContentStatus
+        const n = Number(row.n)
+        if (status in byStatus) byStatus[status] = n
+        total += n
+      }
+
+      return {
+        ...byStatus,
+        trashed: Number(trashedResult.rows[0]?.n ?? 0),
+        total,
       }
     },
 

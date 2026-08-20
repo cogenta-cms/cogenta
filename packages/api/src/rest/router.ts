@@ -32,6 +32,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  * that REST and GraphQL must agree on already happened in `ContentService`.
  *
  *   GET    /-/by-path                      resolve a site URL
+ *   GET    /-/summary                      status counts for every readable collection
  *   GET    /{collection}                   list
  *   POST   /{collection}                   create
  *   GET    /{collection}/{id}              read
@@ -246,6 +247,16 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
     name: string | undefined,
     extra: string | undefined,
   ): Promise<RestResponse> {
+    // The dashboard's content summary widget (fiche 22 tâche 1): one request
+    // for every readable collection's status counts, rather than one per
+    // collection — the same reserved `-` segment `by-path` already uses,
+    // because a summary is not a collection either.
+    if (name === 'summary') {
+      if (extra !== undefined) throw noRoute()
+      if (method !== 'GET') return methodNotAllowed(['GET'])
+      return jsonResponse(200, { data: await service.summary(context) })
+    }
+
     if (name !== 'by-path' || extra !== undefined) throw noRoute()
     if (method !== 'GET') return methodNotAllowed(['GET'])
 

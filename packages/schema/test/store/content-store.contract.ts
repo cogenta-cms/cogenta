@@ -457,6 +457,56 @@ export function runContentStoreContract(
       })
     })
 
+    describe('count', () => {
+      it('groups live rows by status, and counts the trash separately', async () => {
+        const d1 = await articles.create({ values: { title: 'd1' } })
+        await articles.create({ values: { title: 'd2' } })
+        const published = await articles.create({ values: { title: 'p1' } })
+        await articles.publish(published.id)
+        const trashed = await articles.create({ values: { title: 't1' } })
+        await articles.delete(trashed.id)
+
+        const counts = await articles.count()
+        expect(counts).toEqual({
+          draft: 2,
+          scheduled: 0,
+          published: 1,
+          archived: 0,
+          trashed: 1,
+          total: 3,
+        })
+
+        // The trashed row must not haunt either side of the count: not among
+        // the live statuses, and not silently folded into the total.
+        expect(await articles.read(d1.id, { state: 'working' })).not.toBeNull()
+      })
+
+      it('reports every status at zero on an empty collection', async () => {
+        expect(await articles.count()).toEqual({
+          draft: 0,
+          scheduled: 0,
+          published: 0,
+          archived: 0,
+          trashed: 0,
+          total: 0,
+        })
+      })
+
+      it('excludes the trash from the status breakdown even when it grows', async () => {
+        const kept = await articles.create({ values: { title: 'kept' } })
+        for (let index = 0; index < 3; index += 1) {
+          const doomed = await articles.create({ values: { title: `doomed-${index}` } })
+          await articles.delete(doomed.id)
+        }
+
+        const counts = await articles.count()
+        expect(counts.draft).toBe(1)
+        expect(counts.trashed).toBe(3)
+        expect(counts.total).toBe(1)
+        expect(await articles.read(kept.id, { state: 'working' })).not.toBeNull()
+      })
+    })
+
     describe('duplication', () => {
       it('copies the values, the relations and the blocks into a new draft', async () => {
         const writer = await authors.create({ values: { name: 'Colette' } })

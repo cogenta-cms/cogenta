@@ -639,7 +639,9 @@
     "confirmLeaveDiscard": "Leave without saving",
     "confirmLeaveSave": "Save",
     "assistantSectionLabel": "Assistant",
+    "assistantSectionEmpty": "No LLM provider is configured on this site: the writing assistant is not available. Everything else on this screen works without it.",
     "translationsSectionLabel": "Translations",
+    "translationsSectionEmpty": "This site only has one language configured: there is no translation to manage here.",
     "historySectionLabel": "History",
     "workflow": {
       "stateLabel": "Review:",

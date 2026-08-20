@@ -133,11 +133,29 @@ export function getEntry(token: string, collection: string, id: string): Promise
   )
 }
 
+/** One accepted assistant suggestion since the last save — fiche 30 task 5's audit trail. Not stored on the entry; the server reads it only to write the audit row. */
+export interface AssistApplied {
+  readonly field: string
+  readonly tool: string
+}
+
+/** Contract A's system field, sent only when this save should be marked (fiche 30 task 5). */
+export interface AssistProvenance {
+  readonly provenance: 'assisted'
+  readonly provenanceDetail?: {
+    readonly agent?: string
+    readonly model?: string
+    readonly at?: string
+  }
+}
+
 export interface CreateEntryOptions {
   readonly blocks?: BlockZones
   readonly locale?: string
   /** The source entry's id — this create becomes its translation (ADR-0014). */
   readonly translationOf?: string
+  readonly assist?: AssistProvenance
+  readonly assistApplied?: readonly AssistApplied[]
 }
 
 export function createEntry(
@@ -146,7 +164,7 @@ export function createEntry(
   values: Readonly<Record<string, unknown>>,
   options: CreateEntryOptions = {},
 ): Promise<Entry> {
-  const { blocks, locale, translationOf } = options
+  const { blocks, locale, translationOf, assist, assistApplied } = options
   return request(`/api/content/${encodeURIComponent(collection)}`, {
     method: 'POST',
     headers: authHeader(token),
@@ -155,8 +173,15 @@ export function createEntry(
       ...(blocks === undefined ? {} : { blocks }),
       ...(locale === undefined ? {} : { locale }),
       ...(translationOf === undefined ? {} : { translationOf }),
+      ...(assist === undefined ? {} : assist),
+      ...(assistApplied === undefined || assistApplied.length === 0 ? {} : { assistApplied }),
     }),
   })
+}
+
+export interface UpdateEntryOptions {
+  readonly assist?: AssistProvenance
+  readonly assistApplied?: readonly AssistApplied[]
 }
 
 export function updateEntry(
@@ -165,11 +190,18 @@ export function updateEntry(
   id: string,
   values: Readonly<Record<string, unknown>>,
   blocks?: BlockZones,
+  options: UpdateEntryOptions = {},
 ): Promise<Entry> {
+  const { assist, assistApplied } = options
   return request(`/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: authHeader(token),
-    body: JSON.stringify(blocks === undefined ? { values } : { values, blocks }),
+    body: JSON.stringify({
+      values,
+      ...(blocks === undefined ? {} : { blocks }),
+      ...(assist === undefined ? {} : assist),
+      ...(assistApplied === undefined || assistApplied.length === 0 ? {} : { assistApplied }),
+    }),
   })
 }
 

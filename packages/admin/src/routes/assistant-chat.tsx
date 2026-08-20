@@ -20,8 +20,13 @@ import { useSchema } from '../schema/schema-context.js'
  * Same degradation rule as everywhere else in this lot (R2): `GET
  * /api/assistant` is asked once, and this screen renders nothing at all —
  * not an error, not an upsell — unless `assist.chat` is actually in the list
- * the server sent back. The nav link stays (as it does for every other
- * section, permission-gated pages included); the screen itself disappears.
+ * the server sent back.
+ *
+ * Fiche 30 task 2: this is no longer a standalone nav entry. It is mounted
+ * as the "Chat" tab of `routes/assistant.tsx`, unchanged otherwise — the
+ * component still runs its own independent capability check and disappears
+ * on its own if `assist.chat` specifically is missing, even while the rest
+ * of the assistant screen renders.
  *
  * The answer's citations are the whole security argument of the underlying
  * tool: the model only ever names 1-based indices into passages retrieval

@@ -10,6 +10,7 @@ import { createClassifyTool, createFindDuplicatesTool, createModerateTool } from
 import { createFaqTool, createSchemaOrgTool } from './faq.js'
 import { createGenerateImageTool } from './images.js'
 import { type AssistRuntime, createAssistRuntime } from './runtime.js'
+import type { AssistUsageTracker } from './usage.js'
 import { createWritingTools } from './writing.js'
 
 /**
@@ -60,6 +61,10 @@ export interface AssistToolset {
   readonly capabilities: readonly AssistCapability[]
   /** Absent when no text provider is configured. */
   readonly runtime?: AssistRuntime
+  /** The text model actually in use, when a provider is configured — fiche 30 task 5's `provenanceDetail.model` reads this. */
+  readonly model?: string
+  /** Fiche 30 task 3. Present exactly when a text provider is present — the only side that spends tokens. */
+  readonly usage?: AssistUsageTracker
 }
 
 export interface AssistToolsetOptions {
@@ -76,6 +81,8 @@ export interface AssistToolsetOptions {
   /** The vector store and embedder duplicate detection runs on. Needs no AI provider. */
   readonly vectors?: { readonly store: VectorStore; readonly embeddings: EmbeddingProvider }
   readonly site: SiteContext
+  /** Fiche 30 task 3. Absent means no cap is tracked (the toolset still runs — only visibility and enforcement are lost). */
+  readonly usage?: AssistUsageTracker
 }
 
 const LABELS: Readonly<Record<string, { readonly label: string; readonly needs: string[] }>> = {
@@ -120,7 +127,21 @@ export function createAssistToolset(options: AssistToolsetOptions): AssistToolse
   const runtime =
     options.provider === undefined
       ? undefined
-      : createAssistRuntime({ provider: options.provider, site: options.site })
+      : createAssistRuntime({
+          provider: options.provider,
+          site: options.site,
+          ...(options.usage === undefined
+            ? {}
+            : {
+                onUsage: (info) => {
+                  // `record` needs a tool name to attribute to; a completion
+                  // made with no `request.tool` (there is none today) is
+                  // still counted against the monthly cap, just not
+                  // attributed to any one row in the per-tool breakdown.
+                  options.usage?.record(info.tool ?? 'unknown', info.usage)
+                },
+              }),
+        })
 
   const tools: ToolDefinition[] = [
     ...(runtime === undefined
@@ -149,6 +170,7 @@ export function createAssistToolset(options: AssistToolsetOptions): AssistToolse
     available: true,
     tools,
     capabilities: describeCapabilities(tools),
-    ...(runtime === undefined ? {} : { runtime }),
+    ...(runtime === undefined ? {} : { runtime, model: runtime.model }),
+    ...(runtime === undefined || options.usage === undefined ? {} : { usage: options.usage }),
   }
 }

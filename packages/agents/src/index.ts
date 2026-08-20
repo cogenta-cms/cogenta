@@ -41,6 +41,14 @@ export type {
   AssistToolsetOptions,
 } from './assist/toolset.js'
 export { createAssistToolset, describeCapabilities } from './assist/toolset.js'
+export type {
+  AssistToolUsage,
+  AssistUsageLimits,
+  AssistUsageSnapshot,
+  AssistUsageTracker,
+  AssistUsageTrackerOptions,
+} from './assist/usage.js'
+export { createAssistUsageTracker } from './assist/usage.js'
 export {
   createAltTextTool,
   createMetaDescriptionTool,

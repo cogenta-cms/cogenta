@@ -37,9 +37,13 @@ describe('the duplicate-detection screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Doublons' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
 
+    // Fiche 30 task 2: with no provider, the whole assistant screen becomes
+    // the one explanation page — there are no tabs to click into.
+    await screen.findByText("Aucun fournisseur IA n'est configuré")
     expect(screen.queryByRole('heading', { name: 'Détection de doublons' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Doublons' })).toBeNull()
   })
 
   it('reports a possible duplicate with a similarity score, and merges nothing itself', async () => {
@@ -64,7 +68,8 @@ describe('the duplicate-detection screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Doublons' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Doublons' }))
     await screen.findByRole('heading', { name: 'Détection de doublons' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Chercher des doublons' }))

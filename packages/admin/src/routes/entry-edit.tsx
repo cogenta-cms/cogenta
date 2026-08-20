@@ -2,7 +2,7 @@ import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client.js'
-import type { BlockZones, ContentBlock } from '../api/content-client.js'
+import type { AssistApplied, BlockZones, ContentBlock } from '../api/content-client.js'
 import {
   createEntry,
   duplicateEntry,
@@ -153,6 +153,8 @@ export function EntryEditRoute(): JSX.Element {
   const [scheduleInput, setScheduleInput] = useState('')
   const [duplicating, setDuplicating] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  /** Fiche 30 task 5: every assistant suggestion accepted since the last save — cleared on save, not on discard, since a save is the only thing that turns "accepted" into a real audit entry. */
+  const [assistApplied, setAssistApplied] = useState<readonly AssistApplied[]>([])
 
   useEffect(() => {
     if (isNew) {
@@ -215,6 +217,12 @@ export function EntryEditRoute(): JSX.Element {
     setValues((current) => ({ ...current, [field]: value }))
   }
 
+  /** Every "accept" button in every assist panel routes through here — the one place `assistApplied` grows (fiche 30 task 5). */
+  function applyAssistSuggestion(field: string, value: unknown, tool: string): void {
+    setFieldValue(field, value)
+    setAssistApplied((current) => [...current, { field, tool }])
+  }
+
   function setBlockZone(zone: string, value: unknown): void {
     setBlocks((current) => ({ ...current, [zone]: value as BlockZones[string] }))
   }
@@ -231,23 +239,45 @@ export function EntryEditRoute(): JSX.Element {
     setSaving(true)
     setError(null)
     setSaved(false)
+    // Fiche 30 task 5: a save that includes at least one accepted suggestion
+    // is marked `provenance: 'assisted'` — contract A's existing middle
+    // ground between `human` and `generated` (`PROVENANCE_KINDS`), exactly
+    // the case of a paragraph a person reviewed and approved rather than
+    // typed themselves. `assistApplied` never reaches the entry itself
+    // (`parseUpdateBody`/`parseCreateBody` strip the unknown key) — it only
+    // feeds `cogenta serve`'s audit recorder.
+    const assistOptions =
+      assistApplied.length === 0
+        ? {}
+        : {
+            assist: {
+              provenance: 'assisted' as const,
+              provenanceDetail: {
+                agent: [...new Set(assistApplied.map((entry) => entry.tool))].join(','),
+                at: new Date().toISOString(),
+              },
+            },
+            assistApplied,
+          }
     try {
       if (isNew) {
         const entry = await createEntry(token, name, values, {
           blocks,
           locale,
           ...(translationOf === null ? {} : { translationOf }),
+          ...assistOptions,
         })
         forgetAutosave()
         navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`, {
           replace: true,
         })
       } else if (id !== undefined) {
-        const entry = await updateEntry(token, name, id, values, blocks)
+        const entry = await updateEntry(token, name, id, values, blocks, assistOptions)
         setValues({ ...entry.values })
         setBlocks({ ...entry.blocks })
         setBaseline({ values: entry.values, blocks: entry.blocks })
         setRecovered(null)
+        setAssistApplied([])
         forgetAutosave()
         setSaved(true)
       }
@@ -722,7 +752,7 @@ export function EntryEditRoute(): JSX.Element {
           fields={assistFields}
           locale={locale}
           siteLocales={siteLocales}
-          onApply={setFieldValue}
+          onApply={applyAssistSuggestion}
         />
       )}
 
@@ -740,7 +770,7 @@ export function EntryEditRoute(): JSX.Element {
             options: classifyVocabulary,
           }}
           currentValue={classifyCurrentValue}
-          onAccept={setFieldValue}
+          onAccept={(field, next) => applyAssistSuggestion(field, next, 'assist.classify')}
         />
       )}
 
@@ -756,6 +786,7 @@ export function EntryEditRoute(): JSX.Element {
           blockZone={blockZone ?? null}
           onAcceptFaq={(zone, block: ContentBlock) => {
             setBlockZone(zone, [...(blocks[zone] ?? []), block])
+            setAssistApplied((current) => [...current, { field: zone, tool: 'assist.faq_draft' }])
           }}
         />
       )}

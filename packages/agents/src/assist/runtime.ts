@@ -1,7 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import type { z } from 'zod'
 import { assembleContext, type DataItem, type SiteContext } from '../identity/context.js'
-import type { ProviderClient } from '../providers/types.js'
+import type { ProviderClient, TokenUsage } from '../providers/types.js'
 
 /**
  * The single-shot completion every L18 assistant tool is built on.
@@ -39,6 +39,8 @@ export interface AssistRequest {
   readonly maxTokens?: number
   readonly temperature?: number
   readonly signal?: AbortSignal
+  /** Contract C tool name this call is made on behalf of — fiche 30 task 3's per-tool usage attribution. Absent means the call is not attributed to any one tool. */
+  readonly tool?: string
 }
 
 export interface AssistRuntime {
@@ -52,6 +54,11 @@ export interface AssistRuntimeOptions {
   readonly provider: ProviderClient
   readonly site: SiteContext
   readonly defaultMaxTokens?: number
+  /** Fiche 30 task 3: reports every completion's real token usage, attributed to `request.tool` when the caller named one. Never blocks or throws on its own — a usage tracker records, it does not decide. */
+  readonly onUsage?: (info: {
+    readonly tool: string | undefined
+    readonly usage: TokenUsage
+  }) => void
 }
 
 const DEFAULT_MAX_TOKENS = 1200
@@ -123,6 +130,8 @@ export function createAssistRuntime(options: AssistRuntimeOptions): AssistRuntim
       },
       request.signal === undefined ? undefined : { signal: request.signal },
     )
+
+    options.onUsage?.({ tool: request.tool, usage: response.usage })
 
     if (response.content === null || response.content.trim().length === 0) {
       throw responseInvalid(

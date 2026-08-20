@@ -151,6 +151,9 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // The model answered with something unusable. That is an upstream failure the
   // caller cannot fix by changing their request.
   ASSIST_RESPONSE_INVALID: 502,
+  // Fiche 30 task 3's spending cap. Same status as `PROVIDER_RATE_LIMITED` —
+  // "try again later" is the accurate instruction for both.
+  ASSIST_BUDGET_EXCEEDED: 429,
   TOOL_UNKNOWN: 404,
   TOOL_INPUT_INVALID: 400,
   TOOL_CALL_REJECTED: 403,

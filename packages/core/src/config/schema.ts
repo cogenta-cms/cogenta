@@ -188,6 +188,19 @@ const billingSchema = z.strictObject({
   footer: nonEmpty.optional(),
 })
 
+/**
+ * The writing assistant's spending cap (fiche 30 task 3).
+ *
+ * A non-null default rather than "unlimited": the lot's own pitfall is exact
+ * — "le coût est invisible jusqu'à la facture", and a service billed per token
+ * left uncapped by default is the wrong default for a CMS that ships with AI
+ * off. One million tokens a month is generous for a single site's editors
+ * while still being a real ceiling, not a decoration.
+ */
+const assistantSchema = z.strictObject({
+  monthlyTokenLimit: z.number().int().positive().default(1_000_000),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -203,6 +216,7 @@ export const configSchema = z.strictObject({
   imageGeneration: imageGenerationSchema.optional(),
   vector: vectorSchema.prefault({}),
   billing: billingSchema.optional(),
+  assistant: assistantSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

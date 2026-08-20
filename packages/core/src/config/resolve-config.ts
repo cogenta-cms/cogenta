@@ -203,5 +203,8 @@ export function resolveConfig(
             taxId: config.billing.taxId,
             footer: config.billing.footer,
           }),
+    assistant: Object.freeze({
+      monthlyTokenLimit: config.assistant.monthlyTokenLimit,
+    }),
   })
 }

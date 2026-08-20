@@ -618,6 +618,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
                 collection: collection.name,
                 error: String(error),
               }),
+            onIndexed: () => options.assistant?.vectorInfo?.noteIndexed(),
           })
     // Outermost of all: an event must describe a write that really landed, so
     // it fires after the read-only guard has had its chance to refuse and
@@ -904,6 +905,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       permissions,
       site,
       logger,
+      ...(options.assistant?.vectorInfo === undefined
+        ? {}
+        : { vectorInfo: options.assistant.vectorInfo }),
     }),
     ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
     ...(options.sitePlans === undefined
@@ -1101,6 +1105,30 @@ async function recordContentAudit(
       ? (body as { readonly values?: Record<string, unknown> }).values
       : undefined
 
+  // Fiche 30 task 5: which fields (if any) were filled by an accepted
+  // assistant suggestion since the last save. Not a contract A field — this
+  // never reaches `store.update`, `parseUpdateBody` strips it as an unknown
+  // key — only the audit trail, so "a paragraph written" and "a paragraph
+  // accepted from a suggestion" read differently in the log even though both
+  // produce the same `content.update`.
+  const assistApplied =
+    typeof body === 'object' && body !== null && 'assistApplied' in body
+      ? (
+          body as {
+            readonly assistApplied?: readonly { readonly field: string; readonly tool: string }[]
+          }
+        ).assistApplied
+      : undefined
+  const diff =
+    values === undefined && (assistApplied === undefined || assistApplied.length === 0)
+      ? undefined
+      : {
+          ...(values === undefined ? {} : values),
+          ...(assistApplied === undefined || assistApplied.length === 0
+            ? {}
+            : { _assistApplied: assistApplied }),
+        }
+
   await site.auth.audit
     .record({
       actorId: actor.id,
@@ -1108,7 +1136,7 @@ async function recordContentAudit(
       action,
       collection,
       ...(entryId === undefined ? {} : { entryId }),
-      ...(values === undefined ? {} : { diff: values }),
+      ...(diff === undefined ? {} : { diff }),
     })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }

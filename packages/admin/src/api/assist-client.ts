@@ -17,6 +17,31 @@ export interface AssistCapability {
   readonly needs: readonly string[]
 }
 
+/** Fiche 30 task 3 — one row of `usage.byTool`. */
+export interface AssistToolUsage {
+  readonly tool: string
+  readonly calls: number
+  readonly tokens: number
+}
+
+/** Fiche 30 task 3 — the whole toolset's spending this calendar month. */
+export interface AssistUsageSnapshot {
+  readonly tokensThisMonth: number
+  readonly limit?: number
+  readonly percentUsed?: number
+  readonly nearLimit: boolean
+  readonly overLimit: boolean
+  readonly byTool: readonly AssistToolUsage[]
+}
+
+/** Fiche 30 task 6 — the vector index's visible state. */
+export interface AssistVectorInfo {
+  readonly driver: string
+  readonly dimensions: number
+  readonly count: number
+  readonly lastIndexedAt: string | null
+}
+
 export interface AssistCapabilities {
   /**
    * False on a site with no AI provider. The route answers 200 in that case —
@@ -25,6 +50,12 @@ export interface AssistCapabilities {
   readonly available: boolean
   readonly reason?: string
   readonly tools: readonly AssistCapability[]
+  /** The text model configured, when there is a provider — fiche 30 tasks 2/3. */
+  readonly model?: string
+  /** Absent when no usage tracker is configured server-side. */
+  readonly usage?: AssistUsageSnapshot
+  /** Absent when the site has no vector store at all. */
+  readonly vector?: AssistVectorInfo
 }
 
 /** Every writing tool answers with this shape. `applied` is always false. */

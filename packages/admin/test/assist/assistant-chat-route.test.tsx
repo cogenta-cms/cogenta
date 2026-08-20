@@ -30,16 +30,16 @@ const CHAT_TOOL = {
 }
 
 describe('the "ask the site" chat screen', () => {
-  it('does not appear in the nav, and does not render, on a site with no AI provider', async () => {
+  it('does not render, on a site with no AI provider — the whole assistant screen explains why instead', async () => {
     signedIn()
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    // The nav link stays (same convention as every other section); the
-    // screen itself is what disappears.
-    fireEvent.click(screen.getByRole('link', { name: 'Interroger le site' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
 
+    await screen.findByText("Aucun fournisseur IA n'est configuré")
     expect(screen.queryByRole('heading', { name: 'Interroger le site' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Interroger le site' })).toBeNull()
   })
 
   it('answers a question with the real citations retrieval found', async () => {
@@ -64,7 +64,8 @@ describe('the "ask the site" chat screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Interroger le site' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
     await screen.findByRole('heading', { name: 'Interroger le site' })
 
     fireEvent.change(screen.getByLabelText('Votre question'), {

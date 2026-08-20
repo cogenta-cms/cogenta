@@ -12,6 +12,7 @@ import {
 } from 'slate-react'
 import { portableTextToSlate, slateToPortableText } from './convert.js'
 import type { RichTextDocument } from './portable-text.js'
+import { RichTextSelectionAssist } from './selection-assist.js'
 import { RichTextToolbar } from './toolbar.js'
 import { withInlines } from './with-inlines.js'
 
@@ -111,6 +112,7 @@ export function RichTextEditor({
     <div className="rich-text-editor">
       <Slate editor={editor} initialValue={internalValue} onChange={handleChange}>
         <RichTextToolbar disabled={disabled} />
+        <RichTextSelectionAssist disabled={disabled} />
         <Editable
           id={id}
           readOnly={disabled}

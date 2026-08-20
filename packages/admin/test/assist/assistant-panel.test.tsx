@@ -179,7 +179,7 @@ describe('the assistant panel on a configured site', () => {
       input: Record<string, unknown>
     }
     expect(body.input['text']).toBe('A museum.')
-    expect(onApply).toHaveBeenCalledWith('summary', 'A better summary.')
+    expect(onApply).toHaveBeenCalledWith('summary', 'A better summary.', 'assist.rewrite')
   })
 
   it('shows the suggestion and says, in so many words, that nothing was changed', async () => {
@@ -210,7 +210,7 @@ describe('the assistant panel on a configured site', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Rewrite' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Utiliser' }))
 
-    expect(onApply).toHaveBeenCalledWith('body', 'A shorter sentence.')
+    expect(onApply).toHaveBeenCalledWith('body', 'A shorter sentence.', 'assist.rewrite')
     // Two calls: the capability probe and the suggestion. No content write.
     expect(fetchMock).toHaveBeenCalledTimes(2)
     for (const call of fetchMock.mock.calls) {

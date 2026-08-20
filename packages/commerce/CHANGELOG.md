@@ -1,5 +1,80 @@
 # @cogenta/commerce
 
+## 0.3.0
+
+### Minor Changes
+
+- [`2211d4b`](https://github.com/cogenta-cms/cogenta/commit/2211d4b3bb3e62b727f123bb15cfe8b2daa392ed) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `GET /api/commerce/permissions` — a read-only route answering contract E's own
+  permission vocabulary (`COMMERCE_PERMISSIONS`) and which roles this site actually grants
+  each one. Needs `commerce.read`, the same as every other read route.
+  
+  `CommercePermissionLayer` gains a `roles` field: the resolved role→permissions map this
+  layer is actually enforcing (`DEFAULT_COMMERCE_ROLES` unless `CommercePermissionOptions.roles`
+  overrode it). A structural, additive change to the interface — every existing
+  `createCommercePermissions()` caller still compiles and behaves identically; only a
+  caller that builds its own object literal satisfying `CommercePermissionLayer` by hand
+  (none does in this codebase) would need to add the field.
+  
+  Both exist so fiche 19's admin permission matrix can render what this layer really
+  enforces instead of a copy of `DEFAULT_COMMERCE_ROLES` hand-typed into the admin bundle,
+  which would silently go stale the day a site passes `roles` to override the defaults.
+
+- [`bebbab8`](https://github.com/cogenta-cms/cogenta/commit/bebbab881761fb86a28cdbbcb95b5960429f2a29) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add store settings for the shop (fiche 34): tax zones/rates with a simulator, shipping
+  zones/methods with a simulator, payment driver activation (presence-only for keys, never
+  values), general store settings, and a configurable invoice template.
+  
+  - `@cogenta/core` gains a `payment` configuration section (`driver`, `testMode`,
+    `manualInstructions`) following the exact `llm`/`billing` pattern: the Stripe secret key
+    and webhook secret are never declared in the schema and are refused with
+    `CONFIG_SECRET_IN_FILE` if written to `cogenta.config.mjs` — they come only from
+    `COGENTA_PAYMENT_STRIPE_SECRET_KEY`/`COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET`.
+  - `@cogenta/schema`'s site-settings registry (fiche 23) gains a `commerce` group
+    (currency, tax-inclusive/exclusive display, countries served, minimum order, default
+    backorder policy, ToS/return-policy page paths — pointers to real content entries, not
+    text fields — and invoice series prefix/payment terms/language) and a new `select`
+    `uiType` for closed-choice settings.
+  - `@cogenta/commerce`'s admin router gains `GET|POST /tax/rules`, `DELETE
+    /tax/rules/{id}`, `POST /tax/simulate` (calls the real resolver, never a second
+    implementation), the shipping equivalents (`/shipping/methods`, `/shipping/simulate`),
+    and `GET /payment/drivers` / `POST /payment/drivers/{name}/test-connection` (presence
+    and live health only, never a key's value). `CommerceAdminRouterOptions` gains required
+    `tax`/`shipping` fields and an optional `payment` field — **a breaking change** for any
+    direct caller of `createCommerceAdminRouter` that does not yet pass them.
+  - `@cogenta/cli`'s `cogenta serve` now selects a real payment gateway through
+    `createPaymentRegistry` (Stripe when a key is configured and reachable, bank transfer
+    otherwise) instead of a hardcoded manual gateway, and mounts the new commerce settings
+    routes.
+  - `@cogenta/admin` (private, no changeset) gains four screens under "Boutique": Tax,
+    Shipping, Payment, and Store settings (general + invoice template), all `admin`-only.
+  
+  Deliberately not built in this fiche: an inbound `POST /api/commerce/payments/webhook`
+  route. `PaymentStore.handleWebhook` is already implemented and tested; wiring it needs
+  the raw (non-JSON-parsed) request body, which `cogenta serve`'s shared body reader does
+  not yet support for any route. The payment screen shows the webhook URL a deployer would
+  configure at Stripe, honestly labelled as not yet receiving events. See `BLOCKERS.md` §15.
+
+### Patch Changes
+
+- [`e75b23e`](https://github.com/cogenta-cms/cogenta/commit/e75b23ec985099f2eabe6eabb7b4c86115006996) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add global search: the ⌘K/Ctrl+K palette with shortcuts and "go to"/"create" actions, a full `/search?q=…` results page, highlighted excerpts, widened sources (orders, media, users, menus, extensions, taxonomy terms), typed inline filters (`status:draft`) and recent-search history (fiche 36).
+  
+  - `@cogenta/schema`'s search indexing (`extract.ts`) gains `buildExcerpt` — a window of prose
+    around the first query term found, with match offsets scoped to that window, never the
+    full text. Built from the *display* text (`SearchDocument.body`, never folded), so an
+    excerpt keeps real casing and accents while still matching a folded, prefix-matching
+    query.
+  - `@cogenta/api`'s `search-router.ts` enriches each `SearchHit` with an excerpt built
+    server-side, never reconstructed from HTML on the client (R3/R8: the excerpt is data,
+    escaped at render).
+  - `@cogenta/commerce`'s order store and admin router gain a search-by-number/email lookup,
+    gated on the caller's own `commerce.read` permission — a source in the global search
+    widens only what its own permission already allows, never more.
+  - Admin: `shell/global-search.tsx` (palette, shortcuts, recent searches, inline-filter
+    parsing), `routes/search.tsx` (the full results page, one tab per source with its own
+    permission gate), `search/` (excerpt highlighting, inline-filter parser, recent-search
+    `localStorage` store — never server-side, these are one person's own queries).
+- Updated dependencies [[`54ca689`](https://github.com/cogenta-cms/cogenta/commit/54ca6894449fcdd29ff76eef4514cda7c081f483), [`0692713`](https://github.com/cogenta-cms/cogenta/commit/06927130c15f7bc95ea97839cb50f67de87bd668), [`36744d3`](https://github.com/cogenta-cms/cogenta/commit/36744d3bc8e74a39fa6c68bdd78804fad1d8f069), [`0ca8a79`](https://github.com/cogenta-cms/cogenta/commit/0ca8a797288624a3c4d53ca0942687d9e570b186), [`c392e24`](https://github.com/cogenta-cms/cogenta/commit/c392e24880a29388fc63a08388042bf163817619), [`562c9c1`](https://github.com/cogenta-cms/cogenta/commit/562c9c1ee4d52b3e7f624e3b54ae033c2bd01e1c), [`edf5623`](https://github.com/cogenta-cms/cogenta/commit/edf562389652c4f6afb58d6e3f166de233d063e2), [`db307e0`](https://github.com/cogenta-cms/cogenta/commit/db307e068f4d029d98526c74d0ab9d56e531b73b), [`49815b9`](https://github.com/cogenta-cms/cogenta/commit/49815b95ad87cd37e7781cbb5a726327226259dd), [`122da7a`](https://github.com/cogenta-cms/cogenta/commit/122da7ad20396966b4d44538b0842f8efb9b7621), [`2fb2101`](https://github.com/cogenta-cms/cogenta/commit/2fb210109824f000788d512fef748f1066f65551), [`0e90b32`](https://github.com/cogenta-cms/cogenta/commit/0e90b32c19247430987e84cc1fd0be57e1ad4f3e), [`d0bfa1d`](https://github.com/cogenta-cms/cogenta/commit/d0bfa1d71166adfb0c66a296c4cf490ddd58a218), [`95acedf`](https://github.com/cogenta-cms/cogenta/commit/95acedf48920dba08e443e56ca4464bcfd394d34), [`6e5df34`](https://github.com/cogenta-cms/cogenta/commit/6e5df34e6f428c36712bc80e76c37d0cd7e33b1c), [`bebbab8`](https://github.com/cogenta-cms/cogenta/commit/bebbab881761fb86a28cdbbcb95b5960429f2a29), [`4513a71`](https://github.com/cogenta-cms/cogenta/commit/4513a71a15dfa7a716bf9c8fcd02f93df927f230), [`54409f3`](https://github.com/cogenta-cms/cogenta/commit/54409f3ff4640518d5d4149bef73a29142ba0d0a), [`2285720`](https://github.com/cogenta-cms/cogenta/commit/2285720ae29de05e96a8d776fd5ae14f2fe4fd0d), [`2c1af5d`](https://github.com/cogenta-cms/cogenta/commit/2c1af5d8ec08b460ba80a2228ceca6f4ff89eef2), [`745ebd8`](https://github.com/cogenta-cms/cogenta/commit/745ebd8f80ea94d916a370af0f9615e6565c0d00)]:
+  - @cogenta/core@0.5.0
+
 ## 0.2.0
 
 ### Minor Changes

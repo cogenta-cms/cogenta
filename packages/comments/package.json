@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/comments",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Contract F: visitor comments — moderation queue, threading, rate limiting, hashed IP, anti-spam.",
   "license": "MPL-2.0",
   "type": "module",

@@ -1,5 +1,500 @@
 # @cogenta/schema
 
+## 0.4.0
+
+### Minor Changes
+
+- [`7b7ec0b`](https://github.com/cogenta-cms/cogenta/commit/7b7ec0b897735c1323bb733ae6ba76a522f72669) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `ContentStore.count()` — a single `GROUP BY status` plus a trash count,
+  never a page scanned client-side — and `ContentService.summary()` /
+  `GET /-/summary` on top of it: one request that answers every collection an
+  actor may read with its status counts (`draft`/`scheduled`/`published`/
+  `archived`/`trashed`/`total`), each figure `null` rather than a fabricated
+  `0` when the actor may not read that collection's unpublished rows or its
+  trash. This is the shared implementation the admin's dashboard content
+  summary widget and the collection list's status tabs both build on. Purely
+  additive: no existing method, route or response shape changes.
+
+- [`0ca8a79`](https://github.com/cogenta-cms/cogenta/commit/0ca8a797288624a3c4d53ca0942687d9e570b186) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add optimistic concurrency detection and per-field error naming for the entry editor (fiche 02, tasks 3 and 7).
+  
+  - `@cogenta/core` gains the `CONTENT_STALE_WRITE` error code.
+  - `@cogenta/schema`'s `UpdateInput` gains an optional `expectedUpdatedAt`. When a caller
+    passes it, `update()` compares it against the live row's `updatedAt` and refuses with
+    `CONTENT_STALE_WRITE` (409) if someone else's write landed first, instead of silently
+    overwriting it. Omitting it keeps the previous last-write-wins behaviour unchanged.
+  - `@cogenta/api`'s `PATCH` body accepts the new `expectedUpdatedAt`, and `errorResponse`
+    now includes `error.field` for `CONTENT_INVALID`/`CONTENT_SLUG_INVALID` refusals, naming
+    the schema-declared field the error is about so a client can drive per-field validation
+    UI without parsing the message.
+  
+  Both additions are additive and backward compatible: existing callers that never send
+  `expectedUpdatedAt` see no behaviour change, and `error.field` is only ever present for
+  the two codes listed above.
+
+- [`c392e24`](https://github.com/cogenta-cms/cogenta/commit/c392e24880a29388fc63a08388042bf163817619) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Redirects: 404 log, prefix patterns, editing, CSV import/export, automatic
+  redirect on slug rename, and 307/308/410 status codes (fiche 12).
+  
+  **`@cogenta/core`**: gains a `notFoundLog` config section (`enabled`,
+  `maxPaths`, `retainDays`) — on by default, bounded, purged past its
+  retention. Never stores an IP address or a user agent.
+  
+  **`@cogenta/schema`**:
+  - `RedirectStatus` widens from `301 | 302` to `301 | 302 | 307 | 308 | 410`.
+    A 410 (Gone) row needs no `to`. Consumers that exhaustively switch on
+    `RedirectStatus` — a rare pattern, but a real one — need a case for the
+    three new values.
+  - `RedirectStore` gains `update(from, { to?, status? })` — implementors of
+    the interface (not typical callers) must add it. `RedirectStore.add`'s
+    `to` is now optional, required only when `status` is not 410.
+  - New: `createNotFoundLogStore`/`NotFoundLogStore` (the 404 log — aggregated
+    by path, capped at `maxPaths` distinct paths, no personal data ever) and
+    `createRedirectPatternStore`/`RedirectPatternStore` (prefix redirects —
+    `/blog/*` to `/actualites/*` — matched by `startsWith`, never a regular
+    expression, so the public routing path can never be exposed to
+    catastrophic backtracking).
+  - New: `withRedirectTracking` — wraps a `ContentStore` so renaming the slug
+    of a **published** entry writes a 301 from the old path to the new one on
+    its own, reversibly (renaming back makes the redirect disappear), and a
+    chain of renames stays flattened to one hop.
+  
+  **`@cogenta/api`**: `redirect-router.ts` gains `PATCH /api/redirects` (edit
+  in place), `?q=`/`?limit=`/`?offset=` on the list, `/api/redirects/patterns`
+  (prefix redirects), and `/api/redirects/export` / `/api/redirects/import`
+  (CSV, always previewed before anything is written — pass `apply: true` to
+  commit). New `createNotFoundRouter` (`GET`/`DELETE /api/not-found`). New
+  `parseCsv`/`stringifyCsv` — hand-written, zero dependency (R9).
+  
+  **`@cogenta/cli`**: `cogenta serve` mounts `/api/not-found` and the new
+  `/api/redirects/*` routes, applies prefix-redirect resolution after the
+  exact-match table finds nothing, answers a 410 with no `Location` header,
+  records every public GET that matches no route into the 404 log (never for
+  `/api/*`), and purges the log past its retention on a daily tick (new
+  `ServeOptions.notFoundPurgeTickMs` overrides it, for tests). Renaming the
+  slug of a published entry now writes its redirect automatically, wired
+  through `withRedirectTracking`.
+
+- [`562c9c1`](https://github.com/cogenta-cms/cogenta/commit/562c9c1ee4d52b3e7f624e3b54ae033c2bd01e1c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the "Apparence" admin screen (fiche 14) — the CMS's most-differentiating
+  feature, AI skin generation, was previously exposed only through the CLI.
+  
+  - `@cogenta/render` gains `mergeSkinTokens` (`SkinTokenOverrides`): overlays a
+    partial token tree onto a complete base skin, group by group, key by key.
+  - `@cogenta/schema` gains `createThemeStore`/`ensureThemeTable` — one row of
+    theme overrides (a partial token overlay, additional CSS, and four identity
+    media references), the database half of the two-source-of-truth design
+    task 0 settles on: `theme.tokens.json` stays the versioned file default,
+    the database holds what an `admin` changed from the admin screen.
+  - `@cogenta/plugins`'s `SkinGalleryEntry` now carries the accepted skin's real
+    `tokens` (`null` for a rejected entry) — needed to render a swatch or apply
+    a gallery skin, previously only metadata.
+  - `@cogenta/api` gains `createThemeRouter` (`GET/PUT/DELETE /api/theme[/overrides]`,
+    `GET /api/theme/skins`, `POST /api/theme/skins/:id/apply`,
+    `POST /api/theme/generate`, `POST /api/theme/export`), plus the
+    `SKIN_*`/`THEME_*` error-code → HTTP-status mappings it needs.
+  - `@cogenta/cli` wires it all into `cogenta serve`/`dev`: `resolveStyles()`
+    recomputes the served stylesheet on every request (file tokens merged with
+    saved overrides plus additional CSS), which is what makes a saved change
+    visible on the very next page view instead of only after a restart — the
+    "hot swap" contract D already promised for the file alone. A new
+    `POST /api/theme/preview` route renders the real home page with a candidate
+    overlay nobody has saved yet, the same iframe-on-the-real-render decision
+    L16 made for the page builder. Exporting the merged tokens back into
+    `theme.tokens.json` is gated to `cogenta dev` only, mirroring the
+    ADR-0010 rule L19's site-plan applier already uses for the schema file.
+  
+  R2 verified: without an LLM provider, `GET /api/theme` reports
+  `aiAvailable: false` and the admin's AI section does not render at all — no
+  error, no dead link. R6 verified: an AI-generated candidate or a chosen
+  gallery skin is never applied automatically; a save is always a separate,
+  explicit action.
+
+- [`edf5623`](https://github.com/cogenta-cms/cogenta/commit/edf562389652c4f6afb58d6e3f166de233d063e2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 15 — comments (ADR-0025, new contract F, `comments@1.0`):
+  
+  - **New package `@cogenta/comments`**: the comment model and store
+    (`CommentStore`) — plain-text body only (R3: no HTML tags accepted, ever),
+    hashed IP (never stored in clear, RGPD), moderation status
+    (`pending`/`approved`/`spam`/`trash`), threading via `parentId`,
+    `provenance`. A reversible migration (`ensureCommentsTables`/
+    `dropCommentsTables`), tested up/down/up on SQLite; Postgres/MySQL/MariaDB
+    integration tests are written (`test/integration/tables.test.ts`) but not
+    executed this session (no local Docker). `createCommentsRouter` is the
+    CMS's first public write route (`POST /api/comments`, no actor required)
+    plus the admin moderation queue, both behind contract F's own permission
+    vocabulary (`comments.read`/`moderate`/`reply`/`purge`/`settings`, distinct
+    from contract A's five frozen actions). The public route enforces, from
+    day one: rate limiting by IP and by target (`createCommentRateLimiter`),
+    a honeypot field, a minimum fill-delay, non-AI spam heuristics
+    (`checkSpamHeuristics`), and the WordPress "auto-approve a returning
+    commenter" rule. A no-JS `<form method=post>` gets a `303` redirect back to
+    its own page (`redirectTo`, validated against open-redirect and HTTP
+    response-splitting) instead of a raw JSON body.
+  - **`@cogenta/core`**: ten new error codes (`COMMENT_NOT_FOUND`,
+    `COMMENT_BODY_INVALID`, `COMMENT_AUTHOR_INVALID`, `COMMENT_TARGET_INVALID`,
+    `COMMENT_TARGET_CLOSED`, `COMMENT_PARENT_INVALID`,
+    `COMMENT_PARENT_TOO_DEEP`, `COMMENT_STATUS_INVALID`,
+    `COMMENT_RATE_LIMITED`, `COMMENT_SPAM_DETECTED`).
+  - **`@cogenta/schema`**: `SITE_SETTINGS_REGISTRY` gains the `discussion`
+    group (`discussion.enabled`/`moderationRequired`/`allowAnonymous`/
+    `autoCloseDays`/`maxNestingDepth`/`notifyEmail`) — the site-wide defaults
+    a collection or an entry can still override from `@cogenta/comments`'s own
+    settings store (per-collection/per-entry overrides deliberately do not
+    live in this registry, which is site/locale scoped only).
+  - **`@cogenta/api`**: `shell-status-router.ts` gains `commentsPending` (a
+    structural `CommentsQueueLike`, the same pattern `commerceOrdersPending`
+    already uses) — additive, existing callers that never pass `comments` see
+    `null` exactly as before.
+  - **`@cogenta/theme-canonical`**: `renderCommentsSection` — the comment
+    thread and its plain-HTML submission form, built through the existing
+    `h()`/`text()` tree (no `raw()` escape hatch exists in this package, which
+    is what makes "no visitor HTML ever reaches the page" structural rather
+    than a habit to remember). Rendered by `renderEntryPage`
+    (`@cogenta/cli`'s `theme-render.ts`) after the page's own `<main>`, on both
+    the published page and the L16 page-builder preview's own draft render —
+    except the preview, which never shows it (its `_ts` anti-spam field cannot
+    be identical across two separate renders, so byte-identity there would be
+    comparing two different legitimate values; `serve-builder.test.ts`'s
+    fidelity test now documents this as a deliberate, checked difference).
+    Contract B is untouched — no `comments` block, same reasoning L10 gave for
+    `/search`.
+  - **`@cogenta/import`**: `importWordPress` gains an optional `comments`
+    option (a `CommentStore`) — when given, every importable WordPress comment
+    is written with its real status (`wp:comment_approved` mapped to
+    pending/approved/spam/trash, not just `'1'`), real threading
+    (`wp:comment_parent`), on **both** posts and pages. Pages never imported a
+    single comment before this — a real, independent bug, not something this
+    fiche introduced, found while checking what the importer does today per
+    the fiche's own instruction. Inline HTML a legacy WordPress comment form
+    allowed (`<a>`, `<em>`, …) is stripped to plain text and reported (R3: no
+    escape hatch). Absent `comments` keeps the pre-fiche-15 behaviour
+    unchanged (approved-only, posts-only, the synthetic `comment` collection)
+    for a caller that has not wired `@cogenta/comments` yet — its `post` field
+    is a hard `relation` to the `post` collection specifically, so extending
+    it to pages was never an option, only the real store is.
+  - **`@cogenta/cli`**: `cogenta serve` mounts `/api/comments` (public POST +
+    moderation queue), extends `readBody` to also parse
+    `application/x-www-form-urlencoded` (the no-JS form's own content type —
+    every other route still only ever sends JSON), wires the comment thread
+    into `theme-render.ts`'s page render, and passes a real `CommentStore`
+    into every `importWordPress` call site (the terminal command and the
+    admin's import screen alike). `cogenta doctor`/`serve` create contract F's
+    tables idempotently, the same way commerce's tables are created — a site
+    that never receives a comment never pays for them.
+  
+  Admin (`@cogenta/admin`, private, no changeset): a moderation queue screen
+  (`/comments`, counters, bulk actions, search, reply-from-the-admin), a
+  pending-count nav badge, `assist.moderate` reused verbatim as an indicator
+  (never an action — its own closed `none`/`review` union already guarantees
+  that, per the fiche's own instruction not to build a second decision path),
+  a "Discussion" settings tab (previously a placeholder), and a per-entry
+  comments toggle in the entry editor sidebar.
+
+- [`2fb2101`](https://github.com/cogenta-cms/cogenta/commit/2fb210109824f000788d512fef748f1066f65551) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the editorial site settings screen (fiche 23, ADR-0025's third settings
+  category between `cogenta.config.mjs` — infrastructure, read-only — and
+  `localStorage` — personal preference).
+  
+  - `@cogenta/schema` gains a typed key/value site-settings store
+    (`createSiteSettingsStore`) backed by a closed registry: general (title,
+    tagline, admin email, time zone, date/time style), reading (home path,
+    posts per page), media (max upload size), and privacy (policy path, cookie
+    banner). Every setting has a declared scope (site or per-locale), a default,
+    and a required permission; writing an undeclared key is refused.
+  - `@cogenta/api` gains `createSitePlanRouter`'s sibling `GET|PATCH
+    /api/settings` and extends `GET /api/config-status` with `storage`,
+    `llm`/`embeddings`/`imageGeneration`/`vector`, and `billingConfigured` —
+    never a secret, never a credential.
+  - `@cogenta/cli` wires the new store into `cogenta serve`/`dev`, and
+    `theme-render.ts` now serves the configured home path instead of always
+    falling back to the hardcoded `/home`.
+  - `@cogenta/core` adds `SITE_SETTING_UNKNOWN`/`SITE_SETTING_INVALID` and a
+    `secret-hygiene` module the settings screen uses to detect a
+    `database.url` with embedded credentials, or a `.env` file readable by
+    other users on shared hosting.
+  - `create-cogenta` now writes the generated `.env` (which holds
+    `COGENTA_AUTH_SIGNING_KEY`) with mode `0o600` instead of the default —
+    closing the shared-hosting exposure `docs/hebergement-mutualise.md`
+    already named as a known gap.
+  
+  The admin's old single-control "Paramètres" screen (the signed-in account's
+  own interface language) moves to "My profile"; `/settings` is now the
+  site-wide editorial screen.
+
+- [`0e90b32`](https://github.com/cogenta-cms/cogenta/commit/0e90b32c19247430987e84cc1fd0be57e1ad4f3e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the "Santé" and "Outils" admin screens (fiche 24), maintenance mode, and a bounded server error journal.
+  
+  - `@cogenta/core`: adds `createErrorLog`, a bounded, redacted ring buffer for the last N server errors — the admin's substitute for reading `stdout` on a host with no access to the process.
+  - `@cogenta/schema`: adds `createMaintenanceStore`/`ensureMaintenanceTable` (a one-row on/off switch with a visitor-facing message) and exports `reindexAll`/`reindexEntry` from the search indexer, so a full rebuild reuses exactly what the write path already does on save.
+  - `@cogenta/api`: adds `createHealthRouter` (`GET /api/health-report` — literally `cogenta doctor`'s own report, over HTTP; migrations status/apply; audit chain integrity; disk usage; the error log; maintenance mode get/set) and `createToolsRouter` (`GET /api/tools`, `POST /api/tools/{id}/run`, `GET /api/tools/runs[/…]` — seven maintenance tools, always queued, never run inline in the request). Adds a `pending-migrations` notice source.
+  - `@cogenta/cli`: `cogenta serve` wires all of the above — `runDoctor` reused unchanged, migrations applied only up to the first destructive one (the CLI is named for the rest), the seven tools (purge caches, reindex search/vectors, regenerate image variants, check links, test email, purge expired trash) running through the existing database-queue driver's degraded tier, and a maintenance-mode gate that serves an uncacheable 503 with a wait page to every anonymous visitor while `/api/*` and `/admin*` stay reachable.
+  
+  Purely additive: `createRequestListener`'s new third parameter is optional, and every `AssembleSiteOptions` addition is optional — a caller that builds a `Site` by hand, or does not pass a migrator, keeps working unchanged.
+
+- [`bebbab8`](https://github.com/cogenta-cms/cogenta/commit/bebbab881761fb86a28cdbbcb95b5960429f2a29) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add store settings for the shop (fiche 34): tax zones/rates with a simulator, shipping
+  zones/methods with a simulator, payment driver activation (presence-only for keys, never
+  values), general store settings, and a configurable invoice template.
+  
+  - `@cogenta/core` gains a `payment` configuration section (`driver`, `testMode`,
+    `manualInstructions`) following the exact `llm`/`billing` pattern: the Stripe secret key
+    and webhook secret are never declared in the schema and are refused with
+    `CONFIG_SECRET_IN_FILE` if written to `cogenta.config.mjs` — they come only from
+    `COGENTA_PAYMENT_STRIPE_SECRET_KEY`/`COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET`.
+  - `@cogenta/schema`'s site-settings registry (fiche 23) gains a `commerce` group
+    (currency, tax-inclusive/exclusive display, countries served, minimum order, default
+    backorder policy, ToS/return-policy page paths — pointers to real content entries, not
+    text fields — and invoice series prefix/payment terms/language) and a new `select`
+    `uiType` for closed-choice settings.
+  - `@cogenta/commerce`'s admin router gains `GET|POST /tax/rules`, `DELETE
+    /tax/rules/{id}`, `POST /tax/simulate` (calls the real resolver, never a second
+    implementation), the shipping equivalents (`/shipping/methods`, `/shipping/simulate`),
+    and `GET /payment/drivers` / `POST /payment/drivers/{name}/test-connection` (presence
+    and live health only, never a key's value). `CommerceAdminRouterOptions` gains required
+    `tax`/`shipping` fields and an optional `payment` field — **a breaking change** for any
+    direct caller of `createCommerceAdminRouter` that does not yet pass them.
+  - `@cogenta/cli`'s `cogenta serve` now selects a real payment gateway through
+    `createPaymentRegistry` (Stripe when a key is configured and reachable, bank transfer
+    otherwise) instead of a hardcoded manual gateway, and mounts the new commerce settings
+    routes.
+  - `@cogenta/admin` (private, no changeset) gains four screens under "Boutique": Tax,
+    Shipping, Payment, and Store settings (general + invoice template), all `admin`-only.
+  
+  Deliberately not built in this fiche: an inbound `POST /api/commerce/payments/webhook`
+  route. `PaymentStore.handleWebhook` is already implemented and tested; wiring it needs
+  the raw (non-JSON-parsed) request body, which `cogenta serve`'s shared body reader does
+  not yet support for any route. The payment screen shows the webhook URL a deployer would
+  configure at Stripe, honestly labelled as not yet receiving events. See `BLOCKERS.md` §15.
+
+- [`e75b23e`](https://github.com/cogenta-cms/cogenta/commit/e75b23ec985099f2eabe6eabb7b4c86115006996) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add global search: the ⌘K/Ctrl+K palette with shortcuts and "go to"/"create" actions, a full `/search?q=…` results page, highlighted excerpts, widened sources (orders, media, users, menus, extensions, taxonomy terms), typed inline filters (`status:draft`) and recent-search history (fiche 36).
+  
+  - `@cogenta/schema`'s search indexing (`extract.ts`) gains `buildExcerpt` — a window of prose
+    around the first query term found, with match offsets scoped to that window, never the
+    full text. Built from the *display* text (`SearchDocument.body`, never folded), so an
+    excerpt keeps real casing and accents while still matching a folded, prefix-matching
+    query.
+  - `@cogenta/api`'s `search-router.ts` enriches each `SearchHit` with an excerpt built
+    server-side, never reconstructed from HTML on the client (R3/R8: the excerpt is data,
+    escaped at render).
+  - `@cogenta/commerce`'s order store and admin router gain a search-by-number/email lookup,
+    gated on the caller's own `commerce.read` permission — a source in the global search
+    widens only what its own permission already allows, never more.
+  - Admin: `shell/global-search.tsx` (palette, shortcuts, recent searches, inline-filter
+    parsing), `routes/search.tsx` (the full results page, one tab per source with its own
+    permission gate), `search/` (excerpt highlighting, inline-filter parser, recent-search
+    `localStorage` store — never server-side, these are one person's own queries).
+
+- [`e8061e2`](https://github.com/cogenta-cms/cogenta/commit/e8061e24ec41e9a99f5c852c28649f62656b0cc9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `ContentStore` gains `countByStatus()`, a real `GROUP BY status` count of a
+  collection's live (non-trashed) entries. `ContentService` gains a matching
+  `counts()`, and `GET /{collection}?counts=1` now returns a `counts` field
+  alongside the page — a role that may not read unpublished content only ever
+  gets the `published` count, never the others (not even as `0`).
+  
+  The server-side title fallback used for search results (`searchDocumentFor`)
+  now checks fields named `title`, `name` or `label`, in that priority order,
+  before falling back to the first declared `text` field — matching the same
+  convention the admin's collection list, trash screen and relation picker
+  already use for "what do we call this entry" (fiche 01, "Liste de contenu",
+  task 1). This can change which text labels a search result for a collection
+  whose first declared text field is not `title`.
+
+- [`54409f3`](https://github.com/cogenta-cms/cogenta/commit/54409f3ff4640518d5d4149bef73a29142ba0d0a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Media library (fiche 11): tags, usage tracking, in-place replace, and richer
+  listing.
+  
+  **Breaking for a custom `MediaStore` implementation**, written as `minor`
+  following this project's established pre-alpha convention (0.x, no package
+  has ever used `major`, and one here would jump straight to `1.0.0` — which
+  "pre-alpha" contradicts). `@cogenta/core`'s `MediaStore` interface gains two
+  new required methods, `count()` (the total match count ignoring
+  `limit`/`cursor`, so the admin can show "2,000 assets" instead of only "there
+  is another page") and `replace()` (overwrite the bytes behind an existing id
+  in place — every entry and block already holding that id keeps working,
+  unchanged). `MediaAsset` gains two new required fields: `tags` (free-form
+  labels, not a hierarchy — an asset commonly belongs to more than one subject
+  at once) and `contentHash` (a short digest of the stored bytes, folded into
+  `/_image` URLs as `&v=` to bust the year-long immutable cache when an asset
+  is replaced — never a secret, never used for integrity). The only
+  implementation in this repo, `createDatabaseMediaStore`, is updated; a
+  third-party driver is not.
+  
+  Backward-compatible additions: `CreateMediaInput`/`UpdateMediaInput` gain
+  optional `tags`; `ListMediaOptions` gains `tag`, `from`/`to` (created-at
+  range), `sort` (`MediaSortField`: `createdAt`/`filename`/`size`), and
+  `direction`. `@cogenta/render`'s `MediaAsset` gains an optional `version`
+  field (`theme@1.2`) — absent is fully backward compatible, exactly today's
+  behaviour with no `&v=` appended.
+  
+  `@cogenta/api`'s `createMediaRouter` gains real multipart parsing
+  (`packages/api/src/rest/multipart.ts`, zero new dependency — R9/R10), a
+  `POST /api/media/{id}/replace` route, `tag`/`from`/`to`/`sort`/`direction`
+  query parameters on the list route, and EXIF GPS stripping on upload and
+  replace (`stripGps`, opt-out per request, default on — a photo's location is
+  not something an editor usually means to publish).
+  
+  `@cogenta/schema` gains `findMediaUsage` (`packages/schema/src/media-usage.ts`):
+  scans every collection's entries for a media id in a `media`/`richText`/
+  `blocks` field and reports where it is referenced, so the admin can warn
+  before deleting an asset still in use rather than after. `titleOf` (from
+  `search/extract.ts`) is now exported — `findMediaUsage` needed the same
+  "what does an editor call this entry" logic the search indexer already had,
+  and duplicating it would have drifted.
+
+- [`2285720`](https://github.com/cogenta-cms/cogenta/commit/2285720ae29de05e96a8d776fd5ae14f2fe4fd0d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Menus gain a real editor (fiche `docs/plans/09-menus.md`):
+  
+  - **Edit an item in place.** `PATCH /api/menus/{id}/items/{itemId}` now accepts `label`, `kind`, the target fields, `title` and `openInNewTab` — no more delete-and-recreate to fix a typo. Changing `kind` clears the previous target rather than keeping a value that no longer applies. `parent` is deliberately not accepted here; re-parenting still goes through `POST .../move`.
+  - **Bulk, transactional reorder.** `MenuStore.reorderItems` and `PATCH /api/menus/{id}/items` rewrite `parent`/`position` for any number of items in a single transaction, so a drag-and-drop or keyboard reordering session commits (or fails) as one unit — never a partially-rewritten tree if the network drops mid-session.
+  - **Menu locations.** `Menu` gains `location: string | null` (`byLocation`, `GET /api/menus/by-location/{location}`) — where a menu renders (`primary`, `footer`, …), carried by the menu itself rather than baked into a theme's name convention. `@cogenta/cli`'s `ThemeRenderOptions` gains `headerMenuLocation`/`footerMenuLocation`, resolved generically by location with a fallback to the legacy `main`/`footer` name lookup, so an existing site's navigation keeps rendering unchanged. `@cogenta/core` gains the `MENU_LOCATION_TAKEN` error code for the one-menu-per-location-per-locale rule.
+  - **Two new item kinds.** `taxonomy` (links to a term) and `home` (always resolves to `/`) join `entry`/`url`/`submenu-placeholder`.
+  - **Target health.** A menu item resolver may now report `health` (`published`/`draft`/`scheduled`/`archived`/`trashed`) for an `entry` item — computed only for an actor whose role already has draft access to the target collection, so a public read never learns that a draft exists. `cogenta serve`'s public render hides a dead `entry`/`taxonomy`/`home` link entirely rather than serving one.
+  
+  All additions are backward compatible: `resolveEntry` gained a third `context` parameter and an optional `health` on its result, but a two-argument resolver still satisfies the type; every new field is optional or nullable on the wire.
+
+- [`46572ba`](https://github.com/cogenta-cms/cogenta/commit/46572bae836b8182c2a3563e8f0e2da74d7e82ee) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the admin notification center (fiche 38): a bell with an unread count, filterable
+  by severity/period, bulk mark-as-read; new notice sources (plugin auto-disabled,
+  scheduled publication failed); channel-bridged notices reusing `@cogenta/channels`'
+  existing message formats, grouping and identity-linking (no second mechanism); and a
+  per-severity channel routing settings screen.
+  
+  `@cogenta/schema` gains `scheduled-publish-failures` store used by the new notice
+  source. `@cogenta/api` gains a real `@cogenta/channels` dependency, new notice-router
+  routes for channel settings and notice history, and a `plugin-disabled`/
+  `scheduled-publish-failed` notice source pair. `@cogenta/plugins` exposes disabled-state
+  data the new notice source reads. `@cogenta/channels`' preference types gain the field
+  the settings screen needs.
+
+- [`2c1af5d`](https://github.com/cogenta-cms/cogenta/commit/2c1af5d8ec08b460ba80a2228ceca6f4ff89eef2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 28 (tâches planifiées): a real scheduled-task registry and its admin
+  screen — task 1 (registry) and task 2 (screen) complete and tested; task 4's
+  concurrency-safe scheduled publication verified. `cogenta serve`'s own
+  wiring of the registry, and the standalone `cogenta cron` command (task 5,
+  for hosts with no permanent process), are **not done** — see below.
+  
+  - `@cogenta/schema`'s `ScheduledTaskRegistry` (`createScheduledTaskRegistry`):
+    each task declares a name, description, interval and run function; the
+    registry persists every run (`cogenta_scheduled_task_runs`) — last run,
+    duration, outcome, error — so "did the trash sweep run last night" survives
+    a restart rather than resetting with an in-memory timer. `overdue` is
+    computed from that persisted timestamp (fiche 28's own named pitfall: a
+    detector that lives in memory is blind exactly when a restart makes it
+    matter).
+  - `@cogenta/api`'s `createScheduledTasksRouter` (`GET /api/scheduled-tasks`,
+    `GET .../{name}`, `POST .../{name}/run`, `GET .../queue`,
+    `POST .../queue/{id}/retry`) — admin-only, thin read-through, "run now"
+    never awaits its own audit write so a slow log never hangs the request.
+  - `@cogenta/core`'s `QueueDriver` gains `list()`/`retry()` — the "file" section
+    of the screen, and the way a failed maintenance job (fiche 24's queue) gets
+    retried from the UI instead of a terminal.
+  - `@cogenta/core`'s config gains `scheduler.mode` (`'internal'` |
+    `'external-cron'`) and `backup.*` (interval/keep/dir) — resolved, defaulted,
+    not yet consumed by `cogenta serve` (see below).
+  - Admin: `/scheduled` (new nav entry, admin-only at the route level — R4, the
+    nav link itself is not the gate) — task table with last run/duration/
+    result/next run, an overdue badge, "run now" with a confirmation dialog for
+    a `destructive` task (the trash sweep), a queue section with retry, and a
+    pointer to the dashboard's own scheduled-content list rather than a second
+    copy of it.
+  
+  **Genuinely not done, not just deferred quietly**: `cogenta serve` still
+  drives scheduled publication, the trash sweep, the 404-log purge and the
+  audit-integrity check on their own separate `setInterval`s, exactly as
+  before this fiche — none of them are registered with the new
+  `ScheduledTaskRegistry`. The registry and the admin screen above are real
+  and fully tested against a registry populated by hand in their own test
+  suites, but on a running `cogenta serve` today `/scheduled` would show an
+  empty task list, because nothing calls `registry.register()` there yet.
+  Wiring that in, and the `cogenta cron` command (task 5 — the fiche's own
+  §8 leaves "deliver now or later" as an open decision), is real remaining
+  work, not a rename or a config flag. Flagged here rather than left to be
+  discovered later.
+
+- [`745ebd8`](https://github.com/cogenta-cms/cogenta/commit/745ebd8f80ea94d916a370af0f9615e6565c0d00) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Editorial workflow and owner permission (`schema@2.1`, ADR-0027, fiche 37 + fiche 19
+  task 5).
+  
+  Strictly additive — a site that never declares `workflow: { enabled: true }` on a
+  collection, and never uses the `{ roles, own }` permission form, behaves identically
+  to before this release. Proved by a compatibility test: a client reading only
+  `status` gets byte-identical values.
+  
+  - `reviewState` (`none`/`pending`/`changes-requested`/`approved`) and
+    `assignedReviewer` join the system fields, orthogonal to `status` — the same design
+    ADR-0022 gave `deletedAt`. `approved` is not `published`: approving authorises,
+    `publish` remains the action that makes an entry public.
+  - A closed, server-side transition table (`submit`/`approve`/`requestChanges`), each
+    gated by its own contract A action (`update` for submit, `publish` for the other
+    two) — never duplicated by a client.
+  - New `ContentStore` methods `submitForReview`/`approveReview`/`requestReviewChanges`/
+    `assignReviewer`, and new REST routes `POST .../submit`, `.../approve`,
+    `.../request-changes`, `.../assign-reviewer` — each its own path, never a second
+    meaning for an existing verb (ADR-0022's own lesson for `purge`).
+  - `CollectionPermissionRule` gains the object form `{ roles, own? }` alongside the
+    plain role-name array, which stays valid. `own: true` scopes every listed role to
+    entries the acting account created; `PermissionLayer.can()`/`.assert()` take an
+    optional `ownerId` to check it.
+  - Reversible, non-destructive migration (`schema21Migration`) adding `review_state`
+    (`not null default 'none'`) and a nullable `assigned_reviewer` to every collection.
+  - Admin: a review queue screen (three tabs — assigned to me / all pending / my
+    submissions — aggregated server-side via a new `GET /api/review`), a pending-count
+    nav badge, and an entry editor sidebar showing workflow state, assigned reviewer,
+    and a contextual action button that replaces the absent Publish button with
+    "Submit for review" for an actor without `publish`.
+  
+  Postgres/MySQL/MariaDB integration test files are written
+  (`packages/schema/test/integration/schema-2-1-migration.test.ts`) but not executed
+  this session — Docker unavailable; they skip loudly, naming the missing variable.
+
+- [`9e67928`](https://github.com/cogenta-cms/cogenta/commit/9e67928b4b2fd58cc4e72f42f7a265aac8460567) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Taxonomy terms can now be edited (multi-locale labels, slug) and moved to a new parent without losing classification, per ADR-0022's materialised-path model. `GET /api/taxonomies/{name}` gains `?q=` (accent- and case-insensitive search), `?counts=1` (per-term entry counts, direct and with descendants) and `?unused=1` (terms nothing classifies), each permission-gated the same way ordinary content reads are. `countTaxonomyUsage` is a new export of `@cogenta/schema`.
+
+- [`954460e`](https://github.com/cogenta-cms/cogenta/commit/954460e63748a58c47d28292b1691425775b7e36) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add the translation dashboard (fiche 10 task 1) — everything needed to answer "what
+  is still missing in each language" in one screen, without an `N × M` scan.
+  
+  `@cogenta/schema`'s `ContentStore` gains `translationsOfMany(rootIds)`: every
+  working-state translation of a batch of root entries, in one query. A custom
+  `ContentStore` implementation (uncommon — everyone else constructs one through
+  `createContentStore`) needs to add it.
+  
+  `@cogenta/api`'s `ContentService` gains `translationMatrix(context, name, query)`,
+  and REST gains `GET /{collection}/-/translation-matrix`: one row per root entry
+  (`translationOf: null`), one cell per locale carrying its state (absent, draft,
+  published, archived, scheduled) and, when the locale is a translation, whether the
+  source changed since (`obsolete`) — a plain `updatedAt` comparison, stated as a fact
+  rather than a verdict, per the fiche's own recommendation for signal (a). Requires the
+  same `read` permission `GET .../translations` already does, plus the working-state
+  gate; every row still passes the ordinary per-entry draft/preview gate.
+  
+  Honestly scoped: today's `PermissionLayer` has no per-locale permission, only
+  per-collection — a role cannot be "denied French" independently of the collection
+  itself. That is a permission-model change, not a dashboard change, and is
+  deliberately out of this note's scope.
+
+- [`3824e8e`](https://github.com/cogenta-cms/cogenta/commit/3824e8e043e5d4036a47bd1e0b9d86c44c45a5a7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 06 (versions et historique): `diff.ts` gains `diffWords`, `extractPlainText` and
+  `enrichWordDiffs` — a longest-common-subsequence word diff (R9: no diff dependency) that
+  turns a `changed` `text`/`richText` field's before/after into the actual words that moved,
+  rather than the flat "changed" a caller had to render on its own. `FieldChange` gains an
+  optional `words` property carrying this — populated only by `enrichWordDiffs`, never by
+  `diffValues`/`diffContent`/`diffBlocks` themselves, so the plain structural diff every
+  existing caller (REST, and any agent tool built on `ContentStore.diff`) already relies on
+  is unchanged unless it opts in.
+  
+  `@cogenta/api`'s `GET /{collection}/{id}/diff` now calls `enrichWordDiffs` on the store's
+  result before returning it, so a corrected word in the admin's version history shows as a
+  corrected word instead of "changed" (VersionHistory, `packages/admin`). Additive only: the
+  response shape gains an optional field, no existing field changes meaning.
+
+### Patch Changes
+
+- [`f47e893`](https://github.com/cogenta-cms/cogenta/commit/f47e893b3e2b674b028af54d2146c7e83c32617c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `f.media({ many: true })` and `f.select({ many: true })` now actually store more than one
+  value. Both options have existed on the public field constructors since contract A shipped,
+  and `validation.ts` already validated an array against them (`manyOf`) — but
+  `columnTypeFor`/`encodeFieldValue` treated every `media`/`select` field as a single scalar
+  column regardless of `many`, so a genuine array threw `CONTENT_INVALID` ("expects a string,
+  not object") the moment it reached the store. No site could ever have used either option
+  successfully; this was found while wiring `@cogenta/admin`'s media and select field editors
+  to a real gallery/many-choice UI, which needed the option to actually work.
+  
+  Fixed the same way a to-many `relation`/`taxonomy` field is fixed, minus the join table:
+  neither `media` nor `select` has anything on the other end a foreign key could enforce (a
+  media asset lives in its own subsystem; a select choice references nothing), so the ordered
+  array is JSON-encoded straight into the field's own column instead — the same encoding
+  `richText`/`json`/`geo` already use. An unset many-valued field now defaults to `[]`, never
+  `null`, matching the same rule a to-many relation's empty case already followed.
+  
+  No migration: nothing could have written a value in the old shape (every write attempt threw),
+  so there is no data to move.
+- Updated dependencies [[`54ca689`](https://github.com/cogenta-cms/cogenta/commit/54ca6894449fcdd29ff76eef4514cda7c081f483), [`0692713`](https://github.com/cogenta-cms/cogenta/commit/06927130c15f7bc95ea97839cb50f67de87bd668), [`36744d3`](https://github.com/cogenta-cms/cogenta/commit/36744d3bc8e74a39fa6c68bdd78804fad1d8f069), [`0ca8a79`](https://github.com/cogenta-cms/cogenta/commit/0ca8a797288624a3c4d53ca0942687d9e570b186), [`c392e24`](https://github.com/cogenta-cms/cogenta/commit/c392e24880a29388fc63a08388042bf163817619), [`562c9c1`](https://github.com/cogenta-cms/cogenta/commit/562c9c1ee4d52b3e7f624e3b54ae033c2bd01e1c), [`edf5623`](https://github.com/cogenta-cms/cogenta/commit/edf562389652c4f6afb58d6e3f166de233d063e2), [`db307e0`](https://github.com/cogenta-cms/cogenta/commit/db307e068f4d029d98526c74d0ab9d56e531b73b), [`49815b9`](https://github.com/cogenta-cms/cogenta/commit/49815b95ad87cd37e7781cbb5a726327226259dd), [`122da7a`](https://github.com/cogenta-cms/cogenta/commit/122da7ad20396966b4d44538b0842f8efb9b7621), [`2fb2101`](https://github.com/cogenta-cms/cogenta/commit/2fb210109824f000788d512fef748f1066f65551), [`0e90b32`](https://github.com/cogenta-cms/cogenta/commit/0e90b32c19247430987e84cc1fd0be57e1ad4f3e), [`d0bfa1d`](https://github.com/cogenta-cms/cogenta/commit/d0bfa1d71166adfb0c66a296c4cf490ddd58a218), [`95acedf`](https://github.com/cogenta-cms/cogenta/commit/95acedf48920dba08e443e56ca4464bcfd394d34), [`6e5df34`](https://github.com/cogenta-cms/cogenta/commit/6e5df34e6f428c36712bc80e76c37d0cd7e33b1c), [`bebbab8`](https://github.com/cogenta-cms/cogenta/commit/bebbab881761fb86a28cdbbcb95b5960429f2a29), [`4513a71`](https://github.com/cogenta-cms/cogenta/commit/4513a71a15dfa7a716bf9c8fcd02f93df927f230), [`54409f3`](https://github.com/cogenta-cms/cogenta/commit/54409f3ff4640518d5d4149bef73a29142ba0d0a), [`2285720`](https://github.com/cogenta-cms/cogenta/commit/2285720ae29de05e96a8d776fd5ae14f2fe4fd0d), [`2c1af5d`](https://github.com/cogenta-cms/cogenta/commit/2c1af5d8ec08b460ba80a2228ceca6f4ff89eef2), [`745ebd8`](https://github.com/cogenta-cms/cogenta/commit/745ebd8f80ea94d916a370af0f9615e6565c0d00)]:
+  - @cogenta/core@0.5.0
+
 ## 0.3.0
 
 ### Minor Changes

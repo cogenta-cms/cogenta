@@ -1,5 +1,287 @@
 # @cogenta/auth
 
+## 0.4.0
+
+### Minor Changes
+
+- [`54ca689`](https://github.com/cogenta-cms/cogenta/commit/54ca6894449fcdd29ff76eef4514cda7c081f483) Thanks [@georgesmomo](https://github.com/georgesmomo)! - API key lifecycle, rotation and a per-key request quota (fiche 20).
+  
+  **Breaking (`@cogenta/api`):** `POST /api/api-keys` no longer mints a key that
+  never expires by default. A request that omits `expiresAt` now gets a
+  90-day expiry — a real, generous but bounded default, since a key with no
+  expiry is a key that leaks forever. Pass `neverExpires: true` explicitly to
+  keep the old "never expires" behaviour. Any script that creates API keys
+  without setting `expiresAt` will see its keys start expiring after 90 days;
+  set `neverExpires: true` (or a longer `expiresAt`) if that is not wanted.
+  
+  New, additive:
+  
+  - `POST /api/api-keys/{id}/rotate` (`@cogenta/api`, `@cogenta/auth`'s
+    `ApiKeyStore.rotate`): mints a replacement carrying the same name, scope
+    and quota, and lets the original keep authenticating for a chosen grace
+    window (1h/24h/7d) instead of dying mid-flight. The new key's raw value is
+    returned exactly once, the same rule `POST /api/api-keys` already follows.
+  - A per-key request quota (`rateLimitPerMinute`, `@cogenta/auth`), enforced
+    once per request by `resolveActor` when a `RateLimitDriver` is supplied.
+    Exceeding it answers `429` with `Retry-After` and `RateLimit-*` headers.
+    `@cogenta/core` gains the `rateLimit` driver need (`createRateLimitRegistry`,
+    a Redis driver and an in-process one — R1: works with no Redis at all) and
+    a matching `rateLimit` configuration section; `cogenta serve`/`doctor` wire
+    and report it.
+  - Aggregated 7- and 30-day call counts per key (`ApiKeyStore.usage`), and a
+    new admin notice when a key is within seven days of expiring
+    (`createApiKeyExpiryNoticeSource`).
+  - `ApiKey` gains `rateLimitPerMinute` and `supersededBy` (set once a key has
+    been rotated). `ApiKeyStore` gains `getById`, `rotate` and `usage`.
+  
+  New error codes: `API_KEY_RATE_LIMITED` (429), `API_KEY_ROTATION_INVALID`
+  (409 — a revoked or expired key cannot be rotated), `RATE_LIMIT_FAILED`.
+  
+  The property that a raw API key is shown exactly once, never twice, holds
+  for the new rotate response too: `listApiKeys` and the `previous` half of a
+  rotation response never carry key material.
+
+- [`36744d3`](https://github.com/cogenta-cms/cogenta/commit/36744d3bc8e74a39fa6c68bdd78804fad1d8f069) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 21: the audit log gains what the state-of-the-art comparison named as
+  missing — a real entry detail, filters that reach a date range, an export,
+  an actually-scheduled integrity check, and a way to tell a human's action
+  from an agent's.
+  
+  **Task 1 — detail.** `GET /api/audit/{id}` (`@cogenta/api`'s `audit-router.ts`)
+  answers with the entry, its resolved actor kind and label (an email, or an
+  API key's name), and — for a `content.create`/`update`/`restore` action — the
+  same structural diff `GET /{collection}/{id}/diff` already computes, called
+  through rather than recomputed (the fiche's own warning against duplicating
+  it). This needed a place to keep which content version an action produced:
+  `RecordAuditInput`/`AuditEntry` gain `version`, stored in a new nullable
+  `cogenta_audit_log.version` column added with a `try`/`catch` `alter table`
+  (no portable `add column if not exists` across SQLite/Postgres/MySQL) — and
+  **deliberately excluded from the hash `computeHash` chains together**. Adding
+  a field to that canonical list would change what every already-recorded hash
+  means, and every site's existing chain would fail `verify()` the moment this
+  code ran. The fields that matter for accountability — who, when, what
+  action, on what — are untouched; `version` is UI-convenience metadata, not
+  inside the tamper-evidence boundary. A permission refusal on the diff's own
+  collection (an admin who was never granted an authoring role there) degrades
+  to `diffUnavailable`, not a 403 for the whole entry.
+  
+  **Task 2 — dates, export, pagination.** `since`/`until`/`actorKind` filters
+  on `GET /api/audit`, and `GET /api/audit/export?format=csv|json` (bounded to
+  10,000 entries) for the filtered view. The export is itself an audit-worthy
+  event — a personal-data extraction, per the fiche — recorded as
+  `audit.export` (format and count only, never the exported rows) at the same
+  transport-boundary layer `cogenta serve` already records every other
+  mutation at.
+  
+  **Task 3 — scheduled integrity, for real.** `@cogenta/auth` gains
+  `AuditLog.verifyRange`/`get` (a bounded, checkpoint-resuming form of
+  `verify()`) and `createAuditIntegrityStore`, which persists the last
+  check's outcome across a restart. `cogenta serve` runs it once at startup
+  and then on its own `setInterval` (daily by default,
+  `ServeOptions.auditIntegrityTickMs` overridable for tests) — the same
+  accepted trade-off as the scheduled-publication tick. Most runs are
+  incremental (only entries after the last checkpoint); a full replay runs
+  weekly on its own as the backstop the fiche asks for, since an incremental
+  check cannot see tampering in already-checkpointed history. A break sends
+  one signed channel alert (`security.audit_integrity_broken`, only on the run
+  that first finds it — never once per tick) and a non-dismissible, danger-
+  severity admin notice that clears itself once a forced full check reports
+  the chain intact again. `GET`/`POST /api/audit/integrity` expose the status
+  and the "verify now" that persists its result, alongside the untouched,
+  stateless `GET /api/audit/verify`.
+  
+  **Task 4 — distinguishing actors.** `classifyAuditActor` (`@cogenta/auth`)
+  reads signals the log already carried — `actorId === null` is `system`, the
+  `apikey:` prefix `resolveActor` has minted since L13 is `api_key`, the
+  `agent.tool.` prefix `withAudit` has minted since L4 is `agent`, everything
+  else is `human` — no schema change needed. `withAudit` (`@cogenta/agents`)
+  gains optional `model`/`autonomyLevel`, carried into the recorded diff when
+  a caller tracks them. `?actorKind=` filters `GET /api/audit`.
+  
+  **Task 5 — retention, honestly.** No purge is wired into a schedule in this
+  pass — `AuditLog.prune(olderThan)` exists, tested, and safe (it refuses to
+  purge a segment that does not itself verify first, and records a genesis
+  anchor so the surviving chain keeps verifying from a documented truncation
+  point rather than silently going quiet about it), but nothing calls it
+  automatically yet. The admin screen says so plainly: this journal keeps
+  every entry and grows without limit until an operator acts.
+  
+  None of this is a breaking change: `AuditLog.verify()`'s signature and every
+  existing route's response shape are unchanged, and the new column/tables
+  are additive (a fresh `ensureAuthTables` run tolerates them being already
+  there, an existing install picks them up the same way).
+
+- [`49815b9`](https://github.com/cogenta-cms/cogenta/commit/49815b95ad87cd37e7781cbb5a726327226259dd) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Account lifecycle: invitation by email, search/pagination/bulk actions, a
+  self-service public profile, dormant/MFA-recommended signals, and
+  irreversible anonymization (fiche 17).
+  
+  **Breaking (`@cogenta/auth`), in the same pre-1.0 sense the taxonomies/trash
+  and redirects changesets already used this bump for**: `User['status']`
+  widens from `'active' | 'disabled'` to also include `'invited'` and
+  `'anonymized'` — an exhaustive `switch` on the old two-value union needs a
+  new case. `User` also gains four new non-optional fields (`displayName`,
+  `avatarMediaId`, `bio`, `locale`, all `string | null`) — code that builds a
+  `User` object literal by hand (rather than reading one back from
+  `UserStore`) needs to add them. `CreateUserInput` gains an optional `status`
+  (defaults to `active`, so existing callers are unaffected).
+  
+  **`@cogenta/auth`**:
+  - `UserStore` gains `updateProfile` (self-service, fiche 17 task 3),
+    `delete` (real hard delete — safe only for a never-accepted `invited`
+    account, see its doc comment for why that does not contradict "accounts
+    are disabled, never removed"), and `anonymize` (RGPD-erasure: replaces the
+    email with a non-reversible `@anonymized.invalid` token, clears the
+    profile fields, sets `status: 'anonymized'`).
+  - `SessionStore` gains `lastSeenByUser()` — the last activity timestamp for
+    every account in one query, across every session ever held (revoked and
+    expired included), for the "last sign-in" column and the dormant-account
+    signal.
+  - `PasswordResetStore` gains `pending(userId)` — the still-usable token for
+    a user, if any, without ever returning the token itself. Used by fiche
+    17's invitation to answer "invitation sent on …" and to support resend.
+  - New table columns on `cogenta_users` (`display_name`, `avatar_media_id`,
+    `bio`, `locale`), added the same additive, catch-and-ignore way the API
+    key lifecycle columns were.
+  - New error codes: `AUTH_INVITE_UNAVAILABLE` (503), `AUTH_INVITE_INVALID_STATE`
+    (409), `AUTH_ACCOUNT_ANONYMIZED` (409), `AUTH_ANONYMIZE_CONFIRMATION_MISMATCH`
+    (400).
+  
+  **`@cogenta/api`**: `users-router.ts` grows substantially, entirely additive
+  at the route level —
+  - `POST /api/users` accepts `invite: true`. With `onInvite` wired, it
+    creates an `invited` account and hands the invitation token to the
+    callback instead of returning a password — the same single-use token
+    primitive `/forgot-password` already uses, reused rather than
+    reimplemented. Without `onInvite` wired (or the flag omitted), the route
+    behaves exactly as it always has: a generated password, shown once (R1's
+    mandatory fallback). The response gains `invited`/`emailSent` alongside
+    the (now optional) `password`.
+  - `GET /api/users` gains `?sort=`, `?after=`, `?limit=`, and a substring
+    match on display name as well as email for `?q=`. The response gains
+    `page: { hasMore, nextCursor }` and `meta: { invitationEmailAvailable }`
+    — `data` is unchanged.
+  - `POST /api/users/{id}/invite` (resend) and `DELETE .../invite` (cancel —
+    a real delete, safe for the reason above) are new.
+  - `POST /api/users/bulk` (`disable`/`enable`/`setRoles` over several ids at
+    once, `Promise.allSettled`, a report naming every failure) is new.
+  - `PATCH /api/users/me/profile` (self-only, mirrors the existing
+    self-only `/me/password`) is new.
+  - `POST /api/users/{id}/anonymize` (admin-only, confirmed by typing the
+    account's current email, refuses the last active admin the same way
+    disabling one already did, writes one `user.anonymize` audit entry that
+    never carries the erased address) is new.
+  - `auth-router.ts`'s `POST /api/auth/reset-password` gains one line: an
+    `invited` account is flipped to `active` the moment its token is
+    redeemed — the only place in the product that changes that bit, and the
+    reason the invitation never needed a second token type.
+  - `statusFor()` gains the four new codes above.
+  
+  **`@cogenta/cli`**: `cogenta serve` wires the users router's `collections`
+  (for the MFA-recommended signal) and a new `onInvite` callback, delivered
+  through a new `invite-mail.ts` (the file-transport email, sibling to the
+  existing `reset-mail.ts`) pointed at the same `/admin/reset-password` screen
+  `onForgotPassword` already uses — accepting an invitation and resetting a
+  forgotten password redeem the identical token type.
+  
+  Tests: `@cogenta/auth` 189 (19 new), `@cogenta/api` 582 (78 new across
+  `users-router.test.ts` and `auth-router.test.ts`), `@cogenta/cli` 236 (11
+  new in `test/serve-users.test.ts`, end to end over real HTTP against a real
+  mail directory — invite, read the mail, redeem, sign in; single-use and
+  expiry; resend/cancel; bulk actions; self-service profile; anonymization
+  with audit-log coherence). `@cogenta/admin` (private, no changeset) gains
+  26 new UI tests across `test/users/users.test.tsx` and
+  `test/users/profile.test.tsx`.
+
+- [`122da7a`](https://github.com/cogenta-cms/cogenta/commit/122da7ad20396966b4d44538b0842f8efb9b7621) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 18 (profile and authentication): TOTP recovery codes, readable sessions
+  with bulk sign-out, an account's own activity feed, and a fetchable password
+  policy.
+  
+  **`@cogenta/core`** gains two error codes: `AUTH_RECOVERY_CODE_INVALID` and
+  `AUTH_RECOVERY_CODES_UNAVAILABLE`.
+  
+  **`@cogenta/auth`** (the priority of this fiche): confirming TOTP enrolment
+  now mints ten single-use recovery codes in the same step and hands them back
+  — `confirmTotpEnrolment` returns `Promise<RecoveryCodesIssued>` instead of
+  `Promise<void>`. New `AuthService` methods: `recoveryCodeLogin`,
+  `regenerateRecoveryCodes`, `recoveryCodesStatus`. `passwordLogin`, `totpLogin`
+  and `completeWebAuthnLogin` accept an optional `LoginContext` (`userAgent`,
+  `ttlMs`) for "remember me" and readable sessions. `SessionStore` gains
+  `revokeAllExcept` ("sign out everywhere else") and every session now reports
+  a `browser`/`device` pair distilled from the `User-Agent` at creation —
+  never the raw header, never an IP address. `CredentialStore` gains
+  `setRecoveryCodes`/`recoveryCodesStatus`/`consumeRecoveryCode`/`removeRecoveryCodes`.
+  New exports: `generateRecoveryCodes`, `hashRecoveryCode`, `verifyRecoveryCode`,
+  `normaliseRecoveryCode`, `RECOVERY_CODE_COUNT`, `parseUserAgent`,
+  `ParsedUserAgent`, `LoginContext`, `RecoveryCodesIssued`. Consumption is a
+  real compare-and-set on the stored batch (the same idiom `resets.ts` already
+  used for password-reset tokens), with a bounded retry against the fresher row
+  on a lost race — proven under genuine two-connection SQLite concurrency, code
+  by code, in `packages/auth/test/recovery-code-concurrency.test.ts`, alongside
+  a naive-control test showing the read-then-write shape it replaces really
+  would let one code work twice.
+  
+  **Breaking, honestly**: `confirmTotpEnrolment`'s return type change and the
+  new required members on `SessionStore`/`CredentialStore` are real breaks for
+  anyone who type-pinned the old signatures or hand-rolled an implementation of
+  either store interface — real callers of `createAuthStore`/`createAuthService`
+  (the only supported way to get one) are unaffected. Marked `minor` rather than
+  `major` per this project's existing 0.x convention (no package has used
+  `major` yet, and one now would jump straight to `1.0.0`, which contradicts
+  "pre-alpha") — human judgement invited to confirm.
+  
+  **`@cogenta/api`**: new routes `POST /api/auth/recovery-code`,
+  `GET /api/auth/password-policy`, `GET /api/auth/totp/recovery-codes`,
+  `POST /api/auth/totp/recovery-codes/regenerate`, `POST
+  /api/users/me/sessions/revoke-others`, and `GET /api/audit/me` (the one audit
+  route open to a non-admin — force-scoped server-side to the caller, never a
+  client-supplied id). `POST /api/auth/totp/enrol/confirm`'s response gains
+  `recoveryCodes`; `GET /api/users/{id}/sessions` entries gain `browser`,
+  `device` and `isCurrent`. New export: `createRecoveryCodeUsedNoticeSource`
+  (the security notice a recovery-code sign-in triggers).
+  
+  **`@cogenta/cli`**: `cogenta serve` wires all of the above — the new notice
+  source is registered, and a recovery-code sign-in is recorded in the audit
+  log as `auth.recovery_code_used` instead of the generic `auth.login`.
+
+### Patch Changes
+
+- [`745ebd8`](https://github.com/cogenta-cms/cogenta/commit/745ebd8f80ea94d916a370af0f9615e6565c0d00) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Editorial workflow and owner permission (`schema@2.1`, ADR-0027, fiche 37 + fiche 19
+  task 5).
+  
+  Strictly additive — a site that never declares `workflow: { enabled: true }` on a
+  collection, and never uses the `{ roles, own }` permission form, behaves identically
+  to before this release. Proved by a compatibility test: a client reading only
+  `status` gets byte-identical values.
+  
+  - `reviewState` (`none`/`pending`/`changes-requested`/`approved`) and
+    `assignedReviewer` join the system fields, orthogonal to `status` — the same design
+    ADR-0022 gave `deletedAt`. `approved` is not `published`: approving authorises,
+    `publish` remains the action that makes an entry public.
+  - A closed, server-side transition table (`submit`/`approve`/`requestChanges`), each
+    gated by its own contract A action (`update` for submit, `publish` for the other
+    two) — never duplicated by a client.
+  - New `ContentStore` methods `submitForReview`/`approveReview`/`requestReviewChanges`/
+    `assignReviewer`, and new REST routes `POST .../submit`, `.../approve`,
+    `.../request-changes`, `.../assign-reviewer` — each its own path, never a second
+    meaning for an existing verb (ADR-0022's own lesson for `purge`).
+  - `CollectionPermissionRule` gains the object form `{ roles, own? }` alongside the
+    plain role-name array, which stays valid. `own: true` scopes every listed role to
+    entries the acting account created; `PermissionLayer.can()`/`.assert()` take an
+    optional `ownerId` to check it.
+  - Reversible, non-destructive migration (`schema21Migration`) adding `review_state`
+    (`not null default 'none'`) and a nullable `assigned_reviewer` to every collection.
+  - Admin: a review queue screen (three tabs — assigned to me / all pending / my
+    submissions — aggregated server-side via a new `GET /api/review`), a pending-count
+    nav badge, and an entry editor sidebar showing workflow state, assigned reviewer,
+    and a contextual action button that replaces the absent Publish button with
+    "Submit for review" for an actor without `publish`.
+  
+  Postgres/MySQL/MariaDB integration test files are written
+  (`packages/schema/test/integration/schema-2-1-migration.test.ts`) but not executed
+  this session — Docker unavailable; they skip loudly, naming the missing variable.
+- Updated dependencies [[`54ca689`](https://github.com/cogenta-cms/cogenta/commit/54ca6894449fcdd29ff76eef4514cda7c081f483), [`0692713`](https://github.com/cogenta-cms/cogenta/commit/06927130c15f7bc95ea97839cb50f67de87bd668), [`36744d3`](https://github.com/cogenta-cms/cogenta/commit/36744d3bc8e74a39fa6c68bdd78804fad1d8f069), [`7b7ec0b`](https://github.com/cogenta-cms/cogenta/commit/7b7ec0b897735c1323bb733ae6ba76a522f72669), [`0ca8a79`](https://github.com/cogenta-cms/cogenta/commit/0ca8a797288624a3c4d53ca0942687d9e570b186), [`c392e24`](https://github.com/cogenta-cms/cogenta/commit/c392e24880a29388fc63a08388042bf163817619), [`562c9c1`](https://github.com/cogenta-cms/cogenta/commit/562c9c1ee4d52b3e7f624e3b54ae033c2bd01e1c), [`edf5623`](https://github.com/cogenta-cms/cogenta/commit/edf562389652c4f6afb58d6e3f166de233d063e2), [`db307e0`](https://github.com/cogenta-cms/cogenta/commit/db307e068f4d029d98526c74d0ab9d56e531b73b), [`49815b9`](https://github.com/cogenta-cms/cogenta/commit/49815b95ad87cd37e7781cbb5a726327226259dd), [`122da7a`](https://github.com/cogenta-cms/cogenta/commit/122da7ad20396966b4d44538b0842f8efb9b7621), [`2fb2101`](https://github.com/cogenta-cms/cogenta/commit/2fb210109824f000788d512fef748f1066f65551), [`0e90b32`](https://github.com/cogenta-cms/cogenta/commit/0e90b32c19247430987e84cc1fd0be57e1ad4f3e), [`d0bfa1d`](https://github.com/cogenta-cms/cogenta/commit/d0bfa1d71166adfb0c66a296c4cf490ddd58a218), [`95acedf`](https://github.com/cogenta-cms/cogenta/commit/95acedf48920dba08e443e56ca4464bcfd394d34), [`6e5df34`](https://github.com/cogenta-cms/cogenta/commit/6e5df34e6f428c36712bc80e76c37d0cd7e33b1c), [`bebbab8`](https://github.com/cogenta-cms/cogenta/commit/bebbab881761fb86a28cdbbcb95b5960429f2a29), [`e75b23e`](https://github.com/cogenta-cms/cogenta/commit/e75b23ec985099f2eabe6eabb7b4c86115006996), [`4513a71`](https://github.com/cogenta-cms/cogenta/commit/4513a71a15dfa7a716bf9c8fcd02f93df927f230), [`e8061e2`](https://github.com/cogenta-cms/cogenta/commit/e8061e24ec41e9a99f5c852c28649f62656b0cc9), [`54409f3`](https://github.com/cogenta-cms/cogenta/commit/54409f3ff4640518d5d4149bef73a29142ba0d0a), [`f47e893`](https://github.com/cogenta-cms/cogenta/commit/f47e893b3e2b674b028af54d2146c7e83c32617c), [`2285720`](https://github.com/cogenta-cms/cogenta/commit/2285720ae29de05e96a8d776fd5ae14f2fe4fd0d), [`46572ba`](https://github.com/cogenta-cms/cogenta/commit/46572bae836b8182c2a3563e8f0e2da74d7e82ee), [`2c1af5d`](https://github.com/cogenta-cms/cogenta/commit/2c1af5d8ec08b460ba80a2228ceca6f4ff89eef2), [`745ebd8`](https://github.com/cogenta-cms/cogenta/commit/745ebd8f80ea94d916a370af0f9615e6565c0d00), [`9e67928`](https://github.com/cogenta-cms/cogenta/commit/9e67928b4b2fd58cc4e72f42f7a265aac8460567), [`954460e`](https://github.com/cogenta-cms/cogenta/commit/954460e63748a58c47d28292b1691425775b7e36), [`3824e8e`](https://github.com/cogenta-cms/cogenta/commit/3824e8e043e5d4036a47bd1e0b9d86c44c45a5a7)]:
+  - @cogenta/core@0.5.0
+  - @cogenta/schema@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

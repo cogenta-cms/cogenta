@@ -1,3 +1,44 @@
+export type { ParsedCsv } from './csv.js'
+export { parseCsv } from './csv.js'
+export { csvToRecords } from './csv-import.js'
+export { feedToRecords } from './feed.js'
+export type {
+  ApplyGenericOptions,
+  GenericApplyReport,
+  GenericPreviewReport,
+  GenericSourceRecord,
+} from './generic-import.js'
+export { analyzeGeneric, applyGeneric } from './generic-import.js'
+export type {
+  ApplyJsonOptions,
+  JsonApplyReport,
+  JsonImportRecord,
+  JsonPreviewReport,
+} from './json-import.js'
+export { analyzeJson, applyJson, parseJsonImport } from './json-import.js'
+export type { FieldMapping, ResolvedMapping } from './mapping.js'
+export { proposeFieldMapping, resolveMapping } from './mapping.js'
+export { assertPublicUrl, isPrivateAddress } from './ssrf.js'
+export type {
+  CreateImportRunInput,
+  CreateImportTrackingStoreOptions,
+  ImportItem,
+  ImportRun,
+  ImportRunStatus,
+  ImportSource,
+  ImportTrackingStore,
+} from './tracking.js'
+export {
+  createImportTrackingStore,
+  IMPORT_ITEMS_TABLE,
+  IMPORT_RUN_STATUSES,
+  IMPORT_RUNS_TABLE,
+  IMPORT_SOURCES,
+} from './tracking.js'
+export type { UndoImportOptions, UndoImportReport } from './undo.js'
+export { undoImport } from './undo.js'
+export type { WordPressPreviewReport, WordPressSlugConflict } from './wordpress/analyze.js'
+export { analyzeWordPress } from './wordpress/analyze.js'
 export {
   WORDPRESS_IMPORT_COLLECTIONS,
   wpCategory,

@@ -71,3 +71,75 @@ export async function importWordPressExport(
     body: JSON.stringify({ filename: file.name, data }),
   })
 }
+
+/**
+ * The preview/apply/status/undo flow (fiche 25 tasks 1-4), for CSV, JSON and
+ * RSS/Atom — WordPress keeps its one-shot upload above unchanged, but is
+ * also reachable this way (`source: 'wordpress'`) when a preview before
+ * writing is wanted.
+ */
+
+export const IMPORT_SOURCES = ['wordpress', 'csv', 'json', 'rss'] as const
+export type ImportSource = (typeof IMPORT_SOURCES)[number]
+
+export interface ImportFieldMapping {
+  readonly targetCollection: string
+  readonly fields: Readonly<Record<string, string | null>>
+}
+
+export interface ImportRun {
+  readonly id: string
+  readonly source: string
+  readonly status: 'analyzed' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly analysis: unknown
+  readonly mapping: ImportFieldMapping | null
+  readonly progress: { readonly processed: number; readonly total: number }
+  readonly report: unknown
+  readonly error: string | null
+}
+
+export async function analyzeImport(
+  token: string,
+  input: { readonly source: ImportSource; readonly file: File; readonly targetCollection?: string },
+): Promise<ImportRun> {
+  const data = await toBase64(input.file)
+  return request('/api/import/analyze', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      source: input.source,
+      filename: input.file.name,
+      data,
+      ...(input.targetCollection === undefined ? {} : { targetCollection: input.targetCollection }),
+    }),
+  })
+}
+
+export async function applyImportRun(
+  token: string,
+  runId: string,
+  mapping?: ImportFieldMapping,
+): Promise<ImportRun> {
+  return request(`/api/import/runs/${encodeURIComponent(runId)}/apply`, {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify(mapping === undefined ? {} : { mapping }),
+  })
+}
+
+export async function cancelImportRun(token: string, runId: string): Promise<ImportRun> {
+  return request(`/api/import/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+export async function getImportRun(token: string, runId: string): Promise<ImportRun> {
+  return request(`/api/import/runs/${encodeURIComponent(runId)}`, { headers: authHeader(token) })
+}
+
+export async function listImportRuns(token: string): Promise<readonly ImportRun[]> {
+  return request('/api/import/runs', { headers: authHeader(token) })
+}

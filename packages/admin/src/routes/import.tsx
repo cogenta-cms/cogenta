@@ -1,9 +1,28 @@
 import { type ChangeEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
-import { importWordPressExport, type WordPressImportReport } from '../api/import-client.js'
+import {
+  analyzeImport,
+  applyImportRun,
+  cancelImportRun,
+  type ImportRun,
+  type ImportSource,
+  importWordPressExport,
+  type WordPressImportReport,
+} from '../api/import-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Card, CardBody, CardDescription, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Field,
+  Input,
+  Notice,
+  Select,
+} from '../ui/index.js'
 
 /**
  * The admin's counterpart to `cogenta import wordpress` on a terminal
@@ -155,6 +174,208 @@ export function ImportRoute(): JSX.Element {
           </CardBody>
         </Card>
       )}
+
+      <PreviewImportCard token={token} />
     </section>
+  )
+}
+
+/**
+ * The preview/apply/undo flow (fiche 25 tasks 1-4), for every source
+ * `/api/import/analyze` accepts. Unlike the one-shot WordPress uploader
+ * above, nothing is written until "Apply" is pressed — and applying twice on
+ * the same run resumes rather than duplicates (task 3), so the same button
+ * doubles as the "resume after an interruption" control.
+ */
+function PreviewImportCard({ token }: { readonly token: string | null }): JSX.Element {
+  const { t } = useTranslation()
+  const [source, setSource] = useState<ImportSource>('csv')
+  const [targetCollection, setTargetCollection] = useState('')
+  const [run, setRun] = useState<ImportRun | null>(null)
+  const [busy, setBusy] = useState<'analyze' | 'apply' | 'cancel' | null>(null)
+  const [error, setError] = useState<{ message: string; hint?: string } | null>(null)
+
+  function describeError(caught: unknown, fallback: string): { message: string; hint?: string } {
+    return caught instanceof ApiError
+      ? { message: caught.message, ...(caught.hint === undefined ? {} : { hint: caught.hint }) }
+      : { message: fallback }
+  }
+
+  async function onAnalyze(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const [file] = event.target.files ?? []
+    event.target.value = ''
+    if (token === null || file === undefined) return
+    setBusy('analyze')
+    setError(null)
+    setRun(null)
+    try {
+      setRun(
+        await analyzeImport(token, {
+          source,
+          file,
+          ...(targetCollection.trim().length > 0
+            ? { targetCollection: targetCollection.trim() }
+            : {}),
+        }),
+      )
+    } catch (caught) {
+      setError(describeError(caught, t('importPreview.analyzeError')))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onApply(): Promise<void> {
+    if (token === null || run === null) return
+    setBusy('apply')
+    setError(null)
+    try {
+      setRun(await applyImportRun(token, run.id))
+    } catch (caught) {
+      setError(describeError(caught, t('importPreview.applyError')))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onCancel(): Promise<void> {
+    if (token === null || run === null) return
+    setBusy('cancel')
+    setError(null)
+    try {
+      setRun(await cancelImportRun(token, run.id))
+    } catch (caught) {
+      setError(describeError(caught, t('importPreview.cancelError')))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const analysis = run?.analysis as {
+    totalRecords?: number
+    counts?: Record<string, number>
+  } | null
+  const totalRecords =
+    analysis?.totalRecords ??
+    (analysis?.counts === undefined
+      ? undefined
+      : Object.values(analysis.counts).reduce((a, b) => a + b, 0))
+  const report = run?.report as { imported?: number; resumedSkips?: number } | null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>{t('importPreview.heading')}</h2>
+        </CardTitle>
+        <CardDescription>{t('importPreview.intro')}</CardDescription>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        {error !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{error.message}</p>
+            {error.hint !== undefined && <p>{error.hint}</p>}
+          </Notice>
+        )}
+
+        <Field label={t('importPreview.sourceLabel')}>
+          {(control) => (
+            <Select
+              {...control}
+              value={source}
+              disabled={busy !== null}
+              onChange={(event) => {
+                setSource(event.target.value as ImportSource)
+                setRun(null)
+              }}
+            >
+              <option value="wordpress">{t('importPreview.sourceWordpress')}</option>
+              <option value="csv">{t('importPreview.sourceCsv')}</option>
+              <option value="json">{t('importPreview.sourceJson')}</option>
+              <option value="rss">{t('importPreview.sourceRss')}</option>
+            </Select>
+          )}
+        </Field>
+
+        {(source === 'csv' || source === 'rss') && (
+          <Field
+            label={t('importPreview.targetCollectionLabel')}
+            description={t('importPreview.targetCollectionHelp')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                value={targetCollection}
+                disabled={busy !== null}
+                onChange={(event) => setTargetCollection(event.target.value)}
+                placeholder="page"
+              />
+            )}
+          </Field>
+        )}
+
+        <Field label={t('importPreview.fileLabel')}>
+          {(control) => (
+            <input
+              {...control}
+              type="file"
+              disabled={busy !== null}
+              onChange={(event) => void onAnalyze(event)}
+            />
+          )}
+        </Field>
+        {busy === 'analyze' && <p>{t('importPreview.analyzing')}</p>}
+
+        {run !== null && (
+          <div className="flex flex-col gap-3 border-t border-border pt-4">
+            <h3>{t('importPreview.previewHeading')}</h3>
+            {totalRecords !== undefined && (
+              <p>{t('importPreview.previewRecords', { count: totalRecords })}</p>
+            )}
+
+            {(run.status === 'analyzed' || run.status === 'failed') && (
+              <Button type="button" disabled={busy !== null} onClick={() => void onApply()}>
+                {run.status === 'failed'
+                  ? t('importPreview.resumeButton')
+                  : t('importPreview.applyButton')}
+              </Button>
+            )}
+            {busy === 'apply' && <p>{t('importPreview.applying')}</p>}
+
+            {run.status === 'done' && report !== null && (
+              <Notice tone="success" live="polite">
+                <p>{t('importPreview.reportImported', { count: report.imported ?? 0 })}</p>
+                {(report.resumedSkips ?? 0) > 0 && (
+                  <p>{t('importPreview.reportSkipped', { count: report.resumedSkips })}</p>
+                )}
+              </Notice>
+            )}
+            {run.status === 'failed' && run.error !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{t('importPreview.statusFailed', { error: run.error })}</p>
+              </Notice>
+            )}
+
+            {(run.status === 'done' || run.status === 'running') && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy !== null}
+                onClick={() => void onCancel()}
+              >
+                {t('importPreview.cancelButton')}
+              </Button>
+            )}
+            {busy === 'cancel' && <p>{t('importPreview.cancelling')}</p>}
+
+            {run.status === 'cancelled' && (
+              <Notice tone="info" live="polite">
+                <p>{t('importPreview.cancelled')}</p>
+              </Notice>
+            )}
+          </div>
+        )}
+      </CardBody>
+    </Card>
   )
 }

@@ -6,6 +6,7 @@ import {
   createRedirectStore,
   createSchemaTables,
 } from '@cogenta/schema'
+import type { ImportTrackingStore } from '../tracking.js'
 import {
   WORDPRESS_IMPORT_COLLECTIONS,
   wpCategory,
@@ -31,6 +32,19 @@ export interface ImportWordPressOptions {
   readonly storage: StorageDriver
   /** Injected for tests — real `fetch` by default. */
   readonly fetchImpl?: typeof fetch
+  /**
+   * Fiche 25 tasks 3-4: when both are given, every post/page/comment this
+   * apply writes is recorded against `runId` — what makes a second call with
+   * the same `runId` a **resume** (already-recorded WordPress ids are
+   * skipped rather than re-created) and what `undoImport` reads to trash
+   * everything a run produced. Categories, tags, media and authors are
+   * deliberately not tracked here: they are reference data a second import
+   * or the site's own editors may already depend on, so undo leaves them in
+   * place — the same choice WordPress's own "remove imported posts" tools
+   * make.
+   */
+  readonly tracking?: ImportTrackingStore
+  readonly runId?: string
 }
 
 const APPROVED = '1'
@@ -128,10 +142,22 @@ export async function importWordPress(
   }
 
   // ---- Categories & tags ----------------------------------------------
+  // A resumed apply (task 3) re-parses the same WXR and reaches this loop
+  // again: `slug` is `unique`, so re-creating an already-imported category or
+  // tag would throw rather than silently duplicate. Looking it up by slug
+  // first makes this idempotent, the same property `recordItem` gives posts
+  // and pages via the tracking table — categories/tags have no source id of
+  // their own to track against, but their slug already is one.
   const categoryByNiceName = new Map<string, string>()
   for (const category of parsed.categories) {
+    const slug = category.niceName
+    const existing = await categoryStore.list({ where: { slug }, limit: 1 })
+    if (existing.items[0] !== undefined) {
+      categoryByNiceName.set(category.niceName, existing.items[0].id)
+      continue
+    }
     const entry = await categoryStore.create({
-      values: { name: category.name || category.niceName, slug: category.niceName },
+      values: { name: category.name || category.niceName, slug },
       status: 'published',
     })
     categoryByNiceName.set(category.niceName, entry.id)
@@ -140,17 +166,39 @@ export async function importWordPress(
 
   const tagByNiceName = new Map<string, string>()
   for (const tag of parsed.tags) {
+    const slug = tag.slug
+    const existing = await tagStore.list({ where: { slug }, limit: 1 })
+    if (existing.items[0] !== undefined) {
+      tagByNiceName.set(tag.slug, existing.items[0].id)
+      continue
+    }
     const entry = await tagStore.create({
-      values: { name: tag.name || tag.slug, slug: tag.slug },
+      values: { name: tag.name || tag.slug, slug },
       status: 'published',
     })
     tagByNiceName.set(tag.slug, entry.id)
     acc.imported.tags += 1
   }
 
+  // ---- Resume (task 3) -------------------------------------------------
+  // Entry ids are deterministic (`store.create({ id: item.postId, … })`
+  // below), so a WordPress id already recorded for this run was already
+  // written by an earlier, interrupted attempt. Filtering it out here — not
+  // merely skipping the write — is what also keeps its comments from being
+  // re-created: `commentStore.create` has no id of its own to dedupe on, so
+  // reaching that loop a second time for the same post would duplicate them.
+  const done =
+    options.tracking !== undefined && options.runId !== undefined
+      ? await options.tracking.doneSourceIds(options.runId)
+      : new Set<string>()
+
   // ---- Media --------------------------------------------------------
-  const posts = parsed.items.filter((item) => item.postType === 'post')
-  const pages = parsed.items.filter((item) => item.postType === 'page')
+  const posts = parsed.items
+    .filter((item) => item.postType === 'post')
+    .filter((item) => !done.has(item.postId))
+  const pages = parsed.items
+    .filter((item) => item.postType === 'page')
+    .filter((item) => !done.has(item.postId))
   const attachments = parsed.items.filter((item) => item.postType === 'attachment')
 
   const attachmentUrlById = new Map(
@@ -286,14 +334,34 @@ export async function importWordPress(
     return entry.id
   }
 
+  // Posts and pages are recorded under their bare WordPress id, matching
+  // `done` above (which the resume filter checks the same id against);
+  // comments get a prefixed id since a comment id and a post id share the
+  // same small-integer namespace in a WXR export and would otherwise collide
+  // in the tracking table's `(run_id, source_id)` uniqueness.
+  async function record(
+    kind: 'post' | 'page' | 'comment',
+    wpId: string,
+    entryId: string,
+  ): Promise<void> {
+    if (options.tracking === undefined || options.runId === undefined) return
+    await options.tracking.recordItem({
+      runId: options.runId,
+      sourceId: kind === 'comment' ? `comment:${wpId}` : wpId,
+      collection: kind === 'comment' ? wpComment.name : kind === 'post' ? wpPost.name : wpPage.name,
+      entryId,
+    })
+  }
+
   for (const item of posts) {
     const id = await writeEntry(item, postStore, 'post')
     if (id !== null) {
       acc.imported.posts += 1
+      await record('post', item.postId, id)
 
       for (const comment of item.comments) {
         if (comment.approved !== APPROVED) continue
-        await commentStore.create({
+        const createdComment = await commentStore.create({
           status: 'published',
           values: {
             post: id,
@@ -304,13 +372,23 @@ export async function importWordPress(
           },
         })
         acc.imported.comments += 1
+        await record('comment', comment.id, createdComment.id)
       }
     }
   }
 
   for (const item of pages) {
     const id = await writeEntry(item, pageStore, 'page')
-    if (id !== null) acc.imported.pages += 1
+    if (id !== null) {
+      acc.imported.pages += 1
+      await record('page', item.postId, id)
+    }
+  }
+
+  if (options.tracking !== undefined && options.runId !== undefined && done.size > 0) {
+    acc.warnings.push(
+      `Resumed: ${done.size} item(s) already imported by an earlier attempt of this run were not re-created.`,
+    )
   }
 
   const skipped: UnconvertedItem[] = acc.skipped

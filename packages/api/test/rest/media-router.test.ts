@@ -146,6 +146,34 @@ describe('POST /api/media', () => {
     expect(body.data.alt).toBe('')
     expect(body.data.decorative).toBe(true)
   })
+
+  it('honours a configured upload size ceiling (fiche 23 task 2), read fresh per request', async () => {
+    // The fixture PNG above is well under any real ceiling; a ceiling of a
+    // single byte is what proves this is actually enforced rather than a
+    // no-op wrapper around the fixed default.
+    const tinyLimitRouter = createMediaRouter({
+      store,
+      storage,
+      maxUploadBytes: async () => 1,
+    })
+    const response = await tinyLimitRouter.handle(
+      {
+        method: 'POST',
+        path: '/api/media',
+        query: {},
+        body: {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+          alt: 'x',
+        },
+      },
+      EDITOR,
+    )
+    expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe('MEDIA_INVALID')
+  })
 })
 
 describe('GET /api/media and /api/media/{id}', () => {

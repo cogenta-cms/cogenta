@@ -370,7 +370,30 @@
     "webhooksSigned": "Every event is signed (HMAC-SHA256) before delivery.",
     "webhooksUnsigned": "Not signed — sending is disabled until a secret is set.",
     "webhooksHistoryUnavailable": "No delivery history is kept yet — deliveries are logged, not stored.",
-    "readOnlyNote": "These settings come from this site's configuration file, not the database. Change cogenta.config.mjs and restart the server to update them."
+    "readOnlyNote": "These settings come from this site's configuration file, not the database. Change cogenta.config.mjs and restart the server to update them.",
+    "configHeading": "Infrastructure",
+    "configUnavailable": "This server did not report an infrastructure mirror.",
+    "databaseLabel": "Database driver",
+    "cacheLabel": "Cache driver",
+    "queueLabel": "Queue driver",
+    "storageLabel": "Storage driver",
+    "llmLabel": "LLM provider",
+    "llmNone": "Not configured — the CMS works without it (R2).",
+    "embeddingsLabel": "Embeddings provider",
+    "imageGenerationLabel": "Image generation provider",
+    "imageGenerationNone": "Not configured.",
+    "vectorLabel": "Vector driver",
+    "billingLabel": "Billing",
+    "billingConfigured": "Configured.",
+    "billingNotConfigured": "Not configured — the invoice route stays unreachable.",
+    "notFoundPathLabel": "404 page",
+    "secretHygieneHeading": "Secret hygiene",
+    "databaseUrlWarning": "The database URL in cogenta.config.mjs embeds real credentials. Move it to the COGENTA_DATABASE_URL environment variable instead — the config file is committed to git.",
+    "databaseUrlOk": "No embedded credentials found in the config file's database URL.",
+    "envFileWarning": "The .env file ({{path}}) is readable by other users on this machine — on shared hosting that means every other tenant. Restrict its permissions (chmod 600).",
+    "envFileOk": "The .env file's permissions look correctly restricted.",
+    "envFileUnknown": "Could not check the .env file's permissions on this platform.",
+    "envFileNone": "No .env file found next to the config."
   },
   "trash": {
     "heading": "Trash",
@@ -481,11 +504,78 @@
     "backupsBody": "No data source yet: this widget arrives with the backup agent (L5)."
   },
   "settings": {
-    "heading": "Account settings",
-    "signedInAs": "Signed in as {{email}}.",
-    "languageHeading": "Interface language",
-    "languageLabel": "Language",
-    "securityMoved": "Password, two-step verification and active sessions: see \"My profile\"."
+    "heading": "Site settings",
+    "description": "Editorial settings only. Infrastructure and security stay in cogenta.config.mjs — see \"Advanced\".",
+    "adminOnly": "Only the admin role may read or change the site's editorial settings.",
+    "loadError": "Could not load the site settings.",
+    "saveError": "This setting could not be saved.",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "provenanceEditable": "Editable here.",
+    "provenanceReadOnly": "Defined in cogenta.config.mjs — read-only.",
+    "tab": {
+      "general": "General",
+      "reading": "Reading",
+      "discussion": "Discussion",
+      "media": "Media",
+      "privacy": "Privacy",
+      "advanced": "Advanced"
+    },
+    "dateTimeStyle": {
+      "full": "Full",
+      "long": "Long",
+      "medium": "Medium",
+      "short": "Short"
+    },
+    "taglineLocaleLabel": "Tagline language",
+    "defaultLocaleHeading": "Default site language",
+    "notFoundPathLabel": "404 page",
+    "notFoundPathUnavailable": "Not available.",
+    "notFoundPathNote": "Kept in the config file on purpose — a custom 404 page ships with the deploy that wrote it, the same as a route change would.",
+    "mediaFormatsLabel": "Image variants produced",
+    "mediaFormatsValue": "WebP, at a fixed set of widths — built into the image pipeline, not editable here.",
+    "discussionPlaceholder": "Not applicable yet: Cogenta has no comment system today (see fiche 15). This tab is a placeholder for it.",
+    "noCookieByDefault": "Cogenta sets no cookie of its own. Turn this on only if this site adds one (an embed, an analytics script) — a banner nobody needs is worse than none.",
+    "advancedLink": "Security, webhooks and infrastructure (read-only)",
+    "advancedNote": "Everything there comes from cogenta.config.mjs. Edit the file and restart the server to change it.",
+    "field": {
+      "general": {
+        "title": {
+          "label": "Site title",
+          "help": "Shown in the browser tab and search results when a page has none of its own."
+        },
+        "tagline": { "label": "Tagline", "help": "A short description of the site." },
+        "adminEmail": { "label": "Administration email", "help": "" },
+        "timeZone": {
+          "label": "Time zone",
+          "help": "An IANA zone name, e.g. Europe/Paris. Governs scheduled publication and every date shown in this admin."
+        },
+        "dateStyle": { "label": "Date format", "help": "" },
+        "timeStyle": { "label": "Time format", "help": "" }
+      },
+      "reading": {
+        "homePath": {
+          "label": "Homepage",
+          "help": "The path served at /, e.g. /home. Leave empty to keep the default (/home)."
+        },
+        "postsPerPage": { "label": "Items per page", "help": "" }
+      },
+      "media": {
+        "maxUploadSizeMb": { "label": "Maximum upload size (MB)", "help": "" }
+      },
+      "privacy": {
+        "policyPath": {
+          "label": "Privacy policy page",
+          "help": "A site-relative path, e.g. /privacy."
+        },
+        "cookieBannerEnabled": { "label": "Show a cookie banner", "help": "" },
+        "cookieBannerMessage": { "label": "Cookie banner message", "help": "" },
+        "dataRetentionNote": {
+          "label": "Data retention note",
+          "help": "Shown to visitors, purely informational — nothing here changes what is actually retained."
+        }
+      }
+    }
   },
   "users": {
     "heading": "Users",

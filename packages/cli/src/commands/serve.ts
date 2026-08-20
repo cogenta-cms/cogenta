@@ -19,6 +19,7 @@ import {
   type AuditRouter,
   type AuthRouter,
   buildContentSchema,
+  type ConfigStatusInput,
   createAgentsRouter,
   createAnalyticsRouter,
   createApiKeysRouter,
@@ -40,6 +41,7 @@ import {
   createRestRouter,
   createSearchRouter,
   createSitePlanRouter,
+  createSiteSettingsRouter,
   createSuspiciousActivitySource,
   createTaxonomyRouter,
   createUsersRouter,
@@ -62,6 +64,7 @@ import {
   type SearchRouter,
   type SitePlanRouter,
   type SitePlanRouterOptions,
+  type SiteSettingsRouter,
   type TaxonomyRouter,
   type UsersRouter,
   variantKeyFor,
@@ -99,6 +102,7 @@ import {
   type Logger,
   loadConfig,
   type MediaStore,
+  type SecretHygieneReport,
   type StorageDriver,
 } from '@cogenta/core'
 import { importWordPress } from '@cogenta/import'
@@ -123,13 +127,17 @@ import {
   createRedirectStore,
   createSchemaTables,
   createSearchIndex,
+  createSiteSettingsStore,
   createTaxonomyStore,
   ensureMenuTables,
+  ensureSiteSettingsTables,
   type MenuStore,
   type RedirectStore,
   registerScheduledPublishing,
   type SchemaDocument,
   type SearchDriver,
+  SITE_SETTINGS_SITE_SCOPE,
+  type SiteSettingsStore,
   type TaxonomyDefinition,
   type TaxonomyStore,
   withLifecycleEvents,
@@ -352,6 +360,20 @@ interface Site {
   readonly redirectRouter: RedirectRouter
   /** `GET /api/security-status` and `GET /api/webhooks-status` — read-only mirrors of the site's configuration file, admin-only (audit follow-up to L10 task 6 / L14 task 1). */
   readonly opsStatusRouter: OpsStatusRouter
+  /**
+   * `GET|PATCH /api/settings` — the editorial site settings a rédacteur can
+   * change without a terminal (fiche 23, ADR-0025's third category: not
+   * infrastructure like `opsStatusRouter` above, not a personal preference
+   * like the admin's interface language, but a site property stored in the
+   * database precisely so it can change without a redeploy).
+   */
+  readonly siteSettingsRouter: SiteSettingsRouter
+  /**
+   * The same store `siteSettingsRouter` writes through, exposed directly so
+   * an internal caller — `theme-render.ts`'s `homePath` accessor — can read
+   * a live value without an in-process HTTP round trip to itself.
+   */
+  readonly siteSettingsStore: SiteSettingsStore
   /** ADR-0021's half that replaces the MFA sign-in gate: recommendations the admin shows, never a block. */
   readonly noticeRouter: NoticeRouter
   /** Refused sign-ins, watched for a run worth alerting on (L14 task 4). `null` when nothing is configured to receive one. */
@@ -540,6 +562,15 @@ interface AssembleSiteOptions {
    * made-up seller address.
    */
   readonly billing?: CogentaConfig['billing']
+  /**
+   * `GET /api/config-status`'s answer (fiche 23 task 5) — the sections of
+   * `cogenta.config.mjs` `ops-settings.tsx` never showed (database driver,
+   * cache/queue/storage drivers, LLM/embeddings/image/vector providers) plus
+   * the two secret-hygiene warnings (`SecretHygieneReport`). Built once in
+   * `runServe` from the same `loadConfig()` result everything else here
+   * already reads.
+   */
+  readonly configStatus: ConfigStatusInput
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -718,6 +749,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensureMenuTables(db)
   const menuStore: MenuStore = createMenuStore({ db })
 
+  // Editorial site settings (fiche 23, ADR-0025): not schema-declared either
+  // — a rédacteur's tagline or homepage choice is not part of the content
+  // model — so this gets the same one-fixed-table treatment as menus.
+  await ensureSiteSettingsTables(db)
+  const siteSettingsStore: SiteSettingsStore = createSiteSettingsStore({ db })
+
   const gateway = createContentGateway({ collections, stores, permissions })
 
   // Resolves an `entry`-kind menu item to a display label and public route,
@@ -840,6 +877,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ...(options.images === undefined || options.images === null
         ? {}
         : { images: options.images }),
+      // fiche 23 task 2's "Médias" tab — read fresh on every upload so a
+      // changed ceiling applies immediately, no restart needed.
+      maxUploadBytes: async () => {
+        const setting = await siteSettingsStore.get(
+          'media.maxUploadSizeMb',
+          SITE_SETTINGS_SITE_SCOPE,
+        )
+        const mb = typeof setting?.value === 'number' ? setting.value : 15
+        return mb * 1024 * 1024
+      },
     }),
     auditRouter: createAuditRouter({ audit: auth.audit }),
     taxonomyRouter: createTaxonomyRouter({
@@ -852,6 +899,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       installer: marketplaceInstaller,
     }),
     menuRouter: createMenuRouter({ store: menuStore, resolveEntry: resolveMenuEntry }),
+    siteSettingsRouter: createSiteSettingsRouter({
+      store: siteSettingsStore,
+      defaultLocale: site.defaultLocale,
+    }),
+    siteSettingsStore,
     commerceRouter: createCommerceAdminRouter({
       catalog: commerceCatalog,
       orders: commerceOrders,
@@ -866,6 +918,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     opsStatusRouter: createOpsStatusRouter({
       security: options.security,
       webhooks: options.webhooks,
+      config: options.configStatus,
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -1312,6 +1365,53 @@ async function recordApiKeyAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/**
+ * Every editorial setting change, in the same hash-chained log as every
+ * other write (fiche 23 task 1: "toute écriture produit une entrée
+ * d'audit"). Only `PATCH` writes anything down — `GET` is a plain read, the
+ * same restraint `recordMediaAudit`/`recordApiKeyAudit` already apply.
+ *
+ * The written key and value are read back from the router's own response
+ * body (`{ data: { key, value, … } }`) rather than the request body: it is
+ * the value that actually landed, after the store's own validation, which
+ * is the more honest thing for an audit entry to name.
+ */
+async function recordSiteSettingsAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (method !== 'PATCH') return
+  if (response.status < 200 || response.status >= 300) return
+
+  const data = (
+    response.body as {
+      readonly data?: {
+        readonly key?: unknown
+        readonly value?: unknown
+        readonly locale?: unknown
+      }
+    } | null
+  )?.data
+  const key = typeof data?.key === 'string' ? data.key : null
+  if (key === null) return
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'site_setting.update',
+      diff: {
+        key,
+        value: data?.value ?? null,
+        ...(data?.locale == null ? {} : { locale: data.locale }),
+      },
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
 function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   res.writeHead(response.status, response.headers)
   res.end(
@@ -1712,12 +1812,30 @@ export function createRequestListener(
         return
       }
 
-      // Read-only mirrors of `security`/`webhooks` from the config file (audit
-      // follow-up to L10 task 6 / L14 task 1) — see `ops-status-router.ts` for
-      // why editing them here would be the wrong architecture.
-      if (url.pathname === '/api/security-status' || url.pathname === '/api/webhooks-status') {
+      // Read-only mirrors of `security`/`webhooks`/`config` from the config
+      // file (audit follow-up to L10 task 6 / L14 task 1; `config-status`
+      // added by fiche 23 task 5) — see `ops-status-router.ts` for why
+      // editing them here would be the wrong architecture.
+      if (
+        url.pathname === '/api/security-status' ||
+        url.pathname === '/api/webhooks-status' ||
+        url.pathname === '/api/config-status'
+      ) {
         const request = toRestRequest(req, url, undefined)
         writeRestResponse(res, await site.opsStatusRouter.handle(request, context))
+        return
+      }
+
+      // The editorial site settings (fiche 23, ADR-0025): read is public —
+      // the theme's own homepage/tagline render must answer the same thing
+      // to an anonymous visitor as `GET /api/settings` does — write is
+      // admin-only, checked per setting by the router itself.
+      if (url.pathname === '/api/settings') {
+        const body = req.method === 'PATCH' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        const response = await site.siteSettingsRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordSiteSettingsAudit(site, actor, req.method ?? 'GET', response, logger)
         return
       }
 
@@ -2038,6 +2156,17 @@ export function createRequestListener(
           // than a client script, is how this page's beacon pixel gets it.
           analyticsBeacon: { referrer: req.headers.referer },
           menuRouter: site.menuRouter,
+          // The homepage a rédacteur chose from the admin (fiche 23 task 4),
+          // read fresh on every request — "sans redéployer" only holds if
+          // this is not cached at startup. `theme-render.ts` falls back to
+          // `/home` when nothing was ever written.
+          homePath: async () => {
+            const setting = await site.siteSettingsStore.get(
+              'reading.homePath',
+              SITE_SETTINGS_SITE_SCOPE,
+            )
+            return typeof setting?.value === 'string' ? setting.value : null
+          },
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
@@ -2149,6 +2278,42 @@ const SHUTDOWN_GRACE_MS = 2_000
 const SCHEDULED_PUBLISH_TICK_MS = 60_000
 
 /**
+ * Builds `/api/config-status`'s answer (fiche 23 task 5) from what
+ * `loadConfig()` already resolved — a hand-picked, secret-free subset
+ * (`ConfigStatusInput` has no field a secret could occupy), plus the
+ * `secretHygiene` report `loadConfig()` computed from the raw file.
+ */
+function buildConfigStatus(
+  config: CogentaConfig,
+  secretHygiene: SecretHygieneReport,
+): ConfigStatusInput {
+  return {
+    site: { name: config.site.name, url: config.site.url, notFoundPath: config.site.notFoundPath },
+    database: { driver: config.database.driver },
+    cache: { driver: config.cache.driver },
+    queue: { driver: config.queue.driver },
+    storage: {
+      driver: config.storage.driver,
+      bucket: config.storage.bucket,
+      region: config.storage.region,
+      endpoint: config.storage.endpoint,
+    },
+    llm:
+      config.llm === undefined
+        ? undefined
+        : { provider: config.llm.provider, model: config.llm.model },
+    embeddings: { provider: config.embeddings.provider, model: config.embeddings.model },
+    imageGeneration:
+      config.imageGeneration === undefined
+        ? undefined
+        : { provider: config.imageGeneration.provider, model: config.imageGeneration.model },
+    vector: { driver: config.vector.driver },
+    billingConfigured: config.billing !== undefined,
+    secretHygiene,
+  }
+}
+
+/**
  * Runs until `options.signal` aborts. Returns 0 on a clean shutdown, 1 if
  * startup failed — nothing here calls `process.exit` (same convention as
  * every other command), so an embedder controls the process lifecycle.
@@ -2233,6 +2398,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     security: loaded.config.security,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
+    configStatus: buildConfigStatus(loaded.config, loaded.secretHygiene),
     sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,

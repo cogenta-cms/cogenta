@@ -2,6 +2,8 @@ import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
+  type ConfigStatus,
+  readConfigStatus,
   readSecurityStatus,
   readWebhooksStatus,
   type SecurityStatus,
@@ -34,6 +36,7 @@ export function OpsSettingsRoute(): JSX.Element {
 
   const [security, setSecurity] = useState<SecurityStatus | null>(null)
   const [webhooks, setWebhooks] = useState<WebhooksStatus | null>(null)
+  const [config, setConfig] = useState<ConfigStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -42,11 +45,12 @@ export function OpsSettingsRoute(): JSX.Element {
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([readSecurityStatus(token), readWebhooksStatus(token)])
-      .then(([securityStatus, webhooksStatus]) => {
+    Promise.all([readSecurityStatus(token), readWebhooksStatus(token), readConfigStatus(token)])
+      .then(([securityStatus, webhooksStatus, configStatus]) => {
         if (cancelled) return
         setSecurity(securityStatus)
         setWebhooks(webhooksStatus)
+        setConfig(configStatus)
       })
       .catch((caught: unknown) => {
         if (cancelled) return
@@ -158,6 +162,103 @@ export function OpsSettingsRoute(): JSX.Element {
             <p className="text-muted-foreground m-0 text-sm">
               {t('opsSettings.webhooksHistoryUnavailable')}
             </p>
+          </CardBody>
+        </Card>
+      )}
+
+      {config !== null && (
+        <Card aria-labelledby="ops-settings-config-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="ops-settings-config-heading">{t('opsSettings.configHeading')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody className="flex flex-col gap-4">
+            <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="font-medium">{t('opsSettings.databaseLabel')}</dt>
+              <dd className="m-0">{config.database.driver}</dd>
+
+              <dt className="font-medium">{t('opsSettings.cacheLabel')}</dt>
+              <dd className="m-0">{config.cache.driver}</dd>
+
+              <dt className="font-medium">{t('opsSettings.queueLabel')}</dt>
+              <dd className="m-0">{config.queue.driver}</dd>
+
+              <dt className="font-medium">{t('opsSettings.storageLabel')}</dt>
+              <dd className="m-0">{config.storage.driver}</dd>
+
+              <dt className="font-medium">{t('opsSettings.llmLabel')}</dt>
+              <dd className="m-0">
+                {config.llm === undefined
+                  ? t('opsSettings.llmNone')
+                  : `${config.llm.provider} (${config.llm.model})`}
+              </dd>
+
+              <dt className="font-medium">{t('opsSettings.embeddingsLabel')}</dt>
+              <dd className="m-0">
+                {config.embeddings.provider} ({config.embeddings.model})
+              </dd>
+
+              <dt className="font-medium">{t('opsSettings.imageGenerationLabel')}</dt>
+              <dd className="m-0">
+                {config.imageGeneration === undefined
+                  ? t('opsSettings.imageGenerationNone')
+                  : `${config.imageGeneration.provider} (${config.imageGeneration.model})`}
+              </dd>
+
+              <dt className="font-medium">{t('opsSettings.vectorLabel')}</dt>
+              <dd className="m-0">{config.vector.driver}</dd>
+
+              <dt className="font-medium">{t('opsSettings.billingLabel')}</dt>
+              <dd className="m-0">
+                {config.billingConfigured
+                  ? t('opsSettings.billingConfigured')
+                  : t('opsSettings.billingNotConfigured')}
+              </dd>
+
+              <dt className="font-medium">{t('opsSettings.notFoundPathLabel')}</dt>
+              <dd className="m-0 font-mono">{config.site.notFoundPath}</dd>
+            </dl>
+
+            {/* Secret hygiene (fiche 23 task 5's second literal ask):
+                "détecter et signaler" — never a hard refusal, since
+                `database.url` is legitimately present in the file for the
+                common SQLite/no-password case. */}
+            <div>
+              <h3 className="m-0 mb-2 font-sans text-sm font-semibold text-foreground">
+                {t('opsSettings.secretHygieneHeading')}
+              </h3>
+              {config.secretHygiene.databaseUrlHasCredentialsInFile ? (
+                <Notice tone="danger">
+                  <p>{t('opsSettings.databaseUrlWarning')}</p>
+                </Notice>
+              ) : (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t('opsSettings.databaseUrlOk')}
+                </p>
+              )}
+              {config.secretHygiene.envFilePath === null ? (
+                <p className="m-0 mt-2 text-sm text-muted-foreground">
+                  {t('opsSettings.envFileNone')}
+                </p>
+              ) : config.secretHygiene.envFileReadableByOthers === true ? (
+                <div className="mt-2">
+                  <Notice tone="danger">
+                    <p>
+                      {t('opsSettings.envFileWarning', { path: config.secretHygiene.envFilePath })}
+                    </p>
+                  </Notice>
+                </div>
+              ) : config.secretHygiene.envFileReadableByOthers === false ? (
+                <p className="m-0 mt-2 text-sm text-muted-foreground">
+                  {t('opsSettings.envFileOk')}
+                </p>
+              ) : (
+                <p className="m-0 mt-2 text-sm text-muted-foreground">
+                  {t('opsSettings.envFileUnknown')}
+                </p>
+              )}
+            </div>
           </CardBody>
         </Card>
       )}

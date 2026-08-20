@@ -1,7 +1,11 @@
 import type { CogentaConfig } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import type { RestRequest, RestResponse } from '../../src/rest/http.js'
-import { createOpsStatusRouter, type OpsStatusRouter } from '../../src/rest/ops-status-router.js'
+import {
+  type ConfigStatusInput,
+  createOpsStatusRouter,
+  type OpsStatusRouter,
+} from '../../src/rest/ops-status-router.js'
 import type { AccessContext, Actor } from '../../src/types.js'
 import { ANONYMOUS } from '../../src/types.js'
 
@@ -127,6 +131,84 @@ describe('the ops status transport', () => {
       const response = await router.handle(request('GET', '/api/webhooks-status'), asAdmin)
       const data = dataOf<{ disabledForMissingSecret: boolean }>(response)
       expect(data.disabledForMissingSecret).toBe(false)
+    })
+  })
+
+  describe('config status (fiche 23 task 5)', () => {
+    const CONFIG: ConfigStatusInput = {
+      site: { name: 'Test site', url: 'https://example.com', notFoundPath: '/404' },
+      database: { driver: 'sqlite' },
+      cache: { driver: 'memory' },
+      queue: { driver: 'database' },
+      storage: { driver: 'local', bucket: undefined, region: undefined, endpoint: undefined },
+      llm: undefined,
+      embeddings: { provider: 'local', model: 'all-MiniLM-L6-v2' },
+      imageGeneration: undefined,
+      vector: { driver: 'memory' },
+      billingConfigured: false,
+      secretHygiene: {
+        databaseUrlHasCredentialsInFile: false,
+        envFilePath: null,
+        envFileReadableByOthers: null,
+      },
+    }
+
+    it('refuses an anonymous or editor read', async () => {
+      const router = createOpsStatusRouter({
+        security: SECURITY,
+        webhooks: { endpoints: [], secret: undefined },
+        config: CONFIG,
+      })
+      const asAnon = await router.handle(request('GET', '/api/config-status'), asPublic)
+      const asEd = await router.handle(request('GET', '/api/config-status'), asEditor)
+      expect(asAnon.status).toBe(403)
+      expect(asEd.status).toBe(403)
+    })
+
+    it('mirrors driver/provider names to an admin, never a secret field', async () => {
+      const router = createOpsStatusRouter({
+        security: SECURITY,
+        webhooks: { endpoints: [], secret: undefined },
+        config: CONFIG,
+      })
+      const response = await router.handle(request('GET', '/api/config-status'), asAdmin)
+      expect(response.status).toBe(200)
+      expect(dataOf(response)).toEqual(CONFIG)
+      // Structural guarantee, not just this fixture: `ConfigStatusInput` has
+      // no field named `url`, `apiKey`, `accessKeyId` or `secretAccessKey` —
+      // there is nothing to accidentally serialise.
+      const body = JSON.stringify(response.body)
+      expect(body).not.toContain('apiKey')
+      expect(body).not.toContain('secretAccessKey')
+    })
+
+    it('flags a database URL with embedded credentials found in the config file', async () => {
+      const router = createOpsStatusRouter({
+        security: SECURITY,
+        webhooks: { endpoints: [], secret: undefined },
+        config: {
+          ...CONFIG,
+          secretHygiene: {
+            databaseUrlHasCredentialsInFile: true,
+            envFilePath: '/site/.env',
+            envFileReadableByOthers: true,
+          },
+        },
+      })
+      const response = await router.handle(request('GET', '/api/config-status'), asAdmin)
+      const data = dataOf<ConfigStatusInput>(response)
+      expect(data.secretHygiene.databaseUrlHasCredentialsInFile).toBe(true)
+      expect(data.secretHygiene.envFileReadableByOthers).toBe(true)
+    })
+
+    it('answers null, not a 500, when the caller never wired a config mirror', async () => {
+      const router = createOpsStatusRouter({
+        security: SECURITY,
+        webhooks: { endpoints: [], secret: undefined },
+      })
+      const response = await router.handle(request('GET', '/api/config-status'), asAdmin)
+      expect(response.status).toBe(200)
+      expect(dataOf(response)).toBeNull()
     })
   })
 

@@ -59,6 +59,31 @@ export type { Schema2MigrationOptions } from './schema-2-migration.js'
 export { schema2Migration } from './schema-2-migration.js'
 export type { SearchIndexingOptions } from './search-indexing.js'
 export { withSearchIndexing } from './search-indexing.js'
+export type {
+  SiteSettingDefinition,
+  SiteSettingGroup,
+  SiteSettingScope,
+  SiteSettingUiType,
+} from './site-settings-registry.js'
+export {
+  SITE_SETTING_GROUPS,
+  SITE_SETTING_SCOPES,
+  SITE_SETTING_UI_TYPES,
+  SITE_SETTINGS_REGISTRY,
+  siteSettingByKey,
+} from './site-settings-registry.js'
+export type {
+  SiteSettingRecord,
+  SiteSettingsStore,
+  SiteSettingsStoreOptions,
+} from './site-settings-store.js'
+export { createSiteSettingsStore } from './site-settings-store.js'
+export {
+  ensureSiteSettingsTables,
+  SITE_SETTING_VALUE_LENGTH,
+  SITE_SETTINGS_SITE_SCOPE,
+  SITE_SETTINGS_TABLE,
+} from './site-settings-tables.js'
 export type { ContentStore, ContentStoreOptions } from './store.js'
 export { createContentStore } from './store.js'
 export type { RelationTarget } from './tables.js'

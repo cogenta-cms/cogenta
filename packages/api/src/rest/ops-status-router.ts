@@ -1,35 +1,86 @@
-import type { CogentaConfig } from '@cogenta/core'
+import type { CogentaConfig, SecretHygieneReport } from '@cogenta/core'
 import { CogentaError } from '@cogenta/core'
 import type { AccessContext } from '../types.js'
 import { ANONYMOUS } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 
 /**
- * `GET /api/security-status` and `GET /api/webhooks-status` — read-only
- * mirrors of two site settings that only ever lived in `cogenta.config.mjs`
- * (L10 audit follow-up).
+ * `GET /api/security-status`, `GET /api/webhooks-status` and
+ * `GET /api/config-status` — read-only mirrors of site settings that only
+ * ever live in `cogenta.config.mjs` (L10 audit follow-up; `config-status`
+ * added by fiche 23 task 5 to widen the mirror to the sections it never
+ * covered).
  *
- * Both are **read-only by design, not by omission.** `security` (CORS/CSP/HSTS)
- * and `webhooks` (outbound endpoints) come from the site's own configuration
- * file, which is the source of truth precisely because it is versioned in git
+ * All three are **read-only by design, not by omission.** `security`
+ * (CORS/CSP/HSTS), `webhooks` (outbound endpoints) and `config` (driver
+ * choices, provider names) come from the site's own configuration file,
+ * which is the source of truth precisely because it is versioned in git
  * alongside the code that depends on it (a CSP that allows a script host has
- * to travel with the deploy that added the script). Letting the admin edit
+ * to travel with the deploy that added the script; a database driver change
+ * travels with the migration that makes it safe). Letting the admin edit
  * them here would mean two sources of truth disagreeing the moment someone
  * edits the file without restarting, or edits the database without touching
  * the file — so this route only ever answers what the process already
- * resolved at startup, the same values `applySecurity`/the webhook emitter
- * already apply to every request.
+ * resolved at startup.
  *
- * Admin-only: neither answer is public information (an internal CSP or an
- * endpoint URL is exactly the kind of detail a probing attacker wants).
+ * `config-status` is deliberately narrow: it takes `ConfigStatusInput`, a
+ * hand-picked subset of `CogentaConfig` (driver names, provider names,
+ * model names, bucket/region/endpoint) rather than the whole resolved
+ * config object — a secret field (`database.url`, `storage.secretAccessKey`,
+ * `llm.apiKey`, …) has no accessor in this type at all, so there is no
+ * field to forget to strip.
+ *
+ * Admin-only: none of the three answers is public information (an internal
+ * CSP, an endpoint URL, or which LLM vendor a site uses are all exactly the
+ * kind of detail a probing attacker wants).
  */
 
 export interface OpsStatusRouterOptions {
   readonly security: CogentaConfig['security']
   readonly webhooks: CogentaConfig['webhooks']
-  /** Mount points. `/api/security-status` and `/api/webhooks-status` by default. */
+  /** Absent only in a caller (a narrow unit test) that does not care about `/api/config-status` at all. */
+  readonly config?: ConfigStatusInput
+  /** Mount points. `/api/security-status`, `/api/webhooks-status` and `/api/config-status` by default. */
   readonly securityPath?: string
   readonly webhooksPath?: string
+  readonly configPath?: string
+}
+
+/**
+ * Never the driver's connection details, never a key. `driver`/`provider`
+ * names are safe to show because a site's `cogenta.config.mjs` already
+ * names them in the clear — this route just proves what actually loaded
+ * matches what the file says.
+ */
+export interface ConfigStatusInput {
+  /**
+   * The fields of `site` that stay in the config file by decision (fiche 23
+   * § "Décisions à prendre": `notFoundPath` is not migrated to the editorial
+   * store — "pas gratuit, à trancher plutôt qu'à faire par symétrie" — and
+   * `name`/`url` are infra, not editorial). `defaultLocale`/`locales`
+   * already reach the admin publicly via `/api/schema`'s `SchemaDocumentSite`
+   * (contract A, frozen) and are deliberately not duplicated here.
+   */
+  readonly site: Pick<CogentaConfig['site'], 'name' | 'url' | 'notFoundPath'>
+  readonly database: Pick<CogentaConfig['database'], 'driver'>
+  readonly cache: Pick<CogentaConfig['cache'], 'driver'>
+  readonly queue: Pick<CogentaConfig['queue'], 'driver'>
+  readonly storage: Pick<CogentaConfig['storage'], 'driver' | 'bucket' | 'region' | 'endpoint'>
+  readonly llm: Pick<NonNullable<CogentaConfig['llm']>, 'provider' | 'model'> | undefined
+  readonly embeddings: Pick<CogentaConfig['embeddings'], 'provider' | 'model'>
+  readonly imageGeneration:
+    | Pick<NonNullable<CogentaConfig['imageGeneration']>, 'provider' | 'model'>
+    | undefined
+  readonly vector: Pick<CogentaConfig['vector'], 'driver'>
+  /** Whether `billing` is filled in — never the seller's legal name or address. */
+  readonly billingConfigured: boolean
+  /**
+   * Fiche 23 task 5's second literal ask: "L'écran doit détecter et
+   * signaler ces deux situations" — a database URL with embedded
+   * credentials committed to the config file, and a `.env` readable by
+   * other tenants on shared hosting.
+   */
+  readonly secretHygiene: SecretHygieneReport
 }
 
 export interface OpsStatusRouter {
@@ -38,6 +89,7 @@ export interface OpsStatusRouter {
 
 const DEFAULT_SECURITY_PATH = '/api/security-status'
 const DEFAULT_WEBHOOKS_PATH = '/api/webhooks-status'
+const DEFAULT_CONFIG_PATH = '/api/config-status'
 
 interface SecurityStatus {
   readonly cors: {
@@ -65,6 +117,9 @@ interface WebhooksStatus {
   readonly disabledForMissingSecret: boolean
 }
 
+/** `GET /api/config-status`'s answer — `ConfigStatusInput`, unchanged, plus nothing derived. */
+type ConfigStatus = ConfigStatusInput
+
 function forbidden(context: AccessContext, what: string): CogentaError {
   return new CogentaError({
     code: 'FORBIDDEN',
@@ -85,6 +140,7 @@ function assertAdmin(context: AccessContext, what: string): void {
 export function createOpsStatusRouter(options: OpsStatusRouterOptions): OpsStatusRouter {
   const securityPath = normalise(options.securityPath ?? DEFAULT_SECURITY_PATH)
   const webhooksPath = normalise(options.webhooksPath ?? DEFAULT_WEBHOOKS_PATH)
+  const configPath = normalise(options.configPath ?? DEFAULT_CONFIG_PATH)
 
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
@@ -137,6 +193,14 @@ export function createOpsStatusRouter(options: OpsStatusRouterOptions): OpsStatu
       return jsonResponse(200, { data: status })
     }
 
+    if (path === configPath) {
+      if (method !== 'GET') return methodNotAllowed(['GET'])
+      assertAdmin(context, 'the infrastructure configuration')
+      if (options.config === undefined) return jsonResponse(200, { data: null })
+      const status: ConfigStatus = options.config
+      return jsonResponse(200, { data: status })
+    }
+
     throw noRoute()
   }
 }
@@ -159,7 +223,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'The ops status routes are GET /api/security-status and GET /api/webhooks-status.',
+    hint: 'The ops status routes are GET /api/security-status, GET /api/webhooks-status and GET /api/config-status.',
   })
 }
 

@@ -90,6 +90,15 @@ export interface MediaRouterOptions {
    * uploads and serves originals exactly as before.
    */
   readonly images?: MediaImageProcessor
+  /**
+   * The upload size ceiling, in bytes (fiche 23 task 2 — the "Médias" tab's
+   * `media.maxUploadSizeMb` setting). A function, not a plain number: it is
+   * backed by a database row that can change without a redeploy, so this is
+   * read fresh on every upload rather than baked in when the router is
+   * constructed. Absent means `MAX_UPLOAD_BYTES` — the pre-fiche-23 fixed
+   * 15MB ceiling, unchanged.
+   */
+  readonly maxUploadBytes?: () => Promise<number>
   /** Mount point. `/api/media` by default. */
   readonly basePath?: string
 }
@@ -164,7 +173,7 @@ function sanitiseFilename(filename: string): string {
   return cleaned.length === 0 ? 'file' : cleaned
 }
 
-function decodeBase64(data: string): Buffer {
+function decodeBase64(data: string, maxBytes: number): Buffer {
   const buffer = Buffer.from(data, 'base64')
   // A non-base64 string decodes to *something* rather than throwing, so the
   // only reliable check is round-tripping it back and comparing lengths.
@@ -175,10 +184,10 @@ function decodeBase64(data: string): Buffer {
       hint: 'Encode the file contents as base64 before sending them.',
     })
   }
-  if (buffer.length > MAX_UPLOAD_BYTES) {
+  if (buffer.length > maxBytes) {
     throw new CogentaError({
       code: 'MEDIA_INVALID',
-      message: `The file is larger than the ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))}MB this route accepts.`,
+      message: `The file is larger than the ${Math.floor(maxBytes / (1024 * 1024))}MB this route accepts.`,
       hint: 'Upload a smaller file.',
     })
   }
@@ -334,7 +343,9 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
   async function upload(request: RestRequest, actor: Actor): Promise<RestResponse> {
     requireActor(actor)
     const input = decode(uploadSchema, request.body)
-    const bytes = decodeBase64(input.data)
+    const maxBytes =
+      options.maxUploadBytes === undefined ? MAX_UPLOAD_BYTES : await options.maxUploadBytes()
+    const bytes = decodeBase64(input.data, maxBytes)
     // For an image this is the type the *bytes* say, not the one the uploader
     // typed — the asset record and every response built from it use it, so a
     // disguised type cannot travel back out as a `Content-Type`.

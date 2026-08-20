@@ -80,7 +80,11 @@ export type {
 export { createMediaRouter, variantKeyFor } from './media-router.js'
 export type { MenuRouter, MenuRouterOptions } from './menu-router.js'
 export { createMenuRouter } from './menu-router.js'
-export type { OpsStatusRouter, OpsStatusRouterOptions } from './ops-status-router.js'
+export type {
+  ConfigStatusInput,
+  OpsStatusRouter,
+  OpsStatusRouterOptions,
+} from './ops-status-router.js'
 export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
@@ -112,6 +116,12 @@ export type {
   UploadedDocument,
 } from './site-plan-router.js'
 export { createSitePlanRouter } from './site-plan-router.js'
+export type {
+  SerialisedSiteSetting,
+  SiteSettingsRouter,
+  SiteSettingsRouterOptions,
+} from './site-settings-router.js'
+export { createSiteSettingsRouter } from './site-settings-router.js'
 export type { TaxonomyRouter, TaxonomyRouterOptions } from './taxonomy-router.js'
 export { createTaxonomyRouter } from './taxonomy-router.js'
 export type { UsersRouter, UsersRouterOptions } from './users-router.js'

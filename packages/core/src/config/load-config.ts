@@ -4,6 +4,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { CogentaError } from '../errors/index.js'
 import { resolveConfig } from './resolve-config.js'
+import { buildSecretHygieneReport, type SecretHygieneReport } from './secret-hygiene.js'
 import type { CogentaConfig, Environment } from './types.js'
 
 /** Checked in order, so a TypeScript config wins over a compiled one. */
@@ -54,6 +55,14 @@ export interface LoadedConfig {
   readonly config: CogentaConfig
   /** Null when the configuration came from the environment alone. */
   readonly path: string | null
+  /**
+   * The two secret-hygiene gaps fiche 23's audit named (a database URL with
+   * embedded credentials written into the versioned config file, and an
+   * `.env` readable by other tenants on shared hosting) — computed once
+   * here, where the raw pre-resolution file and the `.env` path are both in
+   * scope, and surfaced read-only on the admin's ops-settings mirror.
+   */
+  readonly secretHygiene: SecretHygieneReport
 }
 
 /**
@@ -80,21 +89,42 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
   // process.env` once and thread the *same object* down explicitly — so by
   // the time it reaches here, `options.env` is always "defined" even for a
   // real, unconfigured shell.
-  if (env === process.env) {
-    const configDir = path === null ? (options.cwd ?? process.cwd()) : dirname(path)
-    const envFile = join(configDir, '.env')
-    if (await exists(envFile)) {
-      try {
-        process.loadEnvFile(envFile)
-      } catch {
-        // Malformed .env is not fatal here — a real missing signingKey still
-        // surfaces its own clear CONFIG_INVALID error downstream. This is a
-        // best-effort convenience, not a second validation layer.
-      }
+  // Computed once, whatever `env` turns out to be: the `.env` a real site
+  // would read from lives next to the config regardless of who is asking, so
+  // the secret-hygiene report below can check it even when a test supplies a
+  // synthetic environment.
+  const configDir = path === null ? (options.cwd ?? process.cwd()) : dirname(path)
+  const envFilePath = join(configDir, '.env')
+  const envFileExists = await exists(envFilePath)
+
+  if (env === process.env && envFileExists) {
+    // `create-cogenta` writes a real, generated `COGENTA_AUTH_SIGNING_KEY` (and
+    // any other real secret a site needs) into `.env` next to the config —
+    // Node's own `--env-file` support, no new dependency (R9). Skipped
+    // whenever the resolved env is not really `process.env`: a test (or any
+    // caller) that injects its own synthetic map wants exactly that map, not
+    // one silently topped up from a file on disk. Checking identity rather
+    // than `options.env === undefined` matters because real callers up the
+    // stack (the CLI's own `run()`, `runServe`) resolve `options.env ??
+    // process.env` once and thread the *same object* down explicitly — so by
+    // the time it reaches here, `options.env` is always "defined" even for a
+    // real, unconfigured shell.
+    try {
+      process.loadEnvFile(envFilePath)
+    } catch {
+      // Malformed .env is not fatal here — a real missing signingKey still
+      // surfaces its own clear CONFIG_INVALID error downstream. This is a
+      // best-effort convenience, not a second validation layer.
     }
   }
 
-  if (path === null) return { config: resolveConfig({}, env), path: null }
+  if (path === null) {
+    return {
+      config: resolveConfig({}, env),
+      path: null,
+      secretHygiene: await buildSecretHygieneReport({}, envFilePath, envFileExists),
+    }
+  }
 
   let module: { default?: unknown }
   try {
@@ -123,5 +153,9 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
   // Relative paths in the file are relative to the file, not to the shell's
   // working directory: running a command from a subdirectory must reach the same
   // database, cache and media as running it from the project root.
-  return { config: resolveConfig(module.default, env, dirname(path)), path }
+  return {
+    config: resolveConfig(module.default, env, dirname(path)),
+    path,
+    secretHygiene: await buildSecretHygieneReport(module.default, envFilePath, envFileExists),
+  }
 }

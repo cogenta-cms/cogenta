@@ -181,6 +181,12 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // which is a conflict with the item's current pending-permission state,
   // not a malformed request.
   MARKETPLACE_UPDATE_REQUIRES_APPROVAL: 409,
+
+  // Site settings (fiche 23, ADR-0025). An unknown key is a plain 404 — the
+  // registry is the whole vocabulary; a value that fails that key's own
+  // schema is the caller's fault (400).
+  SITE_SETTING_UNKNOWN: 404,
+  SITE_SETTING_INVALID: 400,
 }
 
 export function statusFor(code: ErrorCode): number {

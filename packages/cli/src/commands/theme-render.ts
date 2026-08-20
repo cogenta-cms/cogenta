@@ -170,6 +170,29 @@ export interface ThemeRenderOptions {
    * was wired.
    */
   readonly menuRouter?: MenuRouter
+  /**
+   * The path served at `/` (fiche 23 task 4) — a real, honest replacement
+   * for the `/home` fallback this file used to hardcode.
+   *
+   * Read live, not cached at startup: the whole point of storing this in the
+   * site settings database rather than the config file is "choisir une
+   * autre page d'accueil depuis l'admin, sans redéployer" (fiche 23's own
+   * acceptance test), so every request that resolves `/` asks again.
+   *
+   * Absent, or resolving to `null`/`''` (unset), falls back to the exact
+   * pre-fiche-23 behaviour: retry `/`  as `/home`, the slug every blueprint
+   * seeds its home page at.
+   */
+  readonly homePath?: () => Promise<string | null>
+}
+
+/** The hardcoded fallback every blueprint's home page uses when no `reading.homePath` setting is stored. */
+const DEFAULT_HOME_PATH = '/home'
+
+async function homePathFor(options: ThemeRenderOptions): Promise<string> {
+  if (options.homePath === undefined) return DEFAULT_HOME_PATH
+  const configured = await options.homePath()
+  return configured === null || configured === '' ? DEFAULT_HOME_PATH : configured
 }
 
 /**
@@ -319,18 +342,19 @@ async function fetchOne(
  * this rather than each re-deriving the same filter from `match.params`.
  *
  * `/` itself matches no collection's route (every `page` pattern is
- * `/:slug`, which needs a real segment) — every `create-cogenta` blueprint
- * seeds its home page at the real, consistent slug `home`, so `/` retries
- * once as `/home` rather than 404ing on the one URL a real visitor always
- * tries first. Not a magic redirect: a site with no page at that slug still
- * 404s honestly, exactly like every other unmatched path.
+ * `/:slug`, which needs a real segment), so `/` retries once as
+ * `homePathFor(options)` — the `reading.homePath` site setting when one is
+ * stored (fiche 23 task 4), `/home` otherwise, the slug every
+ * `create-cogenta` blueprint seeds its home page at. Not a magic redirect: a
+ * site with no page at that path still 404s honestly, exactly like every
+ * other unmatched path.
  */
 async function resolveEntry(
   pathname: string,
   options: ThemeRenderOptions,
   context: AccessContext,
 ): Promise<{ readonly collection: CollectionDefinition; readonly entry: ContentEntry } | null> {
-  const effectivePath = pathname === '/' ? '/home' : pathname
+  const effectivePath = pathname === '/' ? await homePathFor(options) : pathname
   const match = matchPath(options.collections, effectivePath, {
     locales: options.site.locales,
     defaultLocale: options.site.defaultLocale,

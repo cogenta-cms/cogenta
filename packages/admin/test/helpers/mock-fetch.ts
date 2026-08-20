@@ -449,6 +449,49 @@ export function installMockFetch(
      * here answers with its own registry default, `isDefault: true`.
      */
     readonly siteSettings?: Readonly<Record<string, unknown>>
+    /** Seeds `/api/commerce/tax/rules` (fiche 34 task 1). Empty by default. */
+    readonly commerceTaxRules?: readonly {
+      id: string
+      country: string | null
+      region: string | null
+      taxCategory: string
+      name: string
+      rateBp: number
+      includedInPrice: boolean
+      priority: number
+      active: boolean
+      createdAt: string
+    }[]
+    /** Seeds `/api/commerce/shipping/methods` (fiche 34 task 2). Empty by default. */
+    readonly commerceShippingMethods?: readonly {
+      id: string
+      label: string
+      country: string | null
+      region: string | null
+      kind: 'flat' | 'by_weight' | 'free'
+      currency: string
+      amountMinor: number
+      perKgMinor: number
+      freeOverMinor: number | null
+      carrier: string | null
+      position: number
+      active: boolean
+      createdAt: string
+    }[]
+    /**
+     * Overrides `/api/commerce/payment/drivers` (fiche 34 task 3). A driver
+     * entry may carry extra JSON fields beyond what `PaymentDriverStatus`
+     * declares — this is exactly the shape a security test uses to prove the
+     * screen never renders a field it should not be reading, even if the
+     * backend regressed and returned one.
+     */
+    readonly commercePaymentDrivers?: readonly Readonly<Record<string, unknown>>[]
+    readonly commercePaymentTestMode?: boolean
+    readonly commercePaymentWebhookUrl?: string | null
+    /** `POST /api/commerce/payment/drivers/{name}/test-connection`'s answer, keyed by driver name. Defaults to `{ ok: true, message: null }`. */
+    readonly commercePaymentTestResults?: Readonly<
+      Record<string, { readonly ok: boolean; readonly message: string | null }>
+    >
     /** Overrides for `GET /api/shell-status` (fiche 35 task 3) — badges and feature flags, quiet-site defaults otherwise. */
     readonly shellStatus?: {
       readonly trash?: number
@@ -566,7 +609,14 @@ export function installMockFetch(
   const SITE_SETTINGS_DEFAULTS: Readonly<
     Record<
       string,
-      { group: string; order: number; uiType: string; scope: 'site' | 'locale'; value: unknown }
+      {
+        group: string
+        order: number
+        uiType: string
+        scope: 'site' | 'locale'
+        value: unknown
+        options?: readonly { readonly value: string; readonly label: string }[]
+      }
     >
   > = {
     'general.title': { group: 'general', order: 0, uiType: 'string', scope: 'site', value: '' },
@@ -629,6 +679,82 @@ export function installMockFetch(
       uiType: 'text',
       scope: 'site',
       value: '',
+    },
+    // Commerce (fiche 34 tasks 4-5) -- general store settings and the
+    // invoice template, mirroring packages/schema/src/store/site-settings-registry.ts.
+    'commerce.currency': {
+      group: 'commerce',
+      order: 0,
+      uiType: 'string',
+      scope: 'site',
+      value: 'EUR',
+    },
+    'commerce.priceDisplay': {
+      group: 'commerce',
+      order: 1,
+      uiType: 'select',
+      scope: 'site',
+      value: 'ttc',
+      options: [
+        { value: 'ttc', label: 'Tax-inclusive (TTC)' },
+        { value: 'ht', label: 'Tax-exclusive (HT)' },
+      ],
+    },
+    'commerce.countriesServed': {
+      group: 'commerce',
+      order: 2,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+    'commerce.minOrderSubtotalMinor': {
+      group: 'commerce',
+      order: 3,
+      uiType: 'number',
+      scope: 'site',
+      value: 0,
+    },
+    'commerce.allowBackorderDefault': {
+      group: 'commerce',
+      order: 4,
+      uiType: 'boolean',
+      scope: 'site',
+      value: false,
+    },
+    'commerce.tosPagePath': {
+      group: 'commerce',
+      order: 5,
+      uiType: 'path',
+      scope: 'site',
+      value: '',
+    },
+    'commerce.returnPolicyPagePath': {
+      group: 'commerce',
+      order: 6,
+      uiType: 'path',
+      scope: 'site',
+      value: '',
+    },
+    'commerce.invoiceSeriesPrefix': {
+      group: 'commerce',
+      order: 7,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'commerce.invoicePaymentTerms': {
+      group: 'commerce',
+      order: 8,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+    'commerce.invoiceLanguage': {
+      group: 'commerce',
+      order: 9,
+      uiType: 'string',
+      scope: 'site',
+      value: 'en',
     },
   }
   const siteSettingsWrites = new Map<
@@ -860,6 +986,32 @@ export function installMockFetch(
   const mockProducts: MockProduct[] = []
   const mockVariants: MockVariant[] = []
   const mockCoupons: MockCoupon[] = []
+  let mockTaxRuleCounter = 0
+  const mockTaxRules = [...(options.commerceTaxRules ?? [])]
+  let mockShippingMethodCounter = 0
+  const mockShippingMethods = [...(options.commerceShippingMethods ?? [])]
+  const mockPaymentDrivers = options.commercePaymentDrivers ?? [
+    {
+      name: 'manual',
+      tier: 'degraded',
+      settlesOffline: true,
+      configured: true,
+      selected: undefined,
+    },
+    {
+      name: 'stripe',
+      tier: 'optimal',
+      settlesOffline: false,
+      configured: false,
+      selected: undefined,
+    },
+  ]
+  const mockPaymentTestMode = options.commercePaymentTestMode ?? true
+  const mockPaymentWebhookUrl =
+    options.commercePaymentWebhookUrl === undefined
+      ? 'https://example.com/api/commerce/payments/webhook'
+      : options.commercePaymentWebhookUrl
+  const mockPaymentTestResults = options.commercePaymentTestResults ?? {}
   const mockSubscriptions: MockSubscription[] = [
     {
       id: 'subscription-1',
@@ -3810,6 +3962,178 @@ export function installMockFetch(
           })
         }
 
+        // ---- tax (fiche 34 task 1) --------------------------------------
+        if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, { rules: mockTaxRules })
+          }
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            mockTaxRuleCounter += 1
+            const rule = {
+              id: `tax-rule-${mockTaxRuleCounter}`,
+              name: String(body.name),
+              country: body.country === undefined ? null : String(body.country),
+              region: body.region === undefined ? null : String(body.region),
+              taxCategory: body.taxCategory === undefined ? 'standard' : String(body.taxCategory),
+              rateBp: Number(body.rateBp),
+              includedInPrice: body.includedInPrice !== false,
+              priority: body.priority === undefined ? 0 : Number(body.priority),
+              active: true,
+              createdAt: '2026-03-01T00:00:00.000Z',
+            }
+            mockTaxRules.push(rule)
+            return json(201, rule)
+          }
+        }
+        if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 3) {
+          if (method === 'DELETE') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const index = mockTaxRules.findIndex((rule) => rule.id === segments[2])
+            if (index !== -1) mockTaxRules.splice(index, 1)
+            return new Response(null, { status: 204 })
+          }
+        }
+        if (segments[0] === 'tax' && segments[1] === 'simulate' && segments.length === 2) {
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const category = body.taxCategory === undefined ? 'standard' : String(body.taxCategory)
+            const country = body.country === undefined ? null : String(body.country)
+            const region = body.region === undefined ? null : String(body.region)
+            const candidates = mockTaxRules.filter(
+              (rule) => rule.active && rule.taxCategory === category,
+            )
+            const specificity = (rule: (typeof mockTaxRules)[number]): number => {
+              if (rule.country === null) return 0
+              if (country !== null && rule.country === country) {
+                return rule.region !== null && rule.region === region ? 2 : 1
+              }
+              return -1
+            }
+            const applicable = candidates.filter((rule) => specificity(rule) >= 0)
+            const winner =
+              applicable.length === 0
+                ? null
+                : applicable.reduce((best, rule) =>
+                    specificity(rule) > specificity(best) ||
+                    (specificity(rule) === specificity(best) && rule.priority > best.priority)
+                      ? rule
+                      : best,
+                  )
+            const amountMinor = Number(body.amountMinor)
+            const rateBp = winner?.rateBp ?? 0
+            const includedInPrice = winner?.includedInPrice ?? true
+            const taxMinor = includedInPrice
+              ? Math.round(amountMinor - (amountMinor * 10000) / (10000 + rateBp))
+              : Math.round((amountMinor * rateBp) / 10000)
+            return json(200, {
+              rule: winner,
+              outcome: { rateBp, taxMinor, includedInPrice, ruleName: winner?.name ?? null },
+            })
+          }
+        }
+
+        // ---- shipping (fiche 34 task 2) ---------------------------------
+        if (segments[0] === 'shipping' && segments[1] === 'methods' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, { methods: mockShippingMethods })
+          }
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            mockShippingMethodCounter += 1
+            const method_ = {
+              id: `shipping-method-${mockShippingMethodCounter}`,
+              label: String(body.label),
+              country: body.country === undefined ? null : String(body.country),
+              region: body.region === undefined ? null : String(body.region),
+              kind: (body.kind === undefined ? 'flat' : String(body.kind)) as
+                | 'flat'
+                | 'by_weight'
+                | 'free',
+              currency: String(body.currency),
+              amountMinor: body.amountMinor === undefined ? 0 : Number(body.amountMinor),
+              perKgMinor: body.perKgMinor === undefined ? 0 : Number(body.perKgMinor),
+              freeOverMinor: body.freeOverMinor === undefined ? null : Number(body.freeOverMinor),
+              carrier: body.carrier === undefined ? null : String(body.carrier),
+              position: mockShippingMethods.length,
+              active: true,
+              createdAt: '2026-03-01T00:00:00.000Z',
+            }
+            mockShippingMethods.push(method_)
+            return json(201, method_)
+          }
+        }
+        if (segments[0] === 'shipping' && segments[1] === 'methods' && segments.length === 3) {
+          if (method === 'DELETE') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const index = mockShippingMethods.findIndex((entry) => entry.id === segments[2])
+            if (index !== -1) mockShippingMethods.splice(index, 1)
+            return new Response(null, { status: 204 })
+          }
+        }
+        if (segments[0] === 'shipping' && segments[1] === 'simulate' && segments.length === 2) {
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const currency = String(body.currency)
+            const subtotalMinor = body.subtotalMinor === undefined ? 0 : Number(body.subtotalMinor)
+            const quotes = mockShippingMethods
+              .filter((entry) => entry.active && entry.currency === currency)
+              .map((entry) => ({
+                methodId: entry.id,
+                label: entry.label,
+                amountMinor:
+                  entry.freeOverMinor !== null && subtotalMinor >= entry.freeOverMinor
+                    ? 0
+                    : entry.amountMinor,
+                currency: entry.currency,
+                carrier: entry.carrier,
+              }))
+            return json(200, { quotes })
+          }
+        }
+
+        // ---- payment (fiche 34 task 3) -----------------------------------
+        if (segments[0] === 'payment' && segments[1] === 'drivers' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, {
+              drivers: mockPaymentDrivers,
+              testMode: mockPaymentTestMode,
+              webhookUrl: mockPaymentWebhookUrl,
+            })
+          }
+        }
+        if (
+          segments[0] === 'payment' &&
+          segments[1] === 'drivers' &&
+          segments[3] === 'test-connection' &&
+          segments.length === 4
+        ) {
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const name = segments[2] ?? ''
+            const known = mockPaymentDrivers.some((driver) => driver.name === name)
+            if (!known) {
+              return json(404, {
+                error: { code: 'DRIVER_UNKNOWN', message: `No payment driver named "${name}".` },
+              })
+            }
+            return json(200, mockPaymentTestResults[name] ?? { ok: true, message: null })
+          }
+        }
+
         // products
         if (segments[0] === 'products' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
@@ -4577,6 +4901,7 @@ export function installMockFetch(
             isDefault: write === undefined,
             updatedAt: write?.updatedAt ?? null,
             updatedBy: write?.updatedBy ?? null,
+            options: definition.options,
           }
         })
         return json(200, { data })
@@ -4616,6 +4941,7 @@ export function installMockFetch(
             isDefault: false,
             updatedAt,
             updatedBy: user.id,
+            options: definition.options,
           },
         })
       }

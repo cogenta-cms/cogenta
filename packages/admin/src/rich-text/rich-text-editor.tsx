@@ -235,9 +235,10 @@ export function RichTextEditor({
           </div>
           <button
             type="button"
+            disabled={disabled}
             aria-label={fullscreen ? t('richText.exitFullscreen') : t('richText.enterFullscreen')}
             title={fullscreen ? t('richText.exitFullscreen') : t('richText.enterFullscreen')}
-            className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent"
+            className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => setFullscreen((current) => !current)}
           >
             {fullscreen ? (

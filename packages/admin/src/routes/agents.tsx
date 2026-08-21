@@ -41,16 +41,25 @@ import {
 
 /**
  * Contract C's taxonomy of tool permissions (`docs/04-contrats.md` §
- * "Contrat C — Outil agentique", `tools@1.1`), reproduced verbatim as a
+ * "Contrat C — Outil agentique", `tools@1.2`), reproduced verbatim as a
  * fixed, ordered list — the admin package must not gain a dependency on
  * `@cogenta/agents` just to label a checklist. Adding a permission to the
  * real taxonomy (a mineur change) means adding its name here too.
+ *
+ * `content.collections`/`content.list` both carry `content.read`'s own
+ * permission (browsing is the same access as reading one entry, not a
+ * wider grant — see `@cogenta/agents`' `content-browse.ts`), so they are
+ * listed under their own tool names, not a new taxonomy entry.
+ * `logs.read_not_found` and `redirects.create` do add two genuinely new
+ * entries, `logs.read` and `redirects.write` (L22 task 3, `tools@1.2`).
  */
 const CONTRACT_C_PERMISSIONS: readonly string[] = [
   'content.read',
   'content.write_draft',
   'content.publish',
   'content.delete',
+  'content.collections',
+  'content.list',
   'media.read',
   'media.write',
   'schema.read',
@@ -58,6 +67,8 @@ const CONTRACT_C_PERMISSIONS: readonly string[] = [
   'deps.scan',
   'document.extract_text',
   'http.fetch',
+  'logs.read_not_found',
+  'redirects.create',
 ]
 
 /**

@@ -4,9 +4,14 @@ import {
   type AgentProviderRegistryLike,
   type AgentRunner,
   type AgentSkillStore,
+  type ApprovalQueue,
+  type ContentBrowseAccessContext,
+  type ContentBrowseServiceLike,
   type ContentServiceLike,
   createAgentRunner,
+  createContentCollectionsTool,
   createContentDeleteTool,
+  createContentListTool,
   createContentPublishTool,
   createContentReadTool,
   createContentWriteDraftTool,
@@ -19,15 +24,19 @@ import {
   createMediaReadTool,
   createMediaWriteTool,
   createMemoryApprovalQueue,
+  createNotFoundLogReadTool,
   createProviderRegistry,
+  createRedirectCreateTool,
   createSiteConfigReadTool,
   createToolRegistry,
   ensureBuiltinAgentSkills,
   ensureBuiltinAgents,
   type MutableKillSwitch,
+  type NotFoundLogReader,
   PROVIDER_NAMES,
   type ProviderConfigStore,
   type ProviderName,
+  type RedirectWriter,
   resolveProviderRegistryConfig,
   type ToolDefinition,
 } from '@cogenta/agents'
@@ -40,6 +49,7 @@ import type {
 } from '@cogenta/api'
 import type { AuditLog } from '@cogenta/auth'
 import type { Logger, MediaStore } from '@cogenta/core'
+import { buildPath, type CollectionDefinition } from '@cogenta/schema'
 
 /**
  * L22 tasks 1/1bis — where the runtime `@cogenta/agents` provides finally
@@ -77,6 +87,12 @@ export interface BuildAgentRuntimeOptions {
   readonly mediaStore: MediaStore
   readonly auditLog: AuditLog
   readonly logger: Logger
+  /** The site's schema — for `content.collections`/`content.list` (L22 task 3) to know which collections have a public route, and to compute one. */
+  readonly collections: readonly CollectionDefinition[]
+  /** For `logs.read_not_found` (L22 task 3, the Site Monitor's own tool). */
+  readonly notFoundLog: NotFoundLogReader
+  /** For `redirects.create` (L22 task 3). */
+  readonly redirects: RedirectWriter
 }
 
 export interface AgentRuntimeAssembly {
@@ -84,6 +100,13 @@ export interface AgentRuntimeAssembly {
   readonly agentRunner: AgentRunnerLike
   readonly providerRegistry: ProviderRegistryLike
   readonly skillRegistry: AgentSkillRegistryLike
+  /**
+   * Exposed so `serve.ts` can build the L22 task 3 notice source
+   * (`@cogenta/api`'s `createAgentApprovalsSource`) over the very same
+   * queue `co-pilot` autonomy files into — never a second queue that would
+   * disagree with what the runner actually proposed.
+   */
+  readonly approvalQueue: ApprovalQueue
   readonly summary: string
 }
 
@@ -115,6 +138,87 @@ function contentServiceLikeOf(service: ContentService): ContentServiceLike {
   }
 }
 
+/** The first string field a list item is worth labelling by — `title`/`name`/`heading` cover every blueprint collection this project ships; a collection using none of those still lists, just with a null title the model reads as "no obvious title" rather than a guess. */
+function titleOf(values: Readonly<Record<string, unknown>>): string | null {
+  const candidate = values.title ?? values.name ?? values.heading
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null
+}
+
+/**
+ * `ContentService` adapted to `content.collections`/`content.list`'s
+ * `ContentBrowseServiceLike` (L22 task 3) — a second, separate adapter from
+ * `contentServiceLikeOf` above, on purpose: those four CRUD tools and these
+ * two read/browse ones need different shapes out of the same service
+ * (`summary`/`list`/route-building versus single-entry read/write), and nothing
+ * here overlaps with `ContentServiceLike`'s own contract enough to be worth
+ * merging.
+ *
+ * `path` is computed here, not by the tool: this is the one place that has
+ * both an entry's field values (`SerialisedEntry.values`) and its
+ * collection's route pattern (`CollectionDefinition.routing`) in scope.
+ * `buildPath` throws for a required param the values do not fill (`Content
+ * Route Invalid`) — caught and turned into `null`, the same "cannot offer
+ * this as a redirect target" signal an unrouted collection gets, rather than
+ * a tool call failing over a values shape this adapter cannot second-guess.
+ */
+function contentBrowseServiceLikeOf(
+  service: ContentService,
+  collections: readonly CollectionDefinition[],
+): ContentBrowseServiceLike {
+  const byName = new Map(collections.map((collection) => [collection.name, collection]))
+
+  function pathOf(
+    collection: CollectionDefinition,
+    entry: { readonly values: Readonly<Record<string, unknown>>; readonly locale: string },
+  ): string | null {
+    if (collection.routing === undefined) return null
+    const params: Record<string, string> = {}
+    for (const [key, value] of Object.entries(entry.values)) {
+      if (typeof value === 'string') params[key] = value
+    }
+    try {
+      return buildPath(collection, params, entry.locale)
+    } catch {
+      return null
+    }
+  }
+
+  return {
+    collections: async (context: ContentBrowseAccessContext) => {
+      const summaries = await service.summary(context)
+      return summaries.map((summary) => ({
+        collection: summary.collection,
+        total: summary.total,
+        published: summary.published,
+        routed: byName.get(summary.collection)?.routing !== undefined,
+      }))
+    },
+    list: async (context: ContentBrowseAccessContext, collectionName, options) => {
+      const collection = byName.get(collectionName)
+      if (collection === undefined) return undefined
+      const page = await service.list(context, collectionName, {
+        filter: undefined,
+        sort: { field: 'updatedAt', direction: 'desc' },
+        limit: options.limit,
+        cursor: undefined,
+        locale: undefined,
+        requestedState: 'published',
+        requestedStatus: undefined,
+        trashed: undefined,
+        depth: 0,
+      })
+      return {
+        items: page.items.map((item) => ({
+          id: item.id,
+          title: titleOf(item.values),
+          path: pathOf(collection, { values: item.values, locale: item.locale }),
+          status: item.status,
+        })),
+      }
+    },
+  }
+}
+
 function isProviderName(value: string): value is ProviderName {
   return (PROVIDER_NAMES as readonly string[]).includes(value)
 }
@@ -143,8 +247,15 @@ function buildToolRegistry(options: {
   readonly contentService: ContentService
   readonly mediaStore: MediaStore
   readonly projectRoot: string
+  readonly collections: readonly CollectionDefinition[]
+  readonly notFoundLog: NotFoundLogReader
+  readonly redirects: RedirectWriter
 }) {
   const contentServiceLike: ContentServiceLike = contentServiceLikeOf(options.contentService)
+  const contentBrowseServiceLike = contentBrowseServiceLikeOf(
+    options.contentService,
+    options.collections,
+  )
   const definitions: ToolDefinition[] = [
     createContentReadTool(contentServiceLike),
     createContentWriteDraftTool(contentServiceLike),
@@ -155,6 +266,11 @@ function buildToolRegistry(options: {
     createSiteConfigReadTool(),
     createDocumentExtractTool(),
     createDepsScanTool({ projectRoot: options.projectRoot }),
+    // L22 task 3 — the Site Monitor's toolset.
+    createNotFoundLogReadTool(options.notFoundLog),
+    createContentCollectionsTool(contentBrowseServiceLike),
+    createContentListTool(contentBrowseServiceLike),
+    createRedirectCreateTool(options.redirects),
   ]
   return createToolRegistry(definitions)
 }
@@ -300,7 +416,16 @@ export async function buildAgentRuntime(
     contentService: options.contentService,
     mediaStore: options.mediaStore,
     projectRoot: options.projectRoot,
+    collections: options.collections,
+    notFoundLog: options.notFoundLog,
+    redirects: options.redirects,
   })
+
+  // Built once and handed both to the runner (where `co-pilot` autonomy
+  // files a request) and back out on `AgentRuntimeAssembly` (where
+  // `serve.ts` reads pending ones for the L22 task 3 notice source) — the
+  // same object, never two queues that could disagree.
+  const approvalQueue = createMemoryApprovalQueue()
 
   const runner: AgentRunner = createAgentRunner({
     agents: agentStore,
@@ -308,7 +433,7 @@ export async function buildAgentRuntime(
     tools,
     providers: liveProviders,
     auditLog: options.auditLog,
-    approvalQueue: createMemoryApprovalQueue(),
+    approvalQueue,
     site: options.site,
     killSwitchFor,
   })
@@ -332,5 +457,5 @@ export async function buildAgentRuntime(
           .map((p) => p.provider)
           .join(', ')})`
 
-  return { agentRegistry, agentRunner, providerRegistry, skillRegistry, summary }
+  return { agentRegistry, agentRunner, providerRegistry, skillRegistry, approvalQueue, summary }
 }

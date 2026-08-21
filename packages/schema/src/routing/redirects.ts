@@ -43,7 +43,17 @@ const MAX_PATH_LENGTH = 512
  */
 const MAX_HOPS = 10
 
-export const REDIRECT_REASONS = ['slug-change', 'manual', 'import'] as const
+/**
+ * `'agent'` (L22 task 3) marks a redirect an agent created itself —
+ * `redirects.create` (`@cogenta/agents`) always writes this reason, never
+ * `'manual'`, so an admin looking at `/seo?tab=redirects` can tell which
+ * rows a human typed and which one a monitoring agent proposed and had
+ * applied under `autopilot` autonomy. Additive to a stored, open list (not a
+ * versioned contract enum): `toRecord` below already falls back to
+ * `'manual'` for any string it does not recognise, so a row written by an
+ * older build still reads back fine.
+ */
+export const REDIRECT_REASONS = ['slug-change', 'manual', 'import', 'agent'] as const
 
 export type RedirectReason = (typeof REDIRECT_REASONS)[number]
 

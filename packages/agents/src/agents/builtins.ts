@@ -1,7 +1,8 @@
 import type { AgentDeclarationInput, AgentDeclarationStore } from './store.js'
 
 /**
- * L22 task 1 items 2 and 5 — the three agents every site starts with.
+ * L22 task 1 items 2 and 5, plus task 3 — the four agents every site starts
+ * with.
  *
  * `SUPERAGENT_NAME` ("Cogenta Agent") is active by default, with every
  * content/media/site/document tool this build actually implements (never a
@@ -13,14 +14,29 @@ import type { AgentDeclarationInput, AgentDeclarationStore } from './store.js'
  * flagged in this lot's report, that a site operator can raise to
  * `autonomous` per tool or by default once they trust it.
  *
- * The security scanner and the content-watch example are disabled by
- * default, exactly as the lot asks, and both ship as editable seeds: nothing
- * about `builtin: true` freezes their tools, autonomy, budget or triggers,
- * it only prevents deletion (`AgentDeclarationStore.remove`).
+ * The security scanner, the content-watch example and the site monitor
+ * (task 3) are disabled by default, exactly as the lot asks, and all three
+ * ship as editable seeds: nothing about `builtin: true` freezes their tools,
+ * autonomy, budget or triggers, it only prevents deletion
+ * (`AgentDeclarationStore.remove`).
+ *
+ * `SITE_MONITOR_AGENT_NAME` ("Site Monitor") is task 3's own agent, kept
+ * separate from `SUPERAGENT_NAME` rather than folded into it: the
+ * superagent's tools are whatever an operator talks to it about, one
+ * instruction at a time, while this one exists to run unattended on a cron
+ * trigger with a narrow, fixed toolset (read the 404 log, browse content,
+ * propose or create a redirect) — a different shape of agent, not a bigger
+ * one. Its default autonomy is `propose` (co-pilot), same reasoning as the
+ * superagent's: a monitoring agent that can silently rewrite routing on its
+ * first boot is not what "disabled by default" is supposed to soften into
+ * once enabled. Raising it to `autonomous` (autopilot) is the one thing
+ * task 3's spec names as the condition for an applied, not merely
+ * suggested, redirect.
  */
 export const SUPERAGENT_NAME = 'Cogenta Agent'
 export const SECURITY_AGENT_NAME = 'Security Scanner'
 export const CONTENT_WATCH_AGENT_NAME = 'Content Watch'
+export const SITE_MONITOR_AGENT_NAME = 'Site Monitor'
 
 /** Passed to `AgentDeclarationInput.model` — every seed prefers the same provider/model names an operator is most likely to configure first; `agents/orchestrator.ts` never fails to resolve a provider just because the *name* differs from what the site has enabled, it only needs `providers/store.ts` to have configured at least one. */
 const DEFAULT_MODEL = { preferred: 'anthropic', fallback: 'openai' } as const
@@ -88,16 +104,36 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
       triggers: [{ on: 'schedule', cron: '0 8 * * 1' }],
       enabled: false,
     },
+    {
+      name: SITE_MONITOR_AGENT_NAME,
+      identity: {
+        role: 'Watches this site’s own 404 log for a broken link worth fixing, and either proposes or creates a redirect to a page it picks — never anything else (it never touches content, media or site config).',
+        objectives: [
+          'Call logs.read_not_found and look at the paths with the most hits.',
+          'For the top one with no redirect yet, call content.collections then content.list to find a genuinely related, routed page.',
+          'Call redirects.create with that path as "to" — under co-pilot autonomy this only ever proposes the change for an admin to confirm in the Redirections screen; nothing is written until it does.',
+          'Skip a 404 with too few hits to be worth a redirect, or when nothing in the site’s content is actually related — proposing a bad redirect is worse than proposing none.',
+        ],
+        style: 'Terse, factual, one finding per turn.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['logs.read_not_found', 'content.collections', 'content.list', 'redirects.create'],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 50_000, callsPerHour: 10 },
+      triggers: [{ on: 'schedule', cron: '0 7 * * *' }],
+      enabled: false,
+    },
   ]
 }
 
 /**
  * Idempotent: called both by `create-cogenta` at install and defensively by
- * `cogenta serve` at every boot (an upgrade from a pre-L22 site gets the
- * three builtins the first time it starts on the new version, not only a
- * freshly scaffolded one). Matched by name — a seed already present (its
- * `builtin: true` record cannot be removed, only disabled or edited) is
- * left untouched, never overwritten with the seed's defaults again.
+ * `cogenta serve` at every boot (an upgrade from an older site gains
+ * whichever of these it does not already have the first time it starts on
+ * the new version, not only a freshly scaffolded one). Matched by name — a
+ * seed already present (its `builtin: true` record cannot be removed, only
+ * disabled or edited) is left untouched, never overwritten with the seed's
+ * defaults again.
  */
 export async function ensureBuiltinAgents(store: AgentDeclarationStore): Promise<void> {
   for (const seed of builtinAgentSeeds()) {

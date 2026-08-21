@@ -3,6 +3,7 @@ export {
   CONTENT_WATCH_AGENT_NAME,
   ensureBuiltinAgents,
   SECURITY_AGENT_NAME,
+  SITE_MONITOR_AGENT_NAME,
   SUPERAGENT_NAME,
 } from './agents/builtins.js'
 export { defineAgent } from './agents/define.js'
@@ -434,6 +435,16 @@ export {
   createContentReadTool,
   createContentWriteDraftTool,
 } from './tools/core/content.js'
+export type {
+  ContentBrowseAccessContext,
+  ContentBrowseServiceLike,
+  ContentCollectionSummaryLike,
+  ContentListItemLike,
+} from './tools/core/content-browse.js'
+export {
+  createContentCollectionsTool,
+  createContentListTool,
+} from './tools/core/content-browse.js'
 export type { DepsScanOutput, DepsScanToolOptions } from './tools/core/deps-scan.js'
 export { createDepsScanTool } from './tools/core/deps-scan.js'
 export type {
@@ -443,6 +454,10 @@ export type {
 } from './tools/core/http-fetch.js'
 export { createHttpFetchTool } from './tools/core/http-fetch.js'
 export { createMediaReadTool, createMediaWriteTool } from './tools/core/media.js'
+export type { NotFoundLogReader } from './tools/core/not-found-log.js'
+export { createNotFoundLogReadTool } from './tools/core/not-found-log.js'
+export type { RedirectWriter } from './tools/core/redirects.js'
+export { createRedirectCreateTool } from './tools/core/redirects.js'
 export type { SiteConfig } from './tools/core/site-config.js'
 export { createSiteConfigReadTool } from './tools/core/site-config.js'
 export { defineTool } from './tools/define.js'

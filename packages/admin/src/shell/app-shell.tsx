@@ -52,7 +52,7 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/media': MediaIcon,
   '/audit': AuditIcon,
   '/agents': AgentsIcon,
-  '/site-plan': SitePlanIcon,
+  '/create-site': SitePlanIcon,
   '/users': UsersIcon,
   '/profile': ProfileIcon,
   '/settings': SettingsIcon,

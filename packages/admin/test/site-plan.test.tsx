@@ -23,8 +23,8 @@ afterEach(() => {
 
 async function goToSitePlan(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Plan du site' }))
-  await screen.findByRole('heading', { name: 'Plan du site', level: 1 })
+  fireEvent.click(screen.getByRole('link', { name: 'Créer un site' }))
+  await screen.findByRole('heading', { name: 'Créer un site', level: 1 })
 }
 
 function signIn(roles: readonly string[]): void {
@@ -48,10 +48,23 @@ describe('the site plan screen', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('alert')).toHaveProperty(
+    // The old bookmarked path now resolves via a `<Navigate>` redirect
+    // (fiche 21, task 1) before this route's own role check ever runs — one
+    // extra render pass past the default `findBy*` timeout on a cold mount.
+    expect(await screen.findByRole('alert', undefined, { timeout: 5000 })).toHaveProperty(
       'textContent',
       expect.stringContaining('admin'),
     )
+  })
+
+  it('sends the old `/site-plan` bookmark to the renamed `/create-site` route (fiche 21, task 1)', async () => {
+    signIn(['admin'])
+    window.history.pushState(null, '', '/site-plan')
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Créer un site', level: 1 }, { timeout: 5000 })
+    expect(window.location.pathname).toBe('/create-site')
   })
 
   it('lists a waiting proposal with the document it came from', async () => {

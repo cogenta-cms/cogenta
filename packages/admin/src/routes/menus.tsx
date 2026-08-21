@@ -32,12 +32,25 @@ import { Button, Field, Input, Label, Notice, Select } from '../ui/index.js'
  * them; the server refuses the rest regardless (R4), so hiding a button here
  * is courtesy, not security.
  *
- * Locations a menu is offered here (`primary`, `footer`) are this stand-in
- * theme's own — a hint in the field, never a closed list: the location is a
- * free-text value the *menu* carries (fiche 09, task 3), so a future second
- * theme with different slot names needs no code change here either.
+ * `location` stays the free-text field the API already carries (fiche 09,
+ * task 3, no schema change) — `theme-render.ts` resolves whatever string is
+ * there, and a future second theme with different slot names needs no code
+ * change here. What changed (fiche 21, task 1) is the *control*: a bare text
+ * input next to a datalist hint let an editor type `primery` or `Primary`
+ * and never notice the header stayed empty. `primary` and `footer` are this
+ * stand-in theme's two slots (`DEFAULT_HEADER_MENU_LOCATION` /
+ * `DEFAULT_FOOTER_MENU_LOCATION` in `theme-render.ts`), offered as
+ * unambiguous named choices; "Other" reveals the free-text field for a
+ * theme that names its slots differently.
  */
-const LOCATION_SUGGESTIONS = ['primary', 'footer']
+type LocationMode = 'none' | 'primary' | 'footer' | 'custom'
+
+/** The two slots this stand-in theme understands out of the box (mirrors `theme-render.ts`'s defaults) — anything else falls under "Other". */
+function modeForLocation(location: string | null): LocationMode {
+  if (location === null || location === '') return 'none'
+  if (location === 'primary' || location === 'footer') return location
+  return 'custom'
+}
 
 export function MenusRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
@@ -68,8 +81,9 @@ export function MenusRoute(): JSX.Element {
   const [newLabel, setNewLabel] = useState('')
   const [creatingMenu, setCreatingMenu] = useState(false)
 
-  // Location (task 3).
-  const [locationDraft, setLocationDraft] = useState('')
+  // Location (fiche 09 task 3; control redesigned in fiche 21 task 1).
+  const [locationMode, setLocationMode] = useState<LocationMode>('none')
+  const [customLocationDraft, setCustomLocationDraft] = useState('')
   const [savingLocation, setSavingLocation] = useState(false)
 
   // New item form.
@@ -135,7 +149,9 @@ export function MenusRoute(): JSX.Element {
   const selected = menus.find((menu) => menu.id === selectedId) ?? null
 
   useEffect(() => {
-    setLocationDraft(selected?.location ?? '')
+    const location = selected?.location ?? null
+    setLocationMode(modeForLocation(location))
+    setCustomLocationDraft(modeForLocation(location) === 'custom' ? (location ?? '') : '')
   }, [selected])
 
   async function submitNewMenu(event: FormEvent): Promise<void> {
@@ -171,12 +187,18 @@ export function MenusRoute(): JSX.Element {
   async function saveLocation(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || selected === null) return
+    const location =
+      locationMode === 'none'
+        ? null
+        : locationMode === 'custom'
+          ? customLocationDraft.trim() === ''
+            ? null
+            : customLocationDraft.trim()
+          : locationMode
     setSavingLocation(true)
     setError(null)
     try {
-      await updateMenu(token, selected.id, {
-        location: locationDraft.trim() === '' ? null : locationDraft.trim(),
-      })
+      await updateMenu(token, selected.id, { location })
       await loadMenus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('menus.locationError'))
@@ -410,21 +432,34 @@ export function MenusRoute(): JSX.Element {
               onSubmit={(event) => void saveLocation(event)}
               className="flex flex-wrap items-end gap-2"
             >
-              <Field label={t('menus.location')} description={t('menus.locationHint')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    list="menu-location-suggestions"
-                    value={locationDraft}
-                    onChange={(event) => setLocationDraft(event.target.value)}
-                  />
-                )}
-              </Field>
-              <datalist id="menu-location-suggestions">
-                {LOCATION_SUGGESTIONS.map((location) => (
-                  <option key={location} value={location} />
-                ))}
-              </datalist>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="menu-location">{t('menus.location')}</Label>
+                <Select
+                  id="menu-location"
+                  aria-describedby="menu-location-hint"
+                  value={locationMode}
+                  onChange={(event) => setLocationMode(event.target.value as LocationMode)}
+                >
+                  <option value="none">{t('menus.locationNone')}</option>
+                  <option value="primary">{t('menus.locationPrimary')}</option>
+                  <option value="footer">{t('menus.locationFooter')}</option>
+                  <option value="custom">{t('menus.locationCustom')}</option>
+                </Select>
+                <p id="menu-location-hint" className="text-sm text-muted-foreground">
+                  {t('menus.locationHint')}
+                </p>
+              </div>
+              {locationMode === 'custom' && (
+                <Field label={t('menus.locationCustomLabel')}>
+                  {(control) => (
+                    <Input
+                      {...control}
+                      value={customLocationDraft}
+                      onChange={(event) => setCustomLocationDraft(event.target.value)}
+                    />
+                  )}
+                </Field>
+              )}
               <Button type="submit" variant="secondary" disabled={savingLocation}>
                 {t('menus.saveLocation')}
               </Button>

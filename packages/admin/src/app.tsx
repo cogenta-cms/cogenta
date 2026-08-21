@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import { BrowserRouter, Route, Routes } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
@@ -133,7 +133,9 @@ export function App(): JSX.Element {
               <Route path="form-submissions" element={<FormSubmissionsRoute />} />
               <Route path="profile" element={<ProfileRoute />} />
               <Route path="settings" element={<SettingsRoute />} />
-              <Route path="site-plan" element={<SitePlanRoute />} />
+              <Route path="create-site" element={<SitePlanRoute />} />
+              {/* Old path (fiche 21, task 1 renamed it) — a bookmark or a link elsewhere in the app still lands somewhere real. */}
+              <Route path="site-plan" element={<Navigate to="/create-site" replace />} />
               <Route path="marketplace" element={<MarketplaceRoute />} />
             </Route>
           </Routes>

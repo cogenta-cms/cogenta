@@ -261,8 +261,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
-    to: '/site-plan',
-    labelKey: 'nav.sitePlan',
+    // Renamed from `/site-plan` (fiche 21, task 1): the old path and label
+    // read as a sitemap feature, but this screen is the L19 AI-driven site
+    // creation wizard — an unrelated thing that happened to reuse a name
+    // already familiar from "site map" navigation. `/site-plan` still
+    // resolves (see the redirect route in `app.tsx`) so an old bookmark
+    // keeps working.
+    to: '/create-site',
+    labelKey: 'nav.createSite',
     group: 'ai',
     visibleWhen: { kind: 'role', role: 'admin' },
   },

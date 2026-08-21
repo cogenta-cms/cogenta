@@ -203,4 +203,83 @@ describe('the menu screen', () => {
     expect(screen.queryByRole('button', { name: 'Créer' })).toBeNull()
     expect(screen.queryByRole('button', { name: "Ajouter l'élément" })).toBeNull()
   })
+
+  /**
+   * The location control (fiche 21, task 1): a bare text input next to a
+   * datalist hint let an editor type a near-miss (`Primary`, `primery`) and
+   * never notice the header stayed unassigned. Named choices remove that
+   * class of mistake for the theme's two known slots, and it round-trips
+   * through the real `PATCH /api/menus/{id}` call, not just local state.
+   */
+  it('assigns a menu to the header slot through an unambiguous choice, not free text', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToMenus()
+
+    await createMenu('main', 'Menu principal')
+
+    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'primary' } })
+    fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole('option', { name: /^Menu principal \(.+, primary\)$/u }),
+        ).toBeDefined()
+      },
+      { timeout: 5000 },
+    )
+    // No free-text field is left showing once a named slot is chosen.
+    expect(screen.queryByLabelText("Nom de l'emplacement")).toBeNull()
+  })
+
+  it("lets a theme-specific slot name through the 'Other' option, and only then shows the free-text field", async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToMenus()
+
+    await createMenu('main', 'Menu principal')
+
+    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'custom' } })
+    const customField = await screen.findByLabelText("Nom de l'emplacement")
+    fireEvent.change(customField, { target: { value: 'sidebar' } })
+    fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole('option', { name: /^Menu principal \(.+, sidebar\)$/u }),
+        ).toBeDefined()
+      },
+      { timeout: 5000 },
+    )
+  })
+
+  it('unassigns a menu from its slot by choosing "not assigned"', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToMenus()
+
+    await createMenu('main', 'Menu principal')
+    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'footer' } })
+    fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole('option', { name: /^Menu principal \(.+, footer\)$/u }),
+        ).toBeDefined()
+      },
+      { timeout: 5000 },
+    )
+
+    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'none' } })
+    fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole('option', { name: /^Menu principal \([^,]+\)$/u })).toBeDefined()
+      },
+      { timeout: 5000 },
+    )
+  })
 })

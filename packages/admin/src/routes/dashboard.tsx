@@ -383,7 +383,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-summary-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-1 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-summary-heading" className="m-0 flex items-center gap-2 text-base">
           <PulseIcon className="size-4 text-primary" />
@@ -457,7 +457,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-health-heading"
-        className="flex flex-col gap-4 rounded-lg border-2 border-foreground bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-2 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-health-heading" className="m-0 flex items-center gap-2 text-base">
           <PulseIcon className="size-4 text-primary" />
@@ -498,7 +498,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-activity-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-3 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-activity-heading" className="m-0 flex items-center gap-2 text-base">
           <AuditIcon className="size-4 text-primary" />
@@ -540,7 +540,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-analytics-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-4 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-analytics-heading" className="m-0 flex items-center gap-2 text-base">
           <TrendIcon className="size-4 text-primary" />
@@ -582,7 +582,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-scheduled-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-5 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-scheduled-heading" className="m-0 flex items-center gap-2 text-base">
           <ClockIcon className="size-4 text-primary" />
@@ -620,7 +620,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-todo-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-6 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-todo-heading" className="m-0 flex items-center gap-2 text-base">
           <ClockIcon className="size-4 text-primary" />
@@ -687,7 +687,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-shortcuts-heading"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
       >
         <h2 id="dashboard-shortcuts-heading" className="m-0 flex items-center gap-2 text-base">
           <PlusIcon className="size-4 text-primary" />

@@ -2,29 +2,48 @@
  * L11 task 1 — the admin's design tokens, and the Tailwind build that turns
  * them into utilities.
  *
- * Direction: technical/editorial. This is a CMS built for developers and
- * agencies (ADR-0001) — an audience that recognises a stock shadcn/ui theme
- * on sight. The palette below drops the indigo-on-white default entirely: a
- * warm, printed-paper light mode and a near-black, signal-lit dark mode, both
- * built around one deliberate accent (a burnt signal orange) rather than a
- * gradient. Headings run in IBM Plex Mono — a monospaced, technical display
- * face — set against IBM Plex Sans for running text and controls: one type
- * family, two purposes, self-hosted from `public/fonts/` (R1: no runtime
- * request to Google Fonts).
+ * Direction, revised: modern, professional, dynamic SaaS console — explicitly
+ * chosen by the project owner to replace the original "warm printed paper"
+ * identity below (that direction's own reasoning is kept here, struck through
+ * in spirit, so the *why* of the change stays legible instead of silently
+ * vanishing from history):
  *
- * Preflight is deliberately NOT imported. Tailwind's reset would restyle the
- * eight hand-written stylesheets the admin still uses (auth.css, shell.css,
- * collection-list.css, entry-form.css, fields.css, media.css,
- * version-history.css), which task 5 of this lot converts and this task does
- * not — turning it on now would leave every un-converted screen visually broken
- * between the two tasks. Importing `theme.css` + `utilities.css` without
- * `preflight.css` is Tailwind v4's own documented way to opt out. The cost is
- * that a component in `src/ui/` must state its own reset (a bare `<button>`
- * still arrives with a border and a grey background); each one does.
+ *   ~~a warm, printed-paper light mode and a near-black, signal-lit dark
+ *   mode, built around one deliberate accent (a burnt signal orange) rather
+ *   than a gradient, set in IBM Plex Mono for headings.~~ — this reasoning
+ *   was sound for a first version, but explicitly reconsidered: the product
+ *   direction now wants an admin that reads as a contemporary SaaS console
+ *   (Linear/Vercel register) rather than an editorial print artefact.
  *
- * Light is the base and dark is a `prefers-color-scheme` override rather than a
- * `.dark` class, matching what `base.css` already did — the admin has no theme
- * toggle driven by a class, so a class-based switch would have nothing to set it.
+ * New direction ("Nightops"): a near-black console surface with ONE
+ * deliberate accent — a vivid signal green — carried through both colour
+ * schemes at different lightness (bright on dark, deepened for contrast on
+ * white — never the same literal hex in both, or one of the two modes reads
+ * washed out). Display and body type both run in Space Grotesk; JetBrains
+ * Mono is reserved for the small mono details (keyboard-shortcut badges,
+ * counters, technical labels) that want a monospaced rhythm without setting
+ * whole headings in it. Self-hosted from `public/fonts/` (R1: no runtime
+ * request to Google Fonts), both as single variable-weight files, the same
+ * pattern `ibm-plex-sans-var.woff2` already used.
+ *
+ * Preflight is deliberately NOT imported — see the original note below,
+ * still true: Tailwind's reset would restyle the hand-written stylesheets
+ * this admin still uses (shell.css, entry-form.css, fields.css, media.css,
+ * version-history.css), so a component in `src/ui/` must state its own reset
+ * (a bare `<button>` still arrives with a border and a grey background);
+ * each one does.
+ *
+ * Light is the base and dark is a `prefers-color-scheme` override, and a
+ * `data-theme` attribute on `<html>` (set by `theme/theme-context.tsx`'s
+ * `ThemeToggle`) wins over the system preference in both directions:
+ * `:root:not([data-theme="light"])` guards the media query so an explicit
+ * "light" pick is never re-darkened by the OS, and a standalone
+ * `:root[data-theme="dark"]` block (outside the media query, so it applies
+ * regardless of system preference) is what lets an explicit "dark" pick work
+ * on a system whose OS preference is light. The two dark blocks carry the
+ * same tokens by necessity — a media query and a plain selector can't share
+ * one rule body — kept in sync deliberately rather than by a build step,
+ * since this file changes rarely and the two are five lines apart.
  */
 
 @layer theme, base, components, utilities;
@@ -33,140 +52,161 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 
 /*
- * Self-hosted IBM Plex. Latin subset only — the admin ships in French and
- * English (i18next), and a subset that also carried Cyrillic/Greek/Vietnamese
- * glyphs neither locale uses would be dead weight. `Plex Sans` is served as a
- * single variable-capable file across four static weights (the file Google
- * Fonts itself serves this way); `Plex Mono` ships one static file per weight.
+ * Self-hosted Space Grotesk (headings + body) and JetBrains Mono (small mono
+ * details) — both variable-weight files, Latin subset only (the admin ships
+ * in French and English; a subset also carrying Cyrillic/Greek/Vietnamese
+ * glyphs neither locale uses would be dead weight).
  */
 @font-face {
-  font-family: "Plex Mono";
+  font-family: "Space Grotesk";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 300 700;
   font-display: swap;
-  src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2");
+  src: url("/fonts/space-grotesk-var.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Plex Mono";
+  font-family: "JetBrains Mono";
   font-style: normal;
-  font-weight: 500;
+  font-weight: 100 800;
   font-display: swap;
-  src: url("/fonts/ibm-plex-mono-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Plex Mono";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Plex Mono";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/ibm-plex-mono-700.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Plex Sans";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("/fonts/ibm-plex-sans-var.woff2") format("woff2");
+  src: url("/fonts/jetbrains-mono-var.woff2") format("woff2");
 }
 
 :root {
-  /* Surfaces, from furthest back to nearest front. Warm, unbleached paper —
-     not the clinical pure-white of a generic admin theme. */
-  --background: #f2ede2;
-  --foreground: #201a11;
-  --card: #faf7f0;
-  --card-foreground: #201a11;
-  --muted: #e6dfcf;
-  --muted-foreground: #6b6152;
+  /* Surfaces, from furthest back to nearest front. Crisp, near-white — a
+     console's daylight mode, not the previous warm unbleached paper. */
+  --background: #fafafa;
+  --foreground: #0e1013;
+  --card: #ffffff;
+  --card-foreground: #0e1013;
+  --muted: #f1f2f4;
+  --muted-foreground: #63676f;
 
   /* Lines and controls. */
-  --border: #d8cfb8;
-  --input: #c2b799;
-  --ring: #c23d0a;
+  --border: #e3e5e9;
+  --input: #d3d6db;
+  --ring: oklch(0.56 0.17 145);
 
-  /* Actions. One accent, committed to: burnt signal orange. */
-  --primary: #c23d0a;
-  --primary-foreground: #fff6ec;
-  --secondary: #faf7f0;
-  --secondary-foreground: #201a11;
-  --accent: #ece0c8;
-  --accent-foreground: #5c2c0c;
+  /* Actions. One accent, committed to: signal green — deepened here (vs. the
+     dark-mode value below) so it stays readable as text and border on white,
+     never the same lightness in both modes. */
+  --primary: oklch(0.56 0.17 145);
+  --primary-foreground: #f6fef9;
+  --secondary: #f5f6f7;
+  --secondary-foreground: #0e1013;
+  --accent: oklch(0.56 0.17 145 / 10%);
+  --accent-foreground: oklch(0.4 0.15 145);
 
   /* Status. `-surface` is the tinted background a notice sits on;
      the bare token is the solid colour a button or an icon uses. */
-  --destructive: #a3140a;
-  --destructive-foreground: #fff6ec;
-  --destructive-surface: #f8e6de;
-  --success: #266b3d;
-  --success-foreground: #f4fbf1;
-  --success-surface: #e6f0dd;
-  --warning: #8a5a05;
-  --warning-foreground: #fdf6e6;
-  --warning-surface: #f3e7c9;
-  --info: #295a8a;
-  --info-foreground: #eff6ff;
-  --info-surface: #dfe9f3;
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: #fff6f5;
+  --destructive-surface: oklch(0.55 0.22 25 / 10%);
+  --success: oklch(0.56 0.17 145);
+  --success-foreground: #f6fef9;
+  --success-surface: oklch(0.56 0.17 145 / 10%);
+  --warning: oklch(0.62 0.16 60);
+  --warning-foreground: #211703;
+  --warning-surface: oklch(0.62 0.16 60 / 14%);
+  --info: oklch(0.55 0.16 240);
+  --info-foreground: #f5f9ff;
+  --info-surface: oklch(0.55 0.16 240 / 10%);
 
-  /* Elevation. A printed, layered shadow rather than Tailwind's soft
-     defaults — an admin surface should read as a card set on a desk, with a
-     hard-edged direction to the light. */
-  --shadow-card: 0 1px 0 rgb(32 26 17 / 0.08), 0 3px 8px -2px rgb(32 26 17 / 0.1);
-  --shadow-raised: 0 2px 0 rgb(32 26 17 / 0.1), 0 12px 24px -8px rgb(32 26 17 / 0.18);
-  --shadow-overlay: 0 4px 0 rgb(32 26 17 / 0.14), 0 32px 64px -16px rgb(32 26 17 / 0.32);
+  /* Elevation. Soft and diffuse, daylight-console shadows rather than the
+     previous hard-printed direction. */
+  --shadow-card: 0 1px 2px rgb(14 16 19 / 0.04), 0 1px 3px rgb(14 16 19 / 0.06);
+  --shadow-raised: 0 4px 8px -2px rgb(14 16 19 / 0.08), 0 12px 24px -8px rgb(14 16 19 / 0.1);
+  --shadow-overlay: 0 8px 16px -4px rgb(14 16 19 / 0.12), 0 32px 64px -16px rgb(14 16 19 / 0.18);
 
-  /* A faint paper-grain texture, applied as a background-image by
-     `base.css`. Two tiny radial specks tiled at an odd size read as noise
-     rather than as a repeating pattern. */
-  --grain-opacity: 0.05;
+  /* The previous direction's paper-grain texture has no place in a console
+     surface — the mechanism stays in `base.css` (a future direction could
+     want it again) but is switched off at the token. */
+  --grain-opacity: 0;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    /* Near-black, not slate — warmed towards the same hue family as light
-       mode's paper, so the accent reads as the same colour in both. */
-    --background: #14100b;
-    --foreground: #f1e9d8;
-    --card: #1c1710;
-    --card-foreground: #f1e9d8;
-    --muted: #241d13;
-    --muted-foreground: #a99a80;
+  :root:not([data-theme="light"]) {
+    /* Near-black console surface — "Nightops": deliberately cooler and
+       darker than the previous warm near-black, with no orange undertone. */
+    --background: #0a0b0d;
+    --foreground: oklch(0.92 0.006 100);
+    --card: #131519;
+    --card-foreground: oklch(0.92 0.006 100);
+    --muted: #16181d;
+    --muted-foreground: oklch(0.68 0.006 100);
 
-    --border: #362b1a;
-    --input: #4a3b23;
-    --ring: #ff7a3d;
+    --border: oklch(1 0 0 / 8%);
+    --input: oklch(1 0 0 / 14%);
+    --ring: oklch(0.82 0.2 130);
 
-    --primary: #ff7a3d;
-    --primary-foreground: #1c0f04;
-    --secondary: #241d13;
-    --secondary-foreground: #f1e9d8;
-    --accent: #2c2213;
-    --accent-foreground: #ffcda3;
+    --primary: oklch(0.82 0.2 130);
+    --primary-foreground: #08090b;
+    --secondary: #16181d;
+    --secondary-foreground: oklch(0.92 0.006 100);
+    --accent: oklch(0.82 0.2 130 / 14%);
+    --accent-foreground: oklch(0.82 0.2 130);
 
-    --destructive: #ff6350;
+    --destructive: oklch(0.68 0.19 25);
     --destructive-foreground: #1c0704;
-    --destructive-surface: #2c1510;
-    --success: #6bc98d;
-    --success-foreground: #07170c;
-    --success-surface: #142016;
-    --warning: #e0ab3f;
+    --destructive-surface: oklch(0.68 0.19 25 / 14%);
+    --success: oklch(0.82 0.2 130);
+    --success-foreground: #08090b;
+    --success-surface: oklch(0.82 0.2 130 / 14%);
+    --warning: oklch(0.78 0.15 70);
     --warning-foreground: #1f1503;
-    --warning-surface: #26200e;
-    --info: #7fb3e0;
+    --warning-surface: oklch(0.78 0.15 70 / 14%);
+    --info: oklch(0.75 0.13 240);
     --info-foreground: #071420;
-    --info-surface: #14202c;
+    --info-surface: oklch(0.75 0.13 240 / 14%);
 
-    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.5), 0 3px 10px -2px rgb(0 0 0 / 0.5);
-    --shadow-raised: 0 2px 0 rgb(0 0 0 / 0.55), 0 16px 32px -8px rgb(0 0 0 / 0.6);
-    --shadow-overlay: 0 4px 0 rgb(0 0 0 / 0.6), 0 40px 80px -16px rgb(0 0 0 / 0.75);
+    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.4);
+    --shadow-raised: 0 2px 0 rgb(0 0 0 / 0.45), 0 16px 32px -8px rgb(0 0 0 / 0.5);
+    --shadow-overlay: 0 4px 0 rgb(0 0 0 / 0.5), 0 40px 80px -16px rgb(0 0 0 / 0.65);
 
-    --grain-opacity: 0.08;
+    --grain-opacity: 0;
   }
+}
+
+/* The explicit "dark" pick (ThemeToggle) — wins over system preference in
+   both directions, so it must repeat the block above rather than rely on the
+   media query. Keep the two in sync when either changes. */
+:root[data-theme="dark"] {
+  --background: #0a0b0d;
+  --foreground: oklch(0.92 0.006 100);
+  --card: #131519;
+  --card-foreground: oklch(0.92 0.006 100);
+  --muted: #16181d;
+  --muted-foreground: oklch(0.68 0.006 100);
+
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.82 0.2 130);
+
+  --primary: oklch(0.82 0.2 130);
+  --primary-foreground: #08090b;
+  --secondary: #16181d;
+  --secondary-foreground: oklch(0.92 0.006 100);
+  --accent: oklch(0.82 0.2 130 / 14%);
+  --accent-foreground: oklch(0.82 0.2 130);
+
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: #1c0704;
+  --destructive-surface: oklch(0.68 0.19 25 / 14%);
+  --success: oklch(0.82 0.2 130);
+  --success-foreground: #08090b;
+  --success-surface: oklch(0.82 0.2 130 / 14%);
+  --warning: oklch(0.78 0.15 70);
+  --warning-foreground: #1f1503;
+  --warning-surface: oklch(0.78 0.15 70 / 14%);
+  --info: oklch(0.75 0.13 240);
+  --info-foreground: #071420;
+  --info-surface: oklch(0.75 0.13 240 / 14%);
+
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 2px 0 rgb(0 0 0 / 0.45), 0 16px 32px -8px rgb(0 0 0 / 0.5);
+  --shadow-overlay: 0 4px 0 rgb(0 0 0 / 0.5), 0 40px 80px -16px rgb(0 0 0 / 0.65);
+
+  --grain-opacity: 0;
 }
 
 /*
@@ -175,17 +215,21 @@
  * `:root` — which `base.css`'s `body { font-family: var(--font-sans) }` reads.
  */
 @theme {
-  --radius-sm: 0.125rem;
-  --radius-md: 0.25rem;
-  --radius-lg: 0.375rem;
-  --radius-xl: 0.5rem;
+  /* Softer, more rounded than the previous direction's near-sharp corners —
+     a deliberate part of reading as a modern SaaS console rather than a
+     printed form. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 
-  --font-sans: "Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* The display face used for headings, the brand mark and anything meant to
-     announce itself — always `--font-mono`'s family, kept as a separate name
-     so intent stays legible at the call site. */
-  --font-display: "Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The display face used for headings and the brand mark — Space Grotesk
+     again (not a mono face): Nightops sets everything, headings included, in
+     one confident grotesque rather than pairing a mono display with a
+     separate body face. */
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
 }
 
 /*

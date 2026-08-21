@@ -267,6 +267,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    // Fiche 21 task 6: a screen dedicated to the MCP use case, parallel to
+    // "Agents" rather than folded into the generic "Clés API" screen — same
+    // underlying key store, different audience (wiring up an MCP client) and
+    // a client config snippet the generic screen has no reason to show.
+    to: '/mcp',
+    labelKey: 'nav.mcp',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     // Renamed from `/site-plan` (fiche 21, task 1): the old path and label
     // read as a sitemap feature, but this screen is the L19 AI-driven site
     // creation wizard — an unrelated thing that happened to reuse a name

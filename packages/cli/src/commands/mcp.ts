@@ -20,7 +20,12 @@ import {
   createContentService,
   createPermissionLayer,
 } from '@cogenta/api'
-import { createUserStore, ensureAuthTables } from '@cogenta/auth'
+import {
+  createApiKeyStore,
+  createUserStore,
+  ensureAuthTables,
+  looksLikeApiKey,
+} from '@cogenta/auth'
 import {
   CogentaError,
   createDatabaseMediaStore,
@@ -51,13 +56,25 @@ export interface McpOptions {
   readonly email?: string
   /** A synthetic actor for local testing (`--role viewer`), never combined with --email. */
   readonly role?: string
+  /**
+   * A machine-to-machine bearer credential minted from the admin's "MCP"
+   * screen (or the generic "Clés API" one) — resolved through the exact same
+   * `ApiKeyStore` REST's `resolveActor` verifies against
+   * (`@cogenta/auth`'s `createApiKeyStore`), never a second store. The
+   * actor's roles are the key's `scope`, and its id is `apikey:<key id>`,
+   * mirroring `resolveApiKeyActor` in `@cogenta/api` byte for byte — a role
+   * this key was not granted is refused by the same `PermissionLayer` REST
+   * uses, not by anything specific to MCP. Never combined with --email or
+   * --role.
+   */
+  readonly apiKey?: string
   /** Injectable for tests — defaults to the real process streams. */
   readonly stdin?: NodeJS.ReadableStream
   readonly stdout?: NodeJS.WritableStream
 }
 
 const USAGE = `Usage
-  cogenta mcp [--email <email> | --role <role>]
+  cogenta mcp [--email <email> | --role <role> | --api-key <key>]
 
 Starts an MCP (Model Context Protocol) server on stdin/stdout, exposing this
 site's content and site tools to whatever process spawned this command
@@ -68,17 +85,22 @@ packages/mcp/README.md for how to connect one.
 call runs with that user's real roles, checked by the same permission layer
 REST and GraphQL use (R4). --role hands a synthetic actor with no id and the
 named role(s) (comma-separated) — meant for local testing, never for a real
-deployment.
+deployment. --api-key resolves the acting roles from a key minted in the
+admin's "MCP" or "Clés API" screen, through the exact same key store and
+verification REST uses for that key — a role the key was not granted is
+refused by the same permission layer, exactly as it would be over HTTP.
 
-With neither flag, tool calls run as an anonymous ("public") actor: content
-tools still run through the real permission layer (a public actor sees only
-what a public actor may see), but media, site-config and HTTP-fetch tools —
-which have no permission check of their own to fall back on — are left out of
-the manifest entirely. See BLOCKERS.md, "MCP actor scoping", for why.
+With none of these flags, tool calls run as an anonymous ("public") actor:
+content tools still run through the real permission layer (a public actor
+sees only what a public actor may see), but media, site-config and
+HTTP-fetch tools — which have no permission check of their own to fall back
+on — are left out of the manifest entirely. See BLOCKERS.md, "MCP actor
+scoping", for why.
 
 Options
-  --email <email>   Run as this user (looked up in the user store; must exist)
-  --role <role,…>   Run as a synthetic actor with these roles, no real user
+  --email <email>    Run as this user (looked up in the user store; must exist)
+  --role <role,…>    Run as a synthetic actor with these roles, no real user
+  --api-key <key>    Run as the actor a "cogenta_sk_…" API key was granted
 `
 
 /** A fresh, undecorated store per collection: an MCP tool call reads and writes content the same way `cogenta serve`'s REST/GraphQL routes do, through the real permission layer, but does not carry the search/redirect/schedule/vector decorators `assembleSite` wraps around a store — those are cache and derived-index maintenance, not permission-relevant, and wiring the whole of `assembleSite` into a single stdio command is out of this task's scope (see BLOCKERS.md). */
@@ -129,19 +151,49 @@ function contentServiceLikeOf(service: ContentService): ContentServiceLike {
  *
  * `--email` looks the user up in the real user store — the account must
  * already exist (`cogenta users create`); this command never creates one.
- * `--role` is a synthetic actor for local testing. Neither given: the
- * anonymous ("public") actor, same as an unauthenticated REST request.
+ * `--role` is a synthetic actor for local testing. `--api-key` resolves
+ * through the same `ApiKeyStore` (`@cogenta/auth`) REST's `resolveActor`
+ * verifies against — one store, two callers, never a second lookup path.
+ * None given: the anonymous ("public") actor, same as an unauthenticated
+ * REST request.
  */
 async function resolveMcpActor(
   options: McpOptions,
   db: DatabaseHandle,
 ): Promise<{ readonly actor: AccessContext['actor']; readonly authenticated: boolean }> {
-  if (options.email !== undefined && options.role !== undefined) {
+  const given = [options.email, options.role, options.apiKey].filter(
+    (value) => value !== undefined,
+  ).length
+  if (given > 1) {
     throw new CogentaError({
       code: 'MCP_ACTOR_OPTIONS_CONFLICT',
-      message: '--email and --role are mutually exclusive.',
-      hint: 'Pass one or the other — --email resolves a real user, --role is a synthetic test actor.',
+      message: '--email, --role and --api-key are mutually exclusive.',
+      hint: 'Pass exactly one: --email resolves a real user, --role is a synthetic test actor, --api-key resolves a minted key.',
     })
+  }
+  if (options.apiKey !== undefined) {
+    if (!looksLikeApiKey(options.apiKey)) {
+      throw new CogentaError({
+        code: 'MCP_ACTOR_API_KEY_INVALID',
+        message: 'That does not look like a Cogenta API key.',
+        hint: 'A real key starts with "cogenta_sk_" — copy it again from the admin\'s "MCP" screen.',
+      })
+    }
+    await ensureAuthTables(db)
+    const apiKeys = createApiKeyStore(db)
+    const key = await apiKeys.verify(options.apiKey)
+    if (key === null) {
+      throw new CogentaError({
+        code: 'MCP_ACTOR_API_KEY_INVALID',
+        message: 'This API key is unknown, revoked, or expired.',
+        hint: 'Mint a new one from the admin\'s "MCP" screen, or "Clés API" for a general-purpose key.',
+      })
+    }
+    // Mirrors `resolveApiKeyActor` in `@cogenta/api` (`packages/api/src/rest/auth-router.ts`)
+    // exactly: the same id shape and the same "roles = scope" mapping, so a
+    // key behaves identically whether it authenticates an HTTP request or
+    // this stdio server.
+    return { actor: { id: `apikey:${key.id}`, roles: key.scope }, authenticated: true }
   }
   if (options.email !== undefined) {
     await ensureAuthTables(db)
@@ -238,8 +290,10 @@ export async function runMcp(options: McpOptions): Promise<number> {
   const env = options.env ?? process.env
   const logger = options.logger ?? createLogger({ level: 'silent' })
 
-  if (options.email !== undefined && options.role !== undefined) {
-    stderr(`--email and --role are mutually exclusive.\n\n${USAGE}`)
+  if (
+    [options.email, options.role, options.apiKey].filter((value) => value !== undefined).length > 1
+  ) {
+    stderr(`--email, --role and --api-key are mutually exclusive.\n\n${USAGE}`)
     return 2
   }
 

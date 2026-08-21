@@ -21,6 +21,7 @@ speaks stdio.
 ```sh
 cogenta mcp --email you@example.com   # a real user, looked up in the site's own user store
 cogenta mcp --role viewer             # a synthetic actor for local testing, no real account
+cogenta mcp --api-key cogenta_sk_…    # a key minted from the admin's "MCP" or "Clés API" screen
 cogenta mcp                           # anonymous ("public") — the default, no flag needed
 ```
 
@@ -35,7 +36,17 @@ cogenta mcp                           # anonymous ("public") — the default, no
   (comma-separated: `--role editor,reviewer`) and no real account behind it.
   Meant for local testing against a scratch site, not for pointing a real
   client at a real site.
-- **With neither flag**, the server runs as the anonymous `public` actor —
+- **`--api-key`** resolves an actor from a machine-to-machine bearer key,
+  through the exact same `ApiKeyStore` (`@cogenta/auth`) and "roles = scope"
+  mapping REST's own `resolveActor` uses for a `cogenta_sk_…` bearer token —
+  one store, two callers. Mint one from the admin's dedicated **MCP** screen
+  (which also shows the client configuration below, pre-filled with the raw
+  key), or from the general-purpose **Clés API** screen — either works, since
+  a key is a key regardless of which screen minted it. A revoked, expired, or
+  unknown key refuses to start the server at all (`MCP_ACTOR_API_KEY_INVALID`)
+  rather than silently falling back to anonymous.
+- **With none of these flags**, the server runs as the anonymous `public`
+  actor —
   the same actor an unauthenticated REST request gets. Content tools
   (`content.read`, `content.write_draft`, `content.publish`,
   `content.delete`) are still on the manifest and still permission-checked
@@ -56,9 +67,9 @@ Media (`media.read`, `media.write`) and site-config (`site.config_read`)
 tools have no such check of their own — by design, per their own doc
 comments in `@cogenta/agents`, *the manifest itself* is the permission gate
 for these three. `cogenta mcp` therefore only puts them on the manifest for
-an authenticated actor (`--email` or `--role`); the anonymous default never
-sees them at all, so there is no way to reach one without first naming who
-you are running as.
+an authenticated actor (`--email`, `--role`, or `--api-key`); the anonymous
+default never sees them at all, so there is no way to reach one without
+first naming who you are running as.
 
 ## Connecting a client
 
@@ -82,10 +93,13 @@ all accept this shape:
 }
 ```
 
-Drop `--email …` for the anonymous default, or swap it for `--role viewer`
-while testing locally. If `cogenta` is installed as a project dependency
-rather than globally, point `command` at the local binary instead of `npx`
-(for example `"command": "./node_modules/.bin/cogenta"`).
+Drop `--email …` for the anonymous default, swap it for `--role viewer`
+while testing locally, or swap it for `--api-key cogenta_sk_…` to connect
+with a key minted from the admin — the admin's **MCP** screen generates this
+exact JSON block for you, with the key already filled in, right after you
+create one. If `cogenta` is installed as a project dependency rather than
+globally, point `command` at the local binary instead of `npx` (for example
+`"command": "./node_modules/.bin/cogenta"`).
 
 `COGENTA_AUTH_SIGNING_KEY` and any other environment variables your site's
 `cogenta.config.mjs` needs must be visible to the spawned process — most

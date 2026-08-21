@@ -215,6 +215,8 @@ export const ERROR_CODES = [
   'MCP_ACTOR_OPTIONS_CONFLICT',
   'MCP_ACTOR_USER_NOT_FOUND',
   'MCP_ACTOR_ROLE_EMPTY',
+  // MCP server (L21) — "cogenta mcp --api-key"
+  'MCP_ACTOR_API_KEY_INVALID',
 
   // Agents — privacy (L4)
   'PRIVACY_NO_DATA_LEAVES_VIOLATION',

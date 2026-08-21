@@ -21,6 +21,7 @@ export type SiteSettingGroup =
   | 'commerce'
   | 'branding'
   | 'seo'
+  | 'assistant'
 export type SiteSettingScope = 'site' | 'locale'
 
 export interface SiteSetting {

@@ -6,6 +6,7 @@ import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 import { AssistantChatRoute } from './assistant-chat.js'
+import { AssistantIndexRoute } from './assistant-index.js'
 import { DuplicatesRoute } from './duplicates.js'
 
 /**
@@ -26,7 +27,7 @@ import { DuplicatesRoute } from './duplicates.js'
  * someone has to be told where the switch is.
  */
 
-type Tab = 'overview' | 'chat' | 'duplicates'
+type Tab = 'overview' | 'index' | 'chat' | 'duplicates'
 
 /** Where a tool with no dedicated tab actually shows up in this admin. Not part of any contract — purely a navigation hint. */
 const TOOL_LOCATION: Readonly<Record<string, string>> = {
@@ -55,6 +56,7 @@ export function AssistantRoute(): JSX.Element | null {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
 
   const [capabilities, setCapabilities] = useState<AssistCapabilities | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -133,6 +135,7 @@ export function AssistantRoute(): JSX.Element | null {
         {(
           [
             ['overview', t('assistant.tabOverview')],
+            ...(vector === undefined ? [] : [['index', t('assistant.tabIndex')] as const]),
             ['chat', t('assistant.tabChat')],
             ['duplicates', t('assistant.tabDuplicates')],
           ] as const
@@ -242,7 +245,10 @@ export function AssistantRoute(): JSX.Element | null {
                   </CardTitle>
                 </CardHeader>
                 <CardBody>
-                  <p className="m-0 text-sm text-foreground">
+                  <p className="m-0 text-sm text-muted-foreground">
+                    {t('assistant.vectorExplain')}
+                  </p>
+                  <p className="m-0 mt-2 text-sm text-foreground">
                     {t('assistant.vectorDriver', {
                       driver: vector.driver,
                       dimensions: vector.dimensions,
@@ -258,10 +264,27 @@ export function AssistantRoute(): JSX.Element | null {
                           at: new Date(vector.lastIndexedAt).toLocaleString(),
                         })}
                   </p>
+                  <button
+                    type="button"
+                    className="mt-3 text-sm font-medium text-primary underline"
+                    onClick={() => setTab('index')}
+                  >
+                    {t('assistant.vectorViewIndex')}
+                  </button>
                 </CardBody>
               </Card>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === 'index' && vector !== undefined && (
+        <div id="assistant-panel-index" role="tabpanel" aria-labelledby="assistant-tab-index">
+          <AssistantIndexRoute
+            vector={vector}
+            isAdmin={isAdmin}
+            onIndexChanged={() => void load()}
+          />
         </div>
       )}
 

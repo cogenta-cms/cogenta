@@ -1028,6 +1028,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             siteId: site.url,
             store: options.assistant.vectors.store,
             embeddings: options.assistant.vectors.embeddings,
+            // L22 task 4's per-collection toggle, read live on every write.
+            isEnabled: options.assistant.vectors.isEnabled,
             onError: (error) =>
               logger.error('vector index write failed', {
                 collection: collection.name,
@@ -1931,6 +1933,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ...(options.assistant?.vectorInfo === undefined
         ? {}
         : { vectorInfo: options.assistant.vectorInfo }),
+      ...(options.assistant?.documents === undefined
+        ? {}
+        : { documents: options.assistant.documents }),
     }),
     ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
     ...(options.sitePlans === undefined
@@ -4295,10 +4300,19 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // L18. Never fatal: everything inside degrades to "off" with a log line
   // rather than stopping the site from serving (R2).
   const searchIndex = await createSearchIndex({ db: selection.instance })
+  // Its own instance, separate from `assembleSite`'s internal one
+  // (`createSiteSettingsStore` is stateless — every call hits the same table,
+  // there is nothing to share): `buildAssistant` runs before `assembleSite`
+  // does, and the `assistant.indexedCollections` toggle (L22 task 4) has to
+  // be readable from the moment the first store wrap is built.
+  const assistantSettings = createSiteSettingsStore({ db: selection.instance })
   const assistant = await buildAssistant({
     config: loaded.config,
     db: selection.instance,
     logger,
+    collections,
+    settings: assistantSettings,
+    siteId: loaded.config.site.url,
     // Beside the full-text index, never instead of it: the semantic half is
     // fused with this one by RRF (L18 task 5).
     fullText: searchIndex,

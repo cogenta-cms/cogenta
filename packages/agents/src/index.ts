@@ -210,6 +210,26 @@ export type {
   RankedId,
 } from './rag/index/types.js'
 export { vectorRank } from './rag/index/vector-rank.js'
+export type { ReferenceDocumentIngestOptions } from './rag/reference-documents/ingest.js'
+export {
+  ingestReferenceDocument,
+  removeReferenceDocumentVectors,
+} from './rag/reference-documents/ingest.js'
+export type {
+  CreateReferenceDocumentInput,
+  ReferenceDocumentStore,
+} from './rag/reference-documents/store.js'
+export { createReferenceDocumentStore } from './rag/reference-documents/store.js'
+export type {
+  ReferenceDocumentRecord,
+  ReferenceDocumentStatus,
+} from './rag/reference-documents/types.js'
+export {
+  REFERENCE_DOCUMENT_COLLECTION,
+  REFERENCE_DOCUMENT_LOCALE,
+  REFERENCE_DOCUMENT_STATUS,
+  REFERENCE_DOCUMENT_STATUSES,
+} from './rag/reference-documents/types.js'
 export type {
   FullTextSearchLike,
   SemanticHit,

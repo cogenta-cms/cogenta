@@ -88,6 +88,15 @@ export const SITE_SETTING_GROUPS = [
    * own screen instead of a `SettingsRoute` tab.
    */
   'seo',
+  /**
+   * L22 task 4 — which collections the writing assistant's vector index
+   * actually contains. Its own screen (the redesigned `AssistantRoute`),
+   * not a `SettingsRoute` tab, for the same reason `commerce`/`seo` get
+   * their own: the one key this group holds (`assistant.indexedCollections`)
+   * is a per-collection map, not a single scalar a generic form field can
+   * render — exactly `seo.sitemapCollectionSettings`'s own shape.
+   */
+  'assistant',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -185,6 +194,14 @@ const sitemapCollectionSettings = z.record(
     priority: z.union([z.literal(''), z.number().min(0).max(1)]),
   }),
 )
+
+/**
+ * `assistant.indexedCollections` (L22 task 4) — one boolean per collection
+ * name, `false` meaning "excluded from the vector index". A collection
+ * absent from the map is included: the opt-out shape is what keeps a site
+ * that has never touched this setting indexing exactly as it always has.
+ */
+const indexedCollectionsSettings = z.record(z.string(), z.boolean())
 
 /**
  * A real IANA time zone name, or empty for "not set". `Intl.DateTimeFormat`
@@ -717,6 +734,25 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `/api/media/{id}/file` or `/_image?id=…` would answer.
     schema: urlOrPathOrEmpty,
     defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Assistant (L22 task 4) — which collections the writing assistant's
+  // vector index actually contains. Read live by `cogenta serve` on every
+  // content write and by the "Reindex vectors" tool (`@cogenta/cli`'s
+  // `isAssistantCollectionEnabled`) — never cached, so a toggle here takes
+  // effect on the next save with no restart.
+  {
+    key: 'assistant.indexedCollections',
+    group: 'assistant',
+    order: 0,
+    // Bypasses the generic per-`uiType` renderer, the same way
+    // `seo.sitemapCollectionSettings` does — the redesigned assistant
+    // screen renders this one key as a per-collection toggle list instead.
+    uiType: 'text',
+    scope: 'site',
+    schema: indexedCollectionsSettings,
+    defaultValue: {},
     writeRoles: ADMIN_ONLY,
   },
 ] as const

@@ -290,6 +290,243 @@ describe('cogenta serve — vector index visibility (fiche 30 task 6)', () => {
   })
 })
 
+interface VectorCapabilities {
+  readonly data: {
+    readonly vector?: {
+      readonly count: number
+      readonly referenceCollection: string
+      readonly collections: readonly {
+        readonly name: string
+        readonly enabled: boolean
+        readonly count: number
+      }[]
+    }
+  }
+}
+
+async function assistantCapabilities(base: string, token: string): Promise<VectorCapabilities> {
+  const response = await fetch(`${base}/api/assistant`, {
+    headers: { authorization: `Bearer ${token}` },
+  })
+  return (await response.json()) as VectorCapabilities
+}
+
+describe('cogenta serve — per-collection index composition (L22 task 4)', () => {
+  it('lists every collection as included by default, with its own chunk count', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'editor@example.com',
+      'correct horse battery staple',
+    )
+
+    const before = await assistantCapabilities(server.base, token)
+    expect(before.data.vector?.collections).toEqual([{ name: 'page', enabled: true, count: 0 }])
+    expect(before.data.vector?.referenceCollection).toBe('_reference_documents')
+
+    const created = await fetch(`${server.base}/api/content/page`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: { title: 'Nave', slug: 'nave' } }),
+    })
+    const id = ((await created.json()) as { data: { id: string } }).data.id
+    await fetch(`${server.base}/api/content/page/${id}/publish`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    const after = await assistantCapabilities(server.base, token)
+    expect(after.data.vector?.collections).toEqual([{ name: 'page', enabled: true, count: 1 }])
+  })
+
+  it('excludes a collection once toggled off, and the change applies on the very next save with no restart', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin', 'editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const created = await fetch(`${server.base}/api/content/page`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ values: { title: 'Crypt', slug: 'crypt' } }),
+    })
+    const id = ((await created.json()) as { data: { id: string } }).data.id
+    await fetch(`${server.base}/api/content/page/${id}/publish`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    const indexed = await assistantCapabilities(server.base, token)
+    expect(indexed.data.vector?.collections).toEqual([{ name: 'page', enabled: true, count: 1 }])
+
+    // Turn the collection off — same generic site-settings route every other
+    // editorial setting uses, no bespoke endpoint.
+    const toggled = await fetch(`${server.base}/api/settings`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ key: 'assistant.indexedCollections', value: { page: false } }),
+    })
+    expect(toggled.status).toBe(200)
+
+    const stillThere = await assistantCapabilities(server.base, token)
+    expect(stillThere.data.vector?.collections).toEqual([
+      { name: 'page', enabled: false, count: 1 },
+    ])
+
+    // A save after the toggle removes the entry from the index — read live,
+    // no restart, exactly what the toggle promises.
+    await fetch(`${server.base}/api/content/page/${id}/publish`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    const removed = await assistantCapabilities(server.base, token)
+    expect(removed.data.vector?.collections).toEqual([{ name: 'page', enabled: false, count: 0 }])
+  })
+
+  it('refuses the toggle to an editor who is not an admin', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'editor@example.com',
+      'correct horse battery staple',
+    )
+
+    const response = await fetch(`${server.base}/api/settings`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ key: 'assistant.indexedCollections', value: { page: false } }),
+    })
+    expect(response.status).toBe(403)
+  })
+})
+
+interface ReferenceDocumentBody {
+  readonly data: {
+    readonly id: string
+    readonly filename: string
+    readonly status: 'pending' | 'indexed' | 'error'
+    readonly chunkCount: number
+    readonly errorMessage: string | null
+  }
+}
+
+describe('cogenta serve — reference document upload flow (L22 task 4)', () => {
+  it('extracts, chunks, embeds and indexes an uploaded document, with no AI provider at all', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin', 'editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const text =
+      'Returns are accepted within thirty days of purchase.\n\n' +
+      'A refund is issued to the original payment method within five business days.'
+    const contentBase64 = Buffer.from(text, 'utf8').toString('base64')
+
+    const uploaded = await fetch(`${server.base}/api/assistant/documents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ filename: 'returns-policy.txt', contentBase64 }),
+    })
+    expect(uploaded.status).toBe(201)
+    const body = (await uploaded.json()) as ReferenceDocumentBody
+    expect(body.data.status).toBe('indexed')
+    expect(body.data.chunkCount).toBeGreaterThan(0)
+    expect(body.data.errorMessage).toBeNull()
+
+    const listed = await fetch(`${server.base}/api/assistant/documents`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const listedBody = (await listed.json()) as { data: readonly ReferenceDocumentBody['data'][] }
+    expect(listedBody.data.map((doc) => doc.id)).toEqual([body.data.id])
+
+    // Visible in the reference pseudo-collection's chunk count too.
+    const capabilities = await assistantCapabilities(server.base, token)
+    expect(capabilities.data.vector?.count).toBeGreaterThanOrEqual(body.data.chunkCount)
+
+    const removed = await fetch(`${server.base}/api/assistant/documents/${body.data.id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(removed.status).toBe(200)
+
+    const listedAfter = await fetch(`${server.base}/api/assistant/documents`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(((await listedAfter.json()) as { data: unknown[] }).data).toEqual([])
+  })
+
+  it('refuses an unsupported document with a code a client can branch on, without wedging the upload as pending', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin', 'editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    // The legacy Word 97-2003 `.doc` magic number — `extractDocumentText`
+    // detects format from the bytes, not the extension, and refuses this
+    // one by name rather than guessing at binary data.
+    const contentBase64 = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0, 0, 0]).toString('base64')
+
+    const uploaded = await fetch(`${server.base}/api/assistant/documents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ filename: 'legacy.doc', contentBase64 }),
+    })
+    expect(uploaded.status).toBe(400)
+    expect(((await uploaded.json()) as { error: { code: string } }).error.code).toBe(
+      'DOCUMENT_FORMAT_UNSUPPORTED',
+    )
+
+    // Nothing was recorded — a rejected extraction never reaches the store.
+    const listed = await fetch(`${server.base}/api/assistant/documents`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(((await listed.json()) as { data: unknown[] }).data).toEqual([])
+  })
+
+  it('refuses document management to an editor who is not an admin', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'editor@example.com',
+      'correct horse battery staple',
+    )
+
+    const contentBase64 = Buffer.from('hello world', 'utf8').toString('base64')
+    const uploaded = await fetch(`${server.base}/api/assistant/documents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ filename: 'notes.txt', contentBase64 }),
+    })
+    expect(uploaded.status).toBe(403)
+
+    // Listing, on the other hand, is open to anyone who may use the
+    // assistant at all — seeing what feeds it is not the same as managing it.
+    const listed = await fetch(`${server.base}/api/assistant/documents`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(listed.status).toBe(200)
+  })
+})
+
 describe('cogenta serve — assistant traceability on save (fiche 30 task 5)', () => {
   it('records an accepted suggestion in the audit log, distinct from an ordinary edit', async () => {
     const root = await project()

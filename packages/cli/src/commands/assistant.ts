@@ -6,20 +6,32 @@ import {
   createHashingEmbeddingProvider,
   createImageProviderRegistry,
   createProviderRegistry,
+  createReferenceDocumentStore,
   createSemanticSearch,
   createVectorRegistry,
   type EmbeddingProvider,
+  extractDocumentText,
   type ImageProviderClient,
+  ingestReferenceDocument,
+  MAX_DOCUMENT_BYTES,
   PROVIDER_NAMES,
   type ProviderClient,
   type ProviderName,
+  REFERENCE_DOCUMENT_COLLECTION,
+  type ReferenceDocumentRecord,
+  removeReferenceDocumentVectors,
   type SemanticSearch,
   type VectorRecord,
   type VectorStore,
 } from '@cogenta/agents'
-import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
-import type { CollectionDefinition, ContentStore, SearchDriver } from '@cogenta/schema'
-import { searchDocumentFor } from '@cogenta/schema'
+import { type CogentaConfig, CogentaError, type DatabaseHandle, type Logger } from '@cogenta/core'
+import type {
+  CollectionDefinition,
+  ContentStore,
+  SearchDriver,
+  SiteSettingsStore,
+} from '@cogenta/schema'
+import { SITE_SETTINGS_SITE_SCOPE, searchDocumentFor } from '@cogenta/schema'
 
 /**
  * Where L18 is actually wired into a running site.
@@ -37,11 +49,21 @@ import { searchDocumentFor } from '@cogenta/schema'
  * serving a site (R2).
  */
 
+/** One collection's place in the vector index — L22 task 4's "quelles collections, activable/désactivable par collection". */
+export interface AssistantIndexedCollection {
+  readonly name: string
+  /** `false` when an operator has explicitly excluded this collection (`assistant.indexedCollections`) — the explicit ask being able to turn off e.g. published articles. Absent from the setting means enabled: an install that has never touched this toggle indexes everything, as it always has. */
+  readonly enabled: boolean
+  /** How many chunks of this collection are in the index right now — independent of `enabled`, since a toggle flipped off leaves old chunks in place until a reindex (`cogenta serve`'s "Reindex vectors" tool) sweeps them out. */
+  readonly count: number
+}
+
 /**
  * What the vector index looks like right now — fiche 30 task 6, "l'index
- * vectoriel est invisible". `count`/`lastIndexedAt` are read on demand, never
- * cached beyond the process, so the admin panel is never stale by more than
- * one request.
+ * vectoriel est invisible", widened by L22 task 4 to explain *what is in it*
+ * rather than only how big it is. `count`/`lastIndexedAt`/`collections` are
+ * read on demand, never cached beyond the process, so the admin panel is
+ * never stale by more than one request.
  */
 export interface AssistantVectorInfo {
   readonly driver: string
@@ -50,6 +72,27 @@ export interface AssistantVectorInfo {
   lastIndexedAt(): string | null
   /** `withVectorIndexing` calls this after each successful write — not exported for anything else to call. */
   noteIndexed(): void
+  /** Every content collection this site has, each with its toggle state and its current chunk count. */
+  collections(): Promise<readonly AssistantIndexedCollection[]>
+  /** The reserved pseudo-collection name uploaded reference documents are stored under — `assist.chat`'s `collections` input names it to retrieve them. Exposed so the admin never has to hard-code it. */
+  readonly referenceCollection: string
+}
+
+/**
+ * The document upload flow, L22 task 4 — wired onto the existing
+ * `document.extract_text` → `chunkDocument` → `EmbeddingProvider.embed`
+ * pipeline (L19/L18) rather than a second one. Absent under exactly the
+ * condition `vectors` is: no embedder, nothing to embed an upload into.
+ */
+export interface AssistantDocumentService {
+  list(): Promise<readonly ReferenceDocumentRecord[]>
+  /** Extracts, chunks, embeds and stores one document; never throws on a bad upload — the returned record's own `status`/`errorMessage` says what happened. */
+  upload(input: {
+    readonly filename: string
+    readonly bytes: Buffer
+    readonly uploadedBy: string | null
+  }): Promise<ReferenceDocumentRecord>
+  remove(id: string): Promise<void>
 }
 
 export interface AssistantAssembly {
@@ -57,9 +100,16 @@ export interface AssistantAssembly {
   /** Absent when semantic search is not available on this site. */
   readonly search?: SemanticSearch
   /** Absent for the same reason. Used to keep the index in step with the content. */
-  readonly vectors?: { readonly store: VectorStore; readonly embeddings: EmbeddingProvider }
+  readonly vectors?: {
+    readonly store: VectorStore
+    readonly embeddings: EmbeddingProvider
+    /** Reads live, per collection, whether it belongs in the index — shared by the write path (`withVectorIndexing`) and the bulk "Reindex vectors" tool, so both honour the same toggle. */
+    readonly isEnabled: (collectionName: string) => Promise<boolean>
+  }
   /** Absent when there is no vector store at all — same condition as `vectors`, but the toolset already has its own view of driver/dimensions so this is not derived from it. */
   readonly vectorInfo?: AssistantVectorInfo
+  /** Absent under the same condition as `vectors` — nothing to embed an uploaded document into. */
+  readonly documents?: AssistantDocumentService
   /** What `cogenta serve` prints on startup. Always truthful about what is off. */
   readonly summary: string
   dispose(): Promise<void>
@@ -71,6 +121,28 @@ export interface BuildAssistantOptions {
   readonly logger: Logger
   /** L10's full-text index, fused with the vector half rather than replaced by it. */
   readonly fullText?: SearchDriver
+  /** Every content collection this site declares — needed to report per-collection index state (L22 task 4). */
+  readonly collections: readonly CollectionDefinition[]
+  /** Backs the `assistant.indexedCollections` per-collection toggle and identifies the site for reference-document rows. */
+  readonly settings: SiteSettingsStore
+  readonly siteId: string
+}
+
+/** The one site setting this task adds — a record of collection name → included, absent meaning included (opt-out, so an existing site's behaviour before this task does not change). */
+const INDEXED_COLLECTIONS_SETTING = 'assistant.indexedCollections'
+
+/**
+ * Reads the live toggle for one collection. Exported so `cogenta serve`'s
+ * "Reindex vectors" tool body (`tools.ts`) can honour the exact same
+ * predicate the write path uses, rather than a second copy of this read.
+ */
+export async function isAssistantCollectionEnabled(
+  settings: SiteSettingsStore,
+  collectionName: string,
+): Promise<boolean> {
+  const row = await settings.get(INDEXED_COLLECTIONS_SETTING, SITE_SETTINGS_SITE_SCOPE)
+  const map = (row?.value as Readonly<Record<string, boolean>> | undefined) ?? {}
+  return map[collectionName] !== false
 }
 
 function isProviderName(value: string): value is ProviderName {
@@ -220,9 +292,13 @@ export async function buildAssistant(options: BuildAssistantOptions): Promise<As
     ? `assistant: ${toolset.tools.length} tool(s), text provider: ${provider?.name ?? 'none'}, image provider: ${images?.name ?? 'none'}, vector driver: ${vectorDriver}`
     : 'assistant: off (no AI provider configured)'
 
-  // Fiche 30 task 6. Only when there is a real store — `vectorDriver` stays
-  // `'none'` and `store` stays `undefined` on a site with no embedder, and an
-  // "index" with no store to count is not a real state to report.
+  const isEnabled = (collectionName: string): Promise<boolean> =>
+    isAssistantCollectionEnabled(options.settings, collectionName)
+
+  // Fiche 30 task 6, widened by L22 task 4. Only when there is a real store —
+  // `vectorDriver` stays `'none'` and `store` stays `undefined` on a site with
+  // no embedder, and an "index" with no store to count is not a real state to
+  // report.
   let lastIndexedAt: string | null = null
   const vectorInfo: AssistantVectorInfo | undefined =
     store === undefined || embeddings === undefined
@@ -235,13 +311,92 @@ export async function buildAssistant(options: BuildAssistantOptions): Promise<As
           noteIndexed: () => {
             lastIndexedAt = new Date().toISOString()
           },
+          referenceCollection: REFERENCE_DOCUMENT_COLLECTION,
+          collections: async () => {
+            const rows: AssistantIndexedCollection[] = []
+            for (const collection of options.collections) {
+              const [enabled, count] = await Promise.all([
+                isEnabled(collection.name),
+                store.count({ siteId: options.siteId, collections: [collection.name] }),
+              ])
+              rows.push({ name: collection.name, enabled, count })
+            }
+            return rows
+          },
         }
+
+  /**
+   * A nested function rather than an inline ternary: `store`/`embeddings`
+   * narrow to their non-optional type for the rest of *this* function body
+   * once checked here, which a value captured from the outer scope by a
+   * separately-declared closure does not reliably do.
+   */
+  async function buildDocumentService(): Promise<AssistantDocumentService | undefined> {
+    if (store === undefined || embeddings === undefined) return undefined
+    const vectorStore = store
+    const embeddingProviderRef = embeddings
+
+    const docStore = createReferenceDocumentStore(options.db)
+    // Created eagerly, once — every method below (`list` included) reads or
+    // writes this table, so it must exist before the first request, not only
+    // before the first upload.
+    await docStore.ensureTable()
+
+    return {
+      list: () => docStore.list(options.siteId),
+      async upload({ filename, bytes, uploadedBy }) {
+        if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
+          throw new CogentaError({
+            code: 'DOCUMENT_TOO_LARGE',
+            message: `"${filename}" is larger than this route accepts.`,
+            hint: 'Upload a document of 20 MB or less, or paste the section as plain text into a .txt/.md file.',
+            details: { filename },
+          })
+        }
+        const extracted = extractDocumentText({ filename, bytes })
+        const created = await docStore.create({
+          siteId: options.siteId,
+          filename: extracted.filename,
+          format: extracted.format,
+          characters: extracted.characters,
+          warnings: extracted.warnings,
+          uploadedBy,
+        })
+        try {
+          const { chunkCount } = await ingestReferenceDocument(
+            { filename: extracted.filename, text: extracted.text },
+            created.id,
+            { store: vectorStore, embeddings: embeddingProviderRef, siteId: options.siteId },
+          )
+          const at = new Date().toISOString()
+          await docStore.markIndexed(options.siteId, created.id, chunkCount, at)
+          lastIndexedAt = at
+          const reread = await docStore.get(options.siteId, created.id)
+          return reread ?? created
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          await docStore.markError(options.siteId, created.id, message)
+          const reread = await docStore.get(options.siteId, created.id)
+          return reread ?? created
+        }
+      },
+      async remove(id) {
+        await removeReferenceDocumentVectors(vectorStore, options.siteId, id)
+        await docStore.remove(options.siteId, id)
+      },
+    }
+  }
+
+  const documents = await buildDocumentService()
 
   return {
     toolset,
     ...(search === undefined ? {} : { search }),
-    ...(store === undefined || embeddings === undefined ? {} : { vectors: { store, embeddings } }),
+    ...(store === undefined || embeddings === undefined
+      ? {}
+      : { vectors: { store, embeddings, isEnabled } }),
     ...(vectorInfo === undefined ? {} : { vectorInfo }),
+    ...(documents === undefined ? {} : { documents }),
     summary,
     dispose: async () => {
       await disposeVectors?.()
@@ -274,6 +429,14 @@ export interface VectorIndexingOptions {
   readonly onError?: (error: unknown) => void
   /** Fiche 30 task 6's "dernière indexation" — called once per successful reindex (upsert or removal alike), never on failure. */
   readonly onIndexed?: () => void
+  /**
+   * L22 task 4's per-collection toggle. Read live on every write and by the
+   * bulk "Reindex vectors" tool — never cached, so a toggle flipped from the
+   * admin takes effect on the very next save without a restart. Absent means
+   * "always enabled", which keeps every site that predates this toggle
+   * indexing exactly as it always has.
+   */
+  readonly isEnabled?: (collectionName: string) => Promise<boolean>
 }
 
 /** The chunk id an entry's single document occupies. One chunk per entry, for now — see the note in `reindexEntry`. */
@@ -327,6 +490,17 @@ export async function reindexVectorEntry(
   id: string,
 ): Promise<void> {
   try {
+    const enabled =
+      options.isEnabled === undefined ? true : await options.isEnabled(options.collection.name)
+    if (!enabled) {
+      // Excluded by the toggle (L22 task 4) — treated exactly like "no
+      // published face": whatever chunk this entry had is removed, and
+      // nothing new is written until the collection is re-enabled.
+      await options.store.remove([chunkIdFor(options.collection.name, id)])
+      options.onIndexed?.()
+      return
+    }
+
     const published = await store.read(id, { state: 'published' })
     if (published === null) {
       await options.store.remove([chunkIdFor(options.collection.name, id)])

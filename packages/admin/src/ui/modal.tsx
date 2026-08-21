@@ -70,7 +70,7 @@ export function Modal({
           }}
           className={cn(
             'fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(32rem,calc(100vw-2rem))] ' +
-              'flex-col overflow-hidden rounded-xl border ' +
+              '-translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border ' +
               'border-border bg-card font-sans text-card-foreground shadow-overlay ' +
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
             'data-[state=open]:[animation:cg-admin-modal-in_180ms_ease-out_forwards]',

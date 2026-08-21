@@ -38,3 +38,7 @@ test-results/
 *.sqlite
 *.sqlite3
 *.db
+
+# A throwaway local test site scaffolded against the workspace's own code
+# (not a published example) — never meant to be committed.
+/examples/local-playground/

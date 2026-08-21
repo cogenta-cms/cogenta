@@ -1,7 +1,7 @@
 import type { AccessContext, ContentGateway, SearchRouter } from '@cogenta/api'
 import { buildPath, type CollectionDefinition, type SearchHit } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
-import { type PageChromeMenus, renderPageChrome } from './theme-render.js'
+import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from './theme-render.js'
 
 /**
  * `GET /search?q=…` — the public half of L10 task 3.
@@ -37,6 +37,8 @@ export interface SearchPageOptions {
   readonly styles: string | null
   /** Same menu wiring the rest of the public site uses (`theme-render.ts`). Absent renders an empty header/footer nav. */
   readonly menus?: PageChromeMenus
+  /** Same live branding read the rest of the public site uses (`theme-render.ts`). Absent means full Cogenta credit. */
+  readonly branding?: () => Promise<BrandingSettings>
 }
 
 interface ResolvedHit {
@@ -176,6 +178,7 @@ ${searchForm(trimmed)}
 ${main}
 </main>`,
       ...(options.menus === undefined ? {} : { menus: options.menus }),
+      ...(options.branding === undefined ? {} : { branding: options.branding }),
     },
     context,
   )

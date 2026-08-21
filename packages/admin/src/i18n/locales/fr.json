@@ -1583,6 +1583,7 @@
       "discussion": "Discussion",
       "media": "Médias",
       "privacy": "Confidentialité",
+      "branding": "Marque",
       "advanced": "Avancé"
     },
     "dateTimeStyle": {
@@ -1600,6 +1601,7 @@
     "mediaFormatsValue": "WebP, à un ensemble fixe de largeurs — intégré au pipeline d'images, non modifiable ici.",
     "discussionNote": "Ce sont les réglages par défaut du site. Une collection ou une entrée peut toujours désactiver les commentaires, ou exiger la modération, depuis les réglages de cette collection ou la barre latérale de l'éditeur.",
     "noCookieByDefault": "Cogenta ne pose aucun cookie par défaut. N'activez ceci que si ce site en ajoute un (un widget intégré, un script de mesure d'audience) — un bandeau dont personne n'a besoin est pire que son absence.",
+    "brandingNote": "Le logo personnalisé ne prend effet qu'une fois « Afficher la marque Cogenta » désactivé — il reste enregistré dans tous les cas, donc réactiver la marque Cogenta ne le perd jamais.",
     "advancedLink": "Sécurité, webhooks et infrastructure (lecture seule)",
     "advancedNote": "Tout y vient de cogenta.config.mjs. Modifiez le fichier et redémarrez le serveur pour changer ces réglages.",
     "field": {
@@ -1702,6 +1704,16 @@
         "invoiceLanguage": {
           "label": "Langue de la facture",
           "help": "Un code de langue court, ex. « fr » ou « en »."
+        }
+      },
+      "branding": {
+        "showCogentaBranding": {
+          "label": "Afficher la marque Cogenta",
+          "help": "Crédite Cogenta dans le pied de page du site public et dans l'en-tête de cet admin."
+        },
+        "customLogoMediaId": {
+          "label": "Logo personnalisé",
+          "help": "Affiché à la place du logo Cogenta une fois la marque désactivée ci-dessus."
         }
       }
     }

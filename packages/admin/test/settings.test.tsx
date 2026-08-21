@@ -188,3 +188,33 @@ describe('the site settings screen', () => {
     expect(screen.queryByLabelText("Langue de l'accroche")).toBeNull()
   })
 })
+
+describe('the site settings screen — Branding tab (fiche L21 task 8)', () => {
+  it('toggles Cogenta credit, on by default, and writes the change', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Marque' }))
+    const toggle = (await screen.findByLabelText('Afficher la marque Cogenta')) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+
+    fireEvent.click(toggle)
+    await waitFor(() => {
+      expect(toggle.checked).toBe(false)
+    })
+  })
+
+  it('offers a media picker for the white-label logo, unconditionally of the toggle', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Marque' }))
+    await screen.findByText('Logo personnalisé')
+    expect(screen.getByRole('button', { name: 'Choisir…' })).toBeDefined()
+    expect(
+      screen.getByText(/ne prend effet qu'une fois « Afficher la marque Cogenta » désactivé/),
+    ).toBeDefined()
+  })
+})

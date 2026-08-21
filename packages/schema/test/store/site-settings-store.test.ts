@@ -95,4 +95,21 @@ describe('createSiteSettingsStore (sqlite)', () => {
   it('get() answers null for a key nobody has written', async () => {
     expect(await store.get('privacy.policyPath', SITE_SETTINGS_SITE_SCOPE)).toBeNull()
   })
+
+  it('writes the branding toggle and a custom logo media id (fiche L21 task 8)', async () => {
+    await store.set('branding.showCogentaBranding', SITE_SETTINGS_SITE_SCOPE, false, 'user-1')
+    await store.set(
+      'branding.customLogoMediaId',
+      SITE_SETTINGS_SITE_SCOPE,
+      'media-abc123',
+      'user-1',
+    )
+
+    expect((await store.get('branding.showCogentaBranding', SITE_SETTINGS_SITE_SCOPE))?.value).toBe(
+      false,
+    )
+    expect((await store.get('branding.customLogoMediaId', SITE_SETTINGS_SITE_SCOPE))?.value).toBe(
+      'media-abc123',
+    )
+  })
 })

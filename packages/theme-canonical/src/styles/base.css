@@ -226,6 +226,33 @@ img {
   font-size: var(--cg-text-sm);
 }
 
+/* Cogenta's own credit, or its white-label replacement (fiche L21 task 8) —
+   pushed to the far end of the footer row, after the site name and its own
+   navigation, never competing with either for space. */
+.cg-site-footer__branding {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+}
+
+.cg-site-footer__branding a {
+  display: flex;
+  align-items: center;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.cg-site-footer__branding a:hover,
+.cg-site-footer__branding a:focus-visible {
+  opacity: 1;
+}
+
+.cg-site-footer__brand-logo {
+  display: block;
+  block-size: 1.5em;
+  inline-size: auto;
+}
+
 /* --------------------------------------------------------------------------
    Actions — the theme's only control
    -------------------------------------------------------------------------- */

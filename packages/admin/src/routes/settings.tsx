@@ -23,7 +23,15 @@ import { Card, CardBody, CardHeader, CardTitle, Notice, Select } from '../ui/ind
  * with an existing `group` needs no change here.
  */
 
-const TAB_ORDER = ['general', 'reading', 'discussion', 'media', 'privacy', 'advanced'] as const
+const TAB_ORDER = [
+  'general',
+  'reading',
+  'discussion',
+  'media',
+  'privacy',
+  'branding',
+  'advanced',
+] as const
 type TabId = (typeof TAB_ORDER)[number]
 
 /**
@@ -180,6 +188,7 @@ export function SettingsRoute(): JSX.Element {
         )}
         {tab === 'media' && <MediaTab settings={byTab.get('media') ?? []} onSave={save} />}
         {tab === 'privacy' && <PrivacyTab settings={byTab.get('privacy') ?? []} onSave={save} />}
+        {tab === 'branding' && <BrandingTab settings={byTab.get('branding') ?? []} onSave={save} />}
         {tab === 'advanced' && <AdvancedTab />}
       </div>
     </section>
@@ -398,6 +407,39 @@ function PrivacyTab({
             />
           ))}
         <p className="m-0 text-xs text-muted-foreground">{t('settings.noCookieByDefault')}</p>
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * "Marque" (fiche L21 task 8) — whether the public footer and the admin
+ * shell credit Cogenta, and the white-label logo that replaces it when they
+ * don't. `branding.customLogoMediaId` is shown regardless of the toggle's
+ * current value (the generic `SiteSettingsField` renderer has no notion of
+ * one setting depending on another) — the note below is what explains the
+ * relationship instead of a field disappearing and reappearing.
+ */
+function BrandingTab({
+  settings,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <Card>
+      <CardBody className="flex flex-col gap-4">
+        {settings.map((setting) => (
+          <SiteSettingsField
+            key={setting.key}
+            setting={setting}
+            canEdit
+            onSave={(value) => onSave(setting.key, value, null)}
+          />
+        ))}
+        <p className="m-0 text-xs text-muted-foreground">{t('settings.brandingNote')}</p>
       </CardBody>
     </Card>
   )

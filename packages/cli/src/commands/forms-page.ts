@@ -2,7 +2,7 @@ import type { AccessContext } from '@cogenta/api'
 import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
 import { HONEYPOT_FIELD, TIMESTAMP_FIELD } from '@cogenta/forms'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
-import { type PageChromeMenus, renderPageChrome } from './theme-render.js'
+import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from './theme-render.js'
 
 /**
  * `GET /forms/{name}` — the "route dédiée" ADR-0026 chose over a contract B
@@ -33,6 +33,8 @@ export interface FormPageOptions {
   readonly now: () => number
   /** Same menu wiring the rest of the public site uses (`theme-render.ts`). Absent renders an empty header/footer nav, exactly as before this page had any chrome at all. */
   readonly menus?: PageChromeMenus
+  /** Same live branding read the rest of the public site uses (`theme-render.ts`). Absent means full Cogenta credit. */
+  readonly branding?: () => Promise<BrandingSettings>
 }
 
 export interface FormPageState {
@@ -180,6 +182,7 @@ async function shell(
 ${body}
 </main>`,
       ...(options.menus === undefined ? {} : { menus: options.menus }),
+      ...(options.branding === undefined ? {} : { branding: options.branding }),
     },
     context,
   )

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, USER, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -78,6 +78,74 @@ describe('App, signed in', () => {
 
     expect(await screen.findByRole('heading', { name: 'Connexion à Cogenta' })).toBeDefined()
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+  })
+})
+
+describe('App, branding in the topbar (fiche L21 task 8)', () => {
+  it('shows the real Cogenta logo and name by default', async () => {
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const brand = container.querySelector('.app-shell__brand')
+    expect(brand).not.toBeNull()
+    const logo = brand?.querySelector('img.app-shell__brand-logo')
+    expect(logo?.getAttribute('src')).toContain('branding/logo-cogenta-small.png')
+    expect(brand?.textContent).toContain('Cogenta')
+  })
+
+  it('hides Cogenta once branding is turned off, with no replacement uploaded', async () => {
+    installMockFetch({ siteSettings: { 'branding.showCogentaBranding': false } })
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    await waitFor(() => {
+      expect(container.querySelector('.app-shell__brand img')).toBeNull()
+    })
+    expect(container.querySelector('.app-shell__brand')?.textContent).not.toContain('Cogenta')
+  })
+
+  it('shows the white-label logo instead, with no "Cogenta" text next to it', async () => {
+    // `installMockFetch`'s media store starts empty and is filled the same
+    // way a real upload would fill it — `media-1` is the first upload's
+    // deterministic id, matched here against the setting rather than
+    // invented, so this exercises the real `/api/media/{id}/file` route
+    // `fetchMediaBlobUrl` calls, not a shortcut around it.
+    installMockFetch({
+      siteSettings: {
+        'branding.showCogentaBranding': false,
+        'branding.customLogoMediaId': 'media-1',
+      },
+    })
+    await fetch('/api/media', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      body: JSON.stringify({
+        kind: 'image',
+        filename: 'client-logo.png',
+        mimeType: 'image/png',
+        alt: 'Client logo',
+      }),
+    })
+
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    URL.createObjectURL = vi.fn(() => 'blob:mock-white-label-logo')
+    URL.revokeObjectURL = vi.fn()
+    try {
+      const { container } = render(<App />)
+      await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+      const brand = await waitFor(() => {
+        const found = container.querySelector('.app-shell__brand img')
+        if (found === null) throw new Error('white-label logo not resolved yet')
+        return found
+      })
+      expect(brand.getAttribute('src')).toBe('blob:mock-white-label-logo')
+      expect(container.querySelector('.app-shell__brand')?.textContent).not.toContain('Cogenta')
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL
+      URL.revokeObjectURL = originalRevokeObjectURL
+    }
   })
 })
 

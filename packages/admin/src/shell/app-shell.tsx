@@ -15,6 +15,7 @@ import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
 import { NotificationCenter } from '../notices/notification-center.js'
 import { useSchema } from '../schema/schema-context.js'
+import { useBrandingSettings, useSiteTitle } from '../settings/site-settings-context.js'
 import { useAdminTheme } from '../theme/admin-theme-context.js'
 import {
   AgentsIcon,
@@ -94,6 +95,53 @@ function readStoredSidebarCollapsed(): boolean {
   return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
 }
 
+/**
+ * The vendored, pre-resized Cogenta mark (fiche L21 task 8) — 64×64,
+ * compressed down from the 500×500 source (`docs/logo/`) with the project's
+ * own WASM image driver rather than served at its full size, which is too
+ * large for a topbar. `BASE_URL` is what keeps this correct in both dev
+ * (`/`) and the production build `cogenta serve` serves under `/admin/`
+ * (`vite.config.ts`'s own `base` comment).
+ */
+const COGENTA_LOGO_URL = `${import.meta.env.BASE_URL}branding/logo-cogenta-small.png`
+/** The plain mark shown when branding is off and no white-label logo was uploaded — the original, pre-task-8 placeholder, unlabelled rather than named "Cogenta". */
+const BRAND_MARK_FALLBACK = '//'
+
+/**
+ * Resolves a media id to a `blob:` URL through the authenticated
+ * `/api/media/{id}/file` route (a plain `<img src>` cannot carry a bearer
+ * token) — shared by the admin theme's own personalised logo below and by
+ * the white-label logo of fiche L21 task 8, the two places this admin shows
+ * an uploaded media asset as a decorative mark rather than through a real
+ * `MediaPicker` preview.
+ */
+function useMediaBlobUrl(mediaId: string | null, token: string | null): string | null {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (mediaId === null || token === null) {
+      setUrl(null)
+      return
+    }
+    let cancelled = false
+    let objectUrl: string | null = null
+    fetchMediaBlobUrl(token, mediaId)
+      .then((resolved) => {
+        if (cancelled) {
+          URL.revokeObjectURL(resolved)
+          return
+        }
+        objectUrl = resolved
+        setUrl(resolved)
+      })
+      .catch(() => setUrl(null))
+    return () => {
+      cancelled = true
+      if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
+    }
+  }, [mediaId, token])
+  return url
+}
+
 /** Every focusable element inside a container, in DOM order — the pool a focus trap cycles through. */
 function focusableIn(container: HTMLElement): readonly HTMLElement[] {
   return Array.from(
@@ -133,35 +181,24 @@ export function AppShell(): JSX.Element {
   const chrome = chromeStatusOrFallback(chromeState)
 
   // The admin's own personalised logo (L21 task 2), if one has been set —
-  // absent by default, which is what leaves the plain `//` text mark below
-  // exactly as it always was. `MediaPicker`'s own convention: a `blob:` URL
-  // fetched through the authenticated `/api/media/{id}/file` route, since a
-  // plain `<img src>` cannot carry a bearer token.
+  // absent by default. This is a visual-identity lever of the admin theme
+  // system (`admin-appearance.tsx`), unrelated to whether Cogenta is
+  // credited at all — it wins over the branding logic below whenever it is
+  // set, on the theory that an install that already chose its own admin
+  // logo does not need a second, competing decision made for it.
   const adminTheme = useAdminTheme()
   const logoMediaId = adminTheme.state?.active.overrides.logoMediaId ?? null
-  const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (logoMediaId === null || authToken === null) {
-      setLogoUrl(null)
-      return
-    }
-    let cancelled = false
-    let objectUrl: string | null = null
-    fetchMediaBlobUrl(authToken, logoMediaId)
-      .then((url) => {
-        if (cancelled) {
-          URL.revokeObjectURL(url)
-          return
-        }
-        objectUrl = url
-        setLogoUrl(url)
-      })
-      .catch(() => setLogoUrl(null))
-    return () => {
-      cancelled = true
-      if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
-    }
-  }, [logoMediaId, authToken])
+  const logoUrl = useMediaBlobUrl(logoMediaId, authToken)
+
+  // Cogenta's own credit, and its white-label override (fiche L21 task 8,
+  // ADR-0025's editorial settings) — read from the same `SiteSettingsProvider`
+  // every screen's date formatting already uses, so no extra request is paid
+  // for this. Defaults to showing Cogenta (the pre-task-8 behaviour) while
+  // the settings are still loading or failed to load, exactly the way
+  // `useFormattingSettings` defaults rather than blocking the shell on this.
+  const branding = useBrandingSettings()
+  const whiteLabelLogoUrl = useMediaBlobUrl(branding.customLogoMediaId, authToken)
+  const siteTitle = useSiteTitle()
 
   const collections = schemaState.status === 'ready' ? schemaState.schema.collections : null
   const taxonomiesPresent =
@@ -308,6 +345,45 @@ export function AppShell(): JSX.Element {
     )
   }
 
+  /**
+   * The image/text shown in the topbar's brand slot, in priority order:
+   * (1) the admin theme's own personalised logo, untouched by branding
+   * (`logoUrl`, above); (2) Cogenta's real logo plus its name, the default;
+   * (3) a white-label logo once Cogenta's credit is turned off and a
+   * replacement was uploaded — deliberately never paired with the literal
+   * word "Cogenta" (the whole point of turning its credit off), so the
+   * image carries the accessible name itself via `alt`, falling back to the
+   * site's own title and then to nothing rather than the product's name;
+   * (4) a bare, unlabelled mark, the honest result of turning branding off
+   * with no replacement uploaded.
+   */
+  function renderBrandMark(): JSX.Element {
+    if (logoUrl !== null) {
+      return (
+        <>
+          <img src={logoUrl} alt="" aria-hidden="true" className="app-shell__brand-logo" />
+          {t('shell.brand')}
+        </>
+      )
+    }
+    if (branding.showCogentaBranding) {
+      return (
+        <>
+          <img src={COGENTA_LOGO_URL} alt="" aria-hidden="true" className="app-shell__brand-logo" />
+          {t('shell.brand')}
+        </>
+      )
+    }
+    if (whiteLabelLogoUrl !== null) {
+      return <img src={whiteLabelLogoUrl} alt={siteTitle ?? ''} className="app-shell__brand-logo" />
+    }
+    return (
+      <span className="app-shell__brand-mark" aria-hidden="true">
+        {BRAND_MARK_FALLBACK}
+      </span>
+    )
+  }
+
   function onDrawerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     // The trap above also listens at the document level (so `Escape`/`Tab`
     // work even when focus is on something React does not attach this
@@ -333,16 +409,7 @@ export function AppShell(): JSX.Element {
         >
           <span aria-hidden="true">☰</span>
         </button>
-        <span className="app-shell__brand">
-          {logoUrl === null ? (
-            <span className="app-shell__brand-mark" aria-hidden="true">
-              {'//'}
-            </span>
-          ) : (
-            <img src={logoUrl} alt="" aria-hidden="true" className="app-shell__brand-logo" />
-          )}
-          {t('shell.brand')}
-        </span>
+        <span className="app-shell__brand">{renderBrandMark()}</span>
         {breadcrumb.length > 0 && (
           <nav aria-label={t('shell.breadcrumb')} className="app-shell__breadcrumb">
             <ol>

@@ -1584,6 +1584,7 @@
       "discussion": "Discussion",
       "media": "Media",
       "privacy": "Privacy",
+      "branding": "Branding",
       "advanced": "Advanced"
     },
     "dateTimeStyle": {
@@ -1601,6 +1602,7 @@
     "mediaFormatsValue": "WebP, at a fixed set of widths — built into the image pipeline, not editable here.",
     "discussionNote": "These are the site-wide defaults. A collection or a single entry can still turn comments off, or require moderation, from that collection's settings or the entry editor.",
     "noCookieByDefault": "Cogenta sets no cookie of its own. Turn this on only if this site adds one (an embed, an analytics script) — a banner nobody needs is worse than none.",
+    "brandingNote": "The custom logo only takes effect once \"Show Cogenta branding\" is turned off — it stays saved either way, so switching branding back on never loses it.",
     "advancedLink": "Security, webhooks and infrastructure (read-only)",
     "advancedNote": "Everything there comes from cogenta.config.mjs. Edit the file and restart the server to change it.",
     "field": {
@@ -1700,6 +1702,16 @@
         "invoiceLanguage": {
           "label": "Invoice language",
           "help": "A short language code, e.g. \"en\" or \"fr\"."
+        }
+      },
+      "branding": {
+        "showCogentaBranding": {
+          "label": "Show Cogenta branding",
+          "help": "Credits Cogenta in the public site's footer and in this admin's own header."
+        },
+        "customLogoMediaId": {
+          "label": "Custom logo",
+          "help": "Shown instead of the Cogenta logo once branding is turned off above."
         }
       }
     }

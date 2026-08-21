@@ -1,6 +1,8 @@
 import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SiteSetting } from '../api/settings-client.js'
+import { useAuth } from '../auth/auth-context.js'
+import { MediaPicker } from '../fields/media-picker.js'
 import { cn } from '../ui/cn.js'
 import { Field, Input, Select } from '../ui/index.js'
 
@@ -111,6 +113,71 @@ function FieldStatus({
   return null
 }
 
+/**
+ * `uiType: 'media'` — today only `branding.customLogoMediaId` (fiche L21
+ * task 8). Reuses `MediaPicker` exactly as `appearance.tsx` does for the
+ * site's own logo/favicon/share-image fields, rather than a bespoke upload
+ * widget: single value, images only, saved on the very next pick (a media
+ * reference has no "blur" event to save on, unlike a text field).
+ *
+ * Needs a token `MediaPicker` requires and this generic field otherwise
+ * never does — read from `useAuth()` directly rather than threading it
+ * through every `SiteSettingsFieldProps` caller for a single `uiType`.
+ */
+function MediaSettingField({
+  setting,
+  canEdit,
+  value,
+  saving,
+  saved,
+  error,
+  label,
+  description,
+  commit,
+}: {
+  readonly setting: SiteSetting
+  readonly canEdit: boolean
+  readonly value: unknown
+  readonly saving: boolean
+  readonly saved: boolean
+  readonly error: string | null
+  readonly label: string
+  readonly description: string | undefined
+  readonly commit: (next: unknown) => Promise<void>
+}): JSX.Element {
+  const auth = useAuth()
+  const token = auth.state.status === 'authenticated' ? auth.state.token : ''
+  const fieldId = `site-setting-${setting.key}`
+  const selected = typeof value === 'string' && value !== '' ? [value] : []
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={fieldId} className="font-sans text-sm font-medium text-foreground">
+        {label}
+      </label>
+      <MediaPicker
+        id={fieldId}
+        token={token}
+        accept={['image']}
+        many={false}
+        value={selected}
+        disabled={!canEdit || saving}
+        onChange={(ids) => void commit(ids[0] ?? '')}
+      />
+      {description !== undefined && (
+        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+      )}
+      {error !== null ? (
+        <p role="alert" className="text-xs leading-5 font-medium text-destructive">
+          {error}
+        </p>
+      ) : (
+        <FieldStatus saving={saving} saved={saved} />
+      )}
+    </div>
+  )
+}
+
 export function SiteSettingsField({
   setting,
   canEdit,
@@ -199,6 +266,22 @@ export function SiteSettingsField({
         </Field>
         {error === null && <FieldStatus saving={saving} saved={saved} />}
       </div>
+    )
+  }
+
+  if (setting.uiType === 'media') {
+    return (
+      <MediaSettingField
+        setting={setting}
+        canEdit={canEdit}
+        value={value}
+        saving={saving}
+        saved={saved}
+        error={error}
+        label={label}
+        description={description}
+        commit={commit}
+      />
     )
   }
 

@@ -1,6 +1,7 @@
 import { createEditor, Editor, Element as SlateElement, Transforms } from 'slate'
 import { describe, expect, it } from 'vitest'
 import {
+  activeBlockKind,
   activeLink,
   clearSlashQuery,
   insertInternalLink,
@@ -8,6 +9,7 @@ import {
   isLinkActive,
   removeLink,
   slashQueryAt,
+  toggleBlock,
 } from '../../src/rich-text/commands.js'
 import type { CustomElement } from '../../src/rich-text/slate-types.js'
 import { withInlines } from '../../src/rich-text/with-inlines.js'
@@ -153,6 +155,30 @@ describe('slashQueryAt', () => {
       focus: { path: [0, 0], offset: 6 },
     })
     expect(slashQueryAt(editor)).toBeNull()
+  })
+})
+
+/** L21 task 5: the code block is a plain block toggle, exactly like a heading or a blockquote. */
+describe('toggleBlock — code-block', () => {
+  it('turns the current block into a code block', () => {
+    const editor = editorWithParagraph('const x = 1')
+    Transforms.collapse(editor, { edge: 'start' })
+
+    toggleBlock(editor, 'code-block')
+
+    expect(editor.children).toEqual([{ type: 'code-block', children: [{ text: 'const x = 1' }] }])
+    expect(activeBlockKind(editor)).toBe('code-block')
+  })
+
+  it('toggles back to a paragraph', () => {
+    const editor = editorWithParagraph('const x = 1')
+    Transforms.collapse(editor, { edge: 'start' })
+    toggleBlock(editor, 'code-block')
+
+    toggleBlock(editor, 'code-block')
+
+    expect(editor.children).toEqual([{ type: 'paragraph', children: [{ text: 'const x = 1' }] }])
+    expect(activeBlockKind(editor)).toBe('paragraph')
   })
 })
 

@@ -12,7 +12,15 @@ export function toggleMark(editor: Editor, mark: RichTextDecorator): void {
   else Editor.addMark(editor, mark, true)
 }
 
-export type BlockKind = 'paragraph' | 'h2' | 'h3' | 'h4' | 'blockquote' | 'bullet' | 'number'
+export type BlockKind =
+  | 'paragraph'
+  | 'h2'
+  | 'h3'
+  | 'h4'
+  | 'blockquote'
+  | 'bullet'
+  | 'number'
+  | 'code-block'
 
 function isBlockNode(node: unknown): node is CustomElement {
   return SlateElement.isElement(node)

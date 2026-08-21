@@ -26,6 +26,19 @@ export type ListItemElement = {
   children: Descendant[]
 }
 /**
+ * An editor-only affordance (L21 task 5) with no dedicated node in contract
+ * A's `richText` — a code block still requires an ADR to become real vocabulary
+ * (see `slash-menu.tsx`'s own note, and the "dropped" list in
+ * `paste-html.ts`'s header). It degrades honestly to existing vocabulary on
+ * save: `convert.ts`'s `blockToPortableText` stores it as a `style: 'normal'`
+ * block whose every span carries the existing `code` decorator, and
+ * `nodeToSlate` reconstructs this element type only when *every* span of a
+ * loaded block is marked with `code` alone and nothing else — see that file's
+ * `isWhollyCoded` for the exact heuristic. No new field, no new mark, no new
+ * node `_type`.
+ */
+export type CodeBlockElement = { readonly type: 'code-block'; children: Descendant[] }
+/**
  * Two shapes under one element type rather than an encoded href: contract
  * A's two mark kinds (`link`, `internalLink`) carry different data, and
  * folding an internal reference into a URL string would need an escaping
@@ -56,7 +69,12 @@ export type MediaElement = {
   children: Descendant[]
 }
 
-export type BlockElement = ParagraphElement | HeadingElement | BlockquoteElement | ListItemElement
+export type BlockElement =
+  | ParagraphElement
+  | HeadingElement
+  | BlockquoteElement
+  | ListItemElement
+  | CodeBlockElement
 export type InlineElement = LinkElement
 export type VoidElement = MediaElement
 export type CustomElement = BlockElement | InlineElement | VoidElement

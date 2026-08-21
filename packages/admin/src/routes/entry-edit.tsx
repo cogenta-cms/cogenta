@@ -31,6 +31,7 @@ import { ClassifyPanel } from '../assist/classify-panel.js'
 import { FaqSchemaPanel } from '../assist/faq-schema-panel.js'
 import { ModerationCheck } from '../assist/moderation-check.js'
 import { useAuth } from '../auth/auth-context.js'
+import { blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
 import { PageBuilder } from '../builder/page-builder.js'
 import type { AutosaveRecord, AutosaveSnapshot } from '../collections/autosave.js'
 import {
@@ -50,6 +51,7 @@ import { useDirtyGuard } from '../lib/use-dirty-guard.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { SeoPanel } from '../seo/seo-panel.js'
+import { useNewEntryDefaultBlocksSetting } from '../settings/site-settings-context.js'
 import { Button, Card, CardBody, Input, Label, Modal, Notice, Select } from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
@@ -201,6 +203,8 @@ export function EntryEditRoute(): JSX.Element {
   const siteLocales = schema.status === 'ready' ? (schema.schema.site?.locales ?? []) : []
   const defaultLocale =
     schema.status === 'ready' ? (schema.schema.site?.defaultLocale ?? 'en') : 'en'
+  /** The configurable starting set for a fresh `blocks` field (L21 task 5) — `settings.tab.general`, "Starting blocks for a new page". */
+  const defaultBlockTypes = useNewEntryDefaultBlocksSetting()
 
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [blocks, setBlocks] = useState<BlockZones>({})
@@ -377,6 +381,60 @@ export function EntryEditRoute(): JSX.Element {
       cancelled = true
     }
   }, [isNew, token, name, id, newTranslation, t, collection, roles])
+
+  /**
+   * L21 task 5: a fresh entry's `blocks` field(s) start with the site's
+   * configured starting set instead of an empty array — the point being
+   * that an MCP call, or a person opening a new page, gets something a
+   * reader would not call broken without first learning every block type in
+   * contract B. Declared *after* the effect above on purpose: that effect
+   * also runs when `collection` first resolves and resets `baseline` to
+   * `{ ..., blocks: {} }` every time it does, so this one has to run second
+   * in the same commit to have the last word and make the prefill count as
+   * the starting point rather than an unsaved edit already waiting to autosave.
+   *
+   * Guarded per zone by "not already set" rather than a run-once ref: this
+   * scopes the effect to genuinely empty zones — the ordinary case for a
+   * new entry — without needing to reason about whether this exact effect
+   * has "already run" across a route that does not remount between two
+   * different new-entry sessions. A zone the person has already started
+   * filling (or that a recovered autosave restored) is never touched.
+   */
+  useEffect(() => {
+    if (!isNew || collection === undefined) return
+    const blockFields = collection.fields.filter((field) => field.kind === 'blocks')
+    if (blockFields.length === 0) return
+
+    // Unknown to this admin's own copy of contract B (a stale or hand-typed
+    // setting) — skipped rather than inserted as a block nothing can render
+    // a form for, the same tolerance `BlocksField` already gives a loaded
+    // entry's own unrecognised block type.
+    const starting: ContentBlock[] = defaultBlockTypes
+      .filter((type) => blockDefinition(type) !== undefined)
+      .map((type) => ({ key: freshBlockKey(), type, data: {} }))
+    if (starting.length === 0) return
+
+    setBlocks((current) => {
+      let changed = false
+      const next = { ...current }
+      for (const field of blockFields) {
+        if (next[field.name] !== undefined) continue
+        next[field.name] = starting
+        changed = true
+      }
+      return changed ? next : current
+    })
+    setBaseline((current) => {
+      let changed = false
+      const nextBlocks = { ...current.blocks }
+      for (const field of blockFields) {
+        if (nextBlocks[field.name] !== undefined) continue
+        nextBlocks[field.name] = starting
+        changed = true
+      }
+      return changed ? { ...current, blocks: nextBlocks } : current
+    })
+  }, [isNew, collection, defaultBlockTypes])
 
   /**
    * Resolves `createdBy`/`updatedBy` to an email (task 4).

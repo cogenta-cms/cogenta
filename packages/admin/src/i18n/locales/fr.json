@@ -108,6 +108,11 @@
     "blockQuote": "Citation",
     "blockBullet": "Liste à puces",
     "blockNumber": "Liste numérotée",
+    "blockCode": "Bloc de code",
+    "viewModeLabel": "Vue",
+    "viewRich": "Texte enrichi",
+    "viewMarkdown": "Markdown",
+    "viewHtml": "HTML",
     "removeLink": "Retirer le lien",
     "linkButton": "Lien",
     "linkUrlLabel": "URL du lien",
@@ -1614,6 +1619,12 @@
         },
         "dateStyle": { "label": "Format de date", "help": "" },
         "timeStyle": { "label": "Format d'heure", "help": "" }
+      },
+      "content": {
+        "newEntryDefaultBlocks": {
+          "label": "Blocs de départ d'une nouvelle page",
+          "help": "Liste de types de blocs séparés par des virgules, p. ex. « prose ». Pré-remplit le champ de blocs d'une nouvelle entrée au lieu de le laisser vide. Laisser vide pour aucun bloc de départ."
+        }
       },
       "reading": {
         "homePath": {

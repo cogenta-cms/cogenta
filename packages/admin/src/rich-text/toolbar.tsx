@@ -6,6 +6,7 @@ import { cn } from '../ui/cn.js'
 import {
   BoldIcon,
   BulletListIcon,
+  CodeBlockIcon,
   Heading2Icon,
   Heading3Icon,
   Heading4Icon,
@@ -31,6 +32,7 @@ import { ImageInsertModal } from './image-picker.js'
 import { LinkPopover } from './link-popover.js'
 import type { RichTextDecorator } from './portable-text.js'
 import type { RichTextSession } from './session.js'
+import type { RichTextViewMode } from './source-view.js'
 
 const MARK_BUTTONS: readonly {
   readonly mark: RichTextDecorator
@@ -54,6 +56,13 @@ const BLOCK_BUTTONS: readonly {
   { kind: 'blockquote', labelKey: 'richText.blockQuote', Icon: QuoteIcon },
   { kind: 'bullet', labelKey: 'richText.blockBullet', Icon: BulletListIcon },
   { kind: 'number', labelKey: 'richText.blockNumber', Icon: NumberListIcon },
+  { kind: 'code-block', labelKey: 'richText.blockCode', Icon: CodeBlockIcon },
+]
+
+const VIEW_MODES: readonly { readonly mode: RichTextViewMode; readonly labelKey: string }[] = [
+  { mode: 'rich', labelKey: 'richText.viewRich' },
+  { mode: 'markdown', labelKey: 'richText.viewMarkdown' },
+  { mode: 'html', labelKey: 'richText.viewHtml' },
 ]
 
 function ToolbarButton({
@@ -102,6 +111,9 @@ export interface RichTextToolbarProps {
   readonly disabled: boolean
   /** Enables the internal-link tab and the image picker — absent means formatting only. */
   readonly session?: RichTextSession | undefined
+  /** Which of the three views (L21 task 5) is showing — `rich-text-editor.tsx` owns the value, since switching it converts the document. */
+  readonly viewMode: RichTextViewMode
+  onViewModeChange(mode: RichTextViewMode): void
 }
 
 /**
@@ -111,7 +123,12 @@ export interface RichTextToolbarProps {
  * announces, and the name `getByRole('button', { name })` matches in tests,
  * are unchanged.
  */
-export function RichTextToolbar({ disabled, session }: RichTextToolbarProps): JSX.Element {
+export function RichTextToolbar({
+  disabled,
+  session,
+  viewMode,
+  onViewModeChange,
+}: RichTextToolbarProps): JSX.Element {
   const { t } = useTranslation()
   const editor = useSlate()
   const [linkOpen, setLinkOpen] = useState(false)
@@ -120,9 +137,48 @@ export function RichTextToolbar({ disabled, session }: RichTextToolbarProps): JS
 
   const canUndo = editor.history.undos.length > 0
   const canRedo = editor.history.redos.length > 0
+  // The formatting controls act on the Slate document through `editor` —
+  // meaningless while a `<textarea>` of raw Markdown/HTML stands in for
+  // `<Editable>` (`rich-text-editor.tsx`), so they turn off together with
+  // it rather than staying clickable against a document nobody sees change.
+  const formattingDisabled = disabled || viewMode !== 'rich'
 
   return (
     <div className="flex flex-col gap-2">
+      {/*
+       * A `<fieldset>` of `aria-pressed` toggle buttons — the same shape
+       * `entry-edit.tsx`'s form/visual-builder switch already uses (L16),
+       * rather than `role="radiogroup"`/`role="radio"`, which would claim a
+       * native semantic (`<input type="radio">`) this is not.
+       */}
+      <fieldset
+        aria-label={t('richText.viewModeLabel')}
+        className="m-0 flex flex-wrap items-center gap-1 border-0 p-0"
+      >
+        {VIEW_MODES.map(({ mode, labelKey }) => (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={viewMode === mode}
+            disabled={disabled}
+            className={cn(
+              'cursor-pointer appearance-none rounded-md border border-border bg-transparent',
+              'px-2.5 py-1 font-sans text-xs font-medium text-foreground',
+              'hover:bg-accent hover:text-accent-foreground',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              'disabled:pointer-events-none disabled:opacity-60',
+              viewMode === mode && 'bg-accent text-accent-foreground',
+            )}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              onViewModeChange(mode)
+            }}
+          >
+            {t(labelKey)}
+          </button>
+        ))}
+      </fieldset>
+
       <div
         className="rich-text-toolbar flex flex-wrap items-center gap-0.5 rounded-md border border-border bg-card p-1"
         role="toolbar"
@@ -132,7 +188,7 @@ export function RichTextToolbar({ disabled, session }: RichTextToolbarProps): JS
           <ToolbarButton
             key={mark}
             label={t(labelKey)}
-            disabled={disabled}
+            disabled={formattingDisabled}
             pressed={isMarkActive(editor, mark)}
             onClick={() => toggleMark(editor, mark)}
             Icon={Icon}
@@ -145,7 +201,7 @@ export function RichTextToolbar({ disabled, session }: RichTextToolbarProps): JS
           <ToolbarButton
             key={kind}
             label={t(labelKey)}
-            disabled={disabled}
+            disabled={formattingDisabled}
             pressed={activeBlock === kind}
             onClick={() => toggleBlock(editor, kind)}
             Icon={Icon}
@@ -156,14 +212,14 @@ export function RichTextToolbar({ disabled, session }: RichTextToolbarProps): JS
 
         <ToolbarButton
           label={t('richText.linkButton')}
-          disabled={disabled}
+          disabled={formattingDisabled}
           pressed={linkOpen}
           onClick={() => setLinkOpen((open) => !open)}
           Icon={LinkIcon}
         />
         <ToolbarButton
           label={t('richText.insertImageButton')}
-          disabled={disabled || session === undefined}
+          disabled={formattingDisabled || session === undefined}
           onClick={() => setImageOpen(true)}
           Icon={ImageIcon}
         />
@@ -172,20 +228,24 @@ export function RichTextToolbar({ disabled, session }: RichTextToolbarProps): JS
 
         <ToolbarButton
           label={t('richText.undoButton')}
-          disabled={disabled || !canUndo}
+          disabled={formattingDisabled || !canUndo}
           onClick={() => HistoryEditor.undo(editor)}
           Icon={UndoIcon}
         />
         <ToolbarButton
           label={t('richText.redoButton')}
-          disabled={disabled || !canRedo}
+          disabled={formattingDisabled || !canRedo}
           onClick={() => HistoryEditor.redo(editor)}
           Icon={RedoIcon}
         />
       </div>
 
       {linkOpen && (
-        <LinkPopover session={session} disabled={disabled} onClose={() => setLinkOpen(false)} />
+        <LinkPopover
+          session={session}
+          disabled={formattingDisabled}
+          onClose={() => setLinkOpen(false)}
+        />
       )}
 
       {session !== undefined && (

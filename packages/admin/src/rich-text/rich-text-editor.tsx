@@ -23,6 +23,7 @@ import type { RichTextDocument } from './portable-text.js'
 import { RichTextSelectionAssist } from './selection-assist.js'
 import type { RichTextSession } from './session.js'
 import { filterSlashItems, SlashMenu, type SlashMenuItem } from './slash-menu.js'
+import { documentToSource, type RichTextViewMode, sourceToDocument } from './source-view.js'
 import { RichTextToolbar } from './toolbar.js'
 import { withInlines } from './with-inlines.js'
 import { countText } from './word-count.js'
@@ -83,6 +84,12 @@ function renderElement(
       return <h4 {...attributes}>{children}</h4>
     case 'blockquote':
       return <blockquote {...attributes}>{children}</blockquote>
+    case 'code-block':
+      return (
+        <pre {...attributes} className="rich-text-editor__code-block">
+          <code>{children}</code>
+        </pre>
+      )
     case 'list-item':
       return (
         <div {...attributes} data-list-type={element.listType} data-list-level={element.level}>
@@ -167,6 +174,18 @@ export function RichTextEditor({
   const [dragOver, setDragOver] = useState(false)
   const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const [imageModalOpen, setImageModalOpen] = useState(false)
+  /** Which of the three views (L21 task 5) is showing. */
+  const [viewMode, setViewMode] = useState<RichTextViewMode>('rich')
+  /** The `<textarea>`'s own draft while `viewMode !== 'rich'` — reconciled into `internalValue`/`onChange` on blur or on switching view (`applyDocument`), never on every keystroke. */
+  const [sourceText, setSourceText] = useState('')
+  /**
+   * Bumped only by `applyDocument`, and used as `<Slate>`'s own `key`: Slate
+   * has no supported way to replace `editor.children` wholesale from a prop
+   * after mount (`initialValue` is read once, on mount — slate-react's own
+   * `Slate` component), so forcing a remount is the documented way to hand
+   * it a document it did not build itself, one keystroke at a time.
+   */
+  const [documentVersion, setDocumentVersion] = useState(0)
 
   const stats = countText(slateToPortableText(internalValue as never))
 
@@ -180,6 +199,29 @@ export function RichTextEditor({
     },
     [editor, onChange],
   )
+
+  /** Replaces the whole document from outside the Slate editor — the source view's own write path. */
+  function applyDocument(nodes: SlateDescendant[]): void {
+    setInternalValue(nodes)
+    onChange(slateToPortableText(nodes as never))
+    setDocumentVersion((version) => version + 1)
+  }
+
+  function handleSourceBlur(): void {
+    if (disabled || viewMode === 'rich') return
+    applyDocument(sourceToDocument(sourceText, viewMode) as SlateDescendant[])
+  }
+
+  function handleViewModeChange(next: RichTextViewMode): void {
+    if (next === viewMode) return
+    let nodes = internalValue
+    if (viewMode !== 'rich') {
+      nodes = sourceToDocument(sourceText, viewMode) as SlateDescendant[]
+      applyDocument(nodes)
+    }
+    if (next !== 'rich') setSourceText(documentToSource(nodes as never, next))
+    setViewMode(next)
+  }
 
   const slashItems = slash === null ? [] : filterSlashItems(slash.query, t)
 
@@ -229,11 +271,21 @@ export function RichTextEditor({
         fullscreen && 'rich-text-editor--fullscreen',
       )}
     >
-      <Slate editor={editor} initialValue={internalValue} onChange={handleChange}>
+      <Slate
+        key={documentVersion}
+        editor={editor}
+        initialValue={internalValue}
+        onChange={handleChange}
+      >
         <div className="flex items-start gap-2">
           <div className="flex-1">
-            <RichTextToolbar disabled={disabled} session={session} />
-            <RichTextSelectionAssist disabled={disabled} />
+            <RichTextToolbar
+              disabled={disabled}
+              session={session}
+              viewMode={viewMode}
+              onViewModeChange={handleViewModeChange}
+            />
+            {viewMode === 'rich' && <RichTextSelectionAssist disabled={disabled} />}
           </div>
           <button
             type="button"
@@ -251,56 +303,73 @@ export function RichTextEditor({
           </button>
         </div>
 
-        {/*
-         * A `<fieldset>` rather than a plain `<div>`: a static element with
-         * drag handlers needs container semantics, the same choice fiche
-         * 03's `MediaPicker` makes for its own drop zone. Dropping is a
-         * convenience, never the only way in — the toolbar's own "insert
-         * image" button reaches the same modal.
-         */}
-        <fieldset
-          aria-label={t('richText.imageDropHint')}
-          className={cn(
-            'rich-text-editor__surface relative m-0 rounded-md border border-input bg-card p-0 px-3 py-2',
-            dragOver && 'rich-text-editor__surface--drag-over',
-          )}
-          onDragOver={(event) => {
-            if (disabled || session === undefined) return
-            event.preventDefault()
-            setDragOver(true)
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(event) => {
-            event.preventDefault()
-            setDragOver(false)
-            if (disabled || session === undefined) return
-            const file = event.dataTransfer.files[0]
-            if (file === undefined || !file.type.startsWith('image/')) return
-            setDroppedFile(file)
-            setImageModalOpen(true)
-          }}
-        >
-          <Editable
-            id={id}
-            readOnly={disabled}
-            renderElement={(props) => renderElement(props, t, session?.token)}
-            renderLeaf={renderLeaf}
-            placeholder={t('richText.placeholder')}
-            onKeyDown={handleKeyDown}
-          />
+        {viewMode === 'rich' ? (
+          /*
+           * A `<fieldset>` rather than a plain `<div>`: a static element with
+           * drag handlers needs container semantics, the same choice fiche
+           * 03's `MediaPicker` makes for its own drop zone. Dropping is a
+           * convenience, never the only way in — the toolbar's own "insert
+           * image" button reaches the same modal.
+           */
+          <fieldset
+            aria-label={t('richText.imageDropHint')}
+            className={cn(
+              'rich-text-editor__surface relative m-0 rounded-md border border-input bg-card p-0 px-3 py-2',
+              dragOver && 'rich-text-editor__surface--drag-over',
+            )}
+            onDragOver={(event) => {
+              if (disabled || session === undefined) return
+              event.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(event) => {
+              event.preventDefault()
+              setDragOver(false)
+              if (disabled || session === undefined) return
+              const file = event.dataTransfer.files[0]
+              if (file === undefined || !file.type.startsWith('image/')) return
+              setDroppedFile(file)
+              setImageModalOpen(true)
+            }}
+          >
+            <Editable
+              id={id}
+              readOnly={disabled}
+              renderElement={(props) => renderElement(props, t, session?.token)}
+              renderLeaf={renderLeaf}
+              placeholder={t('richText.placeholder')}
+              onKeyDown={handleKeyDown}
+            />
 
-          {slash !== null && (
-            <div className="absolute top-full left-0 z-10 mt-1">
-              <SlashMenu
-                items={slashItems}
-                activeIndex={Math.min(slash.activeIndex, Math.max(slashItems.length - 1, 0))}
-                onSelect={runSlashItem}
-                onHover={(index) => setSlash({ ...slash, activeIndex: index })}
-                imagesAvailable={session !== undefined}
-              />
-            </div>
-          )}
-        </fieldset>
+            {slash !== null && (
+              <div className="absolute top-full left-0 z-10 mt-1">
+                <SlashMenu
+                  items={slashItems}
+                  activeIndex={Math.min(slash.activeIndex, Math.max(slashItems.length - 1, 0))}
+                  onSelect={runSlashItem}
+                  onHover={(index) => setSlash({ ...slash, activeIndex: index })}
+                  imagesAvailable={session !== undefined}
+                />
+              </div>
+            )}
+          </fieldset>
+        ) : (
+          // The Markdown/HTML source view (L21 task 5): a plain textarea over
+          // the serialised document, reconciled back into the model on blur
+          // or on switching view (`handleSourceBlur`/`handleViewModeChange`)
+          // rather than on every keystroke — a half-typed `**` or `<p>` is
+          // not a document to reparse yet.
+          <textarea
+            id={id}
+            className="rich-text-editor__source-view"
+            aria-label={t(viewMode === 'markdown' ? 'richText.viewMarkdown' : 'richText.viewHtml')}
+            readOnly={disabled}
+            value={sourceText}
+            onChange={(event) => setSourceText(event.target.value)}
+            onBlur={handleSourceBlur}
+          />
+        )}
 
         <p className="rich-text-editor__stats text-xs text-muted-foreground">
           {t('richText.wordCount', { count: stats.words })} ·{' '}

@@ -187,6 +187,41 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     defaultValue: 'short',
     writeRoles: ADMIN_ONLY,
   },
+  /**
+   * L21 task 5's "blocs de départ" — the admin's new-entry flow prefills a
+   * fresh `blocks` field with these, instead of the empty array it wrote
+   * before this setting existed, so an MCP call or a person opening a new
+   * page never has to know every block type just to get something sane on
+   * the page. Kept out of contract A on purpose (`defineCollection` gains no
+   * `defaultBlocks` option — that would be a frozen-schema change, and the
+   * lot's own note says to avoid it): this is a pure admin default, not
+   * something a headless client's own `POST` ever sees or is bound by.
+   *
+   * A comma-separated list of contract B block type names rather than a new
+   * `uiType` — the same shape `commerce.countriesServed` already uses for a
+   * short closed-ish list — because `@cogenta/schema` cannot import
+   * `@cogenta/blocks` (the dependency runs the other way) to validate
+   * against the real vocabulary here; the admin's own copy
+   * (`blocks/vocabulary.ts`) does that filtering when it reads this value,
+   * silently dropping a name it does not recognise rather than crashing the
+   * new-entry screen over a typo in a setting.
+   */
+  {
+    key: 'content.newEntryDefaultBlocks',
+    group: 'general',
+    order: 6,
+    uiType: 'string',
+    scope: 'site',
+    schema: z
+      .string()
+      .max(500)
+      .regex(/^$|^[a-zA-Z][a-zA-Z0-9]*(\s*,\s*[a-zA-Z][a-zA-Z0-9]*)*$/u, {
+        error:
+          'A comma-separated list of block type names, e.g. "prose". Empty means no starting blocks.',
+      }),
+    defaultValue: 'prose',
+    writeRoles: ADMIN_ONLY,
+  },
 
   // Reading
   {

@@ -17,11 +17,29 @@ import {
 } from './slate-types.js'
 
 /** An empty document is not valid Slate — every editor needs at least one block to place a cursor in. */
-const EMPTY_DOCUMENT: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }]
+export const EMPTY_DOCUMENT: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }]
 
 export function portableTextToSlate(document: RichTextDocument): CustomElement[] {
   if (document.length === 0) return EMPTY_DOCUMENT
   return document.map(nodeToSlate)
+}
+
+/**
+ * The other half of the code-block degradation `slate-types.ts`'s
+ * `CodeBlockElement` documents: a block loads back as a code block only when
+ * *every* span is marked with `code` alone (no `strong`/`em`, no markDefs
+ * reference) — a paragraph that merely contains a short inline-code phrase
+ * mixed with plain text has other spans, and stays a paragraph, exactly as
+ * it should.
+ */
+function isWhollyCoded(node: Extract<RichTextNode, { _type: 'block' }>): boolean {
+  return (
+    node.style === 'normal' &&
+    node.listItem === undefined &&
+    node.markDefs.length === 0 &&
+    node.children.length > 0 &&
+    node.children.every((span) => span.marks.length === 1 && span.marks[0] === 'code')
+  )
 }
 
 function nodeToSlate(node: RichTextNode): CustomElement {
@@ -32,6 +50,10 @@ function nodeToSlate(node: RichTextNode): CustomElement {
       ...(node.caption === undefined ? {} : { caption: node.caption }),
       children: [{ text: '' }],
     }
+  }
+
+  if (isWhollyCoded(node)) {
+    return { type: 'code-block', children: node.children.map((span) => ({ text: span.text })) }
   }
 
   const children = spansToSlate(node.children, node.markDefs)
@@ -104,6 +126,17 @@ function blockToPortableText(element: CustomElement): RichTextNode {
     return node
   }
 
+  if (element.type === 'code-block') {
+    const block: RichTextBlock = {
+      _key: freshKey(),
+      _type: 'block',
+      style: 'normal',
+      children: codeBlockSpans(element.children),
+      markDefs: [],
+    }
+    return block
+  }
+
   const markDefs: RichTextMarkDefinition[] = []
   const spans = flattenSpans(element.children, markDefs)
 
@@ -116,6 +149,26 @@ function blockToPortableText(element: CustomElement): RichTextNode {
     markDefs,
   }
   return block
+}
+
+/**
+ * A code block's children are plain text leaves by construction (the toolbar
+ * and the slash menu never insert a link or a media void inside one). This
+ * still walks defensively into anything that is not a leaf — a paste could
+ * smuggle one in — keeping only its text, since `isWhollyCoded` on the way
+ * back only ever expects a span with exactly the `code` mark: an href would
+ * have nowhere honest to go.
+ */
+function codeBlockSpans(children: readonly Descendant[]): RichTextSpan[] {
+  const spans: RichTextSpan[] = []
+  for (const child of children) {
+    if ('text' in child) {
+      spans.push({ _key: freshKey(), _type: 'span', text: child.text, marks: ['code'] })
+    } else {
+      spans.push(...codeBlockSpans(child.children).map((span) => ({ ...span, marks: ['code'] })))
+    }
+  }
+  return spans.length > 0 ? spans : [{ _key: freshKey(), _type: 'span', text: '', marks: ['code'] }]
 }
 
 /**

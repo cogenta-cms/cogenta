@@ -10,14 +10,19 @@ import type { BlockElement, CustomElement, CustomText, Descendant } from './slat
  * headings (`h1` demoted to `h2` — the page's `h1` is the title, never the
  * body, same as the editor's own toolbar), paragraphs, block quotes,
  * bulleted/numbered lists (nesting preserved), `strong`/`em`/`code` marks,
- * and external links.
+ * external and internal links, `<pre>` (the editor-only code block,
+ * L21 task 5's `CodeBlockElement` — see `slate-types.ts`), and an `<img>`
+ * that carries `data-media-id` (the source-view HTML export's own shape,
+ * `html-export.ts`).
  *
- * Dropped, because nothing in contract A's `richText` can hold them: tables,
- * images (task 3's own toolbar/drop-zone path is the supported way in),
- * horizontal rules, colours, fonts, alignment, and every `class`/`style`
- * attribute a word processor writes — Word's own `mso-*` properties and
- * Google Docs' inline `font-weight`/`font-style` spans included. Their text
- * content survives; the presentation does not.
+ * Dropped, because nothing in contract A's `richText` can hold them: a real
+ * `table` (still no ADR for it — see `slash-menu.tsx`'s own note), an
+ * ordinary pasted `<img>` with no known media id (task 3's own
+ * toolbar/drop-zone path is the supported way in), horizontal rules,
+ * colours, fonts, alignment, and every `class`/`style` attribute a word
+ * processor writes — Word's own `mso-*` properties and Google Docs' inline
+ * `font-weight`/`font-style` spans included. Their text content survives;
+ * the presentation does not.
  */
 
 const HEADING_LEVEL: Readonly<Record<string, 'h2' | 'h3' | 'h4' | null>> = {
@@ -110,8 +115,26 @@ function inlineChildren(node: Node, inherited: InlineMarks): Descendant[] {
     // text (see `wordListParagraph`) — never part of the item's content.
     if ((element.getAttribute('style') ?? '').includes('mso-list:Ignore')) continue
     if (tag === 'a') {
-      const href = element.getAttribute('href')
       const text = inlineChildren(element, marksOf(element, inherited))
+      // `data-collection`/`data-entry-id` is the source-view HTML export's
+      // own shape (`html-export.ts`'s `inlineToHtml`), never something a
+      // real document would carry — an internal link has no URL to paste in
+      // the first place (contract A stores an entity reference, not an
+      // href). Checked before `href` so a round trip through this file
+      // never demotes an internal link back to plain text.
+      const collection = element.getAttribute('data-collection')
+      const entryId = element.getAttribute('data-entry-id')
+      if (collection !== null && collection !== '' && entryId !== null && entryId !== '') {
+        out.push({
+          type: 'link',
+          kind: 'internal',
+          collection,
+          entryId,
+          children: flattenLeaves(text),
+        })
+        continue
+      }
+      const href = element.getAttribute('href')
       if (href === null || href.trim() === '') {
         out.push(...text)
         continue
@@ -260,6 +283,37 @@ function blockChildren(root: Element, level: number): CustomElement[] {
       out.push(...listItems(child, tag === 'ol' ? 'number' : 'bullet', 1))
       continue
     }
+    // The source-view HTML export's own shape for the editor-only code block
+    // (`html-export.ts`'s `slateToHtml`, `slate-types.ts`'s
+    // `CodeBlockElement`) — one `code-block` node per line, the same split a
+    // fenced Markdown block's own decoder uses, so switching Markdown → HTML
+    // → Markdown for the same document is lossless. A real `<pre>` pasted
+    // from elsewhere reads the same way: every line becomes its own code
+    // block, still nothing this vocabulary drops outright.
+    if (tag === 'pre') {
+      const lines = (child.textContent ?? '').replace(/\r\n/g, '\n').split('\n')
+      if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
+      for (const codeLine of lines) out.push({ type: 'code-block', children: [{ text: codeLine }] })
+      continue
+    }
+    // An ordinary pasted `<img>` is still dropped (the toolbar's own insert
+    // path, task 3, is the supported way in) — only the source-view export's
+    // own `data-media-id` marker round-trips, since that is the one case
+    // where the id is already known rather than a URL nothing here can
+    // resolve to a `MediaAsset`.
+    if (tag === 'img') {
+      const mediaId = child.getAttribute('data-media-id')
+      if (mediaId !== null && mediaId !== '') {
+        const caption = child.getAttribute('data-caption') ?? child.getAttribute('alt') ?? ''
+        out.push({
+          type: 'media',
+          mediaId,
+          ...(caption === '' ? {} : { caption }),
+          children: [{ text: '' }],
+        })
+      }
+      continue
+    }
     if (tag === 'p' || tag === 'div') {
       // A `<div>` wrapping further block elements (a common Word/Google Docs
       // shape) is recursed into rather than flattened to one paragraph.
@@ -277,7 +331,10 @@ function blockChildren(root: Element, level: number): CustomElement[] {
       continue
     }
     if (tag === 'br' || tag === 'hr') continue
-    if (tag === 'table' || tag === 'img') continue
+    // `img` is handled above (dropped unless it carries the source view's own
+    // `data-media-id`); `table` has no home in the vocabulary at all yet
+    // (see this file's header).
+    if (tag === 'table') continue
 
     // Any other block-level wrapper (`<section>`, a Word `<o:p>`…): recurse,
     // never drop its text outright.

@@ -53,6 +53,18 @@ export function Modal({
     if (open) openerRef.current = document.activeElement as HTMLElement | null
   }, [open])
 
+  // Radix keeps `Dialog.Content` mounted for the ~150ms exit animation after
+  // `open` goes false, so it can fade out rather than vanish — but a caller
+  // whose title/children are derived from a lookup (`items.find(...) ??
+  // null`) typically clears that same state in `onOpenChange`, which empties
+  // title/children on the very render that starts the animation. The result
+  // is a blank shell fading out instead of the dialog's real content. Freeze
+  // the last real content while open, and keep showing it during the close
+  // transition instead of whatever the now-closing caller passed this render.
+  const frozen = useRef({ title, description, children, footer })
+  if (open) frozen.current = { title, description, children, footer }
+  const shown = open ? { title, description, children, footer } : frozen.current
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -80,10 +92,12 @@ export function Modal({
         >
           <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
             <div className="flex flex-col gap-1">
-              <Dialog.Title className="m-0 text-base leading-6 font-semibold">{title}</Dialog.Title>
-              {description !== undefined && (
+              <Dialog.Title className="m-0 text-base leading-6 font-semibold">
+                {shown.title}
+              </Dialog.Title>
+              {shown.description !== undefined && (
                 <Dialog.Description className="m-0 text-sm leading-5 text-muted-foreground">
-                  {description}
+                  {shown.description}
                 </Dialog.Description>
               )}
             </div>
@@ -94,10 +108,10 @@ export function Modal({
               <CloseIcon />
             </Dialog.Close>
           </div>
-          <div className="flex flex-col gap-4 overflow-y-auto px-5 py-2">{children}</div>
-          {footer !== undefined && (
+          <div className="flex flex-col gap-4 overflow-y-auto px-5 py-2">{shown.children}</div>
+          {shown.footer !== undefined && (
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3">
-              {footer}
+              {shown.footer}
             </div>
           )}
         </Dialog.Content>

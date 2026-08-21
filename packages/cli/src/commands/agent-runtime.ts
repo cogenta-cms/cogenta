@@ -4,6 +4,7 @@ import {
   type AgentProviderRegistryLike,
   type AgentRunner,
   type AgentSkillStore,
+  type ApprovalQueue,
   type ContentServiceLike,
   createAgentRunner,
   createContentDeleteTool,
@@ -77,6 +78,19 @@ export interface BuildAgentRuntimeOptions {
   readonly mediaStore: MediaStore
   readonly auditLog: AuditLog
   readonly logger: Logger
+  /**
+   * Injectable for tests — defaults to a fresh `createMemoryApprovalQueue()`.
+   * A non-reversible, side-effecting tool call (every core content/media
+   * write tool — `content.write_draft` included) always blocks on this
+   * queue regardless of an agent's own autonomy level (`with-autonomy.ts`'s
+   * `forcedApproval`, R6): nothing decides it on its own. A caller that
+   * wants to observe or decide pending requests (an approvals screen, a
+   * channel `/approve` command, or a test proving the *right* tool was
+   * proposed for a write) needs the same instance this runtime actually
+   * uses — hence this override and `AgentRuntimeAssembly.approvalQueue`
+   * below, rather than a queue this module keeps entirely to itself.
+   */
+  readonly approvalQueue?: ApprovalQueue
 }
 
 export interface AgentRuntimeAssembly {
@@ -84,6 +98,8 @@ export interface AgentRuntimeAssembly {
   readonly agentRunner: AgentRunnerLike
   readonly providerRegistry: ProviderRegistryLike
   readonly skillRegistry: AgentSkillRegistryLike
+  /** The exact queue `agentRunner` blocks side-effecting tool calls on — see `BuildAgentRuntimeOptions.approvalQueue`. */
+  readonly approvalQueue: ApprovalQueue
   readonly summary: string
 }
 
@@ -302,13 +318,15 @@ export async function buildAgentRuntime(
     projectRoot: options.projectRoot,
   })
 
+  const approvalQueue = options.approvalQueue ?? createMemoryApprovalQueue()
+
   const runner: AgentRunner = createAgentRunner({
     agents: agentStore,
     skills: skillStore,
     tools,
     providers: liveProviders,
     auditLog: options.auditLog,
-    approvalQueue: createMemoryApprovalQueue(),
+    approvalQueue,
     site: options.site,
     killSwitchFor,
   })
@@ -332,5 +350,5 @@ export async function buildAgentRuntime(
           .map((p) => p.provider)
           .join(', ')})`
 
-  return { agentRegistry, agentRunner, providerRegistry, skillRegistry, summary }
+  return { agentRegistry, agentRunner, providerRegistry, skillRegistry, approvalQueue, summary }
 }

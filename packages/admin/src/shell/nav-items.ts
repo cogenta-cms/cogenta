@@ -288,6 +288,20 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    // L22 task 2 — linking a personal Telegram/Slack/Discord account. Open
+    // to any signed-in role, like `/assistant`: the link itself is personal
+    // (used for notices regardless of role, fiche 38), and chatting with an
+    // agent through it is gated separately, server-side, on the linked
+    // account actually holding `admin` (`@cogenta/channels`' chat bridge) —
+    // exactly what `/api/agents/:name/run` itself already requires, so a
+    // non-admin who links an account gains no capability this nav entry's
+    // own visibility could have hidden anyway.
+    to: '/channels',
+    labelKey: 'nav.channels',
+    group: 'ai',
+    visibleWhen: { kind: 'anyRole' },
+  },
+  {
     // Renamed from `/site-plan` (fiche 21, task 1): the old path and label
     // read as a sitemap feature, but this screen is the L19 AI-driven site
     // creation wizard — an unrelated thing that happened to reuse a name

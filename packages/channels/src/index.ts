@@ -38,6 +38,11 @@ export {
   hashApprovalToken,
   normalizeApprovalToken,
 } from './approvals/token.js'
+export type {
+  AgentChatBridgeOptions,
+  AgentRunnerLike as ChatAgentRunnerLike,
+} from './chat/bridge.js'
+export { createAgentChatBridge } from './chat/bridge.js'
 export type { BuildAlertInput } from './formats/alert.js'
 export { buildAlert } from './formats/alert.js'
 export { REPORT_SCREEN_BUDGET_CHARS } from './formats/budget.js'
@@ -52,6 +57,7 @@ export type {
 } from './inbound/authorize.js'
 export { authorizeInboundCommand } from './inbound/authorize.js'
 export type {
+  ChatHandler,
   CommandHandler,
   CommandHandlerInput,
   CommandRouter,

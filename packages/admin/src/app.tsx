@@ -11,6 +11,7 @@ import { ApiKeysRoute } from './routes/api-keys.js'
 import { AppearanceRoute } from './routes/appearance.js'
 import { AssistantRoute } from './routes/assistant.js'
 import { AuditRoute } from './routes/audit.js'
+import { ChannelsRoute } from './routes/channels.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
 import { CommentsRoute } from './routes/comments.js'
@@ -139,6 +140,7 @@ export function App(): JSX.Element {
                 <Route path="providers" element={<ProvidersRoute />} />
                 <Route path="agent-skills" element={<AgentSkillsRoute />} />
                 <Route path="mcp" element={<McpRoute />} />
+                <Route path="channels" element={<ChannelsRoute />} />
                 <Route path="users" element={<UsersRoute />} />
                 <Route path="api-keys" element={<ApiKeysRoute />} />
                 <Route path="roles" element={<RolesRoute />} />

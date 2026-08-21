@@ -513,6 +513,9 @@ export const ERROR_CODES = [
   'AGENT_REGISTRY_READ_ONLY',
   'AGENT_RUNTIME_UNAVAILABLE',
 
+  // Channels — inbound chat bridge and `cogenta channels` process (L22 task 2)
+  'CHANNEL_PROVIDER_NOT_CONFIGURED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

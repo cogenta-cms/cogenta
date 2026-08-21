@@ -2,6 +2,7 @@ import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
 import { runBackup, runRestore } from './commands/backup.js'
+import { runChannels } from './commands/channels.js'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
 import { runExport, runImportContent } from './commands/export.js'
 import { runGenerate } from './commands/generate.js'
@@ -17,6 +18,8 @@ import { createOutput, shouldUseColour, type Writer } from './output.js'
 
 export type { BackupOptions, RestoreOptions } from './commands/backup.js'
 export { runBackup, runRestore } from './commands/backup.js'
+export type { ChannelsOptions } from './commands/channels.js'
+export { CHANNELS_USAGE, runChannels } from './commands/channels.js'
 export type { DoctorCheck, DoctorOptions, DoctorReport } from './commands/doctor.js'
 export { formatDoctorReport, runDoctor } from './commands/doctor.js'
 export type { ExportOptions, ImportContentOptions } from './commands/export.js'
@@ -70,6 +73,7 @@ Commands
   skin generate --description "…"   Generate a skin from a description
   serve, dev       Run the content and auth API over HTTP
   mcp              Run an MCP server over stdin/stdout, exposing this site's tools
+  channels         Connect Telegram/Slack/Discord and chat with an agent from there
   update check     Compare the installed @cogenta/core / @cogenta/cli against npm
   update apply     Apply an available update — always takes a restore point first
   update history   Show past checks, applies, and the restore points they took
@@ -406,6 +410,17 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.role === 'string' ? { role: parsed.values.role } : {}),
       ...(typeof parsed.values['api-key'] === 'string' ? { apiKey: parsed.values['api-key'] } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'channels') {
+    return runChannels({
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
   }
 

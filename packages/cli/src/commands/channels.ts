@@ -28,6 +28,8 @@ import {
   type CollectionDefinition,
   type ContentStore,
   createContentStore,
+  createNotFoundLogStore,
+  createRedirectStore,
   createSchemaTables,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
@@ -294,6 +296,10 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
     const auditLog = createAuditLog(db)
     const users = createUserStore(db)
     const linkStore = createChannelLinkStore(db)
+    const notFoundLog = createNotFoundLogStore({ db })
+    await notFoundLog.ensureTable()
+    const redirects = createRedirectStore({ db })
+    await redirects.ensureTable()
 
     const agentsRuntime = await buildAgentRuntime({
       dataDir: join(projectRoot, '.cogenta', 'agents-runtime'),
@@ -309,6 +315,9 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
       mediaStore,
       auditLog,
       logger,
+      collections,
+      notFoundLog,
+      redirects,
     })
 
     const getUserRoles = async (userId: string): Promise<readonly string[]> => {

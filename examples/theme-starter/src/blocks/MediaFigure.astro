@@ -1,0 +1,21 @@
+---
+import type { MediaFigureBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: MediaFigureBlock; ctx: RenderContext }
+const media = ctx.image(block.media)
+---
+
+<figure class={`media-figure media-figure--align-${block.align ?? 'center'}`}>
+  {media.kind === 'video' ? (
+    <video src={media.src} poster={media.poster} controls />
+  ) : (
+    <img src={media.src} srcset={media.srcset} width={media.width} height={media.height} alt={media.alt} />
+  )}
+  {(block.caption || block.credit) && (
+    <figcaption>
+      {block.caption}
+      {block.credit && <cite> — {block.credit}</cite>}
+    </figcaption>
+  )}
+</figure>

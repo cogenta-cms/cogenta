@@ -2881,6 +2881,21 @@
     "quickstartHeading": "Quickstart",
     "screensHeading": "Screens in this section",
     "screensNote": "The full list of screens this group can contain — some only appear in the sidebar for a given role or site.",
+    "docsLinkIntro": "Looking for the full guide — content, appearance, IA/agents, building a theme or a plugin?",
+    "docsLinkCta": "Open the full documentation",
+    "docs": {
+      "heading": "Full documentation",
+      "intro": "The same functional and technical documentation published with this version of Cogenta — never fetched from an always-latest source elsewhere.",
+      "treesLabel": "Documentation trees",
+      "tree": {
+        "functional": "Functional",
+        "technical": "Technical"
+      },
+      "sidebarLabel": "Pages in this tree",
+      "notFoundTitle": "Page not found",
+      "notFoundBody": "This page does not exist in the documentation shipped with this version of Cogenta.",
+      "versionNote": "Documentation correct for Cogenta v{{version}}."
+    },
     "sections": {
       "content": {
         "summary": "Cogenta's content: entries organised into collections (articles, pages…), classified by taxonomies, illustrated with media, and tracked over time by a version history. An entry moves through a simple editorial cycle — draft, optional review, publish — detailed below.",

@@ -115,3 +115,65 @@
     stroke: var(--border);
   }
 }
+
+/* L22 task 7 — `documentation-docs.tsx`'s rendered Markdown body. Plain,
+ * readable typography over the admin's own tokens; no new component, since
+ * this content is a fixed set of HTML tags produced by
+ * `@cogenta/render`'s `renderMarkdownToHtml`, not admin UI. */
+.doc-content :is(h1, h2, h3, h4) {
+  color: var(--foreground);
+}
+
+.doc-content h1 {
+  font-size: 1.375rem;
+  margin: 0 0 0.75rem;
+}
+
+.doc-content :is(h2, h3, h4) {
+  margin: 1.5rem 0 0.5rem;
+}
+
+.doc-content p,
+.doc-content ul,
+.doc-content ol,
+.doc-content blockquote,
+.doc-content table,
+.doc-content pre {
+  margin: 0 0 1rem;
+}
+
+.doc-content code {
+  background: var(--muted);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+  font-size: 0.875em;
+}
+
+.doc-content pre {
+  background: var(--muted);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.doc-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.doc-content blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}
+
+.doc-content table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.doc-content :is(th, td) {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}

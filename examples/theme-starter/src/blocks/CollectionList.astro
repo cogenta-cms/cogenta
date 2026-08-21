@@ -1,0 +1,36 @@
+---
+import type { CollectionListBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: CollectionListBlock; ctx: RenderContext }
+
+/**
+ * The only one of the twelve blocks that reads the database at render time
+ * (`runtime: 'server'` in its manifest, contract B) — so it is the one block
+ * a static build target refuses rather than silently degrades.
+ */
+const page = await ctx.content.list({
+  collection: block.collection,
+  filter: block.filter as Readonly<Record<string, unknown>> | undefined,
+  sort: block.sort,
+  limit: block.limit ?? 20,
+})
+---
+
+<section class={`collection-list collection-list--${block.layout}`}>
+  {block.title && <h2>{block.title}</h2>}
+  <ul class="collection-list__items">
+    {page.items.map((entry) => (
+      <li class="collection-list__item">
+        <a href={ctx.link({ collection: block.collection, id: entry.id })}>
+          {/* Contract A leaves per-collection fields open — `title` is the common
+              case, `values.name` a reasonable fallback, the id a last resort so
+              this never renders an empty link. */}
+          {(entry.values.title as string | undefined) ??
+            (entry.values.name as string | undefined) ??
+            entry.id}
+        </a>
+      </li>
+    ))}
+  </ul>
+</section>

@@ -1,0 +1,21 @@
+---
+import type { StatsBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block } = Astro.props as { block: StatsBlock; ctx: RenderContext }
+---
+
+<section class="stats">
+  {block.title && <h2>{block.title}</h2>}
+  <dl class="stats__items">
+    {block.items.map((item) => (
+      <div class="stats__item">
+        <dt class="stats__value">
+          {item.value}
+          {item.unit && <span class="stats__unit"> {item.unit}</span>}
+        </dt>
+        <dd class="stats__label">{item.label}</dd>
+      </div>
+    ))}
+  </dl>
+</section>

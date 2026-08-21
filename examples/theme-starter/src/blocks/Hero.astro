@@ -1,0 +1,41 @@
+---
+import type { HeroBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+// Contract D's "Interface d'un composant de bloc": exactly `{ block, ctx }`.
+const { block, ctx } = Astro.props as { block: HeroBlock; ctx: RenderContext }
+const media = block.media ? ctx.image(block.media) : null
+---
+
+<section class="hero">
+  {block.eyebrow && <p class="hero__eyebrow">{block.eyebrow}</p>}
+  <h1>{block.title}</h1>
+  {block.subtitle && <p class="hero__subtitle">{block.subtitle}</p>}
+
+  {media && media.kind === 'video' && (
+    <video class="hero__media" src={media.src} poster={media.poster} controls />
+  )}
+  {media && media.kind === 'image' && (
+    <img
+      class="hero__media"
+      src={media.src}
+      srcset={media.srcset}
+      width={media.width}
+      height={media.height}
+      alt={media.alt}
+    />
+  )}
+
+  {block.actions && block.actions.length > 0 && (
+    <p class="hero__actions">
+      {block.actions.map((action) => (
+        <a
+          class={`button button--${action.emphasis ?? 'secondary'}`}
+          href={'href' in action.target ? action.target.href : ctx.link(action.target)}
+        >
+          {action.label}
+        </a>
+      ))}
+    </p>
+  )}
+</section>

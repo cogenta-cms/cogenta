@@ -1,0 +1,60 @@
+name: Docs site
+
+# Publishes docs-site/content, rendered by @cogenta/render's Markdown
+# renderer, to GitHub Pages — the "site statique généré" half of L22 task 7.
+# The other half, `/admin/documentation`, ships inside the normal
+# @cogenta/admin build and needs no separate deploy step here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - 'docs/guide-plugin.md'
+      - 'examples/theme-starter/**'
+      - 'examples/plugin-starter/**'
+      - 'packages/render/src/docs/**'
+      - 'packages/export/src/**'
+      - 'packages/core/package.json'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-site-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Only what the generator actually imports — not a full `pnpm build`.
+      - run: pnpm --filter @cogenta/render --filter @cogenta/export --filter @cogenta/blocks --filter @cogenta/core build
+      - run: pnpm docs:site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

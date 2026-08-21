@@ -1,0 +1,99 @@
+---
+import type { RenderContext } from '../theme-contract.js'
+
+interface Props {
+  ctx: RenderContext
+  /** The document title. The page's own `h1` is rendered by the content, not here — contract A never puts `h1` in a `richText` document for exactly this reason. */
+  title: string
+  description?: string
+}
+
+const { ctx, title, description } = Astro.props as Props
+
+// A skin is a *served file*, rewritten in place when the site owner changes
+// skin — contract D, "Tokens de skin". Inlining tokens here would turn every
+// skin change into a rebuild, which defeats the point.
+const SKIN_HREF = '/_cogenta/skin.css'
+---
+
+<!doctype html>
+<html lang={ctx.locale} dir="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={ctx.url.href} />
+    <link rel="stylesheet" href={SKIN_HREF} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{ctx.t('a11y.skipToContent')}</a>
+
+    <header class="site-header">
+      <a class="site-header__home" href={ctx.link({ path: '/' })}>{ctx.site.name}</a>
+      <slot name="navigation" />
+    </header>
+
+    <main id="main"><slot /></main>
+
+    <footer class="site-footer">
+      <slot name="footer" />
+    </footer>
+
+    <!-- No script tag: nothing on this starter's pages hydrates. Add one only for a feature that genuinely needs the browser, and keep it out of the render path of every other block. -->
+  </body>
+</html>
+
+<style>
+  /*
+   * A deliberately thin reset, styled entirely through the skin's own
+   * `--cogenta-<group>-<name>` variables (contract D) rather than hard-coded
+   * values — this is what lets a site owner change skin with no rebuild.
+   */
+  :global(html) {
+    color-scheme: light dark;
+  }
+  :global(body) {
+    margin: 0;
+    background: var(--cogenta-color-bg);
+    color: var(--cogenta-color-fg);
+    font-family: var(--cogenta-font-sans);
+    font-size: var(--cogenta-font-baseSize);
+    line-height: 1.6;
+  }
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+  }
+  .skip-link:focus {
+    left: 1rem;
+    top: 1rem;
+    z-index: 10;
+    background: var(--cogenta-color-accent);
+    color: var(--cogenta-color-accentFg);
+    padding: 0.5rem 1rem;
+    border-radius: var(--cogenta-radius-sm);
+  }
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--cogenta-color-border);
+  }
+  .site-header__home {
+    font-weight: 700;
+    color: inherit;
+    text-decoration: none;
+  }
+  main {
+    display: block;
+  }
+  .site-footer {
+    padding: 1.5rem;
+    border-top: 1px solid var(--cogenta-color-border);
+    color: var(--cogenta-color-mutedFg);
+    font-size: 0.875rem;
+  }
+</style>

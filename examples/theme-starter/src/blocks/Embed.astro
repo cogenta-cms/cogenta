@@ -1,0 +1,27 @@
+---
+import type { EmbedBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block } = Astro.props as { block: EmbedBlock; ctx: RenderContext }
+
+/**
+ * `consentRequired` is a legal decision stored by the editor, not guessed
+ * here (contract B: "un défaut implicite serait une infraction RGPD"). This
+ * starter honours it the only way that needs no client JavaScript: when
+ * consent is required, nothing from `provider` is contacted until the
+ * visitor actively follows a plain link — no iframe is even present in the
+ * markup. When it is not required, the iframe loads directly.
+ */
+---
+
+{block.consentRequired ? (
+  <p class="embed embed--gated">
+    <a href={block.url} rel="noopener noreferrer" target="_blank">
+      {`Voir sur ${block.provider} (contenu externe)`}
+    </a>
+  </p>
+) : (
+  <div class="embed" style={block.ratio && block.ratio !== 'original' ? `aspect-ratio:${block.ratio.replace(':', '/')}` : undefined}>
+    <iframe src={block.url} loading="lazy" title={block.provider} />
+  </div>
+)}

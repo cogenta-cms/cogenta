@@ -1,0 +1,21 @@
+---
+import type { CtaBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: CtaBlock; ctx: RenderContext }
+---
+
+<section class="cta">
+  <h2>{block.title}</h2>
+  {block.text && <p>{block.text}</p>}
+  <p class="cta__actions">
+    {block.actions.map((action) => (
+      <a
+        class={`button button--${action.emphasis ?? 'secondary'}`}
+        href={'href' in action.target ? action.target.href : ctx.link(action.target)}
+      >
+        {action.label}
+      </a>
+    ))}
+  </p>
+</section>

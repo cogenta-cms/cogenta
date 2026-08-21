@@ -1,0 +1,22 @@
+---
+import type { QuoteBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: QuoteBlock; ctx: RenderContext }
+const avatar = block.avatar ? ctx.image(block.avatar) : null
+---
+
+<figure class="quote">
+  <blockquote><p>{block.text}</p></blockquote>
+  {(block.author || block.role) && (
+    <figcaption class="quote__attribution">
+      {avatar && avatar.kind === 'image' && (
+        <img class="quote__avatar" src={avatar.src} width={avatar.width} height={avatar.height} alt="" />
+      )}
+      <span>
+        {block.author && <strong>{block.author}</strong>}
+        {block.role && <span class="quote__role"> — {block.role}</span>}
+      </span>
+    </figcaption>
+  )}
+</figure>

@@ -24,6 +24,7 @@ import { CommerceSubscriptionsRoute } from './routes/commerce-subscriptions.js'
 import { CommerceTaxRoute } from './routes/commerce-tax.js'
 import { DashboardRoute } from './routes/dashboard.js'
 import { DocumentationRoute } from './routes/documentation.js'
+import { DocumentationDocsRoute } from './routes/documentation-docs.js'
 import { EntryEditRoute } from './routes/entry-edit.js'
 import { ForgotPasswordRoute } from './routes/forgot-password.js'
 import { FormSubmissionsRoute } from './routes/form-submissions.js'
@@ -141,6 +142,9 @@ export function App(): JSX.Element {
                 <Route path="profile" element={<ProfileRoute />} />
                 <Route path="settings" element={<SettingsRoute />} />
                 <Route path="documentation" element={<DocumentationRoute />} />
+                <Route path="documentation/docs" element={<DocumentationDocsRoute />} />
+                <Route path="documentation/docs/:tree" element={<DocumentationDocsRoute />} />
+                <Route path="documentation/docs/:tree/:slug" element={<DocumentationDocsRoute />} />
                 <Route path="create-site" element={<SitePlanRoute />} />
                 {/* Old path (fiche 21, task 1 renamed it) — a bookmark or a link elsewhere in the app still lands somewhere real. */}
                 <Route path="site-plan" element={<Navigate to="/create-site" replace />} />

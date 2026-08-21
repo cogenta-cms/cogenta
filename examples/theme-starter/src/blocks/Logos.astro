@@ -1,0 +1,32 @@
+---
+import type { LogosBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: LogosBlock; ctx: RenderContext }
+---
+
+<section class="logos">
+  {block.title && <h2>{block.title}</h2>}
+  <ul class="logos__items">
+    {block.items.map((item) => {
+      const media = ctx.image(item.media)
+      // The organisation's name is the accessible name of the link (contract B) —
+      // no separate visually-hidden label, since the image's own alt already carries it.
+      const img = (
+        <img
+          class="logos__image"
+          src={media.src}
+          srcset={media.srcset}
+          width={media.width}
+          height={media.height}
+          alt={media.alt !== '' ? media.alt : item.name}
+        />
+      )
+      return (
+        <li class="logos__item">
+          {item.url === undefined ? img : <a href={item.url} rel="noopener noreferrer">{img}</a>}
+        </li>
+      )
+    })}
+  </ul>
+</section>

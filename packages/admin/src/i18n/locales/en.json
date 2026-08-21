@@ -1106,7 +1106,25 @@
     "envFileWarning": "The .env file ({{path}}) is readable by other users on this machine — on shared hosting that means every other tenant. Restrict its permissions (chmod 600).",
     "envFileOk": "The .env file's permissions look correctly restricted.",
     "envFileUnknown": "Could not check the .env file's permissions on this platform.",
-    "envFileNone": "No .env file found next to the config."
+    "envFileNone": "No .env file found next to the config.",
+    "updatesHeading": "Updates",
+    "updatesLoadError": "Could not check for updates.",
+    "updatesApplyError": "Could not apply the update.",
+    "updatesUpToDateOne": "{{installed}} — up to date",
+    "updatesAvailable": "{{installed}} → {{latest}} ({{bump}})",
+    "updatesCheckError": "Could not check npm: {{error}}",
+    "updatesCheckNow": "Check now",
+    "updatesApplyNow": "Update now",
+    "updatesApplying": "Updating…",
+    "updatesUpToDate": "Already up to date — nothing was changed.",
+    "updatesApplied": "Updated {{packages}}. A restore point was taken first. Restart the server to run the new version.",
+    "updatesHistoryHeading": "History",
+    "updatesHistoryEmpty": "No update has been checked or applied yet.",
+    "updatesAutoRestorePoint": "taken automatically before an update",
+    "updatesRiskHeading": "This update may touch a frozen contract",
+    "updatesRiskDescription": "A scan of the changelog found a mention of a frozen contract (A/B/C/D/E). This is a best-effort keyword scan, not a guarantee — review the note below, then confirm to proceed. A restore point is still taken first either way.",
+    "updatesRiskConfirm": "I've reviewed this — update anyway",
+    "updatesRiskClose": "Close"
   },
   "review": {
     "heading": "Review queue",
@@ -1782,6 +1800,12 @@
         "logLevel": {
           "label": "Log level captured",
           "help": "How verbose the local log buffer is. Does not change what is written to this process's own stdout, only what shows up here."
+        }
+      },
+      "updates": {
+        "autoUpdatePolicy": {
+          "label": "Automatic updates",
+          "help": "Off by default. When set, the site checks npm daily and applies any update that fits — never one whose changelog mentions a frozen contract, which is always left for manual review."
         }
       }
     }

@@ -66,6 +66,7 @@ import {
   createTaxonomyRouter,
   createThemeRouter,
   createToolsRouter,
+  createUpdateRouter,
   createUsersRouter,
   errorResponse,
   executeGraphQL,
@@ -105,10 +106,11 @@ import {
   type ThemeRouterOptions,
   type ToolsRouter,
   type TrashStatus,
+  type UpdateRouter,
   type UsersRouter,
   variantKeyFor,
 } from '@cogenta/api'
-import { type AuthStore, createAuthStore } from '@cogenta/auth'
+import { type AuditLog, type AuthStore, createAuditLog, createAuthStore } from '@cogenta/auth'
 import {
   type ChannelRegistry,
   createChannelLinkStore,
@@ -167,6 +169,7 @@ import {
   createStorageRegistry,
   type DatabaseHandle,
   type ErrorLog,
+  getCoreVersion,
   type HealthReport,
   isCogentaError,
   type Logger,
@@ -261,6 +264,21 @@ import type { GraphQLSchema } from 'graphql'
 import { sendInviteMail } from '../invite-mail.js'
 import type { Output, Writer } from '../output.js'
 import { sendResetMail } from '../reset-mail.js'
+import {
+  type ApplyUpdateResult,
+  AUTO_UPDATE_POLICIES,
+  type AutoUpdatePolicy,
+  applyUpdate,
+  checkForUpdates,
+  listRestorePoints,
+  listUpdateHistory,
+  policyAllows,
+  type RunPackageInstall,
+  recordUpdateHistory,
+  UPDATE_APPLIED_ACTION,
+  UPDATE_APPLY_FAILED_ACTION,
+} from '../update/index.js'
+import { getCliVersion } from '../version.js'
 import { serveAdminAsset } from './admin-assets.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
@@ -605,6 +623,15 @@ interface Site {
    */
   readonly sitePlanRouter?: SitePlanRouter
   /**
+   * `/api/updates` — L22 task 9: checking npm for a newer
+   * `@cogenta/core`/`@cogenta/cli`, applying one with a mandatory restore
+   * point first. Always mounted — checking and reviewing need no external
+   * provider, only outbound network access to registry.npmjs.org, which
+   * degrades to an honest per-package `checkError` rather than a broken
+   * screen when unavailable (same shape as `sitePlanRouter`'s `SITE_PLAN_NO_PROVIDER`).
+   */
+  readonly updatesRouter: UpdateRouter
+  /**
    * `/api/import` — the admin's counterpart to `cogenta import wordpress` on
    * a terminal. Always mounted: unlike the site planner it needs no external
    * provider, only this site's own database and storage, which `assembleSite`
@@ -756,6 +783,15 @@ interface AssembleSiteOptions {
   readonly agents?: AgentsRouterOptions
   /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
   readonly sitePlans?: SitePlanRouterOptions
+  /**
+   * `/api/updates` (L22 task 9) — already built by `runServe`, which has the
+   * filesystem/network ingredients (`projectRoot`, `env`, npm access) this
+   * function itself has no reason to know about. Unlike `sitePlans` above,
+   * this is never optional: every real site can check npm for an update
+   * even with no LLM provider configured, so there is no "not configured"
+   * state for this router to represent.
+   */
+  readonly updatesRouter: UpdateRouter
   /**
    * L18's toolset, vector store and semantic search.
    *
@@ -1949,6 +1985,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.sitePlans === undefined
       ? {}
       : { sitePlanRouter: createSitePlanRouter(options.sitePlans) }),
+    updatesRouter: options.updatesRouter,
     importRouter: createImportRouter({
       // `db`/`storage` are the very ones already in scope for the rest of
       // this function — `@cogenta/import`'s real importer, unchanged, never
@@ -3563,6 +3600,19 @@ export function createRequestListener(
         return
       }
 
+      // `/api/updates` — L22 task 9. Admin-only, same early check as
+      // `/api/site-plans` above, before the body is read.
+      if (url.pathname.startsWith('/api/updates')) {
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may check for or apply an update.')
+          return
+        }
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.updatesRouter.handle(request, context.actor))
+        return
+      }
+
       // `/api/theme/preview` (fiche 14 task 2) — a candidate token/CSS
       // overlay, rendered on the real home page without saving it. Checked
       // before the generic `/api/theme` mount below since this is not a
@@ -4163,7 +4213,19 @@ export interface ServeOptions {
    * change really takes effect without waiting out the real interval.
    */
   readonly observabilitySettingsTickMs?: number
+  /**
+   * Overrides `UPDATES_AUTO_CHECK_TICK_MS` (L22 task 9). Not a CLI flag,
+   * same reasoning as `scheduledPublishTickMs`: a test proves the
+   * auto-update policy is really honoured without waiting a day for it.
+   */
+  readonly updatesAutoCheckTickMs?: number
+  /** Test seam: replaces the real `fetch` to registry.npmjs.org with a scripted one — every update test in `packages/cli/test/` uses this rather than hitting the real network. */
+  readonly updatesFetchImpl?: typeof fetch
+  /** Test seam: replaces the real `npm install` child process — no test in this repository actually installs an npm package. */
+  readonly updatesRunInstall?: RunPackageInstall
 }
+
+const UPDATES_AUTO_CHECK_TICK_MS = 24 * 60 * 60 * 1000
 
 const DEFAULT_PORT = 4000
 const DEFAULT_HOST = '127.0.0.1'
@@ -4379,6 +4441,86 @@ export async function runServe(options: ServeOptions): Promise<number> {
   })
   const toolsQueue = createDatabaseQueue({ db: selection.instance, logger })
 
+  // The update system (L22 task 9). `@cogenta/core`/`@cogenta/cli` are the
+  // two packages the lot names explicitly as "déjà la source de vérité de
+  // version" — each one's own self-reported version (`getCoreVersion()`,
+  // `getCliVersion()`), never a guess read from `node_modules` by path. One
+  // `AuditLog` handle over this site's own table — the same one
+  // `site.auth.audit` will separately open once `assembleSite` runs below;
+  // both read/write the same `cogenta_audit_log` table, so history recorded
+  // here (before `site` exists) is exactly as visible through `site.auth.audit`
+  // afterwards as any other action.
+  const updatesAuditLog: AuditLog = createAuditLog(selection.instance)
+  // Guards the `updates-auto-check` scheduled task below against re-applying
+  // the same already-applied version on every subsequent tick — see that
+  // task's own comment for why this process cannot otherwise tell.
+  let lastAutoAppliedSignature: string | null = null
+  const updatesBackupDir = join(projectRoot, '.cogenta', 'backups')
+  const updatePackages = (): readonly { readonly name: string; readonly installed: string }[] => [
+    { name: '@cogenta/core', installed: getCoreVersion() },
+    { name: '@cogenta/cli', installed: getCliVersion() },
+  ]
+  async function recordUpdateOutcome(
+    result: ApplyUpdateResult,
+    actorId: string | null,
+  ): Promise<void> {
+    if (result.kind === 'up-to-date' || result.kind === 'confirmation-required') return
+    await recordUpdateHistory(updatesAuditLog, {
+      actorId,
+      actorRoles: ['admin'],
+      action: UPDATE_APPLIED_ACTION,
+      diff: { installed: result.installed, restorePoint: result.restorePoint.path },
+    }).catch((error: unknown) => {
+      logger.error('update history record failed', { error: String(error) })
+    })
+  }
+  const updatesRouter = createUpdateRouter({
+    checker: {
+      check: () =>
+        checkForUpdates({
+          packages: updatePackages(),
+          ...(options.updatesFetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.updatesFetchImpl }),
+        }),
+    },
+    applier: {
+      apply: async (input) => {
+        let result: ApplyUpdateResult
+        try {
+          result = await applyUpdate({
+            cwd: projectRoot,
+            env,
+            logger,
+            packages: updatePackages(),
+            confirmBreakingChange: input.confirmBreakingChange,
+            backupDir: updatesBackupDir,
+            ...(options.updatesFetchImpl === undefined
+              ? {}
+              : { fetchImpl: options.updatesFetchImpl }),
+            ...(options.updatesRunInstall === undefined
+              ? {}
+              : { runInstall: options.updatesRunInstall }),
+          })
+        } catch (error) {
+          await recordUpdateHistory(updatesAuditLog, {
+            actorId: input.actorId,
+            actorRoles: ['admin'],
+            action: UPDATE_APPLY_FAILED_ACTION,
+            diff: { error: isCogentaError(error) ? error.message : String(error) },
+          }).catch(() => undefined)
+          throw error
+        }
+        await recordUpdateOutcome(result, input.actorId)
+        return result
+      },
+    },
+    history: {
+      entries: () => listUpdateHistory(updatesAuditLog),
+      restorePoints: () => listRestorePoints(updatesBackupDir),
+    },
+  })
+
   const site = await assembleSite({
     db: selection.instance,
     assistant,
@@ -4389,6 +4531,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     site: loaded.config.site,
     storage: storageSelection.instance,
     logger,
+    updatesRouter,
     health: async () => ({
       database: await selection.health(),
       storage: await storageSelection.health(),
@@ -4704,6 +4847,91 @@ export async function runServe(options: ServeOptions): Promise<number> {
     intervalMs: options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
     run: async () => ({ summary: `${await site.tickAnalyticsPurge()} purged` }),
   })
+  scheduledTaskRegistry.register({
+    name: 'updates-auto-check',
+    description:
+      'Check npm for a newer @cogenta/core/@cogenta/cli, and apply it when the auto-update policy allows and no contract risk was flagged.',
+    intervalMs: options.updatesAutoCheckTickMs ?? UPDATES_AUTO_CHECK_TICK_MS,
+    run: async () => {
+      const setting = await site.siteSettingsStore.get(
+        'updates.autoUpdatePolicy',
+        SITE_SETTINGS_SITE_SCOPE,
+      )
+      const rawPolicy = setting?.value
+      const policy: AutoUpdatePolicy = AUTO_UPDATE_POLICIES.includes(rawPolicy as AutoUpdatePolicy)
+        ? (rawPolicy as AutoUpdatePolicy)
+        : 'off'
+      // Off by default (the registry's own default value) — no network call
+      // at all in that case, R1/R2's "nothing surprising happens without an
+      // explicit opt-in" applied to this feature too.
+      if (policy === 'off') return { summary: 'auto-update is off' }
+
+      const report = await checkForUpdates({
+        packages: updatePackages(),
+        ...(options.updatesFetchImpl === undefined ? {} : { fetchImpl: options.updatesFetchImpl }),
+      })
+      // Never a package the policy does not cover, and never one whose
+      // changelog scan flagged a frozen-contract mention — an unattended
+      // tick applies exactly nothing it cannot already tell is safe by this
+      // system's own honest standard (`contract-risk.ts`'s module comment).
+      const applicable = report.packages.filter(
+        (pkg) =>
+          pkg.updateAvailable &&
+          pkg.latest !== null &&
+          policyAllows(policy, pkg.bump) &&
+          (pkg.contractRisk?.warnings.length ?? 0) === 0,
+      )
+      if (applicable.length === 0) {
+        return {
+          summary: report.updateAvailable
+            ? 'an update exists but is outside this policy or was flagged risky — left for manual review'
+            : 'up to date',
+        }
+      }
+
+      // `getCoreVersion()`/`getCliVersion()` are cached after their first
+      // real call (self-describing, `readOwnPackageVersion`) and never
+      // change for the lifetime of this process, even after a real `npm
+      // install` really does swap the files on disk — the running code stays
+      // old until an actual restart. Without this guard, every tick after a
+      // successful auto-apply would see the exact same "update available"
+      // and try again, taking a fresh restore point and re-running `npm
+      // install` forever until someone restarts the process.
+      const signature = applicable
+        .map((pkg) => `${pkg.name}@${pkg.latest}`)
+        .sort()
+        .join(',')
+      if (signature === lastAutoAppliedSignature) {
+        return { summary: 'already auto-updated to this version — waiting for a restart' }
+      }
+
+      const result = await applyUpdate({
+        cwd: projectRoot,
+        env,
+        logger,
+        packages: applicable.map((pkg) => ({ name: pkg.name, installed: pkg.installed })),
+        confirmBreakingChange: false,
+        backupDir: updatesBackupDir,
+        ...(options.updatesFetchImpl === undefined ? {} : { fetchImpl: options.updatesFetchImpl }),
+        ...(options.updatesRunInstall === undefined
+          ? {}
+          : { runInstall: options.updatesRunInstall }),
+      })
+      if (result.kind === 'applied') {
+        await recordUpdateOutcome(result, null)
+        lastAutoAppliedSignature = signature
+        return {
+          summary: `auto-updated: ${result.installed.map((pkg) => `${pkg.name}@${pkg.version}`).join(', ')} — restart to run the new version`,
+        }
+      }
+      // A risk this tick's own filter did not see (e.g. the tarball scan
+      // failing between the two checks) — refused rather than guessed at,
+      // same as a human's "confirmation-required" would be.
+      return {
+        summary: 'a re-check before applying found a reason not to — left for manual review',
+      }
+    },
+  })
 
   const scheduledTasksRouter = createScheduledTasksRouter({
     registry: scheduledTaskRegistry,
@@ -4778,6 +5006,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.formsPurgeTickMs ?? FORMS_PURGE_TICK_MS,
     options.channelNotificationTickMs ?? CHANNEL_NOTIFICATION_TICK_MS,
     options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
+    options.updatesAutoCheckTickMs ?? UPDATES_AUTO_CHECK_TICK_MS,
   )
   const runScheduledTasksHeartbeat = (): void => {
     // Sequenced, not concurrent: `registry.tick()` already runs its due

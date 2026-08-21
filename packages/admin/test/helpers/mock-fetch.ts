@@ -389,6 +389,48 @@ export function installMockFetch(
       signed: boolean
       disabledForMissingSecret: boolean
     }
+    /** What `GET /api/updates/status` answers with (L22 task 9) — both packages up to date by default. */
+    readonly updateStatus?: {
+      readonly checkedAt: string
+      readonly packages: readonly {
+        readonly name: string
+        readonly installed: string
+        readonly latest: string | null
+        readonly bump: string
+        readonly updateAvailable: boolean
+        readonly checkError: string | undefined
+        readonly contractRisk: {
+          readonly available: boolean
+          readonly reason: string | undefined
+          readonly scannedVersions: readonly string[]
+          readonly warnings: readonly { readonly version: string; readonly excerpt: string }[]
+        } | null
+      }[]
+      readonly updateAvailable: boolean
+      readonly highestBump: string
+      readonly contractRiskDetected: boolean
+    }
+    /** What `GET /api/updates/history` answers with — empty by default. */
+    readonly updateHistory?: {
+      readonly entries: readonly {
+        readonly id: string
+        readonly at: string
+        readonly action: string
+        readonly actorId: string | null
+        readonly diff: Readonly<Record<string, unknown>> | null
+      }[]
+      readonly restorePoints: readonly {
+        readonly path: string
+        readonly createdAt: string
+        readonly rows: number
+        readonly tables: number
+        readonly checksum: string
+        readonly encrypted: boolean
+        readonly triggeredByUpdate: boolean
+      }[]
+    }
+    /** What `POST /api/updates/apply` answers with — `{kind: 'up-to-date'}` by default. */
+    readonly updateApplyResult?: unknown
     /** What `GET /api/seo/diagnostics` answers with. A healthy, empty site by default. */
     readonly seoDiagnostics?: {
       readonly generatedAt?: string
@@ -5627,6 +5669,70 @@ export function installMockFetch(
           return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
         }
         return json(200, { data: options.configStatus ?? null })
+      }
+
+      // `/api/updates/*` — the update system (L22 task 9). Admin-only, same
+      // shape as every other status route above. Defaults to "up to date,
+      // no history" so a test that never configures this (almost every
+      // existing one — `OpsSettingsRoute` always mounts this card) gets a
+      // quiet, harmless answer rather than an unhandled-request throw.
+      if (url.includes('/api/updates/status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, {
+          data: options.updateStatus ?? {
+            checkedAt: '2026-01-01T00:00:00.000Z',
+            packages: [
+              {
+                name: '@cogenta/core',
+                installed: '0.4.0',
+                latest: '0.4.0',
+                bump: 'none',
+                updateAvailable: false,
+                checkError: undefined,
+                contractRisk: null,
+              },
+              {
+                name: '@cogenta/cli',
+                installed: '0.4.0',
+                latest: '0.4.0',
+                bump: 'none',
+                updateAvailable: false,
+                checkError: undefined,
+                contractRisk: null,
+              },
+            ],
+            updateAvailable: false,
+            highestBump: 'none',
+            contractRiskDetected: false,
+          },
+        })
+      }
+
+      if (url.includes('/api/updates/history') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, { data: options.updateHistory ?? { entries: [], restorePoints: [] } })
+      }
+
+      if (url.includes('/api/updates/apply') && method === 'POST') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, {
+          data: options.updateApplyResult ?? {
+            kind: 'up-to-date',
+            report: {
+              checkedAt: '2026-01-01T00:00:00.000Z',
+              packages: [],
+              updateAvailable: false,
+              highestBump: 'none',
+              contractRiskDetected: false,
+            },
+          },
+        })
       }
 
       // `GET|PATCH /api/settings` — the editorial site settings (fiche 23).

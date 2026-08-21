@@ -11,6 +11,7 @@ import { runMcp } from './commands/mcp.js'
 import { runMigrate } from './commands/migrate.js'
 import { runServe } from './commands/serve.js'
 import { runSkin } from './commands/skin.js'
+import { runUpdate } from './commands/update.js'
 import { runUsers } from './commands/users.js'
 import { createOutput, shouldUseColour, type Writer } from './output.js'
 
@@ -34,10 +35,13 @@ export type { ServeOptions } from './commands/serve.js'
 export { loadCollections, runServe } from './commands/serve.js'
 export type { SkinOptions, SkinSubcommand } from './commands/skin.js'
 export { runSkin } from './commands/skin.js'
+export type { UpdateOptions, UpdateSubcommand } from './commands/update.js'
+export { runUpdate } from './commands/update.js'
 export type { UsersOptions, UsersSubcommand } from './commands/users.js'
 export { runUsers } from './commands/users.js'
 export type { Output, Writer } from './output.js'
 export { createOutput, shouldUseColour } from './output.js'
+export { getCliVersion } from './version.js'
 
 const USAGE = `cogenta — the command line for a Cogenta site
 
@@ -66,12 +70,19 @@ Commands
   skin generate --description "…"   Generate a skin from a description
   serve, dev       Run the content and auth API over HTTP
   mcp              Run an MCP server over stdin/stdout, exposing this site's tools
+  update check     Compare the installed @cogenta/core / @cogenta/cli against npm
+  update apply     Apply an available update — always takes a restore point first
+  update history   Show past checks, applies, and the restore points they took
   help             Show this message
   version          Print the version
 
-Not built yet: build, upgrade, deploy, theme, agent, and generate
-schema/generate migrations — see CLAUDE.md for why each is deferred
-rather than stubbed.
+"update" bumps this site's npm packages only — it never runs a migration for
+you (run "cogenta migrate status"/"migrate up" yourself afterward, with the
+same destructive-change confirmation migrate already requires). That is also
+what separates it from the still-unbuilt "cogenta upgrade" L9 envisioned
+("mise à jour avec migrations et vérification" combined) — not built here,
+along with build, deploy, theme, agent, and generate schema/generate
+migrations — see CLAUDE.md for why each is deferred rather than stubbed.
 
 Options
   --cwd <path>            Run as if from this directory
@@ -81,8 +92,9 @@ Options
   --description <text>    skin generate: free text describing the site
   --external              links check: also follow links that leave the site
   --collections <a,b,c>   export: only these collections (default: all)
-  --dir <path>            backup: where to write/read backups (default .cogenta/backups)
+  --dir <path>            backup / update: where to write/read backups (default .cogenta/backups)
   --passphrase <text>     backup create / restore: encrypt or decrypt the backup
+  --confirm-breaking      update apply: proceed even though a contract-risk warning was found
 
 Migration options
   --to <id>               Stop at this migration, inclusive
@@ -165,6 +177,7 @@ export async function run(options: RunOptions): Promise<number> {
         collections: { type: 'string' },
         dir: { type: 'string' },
         passphrase: { type: 'string' },
+        'confirm-breaking': { type: 'boolean' },
       },
     })
   } catch (error) {
@@ -301,6 +314,19 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.passphrase === 'string'
         ? { passphrase: parsed.values.passphrase }
         : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'update') {
+    return runUpdate({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.dir === 'string' ? { dir: parsed.values.dir } : {}),
+      ...(parsed.values['confirm-breaking'] === true ? { confirmBreaking: true } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

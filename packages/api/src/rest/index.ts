@@ -200,5 +200,20 @@ export type {
   ToolsRouterOptions,
 } from './tools-router.js'
 export { createToolsRouter } from './tools-router.js'
+export type {
+  RestorePointSummaryLike,
+  UpdateApplierLike,
+  UpdateApplyResultLike,
+  UpdateCheckerLike,
+  UpdateCheckReportLike,
+  UpdateContractRiskLike,
+  UpdateContractRiskWarningLike,
+  UpdateHistoryEntryLike,
+  UpdateHistoryLike,
+  UpdatePackageStatusLike,
+  UpdateRouter,
+  UpdateRouterOptions,
+} from './update-router.js'
+export { createUpdateRouter } from './update-router.js'
 export type { InvitedUserEvent, UsersRouter, UsersRouterOptions } from './users-router.js'
 export { createUsersRouter } from './users-router.js'

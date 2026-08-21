@@ -46,6 +46,7 @@ import {
   createNoticeDismissalStore,
   createNoticeHistoryStore,
   createNoticeRouter,
+  createObservabilityRouter,
   createOpsStatusRouter,
   createPendingMigrationsSource,
   createPermissionLayer,
@@ -82,6 +83,7 @@ import {
   type NotFoundRouter,
   type NoticeChannelSettingsRouter,
   type NoticeRouter,
+  type ObservabilityRouter,
   type OpsStatusRouter,
   type PermissionLayer,
   type RedirectRouter,
@@ -168,6 +170,7 @@ import {
   type HealthReport,
   isCogentaError,
   type Logger,
+  type LogLevel,
   loadConfig,
   type MediaStore,
   type MigrationStatus,
@@ -191,6 +194,11 @@ import {
   parseJsonImport,
   undoImport,
 } from '@cogenta/import'
+import {
+  createObservabilityRuntime,
+  type ObservabilityRuntime,
+  withRequestTracing,
+} from '@cogenta/observability'
 import {
   createMarketplaceCatalog,
   createMarketplaceInstaller,
@@ -2908,6 +2916,14 @@ export interface RuntimeExtras {
   readonly maintenance: MaintenanceStore
   readonly errorLog: ErrorLog
   readonly siteName: string
+  /**
+   * The "Exploitation" > Observability screen (fiche L22 task 5). Optional
+   * for the same pragmatic reason `scheduledTasksRouter` is — a caller that
+   * builds a bare `Site` by hand goes on working unchanged, and
+   * `GET /api/observability` simply does not exist rather than 500ing on a
+   * runtime nobody constructed. `cogenta serve` always passes one.
+   */
+  readonly observabilityRouter?: ObservabilityRouter
 }
 
 /**
@@ -3382,6 +3398,15 @@ export function createRequestListener(
         const body = req.method === 'POST' ? await readBody(req) : undefined
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await extras.healthRouter.handle(request, context))
+        return
+      }
+
+      // The "Exploitation" > Observability screen (fiche L22 task 5):
+      // recent request traces and structured-log lines this process has
+      // captured locally, admin-only, read-only.
+      if (extras?.observabilityRouter !== undefined && url.pathname === '/api/observability') {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await extras.observabilityRouter.handle(request, context))
         return
       }
 
@@ -4127,6 +4152,12 @@ export interface ServeOptions {
    * without waiting a day for it.
    */
   readonly analyticsPurgeTickMs?: number
+  /**
+   * Overrides `OBSERVABILITY_SETTINGS_TICK_MS` (fiche L22 task 5). Not a CLI
+   * flag, same reason as `scheduledPublishTickMs`: a test proves a settings
+   * change really takes effect without waiting out the real interval.
+   */
+  readonly observabilitySettingsTickMs?: number
 }
 
 const DEFAULT_PORT = 4000
@@ -4196,6 +4227,15 @@ const CHANNEL_NOTIFICATION_TICK_MS = 60_000
 const ANALYTICS_PURGE_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
+ * How often `runServe` re-reads `observability.enabled`/
+ * `observability.logLevel` from the settings store (fiche L22 task 5).
+ * Every 15 seconds: frequent enough that flipping either from the admin
+ * feels close to immediate, infrequent enough that it is nowhere near the
+ * cost of a query per log call or per request.
+ */
+const OBSERVABILITY_SETTINGS_TICK_MS = 15_000
+
+/**
  * Builds `/api/config-status`'s answer (fiche 23 task 5) from what
  * `loadConfig()` already resolved — a hand-picked, secret-free subset
  * (`ConfigStatusInput` has no field a secret could occupy), plus the
@@ -4239,7 +4279,10 @@ function buildConfigStatus(
 export async function runServe(options: ServeOptions): Promise<number> {
   const { out, stderr } = options
   const env = options.env ?? process.env
-  const logger = options.logger ?? createLogger({ level: 'silent' })
+  // Reassigned once `siteSettingsStore` exists (below): from that point on
+  // every use of `logger` also feeds the observability recent-log buffer,
+  // gated by the live `observability.logLevel` setting.
+  let logger = options.logger ?? createLogger({ level: 'silent' })
 
   const loaded = await loadConfig({
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
@@ -4411,6 +4454,68 @@ export async function runServe(options: ServeOptions): Promise<number> {
         token,
         expiresAt,
       ).then(() => undefined),
+  })
+
+  // Observability (fiche L22 task 5): OpenTelemetry tracing plus a local,
+  // bounded recent-events buffer the admin's "Exploitation" screen reads.
+  // The OTLP export destination is infra config, resolved once here
+  // (`loaded.config.observability` — it can carry a bearer-token header,
+  // rule R7); whether collection runs at all, and how verbose it is, are
+  // the editorial `observability.enabled`/`observability.logLevel` site
+  // settings instead, changeable from the admin with no restart. A DB read
+  // on every request or log call would be its own cost, so both are cached
+  // and refreshed on a short interval — eventually consistent, the same
+  // trade every other "no restart" setting in this file already makes (see
+  // `homePath`'s own comment further up), never a query per call.
+  let observabilityEnabled = true
+  let observabilityLogLevel: LogLevel = 'info'
+  const OBSERVABILITY_LOG_LEVELS: readonly LogLevel[] = ['error', 'warn', 'info', 'debug']
+  async function refreshObservabilitySettings(): Promise<void> {
+    try {
+      const [enabledSetting, logLevelSetting] = await Promise.all([
+        site.siteSettingsStore.get('observability.enabled', SITE_SETTINGS_SITE_SCOPE),
+        site.siteSettingsStore.get('observability.logLevel', SITE_SETTINGS_SITE_SCOPE),
+      ])
+      observabilityEnabled =
+        typeof enabledSetting?.value === 'boolean' ? enabledSetting.value : true
+      const level = logLevelSetting?.value
+      observabilityLogLevel =
+        typeof level === 'string' && (OBSERVABILITY_LOG_LEVELS as readonly string[]).includes(level)
+          ? (level as LogLevel)
+          : 'info'
+    } catch (error) {
+      logger.warn('failed to refresh observability settings', { error: String(error) })
+    }
+  }
+  await refreshObservabilitySettings()
+  const observabilityRuntime: ObservabilityRuntime = createObservabilityRuntime({
+    serviceName: loaded.config.observability.serviceName,
+    ...(loaded.config.observability.otlpEndpoint === undefined
+      ? {}
+      : {
+          otlp: {
+            endpoint: loaded.config.observability.otlpEndpoint,
+            ...(loaded.config.observability.otlpHeaders === undefined
+              ? {}
+              : { headers: loaded.config.observability.otlpHeaders }),
+          },
+        }),
+    isEnabled: () => observabilityEnabled,
+  })
+  // From here on, every `logger.debug/info/warn/error` call in this function
+  // also feeds the observability recent-log buffer (gated by the live
+  // `observabilityLogLevel` above) — nothing before this line could have,
+  // since `site.siteSettingsStore` did not exist yet to read the setting
+  // from. `assembleSite` above already captured the pre-wrap `logger` by
+  // value, so its own internal logging is unaffected — an accepted, narrow
+  // gap (documented in the task report) rather than a reason to thread a
+  // mutable logger reference through a function whose every other caller
+  // (tests included) passes a plain, already-built one.
+  logger = observabilityRuntime.wrapLogger(logger, () => observabilityLogLevel)
+  const observabilityRouter = createObservabilityRouter({
+    isEnabled: () => observabilityEnabled,
+    getRecentTraces: () => observabilityRuntime.recentStore.recentTraces(),
+    getRecentLogs: () => observabilityRuntime.recentStore.recentLogs(),
   })
 
   const toolRunner = createToolRunner({
@@ -4609,14 +4714,18 @@ export async function runServe(options: ServeOptions): Promise<number> {
   })
 
   const server = createServer(
-    createRequestListener(site, logger, {
-      healthRouter,
-      toolsRouter,
-      scheduledTasksRouter,
-      maintenance: maintenanceStore,
-      errorLog,
-      siteName: loaded.config.site.name,
-    }),
+    withRequestTracing(
+      createRequestListener(site, logger, {
+        healthRouter,
+        toolsRouter,
+        scheduledTasksRouter,
+        maintenance: maintenanceStore,
+        errorLog,
+        siteName: loaded.config.site.name,
+        observabilityRouter,
+      }),
+      observabilityRuntime,
+    ),
   )
   const port = options.port ?? DEFAULT_PORT
   const host = options.host ?? DEFAULT_HOST
@@ -4671,6 +4780,16 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // no open connections must still be able to exit.
   scheduledTasksTimer.unref()
 
+  // Refreshes the cached `observabilityEnabled`/`observabilityLogLevel`
+  // values from the settings store (see their own comment above) — this is
+  // what makes flipping either one from the admin take effect without a
+  // restart, bounded by this interval rather than instant.
+  const observabilitySettingsTimer = setInterval(
+    () => void refreshObservabilitySettings(),
+    options.observabilitySettingsTickMs ?? OBSERVABILITY_SETTINGS_TICK_MS,
+  )
+  observabilitySettingsTimer.unref()
+
   await new Promise<void>((resolve) => {
     if (options.signal === undefined) return
     if (options.signal.aborted) {
@@ -4681,6 +4800,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   })
 
   clearInterval(scheduledTasksTimer)
+  clearInterval(observabilitySettingsTimer)
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()))
@@ -4693,6 +4813,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     const grace = setTimeout(() => server.closeAllConnections(), SHUTDOWN_GRACE_MS)
     grace.unref()
   })
+  await observabilityRuntime.shutdown()
   await assistant.dispose()
   await toolsQueue.close()
   await cacheSelection.dispose()

@@ -229,5 +229,11 @@ export function resolveConfig(
       stripeSecretKey: secrets.paymentStripeSecretKey,
       stripeWebhookSecret: secrets.paymentStripeWebhookSecret,
     }),
+    observability: Object.freeze({
+      serviceName: config.observability.serviceName,
+      otlpEndpoint: config.observability.otlpEndpoint,
+      otlpHeaders:
+        secrets.otlpHeaders === undefined ? undefined : Object.freeze({ ...secrets.otlpHeaders }),
+    }),
   })
 }

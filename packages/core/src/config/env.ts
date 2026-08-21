@@ -13,6 +13,7 @@ export const SECRET_KEYS: ReadonlyMap<string, string> = new Map([
   ['webhooks.secret', 'COGENTA_WEBHOOK_SECRET'],
   ['payment.stripeSecretKey', 'COGENTA_PAYMENT_STRIPE_SECRET_KEY'],
   ['payment.stripeWebhookSecret', 'COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET'],
+  ['observability.otlpHeaders', 'COGENTA_OTLP_HEADERS or OTEL_EXPORTER_OTLP_HEADERS'],
 ])
 
 /** First variable that is set and not empty. An empty variable means "unset". */
@@ -180,7 +181,53 @@ export function applyEnv(
     output['payment'] = payment
   }
 
+  // `OTEL_*` are OpenTelemetry's own standard variable names — honoured as a
+  // fallback so an operator who already exports to `OTEL_EXPORTER_OTLP_ENDPOINT`
+  // for every other service in their fleet does not have to learn a second
+  // name for this one (fiche L22 task 5: "le standard du secteur").
+  const observability = section(output, 'observability')
+  if (observability !== undefined) {
+    assign(
+      observability,
+      'serviceName',
+      read(env, 'COGENTA_OBSERVABILITY_SERVICE_NAME', 'OTEL_SERVICE_NAME'),
+    )
+    assign(
+      observability,
+      'otlpEndpoint',
+      read(env, 'COGENTA_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_ENDPOINT'),
+    )
+    output['observability'] = observability
+  }
+
   return output
+}
+
+/**
+ * Parses the OpenTelemetry spec's own `key1=value1,key2=value2` header list
+ * format (used by both `COGENTA_OTLP_HEADERS` and its `OTEL_*` standard
+ * alias) — the same shape
+ * https://opentelemetry.io/docs/specs/otel/protocol/exporter/#specifying-headers-as-a-string
+ * defines, so a value already exported for another OTLP-speaking tool works
+ * here unchanged. An entry with no `=`, or an empty key, is dropped rather
+ * than throwing — a malformed header must not stop the whole site from
+ * starting.
+ */
+function parseHeaderList(raw: string): Record<string, string> {
+  const headers: Record<string, string> = {}
+  for (const pair of raw.split(',')) {
+    const separator = pair.indexOf('=')
+    if (separator <= 0) continue
+    const key = pair.slice(0, separator).trim()
+    const value = pair.slice(separator + 1).trim()
+    if (key === '') continue
+    try {
+      headers[key] = decodeURIComponent(value)
+    } catch {
+      headers[key] = value
+    }
+  }
+  return headers
 }
 
 export interface EnvironmentSecrets {
@@ -197,6 +244,13 @@ export interface EnvironmentSecrets {
   readonly paymentStripeSecretKey: string | undefined
   /** The signing secret Stripe shows when a webhook endpoint is created. */
   readonly paymentStripeWebhookSecret: string | undefined
+  /**
+   * Headers sent with every OTLP export — most often a bearer token the
+   * backend (Grafana Cloud, Datadog, …) issued. `undefined` means "no
+   * extra headers", not "no OTLP export": `observability.otlpEndpoint`
+   * alone is enough for a collector that needs none.
+   */
+  readonly otlpHeaders: Readonly<Record<string, string>> | undefined
 }
 
 export function readSecrets(env: Environment): EnvironmentSecrets {
@@ -209,6 +263,10 @@ export function readSecrets(env: Environment): EnvironmentSecrets {
     webhookSecret: read(env, 'COGENTA_WEBHOOK_SECRET'),
     paymentStripeSecretKey: read(env, 'COGENTA_PAYMENT_STRIPE_SECRET_KEY'),
     paymentStripeWebhookSecret: read(env, 'COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET'),
+    otlpHeaders: (() => {
+      const raw = read(env, 'COGENTA_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_HEADERS')
+      return raw === undefined ? undefined : parseHeaderList(raw)
+    })(),
   }
 }
 

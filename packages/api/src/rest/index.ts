@@ -105,6 +105,13 @@ export { extractBoundary, isMultipartFormData, parseMultipartFormData } from './
 export type { NotFoundRouter, NotFoundRouterOptions } from './not-found-router.js'
 export { createNotFoundRouter } from './not-found-router.js'
 export type {
+  ObservabilityLogLike,
+  ObservabilityRouter,
+  ObservabilityRouterOptions,
+  ObservabilityTraceLike,
+} from './observability-router.js'
+export { createObservabilityRouter } from './observability-router.js'
+export type {
   ConfigStatusInput,
   OpsStatusRouter,
   OpsStatusRouterOptions,

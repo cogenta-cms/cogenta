@@ -117,6 +117,8 @@ export interface StartServerOptions {
   readonly trashPurgeTickMs?: number
   /** Overrides the daily cadence `runServe` purges expired form submissions on — see `ServeOptions.formsPurgeTickMs` (fiche 16 task 7). */
   readonly formsPurgeTickMs?: number
+  /** Overrides the 15s cadence `runServe` re-reads observability settings on — see `ServeOptions.observabilitySettingsTickMs` (fiche L22 task 5). */
+  readonly observabilitySettingsTickMs?: number
 }
 
 export async function startServer(
@@ -160,6 +162,9 @@ export async function startServer(
     ...(options.formsPurgeTickMs === undefined
       ? {}
       : { formsPurgeTickMs: options.formsPurgeTickMs }),
+    ...(options.observabilitySettingsTickMs === undefined
+      ? {}
+      : { observabilitySettingsTickMs: options.observabilitySettingsTickMs }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

@@ -35,6 +35,7 @@ import { MarketplaceRoute } from './routes/marketplace.js'
 import { McpRoute } from './routes/mcp.js'
 import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
+import { ObservabilityRoute } from './routes/observability.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
@@ -122,6 +123,7 @@ export function App(): JSX.Element {
                 <Route path="review" element={<ReviewRoute />} />
                 <Route path="ops-settings" element={<OpsSettingsRoute />} />
                 <Route path="health" element={<HealthRoute />} />
+                <Route path="observability" element={<ObservabilityRoute />} />
                 <Route path="tools" element={<ToolsRoute />} />
                 <Route path="scheduled" element={<ScheduledRoute />} />
                 <Route path="trash" element={<TrashRoute />} />

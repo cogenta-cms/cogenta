@@ -469,3 +469,84 @@ describe('resolveConfig — payment (contract E, fiche 34 task 3)', () => {
     expect(config.payment.manualInstructions).toBe('IBAN FR76…, reference: order number')
   })
 })
+
+describe('resolveConfig — observability (fiche L22 task 5)', () => {
+  it('defaults to a service name of "cogenta" and no OTLP export', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    expect(config.observability.serviceName).toBe('cogenta')
+    expect(config.observability.otlpEndpoint).toBeUndefined()
+    expect(config.observability.otlpHeaders).toBeUndefined()
+  })
+
+  it('accepts a service name and an OTLP endpoint from the config file', () => {
+    const config = resolveConfig(
+      {
+        ...minimal,
+        observability: {
+          serviceName: 'my-site',
+          otlpEndpoint: 'https://otel.example.com/v1/traces',
+        },
+      },
+      noEnv,
+    )
+
+    expect(config.observability.serviceName).toBe('my-site')
+    expect(config.observability.otlpEndpoint).toBe('https://otel.example.com/v1/traces')
+  })
+
+  it('refuses OTLP headers written in the config file', () => {
+    expect(() =>
+      resolveConfig(
+        { ...minimal, observability: { otlpHeaders: { authorization: 'Bearer x' } } },
+        noEnv,
+      ),
+    ).toThrowError(/observability\.otlpHeaders/)
+  })
+
+  it('points the user at the environment variable for the leaked OTLP headers', () => {
+    try {
+      resolveConfig(
+        { ...minimal, observability: { otlpHeaders: { authorization: 'Bearer x' } } },
+        noEnv,
+      )
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(CogentaError)
+      expect((error as CogentaError).code).toBe('CONFIG_SECRET_IN_FILE')
+      expect((error as CogentaError).hint).toContain('COGENTA_OTLP_HEADERS')
+    }
+  })
+
+  it('parses OTLP headers from the environment, spec-format key=value pairs', () => {
+    const config = resolveConfig(minimal, {
+      COGENTA_OTLP_HEADERS: 'Authorization=Bearer%20abc,X-Scope-OrgID=123',
+    })
+
+    expect(config.observability.otlpHeaders).toEqual({
+      Authorization: 'Bearer abc',
+      'X-Scope-OrgID': '123',
+    })
+  })
+
+  it('falls back to the standard OTEL_* environment variable names', () => {
+    const config = resolveConfig(minimal, {
+      OTEL_SERVICE_NAME: 'from-otel-env',
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'https://collector.example.com',
+      OTEL_EXPORTER_OTLP_HEADERS: 'x-api-key=abc',
+    })
+
+    expect(config.observability.serviceName).toBe('from-otel-env')
+    expect(config.observability.otlpEndpoint).toBe('https://collector.example.com')
+    expect(config.observability.otlpHeaders).toEqual({ 'x-api-key': 'abc' })
+  })
+
+  it('prefers the COGENTA_-prefixed variable over the OTEL_* one when both are set', () => {
+    const config = resolveConfig(minimal, {
+      COGENTA_OTLP_ENDPOINT: 'https://cogenta-wins.example.com',
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel-loses.example.com',
+    })
+
+    expect(config.observability.otlpEndpoint).toBe('https://cogenta-wins.example.com')
+  })
+})

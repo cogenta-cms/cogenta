@@ -345,6 +345,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    to: '/observability',
+    labelKey: 'nav.observability',
+    group: 'ops',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     to: '/tools',
     labelKey: 'nav.tools',
     group: 'ops',

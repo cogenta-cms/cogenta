@@ -88,6 +88,16 @@ export const SITE_SETTING_GROUPS = [
    * own screen instead of a `SettingsRoute` tab.
    */
   'seo',
+  /**
+   * OpenTelemetry tracing and structured-log collection (fiche L22 task 5).
+   * Editorial on purpose, unlike the OTLP export destination (which stays in
+   * `cogenta.config.mjs`'s `observability` section, because it can carry a
+   * bearer-token header — rule R7): whether the local recent-events buffer
+   * runs at all, and how verbose it is, are exactly the kind of switch an
+   * admin should be able to flip from the "Exploitation" screen with no
+   * redeploy, the same way `discussion.enabled` already works.
+   */
+  'observability',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -717,6 +727,41 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `/api/media/{id}/file` or `/_image?id=…` would answer.
     schema: urlOrPathOrEmpty,
     defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Observability (fiche L22 task 5) — whether the local trace/log
+  // collection behind the admin's "Exploitation" screen runs, and how
+  // verbose it is. The OTLP export destination itself is not here (see the
+  // `observability` group's own doc comment) — this registry only ever
+  // holds editorial state, never infra wiring that can carry a secret.
+  {
+    key: 'observability.enabled',
+    group: 'observability',
+    order: 0,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // On by default — fiche L22 task 5's own "actif par défaut pour la
+    // collecte et l'affichage local (R1)": a fresh site shows something on
+    // its Exploitation screen without anyone having to opt in first.
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'observability.logLevel',
+    group: 'observability',
+    order: 1,
+    uiType: 'select',
+    scope: 'site',
+    schema: z.enum(['error', 'warn', 'info', 'debug']),
+    defaultValue: 'info',
+    options: [
+      { value: 'error', label: 'Error' },
+      { value: 'warn', label: 'Warn' },
+      { value: 'info', label: 'Info' },
+      { value: 'debug', label: 'Debug' },
+    ],
     writeRoles: ADMIN_ONLY,
   },
 ] as const

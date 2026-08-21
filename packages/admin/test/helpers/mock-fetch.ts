@@ -691,6 +691,34 @@ export function installMockFetch(
       readonly notes?: readonly string[]
       readonly problems?: readonly string[]
     }
+    /**
+     * What `GET /api/observability` answers with — the "Exploitation" >
+     * Observability screen (fiche L22 task 5). Enabled with empty buffers by
+     * default, so a test that never touches this screen does not have to
+     * think about it.
+     */
+    readonly observability?: {
+      readonly enabled?: boolean
+      readonly traces?: readonly {
+        readonly id: string
+        readonly at: string
+        readonly traceId: string
+        readonly spanId: string
+        readonly name: string
+        readonly method?: string
+        readonly path?: string
+        readonly statusCode?: number
+        readonly durationMs: number
+        readonly ok: boolean
+      }[]
+      readonly logs?: readonly {
+        readonly id: string
+        readonly at: string
+        readonly level: 'debug' | 'info' | 'warn' | 'error'
+        readonly msg: string
+        readonly fields?: Readonly<Record<string, unknown>>
+      }[]
+    }
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -975,6 +1003,28 @@ export function installMockFetch(
       uiType: 'path',
       scope: 'site',
       value: '',
+    },
+    // Observability (fiche L22 task 5) — mirrors
+    // packages/schema/src/store/site-settings-registry.ts's `observability` group.
+    'observability.enabled': {
+      group: 'observability',
+      order: 0,
+      uiType: 'boolean',
+      scope: 'site',
+      value: true,
+    },
+    'observability.logLevel': {
+      group: 'observability',
+      order: 1,
+      uiType: 'select',
+      scope: 'site',
+      value: 'info',
+      options: [
+        { value: 'error', label: 'Error' },
+        { value: 'warn', label: 'Warn' },
+        { value: 'info', label: 'Info' },
+        { value: 'debug', label: 'Debug' },
+      ],
     },
   }
   const siteSettingsWrites = new Map<
@@ -3118,6 +3168,24 @@ export function installMockFetch(
             ],
             notes: options.healthReport?.notes ?? [],
             problems: options.healthReport?.problems ?? [],
+          },
+        })
+      }
+
+      if (url.endsWith('/api/observability') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may read recent traces and logs.',
+            },
+          })
+        }
+        return json(200, {
+          data: {
+            enabled: options.observability?.enabled ?? true,
+            traces: options.observability?.traces ?? [],
+            logs: options.observability?.logs ?? [],
           },
         })
       }

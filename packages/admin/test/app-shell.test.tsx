@@ -82,15 +82,18 @@ describe('App, signed in', () => {
 })
 
 describe('App, branding in the topbar (fiche L21 task 8)', () => {
-  it('shows the real Cogenta logo and name by default', async () => {
+  it('shows the real Cogenta logo by default, name conveyed via alt text since the wordmark is baked into the asset', async () => {
     const { container } = render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     const brand = container.querySelector('.app-shell__brand')
     expect(brand).not.toBeNull()
     const logo = brand?.querySelector('img.app-shell__brand-logo')
-    expect(logo?.getAttribute('src')).toContain('branding/logo-cogenta-small.png')
-    expect(brand?.textContent).toContain('Cogenta')
+    // jsdom has no `matchMedia` in this test environment, so `useTheme()`
+    // resolves to its own documented fallback, "light" — the light-theme
+    // asset is the one actually asserted here.
+    expect(logo?.getAttribute('src')).toContain('branding/logo-cogenta-light.png')
+    expect(logo?.getAttribute('alt')).toBe('Cogenta')
   })
 
   it('hides Cogenta once branding is turned off, with no replacement uploaded', async () => {

@@ -80,15 +80,17 @@
   color: var(--color-primary);
 }
 
-/* The admin's own personalised logo (L21 task 2), shown in place of the
-   plain `//` mark once one is set — the brand's text name stays either way.
-   A fixed rem size, not em: sized against the 72px topbar, not against
-   unrelated text — a first pass at 1.5em (~25px), then 2.25rem (~36px),
-   both still read as "minuscule" against a real product's own topbar. */
+/* The brand logo — Cogenta's own real asset (icon + wordmark baked in, see
+   `app-shell.tsx`'s `COGENTA_LOGO_LIGHT_URL`/`COGENTA_LOGO_DARK_URL`) by
+   default, or the admin's own personalised upload (L21 task 2) in its
+   place. 100px tall, an explicit size rather than a design judgment call.
+   `max-width` is a fixed pixel value, not `em`: this class is also used
+   inside the footer, whose own `font-size` (0.75rem) would otherwise cap an
+   image sized in `em` far below its actual rendered height. */
 .app-shell__brand-logo {
   height: 100px;
   width: auto;
-  max-width: 8em;
+  max-width: 200px;
   object-fit: contain;
 }
 

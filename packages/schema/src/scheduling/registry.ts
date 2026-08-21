@@ -35,6 +35,30 @@ import {
  */
 
 export const SCHEDULED_TASK_RUNS_TABLE = 'cogenta_scheduled_task_runs'
+/**
+ * One row per task: the compare-and-set lock `tick()` claims before running a
+ * task (L22 task 6). Kept separate from the run-history table above —
+ * history answers "what happened", this answers "is anyone already doing
+ * this right now", and conflating the two would make every read of the
+ * admin history screen reason about lock state.
+ *
+ * Before this table existed, `tick()` read the last run from the history
+ * table, decided a task was due, and only recorded the new run *after* it
+ * finished — nothing made that read-then-act atomic. With more than one
+ * `cogenta serve` replica (or a replica racing a `cogenta cron` invocation)
+ * against the same database, two processes could both read "due" and both
+ * start executing the same task, including the destructive trash-purge
+ * sweep. The fix is the same shape as `takeOne`'s guarded stock `UPDATE` in
+ * `@cogenta/commerce` and `claimOnce`'s guarded job `UPDATE` in
+ * `@cogenta/core`'s database queue: read `last_claim`, then issue a single
+ * `UPDATE ... WHERE last_claim = <the value just read>`. Only one of two
+ * racing `UPDATE`s can match that `WHERE` — the loser sees
+ * `rowsAffected === 0` and skips the task entirely. No dialect-specific
+ * locking primitive is needed: a single `UPDATE` with an equality `WHERE` is
+ * atomic per row on SQLite, Postgres and MySQL/MariaDB alike, so the exact
+ * same query runs unmodified on all three.
+ */
+export const SCHEDULED_TASK_CLAIMS_TABLE = 'cogenta_scheduled_task_claims'
 
 /** Runs kept per task. Enough to see a pattern across a week of daily tasks, never unbounded. */
 const DEFAULT_KEEP_RUNS = 50
@@ -115,6 +139,11 @@ export interface ScheduledTaskRegistry {
    * Runs every task whose interval has elapsed since its last run, in
    * registration order and one at a time — never concurrently, so two tasks
    * sharing one SQLite connection never open overlapping transactions.
+   *
+   * Each due task is first claimed with a compare-and-set `UPDATE` against
+   * `SCHEDULED_TASK_CLAIMS_TABLE`. Losing that race (another replica already
+   * claimed the same task) is not an error — the task is silently skipped
+   * for this tick, exactly as if it had not been due.
    */
   tick(now?: number): Promise<{ readonly ran: readonly string[] }>
   ensureTable(): Promise<void>
@@ -127,6 +156,8 @@ export interface CreateScheduledTaskRegistryOptions {
   /** Runs kept per task before older ones are pruned. Defaults to 50. */
   readonly keepRuns?: number
   readonly table?: string
+  /** Defaults to `SCHEDULED_TASK_CLAIMS_TABLE`. */
+  readonly claimsTable?: string
 }
 
 interface RunRow {
@@ -140,6 +171,11 @@ interface RunRow {
   error: string | null
   triggered_by: string
   actor: string | null
+}
+
+interface ClaimRow {
+  task_name: string
+  last_claim: number | null
 }
 
 function toRun(row: RunRow): ScheduledTaskRun {
@@ -174,6 +210,7 @@ export function createScheduledTaskRegistry(
   const keepRuns = options.keepRuns ?? DEFAULT_KEEP_RUNS
   const logger = options.logger?.child({ component: 'scheduler' })
   const table = identifier(options.table ?? SCHEDULED_TASK_RUNS_TABLE, db.dialect)
+  const claimsTable = identifier(options.claimsTable ?? SCHEDULED_TASK_CLAIMS_TABLE, db.dialect)
 
   const definitions = new Map<string, ScheduledTaskDefinition>()
   let ready = false
@@ -199,6 +236,15 @@ export function createScheduledTaskRegistry(
             on ${table} (task_name, started_at)`,
       )
       .catch(() => undefined) // already there
+
+    // The compare-and-set lock table (L22 task 6). `last_claim` starts out
+    // `null` — "never claimed" — for a brand-new row, matching the meaning
+    // `lastRunFor` gives a task that has never run.
+    await db.query(sql`
+      create table if not exists ${claimsTable} (
+        task_name varchar(255) not null primary key,
+        last_claim bigint
+      )`)
     ready = true
   }
 
@@ -238,6 +284,84 @@ export function createScheduledTaskRegistry(
     const keptIds = kept.rows.map((row) => row.id)
     const inList = keptIds.map((id) => sql`${id}`).reduce((left, right) => sql`${left}, ${right}`)
     await db.query(sql`delete from ${table} where task_name = ${name} and id not in (${inList})`)
+  }
+
+  /**
+   * Makes sure a claim row exists for a task, seeded from the run history so
+   * an upgrade from a database that already has runs (but no claims table
+   * yet) does not make every existing task look newly-never-run and fire
+   * immediately. A race between two processes both seeding the same row for
+   * the first time is harmless: the loser's `insert` hits the primary key
+   * and is swallowed, exactly like the "already there" index-creation guard
+   * above — the row itself, not who created it, is what matters.
+   */
+  async function ensureClaimRow(name: string): Promise<void> {
+    await ensureTable()
+    const existing = await db.query<{ task_name: string }>(
+      sql`select task_name from ${claimsTable} where task_name = ${name}`,
+    )
+    if (existing.rows.length > 0) return
+
+    const priorRun = await lastRunFor(name)
+    const seed = priorRun === null ? null : priorRun.startedAt
+    await db
+      .query(sql`insert into ${claimsTable} (task_name, last_claim) values (${name}, ${seed})`)
+      .catch(() => undefined) // another process seeded it first — fine, the row exists either way
+  }
+
+  /**
+   * The compare-and-set claim `tick()` takes before running a due task.
+   *
+   * Reads the task's current `last_claim`, decides whether that makes it
+   * due, and — only if so — tries to move `last_claim` forward with a single
+   * guarded `UPDATE` whose `WHERE` re-checks the exact value just read. If
+   * another process already claimed this task between the read and the
+   * write, `last_claim` no longer matches, `rowsAffected` comes back `0`,
+   * and this returns `false` — the caller must not run the task. Only one of
+   * two racing callers can ever see `true` for the same task and instant,
+   * because a single-row `UPDATE` with an equality `WHERE` is atomic on
+   * SQLite, Postgres and MySQL/MariaDB alike; nothing dialect-specific is
+   * needed here.
+   */
+  async function tryClaim(definition: ScheduledTaskDefinition, at: number): Promise<boolean> {
+    await ensureClaimRow(definition.name)
+
+    const found = await db.query<ClaimRow>(
+      sql`select task_name, last_claim from ${claimsTable} where task_name = ${definition.name}`,
+    )
+    // Normalised the same way `toRun` normalises the run-history table's
+    // bigint columns: drivers disagree on whether a bigint column comes back
+    // as a JS number, a string or a `bigint`, and comparing/subtracting the
+    // wrong one silently produces `NaN` or a string mismatch rather than an
+    // error.
+    const raw = found.rows[0]?.last_claim
+    const lastClaim = raw === null || raw === undefined ? null : Number(raw)
+    const due = lastClaim === null || at - lastClaim >= definition.intervalMs
+    if (!due) return false
+
+    const result =
+      lastClaim === null
+        ? await db.query(sql`
+            update ${claimsTable} set last_claim = ${at}
+            where task_name = ${definition.name} and last_claim is null`)
+        : await db.query(sql`
+            update ${claimsTable} set last_claim = ${at}
+            where task_name = ${definition.name} and last_claim = ${lastClaim}`)
+
+    return result.rowsAffected > 0
+  }
+
+  /**
+   * Keeps the claim row in step with the run it just recorded, whether the
+   * run was scheduled or manual (`runNow`) — a manual run must push the next
+   * scheduled run out exactly as it always has, since `tick()` used to base
+   * "is it due" on the run-history table, which every trigger writes to.
+   */
+  async function upsertClaim(name: string, startedAt: number): Promise<void> {
+    await ensureClaimRow(name)
+    await db.query(
+      sql`update ${claimsTable} set last_claim = ${startedAt} where task_name = ${name}`,
+    )
   }
 
   async function stateFor(definition: ScheduledTaskDefinition): Promise<ScheduledTaskState> {
@@ -300,6 +424,7 @@ export function createScheduledTaskRegistry(
         (${run.id}, ${run.taskName}, ${run.startedAt}, ${run.finishedAt}, ${run.durationMs},
          ${run.outcome}, ${run.summary}, ${run.error}, ${run.triggeredBy}, ${run.actor})`)
     await pruneOldRuns(definition.name)
+    await upsertClaim(definition.name, run.startedAt)
 
     return run
   }
@@ -338,13 +463,14 @@ export function createScheduledTaskRegistry(
 
     tick: async (at = now()) => {
       const ran: string[] = []
-      // Sequenced, not concurrent: this may share one SQLite connection with
-      // whatever else calls `db.transaction`, which cannot have two writers
-      // open at the same instant.
+      // Sequenced, not concurrent within this process: this may share one
+      // SQLite connection with whatever else calls `db.transaction`, which
+      // cannot have two writers open at the same instant. Across processes,
+      // `tryClaim` is what actually prevents two replicas from both running
+      // the same task — this loop alone would not (L22 task 6).
       for (const definition of definitions.values()) {
-        const lastRun = await lastRunFor(definition.name)
-        const due = lastRun === null || at - lastRun.startedAt >= definition.intervalMs
-        if (!due) continue
+        const claimed = await tryClaim(definition, at)
+        if (!claimed) continue
         await execute(definition, 'schedule', null)
         ran.push(definition.name)
       }

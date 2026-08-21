@@ -21,6 +21,7 @@ import {
   AuditIcon,
   CollectionsIcon,
   DashboardIcon,
+  DocumentationIcon,
   EditIcon,
   type IconProps,
   LogoutIcon,
@@ -58,6 +59,7 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/users': UsersIcon,
   '/profile': ProfileIcon,
   '/settings': SettingsIcon,
+  '/documentation': DocumentationIcon,
 }
 
 /** Every item without its own icon falls back to its group's — a coherent mark beats a mismatched one, and drawing eleven more glyphs is L11's job, not this fiche's. */

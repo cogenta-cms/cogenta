@@ -340,3 +340,12 @@ export const BellIcon = icon(
     <path d="M8.3 17.5a1.8 1.8 0 003.4 0" />
   </>,
 )
+
+/** The Documentation nav entry (fiche 21 task 7) — an open book, distinct from the flat-page `AuditIcon`. */
+export const DocumentationIcon = icon(
+  <>
+    <path d="M10 5.3C8.6 4.2 6.6 3.6 4.5 3.6v11c2.1 0 4.1.6 5.5 1.7" />
+    <path d="M10 5.3c1.4-1.1 3.4-1.7 5.5-1.7v11c-2.1 0-4.1.6-5.5 1.7z" />
+    <path d="M10 5.3v11.7" />
+  </>,
+)

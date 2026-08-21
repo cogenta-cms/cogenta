@@ -6,6 +6,7 @@ import {
   CONTENT_WATCH_AGENT_NAME,
   ensureBuiltinAgents,
   SECURITY_AGENT_NAME,
+  SITE_MONITOR_AGENT_NAME,
   SUPERAGENT_NAME,
 } from '../../src/agents/builtins.js'
 import type { AgentDeclarationStore } from '../../src/agents/store.js'
@@ -24,7 +25,7 @@ afterEach(async () => {
 })
 
 describe('ensureBuiltinAgents', () => {
-  it('seeds the superagent enabled, and the two examples disabled', async () => {
+  it('seeds the superagent enabled, and the three examples disabled', async () => {
     await ensureBuiltinAgents(store)
     const byName = new Map((await store.list()).map((agent) => [agent.name, agent]))
 
@@ -34,6 +35,14 @@ describe('ensureBuiltinAgents', () => {
     expect(byName.get(SECURITY_AGENT_NAME)?.builtin).toBe(true)
     expect(byName.get(CONTENT_WATCH_AGENT_NAME)?.enabled).toBe(false)
     expect(byName.get(CONTENT_WATCH_AGENT_NAME)?.builtin).toBe(true)
+    expect(byName.get(SITE_MONITOR_AGENT_NAME)?.enabled).toBe(false)
+    expect(byName.get(SITE_MONITOR_AGENT_NAME)?.builtin).toBe(true)
+    expect(byName.get(SITE_MONITOR_AGENT_NAME)?.tools).toEqual([
+      'logs.read_not_found',
+      'content.collections',
+      'content.list',
+      'redirects.create',
+    ])
   })
 
   it('is idempotent — does not duplicate or reset an already-seeded, edited agent', async () => {
@@ -50,8 +59,8 @@ describe('ensureBuiltinAgents', () => {
     expect(security?.tools).toEqual(['deps.scan'])
   })
 
-  it('only ever seeds exactly three agents', async () => {
+  it('only ever seeds exactly four agents', async () => {
     await ensureBuiltinAgents(store)
-    expect(await store.list()).toHaveLength(3)
+    expect(await store.list()).toHaveLength(4)
   })
 })

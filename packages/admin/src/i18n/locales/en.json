@@ -466,6 +466,13 @@
         "body": "An entry in \"{{collection}}\" ({{locale}}) was due to publish but its scheduled publication failed. It stays unpublished until you fix and re-save it.",
         "action": "Open the entry"
       }
+    },
+    "monitoring": {
+      "redirect-suggestion": {
+        "title": "The Site Monitor agent suggests a redirect",
+        "body": "\"{{from}}\" keeps getting hit as a 404. The agent suggests redirecting it to \"{{to}}\". Nothing has been created — review it and add the redirect yourself if it looks right.",
+        "action": "Open Redirections"
+      }
     }
   },
   "notifications": {

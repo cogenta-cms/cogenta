@@ -41,6 +41,7 @@ import {
   createMediaRouter,
   createMenuRouter,
   createMfaRecommendationSource,
+  createMonitoringRedirectSuggestionSource,
   createNotFoundRouter,
   createNoticeChannelBridge,
   createNoticeChannelSettingsRouter,
@@ -1472,6 +1473,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           mediaStore,
           auditLog: auth.audit,
           logger,
+          // L22 task 3: the Site Monitor's own tools — the same `redirects`/
+          // `notFoundLog` stores and `collections` this function already
+          // built above, never a second instance.
+          collections,
+          notFoundLog,
+          redirects,
         })
   if (agentsRuntime !== undefined) logger.info(agentsRuntime.summary)
 
@@ -2018,6 +2025,18 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           listFailed: () => scheduledPublishFailures.list(),
           entryHref: (record) => `/collections/${record.collection}/${record.entryId}`,
         }),
+        // L22 task 3: a redirect the Site Monitor agent proposed under
+        // `co-pilot` autonomy, still pending — absent (no agent runtime
+        // configured) means the array simply does not grow, same as the
+        // pending-migrations source above.
+        ...(agentsRuntime === undefined
+          ? []
+          : [
+              createMonitoringRedirectSuggestionSource({
+                approvalQueue: agentsRuntime.approvalQueue,
+                redirects,
+              }),
+            ]),
       ],
       dismissals: noticeDismissals,
       // Fiche 38 tasks 2-3: history for the notification centre, and the

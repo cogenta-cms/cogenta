@@ -379,6 +379,18 @@ majeur et impose une migration automatique du contenu déjà saisi.
 > `document.extract` à la taxonomie. Aucune signature existante n'est touchée, aucun
 > outil existant ne change — un ajout à une taxonomie ouverte par le bas est mineur,
 > exactement comme l'ajout d'un `ErrorCode`.
+>
+> **`tools@1.2` le 2026-08-21** (L22 tâche 3, l'agent qui surveille le site) : ajout de
+> deux permissions, `logs.read` et `redirects.write`. Même règle que `tools@1.1` :
+> aucune signature existante ne change, l'ajout est par le bas. `logs.read` porte
+> `logs.read_not_found` (lecture seule du journal des 404 publics,
+> `NotFoundLogStore` — jamais le code source, jamais une requête ou une donnée
+> personnelle, le journal lui-même n'en contient pas) ; `redirects.write` porte
+> `redirects.create` (`sideEffects: true`, `reversible: true` — son `revert` retire
+> exactement la redirection qu'il a créée). `content.collections`/`content.list`
+> (mêmes deux outils, pour qu'un agent puisse choisir une page de redirection)
+> réutilisent `content.read` telle quelle plutôt que d'ajouter une troisième entrée :
+> parcourir n'est pas un accès plus large que lire une entrée.
 
 ```ts
 defineTool({
@@ -426,6 +438,7 @@ build.trigger · deploy.trigger
 http.fetch(domains[]) · channel.send(channel)
 agent.delegate · memory.read · memory.write
 document.extract
+logs.read · redirects.write
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte

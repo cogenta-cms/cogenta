@@ -465,6 +465,13 @@
         "body": "Une entrée de « {{collection}} » ({{locale}}) devait être publiée mais sa publication programmée a échoué. Elle reste non publiée tant que vous ne la corrigez pas.",
         "action": "Ouvrir l'entrée"
       }
+    },
+    "monitoring": {
+      "redirect-suggestion": {
+        "title": "L'agent Site Monitor suggère une redirection",
+        "body": "« {{from}} » continue de répondre 404. L'agent suggère de la rediriger vers « {{to}} ». Rien n'a été créé — vérifiez et ajoutez la redirection vous-même si elle vous semble pertinente.",
+        "action": "Ouvrir les redirections"
+      }
     }
   },
   "notifications": {

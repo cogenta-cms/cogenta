@@ -25,6 +25,8 @@ export type {
 export { createNoticeHistoryStore, NOTICE_HISTORY_TABLE } from './history.js'
 export type { MfaRecommendationOptions } from './mfa-recommendation.js'
 export { createMfaRecommendationSource, MFA_RECOMMENDATION_ID } from './mfa-recommendation.js'
+export type { MonitoringRedirectSuggestionOptions } from './monitoring-redirect-suggestion.js'
+export { createMonitoringRedirectSuggestionSource } from './monitoring-redirect-suggestion.js'
 export type { PendingMigrationsOptions } from './pending-migrations.js'
 export {
   createPendingMigrationsSource,

@@ -84,11 +84,19 @@ the target, and restore only into a database you mean to overwrite (a freshly
 created one, in the common case — a moved-to or migrated-to engine).
 `
 
-function defaultBackupDir(cwd: string): string {
+/** Exported for `update/` (L22 task 9) — the same default directory, never a second one to keep in sync. */
+export function defaultBackupDir(cwd: string): string {
   return join(cwd, '.cogenta', 'backups')
 }
 
-async function openSite(
+/**
+ * Opens this site's own database, the way every command in this file that
+ * touches it does. Exported for `update/` (L22 task 9): the update system's
+ * history view needs the same audit log every other admin action already
+ * writes to, which needs the same open connection — never a second way to
+ * resolve `cogenta.config.mjs` into a live `DatabaseHandle`.
+ */
+export async function openSite(
   options: { readonly cwd?: string; readonly env?: Record<string, string | undefined> },
   logger: Logger,
 ): Promise<{
@@ -144,6 +152,72 @@ async function ensureAllTables(
   await createDatabaseMediaStore({ db }).list({ limit: 1 })
 }
 
+export interface CreateSiteBackupOptions {
+  readonly cwd?: string
+  readonly env?: Record<string, string | undefined>
+  readonly logger?: Logger
+  /** Directory backups are written to. Default `.cogenta/backups`, same as `cogenta backup create`. */
+  readonly dir?: string
+  readonly passphrase?: string
+  /**
+   * `backup-` by default (`cogenta backup create`'s own filename). The
+   * update system (`update/restore-point.ts`) passes `update-` so a restore
+   * point taken automatically before an update is visible as such in
+   * `cogenta backup list` / the admin's history view, without a second
+   * directory or a second manifest format.
+   */
+  readonly filenamePrefix?: string
+}
+
+export interface CreateSiteBackupResult {
+  readonly path: string
+  readonly manifest: Awaited<ReturnType<typeof createBackup>>['manifest']
+}
+
+/**
+ * The actual work behind `cogenta backup create` — factored out so
+ * `update/restore-point.ts` calls exactly this, not a reimplementation, for
+ * "un point de restauration obligatoire avant toute mise à jour" (L22 task
+ * 9, point 2: "réutilise `backup create`/`restore apply`, déjà réels depuis
+ * L9 fiche 26"). `runBackup`'s `create` subcommand below is now this
+ * function plus CLI-shaped output, nothing else.
+ */
+export async function createSiteBackup(
+  options: CreateSiteBackupOptions,
+): Promise<CreateSiteBackupResult> {
+  const logger = options.logger ?? createLogger({ level: 'silent' })
+  const cwd = options.cwd ?? process.cwd()
+  const dir = options.dir ?? defaultBackupDir(cwd)
+  const prefix = options.filenamePrefix ?? 'backup-'
+
+  const { collections, taxonomies } = await loadSchemaModule(cwd)
+  const tables = await tablesFor(cwd)
+  const { db, site, dispose } = await openSite(options, logger)
+  try {
+    await ensureAllTables(db, collections, taxonomies)
+    await mkdir(dir, { recursive: true })
+    const filename = `${prefix}${new Date().toISOString().replace(/[:.]/g, '-')}.zip`
+    const path = join(dir, filename)
+    const stream = createWriteStream(path, { mode: 0o600 })
+    const { manifest } = await createBackup({
+      db,
+      site,
+      tables,
+      write: (chunk) =>
+        new Promise((resolve, reject) => {
+          stream.write(chunk, (error) => (error ? reject(error) : resolve()))
+        }),
+      ...(options.passphrase === undefined ? {} : { passphrase: options.passphrase }),
+    })
+    await new Promise<void>((resolve, reject) => {
+      stream.end((error: unknown) => (error ? reject(error) : resolve()))
+    })
+    return { path, manifest }
+  } finally {
+    await dispose()
+  }
+}
+
 export async function runBackup(options: BackupOptions): Promise<number> {
   const { out, stderr } = options
   const logger = options.logger ?? createLogger({ level: 'silent' })
@@ -177,38 +251,20 @@ export async function runBackup(options: BackupOptions): Promise<number> {
   }
 
   try {
-    const { collections, taxonomies } = await loadSchemaModule(cwd)
-    const tables = await tablesFor(cwd)
-    const { db, site, dispose } = await openSite(options, logger)
-    try {
-      await ensureAllTables(db, collections, taxonomies)
-      await mkdir(dir, { recursive: true })
-      const filename = `backup-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`
-      const path = join(dir, filename)
-      const stream = createWriteStream(path, { mode: 0o600 })
-      const { manifest } = await createBackup({
-        db,
-        site,
-        tables,
-        write: (chunk) =>
-          new Promise((resolve, reject) => {
-            stream.write(chunk, (error) => (error ? reject(error) : resolve()))
-          }),
-        ...(options.passphrase === undefined ? {} : { passphrase: options.passphrase }),
-      })
-      await new Promise<void>((resolve, reject) => {
-        stream.end((error: unknown) => (error ? reject(error) : resolve()))
-      })
+    const { path, manifest } = await createSiteBackup({
+      cwd,
+      dir,
+      logger,
+      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.passphrase === undefined ? {} : { passphrase: options.passphrase }),
+    })
 
-      const rows = manifest.tables.reduce((sum, table) => sum + table.rows, 0)
-      out.heading('Backup created')
-      out.line(`${path}`)
-      out.line(`${manifest.tables.length} tables, ${rows} rows, checksum ${manifest.checksum}`)
-      if (manifest.encrypted) out.line('Encrypted with the passphrase you supplied.')
-      return 0
-    } finally {
-      await dispose()
-    }
+    const rows = manifest.tables.reduce((sum, table) => sum + table.rows, 0)
+    out.heading('Backup created')
+    out.line(`${path}`)
+    out.line(`${manifest.tables.length} tables, ${rows} rows, checksum ${manifest.checksum}`)
+    if (manifest.encrypted) out.line('Encrypted with the passphrase you supplied.')
+    return 0
   } catch (error) {
     return reportError(error, stderr)
   }

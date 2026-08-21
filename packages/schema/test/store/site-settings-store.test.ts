@@ -219,4 +219,32 @@ describe('createSiteSettingsStore (sqlite)', () => {
       ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
     })
   })
+
+  // Update system (L22 task 9) — the auto-update policy is a closed enum,
+  // never free text: the scheduled task that reads it only compares it
+  // against a fixed `UpdateBump` union, so an unvalidated typo here must be
+  // impossible to write in the first place.
+  describe('the updates group', () => {
+    it('is off by default until an admin writes a value', async () => {
+      expect(await store.get('updates.autoUpdatePolicy', SITE_SETTINGS_SITE_SCOPE)).toBeNull()
+    })
+
+    it('accepts every declared policy value', async () => {
+      for (const policy of ['off', 'patch', 'patch-minor', 'patch-minor-major']) {
+        const written = await store.set(
+          'updates.autoUpdatePolicy',
+          SITE_SETTINGS_SITE_SCOPE,
+          policy,
+          'user-admin',
+        )
+        expect(written.value).toBe(policy)
+      }
+    })
+
+    it('refuses anything outside the closed enum', async () => {
+      await expect(
+        store.set('updates.autoUpdatePolicy', SITE_SETTINGS_SITE_SCOPE, 'daily', null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+  })
 })

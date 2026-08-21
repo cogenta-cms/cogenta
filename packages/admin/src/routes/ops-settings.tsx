@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useState } from 'react'
+import { Fragment, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
@@ -9,8 +9,19 @@ import {
   type SecurityStatus,
   type WebhooksStatus,
 } from '../api/ops-status-client.js'
+import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
+import {
+  applyUpdateNow,
+  readUpdateHistory,
+  readUpdateStatus,
+  type UpdateApplyResult,
+  type UpdateCheckReport,
+  type UpdateHistory,
+  type UpdatePackageStatus,
+} from '../api/updates-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import { SiteSettingsField } from '../settings/site-settings-field.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '../ui/index.js'
 
 /**
  * `GET /api/security-status` and `GET /api/webhooks-status` — read-only
@@ -40,6 +51,42 @@ export function OpsSettingsRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Update system (L22 task 9) — its own independent loading state: npm can
+  // be slow or unreachable, and that must never blank out the security/
+  // webhooks/config cards above, which need no network at all.
+  const [updateStatus, setUpdateStatus] = useState<UpdateCheckReport | null>(null)
+  const [updateHistory, setUpdateHistory] = useState<UpdateHistory | null>(null)
+  const [autoUpdateSetting, setAutoUpdateSetting] = useState<SiteSetting | null>(null)
+  const [updatesLoading, setUpdatesLoading] = useState(true)
+  const [updatesError, setUpdatesError] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
+  const [applyMessage, setApplyMessage] = useState<string | null>(null)
+  const [risky, setRisky] = useState<readonly UpdatePackageStatus[] | null>(null)
+
+  const loadUpdates = useCallback(async () => {
+    if (token === null || !isAdmin) return
+    setUpdatesLoading(true)
+    setUpdatesError(null)
+    try {
+      const [status, history, settings] = await Promise.all([
+        readUpdateStatus(token),
+        readUpdateHistory(token),
+        listSettings(),
+      ])
+      setUpdateStatus(status)
+      setUpdateHistory(history)
+      setAutoUpdateSetting(
+        settings.find((setting) => setting.key === 'updates.autoUpdatePolicy') ?? null,
+      )
+    } catch (caught) {
+      setUpdatesError(
+        caught instanceof ApiError ? caught.message : t('opsSettings.updatesLoadError'),
+      )
+    } finally {
+      setUpdatesLoading(false)
+    }
+  }, [token, isAdmin, t])
+
   useEffect(() => {
     if (token === null || !isAdmin) return
     let cancelled = false
@@ -63,6 +110,46 @@ export function OpsSettingsRoute(): JSX.Element {
       cancelled = true
     }
   }, [token, isAdmin, t])
+
+  useEffect(() => {
+    void loadUpdates()
+  }, [loadUpdates])
+
+  async function saveAutoUpdatePolicy(value: unknown): Promise<void> {
+    if (token === null) return
+    await writeSetting(token, 'updates.autoUpdatePolicy', value)
+    await loadUpdates()
+  }
+
+  async function runApply(confirmBreakingChange: boolean): Promise<void> {
+    if (token === null) return
+    setApplying(true)
+    setApplyMessage(null)
+    setUpdatesError(null)
+    try {
+      const result: UpdateApplyResult = await applyUpdateNow(token, confirmBreakingChange)
+      if (result.kind === 'up-to-date') {
+        setApplyMessage(t('opsSettings.updatesUpToDate'))
+        setRisky(null)
+      } else if (result.kind === 'confirmation-required') {
+        setRisky(result.risky)
+      } else {
+        setRisky(null)
+        setApplyMessage(
+          t('opsSettings.updatesApplied', {
+            packages: result.installed.map((pkg) => `${pkg.name}@${pkg.version}`).join(', '),
+          }),
+        )
+      }
+      await loadUpdates()
+    } catch (caught) {
+      setUpdatesError(
+        caught instanceof ApiError ? caught.message : t('opsSettings.updatesApplyError'),
+      )
+    } finally {
+      setApplying(false)
+    }
+  }
 
   if (!isAdmin) {
     return (
@@ -88,6 +175,150 @@ export function OpsSettingsRoute(): JSX.Element {
         </Notice>
       )}
       {loading && <p>{t('common.loading')}</p>}
+
+      <Card aria-labelledby="ops-settings-updates-heading">
+        <CardHeader>
+          <CardTitle>
+            <h2 id="ops-settings-updates-heading">{t('opsSettings.updatesHeading')}</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-4">
+          {updatesError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{updatesError}</p>
+            </Notice>
+          )}
+          {applyMessage !== null && (
+            <Notice tone="success" live="polite">
+              <p>{applyMessage}</p>
+            </Notice>
+          )}
+          {updatesLoading && updateStatus === null && <p>{t('common.loading')}</p>}
+
+          {updateStatus !== null && (
+            <>
+              <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+                {updateStatus.packages.map((pkg) => (
+                  <Fragment key={pkg.name}>
+                    <dt className="font-mono font-medium">{pkg.name}</dt>
+                    <dd className="m-0">
+                      {pkg.checkError !== undefined
+                        ? t('opsSettings.updatesCheckError', { error: pkg.checkError })
+                        : pkg.updateAvailable
+                          ? t('opsSettings.updatesAvailable', {
+                              installed: pkg.installed,
+                              latest: pkg.latest,
+                              bump: pkg.bump,
+                            })
+                          : t('opsSettings.updatesUpToDateOne', { installed: pkg.installed })}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => void loadUpdates()}
+                  disabled={updatesLoading}
+                >
+                  {t('opsSettings.updatesCheckNow')}
+                </Button>
+                <Button
+                  onClick={() => void runApply(false)}
+                  disabled={applying || !updateStatus.updateAvailable}
+                >
+                  {applying ? t('opsSettings.updatesApplying') : t('opsSettings.updatesApplyNow')}
+                </Button>
+              </div>
+
+              {autoUpdateSetting !== null && (
+                <div className="max-w-sm">
+                  <SiteSettingsField
+                    setting={autoUpdateSetting}
+                    canEdit
+                    onSave={saveAutoUpdatePolicy}
+                  />
+                </div>
+              )}
+
+              {updateHistory !== null && (
+                <div>
+                  <h3 className="m-0 mb-2 font-sans text-sm font-semibold text-foreground">
+                    {t('opsSettings.updatesHistoryHeading')}
+                  </h3>
+                  {updateHistory.entries.length === 0 &&
+                  updateHistory.restorePoints.length === 0 ? (
+                    <p className="m-0 text-sm text-muted-foreground">
+                      {t('opsSettings.updatesHistoryEmpty')}
+                    </p>
+                  ) : (
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                      {updateHistory.entries.map((entry) => (
+                        <li key={entry.id} className="font-mono">
+                          {entry.at} — {entry.action}
+                        </li>
+                      ))}
+                      {updateHistory.restorePoints.map((point) => (
+                        <li key={point.path} className="font-mono text-muted-foreground">
+                          {point.createdAt} — {point.path}
+                          {point.triggeredByUpdate
+                            ? ` (${t('opsSettings.updatesAutoRestorePoint')})`
+                            : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </CardBody>
+      </Card>
+
+      <Modal
+        open={risky !== null}
+        onOpenChange={(open) => {
+          if (!open) setRisky(null)
+        }}
+        title={t('opsSettings.updatesRiskHeading')}
+        description={t('opsSettings.updatesRiskDescription')}
+        closeLabel={t('opsSettings.updatesRiskClose')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRisky(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setRisky(null)
+                void runApply(true)
+              }}
+              disabled={applying}
+            >
+              {t('opsSettings.updatesRiskConfirm')}
+            </Button>
+          </>
+        }
+      >
+        <ul className="m-0 flex list-none flex-col gap-3 p-0 text-sm">
+          {(risky ?? []).map((pkg) => (
+            <li key={pkg.name}>
+              <p className="m-0 font-medium">
+                {pkg.name}: {pkg.installed} → {pkg.latest}
+              </p>
+              <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0 text-muted-foreground">
+                {(pkg.contractRisk?.warnings ?? []).map((warning) => (
+                  <li key={warning.version}>
+                    {warning.version}: {warning.excerpt}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </Modal>
 
       {security !== null && (
         <Card>

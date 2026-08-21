@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import process from 'node:process'
 import { run } from './index.js'
+import { getCliVersion } from './version.js'
 
 /**
  * Node prints "ExperimentalWarning: SQLite is an experimental feature" on every
@@ -31,4 +32,9 @@ process.exitCode = await run({
   argv: process.argv.slice(2),
   isTty: process.stdout.isTTY === true,
   signal: shutdown.signal,
+  // Real bug fixed here (found while building `cogenta update`, L22 task 9):
+  // this was never passed before, so `cogenta version`/`cogenta --version`
+  // always printed the `run()` fallback "0.0.0" rather than this install's
+  // actual version.
+  version: getCliVersion(),
 })

@@ -481,6 +481,19 @@ export const ERROR_CODES = [
   'FORM_CONSENT_REQUIRED',
   'FORM_AUTORESPONDER_RATE_LIMITED',
 
+  // A package's own `package.json` could not be read to determine its
+  // version (`readOwnPackageVersion`) — a broken install, not a user mistake.
+  'PACKAGE_VERSION_UNREADABLE',
+
+  // Update system (L22 task 9): checking npm for a newer @cogenta/core /
+  // @cogenta/cli, and applying one with a mandatory restore point first.
+  'UPDATE_CHECK_FAILED',
+  'UPDATE_RESTORE_POINT_FAILED',
+  'UPDATE_APPLY_FAILED',
+  'UPDATE_NOT_AVAILABLE',
+  'UPDATE_CONFIRMATION_REQUIRED',
+  'UPDATE_POLICY_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

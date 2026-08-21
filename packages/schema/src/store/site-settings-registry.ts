@@ -88,6 +88,17 @@ export const SITE_SETTING_GROUPS = [
    * own screen instead of a `SettingsRoute` tab.
    */
   'seo',
+  /**
+   * The update system (L22 task 9): whether `cogenta serve`'s own
+   * `updates-auto-check` scheduled task may apply an npm update on its own,
+   * and how far it may go. Lives here, not in `cogenta.config.mjs`, for the
+   * same reason `discussion.moderationRequired` does — it is a live
+   * operational choice an admin flips from the screen at 3am because a
+   * package just misbehaved, not something that should need a git commit
+   * and a redeploy to change. Read by the scheduled task on every tick
+   * (`updates.ts` in `cogenta serve`'s wiring), never cached at startup.
+   */
+  'updates',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -717,6 +728,32 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `/api/media/{id}/file` or `/_image?id=…` would answer.
     schema: urlOrPathOrEmpty,
     defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Update system (L22 task 9) — auto-update policy. A closed choice, never
+  // free text: the scheduled task that reads this only ever compares it
+  // against `UpdateBump` (`@cogenta/cli`'s `policyAllows`), so a typo here
+  // must be impossible, the same reasoning `commerce.priceDisplay` already
+  // gave for using `select` over a free string.
+  {
+    key: 'updates.autoUpdatePolicy',
+    group: 'updates',
+    order: 0,
+    uiType: 'select',
+    scope: 'site',
+    schema: z.enum(['off', 'patch', 'patch-minor', 'patch-minor-major']),
+    // Off by default: an unattended `npm install` against a running site is
+    // real, deliberate behaviour that has to be opted into — never a
+    // surprise sprung on whoever's default install this is (same reasoning
+    // `privacy.cookieBannerEnabled` gives for defaulting off).
+    defaultValue: 'off',
+    options: [
+      { value: 'off', label: 'Off — check only, never apply automatically' },
+      { value: 'patch', label: 'Patch releases only' },
+      { value: 'patch-minor', label: 'Patch and minor releases' },
+      { value: 'patch-minor-major', label: 'Patch, minor and major releases' },
+    ],
     writeRoles: ADMIN_ONLY,
   },
 ] as const

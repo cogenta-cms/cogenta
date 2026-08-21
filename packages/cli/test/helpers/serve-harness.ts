@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createLogger } from '@cogenta/core'
 import { runServe } from '../../src/commands/serve.js'
 import { createOutput } from '../../src/output.js'
+import type { RunPackageInstall } from '../../src/update/index.js'
 
 /**
  * What every `cogenta serve` end-to-end test needs: a real server on a real
@@ -117,6 +118,12 @@ export interface StartServerOptions {
   readonly trashPurgeTickMs?: number
   /** Overrides the daily cadence `runServe` purges expired form submissions on — see `ServeOptions.formsPurgeTickMs` (fiche 16 task 7). */
   readonly formsPurgeTickMs?: number
+  /** Overrides the daily cadence of the update-system's auto-check/apply task — see `ServeOptions.updatesAutoCheckTickMs` (L22 task 9). */
+  readonly updatesAutoCheckTickMs?: number
+  /** Replaces the real `fetch` to registry.npmjs.org in every update-system call — see `ServeOptions.updatesFetchImpl`. */
+  readonly updatesFetchImpl?: typeof fetch
+  /** Replaces the real `npm install` child process the update system would otherwise run — see `ServeOptions.updatesRunInstall`. */
+  readonly updatesRunInstall?: RunPackageInstall
 }
 
 export async function startServer(
@@ -160,6 +167,15 @@ export async function startServer(
     ...(options.formsPurgeTickMs === undefined
       ? {}
       : { formsPurgeTickMs: options.formsPurgeTickMs }),
+    ...(options.updatesAutoCheckTickMs === undefined
+      ? {}
+      : { updatesAutoCheckTickMs: options.updatesAutoCheckTickMs }),
+    ...(options.updatesFetchImpl === undefined
+      ? {}
+      : { updatesFetchImpl: options.updatesFetchImpl }),
+    ...(options.updatesRunInstall === undefined
+      ? {}
+      : { updatesRunInstall: options.updatesRunInstall }),
   })
   // If startup fails before ever listening, `address` would hang forever —
   // race it against the command's own exit so that case fails fast instead.

@@ -112,4 +112,111 @@ describe('createSiteSettingsStore (sqlite)', () => {
       'media-abc123',
     )
   })
+
+  // SEO group (fiche 21 task 3) — `seo.tsx`'s previous read-only scope was
+  // never an ADR, so this group makes it a real, admin-editable registry
+  // group like any other.
+  describe('the seo group', () => {
+    it('requires a title template to actually carry the %title% token', async () => {
+      await expect(
+        store.set('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE, 'A static title', null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+
+      const written = await store.set(
+        'seo.titleTemplate',
+        SITE_SETTINGS_SITE_SCOPE,
+        '%title% — My Site',
+        null,
+      )
+      expect(written.value).toBe('%title% — My Site')
+    })
+
+    it('accepts an empty title template — "no template" is a valid state', async () => {
+      const written = await store.set('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE, '', null)
+      expect(written.value).toBe('')
+    })
+
+    it('stores a per-collection map of title templates, one entry per collection name', async () => {
+      const written = await store.set(
+        'seo.collectionTitleTemplates',
+        SITE_SETTINGS_SITE_SCOPE,
+        { article: '%title% | Blog', page: '%title%' },
+        null,
+      )
+      expect(written.value).toEqual({ article: '%title% | Blog', page: '%title%' })
+    })
+
+    it('refuses a per-collection template missing the %title% token', async () => {
+      await expect(
+        store.set(
+          'seo.collectionTitleTemplates',
+          SITE_SETTINGS_SITE_SCOPE,
+          { article: 'Always the same title' },
+          null,
+        ),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+
+    it('validates a Twitter handle needs its leading @', async () => {
+      await expect(
+        store.set('seo.twitterHandle', SITE_SETTINGS_SITE_SCOPE, 'example', null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+
+      const written = await store.set(
+        'seo.twitterHandle',
+        SITE_SETTINGS_SITE_SCOPE,
+        '@example',
+        null,
+      )
+      expect(written.value).toBe('@example')
+    })
+
+    it('accepts a site-relative path or an absolute URL for the default social image, and refuses anything else', async () => {
+      await expect(
+        store.set('seo.defaultSocialImageUrl', SITE_SETTINGS_SITE_SCOPE, 'not-a-url-or-path', null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+
+      expect(
+        (await store.set('seo.defaultSocialImageUrl', SITE_SETTINGS_SITE_SCOPE, '/share.png', null))
+          .value,
+      ).toBe('/share.png')
+      expect(
+        (
+          await store.set(
+            'seo.defaultSocialImageUrl',
+            SITE_SETTINGS_SITE_SCOPE,
+            'https://cdn.example.com/share.png',
+            null,
+          )
+        ).value,
+      ).toBe('https://cdn.example.com/share.png')
+    })
+
+    it('stores per-collection sitemap inclusion, changefreq and priority', async () => {
+      const written = await store.set(
+        'seo.sitemapCollectionSettings',
+        SITE_SETTINGS_SITE_SCOPE,
+        {
+          article: { included: true, changefreq: 'weekly', priority: 0.8 },
+          memo: { included: false, changefreq: '', priority: '' },
+        },
+        null,
+      )
+      expect(written.value).toEqual({
+        article: { included: true, changefreq: 'weekly', priority: 0.8 },
+        memo: { included: false, changefreq: '', priority: '' },
+      })
+    })
+
+    it('refuses a sitemap priority outside 0..1', async () => {
+      await expect(
+        store.set(
+          'seo.sitemapCollectionSettings',
+          SITE_SETTINGS_SITE_SCOPE,
+          { article: { included: true, changefreq: '', priority: 1.5 } },
+          null,
+        ),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+  })
 })

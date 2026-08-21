@@ -77,6 +77,17 @@ export const SITE_SETTING_GROUPS = [
    * changes, with no redeploy and no code touched.
    */
   'branding',
+  /**
+   * Search-engine visibility (fiche 21 task 3): title/description templates,
+   * per-collection sitemap hints, and social-card defaults. Previously
+   * `seo.tsx` was read-only "by design" — that was a scope choice of a
+   * previous lot, never an ADR, and this group is what makes it editable
+   * without inventing a second settings store: exactly the same registry
+   * that already backs `SettingsRoute`, just with its own screen
+   * (`SeoRoute`) rather than a tab there, the same way `commerce` gets its
+   * own screen instead of a `SettingsRoute` tab.
+   */
+  'seo',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -116,6 +127,64 @@ const pathOrEmpty = z
   .refine((value) => value === '' || value.startsWith('/'), {
     error: 'A path must be empty (unset) or start with "/".',
   })
+
+/** A path or an absolute URL, or empty — `seo.defaultSocialImageUrl`'s own shape (fiche 21 task 3). */
+const urlOrPathOrEmpty = z
+  .string()
+  .max(500)
+  .refine((value) => value === '' || value.startsWith('/') || /^https?:\/\//u.test(value), {
+    error: 'Must be empty, a site-relative path starting with "/", or an absolute http(s) URL.',
+  })
+
+/**
+ * `%title%`/`%site%` composition (`@cogenta/seo`'s `applyTitleTemplate`).
+ * Required to actually contain `%title%` when set — a template that drops it
+ * silently replaces every title on the site with the same static string,
+ * which is never what "add a suffix" meant.
+ */
+const titleTemplateOrEmpty = z
+  .string()
+  .max(200)
+  .refine((value) => value === '' || value.includes('%title%'), {
+    error: 'A title template must include the %title% token, or be left empty.',
+  })
+
+/** `seo.collectionTitleTemplates` — `titleTemplateOrEmpty`, one per collection name (fiche 21 task 3). */
+const collectionTitleTemplates = z.record(z.string(), titleTemplateOrEmpty)
+
+const metaDescriptionOrEmpty = z.string().max(500)
+
+/** A Twitter/X `@handle` for `twitter:site`, or empty. */
+const twitterHandleOrEmpty = z
+  .string()
+  .max(16)
+  .refine((value) => value === '' || /^@[A-Za-z0-9_]{1,15}$/u.test(value), {
+    error:
+      'Must be empty, or a handle starting with "@" (letters, digits, underscore, max 15 characters).',
+  })
+
+const changeFrequencyOrEmpty = z.enum([
+  '',
+  'always',
+  'hourly',
+  'daily',
+  'weekly',
+  'monthly',
+  'yearly',
+  'never',
+])
+
+/** `seo.sitemapCollectionSettings` — one override per collection name (fiche 21 task 3, mirrors `@cogenta/seo`'s `SitemapCollectionOverride`). */
+const sitemapCollectionSettings = z.record(
+  z.string(),
+  z.object({
+    included: z.boolean(),
+    changefreq: changeFrequencyOrEmpty,
+    // '' means "no hint" — kept as a string in storage so an empty text
+    // input round-trips without becoming `NaN` on the way back in.
+    priority: z.union([z.literal(''), z.number().min(0).max(1)]),
+  }),
+)
 
 /**
  * A real IANA time zone name, or empty for "not set". `Intl.DateTimeFormat`
@@ -565,6 +634,88 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `showCogentaBranding` is off; kept independent of it so turning
     // Cogenta's credit back on never throws away a logo already uploaded.
     schema: z.string().max(200),
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  // SEO (fiche 21 task 3) — overrides `seo.tsx`'s previous "read-only by
+  // design" scope choice (never an ADR): title/description templates,
+  // per-collection sitemap hints and social-card defaults, all live-read by
+  // `@cogenta/cli`'s render path and by `@cogenta/api`'s `SeoRouter`
+  // (`titleDefaults`), never cached at server startup.
+  {
+    key: 'seo.titleTemplate',
+    group: 'seo',
+    order: 0,
+    uiType: 'string',
+    scope: 'site',
+    // `%title% — %site%`-style, applied to every page with no per-collection
+    // override below and no `seoTitle` field value of its own.
+    schema: titleTemplateOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.collectionTitleTemplates',
+    group: 'seo',
+    order: 1,
+    // Bypasses the generic per-`uiType` renderer (`SiteSettingsField`) —
+    // `SeoRoute` renders this one key with a bespoke per-collection table
+    // instead, the same way `ReadingTab` special-cases `notFoundPath`. `text`
+    // is the closest shape in the closed `uiType` set; nothing reads it for
+    // this key.
+    uiType: 'text',
+    scope: 'site',
+    schema: collectionTitleTemplates,
+    defaultValue: {},
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.defaultMetaDescription',
+    group: 'seo',
+    order: 2,
+    uiType: 'text',
+    scope: 'site',
+    // Fed into `@cogenta/seo`'s `SeoSite.description`, the fallback every
+    // page's own `excerpt`/`seoDescription` already takes priority over.
+    schema: metaDescriptionOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.sitemapCollectionSettings',
+    group: 'seo',
+    order: 3,
+    // Bypassed the same way `collectionTitleTemplates` is — see that entry's
+    // own comment.
+    uiType: 'text',
+    scope: 'site',
+    schema: sitemapCollectionSettings,
+    defaultValue: {},
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.twitterHandle',
+    group: 'seo',
+    order: 4,
+    uiType: 'string',
+    scope: 'site',
+    // Fed into `@cogenta/seo`'s `SeoSite.twitterSite`, rendered as `twitter:site`.
+    schema: twitterHandleOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.defaultSocialImageUrl',
+    group: 'seo',
+    order: 5,
+    uiType: 'path',
+    scope: 'site',
+    // A plain URL/path setting, deliberately not a media reference: resolving
+    // an arbitrary media id at request time would need the render pipeline's
+    // media store reachable from a settings read, for one field whose value
+    // rarely changes. A site that wants its own asset pastes the same URL
+    // `/api/media/{id}/file` or `/_image?id=…` would answer.
+    schema: urlOrPathOrEmpty,
     defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },

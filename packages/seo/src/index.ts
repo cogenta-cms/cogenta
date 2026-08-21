@@ -42,7 +42,13 @@ export {
 } from './metadata.js'
 export type { RobotsGroup, RobotsOptions } from './robots.js'
 export { renderRobotsTxt } from './robots.js'
-export type { ChangeFrequency, SitemapFile, SitemapOptions, SitemapUrl } from './sitemap.js'
+export type {
+  ChangeFrequency,
+  SitemapCollectionOverride,
+  SitemapFile,
+  SitemapOptions,
+  SitemapUrl,
+} from './sitemap.js'
 export {
   buildSitemap,
   SITEMAP_MAX_BYTES,

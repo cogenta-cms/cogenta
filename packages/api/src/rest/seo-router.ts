@@ -43,9 +43,19 @@ export interface SeoRouterOptions {
   readonly site: SeoSite
   /** Resolves a media id to something a crawler can use. Absent means no image in a preview or a diagnostic. */
   readonly media?: (id: string) => SeoImage | null
-  /** `%title% — %site%` composition (fiche 13, Task 3). Threaded straight into `buildMetaTags`. */
-  readonly titleTemplate?: string
-  readonly collectionTitleTemplates?: Readonly<Record<string, string>>
+  /**
+   * `%title% — %site%` composition (fiche 13, Task 3; wired to a real,
+   * admin-editable setting by fiche 21 task 3). A getter rather than a
+   * static value: this router is built once, at server startup, and a title
+   * template an admin just saved must show up in the very next diagnostic
+   * scan or SEO preview without a restart — the same "read live" contract
+   * `theme-render.ts`'s own `homePath` option already uses. Absent means no
+   * template at all, exactly like an admin who has never set one.
+   */
+  readonly titleDefaults?: () => Promise<{
+    readonly titleTemplate?: string
+    readonly collectionTitleTemplates?: Readonly<Record<string, string>>
+  }>
   /** `false` blocks every crawler outright — a staging safeguard, mirrored in the diagnostic as a loud warning. Defaults to `true`. */
   readonly allowIndexing?: boolean
   /** Mount point. `/api/seo` by default. */
@@ -189,15 +199,16 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
   const maxScan = options.maxScanPerCollection ?? DEFAULT_MAX_SCAN
   const allowIndexing = options.allowIndexing ?? true
 
-  function metadataOptions(): Pick<
-    MetadataOptions,
-    'titleTemplate' | 'collectionTitleTemplates' | 'resolvers'
+  /** Read fresh, once per request — see `titleDefaults`'s own doc comment for why. */
+  async function metadataOptions(): Promise<
+    Pick<MetadataOptions, 'titleTemplate' | 'collectionTitleTemplates' | 'resolvers'>
   > {
+    const defaults = options.titleDefaults === undefined ? {} : await options.titleDefaults()
     return {
-      ...(options.titleTemplate === undefined ? {} : { titleTemplate: options.titleTemplate }),
-      ...(options.collectionTitleTemplates === undefined
+      ...(defaults.titleTemplate === undefined ? {} : { titleTemplate: defaults.titleTemplate }),
+      ...(defaults.collectionTitleTemplates === undefined
         ? {}
-        : { collectionTitleTemplates: options.collectionTitleTemplates }),
+        : { collectionTitleTemplates: defaults.collectionTitleTemplates }),
       ...(options.media === undefined ? {} : { resolvers: { media: options.media } }),
     }
   }
@@ -277,7 +288,7 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
       values: { ...stored.values, ...((overrides as Record<string, unknown> | undefined) ?? {}) },
     }
     const resource: SeoResource = { collection, entry }
-    const tags = buildMetaTags(options.site, resource, metadataOptions())
+    const tags = buildMetaTags(options.site, resource, await metadataOptions())
 
     const title = tagTitle(tags)
     const description = tagContent(tags, 'description') ?? null
@@ -400,6 +411,10 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
   async function diagnostics(context: AccessContext): Promise<RestResponse> {
     assertAdmin(context)
 
+    // Fetched once for the whole scan, not once per entry: `titleDefaults`
+    // reads a settings row, and a diagnostic can walk thousands of entries.
+    const metaOptions = await metadataOptions()
+
     const collectionReports: CollectionSitemapReport[] = []
     const allResources: SeoResource[] = []
 
@@ -432,7 +447,7 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
     const titleGroups = new Map<string, { collection: string; id: string }[]>()
 
     for (const resource of publishedResources) {
-      const tags = buildMetaTags(options.site, resource, metadataOptions())
+      const tags = buildMetaTags(options.site, resource, metaOptions)
       const title = tagTitle(tags)
       const description = tagContent(tags, 'description')
       const ref = { collection: resource.collection.name, id: resource.entry.id }
@@ -456,9 +471,7 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
           resource.collection.name === entries[0]?.collection,
       )
       const title =
-        original === undefined
-          ? key
-          : tagTitle(buildMetaTags(options.site, original, metadataOptions()))
+        original === undefined ? key : tagTitle(buildMetaTags(options.site, original, metaOptions))
       duplicateTitles.push({ title, entries })
     }
 

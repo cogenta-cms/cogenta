@@ -231,6 +231,47 @@ describe('/api/seo', () => {
       expect(response.status).toBe(405)
       expect(response.headers['allow']).toBe('POST')
     })
+
+    it('applies titleDefaults live, read fresh on every request rather than pinned at construction (fiche 21 task 3)', async () => {
+      const created = await articleStore.create({
+        values: { title: 'Hello world', slug: 'hello-world', excerpt: 'A short summary.' },
+      })
+      await articleStore.publish(created.id)
+
+      let template = '%title% — Example'
+      const withDefaults = createSeoRouter({
+        collections: COLLECTIONS,
+        gateway: createContentGateway({
+          collections: COLLECTIONS,
+          stores: new Map([
+            [ARTICLE.name, articleStore],
+            [MEMO.name, memoStore],
+          ]),
+          permissions: createPermissionLayer({ collections: COLLECTIONS }),
+        }),
+        permissions: createPermissionLayer({ collections: COLLECTIONS }),
+        site: SITE,
+        titleDefaults: () => Promise.resolve({ titleTemplate: template }),
+      })
+      const askWithDefaults = (): Promise<RestResponse> =>
+        withDefaults.handle(
+          {
+            method: 'POST',
+            path: '/api/seo/preview',
+            query: {},
+            body: { collection: ARTICLE.name, id: created.id },
+          },
+          actor('editor'),
+        )
+
+      const first = (await askWithDefaults()).body as { data: { title: string } }
+      expect(first.data.title).toBe('Hello world — Example')
+
+      // Changed after the router was built — no restart, no re-construction.
+      template = '%title% :: v2'
+      const second = (await askWithDefaults()).body as { data: { title: string } }
+      expect(second.data.title).toBe('Hello world :: v2')
+    })
   })
 
   describe('GET /api/seo/diagnostics', () => {

@@ -20,6 +20,7 @@ export type SiteSettingGroup =
   | 'privacy'
   | 'commerce'
   | 'branding'
+  | 'seo'
 export type SiteSettingScope = 'site' | 'locale'
 
 export interface SiteSetting {

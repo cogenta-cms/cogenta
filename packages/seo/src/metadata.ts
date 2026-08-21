@@ -54,6 +54,13 @@ export interface MetadataOptions extends IndexableOptions {
   readonly titleTemplate?: string
   /** `titleTemplate`, keyed by collection name. Takes precedence over `titleTemplate` when both apply. */
   readonly collectionTitleTemplates?: Readonly<Record<string, string>>
+  /**
+   * Used only when neither `options.image` nor the resource's own
+   * `seoImage`/first `media` field resolves to anything — a site-wide
+   * default social card (fiche 21 task 3's "Réseaux sociaux" tab), never a
+   * per-entry override. A page that has its own image always wins.
+   */
+  readonly fallbackImage?: SeoImage
 }
 
 const TITLE_FIELDS = ['title', 'name', 'label', 'heading']
@@ -198,7 +205,7 @@ export function buildMetaTags(
     site.description
   const description =
     rawDescription === undefined ? undefined : truncate(rawDescription, MAX_DESCRIPTION)
-  const image = options.image ?? firstImage(resource, options.resolvers)
+  const image = options.image ?? firstImage(resource, options.resolvers) ?? options.fallbackImage
 
   tags.push({ kind: 'title', text: title })
 

@@ -227,7 +227,6 @@
     "commercePayment": "Payment",
     "appearance": "Appearance",
     "adminAppearance": "Admin appearance",
-    "redirects": "Redirects",
     "seo": "SEO",
     "translations": "Translations",
     "review": "Review queue",
@@ -980,6 +979,37 @@
     "importLineLabel": "Line {{line}}"
   },
   "seo": {
+    "pageHeading": "SEO",
+    "pageDescription": "Titles, sitemap, social cards, redirections and diagnostics — everything this site exposes to search engines, in one screen.",
+    "settingsLoadError": "Could not load the SEO settings.",
+    "tab": {
+      "general": "General",
+      "sitemap": "Sitemap",
+      "social": "Social",
+      "redirects": "Redirects",
+      "diagnostics": "Diagnostics"
+    },
+    "collectionTemplatesHeading": "Title templates by content type",
+    "collectionTemplatesDescription": "Overrides the general title template above, per collection. Leave empty to use the general template (or no template at all) for that collection.",
+    "templateColumn": "Title template",
+    "templatePlaceholder": "%title% — Site name",
+    "noRoutedCollections": "No collection has a public route yet, so none can be listed here.",
+    "sitemapCollectionsDescription": "Whether each collection appears in sitemap.xml, and the change-frequency/priority hints given to crawlers. A collection excluded here disappears from the sitemap immediately, on the next request.",
+    "changefreqColumn": "Change frequency",
+    "changefreqNone": "Not set",
+    "changefreq": {
+      "always": "Always",
+      "hourly": "Hourly",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "never": "Never"
+    },
+    "priorityColumn": "Priority",
+    "priorityPlaceholder": "0.0–1.0",
+    "socialHeading": "Default social card",
+    "socialDescription": "Used only when a page has no Open Graph image or description of its own — a page's own image and description always take priority.",
     "panelHeading": "SEO",
     "collapse": "Collapse",
     "expand": "Expand",
@@ -1001,7 +1031,7 @@
     "suggestError": "Could not get a suggestion.",
     "heading": "SEO diagnostics",
     "description": "What the site actually exposes right now — computed live, the same way the public pages and the sitemap are.",
-    "adminOnly": "Only the admin role may read the SEO diagnostics.",
+    "adminOnly": "Only the admin role may read or change the SEO settings.",
     "loadError": "Could not load the SEO diagnostics.",
     "refresh": "Refresh",
     "generatedAt": "Generated {{at}}",
@@ -1723,6 +1753,24 @@
         "customLogoMediaId": {
           "label": "Custom logo",
           "help": "Shown instead of the Cogenta logo once branding is turned off above."
+        }
+      },
+      "seo": {
+        "titleTemplate": {
+          "label": "General title template",
+          "help": "Applied to every page's derived title. Use %title% for the page's own title and %site% for the site name, e.g. \"%title% — %site%\". Leave empty for no template. Never applied to a page's own SEO title field."
+        },
+        "defaultMetaDescription": {
+          "label": "Default meta description",
+          "help": "Used only when a page has no description of its own."
+        },
+        "twitterHandle": {
+          "label": "Twitter/X handle",
+          "help": "Used for the twitter:site tag, e.g. \"@example\"."
+        },
+        "defaultSocialImageUrl": {
+          "label": "Default social image",
+          "help": "A path or an absolute URL, used as the Open Graph/Twitter Card image only when a page has none of its own."
         }
       }
     }

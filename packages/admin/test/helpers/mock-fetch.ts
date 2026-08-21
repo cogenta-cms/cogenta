@@ -932,6 +932,50 @@ export function installMockFetch(
       scope: 'site',
       value: '',
     },
+    // SEO (fiche 21 task 3) -- mirrors
+    // packages/schema/src/store/site-settings-registry.ts's `seo` group.
+    'seo.titleTemplate': {
+      group: 'seo',
+      order: 0,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.collectionTitleTemplates': {
+      group: 'seo',
+      order: 1,
+      uiType: 'text',
+      scope: 'site',
+      value: {},
+    },
+    'seo.defaultMetaDescription': {
+      group: 'seo',
+      order: 2,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+    'seo.sitemapCollectionSettings': {
+      group: 'seo',
+      order: 3,
+      uiType: 'text',
+      scope: 'site',
+      value: {},
+    },
+    'seo.twitterHandle': {
+      group: 'seo',
+      order: 4,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.defaultSocialImageUrl': {
+      group: 'seo',
+      order: 5,
+      uiType: 'path',
+      scope: 'site',
+      value: '',
+    },
   }
   const siteSettingsWrites = new Map<
     string,

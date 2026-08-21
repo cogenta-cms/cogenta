@@ -69,7 +69,7 @@ const SETTINGS_DESTINATIONS: readonly { readonly to: string; readonly labelKey: 
   { to: '/settings', labelKey: 'nav.settings' },
   { to: '/ops-settings', labelKey: 'nav.opsSettings' },
   { to: '/api-keys', labelKey: 'nav.apiKeys' },
-  { to: '/redirects', labelKey: 'nav.redirects' },
+  { to: '/seo', labelKey: 'nav.seo' },
 ]
 
 export function GlobalSearch(): JSX.Element {

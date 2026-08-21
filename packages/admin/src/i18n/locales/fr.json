@@ -226,7 +226,6 @@
     "commercePayment": "Paiement",
     "appearance": "Apparence",
     "adminAppearance": "Apparence de l'admin",
-    "redirects": "Redirections",
     "seo": "SEO",
     "translations": "Traductions",
     "review": "File de relecture",
@@ -979,6 +978,37 @@
     "importLineLabel": "Ligne {{line}}"
   },
   "seo": {
+    "pageHeading": "SEO",
+    "pageDescription": "Titres, sitemap, réseaux sociaux, redirections et diagnostic — tout ce que ce site expose aux moteurs de recherche, en un seul écran.",
+    "settingsLoadError": "Impossible de charger les réglages SEO.",
+    "tab": {
+      "general": "Général",
+      "sitemap": "Sitemap",
+      "social": "Réseaux sociaux",
+      "redirects": "Redirections",
+      "diagnostics": "Diagnostic"
+    },
+    "collectionTemplatesHeading": "Gabarits de titre par type de contenu",
+    "collectionTemplatesDescription": "Remplace le gabarit général ci-dessus, par collection. Laisser vide pour utiliser le gabarit général (ou aucun gabarit) pour cette collection.",
+    "templateColumn": "Gabarit de titre",
+    "templatePlaceholder": "%title% — Nom du site",
+    "noRoutedCollections": "Aucune collection n'a encore de route publique, donc aucune ne peut être listée ici.",
+    "sitemapCollectionsDescription": "Si chaque collection apparaît dans sitemap.xml, et les indices de fréquence de changement/priorité donnés aux robots. Une collection exclue ici disparaît du sitemap immédiatement, dès la prochaine requête.",
+    "changefreqColumn": "Fréquence de changement",
+    "changefreqNone": "Non défini",
+    "changefreq": {
+      "always": "Toujours",
+      "hourly": "Toutes les heures",
+      "daily": "Quotidienne",
+      "weekly": "Hebdomadaire",
+      "monthly": "Mensuelle",
+      "yearly": "Annuelle",
+      "never": "Jamais"
+    },
+    "priorityColumn": "Priorité",
+    "priorityPlaceholder": "0,0–1,0",
+    "socialHeading": "Carte sociale par défaut",
+    "socialDescription": "Utilisée uniquement si une page n'a pas sa propre image ou description Open Graph — l'image et la description propres à une page sont toujours prioritaires.",
     "panelHeading": "SEO",
     "collapse": "Réduire",
     "expand": "Déplier",
@@ -1000,7 +1030,7 @@
     "suggestError": "Impossible d'obtenir une suggestion.",
     "heading": "Diagnostic SEO",
     "description": "Ce que le site expose réellement en ce moment — calculé en direct, exactement comme les pages publiques et le sitemap.",
-    "adminOnly": "Seul le rôle admin peut lire le diagnostic SEO.",
+    "adminOnly": "Seul le rôle admin peut lire ou modifier les réglages SEO.",
     "loadError": "Impossible de charger le diagnostic SEO.",
     "refresh": "Actualiser",
     "generatedAt": "Généré {{at}}",
@@ -1725,6 +1755,24 @@
         "customLogoMediaId": {
           "label": "Logo personnalisé",
           "help": "Affiché à la place du logo Cogenta une fois la marque désactivée ci-dessus."
+        }
+      },
+      "seo": {
+        "titleTemplate": {
+          "label": "Gabarit de titre général",
+          "help": "Appliqué au titre dérivé de chaque page. Utilisez %title% pour le titre propre de la page et %site% pour le nom du site, ex. « %title% — %site% ». Laisser vide pour aucun gabarit. Jamais appliqué au champ « Titre SEO » propre d'une page."
+        },
+        "defaultMetaDescription": {
+          "label": "Meta description par défaut",
+          "help": "Utilisée uniquement quand une page n'a pas sa propre description."
+        },
+        "twitterHandle": {
+          "label": "Identifiant Twitter/X",
+          "help": "Utilisé pour la balise twitter:site, ex. « @exemple »."
+        },
+        "defaultSocialImageUrl": {
+          "label": "Image sociale par défaut",
+          "help": "Un chemin ou une URL absolue, utilisée comme image Open Graph/Twitter Card uniquement quand une page n'a pas la sienne."
         }
       }
     }

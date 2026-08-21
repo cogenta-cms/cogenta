@@ -244,6 +244,7 @@
     "health": "Santé",
     "tools": "Outils",
     "scheduled": "Tâches planifiées",
+    "documentation": "Documentation",
     "groups": {
       "content": "Contenu",
       "appearance": "Apparence",
@@ -2803,5 +2804,108 @@
     "confirmBody": "Cette tâche est destructive — elle supprime des données de façon définitive. Cette action est irréversible.",
     "confirmCancel": "Annuler",
     "confirmRun": "Exécuter maintenant"
+  },
+  "documentation": {
+    "heading": "Documentation",
+    "intro": "Un guide par section : ce qu'elle fait, comment démarrer, et les écrans qu'elle contient.",
+    "tabsLabel": "Sections de la documentation",
+    "quickstartHeading": "Démarrage rapide",
+    "screensHeading": "Écrans de cette section",
+    "screensNote": "La liste complète des écrans que ce groupe peut contenir — certains n'apparaissent dans la barre latérale que pour un rôle ou un site donné.",
+    "sections": {
+      "content": {
+        "summary": "Le contenu de Cogenta : des entrées organisées en collections (articles, pages…), classées par des taxonomies, illustrées par des médias, et suivies dans le temps par un historique de versions. Une entrée passe par un cycle éditorial simple — brouillon, éventuellement révision, publication — détaillé plus bas.",
+        "quickstart": {
+          "step1": "Ouvrez « Contenus » et choisissez une collection.",
+          "step2": "Créez une entrée : remplissez les champs et composez sa mise en page avec des blocs.",
+          "step3": "Enregistrez en brouillon, puis publiez — immédiatement ou à une date programmée.",
+          "step4": "Classez l'entrée avec une taxonomie si le site en déclare, et gérez ses images depuis la Médiathèque.",
+          "step5": "Une entrée supprimée part d'abord à la Corbeille, d'où elle peut être restaurée avant sa purge définitive."
+        }
+      },
+      "appearance": {
+        "summary": "L'apparence publique du site (couleurs, typographie, logo, CSS additionnel), le thème propre à cet admin, le référencement (SEO : méta-données, sitemap, robots.txt) et les redirections.",
+        "quickstart": {
+          "step1": "Ouvrez « Apparence » pour ajuster les couleurs et la typographie — l'aperçu en direct montre le résultat avant d'enregistrer.",
+          "step2": "Déposez un logo et un favicon dans « Identité », ou générez un thème par IA si un fournisseur est configuré.",
+          "step3": "Vérifiez le référencement d'une page dans « SEO » : titre, méta-description, sitemap.",
+          "step4": "Ajoutez une redirection dans « Redirections » quand une URL change d'adresse."
+        }
+      },
+      "commerce": {
+        "summary": "La boutique : produits et variantes, commandes, coupons, abonnements, et la configuration financière (taxes, livraison, moyens de paiement).",
+        "quickstart": {
+          "step1": "Ajoutez un premier produit dans « Produits » pour faire apparaître le groupe Boutique dans la barre latérale.",
+          "step2": "Configurez les taxes, la livraison et un moyen de paiement dans les réglages de la boutique avant la première vente.",
+          "step3": "Suivez les commandes entrantes dans « Commandes » — chaque changement de statut est journalisé.",
+          "step4": "Créez un coupon de réduction si besoin, ou un abonnement pour un produit récurrent.",
+          "step5": "Une entrée de contenu peut être liée à une fiche produit pour garder texte riche, blocs et SEO du contrat de contenu."
+        }
+      },
+      "ai": {
+        "summary": "L'assistant IA (rédaction, traduction, détection de doublons…), les agents autonomes du site, et la création de site pilotée par l'IA à partir d'un document. Rien ici n'est requis pour faire fonctionner le CMS : sans fournisseur configuré, cette section explique où le brancher plutôt que de rester muette.",
+        "quickstart": {
+          "step1": "Ouvrez « Assistant » : sans fournisseur configuré, l'écran explique comment en ajouter un.",
+          "step2": "Une fois configuré, utilisez les outils d'assistance directement depuis l'éditeur d'une entrée (réécrire, traduire, résumer…).",
+          "step3": "Passez par « Agents » pour voir la configuration déclarée d'un agent du site.",
+          "step4": "Utilisez « Créer un site » pour proposer un modèle de contenu et des gabarits à partir d'un document — chaque proposition attend une validation explicite, jamais une application automatique."
+        }
+      },
+      "accounts": {
+        "summary": "Les comptes humains et machine de l'admin : utilisateurs et leurs rôles, clés d'API pour un accès headless, et la matrice des permissions par rôle.",
+        "quickstart": {
+          "step1": "Invitez un utilisateur dans « Utilisateurs » et attribuez-lui un rôle.",
+          "step2": "Consultez « Rôles & permissions » pour voir, action par action, ce qu'un rôle peut faire.",
+          "step3": "Créez une clé d'API dans « Clés API » pour un client headless — elle porte ses propres permissions, indépendantes d'un compte humain.",
+          "step4": "Révoquez ou faites tourner une clé compromise depuis le même écran, à tout moment."
+        }
+      },
+      "settings": {
+        "summary": "Les réglages généraux du site (titre, fuseau horaire, page d'accueil, commentaires, médias, confidentialité) et votre profil personnel. La configuration d'infrastructure (sécurité, webhooks) reste en lecture seule ici — elle vient de cogenta.config.mjs.",
+        "quickstart": {
+          "step1": "Ouvrez « Réglages » pour le titre du site, le fuseau horaire et la page d'accueil.",
+          "step2": "Choisissez si les commentaires sont autorisés par défaut, et si un bandeau de cookies est nécessaire.",
+          "step3": "Vérifiez « Sécurité & webhooks » (lecture seule) pour voir ce que cogenta.config.mjs a réellement configuré.",
+          "step4": "Mettez à jour votre propre profil (mot de passe, préférences) depuis « Mon profil »."
+        }
+      }
+    },
+    "flows": {
+      "editorial": {
+        "heading": "Cycle éditorial : du brouillon à la publication",
+        "intro": "Ce que devient une entrée depuis sa création jusqu'à ce qu'elle soit visible sur le site — avec ou sans étape de révision.",
+        "draft": "Brouillon",
+        "pending": "Soumis",
+        "approved": "Approuvé",
+        "published": "Publié",
+        "changes": "Modifs demandées",
+        "scheduled": "Programmé",
+        "steps": {
+          "step1": "Une entrée créée est un brouillon : rien n'est visible sur le site.",
+          "step2": "Si la collection a activé la révision, soumettre l'entrée la fait passer en « soumis » — elle attend un relecteur.",
+          "step3": "Le relecteur approuve, ou demande des modifications ; une demande de modification revient à l'étape « soumis » après correction.",
+          "step4": "Publier une entrée est une action séparée de son approbation — approuver ne publie jamais automatiquement.",
+          "step5": "Une entrée peut aussi être programmée : elle reste en brouillon jusqu'à la date choisie, puis se publie seule."
+        },
+        "note": "La révision est optionnelle, collection par collection — une collection qui ne l'a pas activée passe directement de brouillon à publié."
+      },
+      "plugin": {
+        "heading": "Permissions d'un plugin tiers : de l'installation à la révocation",
+        "intro": "Ce qu'un plugin du Marketplace peut réellement faire, et comment cet accès se referme.",
+        "manifest": "Manifeste",
+        "install": "Installation",
+        "scoped": "Exécution encadrée",
+        "revoke": "Révocation",
+        "disabled": "Désactivation auto",
+        "steps": {
+          "step1": "Le plugin déclare dans son manifeste les capacités qu'il demande, dans un vocabulaire fermé (lire du contenu, appeler le web, écrire dans le stockage…).",
+          "step2": "Avant l'installation, ces capacités sont montrées en clair pour relecture.",
+          "step3": "Une fois installé, seule l'intersection entre ce que le manifeste demande et ce qui a réellement été accordé atteint le code du plugin — jamais la liste demandée telle quelle.",
+          "step4": "Si le plugin dépasse ses limites de temps ou de mémoire, ou plante, il est désactivé automatiquement ; le reprendre exige une action humaine.",
+          "step5": "Désactiver ou désinstaller le plugin referme l'accès ; une désinstallation avec suppression des données révoque toutes ses permissions d'un coup."
+        },
+        "note": "Modèle honnête, pas encore entièrement à l'écran : révoquer une seule capacité après coup a sa logique côté serveur, mais aucun écran de ce build ne l'expose encore — aujourd'hui, désactiver ou désinstaller est le levier disponible."
+      }
+    }
   }
 }

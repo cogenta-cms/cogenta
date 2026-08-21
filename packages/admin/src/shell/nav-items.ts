@@ -364,4 +364,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Settings — personal preferences, open to whoever is signed in.
   { to: '/settings', labelKey: 'nav.settings', group: 'settings', visibleWhen: { kind: 'always' } },
   { to: '/profile', labelKey: 'nav.profile', group: 'settings', visibleWhen: { kind: 'always' } },
+  {
+    // Fiche 21 task 7 — a reference screen, not a domain screen, so it lives
+    // in Settings rather than getting a group of its own; open to every
+    // signed-in role, the same as Settings and Profile, since a viewer or
+    // editor needs onboarding as much as an admin does.
+    to: '/documentation',
+    labelKey: 'nav.documentation',
+    group: 'settings',
+    visibleWhen: { kind: 'always' },
+  },
 ]

@@ -245,6 +245,7 @@
     "health": "Health",
     "tools": "Tools",
     "scheduled": "Scheduled tasks",
+    "documentation": "Documentation",
     "groups": {
       "content": "Content",
       "appearance": "Appearance",
@@ -2801,5 +2802,108 @@
     "confirmBody": "This task is destructive — it permanently removes data. This cannot be undone.",
     "confirmCancel": "Cancel",
     "confirmRun": "Run now"
+  },
+  "documentation": {
+    "heading": "Documentation",
+    "intro": "A guide per section: what it does, how to get started, and the screens it contains.",
+    "tabsLabel": "Documentation sections",
+    "quickstartHeading": "Quickstart",
+    "screensHeading": "Screens in this section",
+    "screensNote": "The full list of screens this group can contain — some only appear in the sidebar for a given role or site.",
+    "sections": {
+      "content": {
+        "summary": "Cogenta's content: entries organised into collections (articles, pages…), classified by taxonomies, illustrated with media, and tracked over time by a version history. An entry moves through a simple editorial cycle — draft, optional review, publish — detailed below.",
+        "quickstart": {
+          "step1": "Open “Content” and pick a collection.",
+          "step2": "Create an entry: fill in its fields and lay it out with blocks.",
+          "step3": "Save it as a draft, then publish — right away or on a scheduled date.",
+          "step4": "Classify the entry with a taxonomy if the site declares one, and manage its images from the Media library.",
+          "step5": "A deleted entry goes to the Trash first, where it can be restored before it is permanently purged."
+        }
+      },
+      "appearance": {
+        "summary": "The site's public appearance (colours, typography, logo, additional CSS), this admin's own theme, SEO (metadata, sitemap, robots.txt) and redirects.",
+        "quickstart": {
+          "step1": "Open “Appearance” to adjust colours and typography — the live preview shows the result before you save.",
+          "step2": "Drop a logo and favicon into “Identity”, or generate a theme with AI if a provider is configured.",
+          "step3": "Check a page's SEO under “SEO”: title, meta description, sitemap.",
+          "step4": "Add a redirect under “Redirects” whenever a URL moves."
+        }
+      },
+      "commerce": {
+        "summary": "The shop: products and variants, orders, coupons, subscriptions, and the store's financial setup (tax, shipping, payment methods).",
+        "quickstart": {
+          "step1": "Add a first product under “Products” to make the Commerce group appear in the sidebar.",
+          "step2": "Set up tax, shipping and a payment method under the store settings before the first sale.",
+          "step3": "Track incoming orders under “Orders” — every status change is logged.",
+          "step4": "Create a discount coupon if needed, or a subscription for a recurring product.",
+          "step5": "A content entry can be linked to a product record to keep rich text, blocks and SEO from the content contract."
+        }
+      },
+      "ai": {
+        "summary": "The AI assistant (writing help, translation, duplicate detection…), the site's autonomous agents, and AI-driven site creation from an uploaded document. None of it is required for the CMS to work: with no provider configured, this section explains where to plug one in rather than staying silent.",
+        "quickstart": {
+          "step1": "Open “Assistant”: with no provider configured, the screen explains how to add one.",
+          "step2": "Once configured, use the assist tools directly from an entry's editor (rewrite, translate, summarise…).",
+          "step3": "Check “Agents” to see an agent's full declared configuration.",
+          "step4": "Use “Create a site” to propose a content model and templates from a document — every proposal waits for explicit approval, never an automatic apply."
+        }
+      },
+      "accounts": {
+        "summary": "This admin's human and machine accounts: users and their roles, API keys for headless access, and the permission matrix by role.",
+        "quickstart": {
+          "step1": "Invite a user under “Users” and assign them a role.",
+          "step2": "Check “Roles & permissions” to see, action by action, what a role can do.",
+          "step3": "Create an API key under “API keys” for a headless client — it carries its own permissions, independent of any human account.",
+          "step4": "Revoke or rotate a compromised key from the same screen, at any time."
+        }
+      },
+      "settings": {
+        "summary": "The site's general settings (title, time zone, home page, comments, media, privacy) and your own profile. Infrastructure configuration (security, webhooks) stays read-only here — it comes from cogenta.config.mjs.",
+        "quickstart": {
+          "step1": "Open “Settings” for the site title, time zone and home page.",
+          "step2": "Choose whether comments are allowed by default, and whether a cookie banner is needed.",
+          "step3": "Check “Security & webhooks” (read-only) to see what cogenta.config.mjs actually configured.",
+          "step4": "Update your own profile (password, preferences) under “My profile”."
+        }
+      }
+    },
+    "flows": {
+      "editorial": {
+        "heading": "Editorial cycle: from draft to published",
+        "intro": "What happens to an entry from the moment it is created until it is visible on the site — with or without a review step.",
+        "draft": "Draft",
+        "pending": "Submitted",
+        "approved": "Approved",
+        "published": "Published",
+        "changes": "Changes requested",
+        "scheduled": "Scheduled",
+        "steps": {
+          "step1": "A newly created entry is a draft: nothing is visible on the site.",
+          "step2": "If the collection has review turned on, submitting the entry moves it to “submitted” — it waits for a reviewer.",
+          "step3": "The reviewer approves it, or requests changes; a change request goes back to “submitted” once fixed.",
+          "step4": "Publishing is a separate action from approval — approving never publishes automatically.",
+          "step5": "An entry can also be scheduled: it stays a draft until the chosen date, then publishes itself."
+        },
+        "note": "Review is optional, collection by collection — a collection that has not turned it on goes straight from draft to published."
+      },
+      "plugin": {
+        "heading": "A third-party plugin's permissions: from install to revocation",
+        "intro": "What a Marketplace plugin can actually do, and how that access is closed off again.",
+        "manifest": "Manifest",
+        "install": "Install",
+        "scoped": "Scoped execution",
+        "revoke": "Revocation",
+        "disabled": "Auto-disabled",
+        "steps": {
+          "step1": "The plugin declares in its manifest the capabilities it asks for, from a closed vocabulary (read content, call the web, write to storage…).",
+          "step2": "Before installation, those capabilities are shown in plain language for review.",
+          "step3": "Once installed, only the intersection of what the manifest asks for and what was actually granted reaches the plugin's code — never the requested list as-is.",
+          "step4": "If the plugin exceeds its time or memory limits, or crashes, it is disabled automatically; resuming it needs a human action.",
+          "step5": "Deactivating or uninstalling the plugin closes off its access; uninstalling with data removal revokes every one of its permissions at once."
+        },
+        "note": "An honest model, not yet fully on screen: revoking a single capability after the fact has the logic for it server-side, but no screen in this build exposes it yet — today, deactivating or uninstalling is the lever available."
+      }
+    }
   }
 }

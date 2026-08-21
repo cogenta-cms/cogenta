@@ -15,9 +15,10 @@ describe('BLUEPRINTS registry', () => {
         'association',
         'restaurant',
         'saas',
+        'store',
       ].sort(),
     )
-    expect(BLUEPRINTS).toHaveLength(9)
+    expect(BLUEPRINTS).toHaveLength(10)
   })
 })
 
@@ -42,6 +43,7 @@ describe('resolveBlueprint', () => {
     'association',
     'restaurant',
     'saas',
+    'store',
   ])('resolves the %s blueprint directly, without falling back', (id) => {
     const resolved = resolveBlueprint(id)
     expect(resolved.fellBackToBlank).toBe(false)

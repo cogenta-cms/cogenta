@@ -7,7 +7,7 @@ import {
 import { BLUEPRINTS } from '../src/blueprints/registry.js'
 
 describe('per-site-type defaults', () => {
-  it('offers a recommendation for every one of the nine site types', () => {
+  it('offers a recommendation for every site type', () => {
     for (const blueprint of BLUEPRINTS) {
       const settings = blueprintSettings(blueprint.id)
 
@@ -94,6 +94,18 @@ describe('inferring a site type from a brief', () => {
     expect(
       inferBlueprint({ activity: 'Une association loi 1901 pour les jeunes.', contentTypes: [] }),
     ).toBe('association')
+    expect(
+      inferBlueprint({
+        activity: 'A small online store selling handmade ceramics.',
+        contentTypes: [],
+      }),
+    ).toBe('store')
+    expect(
+      inferBlueprint({
+        activity: 'Une boutique en ligne de vêtements pour enfants.',
+        contentTypes: [],
+      }),
+    ).toBe('store')
   })
 
   it('reads the content types too, not only the activity sentence', () => {

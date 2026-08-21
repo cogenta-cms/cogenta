@@ -13,7 +13,9 @@ export interface Blueprint {
  * L9 task 8, batch B: `blank` (empty schema, no demo content), `blog` (L9
  * task 3), `vitrine`/`portfolio`/`documentation` (batch A) and
  * `magazine`/`association`/`restaurant`/`saas` (batch B). Each beyond
- * `blank` has a real `BlueprintContentPack` (`./content-packs.js`).
+ * `blank` has a real `BlueprintContentPack` (`./content-packs.js`). `store`
+ * (L22 task 10) is the tenth: a product catalogue, see `./store.js` for why
+ * it stops at contract A and does not reach for `@cogenta/commerce`.
  */
 export const BLUEPRINTS: readonly Blueprint[] = [
   { id: 'blank', label: 'Blank — empty schema, nothing pre-configured', available: true },
@@ -29,6 +31,7 @@ export const BLUEPRINTS: readonly Blueprint[] = [
   { id: 'association', label: 'Nonprofit / association — events, demo content', available: true },
   { id: 'restaurant', label: 'Restaurant — menu, demo content', available: true },
   { id: 'saas', label: 'SaaS — features, demo content', available: true },
+  { id: 'store', label: 'Online store — product catalogue, demo content', available: true },
 ]
 
 export const DEFAULT_BLUEPRINT_ID = 'blank'

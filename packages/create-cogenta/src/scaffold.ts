@@ -22,6 +22,7 @@ import {
 } from '@cogenta/schema'
 import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
+import { STARTING_SKINS } from './blueprints/starting-skins.js'
 
 export interface ScaffoldAnswers {
   readonly targetDir: string
@@ -72,8 +73,15 @@ export interface ScaffoldResult {
   readonly fellBackToBlank: boolean
   /** Always written — `[]` for `blank`, a real content pack's collections otherwise. `cogenta serve` requires this file to exist regardless of blueprint. */
   readonly schemaPath: string
-  /** Present only when a blueprint wrote `theme.tokens.json` — says whether the AI-generated skin was used or the theme's default was copied. */
-  readonly skinSource?: 'generated' | 'default'
+  /**
+   * Present only when a blueprint wrote `theme.tokens.json` — says which
+   * skin ended up there: `'generated'` (AI, L9 task 7 / approved plan),
+   * `'preset'` (this blueprint's own starting skin, L22 task 10 —
+   * `./blueprints/starting-skins.js`) or `'default'`
+   * (`@cogenta/theme-canonical`'s own tokens, copied verbatim — the only
+   * option for a blueprint with no preset of its own).
+   */
+  readonly skinSource?: 'generated' | 'preset' | 'default'
   /** Names of the collections that came from an approved document-driven plan, in the order written. */
   readonly approvedCollectionNames: readonly string[]
   /** How many approved demonstration entries were actually seeded. */
@@ -262,7 +270,7 @@ export async function scaffoldSite(
   const schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
   const merged = mergeCollections(pack?.collections ?? [], answers.approvedCollections ?? [])
   await writeFile(schemaPath, schemaFileContents(merged.all), 'utf8')
-  let skinSource: 'generated' | 'default' | undefined
+  let skinSource: 'generated' | 'preset' | 'default' | undefined
 
   // A plan the human approved brings its own skin, whatever blueprint was
   // picked — including `blank`, which has no content pack and therefore
@@ -270,11 +278,20 @@ export async function scaffoldSite(
   const writesTheme = pack !== undefined || answers.approvedCollections !== undefined
 
   if (writesTheme) {
-    skinSource = answers.skinTokens === undefined ? 'default' : 'generated'
+    const startingSkin = STARTING_SKINS[blueprint.id]
+    if (answers.skinTokens !== undefined) {
+      skinSource = 'generated'
+    } else if (startingSkin !== undefined) {
+      skinSource = 'preset'
+    } else {
+      skinSource = 'default'
+    }
     const tokensJson =
-      answers.skinTokens === undefined
-        ? await canonicalTokensJson()
-        : `${JSON.stringify(answers.skinTokens, null, 2)}\n`
+      answers.skinTokens !== undefined
+        ? `${JSON.stringify(answers.skinTokens, null, 2)}\n`
+        : startingSkin !== undefined
+          ? `${JSON.stringify(startingSkin, null, 2)}\n`
+          : await canonicalTokensJson()
     await writeFile(join(answers.targetDir, 'theme.tokens.json'), tokensJson, 'utf8')
     if (pack !== undefined) {
       await writeFile(

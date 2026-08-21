@@ -65,6 +65,7 @@ const PAGE_MAX_AGE: Readonly<Record<string, number>> = {
   association: 600,
   restaurant: 900,
   saas: 600,
+  store: 120,
 }
 
 const CACHE_REASON: Readonly<Record<string, string>> = {
@@ -77,6 +78,7 @@ const CACHE_REASON: Readonly<Record<string, string>> = {
   association: 'events and announcements appear weekly',
   restaurant: 'a menu changes on its own schedule, not by the minute',
   saas: 'pricing and feature pages change with releases, not continuously',
+  store: 'stock and prices can change through the day, so two minutes keeps the catalogue honest',
 }
 
 export function blueprintSettings(blueprintId: string): BlueprintSettings {
@@ -151,6 +153,11 @@ export function inferBlueprint(input: {
     {
       id: 'restaurant',
       pattern: /\b(restaurant|bistro|brasserie|traiteur|menu|carte|plat|dish)\b/,
+    },
+    {
+      id: 'store',
+      pattern:
+        /\b(boutique|e-commerce|ecommerce|commerce en ligne|online store|webshop|web shop|vendre en ligne|shopping cart|panier|checkout)\b/,
     },
     {
       id: 'portfolio',

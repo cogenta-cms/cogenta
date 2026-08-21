@@ -31,7 +31,40 @@ import {
 } from '../ui/index.js'
 
 /**
- * L5 task 9: état, autonomie, budget, historique, traces — read from `@cogenta/agents`' registry via `/api/agents`, admin only.
+ * Contract C's taxonomy of tool permissions (`docs/04-contrats.md` §
+ * "Contrat C — Outil agentique", `tools@1.1`), reproduced verbatim as a
+ * fixed, ordered list — this is the same taxonomy `defineTool({ permissions
+ * })` draws from, kept here by hand for the same structural reason
+ * `agents-router.ts` stays untyped against `@cogenta/agents`: the admin
+ * package must not gain a dependency on the tool-definition package just to
+ * label a checklist. Adding a permission to the real taxonomy (a mineur
+ * change, ADR-0020/0022's own rule) means adding its name here too.
+ */
+const CONTRACT_C_PERMISSIONS: readonly string[] = [
+  'content.read',
+  'content.write_draft',
+  'content.publish',
+  'content.delete',
+  'media.read',
+  'media.write',
+  'schema.read',
+  'site.config_read',
+  'site.config_write',
+  'deps.scan',
+  'deps.patch',
+  'build.trigger',
+  'deploy.trigger',
+  'http.fetch',
+  'channel.send',
+  'agent.delegate',
+  'memory.read',
+  'memory.write',
+  'document.extract',
+]
+
+/**
+ * L5 task 9 / L21 task 4: état, autonomie, budget, historique, traces — read
+ * from `@cogenta/agents`' registry via `/api/agents`, admin only.
  *
  * **Fiche 30 task 1.** No `AgentRegistry` runs anywhere in this codebase —
  * enabling an agent here writes a stored configuration flag that nothing
@@ -40,6 +73,23 @@ import {
  * it configures a capability that does not exist yet. The banner says so in
  * plain language, every time this screen renders, so nobody can look at this
  * table and believe an agent is executing.
+ *
+ * **L21 task 4.** `AgentDeclaration` (contract C's `defineAgent`) models far
+ * more than the enable toggle and the two read-only fields this screen used
+ * to show: a full tool/permission list, per-tool autonomy overrides, all
+ * three budget metrics (not just `tokensPerDay`), skills, subagents, a model
+ * preference, a memory configuration, and triggers (including cron
+ * schedules). All of it is now shown in the detail panel below — but as
+ * **read-only** data, on purpose: nothing in `@cogenta/agents`' own
+ * `AgentRegistry` can persist an edit to any of these fields today (only
+ * `enable`/`disable` really mutate anything — see `registry.ts`), so an
+ * editable control for them would have no real backend effect. Building one
+ * anyway would be exactly the kind of inert control R6 forbids: a checkbox
+ * that looks like it grants a permission but changes nothing. The two
+ * fields a user might reasonably also want here — free-form
+ * "responsibilities" or "systems" beyond the fixed contract C taxonomy —
+ * have no backend model at all and are not fabricated; see the task's
+ * closing report for why they are out of scope without a new data model.
  */
 export function AgentsRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -128,6 +178,8 @@ export function AgentsRoute(): JSX.Element {
     )
   }
 
+  const selectedAgent = agents.find((agent) => agent.name === selected) ?? null
+
   return (
     <section aria-labelledby="agents-heading" className="flex flex-col gap-6">
       <h1 id="agents-heading" className="m-0 text-xl leading-7 font-semibold">
@@ -157,6 +209,7 @@ export function AgentsRoute(): JSX.Element {
               <TableRow>
                 <TableHeader>{t('agents.name')}</TableHeader>
                 <TableHeader>{t('agents.state')}</TableHeader>
+                <TableHeader>{t('agents.model')}</TableHeader>
                 <TableHeader>{t('agents.autonomy')}</TableHeader>
                 <TableHeader>{t('agents.budget')}</TableHeader>
                 <TableHeader>{t('agents.actions')}</TableHeader>
@@ -173,6 +226,7 @@ export function AgentsRoute(): JSX.Element {
                   <TableCell>
                     {agent.enabled ? t('agents.enabled') : t('agents.disabled')}
                   </TableCell>
+                  <TableCell>{agent.model?.preferred ?? '—'}</TableCell>
                   <TableCell>{agent.autonomy?.default ?? '—'}</TableCell>
                   <TableCell>
                     {agent.budget?.tokensPerDay ?? '—'} / {agent.usage?.tokensToday ?? 0}
@@ -189,24 +243,212 @@ export function AgentsRoute(): JSX.Element {
                   </TableCell>
                 </TableRow>
               ))}
-              {agents.length === 0 && <TableEmpty colSpan={5}>{t('agents.noAgents')}</TableEmpty>}
+              {agents.length === 0 && <TableEmpty colSpan={6}>{t('agents.noAgents')}</TableEmpty>}
             </TableBody>
           </Table>
         </TableRoot>
       )}
 
-      {selected !== null && (
+      {selectedAgent !== null && (
         <Card aria-labelledby="agents-detail-heading">
           <CardHeader>
             <CardTitle>
-              <h2 id="agents-detail-heading">{t('agents.detailHeading', { name: selected })}</h2>
+              <h2 id="agents-detail-heading">
+                {t('agents.detailHeading', { name: selectedAgent.name })}
+              </h2>
             </CardTitle>
           </CardHeader>
           <CardBody>
+            <Notice tone="info" live="off">
+              <p className="m-0 text-sm">{t('agents.configReadOnlyNotice')}</p>
+            </Notice>
+
             {detailLoading && <p>{t('common.loading')}</p>}
 
             {!detailLoading && (
-              <div className="flex flex-col gap-4">
+              <div className="mt-4 flex flex-col gap-6">
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.model')}</h3>
+                  {selectedAgent.model === undefined ? (
+                    <p className="m-0 text-sm">{t('agents.modelNone')}</p>
+                  ) : (
+                    <p className="m-0 text-sm">
+                      {t('agents.modelPreferred', { model: selectedAgent.model.preferred })}
+                      {selectedAgent.model.fallback !== undefined &&
+                        ` — ${t('agents.modelFallback', { model: selectedAgent.model.fallback })}`}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.autonomy')}
+                  </h3>
+                  <p className="m-0 text-sm">
+                    {t('agents.autonomyDefault', {
+                      level: selectedAgent.autonomy?.default ?? '—',
+                    })}
+                  </p>
+                  {selectedAgent.autonomy?.overrides !== undefined &&
+                    Object.keys(selectedAgent.autonomy.overrides).length > 0 && (
+                      <TableRoot label={t('agents.autonomyOverrides')} className="mt-2">
+                        <Table>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>{t('agents.tool')}</TableHeader>
+                              <TableHeader>{t('agents.level')}</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {Object.entries(selectedAgent.autonomy.overrides).map(
+                              ([tool, level]) => (
+                                <TableRow key={tool}>
+                                  <TableCell>{tool}</TableCell>
+                                  <TableCell>{level}</TableCell>
+                                </TableRow>
+                              ),
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableRoot>
+                    )}
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.budgetDetail')}
+                  </h3>
+                  <TableRoot label={t('agents.budgetDetail')}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableHeader>{t('agents.budgetMetric')}</TableHeader>
+                          <TableHeader>{t('agents.budgetLimit')}</TableHeader>
+                          <TableHeader>{t('agents.budgetUsage')}</TableHeader>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>{t('agents.budgetMetricTokensPerDay')}</TableCell>
+                          <TableCell>
+                            {selectedAgent.budget?.tokensPerDay ?? t('agents.budgetNoLimit')}
+                          </TableCell>
+                          <TableCell>{selectedAgent.usage?.tokensToday ?? 0}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>{t('agents.budgetMetricEurPerMonth')}</TableCell>
+                          <TableCell>
+                            {selectedAgent.budget?.eurPerMonth ?? t('agents.budgetNoLimit')}
+                          </TableCell>
+                          <TableCell>{selectedAgent.usage?.eurThisMonth ?? 0}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>{t('agents.budgetMetricCallsPerHour')}</TableCell>
+                          <TableCell>
+                            {selectedAgent.budget?.callsPerHour ?? t('agents.budgetNoLimit')}
+                          </TableCell>
+                          <TableCell>{selectedAgent.usage?.callsThisHour ?? 0}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableRoot>
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.permissions')}
+                  </h3>
+                  <p className="m-0 mb-2 text-xs opacity-80">{t('agents.permissionsHint')}</p>
+                  <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
+                    {CONTRACT_C_PERMISSIONS.map((permission) => {
+                      const granted = selectedAgent.tools.includes(permission)
+                      const inputId = `agent-permission-${selectedAgent.name}-${permission}`
+                      return (
+                        <li key={permission} className="flex items-center gap-2">
+                          <input
+                            id={inputId}
+                            type="checkbox"
+                            checked={granted}
+                            disabled
+                            readOnly
+                            aria-readonly="true"
+                          />
+                          <label htmlFor={inputId}>{permission}</label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.skills')}</h3>
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                    {(selectedAgent.skills ?? []).map((skill) => (
+                      <li key={skill}>{skill}</li>
+                    ))}
+                    {(selectedAgent.skills === undefined || selectedAgent.skills.length === 0) && (
+                      <li>{t('agents.noSkills')}</li>
+                    )}
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.subagents')}
+                  </h3>
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                    {(selectedAgent.subagents ?? []).map((subagent) => (
+                      <li key={subagent}>{subagent}</li>
+                    ))}
+                    {(selectedAgent.subagents === undefined ||
+                      selectedAgent.subagents.length === 0) && <li>{t('agents.noSubagents')}</li>}
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.memory')}</h3>
+                  {selectedAgent.memory === undefined ? (
+                    <p className="m-0 text-sm">{t('agents.memoryNone')}</p>
+                  ) : (
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                      <li>
+                        {t('agents.memoryEpisodic')}:{' '}
+                        {selectedAgent.memory.episodic === true ? t('common.yes') : t('common.no')}
+                      </li>
+                      <li>
+                        {t('agents.memorySemantic')}:{' '}
+                        {selectedAgent.memory.semantic === true ? t('common.yes') : t('common.no')}
+                      </li>
+                      <li>
+                        {t('agents.memoryProcedural')}:{' '}
+                        {selectedAgent.memory.procedural === true
+                          ? t('common.yes')
+                          : t('common.no')}
+                      </li>
+                      <li>
+                        {t('agents.memoryScope')}: {selectedAgent.memory.scope ?? '—'}
+                      </li>
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.triggers')}
+                  </h3>
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                    {(selectedAgent.triggers ?? []).map((trigger, index) => (
+                      <li key={index}>
+                        {trigger.cron !== undefined
+                          ? t('agents.triggerSchedule', { on: trigger.on, cron: trigger.cron })
+                          : t('agents.triggerEvent', { on: trigger.on })}
+                      </li>
+                    ))}
+                    {(selectedAgent.triggers === undefined ||
+                      selectedAgent.triggers.length === 0) && <li>{t('agents.noTriggers')}</li>}
+                  </ul>
+                </div>
+
                 <div>
                   <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.traces')}</h3>
                   <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">

@@ -17,6 +17,19 @@ export interface AgentSummary {
   readonly tools: readonly string[]
   readonly autonomy?: unknown
   readonly budget?: unknown
+  /**
+   * Fiche 4 (L21 task 4): the rest of contract C's `AgentDeclaration` this
+   * router now passes through unchanged, same `unknown` treatment as
+   * `autonomy`/`budget` above and for the same reason — this package stays
+   * structural, not `@cogenta/agents`-typed. Each is optional because the
+   * underlying declaration field is; a registry backed by a declaration
+   * that never set one simply omits it from the wire response too.
+   */
+  readonly skills?: unknown
+  readonly subagents?: unknown
+  readonly model?: unknown
+  readonly memory?: unknown
+  readonly triggers?: unknown
 }
 
 export interface AgentUsage {
@@ -118,6 +131,11 @@ function summaryOf(options: AgentsRouterOptions, agent: AgentSummary): Record<st
     budget: agent.budget,
     enabled: options.agents.isEnabled(agent.name),
     usage: options.agents.usageFor?.(agent.name),
+    skills: agent.skills,
+    subagents: agent.subagents,
+    model: agent.model,
+    memory: agent.memory,
+    triggers: agent.triggers,
   }
 }
 

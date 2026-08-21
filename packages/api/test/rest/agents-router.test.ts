@@ -17,10 +17,13 @@ function securityAgent() {
   return defineAgent({
     name: 'security',
     identity: './identity.md',
-    model: { preferred: 'claude-sonnet' },
+    model: { preferred: 'claude-sonnet', fallback: 'local' },
     tools: ['deps.scan'],
+    skills: ['cve-triage'],
     autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
     budget: { tokensPerDay: 200_000 },
+    memory: { episodic: true, scope: 'site' },
+    triggers: [{ on: 'schedule', cron: '0 6 * * *' }],
   })
 }
 
@@ -84,6 +87,20 @@ describe('GET /api/agents', () => {
         tools: ['deps.scan'],
         autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
         budget: { tokensPerDay: 200_000 },
+      }),
+    ])
+  })
+
+  it('passes through skills, subagents, model, memory and triggers unchanged (fiche 4)', async () => {
+    const response = await router.handle({ method: 'GET', path: '/api/agents', query: {} }, ADMIN)
+    const body = response.body as { data: readonly Record<string, unknown>[] }
+    expect(body.data).toEqual([
+      expect.objectContaining({
+        skills: ['cve-triage'],
+        subagents: undefined,
+        model: { preferred: 'claude-sonnet', fallback: 'local' },
+        memory: { episodic: true, scope: 'site' },
+        triggers: [{ on: 'schedule', cron: '0 6 * * *' }],
       }),
     ])
   })

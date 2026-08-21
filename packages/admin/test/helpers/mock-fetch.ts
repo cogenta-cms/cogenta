@@ -3135,9 +3135,17 @@ export function installMockFetch(
                 name: 'security',
                 tools: ['deps.scan', 'deps.patch'],
                 autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
-                budget: { tokensPerDay: 200_000 },
+                budget: { tokensPerDay: 200_000, eurPerMonth: 10, callsPerHour: 30 },
                 enabled: securityAgentEnabled,
                 usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 },
+                // L21 task 4: the rest of contract C's `AgentDeclaration`,
+                // mirroring `agents-builtin/src/security/agent.ts`'s real
+                // shape so the admin's richer detail panel has real data to
+                // assert against.
+                skills: ['cve-triage', 'security-report'],
+                model: { preferred: 'claude-sonnet', fallback: 'local' },
+                memory: { episodic: true, semantic: true, procedural: true, scope: 'site' },
+                triggers: [{ on: 'cve.published' }, { on: 'schedule', cron: '0 6 * * *' }],
               },
             ],
           })
@@ -3185,9 +3193,13 @@ export function installMockFetch(
             name,
             tools: ['deps.scan', 'deps.patch'],
             autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
-            budget: { tokensPerDay: 200_000 },
+            budget: { tokensPerDay: 200_000, eurPerMonth: 10, callsPerHour: 30 },
             enabled: securityAgentEnabled,
             usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 },
+            skills: ['cve-triage', 'security-report'],
+            model: { preferred: 'claude-sonnet', fallback: 'local' },
+            memory: { episodic: true, semantic: true, procedural: true, scope: 'site' },
+            triggers: [{ on: 'cve.published' }, { on: 'schedule', cron: '0 6 * * *' }],
           },
         })
       }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -135,7 +135,7 @@ describe('dashboard', () => {
     expect(await screen.findByText('Second article')).toBeDefined()
   })
 
-  it('remembers a hidden widget across a reload', async () => {
+  it('remembers a removed widget across a reload', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({ roles: ['admin'] })
@@ -143,13 +143,75 @@ describe('dashboard', () => {
     const { unmount } = render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    const toggle = await screen.findByRole('checkbox', { name: 'Résumé du contenu' })
-    toggle.click()
+    const remove = await screen.findByRole('button', {
+      name: 'Retirer Résumé du contenu du tableau de bord',
+    })
+    remove.click()
     expect(screen.queryByRole('heading', { name: 'Résumé du contenu' })).toBeNull()
 
     unmount()
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     expect(screen.queryByRole('heading', { name: 'Résumé du contenu' })).toBeNull()
+  })
+
+  it('a widget removed entirely can be added back from the picker list (fiche 22 tâche 8, part 2)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // Not just hidden — genuinely off the dashboard, and offered back from a
+    // dedicated "available widgets" list rather than a checkbox that still
+    // named it among the visible ones.
+    const remove = await screen.findByRole('button', {
+      name: 'Retirer Résumé du contenu du tableau de bord',
+    })
+    remove.click()
+    expect(screen.queryByRole('heading', { name: 'Résumé du contenu' })).toBeNull()
+
+    const add = await screen.findByRole('button', {
+      name: 'Ajouter Résumé du contenu au tableau de bord',
+    })
+    add.click()
+
+    expect(await screen.findByRole('heading', { name: 'Résumé du contenu' })).toBeDefined()
+    expect(
+      screen.queryByRole('button', { name: 'Ajouter Résumé du contenu au tableau de bord' }),
+    ).toBeNull()
+  })
+
+  it('reorders only among the widgets actually on the dashboard', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    function widgetNames(): readonly (string | null)[] {
+      const list = screen.getByText('Résumé du contenu').closest('ul') as HTMLUListElement
+      return Array.from(list.querySelectorAll('li > span:first-child')).map(
+        (node) => node.textContent,
+      )
+    }
+
+    const before = widgetNames()
+    expect(before[0]).toBe('Résumé du contenu')
+
+    // The first item's "up" button is disabled (nothing above it); the
+    // second item's "up" button swaps it with the first — reusing
+    // `reorderWidget` against the *visible* list only, never a raw swap
+    // against the full stored order (which could include a hidden widget in
+    // between and silently do nothing the reader can see).
+    const list = screen.getByText('Résumé du contenu').closest('ul') as HTMLUListElement
+    const secondItem = list.querySelectorAll('li')[1] as HTMLLIElement
+    within(secondItem).getByRole('button', { name: 'Monter' }).click()
+
+    const after = widgetNames()
+    expect(after[0]).toBe(before[1])
+    expect(after[1]).toBe(before[0])
   })
 })

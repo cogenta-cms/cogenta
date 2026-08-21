@@ -15,10 +15,39 @@
   border-top: 1px solid var(--color-border);
   background: var(--card);
   padding: var(--space-2) var(--space-4);
-  text-align: center;
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--color-text-muted);
+}
+
+/* Fiche 22 tâche 8, part 4 — brand/version on one side, the site's own name
+   on the other, instead of the single centred line this used to be. */
+.app-shell__footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.app-shell__footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.app-shell__footer-brand .app-shell__brand-logo {
+  height: 1.1em;
+}
+
+.app-shell__footer-version {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  opacity: 0.8;
+}
+
+.app-shell__footer-site {
+  opacity: 0.8;
 }
 
 .app-shell__topbar {
@@ -99,6 +128,41 @@
 
 .app-shell__logout:active {
   transform: translateY(1px);
+}
+
+/* "View site" (fiche 22 tâche 8, part 5) — the same button shape as
+   `.app-shell__logout`, so the two read as one family of topbar actions. */
+.app-shell__view-site {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.app-shell__view-site:hover,
+.app-shell__view-site:focus-visible {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* The icon alone survives on a narrow topbar — the account area already
+   competes with search and the breadcrumb for room there. */
+@media (max-width: 900px) {
+  .app-shell__view-site-label {
+    display: none;
+  }
 }
 
 .app-shell__sidebar {

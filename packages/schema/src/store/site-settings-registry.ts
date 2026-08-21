@@ -88,6 +88,18 @@ export const SITE_SETTING_GROUPS = [
    * own screen instead of a `SettingsRoute` tab.
    */
   'seo',
+  /**
+   * Admin nav reordering/hiding (fiche 22 tâche 8, part 3) — which sidebar
+   * sections and entries a signed-in actor sees, and in what order.
+   * Deliberately **site-wide**, not per-browser: `sidebarCollapsed` and
+   * `groupOpen` (`app-shell.tsx`) stay in `localStorage` on purpose (each
+   * person's own "collapsed today" is not something anyone else needs to
+   * see), but "this site sells nothing, so hide Boutique for everyone" is an
+   * editorial decision about the site, no different from every other setting
+   * in this registry — it has to survive a different browser, a different
+   * person signing in, and a fresh install pulling the same database.
+   */
+  'navigation',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -173,6 +185,25 @@ const changeFrequencyOrEmpty = z.enum([
   'yearly',
   'never',
 ])
+
+/**
+ * A comma-separated list of bare tokens — a nav group id (`content`,
+ * `commerce`, …) or the `to` path of a nav item (`/collections`,
+ * `/commerce/products`, …). The same shape `content.newEntryDefaultBlocks`
+ * already uses for "an ordered subset of a vocabulary this package cannot
+ * import" (fiche 22 tâche 8, part 3): `@cogenta/schema` has no dependency on
+ * `@cogenta/admin`'s `nav-items.ts` any more than it does on
+ * `@cogenta/blocks`'s block vocabulary, so this only shapes the string —
+ * `@cogenta/admin`'s own `nav-layout.ts` is what filters out a token that
+ * does not name a real group or item. Empty means "no override": the
+ * admin's own shipped order and visibility apply untouched.
+ */
+const navTokenList = z
+  .string()
+  .max(4000)
+  .regex(/^$|^[a-zA-Z0-9/_-]+(\s*,\s*[a-zA-Z0-9/_-]+)*$/u, {
+    error: 'A comma-separated list of navigation section or entry ids.',
+  })
 
 /** `seo.sitemapCollectionSettings` — one override per collection name (fiche 21 task 3, mirrors `@cogenta/seo`'s `SitemapCollectionOverride`). */
 const sitemapCollectionSettings = z.record(
@@ -716,6 +747,53 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // rarely changes. A site that wants its own asset pastes the same URL
     // `/api/media/{id}/file` or `/_image?id=…` would answer.
     schema: urlOrPathOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Navigation (fiche 22 tâche 8, part 3) — admin sidebar reordering and
+  // hiding, site-wide. Four independent lists rather than one nested
+  // structure: each is a plain `navTokenList`, the same "comma-separated
+  // subset of a vocabulary this package cannot import" shape every other
+  // string-shaped setting here already uses, so this registry stays generic
+  // (no key here gets a bespoke value shape the store has to special-case).
+  {
+    key: 'navigation.sectionOrder',
+    group: 'navigation',
+    order: 0,
+    uiType: 'string',
+    scope: 'site',
+    schema: navTokenList,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'navigation.hiddenSections',
+    group: 'navigation',
+    order: 1,
+    uiType: 'string',
+    scope: 'site',
+    schema: navTokenList,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'navigation.itemOrder',
+    group: 'navigation',
+    order: 2,
+    uiType: 'string',
+    scope: 'site',
+    schema: navTokenList,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'navigation.hiddenItems',
+    group: 'navigation',
+    order: 3,
+    uiType: 'string',
+    scope: 'site',
+    schema: navTokenList,
     defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },

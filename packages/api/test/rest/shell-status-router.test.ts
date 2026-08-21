@@ -67,7 +67,22 @@ describe('the shell status transport', () => {
       reviewPending: null,
       commentsPending: null,
       formSubmissionsUnread: null,
+      cogentaVersion: '0.0.0',
     })
+  })
+
+  it('answers the software version to everyone, including an anonymous visitor (fiche 22 tâche 8)', async () => {
+    const router = createShellStatusRouter({ content: emptyContent, cogentaVersion: '0.4.0' })
+    const anonymous = await router.handle(request(), { actor: ANONYMOUS })
+    expect(dataOf<{ cogentaVersion: string }>(anonymous).cogentaVersion).toBe('0.4.0')
+    const signedIn = await router.handle(request(), { actor: EDITOR })
+    expect(dataOf<{ cogentaVersion: string }>(signedIn).cogentaVersion).toBe('0.4.0')
+  })
+
+  it('defaults the software version to a well-formed placeholder when a caller does not configure it', async () => {
+    const router = createShellStatusRouter({ content: emptyContent })
+    const response = await router.handle(request(), { actor: EDITOR })
+    expect(dataOf<{ cogentaVersion: string }>(response).cogentaVersion).toBe('0.0.0')
   })
 
   it('sums trashed counts across every trash-enabled collection this actor may see the trash of', async () => {

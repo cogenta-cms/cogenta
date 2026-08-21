@@ -265,6 +265,15 @@ export interface BrandingSettings {
   readonly showCogentaBranding: boolean
   /** A media id, or `null` for "no white-label logo uploaded". */
   readonly customLogoMediaId: string | null
+  /**
+   * `@cogenta/core`'s own package version (fiche 22 tâche 8, part 4) — shown
+   * next to Cogenta's credit in the public footer, but only ever when
+   * `showCogentaBranding` is true: a white-labelled site has no reason to
+   * advertise which CMS or which version runs it. Optional so a caller that
+   * predates this field (or genuinely does not know the version) still gets
+   * the pre-task-8 footer rather than a crash.
+   */
+  readonly cogentaVersion?: string
 }
 
 const DEFAULT_BRANDING: BrandingSettings = { showCogentaBranding: true, customLogoMediaId: null }
@@ -286,11 +295,15 @@ async function brandingFor(
  */
 function renderFooterBranding(branding: BrandingSettings, imageEndpoint: string): string {
   if (branding.showCogentaBranding) {
+    const versionSuffix =
+      branding.cogentaVersion === undefined || branding.cogentaVersion === ''
+        ? ''
+        : ` <span class="cg-site-footer__version">v${escapeHtml(branding.cogentaVersion)}</span>`
     return (
       `<div class="cg-site-footer__branding">` +
       `<a href="https://github.com/cogenta-cms/cogenta" rel="noopener" target="_blank">` +
       `<img src="${DEFAULT_LOGO_PATH}" width="32" height="32" alt="Cogenta" ` +
-      `class="cg-site-footer__brand-logo" loading="lazy"></a></div>`
+      `class="cg-site-footer__brand-logo" loading="lazy">${versionSuffix}</a></div>`
     )
   }
   if (branding.customLogoMediaId !== null && branding.customLogoMediaId !== '') {

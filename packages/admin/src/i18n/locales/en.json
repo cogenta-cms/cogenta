@@ -268,6 +268,7 @@
     "skipLink": "Skip to main content",
     "brand": "Cogenta",
     "logout": "Sign out",
+    "viewSite": "View site",
     "nav": "Main navigation",
     "footer": "Cogenta admin",
     "breadcrumb": "Breadcrumb",
@@ -1484,6 +1485,14 @@
     "quickDraftError": "Could not create the draft.",
     "quickDraftNoTitleField": "This collection has no plain-text field to hold a title.",
     "customize": "Customise this dashboard",
+    "widgetsOnDashboard": "Widgets on your dashboard",
+    "availableWidgets": "Available widgets",
+    "noWidgetsShown": "No widgets are shown — add one below.",
+    "allWidgetsShown": "Every widget is already on your dashboard.",
+    "remove": "Remove",
+    "removeWidget": "Remove {{name}} from the dashboard",
+    "add": "Add",
+    "addWidget": "Add {{name}} to the dashboard",
     "moveUp": "Move up",
     "moveDown": "Move down",
     "resetLayout": "Reset layout",
@@ -1620,6 +1629,7 @@
       "media": "Media",
       "privacy": "Privacy",
       "branding": "Branding",
+      "navigation": "Navigation",
       "advanced": "Advanced"
     },
     "dateTimeStyle": {
@@ -1638,6 +1648,7 @@
     "discussionNote": "These are the site-wide defaults. A collection or a single entry can still turn comments off, or require moderation, from that collection's settings or the entry editor.",
     "noCookieByDefault": "Cogenta sets no cookie of its own. Turn this on only if this site adds one (an embed, an analytics script) — a banner nobody needs is worse than none.",
     "brandingNote": "The custom logo only takes effect once \"Show Cogenta branding\" is turned off — it stays saved either way, so switching branding back on never loses it.",
+    "navigationNote": "Reorder or hide sidebar sections and entries for everyone on this site — for example, hide \"Shop\" on a site that never sells anything. This never changes what an account is actually allowed to do: hiding an entry here only hides it, it does not revoke the permission behind it.",
     "advancedLink": "Security, webhooks and infrastructure (read-only)",
     "advancedNote": "Everything there comes from cogenta.config.mjs. Edit the file and restart the server to change it.",
     "field": {

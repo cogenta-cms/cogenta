@@ -238,8 +238,15 @@ img {
 .cg-site-footer__branding a {
   display: flex;
   align-items: center;
+  gap: 0.4em;
   opacity: 0.7;
   transition: opacity 0.15s ease;
+}
+
+/* `@cogenta/core`'s package version, next to the logo (fiche 22 tâche 8) — only rendered at all when Cogenta's own credit is on. */
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9em;
 }
 
 .cg-site-footer__branding a:hover,

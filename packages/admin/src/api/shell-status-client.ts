@@ -19,6 +19,8 @@ export interface ShellStatus {
   readonly commentsPending: number | null
   /** Unread form submissions (contract G, ADR-0026, fiche 16). */
   readonly formSubmissionsUnread: number | null
+  /** `@cogenta/core`'s own package version (fiche 22 tâche 8, part 4) — shown in the shell footer/topbar. */
+  readonly cogentaVersion: string
 }
 
 export function getShellStatus(token: string): Promise<ShellStatus> {

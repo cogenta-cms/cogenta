@@ -6,6 +6,13 @@ import { listSettings, type SiteSetting, writeSetting } from '../api/settings-cl
 import { useAuth } from '../auth/auth-context.js'
 import { useSchema } from '../schema/schema-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
+import { NAV_GROUPS, NAV_ITEMS, type NavGroupId } from '../shell/nav-items.js'
+import {
+  type NavLayoutOverrides,
+  parseNavLayoutOverrides,
+  reorderByKey,
+  serialiseNavLayoutOverrides,
+} from '../shell/nav-layout.js'
 import { cn } from '../ui/cn.js'
 import { Card, CardBody, CardHeader, CardTitle, Notice, Select } from '../ui/index.js'
 
@@ -30,6 +37,7 @@ const TAB_ORDER = [
   'media',
   'privacy',
   'branding',
+  'navigation',
   'advanced',
 ] as const
 type TabId = (typeof TAB_ORDER)[number]
@@ -115,6 +123,23 @@ export function SettingsRoute(): JSX.Element {
     await reload()
   }
 
+  // Fiche 22 tâche 8, part 3 — the four `navigation.*` keys always travel
+  // together: a reorder or a hide always produces a full, self-consistent
+  // `NavLayoutOverrides`, so this writes all four rather than asking the
+  // Navigation tab to know which of the four actually changed this time.
+  const navOverrides = useMemo(() => parseNavLayoutOverrides(settings ?? []), [settings])
+  async function saveNavOverrides(next: NavLayoutOverrides): Promise<void> {
+    if (token === null) return
+    const serialised = serialiseNavLayoutOverrides(next)
+    await Promise.all([
+      writeSetting(token, 'navigation.sectionOrder', serialised.sectionOrder),
+      writeSetting(token, 'navigation.hiddenSections', serialised.hiddenSections),
+      writeSetting(token, 'navigation.itemOrder', serialised.itemOrder),
+      writeSetting(token, 'navigation.hiddenItems', serialised.hiddenItems),
+    ])
+    await reload()
+  }
+
   if (!isAdmin) {
     return (
       <section aria-labelledby="settings-heading">
@@ -189,6 +214,9 @@ export function SettingsRoute(): JSX.Element {
         {tab === 'media' && <MediaTab settings={byTab.get('media') ?? []} onSave={save} />}
         {tab === 'privacy' && <PrivacyTab settings={byTab.get('privacy') ?? []} onSave={save} />}
         {tab === 'branding' && <BrandingTab settings={byTab.get('branding') ?? []} onSave={save} />}
+        {tab === 'navigation' && (
+          <NavigationTab overrides={navOverrides} onSave={saveNavOverrides} />
+        )}
         {tab === 'advanced' && <AdvancedTab />}
       </div>
     </section>
@@ -440,6 +468,177 @@ function BrandingTab({
           />
         ))}
         <p className="m-0 text-xs text-muted-foreground">{t('settings.brandingNote')}</p>
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * "Navigation" (fiche 22 tâche 8, part 3) — reordering and hiding sidebar
+ * sections and entries, site-wide (`navigation.*`, `nav-layout.ts`), the
+ * example the fiche itself gives being "hide Boutique on a portfolio site".
+ *
+ * Deliberately edits the *full*, unfiltered `NAV_GROUPS`/`NAV_ITEMS`
+ * (`reorderByKey` applied directly, not `visibleNavGroups`): an admin
+ * configuring this screen has to see and act on an entry regardless of
+ * whether their own account would currently be shown it — hiding Boutique
+ * has to work before the shop is ever visited, and reordering a section
+ * only `admin` can see must still work for `admin` to arrange it.
+ *
+ * Buttons only, no drag-and-drop, unlike the dashboard's own customize panel
+ * (fiche 22 tâche 2): two nested reorderable lists (sections, then entries
+ * within a section) is already enough surface for named up/down controls to
+ * cover the whole feature — a second interaction model here would be an
+ * abstraction for a case this screen does not have (AGENTS.md).
+ */
+function NavigationTab({
+  overrides,
+  onSave,
+}: {
+  readonly overrides: NavLayoutOverrides
+  readonly onSave: (next: NavLayoutOverrides) => Promise<void>
+}): JSX.Element {
+  const { t } = useTranslation()
+  const [saving, setSaving] = useState(false)
+
+  const displayedGroups = reorderByKey(NAV_GROUPS, (group) => group.id, overrides.sectionOrder)
+  const displayedItemsByGroup = new Map(
+    displayedGroups.map((group) => [
+      group.id,
+      reorderByKey(
+        NAV_ITEMS.filter((item) => item.group === group.id),
+        (item) => item.to,
+        overrides.itemOrder,
+      ),
+    ]),
+  )
+
+  async function persist(next: NavLayoutOverrides): Promise<void> {
+    setSaving(true)
+    try {
+      await onSave(next)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function moveGroup(groupId: NavGroupId, direction: 'up' | 'down'): void {
+    const pos = displayedGroups.findIndex((group) => group.id === groupId)
+    const target = direction === 'up' ? pos - 1 : pos + 1
+    if (pos === -1 || target < 0 || target >= displayedGroups.length) return
+    const reordered = [...displayedGroups]
+    const swap = reordered[target]
+    reordered[target] = reordered[pos] as (typeof reordered)[number]
+    reordered[pos] = swap as (typeof reordered)[number]
+    void persist({ ...overrides, sectionOrder: reordered.map((group) => group.id) })
+  }
+
+  function toggleGroupHidden(groupId: NavGroupId): void {
+    const hidden = new Set(overrides.hiddenSections)
+    if (hidden.has(groupId)) hidden.delete(groupId)
+    else hidden.add(groupId)
+    void persist({
+      ...overrides,
+      hiddenSections: NAV_GROUPS.map((group) => group.id).filter((id) => hidden.has(id)),
+    })
+  }
+
+  function moveItem(groupId: NavGroupId, itemTo: string, direction: 'up' | 'down'): void {
+    const items = displayedItemsByGroup.get(groupId) ?? []
+    const pos = items.findIndex((item) => item.to === itemTo)
+    const target = direction === 'up' ? pos - 1 : pos + 1
+    if (pos === -1 || target < 0 || target >= items.length) return
+    const reordered = [...items]
+    const swap = reordered[target]
+    reordered[target] = reordered[pos] as (typeof reordered)[number]
+    reordered[pos] = swap as (typeof reordered)[number]
+    // The other groups keep their own currently-displayed arrangement — only
+    // this one group's slice of the flat, cross-group `itemOrder` changes.
+    const nextItemOrder = displayedGroups.flatMap((group) =>
+      group.id === groupId
+        ? reordered.map((item) => item.to)
+        : (displayedItemsByGroup.get(group.id) ?? []).map((item) => item.to),
+    )
+    void persist({ ...overrides, itemOrder: nextItemOrder })
+  }
+
+  function toggleItemHidden(itemTo: string): void {
+    const hidden = new Set(overrides.hiddenItems)
+    if (hidden.has(itemTo)) hidden.delete(itemTo)
+    else hidden.add(itemTo)
+    void persist({
+      ...overrides,
+      hiddenItems: NAV_ITEMS.map((item) => item.to).filter((to) => hidden.has(to)),
+    })
+  }
+
+  return (
+    <Card aria-busy={saving}>
+      <CardBody className="flex flex-col gap-4">
+        <p className="m-0 text-xs text-muted-foreground">{t('settings.navigationNote')}</p>
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {displayedGroups.map((group, groupIndex) => (
+            <li key={group.id} className="rounded-md border border-border p-3">
+              <div className="flex items-center gap-2">
+                <label className="flex flex-1 items-center gap-2 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={!overrides.hiddenSections.includes(group.id)}
+                    onChange={() => toggleGroupHidden(group.id)}
+                  />
+                  {t(group.labelKey)}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => moveGroup(group.id, 'up')}
+                  disabled={groupIndex === 0}
+                  className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
+                >
+                  {t('dashboard.moveUp')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveGroup(group.id, 'down')}
+                  disabled={groupIndex === displayedGroups.length - 1}
+                  className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
+                >
+                  {t('dashboard.moveDown')}
+                </button>
+              </div>
+
+              <ul className="m-0 mt-2.5 flex list-none flex-col gap-1.5 border-l border-dashed border-border py-0 pr-0 pl-3">
+                {(displayedItemsByGroup.get(group.id) ?? []).map((item, itemIndex, items) => (
+                  <li key={item.to} className="flex items-center gap-2 text-sm">
+                    <label className="flex flex-1 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!overrides.hiddenItems.includes(item.to)}
+                        onChange={() => toggleItemHidden(item.to)}
+                      />
+                      {t(item.labelKey)}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(group.id, item.to, 'up')}
+                      disabled={itemIndex === 0}
+                      className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
+                    >
+                      {t('dashboard.moveUp')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(group.id, item.to, 'down')}
+                      disabled={itemIndex === items.length - 1}
+                      className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
+                    >
+                      {t('dashboard.moveDown')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
       </CardBody>
     </Card>
   )

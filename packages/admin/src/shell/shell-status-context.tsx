@@ -45,6 +45,10 @@ const FALLBACK: ChromeStatus = {
     reviewPending: null,
     commentsPending: null,
     formSubmissionsUnread: null,
+    // Empty rather than a guess — the footer only shows a version once it
+    // actually knows one, the same "no flash of a wrong answer" discipline
+    // every other field on this fallback already follows.
+    cogentaVersion: '',
   },
   assistantTools: [],
 }

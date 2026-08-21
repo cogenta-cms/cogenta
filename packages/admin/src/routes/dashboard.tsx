@@ -16,7 +16,6 @@ import { useAuth } from '../auth/auth-context.js'
 import {
   type DashboardWidgetId,
   loadDashboardPrefs,
-  moveWidget,
   reorderWidget,
   resetDashboardPrefs,
   saveDashboardPrefs,
@@ -24,7 +23,15 @@ import {
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
-import { AuditIcon, ClockIcon, MediaIcon, PlusIcon, PulseIcon, TrendIcon } from '../ui/icons.js'
+import {
+  AuditIcon,
+  ClockIcon,
+  CloseIcon,
+  MediaIcon,
+  PlusIcon,
+  PulseIcon,
+  TrendIcon,
+} from '../ui/icons.js'
 
 const DASHBOARD_WINDOW_DAYS = 7
 /** A schedule due within this many hours counts as imminent for the to-do widget. */
@@ -324,9 +331,28 @@ export function DashboardRoute(): JSX.Element {
     })
   }
 
+  /**
+   * Moves `id` past its neighbour among *visible* widgets only (fiche 22
+   * tâche 8, part 2's redesign no longer interleaves hidden widgets into
+   * this list, so a raw `moveWidget` swap against `current.order` — which
+   * would swap with whatever sits next in the full array, hidden or not —
+   * could silently do nothing the reader can see). Reuses `reorderWidget`
+   * unchanged: moving `id` to just before its upward neighbour, or moving
+   * that neighbour to just before `id` for "down", both reduce to the same
+   * "insert before" primitive `dropBefore` already relies on.
+   */
   function move(id: DashboardWidgetId, direction: 'up' | 'down'): void {
     setPrefs((current) => {
-      const next = { order: moveWidget(current.order, id, direction), hidden: current.hidden }
+      const visible = current.order.filter((candidate) => !current.hidden.has(candidate))
+      const pos = visible.indexOf(id)
+      const targetPos = direction === 'up' ? pos - 1 : pos + 1
+      if (pos === -1 || targetPos < 0 || targetPos >= visible.length) return current
+      const neighbour = visible[targetPos] as DashboardWidgetId
+      const order =
+        direction === 'up'
+          ? reorderWidget(current.order, id, neighbour)
+          : reorderWidget(current.order, neighbour, id)
+      const next = { order, hidden: current.hidden }
       saveDashboardPrefs(next)
       return next
     })
@@ -803,7 +829,8 @@ export function DashboardRoute(): JSX.Element {
     backups: renderBackups,
   }
 
-  const visibleOrder = prefs.order.filter((id) => !prefs.hidden.has(id))
+  const visibleWidgetIds = prefs.order.filter((id) => !prefs.hidden.has(id))
+  const hiddenWidgetIds = prefs.order.filter((id) => prefs.hidden.has(id))
 
   return (
     <section aria-labelledby="dashboard-heading" className="flex flex-col gap-8">
@@ -816,14 +843,22 @@ export function DashboardRoute(): JSX.Element {
         </h1>
       </div>
 
-      {/* Fiche 22 tâche 3: order and visibility, per person, per browser
-          (`localStorage`, never a site setting). Every move here is also a
-          named button — dragging is a shortcut for what the buttons already
-          do, the same rule L16 applies to the block builder's sidebar. */}
+      {/* Fiche 22 tâche 3, redesigned by tâche 8 part 2: order and visibility,
+          per person, per browser (`localStorage`, never a site setting).
+          A widget is either genuinely on the dashboard (reorderable, and
+          removable) or genuinely off it (picked back from a list, never a
+          checkbox pretending a hidden widget is still "there"). Every move
+          here is also a named button — dragging is a shortcut for what the
+          buttons already do, the same rule L16 applies to the block
+          builder's sidebar. */}
       <details className="reveal rounded-lg border border-border bg-card p-4 text-sm">
         <summary className="cursor-pointer font-medium">{t('dashboard.customize')}</summary>
-        <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-          {prefs.order.map((id, index) => (
+
+        <h3 className="m-0 mt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {t('dashboard.widgetsOnDashboard')}
+        </h3>
+        <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
+          {visibleWidgetIds.map((id, index) => (
             <li
               key={id}
               draggable
@@ -836,14 +871,7 @@ export function DashboardRoute(): JSX.Element {
               }}
               className="flex items-center gap-2 rounded-sm border border-border bg-background px-2.5 py-1.5"
             >
-              <label className="flex flex-1 items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!prefs.hidden.has(id)}
-                  onChange={() => toggleHidden(id)}
-                />
-                {t(`dashboard.widgetName.${id}`)}
-              </label>
+              <span className="flex-1">{t(`dashboard.widgetName.${id}`)}</span>
               <button
                 type="button"
                 onClick={() => move(id, 'up')}
@@ -855,25 +883,67 @@ export function DashboardRoute(): JSX.Element {
               <button
                 type="button"
                 onClick={() => move(id, 'down')}
-                disabled={index === prefs.order.length - 1}
+                disabled={index === visibleWidgetIds.length - 1}
                 className="rounded-sm border border-border px-2 py-0.5 disabled:opacity-40"
               >
                 {t('dashboard.moveDown')}
               </button>
+              <button
+                type="button"
+                onClick={() => toggleHidden(id)}
+                aria-label={t('dashboard.removeWidget', { name: t(`dashboard.widgetName.${id}`) })}
+                className="inline-flex items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-destructive hover:bg-destructive/10"
+              >
+                <CloseIcon className="size-3.5" />
+                {t('dashboard.remove')}
+              </button>
             </li>
           ))}
+          {visibleWidgetIds.length === 0 && (
+            <li className="text-muted-foreground">{t('dashboard.noWidgetsShown')}</li>
+          )}
         </ul>
+
+        <h3 className="m-0 mt-4 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {t('dashboard.availableWidgets')}
+        </h3>
+        {hiddenWidgetIds.length === 0 ? (
+          <p className="m-0 mt-2 text-muted-foreground">{t('dashboard.allWidgetsShown')}</p>
+        ) : (
+          <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
+            {hiddenWidgetIds.map((id) => (
+              <li
+                key={id}
+                className="flex items-center gap-2 rounded-sm border border-dashed border-border bg-background px-2.5 py-1.5"
+              >
+                <span className="flex-1 text-muted-foreground">
+                  {t(`dashboard.widgetName.${id}`)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleHidden(id)}
+                  aria-label={t('dashboard.addWidget', { name: t(`dashboard.widgetName.${id}`) })}
+                  className="inline-flex items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-primary hover:bg-primary/10"
+                >
+                  <PlusIcon className="size-3.5" />
+                  {t('dashboard.add')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
         <button
           type="button"
           onClick={resetPrefs}
-          className="mt-3 rounded-sm border border-border px-3 py-1.5"
+          className="mt-4 rounded-sm border border-border px-3 py-1.5"
         >
           {t('dashboard.resetLayout')}
         </button>
       </details>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {visibleOrder.map((id) => (
+        {visibleWidgetIds.map((id) => (
           <div key={id} className={id === 'health' ? 'lg:col-span-2' : undefined}>
             {renderers[id]()}
           </div>

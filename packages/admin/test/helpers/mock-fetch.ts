@@ -526,6 +526,7 @@ export function installMockFetch(
       readonly reviewPending?: number | null
       readonly commentsPending?: number | null
       readonly formSubmissionsUnread?: number | null
+      readonly cogentaVersion?: string
     }
     /** Seeds `wf-article`'s one entry at a given review state (`schema@2.1`, ADR-0027) — default `'none'`. */
     readonly wfEntryReviewState?: 'none' | 'pending' | 'changes-requested' | 'approved'
@@ -973,6 +974,34 @@ export function installMockFetch(
       group: 'seo',
       order: 5,
       uiType: 'path',
+      scope: 'site',
+      value: '',
+    },
+    'navigation.sectionOrder': {
+      group: 'navigation',
+      order: 0,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'navigation.hiddenSections': {
+      group: 'navigation',
+      order: 1,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'navigation.itemOrder': {
+      group: 'navigation',
+      order: 2,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'navigation.hiddenItems': {
+      group: 'navigation',
+      order: 3,
+      uiType: 'string',
       scope: 'site',
       value: '',
     },
@@ -5778,6 +5807,7 @@ export function installMockFetch(
           formSubmissionsUnread: user.roles.includes('admin')
             ? formSubmissions.filter((s) => s.status === 'new').length
             : null,
+          cogentaVersion: '0.4.0',
         }
         return json(200, { data: { ...defaults, ...options.shellStatus } })
       }

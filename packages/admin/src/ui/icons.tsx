@@ -357,3 +357,231 @@ export const DocumentationIcon = icon(
     <path d="M10 5.3v11.7" />
   </>,
 )
+
+/**
+ * Fiche 22 tâche 8, part 6 — the sidebar icon audit. Before this set, every
+ * one of these nav entries fell back to its *group*'s icon (`app-shell.tsx`'s
+ * `GROUP_ICONS`), so "Menus", "Comments", "Translations", "Forms" and
+ * "Submissions" all showed the exact same three-bar glyph as "Content"
+ * itself, six commerce screens all showed the same bar chart, and "Health",
+ * "Tools", "Scheduled", "Import", "Marketplace" and "Analytics" all showed a
+ * plain settings gear — a real user complaint ("several icons don't
+ * represent what they link to"), not a hypothetical one. Each icon below
+ * replaces exactly one of those collisions with something that actually
+ * depicts its own screen; nothing here touches an icon that was already
+ * distinct and correct (`AuditIcon`, `UsersIcon`, `TrashIcon`, …).
+ */
+
+/** "Review queue" (`/review`) — a document with an approval mark, distinct from the flat-page `AuditIcon`. */
+export const ReviewIcon = icon(
+  <>
+    <path d="M5 2.5h7l3 3v12H5z" />
+    <path d="M12 2.5v3h3" />
+    <path d="M7.3 13.3l1.8 1.8 3.6-4" />
+  </>,
+)
+
+/** "Menus" (`/menus`) — a small navigation tree, distinct from `CollectionsIcon`'s flat stacked bars. */
+export const MenusIcon = icon(
+  <>
+    <circle cx="4" cy="4.5" r="1.3" />
+    <path d="M4 5.8v3.7h4.5" />
+    <circle cx="10" cy="10" r="1.3" />
+    <path d="M4 9.5v5h4.5" />
+    <circle cx="10" cy="15" r="1.3" />
+    <path d="M12.8 4.5h4M12.8 10h4M12.8 15h4" />
+  </>,
+)
+
+/** "Comments" (`/comments`) — a speech bubble. */
+export const CommentsIcon = icon(
+  <>
+    <path d="M3 4.5h14v9H8.5L5 17v-3.5H3z" />
+    <path d="M6.3 8h7.4M6.3 10.8h4.6" />
+  </>,
+)
+
+/** "Translations" (`/translations`) — a globe, the conventional mark for language/locale switching. */
+export const TranslationsIcon = icon(
+  <>
+    <circle cx="10" cy="10" r="7.5" />
+    <path d="M2.5 10h15" />
+    <path d="M10 2.5c2.2 2 3.4 5 3.4 7.5s-1.2 5.5-3.4 7.5c-2.2-2-3.4-5-3.4-7.5S7.8 4.5 10 2.5z" />
+  </>,
+)
+
+/** "Forms" (`/forms`) — a clipboard with checkboxes, distinct from `FormSubmissionsIcon`'s inbox. */
+export const FormsIcon = icon(
+  <>
+    <path d="M6 3.5h8v14H6z" />
+    <path d="M8 2.5h4v2H8z" />
+    <path d="M7.6 8.3l1 1 1.8-2M7.6 12.3l1 1 1.8-2" />
+    <path d="M12.2 8.6h1.8M12.2 12.6h1.8" />
+  </>,
+)
+
+/** "Submissions" (`/form-submissions`) — an inbox tray, since these are received rather than authored. */
+export const FormSubmissionsIcon = icon(
+  <>
+    <path d="M3 11.5l2.6-7h8.8l2.6 7" />
+    <path d="M3 11.5v4.5h14v-4.5h-4.2a2.8 2.8 0 01-5.6 0z" />
+  </>,
+)
+
+/** "SEO" (`/seo`) — a magnifying glass over a rising bar, search ranking rather than plain search (`SearchIcon`). */
+export const SeoIcon = icon(
+  <>
+    <circle cx="8.3" cy="8.3" r="5" />
+    <path d="M5.5 9.3l1.6-1.8 1.4 1 1.8-2.4" />
+    <path d="M12.3 12.3l4.7 4.7" />
+  </>,
+)
+
+/** "Products" (`/commerce/products`) — a packing box. */
+export const CommerceProductsIcon = icon(
+  <>
+    <path d="M2.7 6.3L10 2.5l7.3 3.8V14L10 17.5 2.7 14z" />
+    <path d="M2.7 6.3L10 10l7.3-3.7M10 10v7.5" />
+  </>,
+)
+
+/** "Orders" (`/commerce/orders`) — a receipt, distinct from the plain document of `ReviewIcon`/`AuditIcon`. */
+export const CommerceOrdersIcon = icon(
+  <>
+    <path d="M5.5 2.5h9v15l-2-1.3-2 1.3-2-1.3-2 1.3z" />
+    <path d="M7.7 6.5h4.6M7.7 9.5h4.6M7.7 12.5h2.6" />
+  </>,
+)
+
+/** "Coupons" (`/commerce/coupons`) — a ticket/tag shape with a punch hole. */
+export const CommerceTicketIcon = icon(
+  <>
+    <path d="M2.5 8.3a2 2 0 000-3.6V3.5h15v13h-15v-1.2a2 2 0 000-3.6z" />
+    <path d="M9.5 3.5v13" strokeDasharray="1.8 1.8" />
+  </>,
+)
+
+/** "Subscriptions" (`/commerce/subscriptions`) — a recurring cycle, since a subscription renews rather than being a one-off order. */
+export const CommerceSubscriptionsIcon = icon(
+  <>
+    <path d="M15.8 6.5A6 6 0 004.6 8.4M4.2 13.5A6 6 0 0015.4 11.6" />
+    <path d="M15.8 3v3.5h-3.5M4.2 17v-3.5h3.5" />
+  </>,
+)
+
+/** "Store settings" (`/commerce/settings`) — a storefront, the same mark used for the whole Commerce group. */
+export const CommerceShopIcon = icon(
+  <>
+    <path d="M3 8.5V17h14V8.5" />
+    <path d="M2.5 4.5h15l1 4a2.3 2.3 0 01-4.4 1 2.3 2.3 0 01-4.2 0 2.3 2.3 0 01-4.2 0 2.3 2.3 0 01-4.4-1z" />
+    <path d="M8 17v-4.5h4V17" />
+  </>,
+)
+
+/** "Tax" (`/commerce/tax`) — a percent sign. */
+export const CommerceTaxIcon = icon(
+  <>
+    <path d="M15 5L5 15" />
+    <circle cx="6.3" cy="6.3" r="2" />
+    <circle cx="13.7" cy="13.7" r="2" />
+  </>,
+)
+
+/** "Shipping" (`/commerce/shipping`) — a delivery truck. */
+export const CommerceShippingIcon = icon(
+  <>
+    <path d="M2 6.5h9v8H2z" />
+    <path d="M11 9.5h3.3l2.7 2.7v2.3h-6z" />
+    <circle cx="5.8" cy="15.8" r="1.5" />
+    <circle cx="13.5" cy="15.8" r="1.5" />
+  </>,
+)
+
+/** "Payment" (`/commerce/payment`) — a credit card. */
+export const CommercePaymentIcon = icon(
+  <>
+    <rect x="2.5" y="4.5" width="15" height="11" />
+    <path d="M2.5 8h15" />
+    <path d="M5 12.3h3.5" />
+  </>,
+)
+
+/** "Assistant" (`/assistant`, chat + duplicate detection) — a chat bubble with a spark, distinct from `AgentsIcon`'s autonomous robot. */
+export const AssistantIcon = icon(
+  <>
+    <path d="M3 4.5h14v9H9l-3.5 3.5V13.5H3z" />
+    <path
+      d="M9.8 6.3l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"
+      fill="currentColor"
+      stroke="none"
+    />
+  </>,
+)
+
+/** "MCP" (`/mcp`) — a plug, the connector metaphor for wiring up an external client. */
+export const McpIcon = icon(
+  <>
+    <path d="M7 2.5v4M13 2.5v4" />
+    <path d="M5.5 6.5h9v3a4.5 4.5 0 01-9 0z" />
+    <path d="M10 13.5v4" />
+  </>,
+)
+
+/** "API keys" (`/api-keys`) — a physical key, distinct from `RolesIcon`'s shield. */
+export const ApiKeysIcon = icon(
+  <>
+    <circle cx="6" cy="10" r="3.5" />
+    <path d="M9.3 10h8.2M14.5 10v3M17 10v2.3" />
+  </>,
+)
+
+/** "Roles & permissions" (`/roles`) — a shield, distinct from `UsersIcon`'s people and `ApiKeysIcon`'s key. */
+export const RolesIcon = icon(
+  <>
+    <path d="M10 2.7l6 2.3v5c0 4-2.6 6.7-6 7.6-3.4-.9-6-3.6-6-7.6V5z" />
+    <path d="M7.3 10l1.8 1.8L13 8" />
+  </>,
+)
+
+/** "Import" (`/import`) — an inward tray, mirroring `FormSubmissionsIcon`'s shape but with an explicit down-arrow for "bringing content in". */
+export const ImportIcon = icon(
+  <>
+    <path d="M10 2.5v9.5M6.7 8.8L10 12l3.3-3.2" />
+    <path d="M3 13v3.5h14V13" />
+  </>,
+)
+
+/** A generic "download this" mark — the analytics CSV export button (fiche 22 tâche 8, part 1). Same tray as `ImportIcon`, since both are "content leaves/enters through this door", just without that icon's own nav-specific doc comment. */
+export const DownloadIcon = ImportIcon
+
+/** "Marketplace" (`/marketplace`) — a small catalogue grid, distinct from the storefront `CommerceShopIcon`. */
+export const MarketplaceIcon = icon(
+  <>
+    <rect x="2.5" y="2.5" width="6" height="6" />
+    <rect x="11.5" y="2.5" width="6" height="6" />
+    <rect x="2.5" y="11.5" width="6" height="6" />
+    <rect x="11.5" y="11.5" width="6" height="6" />
+  </>,
+)
+
+/** "Health" (`/health`) — a heartbeat trace inside a shield-like frame, distinct from the plain `PulseIcon` sparkline used inside dashboard widgets. */
+export const HealthIcon = icon(
+  <>
+    <path d="M10 17c-4-2.4-7-5.4-7-8.8A3.7 3.7 0 0110 5.8a3.7 3.7 0 017 2.4c0 3.4-3 6.4-7 8.8z" />
+    <path d="M6.5 9.8h2l1-2.4 1.5 4.8 1-2.4h2" />
+  </>,
+)
+
+/** "Tools" (`/tools`) — a wrench, distinct from the settings gear (`SettingsIcon`, a personal/site preference, not a diagnostic tool). */
+export const ToolsIcon = icon(
+  <path d="M13.5 3a3.5 3.5 0 00-4.6 4.2L3 13l2.5 2.5 5.8-5.9A3.5 3.5 0 0017 5.5l-2.7 2.7-2-2z" />,
+)
+
+/** "Scheduled tasks" (`/scheduled`) — a calendar page, distinct from `ClockIcon`'s plain clock used elsewhere for "time-sensitive" dashboard items. */
+export const ScheduledIcon = icon(
+  <>
+    <rect x="2.5" y="4" width="15" height="13" />
+    <path d="M2.5 7.5h15M6 2.5v3M14 2.5v3" />
+    <path d="M10 10.5v2.3l1.8 1" />
+  </>,
+)

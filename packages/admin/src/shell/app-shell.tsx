@@ -15,22 +15,51 @@ import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
 import { NotificationCenter } from '../notices/notification-center.js'
 import { useSchema } from '../schema/schema-context.js'
-import { useBrandingSettings, useSiteTitle } from '../settings/site-settings-context.js'
+import {
+  useBrandingSettings,
+  useSiteSettingsState,
+  useSiteTitle,
+} from '../settings/site-settings-context.js'
 import { useAdminTheme } from '../theme/admin-theme-context.js'
 import {
   AgentsIcon,
+  ApiKeysIcon,
+  AssistantIcon,
   AuditIcon,
   CollectionsIcon,
+  CommentsIcon,
+  CommerceOrdersIcon,
+  CommercePaymentIcon,
+  CommerceProductsIcon,
+  CommerceShippingIcon,
+  CommerceShopIcon,
+  CommerceSubscriptionsIcon,
+  CommerceTaxIcon,
+  CommerceTicketIcon,
   DashboardIcon,
   DocumentationIcon,
   EditIcon,
+  ExternalLinkIcon,
+  FormSubmissionsIcon,
+  FormsIcon,
+  HealthIcon,
   type IconProps,
+  ImportIcon,
   LogoutIcon,
+  MarketplaceIcon,
+  McpIcon,
   MediaIcon,
+  MenusIcon,
   ProfileIcon,
+  ReviewIcon,
+  RolesIcon,
+  ScheduledIcon,
+  SeoIcon,
   SettingsIcon,
   SitePlanIcon,
   TaxonomiesIcon,
+  ToolsIcon,
+  TranslationsIcon,
   TrashIcon,
   TrendIcon,
   UsersIcon,
@@ -38,6 +67,11 @@ import {
 import { breadcrumbFor, documentTitleFor } from './breadcrumb.js'
 import { GlobalSearch } from './global-search.js'
 import type { NavGroupId, NavItem } from './nav-items.js'
+import {
+  applyNavLayout,
+  EMPTY_NAV_LAYOUT_OVERRIDES,
+  parseNavLayoutOverrides,
+} from './nav-layout.js'
 import { visibleNavGroups } from './nav-visibility.js'
 import { chromeStatusOrFallback, useChromeStatus } from './shell-status-context.js'
 import '../styles/shell.css'
@@ -48,26 +82,64 @@ const SIDEBAR_ID = 'app-shell-sidebar'
 const NAV_GROUPS_STORAGE_KEY = 'cogenta.admin.navGroups'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'cogenta.admin.sidebarCollapsed'
 
+/**
+ * One icon per nav entry, wherever a distinct one exists (fiche 22 tâche 8,
+ * part 6 — the sidebar icon audit). Before this, everything not listed here
+ * fell back to `GROUP_ICONS`, which is how "Menus", "Comments" and
+ * "Translations" all ended up showing the exact same three-bar glyph as
+ * "Content", and six commerce screens all showed the same bar chart — the
+ * real user complaint this task fixes. An entry genuinely without its own
+ * meaningful mark (there are none left after this pass) would still fall
+ * back to its group's icon rather than force a glyph onto it.
+ */
 const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/': DashboardIcon,
+  '/review': ReviewIcon,
   '/collections': CollectionsIcon,
   '/taxonomies': TaxonomiesIcon,
+  '/menus': MenusIcon,
+  '/comments': CommentsIcon,
+  '/translations': TranslationsIcon,
   '/trash': TrashIcon,
+  '/forms': FormsIcon,
+  '/form-submissions': FormSubmissionsIcon,
   '/media': MediaIcon,
-  '/audit': AuditIcon,
+  '/appearance': EditIcon,
+  '/admin-appearance': EditIcon,
+  '/seo': SeoIcon,
+  '/commerce/products': CommerceProductsIcon,
+  '/commerce/orders': CommerceOrdersIcon,
+  '/commerce/coupons': CommerceTicketIcon,
+  '/commerce/subscriptions': CommerceSubscriptionsIcon,
+  '/commerce/settings': CommerceShopIcon,
+  '/commerce/tax': CommerceTaxIcon,
+  '/commerce/shipping': CommerceShippingIcon,
+  '/commerce/payment': CommercePaymentIcon,
+  '/assistant': AssistantIcon,
   '/agents': AgentsIcon,
+  '/mcp': McpIcon,
   '/create-site': SitePlanIcon,
   '/users': UsersIcon,
-  '/profile': ProfileIcon,
+  '/api-keys': ApiKeysIcon,
+  '/roles': RolesIcon,
+  '/audit': AuditIcon,
+  '/analytics': TrendIcon,
+  '/import': ImportIcon,
+  '/marketplace': MarketplaceIcon,
+  '/ops-settings': SettingsIcon,
+  '/health': HealthIcon,
+  '/tools': ToolsIcon,
+  '/scheduled': ScheduledIcon,
   '/settings': SettingsIcon,
+  '/profile': ProfileIcon,
   '/documentation': DocumentationIcon,
 }
 
-/** Every item without its own icon falls back to its group's — a coherent mark beats a mismatched one, and drawing eleven more glyphs is L11's job, not this fiche's. */
+/** Only reached by a future nav entry this map has not caught up with yet. */
 const GROUP_ICONS: Record<NavGroupId, ComponentType<IconProps>> = {
   content: CollectionsIcon,
   appearance: EditIcon,
-  commerce: TrendIcon,
+  commerce: CommerceShopIcon,
   ai: AgentsIcon,
   accounts: UsersIcon,
   ops: SettingsIcon,
@@ -204,17 +276,31 @@ export function AppShell(): JSX.Element {
   const taxonomiesPresent =
     schemaState.status === 'ready' ? (schemaState.schema.taxonomies?.length ?? 0) > 0 : null
 
-  const groups = useMemo(
+  // Fiche 22 tâche 8, part 3 — a site-wide reorder/hide on top of the
+  // permission filter above, never a replacement for it: an actor who
+  // cannot read a collection never sees its entry no matter what an admin
+  // configured in Réglages › Navigation, and a group hidden here is
+  // independent from a group `visibleNavGroups` already dropped for having
+  // zero visible items.
+  const settingsState = useSiteSettingsState()
+  const navLayout = useMemo(
     () =>
-      visibleNavGroups({
-        roles,
-        collections,
-        taxonomiesPresent,
-        assistantTools: chromeState.status === 'ready' ? chrome.assistantTools : null,
-        commerceActive: chromeState.status === 'ready' ? chrome.shellStatus.commerceActive : null,
-      }),
-    [roles, collections, taxonomiesPresent, chromeState],
+      settingsState.status === 'ready'
+        ? parseNavLayoutOverrides(settingsState.settings)
+        : EMPTY_NAV_LAYOUT_OVERRIDES,
+    [settingsState],
   )
+
+  const groups = useMemo(() => {
+    const permitted = visibleNavGroups({
+      roles,
+      collections,
+      taxonomiesPresent,
+      assistantTools: chromeState.status === 'ready' ? chrome.assistantTools : null,
+      commerceActive: chromeState.status === 'ready' ? chrome.shellStatus.commerceActive : null,
+    })
+    return applyNavLayout(permitted, navLayout)
+  }, [roles, collections, taxonomiesPresent, chromeState, navLayout])
 
   const [groupOpen, setGroupOpen] =
     useState<Partial<Record<NavGroupId, boolean>>>(readStoredGroupOpen)
@@ -393,6 +479,31 @@ export function AppShell(): JSX.Element {
     )
   }
 
+  /**
+   * The footer (fiche 22 tâche 8, part 4) — replaces the plain centred
+   * "Cogenta admin" text that used to render unconditionally here, which
+   * kept naming Cogenta even after `renderBrandMark()`'s white-label
+   * override had already turned it off in the very same topbar above.
+   * Reuses `renderBrandMark()` as-is (never a second copy of the branding
+   * priority order) and only ever adds a version number next to it while
+   * `branding.showCogentaBranding` is on — a white-labelled install has no
+   * reason to advertise which CMS or which version runs it.
+   */
+  function renderFooter(): JSX.Element {
+    const version = chrome.shellStatus.cogentaVersion
+    return (
+      <div className="app-shell__footer-inner">
+        <span className="app-shell__footer-brand">
+          {renderBrandMark()}
+          {branding.showCogentaBranding && version !== '' && (
+            <span className="app-shell__footer-version">v{version}</span>
+          )}
+        </span>
+        <span className="app-shell__footer-site">{siteTitle ?? t('shell.footer')}</span>
+      </div>
+    )
+  }
+
   function onDrawerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     // The trap above also listens at the document level (so `Escape`/`Tab`
     // work even when focus is on something React does not attach this
@@ -440,6 +551,23 @@ export function AppShell(): JSX.Element {
         )}
         {email !== null && <GlobalSearch />}
         <div className="app-shell__account">
+          {/* Fiche 22 tâche 8, part 5 — a quick way back to what this admin
+              actually manages, one click away from any screen, opened in its
+              own tab so the admin session stays exactly where it was. A
+              root-relative path rather than a stored site URL: the public
+              site and this admin are always served from the same origin
+              (`cogenta serve` mounts `/admin/*` alongside the public routes),
+              so there is no second value that could ever drift from it. */}
+          <a
+            className="app-shell__view-site"
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title={t('shell.viewSite')}
+          >
+            <ExternalLinkIcon className="size-3.5" />
+            <span className="app-shell__view-site-label">{t('shell.viewSite')}</span>
+          </a>
           {email !== null && <NotificationCenter />}
           <ThemeToggle />
           {email !== null && (
@@ -506,7 +634,7 @@ export function AppShell(): JSX.Element {
         <NoticeBoard />
         <Outlet />
       </main>
-      <footer className="app-shell__footer">{t('shell.footer')}</footer>
+      <footer className="app-shell__footer">{renderFooter()}</footer>
     </div>
   )
 }

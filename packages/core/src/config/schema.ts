@@ -281,6 +281,19 @@ const assistantSchema = z.strictObject({
 })
 
 /**
+ * OpenTelemetry tracing (fiche L22 task 5). No `otlpHeaders` field, on
+ * purpose (rule R7, `SECRET_KEYS` in `env.ts` refuses it before this schema
+ * even parses) — those come from `COGENTA_OTLP_HEADERS`/
+ * `OTEL_EXPORTER_OTLP_HEADERS` only. `otlpEndpoint` absent means local
+ * collection only: the recent-events buffer behind the admin's
+ * "Exploitation" screen always works with nothing configured here (R1).
+ */
+const observabilitySchema = z.strictObject({
+  serviceName: nonEmpty.default('cogenta'),
+  otlpEndpoint: z.url().optional(),
+})
+
+/**
  * Contract E's payment gateway choice (fiche 34 task 3).
  *
  * No `secretKey` or `webhookSecret` field, on purpose (rule R7, same shape as
@@ -319,6 +332,7 @@ export const configSchema = z.strictObject({
   backup: backupSchema.prefault({}),
   assistant: assistantSchema.prefault({}),
   payment: paymentSchema.prefault({}),
+  observability: observabilitySchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

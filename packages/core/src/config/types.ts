@@ -188,6 +188,22 @@ export interface CogentaConfigInput {
     readonly monthlyTokenLimit?: number
   }
   /**
+   * OpenTelemetry tracing (fiche L22 task 5). Whether collection actually
+   * runs, and the log level it runs at, are **not** here — those are
+   * editorial (`observability.enabled`/`observability.logLevel` in
+   * `SITE_SETTINGS_REGISTRY`, changeable from the admin with no restart).
+   * This section only holds what an infra operator wires once: where to
+   * export to. There is no `otlpHeaders` field, on purpose (rule R7, same
+   * shape as `payment`'s missing `stripeSecretKey`): a header commonly
+   * carries a bearer token for the OTLP backend, so it comes from
+   * `COGENTA_OTLP_HEADERS`/`OTEL_EXPORTER_OTLP_HEADERS` only.
+   */
+  readonly observability?: {
+    readonly serviceName?: string
+    /** Absent means "local collection only" (R1) — no external exporter runs. */
+    readonly otlpEndpoint?: string
+  }
+  /**
    * Which payment gateway a shop uses (contract E, fiche 34 task 3).
    *
    * There is no `secretKey` or `webhookSecret` field here, on purpose (rule
@@ -347,6 +363,14 @@ export interface CogentaConfig {
   /** The writing assistant's spending cap (fiche 30 task 3), always resolved — never absent. */
   readonly assistant: {
     readonly monthlyTokenLimit: number
+  }
+  /** OpenTelemetry tracing (fiche L22 task 5), always resolved — never absent (R1: local collection needs no export target at all). */
+  readonly observability: {
+    readonly serviceName: string
+    /** `undefined` means no OTLP exporter runs — the local exporter (recent-events buffer, NDJSON) still does. */
+    readonly otlpEndpoint: string | undefined
+    /** `undefined` until `COGENTA_OTLP_HEADERS`/`OTEL_EXPORTER_OTLP_HEADERS` is set. */
+    readonly otlpHeaders: Readonly<Record<string, string>> | undefined
   }
   /** Contract E's payment gateway (fiche 34 task 3), always resolved — never absent (a shop with no key still takes bank transfers, R1/R2). */
   readonly payment: {

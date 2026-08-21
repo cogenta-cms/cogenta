@@ -248,6 +248,7 @@
     "marketplace": "Marketplace",
     "health": "Health",
     "tools": "Tools",
+    "observability": "Observability",
     "scheduled": "Scheduled tasks",
     "documentation": "Documentation",
     "groups": {
@@ -1772,6 +1773,16 @@
           "label": "Default social image",
           "help": "A path or an absolute URL, used as the Open Graph/Twitter Card image only when a page has none of its own."
         }
+      },
+      "observability": {
+        "enabled": {
+          "label": "Collect traces and logs locally",
+          "help": "Powers this process's own recent-events buffer, shown below and in the Observability screen. Turning this off stops collection immediately, on every process."
+        },
+        "logLevel": {
+          "label": "Log level captured",
+          "help": "How verbose the local log buffer is. Does not change what is written to this process's own stdout, only what shows up here."
+        }
       }
     }
   },
@@ -2809,6 +2820,26 @@
     "maintenanceTurnOn": "Turn maintenance mode on",
     "maintenanceTurnOff": "Turn maintenance mode off",
     "maintenanceError": "Could not change maintenance mode."
+  },
+  "observability": {
+    "heading": "Observability",
+    "adminOnly": "Admin role only.",
+    "intro": "A local fallback view, not a replacement for a real APM: it shows only what this one server process has seen since it last started, bounded to the most recent entries. Point \"Export destination\" at Grafana, Datadog or any OTLP-speaking backend for real retention and alerting.",
+    "loadError": "Could not load recent traces and logs.",
+    "settingsHeading": "Collection",
+    "disabledNotice": "Collection is off — nothing is being recorded. Turn \"Collect traces and logs locally\" on above to see data here.",
+    "tracesHeading": "Recent request traces",
+    "tracesEmpty": "No traces recorded yet.",
+    "tracesTime": "Time",
+    "tracesMethod": "Method",
+    "tracesPath": "Path",
+    "tracesStatus": "Status",
+    "tracesDuration": "Duration",
+    "logsHeading": "Recent logs",
+    "logsEmpty": "No log lines recorded yet.",
+    "logsTime": "Time",
+    "logsLevel": "Level",
+    "logsMessage": "Message"
   },
   "tools": {
     "heading": "Tools",

@@ -26,6 +26,7 @@ export default {
         'commerce',
         'comments',
         'analytics',
+        'observability',
         'db',
         'cache',
         'queue',

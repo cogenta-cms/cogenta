@@ -247,6 +247,7 @@
     "marketplace": "Marketplace",
     "health": "Santé",
     "tools": "Outils",
+    "observability": "Observabilité",
     "scheduled": "Tâches planifiées",
     "documentation": "Documentation",
     "groups": {
@@ -1774,6 +1775,16 @@
           "label": "Image sociale par défaut",
           "help": "Un chemin ou une URL absolue, utilisée comme image Open Graph/Twitter Card uniquement quand une page n'a pas la sienne."
         }
+      },
+      "observability": {
+        "enabled": {
+          "label": "Collecter les traces et journaux localement",
+          "help": "Alimente le tampon d'événements récents de ce processus, affiché ci-dessous et dans l'écran Observabilité. Désactiver ceci arrête la collecte immédiatement, sur chaque processus."
+        },
+        "logLevel": {
+          "label": "Niveau de journalisation capturé",
+          "help": "La verbosité du tampon de journaux local. Ne change rien à ce qui est écrit sur la sortie standard de ce processus, seulement à ce qui apparaît ici."
+        }
       }
     }
   },
@@ -2811,6 +2822,26 @@
     "maintenanceTurnOn": "Activer le mode maintenance",
     "maintenanceTurnOff": "Désactiver le mode maintenance",
     "maintenanceError": "Impossible de modifier le mode maintenance."
+  },
+  "observability": {
+    "heading": "Observabilité",
+    "adminOnly": "Réservé au rôle « admin ».",
+    "intro": "Une vue locale de secours, pas un remplacement d'un vrai APM : elle ne montre que ce que ce processus serveur a vu depuis son dernier démarrage, bornée aux entrées les plus récentes. Renseignez une destination d'export vers Grafana, Datadog ou tout backend compatible OTLP pour une vraie rétention et de vraies alertes.",
+    "loadError": "Impossible de charger les traces et journaux récents.",
+    "settingsHeading": "Collecte",
+    "disabledNotice": "La collecte est désactivée — rien n'est enregistré. Activez « Collecter les traces et journaux localement » ci-dessus pour voir des données ici.",
+    "tracesHeading": "Traces de requêtes récentes",
+    "tracesEmpty": "Aucune trace enregistrée pour l'instant.",
+    "tracesTime": "Heure",
+    "tracesMethod": "Méthode",
+    "tracesPath": "Chemin",
+    "tracesStatus": "Statut",
+    "tracesDuration": "Durée",
+    "logsHeading": "Journaux récents",
+    "logsEmpty": "Aucune ligne de journal enregistrée pour l'instant.",
+    "logsTime": "Heure",
+    "logsLevel": "Niveau",
+    "logsMessage": "Message"
   },
   "tools": {
     "heading": "Outils",

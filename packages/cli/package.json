@@ -48,6 +48,7 @@
     "@cogenta/forms": "workspace:*",
     "@cogenta/import": "workspace:*",
     "@cogenta/mcp": "workspace:*",
+    "@cogenta/observability": "workspace:*",
     "@cogenta/plugins": "workspace:*",
     "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",

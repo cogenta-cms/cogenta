@@ -29,6 +29,12 @@ describe('serveAdminAsset', () => {
     expect(asset?.body.toString()).toContain('<title>admin</title>')
   })
 
+  it('never lets a browser cache index.html — a stale shell would hide every future fix behind a silent no-op reload', async () => {
+    const dir = await fixtureAssetsDir()
+    const asset = await serveAdminAsset('/admin', dir)
+    expect(asset?.cacheControl).toBe('no-cache')
+  })
+
   it('serves index.html for a deep SPA route, letting the client router resolve it', async () => {
     const dir = await fixtureAssetsDir()
     const asset = await serveAdminAsset('/admin/collections/post', dir)
@@ -40,6 +46,12 @@ describe('serveAdminAsset', () => {
     const asset = await serveAdminAsset('/admin/assets/index-abc123.js', dir)
     expect(asset?.contentType).toBe('text/javascript; charset=utf-8')
     expect(asset?.body.toString()).toBe('console.log(1)')
+  })
+
+  it('lets a browser cache a hashed asset forever — a rebuild always changes the name', async () => {
+    const dir = await fixtureAssetsDir()
+    const asset = await serveAdminAsset('/admin/assets/index-abc123.js', dir)
+    expect(asset?.cacheControl).toBe('public, max-age=31536000, immutable')
   })
 
   it('returns null for a missing real asset, never falling back to index.html', async () => {

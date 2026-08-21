@@ -28,6 +28,26 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 export interface AdminAsset {
   readonly body: Buffer
   readonly contentType: string
+  readonly cacheControl: string
+}
+
+/**
+ * `vite build`'s own convention: every file under `assets/` is named with a
+ * content hash (`index-D3nbgRin.js`) — a rebuild that changes the file
+ * changes the name, so it is safe to cache forever. `index.html` (and any
+ * extension-less SPA route that resolves to it) references those hashed
+ * names and has no hash of its own, so it must always be revalidated —
+ * serving it stale is exactly what would make a real fix invisible in an
+ * already-open browser tab after a rebuild+restart, no matter how correct
+ * the fix itself is.
+ */
+function cacheControlFor(targetPath: string): string {
+  // `join` uses the OS-native separator (`\` on Windows); normalise before
+  // matching so this doesn't silently miss on the one platform this project
+  // develops on day to day.
+  return targetPath.replaceAll('\\', '/').includes('/assets/')
+    ? 'public, max-age=31536000, immutable'
+    : 'no-cache'
 }
 
 /**
@@ -60,7 +80,7 @@ export async function serveAdminAsset(
   try {
     const body = await readFile(targetPath)
     const contentType = CONTENT_TYPES[extname(targetPath)] ?? 'application/octet-stream'
-    return { body, contentType }
+    return { body, contentType, cacheControl: cacheControlFor(targetPath) }
   } catch {
     return null
   }

@@ -3140,7 +3140,10 @@ export function createRequestListener(
         }
         const asset = await serveAdminAsset(url.pathname)
         if (asset !== null) {
-          res.writeHead(200, { 'content-type': asset.contentType })
+          res.writeHead(200, {
+            'content-type': asset.contentType,
+            'cache-control': asset.cacheControl,
+          })
           res.end(asset.body)
           return
         }

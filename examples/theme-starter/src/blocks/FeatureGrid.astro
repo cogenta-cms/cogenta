@@ -1,0 +1,24 @@
+---
+import type { FeatureGridBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: FeatureGridBlock; ctx: RenderContext }
+---
+
+<section class="feature-grid">
+  {block.title && <h2>{block.title}</h2>}
+  <ul class="feature-grid__items">
+    {block.items.map((item) => (
+      <li class="feature-grid__item">
+        {item.icon && <span class="feature-grid__icon" aria-hidden="true">{item.icon}</span>}
+        <h3>{item.title}</h3>
+        {item.text && <p>{item.text}</p>}
+        {item.link && (
+          <a href={'href' in item.link ? item.link.href : ctx.link(item.link)}>
+            {ctx.t('starter.learnMore')}
+          </a>
+        )}
+      </li>
+    ))}
+  </ul>
+</section>

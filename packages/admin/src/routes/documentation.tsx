@@ -126,6 +126,25 @@ export function DocumentationRoute(): JSX.Element {
         </div>
       </div>
 
+      {/*
+        L22 task 7: the full functional/technical documentation tree, built
+        from `docs-site/content/**` — the same source and renderer as the
+        statically published site. This panel stays the fast per-section
+        overview; the button below is the door to the deep guides (content,
+        appearance, IA/agents, building a theme or a plugin, …).
+      */}
+      <Card>
+        <CardBody className="flex items-center justify-between gap-4">
+          <p className="m-0 text-sm">{t('documentation.docsLinkIntro')}</p>
+          <Link
+            to="/documentation/docs"
+            className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-semibold text-foreground"
+          >
+            {t('documentation.docsLinkCta')}
+          </Link>
+        </CardBody>
+      </Card>
+
       <div
         role="tablist"
         aria-label={t('documentation.tabsLabel')}

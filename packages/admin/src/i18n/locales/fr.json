@@ -2914,6 +2914,21 @@
     "quickstartHeading": "Démarrage rapide",
     "screensHeading": "Écrans de cette section",
     "screensNote": "La liste complète des écrans que ce groupe peut contenir — certains n'apparaissent dans la barre latérale que pour un rôle ou un site donné.",
+    "docsLinkIntro": "Vous cherchez le guide complet — contenu, apparence, IA/agents, créer un thème ou un plugin ?",
+    "docsLinkCta": "Ouvrir la documentation complète",
+    "docs": {
+      "heading": "Documentation complète",
+      "intro": "La même documentation fonctionnelle et technique publiée avec cette version de Cogenta — jamais récupérée depuis une source séparée toujours-à-jour.",
+      "treesLabel": "Arborescences de documentation",
+      "tree": {
+        "functional": "Fonctionnelle",
+        "technical": "Technique"
+      },
+      "sidebarLabel": "Pages de cette arborescence",
+      "notFoundTitle": "Page introuvable",
+      "notFoundBody": "Cette page n'existe pas dans la documentation livrée avec cette version de Cogenta.",
+      "versionNote": "Documentation correcte pour Cogenta v{{version}}."
+    },
     "sections": {
       "content": {
         "summary": "Le contenu de Cogenta : des entrées organisées en collections (articles, pages…), classées par des taxonomies, illustrées par des médias, et suivies dans le temps par un historique de versions. Une entrée passe par un cycle éditorial simple — brouillon, éventuellement révision, publication — détaillé plus bas.",

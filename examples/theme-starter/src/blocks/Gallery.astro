@@ -1,0 +1,35 @@
+---
+import type { GalleryBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: GalleryBlock; ctx: RenderContext }
+
+/**
+ * The carousel layout ships **no client JavaScript** — a scroll-snapping list
+ * gets touch/trackpad/keyboard scrolling for free, and it works before any
+ * hydration. Do the same for any interaction you add to this starter: reach
+ * for CSS first.
+ */
+---
+
+<section class={`gallery gallery--${block.layout}`}>
+  <ul
+    class="gallery__items"
+    role={block.layout === 'carousel' ? 'region' : undefined}
+    aria-label={block.layout === 'carousel' ? ctx.t('starter.galleryCarousel') : undefined}
+    tabindex={block.layout === 'carousel' ? 0 : undefined}
+  >
+    {block.items.map((item) => {
+      const media = ctx.image(item.media)
+      return (
+        <li class="gallery__item">
+          {media.kind === 'video' ? (
+            <video src={media.src} poster={media.poster} controls />
+          ) : (
+            <img src={media.src} srcset={media.srcset} width={media.width} height={media.height} alt={media.alt} />
+          )}
+        </li>
+      )
+    })}
+  </ul>
+</section>

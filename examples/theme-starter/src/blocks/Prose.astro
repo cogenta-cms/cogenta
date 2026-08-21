@@ -1,0 +1,11 @@
+---
+import type { ProseBlock } from '@cogenta/blocks'
+import { renderRichText } from '../render/prose.js'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block } = Astro.props as { block: ProseBlock; ctx: RenderContext }
+---
+
+<div class="prose">
+  <Fragment set:html={renderRichText(block.body)} />
+</div>

@@ -1,0 +1,21 @@
+---
+import type { FaqBlock } from '@cogenta/blocks'
+import { renderRichText } from '../render/prose.js'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block } = Astro.props as { block: FaqBlock; ctx: RenderContext }
+---
+
+<section class="faq">
+  {block.title && <h2>{block.title}</h2>}
+  <div class="faq__items">
+    {block.items.map((item) => (
+      // `<details>`/`<summary>`: expand/collapse, keyboard operation and the
+      // announced state all come from the browser — zero client JavaScript.
+      <details class="faq__item">
+        <summary>{item.question}</summary>
+        <div class="faq__answer"><Fragment set:html={renderRichText(item.answer)} /></div>
+      </details>
+    ))}
+  </div>
+</section>

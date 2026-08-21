@@ -6,6 +6,9 @@ build/
 # delivery targets — and its sources and tests must be committed.
 !packages/*/src/build/
 !packages/*/test/build/
+# `docs-site/build/` is the static-site generator's source, not output — its
+# own output is `docs-site/dist/`, already caught by the `dist/` rule above.
+!docs-site/build/
 .turbo/
 .cogenta/
 coverage/

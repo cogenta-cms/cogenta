@@ -1082,3 +1082,31 @@ haut) — `cogenta mcp` réutilise le même `createDatabaseRegistry` que toute
 autre commande, donc le risque de dialecte spécifique à ce chemin est bas
 mais non prouvé.
 formulaires. Un second constat, faible et informationnel, n'était pas bloquant.
+
+## 18bis. MCP — écran admin dédié et `--api-key` (L21 tâche 6)
+
+La lacune nommée juste au-dessus (« aucune UI admin pour choisir/afficher
+l'acteur MCP actif ») est en partie comblée : `cogenta mcp` accepte
+désormais `--api-key <clé>`, résolu par la **même** `ApiKeyStore`
+(`@cogenta/auth`) et le même mappage « rôles = portée » que
+`resolveApiKeyActor` (`packages/api/src/rest/auth-router.ts`) — aucun second
+magasin de clés. L'admin gagne un écran **MCP** dédié
+(`packages/admin/src/routes/mcp.tsx`), parallèle à « Agents », qui génère une
+clé et affiche une fois la commande `cogenta mcp --api-key …` prête à coller
+ainsi qu'un bloc JSON de configuration client standard, tous deux construits
+à partir de la clé brute réellement renvoyée par le serveur. `@cogenta/core`
+gagne `MCP_ACTOR_API_KEY_INVALID` pour une clé inconnue, révoquée ou expirée
+— refusée au démarrage plutôt que dégradée en anonyme.
+
+Ce qui reste non fait, inchangé depuis la fiche L20 : pas d'écran pour
+*afficher* l'acteur actuellement actif d'un serveur MCP en cours d'exécution
+(cet écran gère des identifiants, pas des sessions en direct — un serveur
+`cogenta mcp` est un process stdio, pas une ressource que l'admin peut lister)
+; toujours aucun test d'intégration Postgres/MySQL/MariaDB pour le chemin
+`cogenta mcp` (même contrainte Docker). Tests réels ajoutés : six nouveaux
+scénarios dans `packages/cli/test/mcp.test.ts` (résolution d'acteur réelle
+depuis une vraie clé, refus R4 par portée insuffisante, clé révoquée, clé
+malformée, conflit `--api-key`/`--email`) et une suite dédiée dans
+`packages/admin/test/mcp/mcp.test.tsx` (liste, création avec la
+configuration client réellement collée dans le DOM — pas un texte
+générique —, copie presse-papiers, révocation, non-admin, accessibilité).

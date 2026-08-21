@@ -31,6 +31,7 @@ import { HealthRoute } from './routes/health.js'
 import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
 import { MarketplaceRoute } from './routes/marketplace.js'
+import { McpRoute } from './routes/mcp.js'
 import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
@@ -129,6 +130,7 @@ export function App(): JSX.Element {
                 <Route path="audit" element={<AuditRoute />} />
                 <Route path="analytics" element={<AnalyticsRoute />} />
                 <Route path="agents" element={<AgentsRoute />} />
+                <Route path="mcp" element={<McpRoute />} />
                 <Route path="users" element={<UsersRoute />} />
                 <Route path="api-keys" element={<ApiKeysRoute />} />
                 <Route path="roles" element={<RolesRoute />} />

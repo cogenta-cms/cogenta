@@ -105,6 +105,7 @@ Serve options
 MCP options
   --email <email>         mcp: run as this real user (looked up in the user store)
   --role <role,role>      mcp: run as a synthetic actor with these roles (testing only)
+  --api-key <key>         mcp: run as the actor a "cogenta_sk_…" API key was granted
 `
 
 export interface RunOptions {
@@ -151,6 +152,7 @@ export async function run(options: RunOptions): Promise<number> {
         email: { type: 'string' },
         roles: { type: 'string' },
         role: { type: 'string' },
+        'api-key': { type: 'string' },
         admin: { type: 'boolean' },
         token: { type: 'string' },
         password: { type: 'string' },
@@ -376,6 +378,7 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(typeof parsed.values.email === 'string' ? { email: parsed.values.email } : {}),
       ...(typeof parsed.values.role === 'string' ? { role: parsed.values.role } : {}),
+      ...(typeof parsed.values['api-key'] === 'string' ? { apiKey: parsed.values['api-key'] } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

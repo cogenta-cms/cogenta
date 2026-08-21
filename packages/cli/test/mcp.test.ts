@@ -2,10 +2,27 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
+import { createSqliteHandle } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runMcp } from '../src/commands/mcp.js'
 import { createOutput } from '../src/output.js'
 import { createUser } from './helpers/serve-harness.js'
+
+/**
+ * Mints a real API key against this project's own database — the exact same
+ * `ApiKeyStore` (`@cogenta/auth`) the admin's "MCP"/"Clés API" screens write
+ * to and `resolveActor` (`@cogenta/api`) reads from. Returns the raw key,
+ * shown only once by the real store, same as it would be to an admin.
+ */
+async function createApiKey(root: string, scope: readonly string[]): Promise<string> {
+  const { createApiKeyStore, ensureAuthTables } = await import('@cogenta/auth')
+  const db = await createSqliteHandle({ url: join(root, 'site.db') })
+  await ensureAuthTables(db)
+  const apiKeys = createApiKeyStore(db)
+  const issued = await apiKeys.create({ name: 'test key', scope, createdBy: null })
+  await db.close()
+  return issued.key
+}
 
 /**
  * `cogenta mcp` against a real project and a real (SQLite) database — a real
@@ -82,7 +99,10 @@ class McpSession {
   private buffer = ''
   private waiters: (() => void)[] = []
 
-  constructor(root: string, actor: { readonly email?: string; readonly role?: string }) {
+  constructor(
+    root: string,
+    actor: { readonly email?: string; readonly role?: string; readonly apiKey?: string },
+  ) {
     this.stdout.on('data', (chunk: Buffer) => {
       this.buffer += chunk.toString('utf8')
       let newline = this.buffer.indexOf('\n')
@@ -265,5 +285,86 @@ describe('cogenta mcp', () => {
 
     session.close()
     expect(await session.done).toBe(1)
+  }, 30_000)
+
+  it('resolves the actor from a real API key, through the same store REST uses', async () => {
+    const root = await project()
+    const key = await createApiKey(root, ['editor'])
+    const session = new McpSession(root, { apiKey: key })
+    activeSessions.push(session)
+
+    const listId = session.send('tools/list')
+    const list = await session.waitForReply(listId)
+    // A key is an authenticated actor, same as --email/--role: media and
+    // site-config tools join the manifest.
+    expect(toolsOf(list.result)).toEqual(
+      expect.arrayContaining(['media.read', 'media.write', 'site.config_read']),
+    )
+
+    const createId = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', values: { title: 'Hello from an API key' } },
+    })
+    const created = await session.waitForReply(createId)
+    expect(created.result).toMatchObject({ isError: false })
+    const createdEntry = JSON.parse(textOf(created.result)) as { values: { title: string } }
+    expect(createdEntry.values.title).toBe('Hello from an API key')
+
+    session.close()
+    expect(await session.done).toBe(0)
+  }, 30_000)
+
+  it('really enforces R4 for an API key: a scope without create is refused by the same permission layer REST uses', async () => {
+    const root = await project()
+    const key = await createApiKey(root, ['viewer'])
+    const session = new McpSession(root, { apiKey: key })
+    activeSessions.push(session)
+
+    const createId = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', values: { title: 'Should be refused' } },
+    })
+    const created = await session.waitForReply(createId)
+    expect(created.result).toMatchObject({ isError: true })
+    expect(textOf(created.result)).toMatch(/create/i)
+
+    session.close()
+    expect(await session.done).toBe(0)
+  }, 30_000)
+
+  it('refuses a revoked API key', async () => {
+    const root = await project()
+    const { createApiKeyStore, ensureAuthTables } = await import('@cogenta/auth')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await ensureAuthTables(db)
+    const apiKeys = createApiKeyStore(db)
+    const issued = await apiKeys.create({ name: 'revoked key', scope: ['editor'], createdBy: null })
+    await apiKeys.revoke(issued.id)
+    await db.close()
+
+    const session = new McpSession(root, { apiKey: issued.key })
+    activeSessions.push(session)
+
+    session.close()
+    expect(await session.done).toBe(1)
+  }, 30_000)
+
+  it('refuses a malformed --api-key value without touching the database', async () => {
+    const root = await project()
+    const session = new McpSession(root, { apiKey: 'not-a-real-key' })
+    activeSessions.push(session)
+
+    session.close()
+    expect(await session.done).toBe(1)
+  }, 30_000)
+
+  it('refuses --api-key combined with --email', async () => {
+    const root = await project()
+    const key = await createApiKey(root, ['editor'])
+    const session = new McpSession(root, { apiKey: key, email: 'editor@example.com' })
+    activeSessions.push(session)
+
+    session.close()
+    expect(await session.done).toBe(2)
   }, 30_000)
 })

@@ -149,6 +149,106 @@ describe('App, branding in the topbar (fiche L21 task 8)', () => {
   })
 })
 
+describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
+  it('hides a whole section for everyone once an admin turns it off, site-wide', async () => {
+    installMockFetch({
+      roles: ['admin'],
+      siteSettings: { 'navigation.hiddenSections': 'commerce' },
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    expect(screen.queryByText('Commerce')).toBeNull()
+  })
+
+  it('hides a single entry while leaving the rest of its section alone', async () => {
+    installMockFetch({
+      roles: ['admin'],
+      siteSettings: { 'navigation.hiddenItems': '/media' },
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // The dashboard heading depends on different data than `/api/settings`
+    // (schema/shell-status), so it can resolve first — the sidebar briefly
+    // shows every item until the settings fetch that carries
+    // `navigation.hiddenItems` catches up. `waitFor` here for the same
+    // reason `settings.test.tsx`'s own live-toggle test already does.
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Médiathèque' })).toBeNull()
+    })
+    expect(screen.getByRole('link', { name: 'Contenus' })).toBeDefined()
+  })
+
+  it('reorders sections the way an admin chose, site-wide', async () => {
+    installMockFetch({
+      roles: ['admin'],
+      siteSettings: { 'navigation.sectionOrder': 'settings,content' },
+    })
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const headings = Array.from(container.querySelectorAll('.app-shell__nav-group-summary')).map(
+      (node) => node.textContent,
+    )
+    expect(headings[0]).toBe('Réglages')
+  })
+
+  it('ignores a stale group id the current build no longer declares', async () => {
+    installMockFetch({
+      roles: ['admin'],
+      siteSettings: { 'navigation.hiddenSections': 'commerce,a-retired-group' },
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // Would have thrown or left the sidebar empty if the unknown token were
+    // trusted rather than dropped.
+    expect(screen.queryByText('Commerce')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Contenus' })).toBeDefined()
+  })
+})
+
+describe('App, footer and topbar (fiche 22 tâche 8, part 4-5)', () => {
+  it('shows the real Cogenta version next to the credit, by default', async () => {
+    installMockFetch({ shellStatus: { cogentaVersion: '9.9.9' } })
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const footer = await waitFor(() => {
+      const found = container.querySelector('.app-shell__footer-version')
+      if (found === null) throw new Error('version not rendered yet')
+      return found
+    })
+    expect(footer.textContent).toBe('v9.9.9')
+  })
+
+  it('drops the version, along with the rest of the credit, once branding is off', async () => {
+    installMockFetch({
+      siteSettings: { 'branding.showCogentaBranding': false },
+      shellStatus: { cogentaVersion: '9.9.9' },
+    })
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    await waitFor(() => {
+      expect(container.querySelector('.app-shell__brand img')).toBeNull()
+    })
+    expect(container.querySelector('.app-shell__footer-version')).toBeNull()
+    expect(container.querySelector('.app-shell__footer')?.textContent).not.toContain('Cogenta')
+  })
+
+  it('offers a "View site" link to the public site root, in a new tab', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const link = screen.getByRole('link', { name: 'Voir le site' })
+    expect(link.getAttribute('href')).toBe('/')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+  })
+})
+
 describe('App, signed out', () => {
   it('redirects to the login page instead of showing a protected route', async () => {
     localStorage.clear()

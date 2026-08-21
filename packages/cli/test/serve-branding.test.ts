@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { getCoreVersion } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 import { makePng } from './helpers/png.js'
@@ -126,6 +127,10 @@ describe('cogenta serve — footer branding (fiche L21 task 8)', () => {
       const html = await home.text()
       expect(html).toContain('cg-site-footer__branding')
       expect(html).toContain('/_cogenta/logo-cogenta.png')
+      // Fiche 22 tâche 8, part 4: the real installed version, next to the
+      // credit — never a hardcoded string here, since a version bump must
+      // not require touching this test.
+      expect(html).toContain(`cg-site-footer__version">v${getCoreVersion()}<`)
 
       const logo = await fetch(`${server.base}/_cogenta/logo-cogenta.png`)
       expect(logo.status).toBe(200)
@@ -153,6 +158,7 @@ describe('cogenta serve — footer branding (fiche L21 task 8)', () => {
       const html = await after.text()
       expect(html).not.toContain('cg-site-footer__branding')
       expect(html).not.toContain('/_cogenta/logo-cogenta.png')
+      expect(html).not.toContain('cg-site-footer__version')
     } finally {
       await server.stop()
     }
@@ -174,6 +180,8 @@ describe('cogenta serve — footer branding (fiche L21 task 8)', () => {
       expect(html).toContain('cg-site-footer__branding')
       expect(html).toContain(`/_image?id=${asset.id}&amp;w=64`)
       expect(html).not.toContain('/_cogenta/logo-cogenta.png')
+      // A white-labelled site does not advertise which CMS runs it either.
+      expect(html).not.toContain('cg-site-footer__version')
     } finally {
       await server.stop()
     }

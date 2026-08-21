@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createLogger, createSqliteHandle } from '@cogenta/core'
+import { createLogger, createSqliteHandle, getCoreVersion } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runServe } from '../src/commands/serve.js'
 import { createOutput } from '../src/output.js'
@@ -153,6 +153,7 @@ interface ShellStatusBody {
     readonly reviewPending: number | null
     readonly commentsPending: number | null
     readonly formSubmissionsUnread: number | null
+    readonly cogentaVersion: string
   }
 }
 
@@ -172,6 +173,7 @@ describe('the shell status route, end to end', () => {
       reviewPending: null,
       commentsPending: null,
       formSubmissionsUnread: null,
+      cogentaVersion: getCoreVersion(),
     })
   })
 

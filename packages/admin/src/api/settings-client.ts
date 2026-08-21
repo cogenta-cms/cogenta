@@ -24,6 +24,7 @@ export type SiteSettingGroup =
   | 'observability'
   | 'assistant'
   | 'updates'
+  | 'navigation'
 export type SiteSettingScope = 'site' | 'locale'
 
 export interface SiteSetting {

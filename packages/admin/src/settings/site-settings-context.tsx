@@ -2,9 +2,11 @@ import {
   createContext,
   type JSX,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { listSettings, type SiteSetting } from '../api/settings-client.js'
@@ -18,10 +20,15 @@ import type { DateStyle, TimeStyle } from '../lib/format.js'
  * network round trip for a value that does not change while the admin is
  * open.
  *
- * A stale copy after another tab changes a setting is an accepted trade —
- * the same one `SchemaProvider` already makes for the collection list, and
- * for the same reason: refetching on every render would be worse than a
- * page reload occasionally being needed to see someone else's change.
+ * A stale copy after **another tab or another person** changes a setting is
+ * an accepted trade — the same one `SchemaProvider` already makes for the
+ * collection list, and for the same reason: refetching on every render would
+ * be worse than a page reload occasionally being needed to see someone
+ * else's change. A change made **in this tab**, though, is a different
+ * promise: the Navigation tab (fiche 22 tâche 8, part 3) explicitly reflects
+ * a hide/reorder in the shell's own sidebar without a reload, so a write
+ * that must be seen immediately calls `refreshSiteSettings()` (from
+ * `useRefreshSiteSettings()`) rather than waiting out this trade.
  */
 
 export type SiteSettingsState =
@@ -29,10 +36,23 @@ export type SiteSettingsState =
   | { readonly status: 'ready'; readonly settings: readonly SiteSetting[] }
   | { readonly status: 'error'; readonly message: string }
 
-const SiteSettingsContext = createContext<SiteSettingsState>({ status: 'loading' })
+interface SiteSettingsContextValue {
+  readonly state: SiteSettingsState
+  readonly refresh: () => Promise<void>
+}
+
+const SiteSettingsContext = createContext<SiteSettingsContextValue>({
+  state: { status: 'loading' },
+  refresh: () => Promise.resolve(),
+})
 
 export function useSiteSettingsState(): SiteSettingsState {
-  return useContext(SiteSettingsContext)
+  return useContext(SiteSettingsContext).state
+}
+
+/** Re-fetches `GET /api/settings` and updates every screen reading `useSiteSettingsState()` — the one legitimate way to make a write in this tab visible immediately, without adopting live-refresh for the general "another tab changed it" case above. */
+export function useRefreshSiteSettings(): () => Promise<void> {
+  return useContext(SiteSettingsContext).refresh
 }
 
 /** Formatting-relevant defaults, read straight off the registry's own (`site-settings-registry.ts`'s) defaults — kept in sync by hand, checked by `format.test.ts`'s callers rather than a shared import (the admin never imports `@cogenta/schema`, a Node package — `schema-context.tsx`'s documented reason). */
@@ -143,29 +163,31 @@ export function useNewEntryDefaultBlocksSetting(): readonly string[] {
 
 export function SiteSettingsProvider({ children }: { readonly children: ReactNode }): JSX.Element {
   const [state, setState] = useState<SiteSettingsState>({ status: 'loading' })
+  const mounted = useRef(true)
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function load(): Promise<void> {
-      try {
-        const settings = await listSettings()
-        if (!cancelled) setState({ status: 'ready', settings })
-      } catch (error) {
-        if (!cancelled) {
-          setState({
-            status: 'error',
-            message: error instanceof Error ? error.message : 'Could not load site settings.',
-          })
-        }
+  const load = useCallback(async (): Promise<void> => {
+    try {
+      const settings = await listSettings()
+      if (mounted.current) setState({ status: 'ready', settings })
+    } catch (error) {
+      if (mounted.current) {
+        setState({
+          status: 'error',
+          message: error instanceof Error ? error.message : 'Could not load site settings.',
+        })
       }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
     }
   }, [])
 
-  return <SiteSettingsContext.Provider value={state}>{children}</SiteSettingsContext.Provider>
+  useEffect(() => {
+    mounted.current = true
+    void load()
+    return () => {
+      mounted.current = false
+    }
+  }, [load])
+
+  const value = useMemo(() => ({ state, refresh: load }), [state, load])
+
+  return <SiteSettingsContext.Provider value={value}>{children}</SiteSettingsContext.Provider>
 }

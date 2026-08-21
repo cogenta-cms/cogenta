@@ -218,3 +218,80 @@ describe('the site settings screen — Branding tab (fiche L21 task 8)', () => {
     ).toBeDefined()
   })
 })
+
+describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3)', () => {
+  it('lists every sidebar section, all shown by default', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
+    const commerce = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    expect(commerce.checked).toBe(true)
+  })
+
+  it('hides a section for everyone, site-wide, once turned off here', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
+    const commerce = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    expect(commerce.checked).toBe(true)
+
+    fireEvent.click(commerce)
+    await waitFor(() => {
+      expect((screen.getByLabelText('Boutique') as HTMLInputElement).checked).toBe(false)
+    })
+
+    // The dashboard's own sidebar reflects the same site-wide setting, not
+    // a second, disconnected notion of "hidden" local to this screen.
+    fireEvent.click(screen.getByRole('link', { name: 'Tableau de bord' }))
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    expect(screen.queryByRole('link', { name: 'Produits' })).toBeNull()
+  })
+
+  it('reflects a hidden section already configured, pre-checked accordingly', async () => {
+    signedIn(['admin'], { siteSettings: { 'navigation.hiddenSections': 'commerce' } })
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
+    const commerce = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    expect(commerce.checked).toBe(false)
+  })
+
+  it('moves a section up, persisting the new order', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
+    // "Boutique" is both a sidebar section heading and, structurally, a
+    // checkbox label here — `getByLabelText` resolves the checkbox
+    // specifically, never the sidebar's own `<summary>` (a different query
+    // by design, not just a different scope: `nav.settings` shares its exact
+    // label with its own group, "Réglages", so any test on that pair has to
+    // navigate the DOM by structure — `.closest('li')`, then a scoped
+    // `:scope >` selector — rather than by matching text a second time).
+    const commerceCheckbox = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    const commerceRow = commerceCheckbox.closest('li') as HTMLLIElement
+    const upButton = Array.from(commerceRow.querySelectorAll(':scope > div > button')).find(
+      (button) => button.textContent === 'Monter',
+    )
+    if (upButton === undefined) throw new Error('expected an "up" button in the Boutique row')
+    fireEvent.click(upButton)
+
+    await waitFor(() => {
+      const groupRows = document.querySelectorAll('[role="tabpanel"] section > div > ul > li')
+      const labels = Array.from(groupRows).map(
+        (row) => row.querySelector(':scope > div label')?.textContent,
+      )
+      // Boutique (shipped 3rd) swaps with Appearance (shipped 2nd) — proven
+      // by the two changing places relative to each other, not by an
+      // absolute index the shipped order could otherwise coincidentally
+      // already satisfy.
+      expect(labels.indexOf('Boutique')).toBeLessThan(labels.indexOf('Apparence'))
+    })
+  })
+})

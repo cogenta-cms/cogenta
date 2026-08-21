@@ -91,6 +91,15 @@ export interface ShellStatus {
   readonly commentsPending: number | null
   /** Unread form submissions (contract G, fiche 16 task 4's nav badge). `null` for an actor holding no role — the same courtesy as `commerceOrdersPending`. */
   readonly formSubmissionsUnread: number | null
+  /**
+   * `@cogenta/core`'s own `package.json` version (fiche 22 tâche 8, part 4)
+   * — shown in the admin footer/topbar. Never secret, so unlike every other
+   * field on this type it is answered the same way for every actor,
+   * including an anonymous one: the software version an install runs is not
+   * information worth hiding behind a sidebar nobody without a session sees
+   * anyway.
+   */
+  readonly cogentaVersion: string
 }
 
 export interface ShellStatusRouterOptions {
@@ -109,6 +118,8 @@ export interface ShellStatusRouterOptions {
   readonly comments?: CommentsQueueLike
   /** Absent only in a test harness that does not care — every real site always has one (forms tables are always created, unlike commerce's). */
   readonly forms?: { countUnread(): Promise<number> }
+  /** `ShellStatus.cogentaVersion`. Defaults to `'0.0.0'` — a caller (a narrow unit test) that does not care still gets a well-formed string rather than `undefined`. */
+  readonly cogentaVersion?: string
   /** Mount point. `/api/shell-status` by default. */
   readonly path?: string
 }
@@ -121,6 +132,7 @@ const DEFAULT_PATH = '/api/shell-status'
 
 export function createShellStatusRouter(options: ShellStatusRouterOptions): ShellStatusRouter {
   const path = normalise(options.path ?? DEFAULT_PATH)
+  const cogentaVersion = options.cogentaVersion ?? '0.0.0'
 
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
@@ -149,6 +161,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
         reviewPending: null,
         commentsPending: null,
         formSubmissionsUnread: null,
+        cogentaVersion,
       }
       return jsonResponse(200, { data: empty })
     }
@@ -161,6 +174,7 @@ export function createShellStatusRouter(options: ShellStatusRouterOptions): Shel
       reviewPending: await reviewPending(context),
       commentsPending: await commentsPending(context),
       formSubmissionsUnread: await formSubmissionsUnread(context),
+      cogentaVersion,
     }
     return jsonResponse(200, { data: status })
   }

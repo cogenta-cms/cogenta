@@ -486,6 +486,8 @@ interface TrashPurgeSummary {
 interface Site {
   readonly db: DatabaseHandle
   readonly auth: AuthStore
+  /** `@cogenta/core`'s own package version (fiche 22 tâche 8, part 4) — the admin footer/topbar and, branding permitting, the public footer. */
+  readonly cogentaVersion: string
   readonly restRouter: RestRouter
   readonly authRouter: AuthRouter
   readonly mediaRouter: MediaRouter
@@ -953,6 +955,18 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const readOnly = options.readOnly ?? false
   const styles = options.styles ?? null
   const taxonomies = options.taxonomies ?? []
+  // Fiche 22 tâche 8, part 4: the one version number shown in the admin
+  // footer/topbar and, if branding stays on, the public site footer.
+  // Resolved once per site assembly (cached after the first real read across
+  // every site a multi-site process serves) and never allowed to fail
+  // startup over a cosmetic label — a broken resolution falls back to an
+  // honest placeholder instead of refusing to serve the site at all.
+  let cogentaVersion: string
+  try {
+    cogentaVersion = getCoreVersion()
+  } catch {
+    cogentaVersion = '0.0.0'
+  }
   // Taxonomies first: a `f.taxonomy()` field carries a real foreign key into
   // the terms table, which therefore has to exist before the collection does.
   await createSchemaTables(db, collections, taxonomies)
@@ -1740,6 +1754,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   return {
     db,
     auth,
+    cogentaVersion,
     restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({
       auth,
@@ -1872,6 +1887,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         : {}),
       comments: commentsStore,
       forms: { countUnread: () => formStore.submissions.unreadCount() },
+      cogentaVersion,
     }),
     searchRouter: createSearchRouter({
       index: searchIndex,
@@ -2230,7 +2246,7 @@ async function brandingForSite(site: Site): Promise<BrandingSettings> {
   const showCogentaBranding = typeof showSetting?.value === 'boolean' ? showSetting.value : true
   const customLogoMediaId =
     typeof logoSetting?.value === 'string' && logoSetting.value !== '' ? logoSetting.value : null
-  return { showCogentaBranding, customLogoMediaId }
+  return { showCogentaBranding, customLogoMediaId, cogentaVersion: site.cogentaVersion }
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {

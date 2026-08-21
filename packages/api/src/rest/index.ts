@@ -9,11 +9,21 @@
 export type { AdminThemeRouter, AdminThemeRouterOptions } from './admin-theme-router.js'
 export { createAdminThemeRouter } from './admin-theme-router.js'
 export type {
+  AgentSkillRegistryLike,
+  AgentSkillSummary,
+  AgentSkillsRouter,
+  AgentSkillsRouterOptions,
+} from './agent-skills-router.js'
+export { createAgentSkillsRouter } from './agent-skills-router.js'
+export type {
   AgentRegistryLike,
+  AgentRunnerLike,
+  AgentRunSummary,
   AgentSummary,
   AgentsRouter,
   AgentsRouterOptions,
   AgentUsage,
+  AgentWriteInput,
   AuditLogLike,
   TraceStoreLike,
 } from './agents-router.js'
@@ -113,6 +123,13 @@ export type {
 export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
+export type {
+  ProviderRegistryLike,
+  ProviderSummary,
+  ProvidersRouter,
+  ProvidersRouterOptions,
+} from './providers-router.js'
+export { createProvidersRouter } from './providers-router.js'
 export type { ListQuery, QueryLimits, ReadQuery } from './query.js'
 export {
   DEFAULT_LIMITS,

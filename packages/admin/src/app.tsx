@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
 import { AdminAppearanceRoute } from './routes/admin-appearance.js'
+import { AgentSkillsRoute } from './routes/agent-skills.js'
 import { AgentsRoute } from './routes/agents.js'
 import { AnalyticsRoute } from './routes/analytics.js'
 import { ApiKeysRoute } from './routes/api-keys.js'
@@ -37,6 +38,7 @@ import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
+import { ProvidersRoute } from './routes/providers.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
 import { ReviewRoute } from './routes/review.js'
 import { RolesRoute } from './routes/roles.js'
@@ -131,6 +133,8 @@ export function App(): JSX.Element {
                 <Route path="audit" element={<AuditRoute />} />
                 <Route path="analytics" element={<AnalyticsRoute />} />
                 <Route path="agents" element={<AgentsRoute />} />
+                <Route path="providers" element={<ProvidersRoute />} />
+                <Route path="agent-skills" element={<AgentSkillsRoute />} />
                 <Route path="mcp" element={<McpRoute />} />
                 <Route path="users" element={<UsersRoute />} />
                 <Route path="api-keys" element={<ApiKeysRoute />} />

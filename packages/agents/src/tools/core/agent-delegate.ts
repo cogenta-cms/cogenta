@@ -25,11 +25,22 @@ const AgentDelegateOutputSchema = z.object({
 })
 export type AgentDelegateOutput = z.infer<typeof AgentDelegateOutputSchema>
 
+/** `agent.delegate.<slug>` — one tool name per named sub-agent, so a model choosing between several declared sub-agents (contract C's `AgentDeclaration.subagents`) sees them as distinct, nameable calls rather than one generic "call some agent" tool it must disambiguate by argument. The permission stays the single, taxonomy-fixed `agent.delegate` (`tools@1.0`) — which sub-agents a name can reach is bounded by `subagents/validate.ts`'s "declared, and its tools ⊆ parent's", not by a per-subagent permission string. */
+export function agentDelegateToolName(subagentName: string): string {
+  const slug = subagentName
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+  return `agent.delegate.${slug.length > 0 ? slug : 'agent'}`
+}
+
 /**
- * `agent.delegate` — hands one task to a sub-agent's own `runAgentLoop` run,
- * with its own manifest and budget (both fixed at construction, one instance
- * per delegating agent, same pattern as `http.fetch`'s per-agent domain
- * list). `runSubagent` (task 11) is what keeps a sub-agent's crash from
+ * Hands one task to a sub-agent's own `runAgentLoop` run, with its own
+ * manifest and budget (both fixed at construction, one instance per
+ * delegating agent, same pattern as `http.fetch`'s per-agent domain list).
+ * `runSubagent` (task 11) is what keeps a sub-agent's crash from
  * propagating: this tool's `execute` never throws for that reason, only for
  * an input/output schema mismatch, which is the manifest's job to catch.
  */
@@ -37,7 +48,7 @@ export function createAgentDelegateTool(
   options: AgentDelegateToolOptions,
 ): ToolDefinition<AgentDelegateInput, AgentDelegateOutput> {
   return defineTool({
-    name: 'agent.delegate',
+    name: agentDelegateToolName(options.subagentName),
     version: '1.0.0',
     description: `Delegate one task to the "${options.subagentName}" sub-agent.`,
     input: AgentDelegateInputSchema,

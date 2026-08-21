@@ -196,6 +196,28 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   API_KEY_RATE_LIMITED: 429,
 
   AGENT_UNKNOWN: 404,
+  // Pre-existing (L5), never mapped before — a malformed create/update body
+  // is the caller's fault, same shape as `CONTENT_INVALID`.
+  AGENT_DEFINITION_INVALID: 400,
+  // L22 task 1: the real, persistent agent runtime. `AGENT_DUPLICATE`/
+  // `AGENT_BUILTIN_UNDELETABLE`/`AGENT_DISABLED` are all conflicts with the
+  // registry's current state, not malformed requests — same reasoning
+  // `AUTH_USER_EXISTS`/`CONTENT_REFERENCED` already use. `AGENT_NO_PROVIDER`
+  // mirrors `SITE_PLAN_NO_PROVIDER` exactly: nothing is broken, this run
+  // simply has no configured LLM provider to use (R2). `AGENT_REGISTRY_
+  // READ_ONLY` is the same "capability not offered by this instance" shape.
+  // `AGENT_RUNTIME_UNAVAILABLE` mirrors `ASSIST_UNAVAILABLE`'s 503 instead:
+  // a whole live runner is missing, not one optional capability of it.
+  AGENT_DUPLICATE: 409,
+  AGENT_DISABLED: 409,
+  AGENT_NO_PROVIDER: 501,
+  AGENT_BUILTIN_UNDELETABLE: 409,
+  PROVIDER_NOT_CONFIGURED: 404,
+  AGENT_SKILL_UNKNOWN: 404,
+  AGENT_SKILL_DUPLICATE: 409,
+  AGENT_SKILL_BUILTIN_UNDELETABLE: 409,
+  AGENT_REGISTRY_READ_ONLY: 501,
+  AGENT_RUNTIME_UNAVAILABLE: 503,
 
   // Notice channel settings (fiche 38 tasks 3-4), reusing `@cogenta/channels`'
   // own error codes rather than inventing new ones for the same failures.

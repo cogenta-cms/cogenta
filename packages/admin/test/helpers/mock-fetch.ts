@@ -706,6 +706,66 @@ export function installMockFetch(
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
 
+  // L22 task 1: a real, persistent (for the life of one test) agent
+  // registry — `security` is the same fixed fixture every existing test
+  // already asserts against, plus create/update/remove/run so the new
+  // editable screen has something real to exercise.
+  interface MockAgent {
+    name: string
+    tools: string[]
+    autonomy: { default: string; overrides?: Record<string, string> }
+    budget: Record<string, number>
+    enabled: boolean
+    skills?: string[]
+    subagents?: string[]
+    model?: { preferred: string; fallback?: string }
+    builtin: boolean
+  }
+  const mockAgents: Record<string, MockAgent> = {
+    security: {
+      name: 'security',
+      tools: ['deps.scan', 'deps.patch'],
+      autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
+      budget: { tokensPerDay: 200_000, eurPerMonth: 10, callsPerHour: 30 },
+      enabled: true,
+      skills: ['cve-triage', 'security-report'],
+      model: { preferred: 'claude-sonnet', fallback: 'local' },
+      builtin: true,
+    },
+  }
+  const mockAgentIdentities: Record<
+    string,
+    { role: string; objectives: string[]; style?: string }
+  > = {
+    security: { role: 'Scans dependencies for known CVEs.', objectives: ['Report findings.'] },
+  }
+  // Kept in sync with `mockAgents.security.enabled` for the pre-existing
+  // enable/disable tests, which read `securityAgentEnabled` directly.
+  const syncSecurityEnabled = (): void => {
+    mockAgents['security'] = {
+      ...(mockAgents['security'] as MockAgent),
+      enabled: securityAgentEnabled,
+    }
+  }
+
+  const mockProviders: {
+    provider: string
+    enabled: boolean
+    model: string
+    maskedKey: string
+    updatedAt: string
+  }[] = []
+  const mockAgentSkills: {
+    id: string
+    name: string
+    description: string
+    instructions: string
+    enabledByDefault: boolean
+    builtin: boolean
+    createdAt: string
+    updatedAt: string
+  }[] = []
+
   // Site settings (fiche 23) — the registry's own defaults, hand-mirrored
   // here rather than imported (this file imports nothing but `vitest`, on
   // purpose: it is the admin's own idea of what the API answers, not a
@@ -3195,42 +3255,117 @@ export function installMockFetch(
             error: { code: 'CONTENT_NOT_FOUND', message: 'No route matches this path.' },
           })
         }
-        const agentMatch = /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history))?/u.exec(
-          url,
-        )
+        syncSecurityEnabled()
+        const agentMatch =
+          /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history|identity|run))?/u.exec(url)
         if (agentMatch === null) {
-          return json(200, {
-            data: [
-              {
-                name: 'security',
-                tools: ['deps.scan', 'deps.patch'],
-                autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
-                budget: { tokensPerDay: 200_000, eurPerMonth: 10, callsPerHour: 30 },
-                enabled: securityAgentEnabled,
+          if (method === 'GET') {
+            return json(200, {
+              data: Object.values(mockAgents).map((agent) => ({
+                ...agent,
                 usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 },
-                // L21 task 4: the rest of contract C's `AgentDeclaration`,
-                // mirroring `agents-builtin/src/security/agent.ts`'s real
-                // shape so the admin's richer detail panel has real data to
-                // assert against.
-                skills: ['cve-triage', 'security-report'],
-                model: { preferred: 'claude-sonnet', fallback: 'local' },
-                memory: { episodic: true, semantic: true, procedural: true, scope: 'site' },
-                triggers: [{ on: 'cve.published' }, { on: 'schedule', cron: '0 6 * * *' }],
-              },
-            ],
-          })
+              })),
+            })
+          }
+          if (method === 'POST') {
+            const body = JSON.parse(String(init?.body ?? '{}')) as {
+              name?: string
+              identity?: { role: string; objectives: string[]; style?: string }
+              model?: { preferred: string; fallback?: string }
+              tools?: string[]
+              autonomy?: { default: string }
+              skills?: string[]
+              subagents?: string[]
+              budget?: Record<string, number>
+            }
+            const newName = body.name ?? 'New Agent'
+            mockAgents[newName] = {
+              name: newName,
+              tools: body.tools ?? [],
+              autonomy: body.autonomy ?? { default: 'propose' },
+              budget: body.budget ?? {},
+              enabled: true,
+              ...(body.skills === undefined ? {} : { skills: body.skills }),
+              ...(body.subagents === undefined ? {} : { subagents: body.subagents }),
+              ...(body.model === undefined ? {} : { model: body.model }),
+              builtin: false,
+            }
+            mockAgentIdentities[newName] = body.identity ?? { role: '', objectives: [] }
+            return json(201, {
+              data: { ...(mockAgents[newName] as MockAgent), usage: {} },
+            })
+          }
         }
-        const [, name, action] = agentMatch
+        const [, name, action] = agentMatch ?? []
+        if (name !== undefined && mockAgents[name] === undefined && action !== undefined) {
+          return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
+        }
         if (name === 'ghost') {
           return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
         }
-        if (action === 'enable' && method === 'POST') {
-          securityAgentEnabled = true
+        if (name !== undefined && action === undefined) {
+          if (method === 'GET') {
+            const agent = mockAgents[name]
+            if (agent === undefined) {
+              return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
+            }
+            return json(200, {
+              data: { ...agent, usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 } },
+            })
+          }
+          if (method === 'PATCH') {
+            const existing = mockAgents[name]
+            if (existing === undefined) {
+              return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
+            }
+            const body = JSON.parse(String(init?.body ?? '{}')) as Partial<MockAgent> & {
+              identity?: { role: string; objectives: string[]; style?: string }
+            }
+            mockAgents[name] = {
+              ...existing,
+              ...body,
+              name: existing.name,
+              builtin: existing.builtin,
+            }
+            if (body.identity !== undefined) mockAgentIdentities[name] = body.identity
+            if (name === 'security' && body.enabled !== undefined) {
+              securityAgentEnabled = body.enabled
+            }
+            return json(200, {
+              data: { ...(mockAgents[name] as MockAgent), usage: {} },
+            })
+          }
+          if (method === 'DELETE') {
+            delete mockAgents[name]
+            delete mockAgentIdentities[name]
+            return json(200, { data: { name, removed: true } })
+          }
+        }
+        if (action === 'enable' && method === 'POST' && name !== undefined) {
+          if (mockAgents[name] !== undefined) (mockAgents[name] as MockAgent).enabled = true
+          if (name === 'security') securityAgentEnabled = true
           return json(200, { data: { name, enabled: true } })
         }
-        if (action === 'disable' && method === 'POST') {
-          securityAgentEnabled = false
+        if (action === 'disable' && method === 'POST' && name !== undefined) {
+          if (mockAgents[name] !== undefined) (mockAgents[name] as MockAgent).enabled = false
+          if (name === 'security') securityAgentEnabled = false
           return json(200, { data: { name, enabled: false } })
+        }
+        if (action === 'identity' && method === 'GET' && name !== undefined) {
+          const identity = mockAgentIdentities[name] ?? { role: '', objectives: [] }
+          return json(200, { data: identity })
+        }
+        if (action === 'run' && method === 'POST' && name !== undefined) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as { instruction?: string }
+          return json(200, {
+            data: {
+              agent: name,
+              stopReason: 'end_turn',
+              finalText: `Mock result for: ${body.instruction ?? ''}`,
+              steps: 1,
+              usage: { inputTokens: 10, outputTokens: 5 },
+            },
+          })
         }
         if (action === 'traces' && method === 'GET') {
           return json(200, {
@@ -3258,19 +3393,100 @@ export function installMockFetch(
             ],
           })
         }
-        return json(200, {
-          data: {
-            name,
-            tools: ['deps.scan', 'deps.patch'],
-            autonomy: { default: 'propose', overrides: { 'deps.scan': 'autonomous' } },
-            budget: { tokensPerDay: 200_000, eurPerMonth: 10, callsPerHour: 30 },
-            enabled: securityAgentEnabled,
-            usage: { tokensToday: 1234, eurThisMonth: 0.5, callsThisHour: 2 },
-            skills: ['cve-triage', 'security-report'],
-            model: { preferred: 'claude-sonnet', fallback: 'local' },
-            memory: { episodic: true, semantic: true, procedural: true, scope: 'site' },
-            triggers: [{ on: 'cve.published' }, { on: 'schedule', cron: '0 6 * * *' }],
-          },
+        return json(404, {
+          error: { code: 'CONTENT_NOT_FOUND', message: 'No route matches this path.' },
+        })
+      }
+
+      if (url.includes('/api/agent-skills')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may manage agent skills.' },
+          })
+        }
+        const skillMatch = /\/api\/agent-skills\/([^/?]+)/u.exec(url)
+        if (skillMatch === null) {
+          if (method === 'GET') return json(200, { data: mockAgentSkills })
+          if (method === 'POST') {
+            const body = JSON.parse(String(init?.body ?? '{}')) as {
+              name?: string
+              description?: string
+              instructions?: string
+              enabledByDefault?: boolean
+            }
+            const created = {
+              id: `skill-${mockAgentSkills.length + 1}`,
+              name: body.name ?? '',
+              description: body.description ?? '',
+              instructions: body.instructions ?? '',
+              enabledByDefault: body.enabledByDefault ?? true,
+              builtin: false,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+            }
+            mockAgentSkills.push(created)
+            return json(201, { data: created })
+          }
+        }
+        const [, skillId] = skillMatch ?? []
+        const index = mockAgentSkills.findIndex((skill) => skill.id === skillId)
+        if (method === 'PATCH' && index >= 0) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+          const existing = mockAgentSkills[index] as (typeof mockAgentSkills)[number]
+          mockAgentSkills[index] = { ...existing, ...body }
+          return json(200, { data: mockAgentSkills[index] })
+        }
+        if (method === 'DELETE' && index >= 0) {
+          mockAgentSkills.splice(index, 1)
+          return json(200, { data: { id: skillId, removed: true } })
+        }
+        return json(404, { error: { code: 'AGENT_SKILL_UNKNOWN', message: 'No such skill.' } })
+      }
+
+      if (url.includes('/api/providers')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may manage providers.' },
+          })
+        }
+        const providerMatch = /\/api\/providers\/([^/?]+)/u.exec(url)
+        if (providerMatch === null) {
+          if (method === 'GET') return json(200, { data: mockProviders })
+          if (method === 'POST') {
+            const body = JSON.parse(String(init?.body ?? '{}')) as {
+              provider?: string
+              apiKey?: string
+              model?: string
+            }
+            const created = {
+              provider: body.provider ?? 'anthropic',
+              enabled: true,
+              model: body.model ?? '',
+              maskedKey: `••••${(body.apiKey ?? '').slice(-4)}`,
+              updatedAt: '2026-03-01T00:00:00.000Z',
+            }
+            const existingIndex = mockProviders.findIndex((p) => p.provider === created.provider)
+            if (existingIndex >= 0) mockProviders[existingIndex] = created
+            else mockProviders.push(created)
+            return json(201, { data: created })
+          }
+        }
+        const [, providerName] = providerMatch ?? []
+        const providerIndex = mockProviders.findIndex((p) => p.provider === providerName)
+        if (method === 'PATCH' && providerIndex >= 0) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+          mockProviders[providerIndex] = {
+            ...(mockProviders[providerIndex] as (typeof mockProviders)[number]),
+            ...body,
+          }
+          return json(200, { data: mockProviders[providerIndex] })
+        }
+        if (method === 'DELETE' && providerIndex >= 0) {
+          mockProviders.splice(providerIndex, 1)
+          return json(200, { data: { provider: providerName, removed: true } })
+        }
+        return json(404, {
+          error: { code: 'PROVIDER_NOT_CONFIGURED', message: 'No such provider.' },
         })
       }
 

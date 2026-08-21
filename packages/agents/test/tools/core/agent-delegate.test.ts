@@ -1,8 +1,43 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatResponse, ProviderClient } from '../../../src/providers/types.js'
 import type { ExecutableTool } from '../../../src/runtime/types.js'
-import { createAgentDelegateTool } from '../../../src/tools/core/agent-delegate.js'
+import {
+  agentDelegateToolName,
+  createAgentDelegateTool,
+} from '../../../src/tools/core/agent-delegate.js'
 import type { ToolContext } from '../../../src/tools/types.js'
+
+describe('agentDelegateToolName', () => {
+  it('gives two different sub-agents two different tool names, so an orchestrator can offer both at once without a collision', () => {
+    expect(agentDelegateToolName('Security Scanner')).toBe('agent.delegate.security-scanner')
+    expect(agentDelegateToolName('Content Watch')).toBe('agent.delegate.content-watch')
+    expect(agentDelegateToolName('Security Scanner')).not.toBe(
+      agentDelegateToolName('Content Watch'),
+    )
+  })
+
+  it('the constructed tool carries the taxonomy-fixed agent.delegate permission regardless of name', () => {
+    const tool = createAgentDelegateTool({
+      subagentName: 'Dependency Analyst',
+      client: {
+        name: 'fake',
+        model: 'fake',
+        async chat() {
+          return {
+            content: 'ok',
+            toolCalls: [],
+            stopReason: 'end_turn' as const,
+            usage: { inputTokens: 0, outputTokens: 0 },
+          }
+        },
+      },
+      tools: [],
+      maxTokens: 10,
+    })
+    expect(tool.name).toBe('agent.delegate.dependency-analyst')
+    expect(tool.permissions).toEqual(['agent.delegate'])
+  })
+})
 
 const USAGE = { inputTokens: 10, outputTokens: 5 }
 

@@ -49,19 +49,47 @@ export interface AgentSummary {
   readonly enabled: boolean
   readonly usage?: AgentUsage
   /**
-   * Fiche 4 (L21 task 4): the rest of `AgentDeclaration` (`@cogenta/agents`,
-   * contract C's `defineAgent`) that `createAgentsRouter` now passes through
-   * unchanged. All optional, exactly as on the declaration itself — an agent
-   * that never declared one simply does not carry it over the wire. Shown
-   * read-only in the admin: nothing in this repo's `AgentRegistry` can
-   * persist an edit to any of these (only `enable`/`disable` really mutate
-   * anything), so an editable control here would have no real effect (R6).
+   * L22 task 1: the rest of `AgentDeclaration` (`@cogenta/agents`, contract
+   * C's `defineAgent`), now genuinely editable through `updateAgent` below —
+   * `createAgentsRouter` was extended with real `create`/`update`/`remove`
+   * capabilities, backed by a persistent file store, not the fixed
+   * in-memory array `AgentRegistry` used to wrap.
    */
   readonly skills?: readonly string[]
   readonly subagents?: readonly string[]
   readonly model?: AgentModelPreference
   readonly memory?: AgentMemoryConfig
   readonly triggers?: readonly AgentTrigger[]
+  /** `true` for the superagent and the two seeded examples — undeletable, always editable. */
+  readonly builtin?: boolean
+}
+
+export interface AgentIdentityFields {
+  readonly role: string
+  readonly objectives: readonly string[]
+  readonly style?: string
+}
+
+export interface AgentWriteInput {
+  readonly name?: string
+  readonly identity?: AgentIdentityFields
+  readonly model?: AgentModelPreference
+  readonly tools?: readonly string[]
+  readonly skills?: readonly string[]
+  readonly subagents?: readonly string[]
+  readonly autonomy?: AgentAutonomy
+  readonly budget?: AgentBudget
+  readonly memory?: AgentMemoryConfig
+  readonly triggers?: readonly AgentTrigger[]
+  readonly enabled?: boolean
+}
+
+export interface AgentRunSummary {
+  readonly agent: string
+  readonly stopReason: string
+  readonly finalText: string | null
+  readonly steps: number
+  readonly usage?: { readonly inputTokens: number; readonly outputTokens: number }
 }
 
 export interface AgentTrace {
@@ -112,5 +140,50 @@ export function listAgentHistory(
 ): Promise<readonly AgentHistoryEntry[]> {
   return request(`/api/agents/${encodeURIComponent(name)}/history`, {
     headers: authHeader(token),
+  })
+}
+
+export function createAgent(token: string, input: AgentWriteInput): Promise<AgentSummary> {
+  return request('/api/agents', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateAgent(
+  token: string,
+  name: string,
+  patch: AgentWriteInput,
+): Promise<AgentSummary> {
+  return request(`/api/agents/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
+  })
+}
+
+export function removeAgent(token: string, name: string): Promise<{ readonly name: string }> {
+  return request(`/api/agents/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+export function getAgentIdentity(token: string, name: string): Promise<AgentIdentityFields> {
+  return request(`/api/agents/${encodeURIComponent(name)}/identity`, {
+    headers: authHeader(token),
+  })
+}
+
+export function runAgent(
+  token: string,
+  name: string,
+  instruction: string,
+): Promise<AgentRunSummary> {
+  return request(`/api/agents/${encodeURIComponent(name)}/run`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ instruction }),
   })
 }

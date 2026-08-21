@@ -1,6 +1,30 @@
+export {
+  builtinAgentSeeds,
+  CONTENT_WATCH_AGENT_NAME,
+  ensureBuiltinAgents,
+  SECURITY_AGENT_NAME,
+  SUPERAGENT_NAME,
+} from './agents/builtins.js'
 export { defineAgent } from './agents/define.js'
+export type {
+  AgentProviderRegistryLike,
+  AgentRunner,
+  AgentRunnerOptions,
+  AgentRunSummary,
+  RunAgentOptions,
+} from './agents/orchestrator.js'
+export { createAgentRunner } from './agents/orchestrator.js'
 export type { AgentRegistry } from './agents/registry.js'
 export { createAgentRegistry } from './agents/registry.js'
+export type {
+  AgentDeclarationInput,
+  AgentDeclarationPatch,
+  AgentDeclarationStore,
+  FileAgentDeclarationStoreOptions,
+  StoredAgent,
+  StoredAgentIdentity,
+} from './agents/store.js'
+export { createFileAgentDeclarationStore } from './agents/store.js'
 export type {
   AgentDeclaration,
   AgentMemoryConfig,
@@ -65,6 +89,12 @@ export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'
 export type { MemoryApprovalQueueOptions } from './autonomy/approval-queue.js'
 export { createMemoryApprovalQueue } from './autonomy/approval-queue.js'
+export type { AutonomyUiLevel } from './autonomy/levels.js'
+export {
+  AUTONOMY_UI_LEVELS,
+  autonomyLevelToUiLevel,
+  uiLevelToAutonomyLevel,
+} from './autonomy/levels.js'
 export type {
   ApprovalQueue,
   ApprovalRequest,
@@ -120,6 +150,8 @@ export type {
   TaskContext,
 } from './identity/context.js'
 export { assembleContext } from './identity/context.js'
+export type { AgentIdentityFields } from './identity/markdown.js'
+export { parseIdentityMarkdown, renderIdentityMarkdown } from './identity/markdown.js'
 export { createFileMemoryStore } from './memory/file-store.js'
 export type { ApprovalToMemoryOptions } from './memory/from-approval.js'
 export { approvalToMemoryRecord } from './memory/from-approval.js'
@@ -180,6 +212,14 @@ export type { OpenAiClientConfig, OpenAiRequestBody } from './providers/openai.j
 export { buildOpenAiRequest, createOpenAiClient, parseOpenAiResponse } from './providers/openai.js'
 export type { ProviderName, ProviderRegistryConfig } from './providers/registry.js'
 export { createProviderRegistry, PROVIDER_NAMES } from './providers/registry.js'
+export { resolveProviderRegistryConfig } from './providers/resolve.js'
+export type {
+  FileProviderConfigStoreOptions,
+  ProviderConfigInput,
+  ProviderConfigStore,
+  StoredProviderConfig,
+} from './providers/store.js'
+export { createFileProviderConfigStore } from './providers/store.js'
 export type {
   ChatMessage,
   ChatOptions,
@@ -339,6 +379,18 @@ export type {
 } from './site-plan/types.js'
 export { createFileSkillStore } from './skills/file-store.js'
 export { parseSkillFile } from './skills/frontmatter.js'
+export type {
+  AgentSkill,
+  AgentSkillInput,
+  AgentSkillPatch,
+  AgentSkillStore,
+  FileAgentSkillStoreOptions,
+} from './skills/library.js'
+export {
+  builtinAgentSkillSeeds,
+  createFileAgentSkillStore,
+  ensureBuiltinAgentSkills,
+} from './skills/library.js'
 export type { Skill, SkillMetadata, SkillStore } from './skills/types.js'
 export type { GenerateSkinOptions, GenerateSkinResult } from './skin/generate.js'
 export { generateSkin } from './skin/generate.js'
@@ -350,7 +402,7 @@ export type {
   AgentDelegateOutput,
   AgentDelegateToolOptions,
 } from './tools/core/agent-delegate.js'
-export { createAgentDelegateTool } from './tools/core/agent-delegate.js'
+export { agentDelegateToolName, createAgentDelegateTool } from './tools/core/agent-delegate.js'
 export type {
   ContentAccessContext,
   ContentReadOptions,
@@ -362,6 +414,8 @@ export {
   createContentReadTool,
   createContentWriteDraftTool,
 } from './tools/core/content.js'
+export type { DepsScanOutput, DepsScanToolOptions } from './tools/core/deps-scan.js'
+export { createDepsScanTool } from './tools/core/deps-scan.js'
 export type {
   HttpFetchInput,
   HttpFetchOutput,

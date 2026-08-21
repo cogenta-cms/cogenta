@@ -94,12 +94,47 @@ export interface AssistToolsetLike {
   readonly usage?: AssistUsageTrackerLike
 }
 
-/** Structural mirror of `@cogenta/cli`'s `AssistantVectorInfo` (fiche 30 task 6), minus `noteIndexed` — a read-only view is all this route needs. */
+/** One collection's place in the vector index. Structural mirror of `@cogenta/cli`'s `AssistantIndexedCollection` (L22 task 4). */
+export interface AssistIndexedCollectionLike {
+  readonly name: string
+  readonly enabled: boolean
+  readonly count: number
+}
+
+/** Structural mirror of `@cogenta/cli`'s `AssistantVectorInfo` (fiche 30 task 6, widened by L22 task 4), minus `noteIndexed` — a read-only view is all this route needs. */
 export interface AssistVectorInfoLike {
   readonly driver: string
   readonly dimensions: number
   count(): Promise<number>
   lastIndexedAt(): string | null
+  collections(): Promise<readonly AssistIndexedCollectionLike[]>
+  readonly referenceCollection: string
+}
+
+/** Structural mirror of `@cogenta/agents`' `ReferenceDocumentRecord` (L22 task 4). */
+export interface AssistDocumentRecordLike {
+  readonly id: string
+  readonly filename: string
+  readonly format: string
+  readonly characters: number
+  readonly chunkCount: number
+  readonly status: 'pending' | 'indexed' | 'error'
+  readonly errorMessage: string | null
+  readonly warnings: readonly string[]
+  readonly uploadedAt: string
+  readonly uploadedBy: string | null
+  readonly indexedAt: string | null
+}
+
+/** Structural mirror of `@cogenta/cli`'s `AssistantDocumentService` (L22 task 4) — the document upload flow, wired onto the existing extraction/chunking/embedding pipeline. */
+export interface AssistDocumentServiceLike {
+  list(): Promise<readonly AssistDocumentRecordLike[]>
+  upload(input: {
+    readonly filename: string
+    readonly bytes: Buffer
+    readonly uploadedBy: string | null
+  }): Promise<AssistDocumentRecordLike>
+  remove(id: string): Promise<void>
 }
 
 export interface AssistantRouterOptions {
@@ -115,6 +150,8 @@ export interface AssistantRouterOptions {
   readonly timeoutMs?: number
   /** Absent when the site has no vector store — fiche 30 task 6's "l'index vectoriel est invisible". */
   readonly vectorInfo?: AssistVectorInfoLike
+  /** Absent under the same condition as `vectorInfo` — L22 task 4's document upload flow. */
+  readonly documents?: AssistDocumentServiceLike
 }
 
 export interface AssistantRouter {
@@ -123,6 +160,8 @@ export interface AssistantRouter {
 
 const DEFAULT_BASE_PATH = '/api/assistant'
 const DEFAULT_TIMEOUT_MS = 60_000
+/** Base64 of `@cogenta/agents`' `MAX_DOCUMENT_BYTES` (20 MiB), inflated by roughly a third — the same margin `site-plan-router.ts`'s `MAX_BASE64_PER_DOCUMENT` uses. */
+const MAX_BASE64_LENGTH = 28 * 1024 * 1024
 
 const SILENT_LOGGER: AssistToolContextLike['logger'] = {
   info: () => undefined,
@@ -172,6 +211,16 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
     })
   }
 
+  /** Managing the shared reference-document index is an admin action, like every `assistant.*` site setting (fiche 23, ADR-0025) — an editor may *use* the assistant without being able to change what it can cite to everyone else. */
+  function assertMayManageDocuments(context: AccessContext): void {
+    if (context.actor.roles.includes('admin')) return
+    throw new CogentaError({
+      code: context.actor.id === null ? 'UNAUTHENTICATED' : 'FORBIDDEN',
+      message: 'Only the admin role may manage the assistant’s reference documents.',
+      hint: 'These documents feed every user’s assistant answers — ask an administrator to add or remove one.',
+    })
+  }
+
   async function capabilities(): Promise<RestResponse> {
     // 200, always. "No provider configured" is an answer, not a failure — the
     // whole degradation story of this lot depends on this not being an error.
@@ -183,6 +232,8 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
             dimensions: options.vectorInfo.dimensions,
             count: await options.vectorInfo.count(),
             lastIndexedAt: options.vectorInfo.lastIndexedAt(),
+            collections: await options.vectorInfo.collections(),
+            referenceCollection: options.vectorInfo.referenceCollection,
           }
 
     return jsonResponse(200, {
@@ -283,6 +334,81 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
     }
   }
 
+  const documentsPath = `${basePath}/documents`
+
+  function noDocumentService(): CogentaError {
+    return new CogentaError({
+      code: 'ASSIST_UNAVAILABLE',
+      message: 'This site has no vector store, so there is nowhere to index a reference document.',
+      hint: 'Configure an embeddings provider (and, optionally, a vector driver) in cogenta.config.mjs.',
+    })
+  }
+
+  async function listDocuments(): Promise<RestResponse> {
+    if (options.documents === undefined) throw noDocumentService()
+    return jsonResponse(200, { data: await options.documents.list() })
+  }
+
+  async function uploadDocument(
+    request: RestRequest,
+    context: AccessContext,
+  ): Promise<RestResponse> {
+    if (options.documents === undefined) throw noDocumentService()
+    const body = request.body
+    if (typeof body !== 'object' || body === null) {
+      throw new CogentaError({
+        code: 'CONTENT_INVALID',
+        message: 'The request body must be a JSON object.',
+        hint: 'Send { "filename": "handbook.pdf", "contentBase64": "…" }.',
+      })
+    }
+    const { filename, contentBase64 } = body as { filename?: unknown; contentBase64?: unknown }
+    if (typeof filename !== 'string' || filename === '') {
+      throw new CogentaError({
+        code: 'CONTENT_INVALID',
+        message: 'This upload has no filename.',
+        hint: 'Send { "filename": "handbook.pdf", "contentBase64": "…" }.',
+      })
+    }
+    if (typeof contentBase64 !== 'string' || contentBase64 === '') {
+      throw new CogentaError({
+        code: 'CONTENT_INVALID',
+        message: `"${filename}" carries no content.`,
+        hint: 'Send the file base64-encoded in "contentBase64".',
+      })
+    }
+    // Base64 grows bytes by roughly a third — checked on the encoded string,
+    // before anything decodes it, the same guard `site-plan-router.ts` uses
+    // for the same reason: this route invites megabyte bodies by design, and
+    // the far side's own `MAX_DOCUMENT_BYTES` (20 MiB) only fires after a
+    // Buffer that size has already been allocated.
+    if (contentBase64.length > MAX_BASE64_LENGTH) {
+      throw new CogentaError({
+        code: 'DOCUMENT_TOO_LARGE',
+        message: `"${filename}" is larger than this route accepts.`,
+        hint: 'Upload a document of 20 MB or less.',
+        details: { filename },
+      })
+    }
+    const created = await options.documents.upload({
+      filename,
+      bytes: Buffer.from(contentBase64, 'base64'),
+      uploadedBy: context.actor.id,
+    })
+    logger.info('reference document uploaded', {
+      filename: created.filename,
+      status: created.status,
+      actorId: context.actor.id,
+    })
+    return jsonResponse(201, { data: created })
+  }
+
+  async function removeDocument(id: string): Promise<RestResponse> {
+    if (options.documents === undefined) throw noDocumentService()
+    await options.documents.remove(id)
+    return jsonResponse(200, { data: { id, deleted: true } })
+  }
+
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
       try {
@@ -303,10 +429,36 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
           return await run(request, context)
         }
 
+        if (path === documentsPath) {
+          if (method === 'GET') {
+            assertMayUseAssistant(context)
+            return await listDocuments()
+          }
+          if (method === 'POST') {
+            assertMayManageDocuments(context)
+            return await uploadDocument(request, context)
+          }
+          return methodNotAllowed(['GET', 'POST'])
+        }
+
+        if (path.startsWith(`${documentsPath}/`)) {
+          const id = path.slice(documentsPath.length + 1)
+          if (id.length === 0 || id.includes('/')) {
+            throw new CogentaError({
+              code: 'CONTENT_NOT_FOUND',
+              message: 'No route matches this path.',
+              hint: 'A document route is /api/assistant/documents/:id.',
+            })
+          }
+          if (method !== 'DELETE') return methodNotAllowed(['DELETE'])
+          assertMayManageDocuments(context)
+          return await removeDocument(id)
+        }
+
         throw new CogentaError({
           code: 'CONTENT_NOT_FOUND',
           message: 'No route matches this path.',
-          hint: 'The assistant routes are GET /api/assistant and POST /api/assistant/run.',
+          hint: 'The assistant routes are GET /api/assistant, POST /api/assistant/run and /api/assistant/documents.',
         })
       } catch (error) {
         return errorResponse(error)

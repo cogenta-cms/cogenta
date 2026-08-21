@@ -405,6 +405,9 @@ export const ERROR_CODES = [
   // Agents — assistant usage/budget (fiche 30 task 3)
   'ASSIST_BUDGET_EXCEEDED',
 
+  // Agents — reference document RAG index (L22 task 4)
+  'ASSIST_DOCUMENT_NOT_FOUND',
+
   // Marketplace — catalog and one-click install (L17)
   'MARKETPLACE_ITEM_NOT_FOUND',
   'MARKETPLACE_KIND_UNSUPPORTED',

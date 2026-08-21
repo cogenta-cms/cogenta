@@ -230,6 +230,9 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // Fiche 30 task 3's spending cap. Same status as `PROVIDER_RATE_LIMITED` —
   // "try again later" is the accurate instruction for both.
   ASSIST_BUDGET_EXCEEDED: 429,
+  // A reference document id that does not exist on this site (L22 task 4) —
+  // an ordinary 404, the same as `AUDIT_ENTRY_NOT_FOUND`.
+  ASSIST_DOCUMENT_NOT_FOUND: 404,
   TOOL_UNKNOWN: 404,
   TOOL_INPUT_INVALID: 400,
   TOOL_CALL_REJECTED: 403,

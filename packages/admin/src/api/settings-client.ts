@@ -22,6 +22,7 @@ export type SiteSettingGroup =
   | 'branding'
   | 'seo'
   | 'observability'
+  | 'assistant'
 export type SiteSettingScope = 'site' | 'locale'
 
 export interface SiteSetting {

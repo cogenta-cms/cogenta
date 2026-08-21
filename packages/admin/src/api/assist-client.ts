@@ -1,4 +1,5 @@
 import { authHeader, request } from './http.js'
+import { toUploadedDocument } from './site-plan-client.js'
 
 /**
  * `/api/assistant` — L18 task 3.
@@ -34,12 +35,40 @@ export interface AssistUsageSnapshot {
   readonly byTool: readonly AssistToolUsage[]
 }
 
-/** Fiche 30 task 6 — the vector index's visible state. */
+/** L22 task 4 — one content collection's place in the vector index. */
+export interface AssistIndexedCollection {
+  readonly name: string
+  readonly enabled: boolean
+  readonly count: number
+}
+
+/** Fiche 30 task 6 — the vector index's visible state, widened by L22 task 4 to explain *what* is indexed, not just how big it is. */
 export interface AssistVectorInfo {
   readonly driver: string
   readonly dimensions: number
   readonly count: number
   readonly lastIndexedAt: string | null
+  readonly collections: readonly AssistIndexedCollection[]
+  /** The reserved pseudo-collection name uploaded reference documents live under — pass it in `runChat`'s `collections` to let the chat tool retrieve them too. */
+  readonly referenceCollection: string
+}
+
+export const REFERENCE_DOCUMENT_STATUSES = ['pending', 'indexed', 'error'] as const
+export type ReferenceDocumentStatus = (typeof REFERENCE_DOCUMENT_STATUSES)[number]
+
+/** L22 task 4 — one uploaded reference document, hand-mirrored from `@cogenta/api`'s `AssistDocumentRecordLike`. */
+export interface AssistReferenceDocument {
+  readonly id: string
+  readonly filename: string
+  readonly format: string
+  readonly characters: number
+  readonly chunkCount: number
+  readonly status: ReferenceDocumentStatus
+  readonly errorMessage: string | null
+  readonly warnings: readonly string[]
+  readonly uploadedAt: string
+  readonly uploadedBy: string | null
+  readonly indexedAt: string | null
 }
 
 export interface AssistCapabilities {
@@ -215,4 +244,38 @@ export function runSchemaOrgDraft(
   },
 ): Promise<SchemaDraft> {
   return runAssistTool<SchemaDraft>(token, 'assist.schema_org_draft', input)
+}
+
+/** L22 task 4 — `GET /api/assistant/documents`. */
+export function listAssistantDocuments(token: string): Promise<readonly AssistReferenceDocument[]> {
+  return request('/api/assistant/documents', { headers: authHeader(token) })
+}
+
+/**
+ * `POST /api/assistant/documents`. Takes a `File` directly rather than an
+ * already-base64 string, reusing `site-plan-client.ts`'s `toUploadedDocument`
+ * for the encoding — the second real user of it (the site-plan uploader was
+ * the first), rather than a second hand-rolled chunked-base64 loop.
+ */
+export async function uploadAssistantDocument(
+  token: string,
+  file: File,
+): Promise<AssistReferenceDocument> {
+  const { filename, contentBase64 } = await toUploadedDocument(file)
+  return request('/api/assistant/documents', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ filename, contentBase64 }),
+  })
+}
+
+/** `DELETE /api/assistant/documents/:id`. */
+export function deleteAssistantDocument(
+  token: string,
+  id: string,
+): Promise<{ id: string; deleted: boolean }> {
+  return request(`/api/assistant/documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
 }

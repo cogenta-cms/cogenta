@@ -257,6 +257,7 @@ import { serveAdminAsset } from './admin-assets.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
+import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from './default-logo.js'
 import { runDoctor } from './doctor.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
@@ -268,6 +269,7 @@ import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } f
 import { createSitePlanning } from './site-plan.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
 import {
+  type BrandingSettings,
   DEFAULT_IMAGE_ENDPOINT,
   entryTitle,
   joinStyles,
@@ -2147,6 +2149,24 @@ async function commentsForEntry(
   }
 }
 
+/**
+ * `branding.showCogentaBranding` / `branding.customLogoMediaId` (fiche L21
+ * task 8), read live off the same `SiteSettingsStore` every other public
+ * settings read already uses — never cached at startup, for the same reason
+ * `homePath` above is not: turning Cogenta's credit off has to show up on
+ * the very next page view, not the next restart.
+ */
+async function brandingForSite(site: Site): Promise<BrandingSettings> {
+  const [showSetting, logoSetting] = await Promise.all([
+    site.siteSettingsStore.get('branding.showCogentaBranding', SITE_SETTINGS_SITE_SCOPE),
+    site.siteSettingsStore.get('branding.customLogoMediaId', SITE_SETTINGS_SITE_SCOPE),
+  ])
+  const showCogentaBranding = typeof showSetting?.value === 'boolean' ? showSetting.value : true
+  const customLogoMediaId =
+    typeof logoSetting?.value === 'string' && logoSetting.value !== '' ? logoSetting.value : null
+  return { showCogentaBranding, customLogoMediaId }
+}
+
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
   const query: Record<string, string | undefined> = {}
   for (const key of url.searchParams.keys()) {
@@ -2995,6 +3015,25 @@ export function createRequestListener(
         return
       }
 
+      // Cogenta's own logo, served for the public footer's default branding
+      // (fiche L21 task 8) — public and unauthenticated for the same reason
+      // `/_image` is: a visitor's browser fetches it with no session. The
+      // bytes are baked into this `@cogenta/cli` release, not a database
+      // asset, so unlike the stylesheet above there is nothing to
+      // recompute per request and the cache header can be truly immutable.
+      if (url.pathname === DEFAULT_LOGO_PATH) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        res.writeHead(200, {
+          'content-type': DEFAULT_LOGO_CONTENT_TYPE,
+          'cache-control': 'public, max-age=31536000, immutable',
+        })
+        res.end(Buffer.from(defaultLogoBytes()))
+        return
+      }
+
       if (url.pathname.startsWith('/api/auth/')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -3226,6 +3265,7 @@ export function createRequestListener(
             styles: await site.resolveStyles(),
             now: Date.now,
             menus: { menuRouter: site.menuRouter },
+            branding: () => brandingForSite(site),
           }
           const html =
             definition === null
@@ -3713,6 +3753,7 @@ export function createRequestListener(
               // reasoning that already keeps `adminBar` out of this render.
               // `theme-render-fidelity`-style byte equality still holds for
               // everything this preview *does* claim to show.
+              branding: () => brandingForSite(site),
             },
             context,
           )
@@ -3827,6 +3868,7 @@ export function createRequestListener(
             site: site.site,
             styles: await site.resolveStyles(),
             menus: { menuRouter: site.menuRouter },
+            branding: () => brandingForSite(site),
           },
           context,
         )
@@ -3851,6 +3893,7 @@ export function createRequestListener(
             styles: await site.resolveStyles(),
             now: Date.now,
             menus: { menuRouter: site.menuRouter },
+            branding: () => brandingForSite(site),
           }
           const html =
             definition === null || !definition.active
@@ -3905,6 +3948,7 @@ export function createRequestListener(
             forEntry: (commentCollection: string, entryId: string, locale: string | null) =>
               commentsForEntry(site, commentCollection, entryId, locale),
           },
+          branding: () => brandingForSite(site),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {

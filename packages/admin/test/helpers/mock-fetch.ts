@@ -906,6 +906,22 @@ export function installMockFetch(
       scope: 'site',
       value: 'en',
     },
+    // Branding (fiche L21 task 8) — mirrors
+    // packages/schema/src/store/site-settings-registry.ts's `branding` group.
+    'branding.showCogentaBranding': {
+      group: 'branding',
+      order: 0,
+      uiType: 'boolean',
+      scope: 'site',
+      value: true,
+    },
+    'branding.customLogoMediaId': {
+      group: 'branding',
+      order: 1,
+      uiType: 'media',
+      scope: 'site',
+      value: '',
+    },
   }
   const siteSettingsWrites = new Map<
     string,

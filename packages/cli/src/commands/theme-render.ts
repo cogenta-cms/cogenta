@@ -33,6 +33,7 @@ import {
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
 } from '@cogenta/theme-canonical'
+import { DEFAULT_LOGO_PATH } from './default-logo.js'
 import { alternatesForEntry, renderSeoHead, seoSiteFor } from './seo.js'
 import { minifyCss } from './theme-css.js'
 
@@ -235,6 +236,62 @@ export interface ThemeRenderOptions {
       locale: string | null,
     ) => Promise<{ readonly open: boolean; readonly items: readonly PublicComment[] }>
   }
+  /**
+   * Whether/how Cogenta's own credit shows in the public footer, and its
+   * white-label override (fiche L21 task 8, ADR-0025's editorial settings).
+   *
+   * Read live per request, not cached at startup — the same reasoning as
+   * `homePath` above: the whole point of storing this in the site settings
+   * database is turning it off from the admin without a redeploy, so every
+   * rendered page asks again.
+   *
+   * Absent means the pre-task-8 behaviour: full Cogenta credit, unconditionally.
+   */
+  readonly branding?: () => Promise<BrandingSettings>
+}
+
+/** `branding.showCogentaBranding` / `branding.customLogoMediaId`, resolved (fiche L21 task 8). */
+export interface BrandingSettings {
+  readonly showCogentaBranding: boolean
+  /** A media id, or `null` for "no white-label logo uploaded". */
+  readonly customLogoMediaId: string | null
+}
+
+const DEFAULT_BRANDING: BrandingSettings = { showCogentaBranding: true, customLogoMediaId: null }
+
+async function brandingFor(
+  get: (() => Promise<BrandingSettings>) | undefined,
+): Promise<BrandingSettings> {
+  if (get === undefined) return DEFAULT_BRANDING
+  return get()
+}
+
+/**
+ * The footer's own branding block — Cogenta's real logo and a link back to
+ * the project by default, the site's uploaded replacement once Cogenta's
+ * credit is turned off, or nothing at all once it is off with no
+ * replacement. `imageEndpoint` is the same `/_image` (or override) every
+ * other image on the page already resolves through — no second delivery
+ * path for this one image.
+ */
+function renderFooterBranding(branding: BrandingSettings, imageEndpoint: string): string {
+  if (branding.showCogentaBranding) {
+    return (
+      `<div class="cg-site-footer__branding">` +
+      `<a href="https://github.com/cogenta-cms/cogenta" rel="noopener" target="_blank">` +
+      `<img src="${DEFAULT_LOGO_PATH}" width="32" height="32" alt="Cogenta" ` +
+      `class="cg-site-footer__brand-logo" loading="lazy"></a></div>`
+    )
+  }
+  if (branding.customLogoMediaId !== null && branding.customLogoMediaId !== '') {
+    const src = `${imageEndpoint}?id=${encodeURIComponent(branding.customLogoMediaId)}&w=64`
+    return (
+      `<div class="cg-site-footer__branding">` +
+      `<img src="${escapeAttribute(src)}" width="32" height="32" alt="" ` +
+      `class="cg-site-footer__brand-logo" loading="lazy"></div>`
+    )
+  }
+  return ''
 }
 
 /** The hardcoded fallback every blueprint's home page uses when no `reading.homePath` setting is stored. */
@@ -531,6 +588,8 @@ export interface PageChromeOptions {
   /** The page's own content — normally a `<main id="cg-main">…</main>`, matching the skip-link's target. */
   readonly bodyHtml: string
   readonly menus?: PageChromeMenus
+  /** Same live read `ThemeRenderOptions.branding` documents — absent means full Cogenta credit, the pre-task-8 behaviour. */
+  readonly branding?: () => Promise<BrandingSettings>
 }
 
 /**
@@ -578,6 +637,8 @@ export async function renderPageChrome(
     footerNav = renderMenuLinks(footerMenu)
   }
 
+  const branding = renderFooterBranding(await brandingFor(options.branding), DEFAULT_IMAGE_ENDPOINT)
+
   return `<!doctype html>
 <html lang="${escapeAttribute(options.locale)}" dir="auto">
 <head>
@@ -591,7 +652,7 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
 <header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
 ${options.bodyHtml}
-<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}</div></footer>
+<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}${branding}</div></footer>
 </body>
 </html>
 `
@@ -1042,6 +1103,7 @@ async function renderEntryPage(
   ])
   const headerNav = renderMenuLinks(headerMenu)
   const footerNav = renderMenuLinks(footerMenu)
+  const branding = renderFooterBranding(await brandingFor(options.branding), imageEndpoint)
 
   // The same frame `Base.astro` builds for a real Astro build: a skip link
   // first, the site name as a header, the content, a footer. Rendering the
@@ -1063,7 +1125,7 @@ ${adminBar}
 <header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
 ${bodyHtml}
 ${commentsHtml}
-<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}</div></footer>
+<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}${branding}</div></footer>
 ${analyticsBeaconTag(pathname, options.analyticsBeacon)}
 </body>
 </html>

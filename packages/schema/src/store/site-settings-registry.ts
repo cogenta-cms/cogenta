@@ -40,6 +40,15 @@ export const SITE_SETTING_UI_TYPES = [
    * type a third value the totals engine does not know what to do with.
    */
   'select',
+  /**
+   * A single optional media reference, rendered as `MediaPicker` (fiche L21
+   * task 8's first and only user: `branding.customLogoMediaId`). The value
+   * stored is a media id, or `''` for "unset" — a plain string, like every
+   * other value this registry holds; nothing here talks to `MediaStore`
+   * directly, exactly the way a `path` setting names a route without
+   * checking the route exists.
+   */
+  'media',
 ] as const
 
 export type SiteSettingUiType = (typeof SITE_SETTING_UI_TYPES)[number]
@@ -60,6 +69,14 @@ export const SITE_SETTING_GROUPS = [
    * (fiche 34 § pièges: "les CGV doivent être une page publique").
    */
   'commerce',
+  /**
+   * Cogenta's own credit and white-label override (fiche L21 task 8) —
+   * whether the public footer and the admin shell name Cogenta at all, and
+   * what replaces it when they don't. Editorial on purpose: a reseller
+   * turns this off from the admin the same way any other setting here
+   * changes, with no redeploy and no code touched.
+   */
+  'branding',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -484,6 +501,36 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     scope: 'site',
     schema: z.string().max(10),
     defaultValue: 'en',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Branding (fiche L21 task 8) — Cogenta's own credit, and its white-label
+  // override. Read publicly (GET /api/settings is unauthenticated, exactly
+  // like every other setting here): the public footer needs both values on
+  // every anonymous request, the same way it already reads `general.title`.
+  {
+    key: 'branding.showCogentaBranding',
+    group: 'branding',
+    order: 0,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // On by default: an install says "built with Cogenta" until someone
+    // deliberately turns it off, never the other way round.
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'branding.customLogoMediaId',
+    group: 'branding',
+    order: 1,
+    uiType: 'media',
+    scope: 'site',
+    // A media id, or '' for "unset" — only meaningful once
+    // `showCogentaBranding` is off; kept independent of it so turning
+    // Cogenta's credit back on never throws away a logo already uploaded.
+    schema: z.string().max(200),
+    defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },
 ] as const

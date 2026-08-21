@@ -60,6 +60,43 @@ export function useFormattingSettings(): FormattingSettings {
   }
 }
 
+export interface BrandingSettings {
+  readonly showCogentaBranding: boolean
+  /** A media id, or `null` when unset — never `''`, so a caller never has to repeat the registry's own "empty means unset" convention. */
+  readonly customLogoMediaId: string | null
+}
+
+/**
+ * Cogenta's own credit and its white-label override (fiche L21 task 8),
+ * read off the same provider `useFormattingSettings` already does — the
+ * same "default to the pre-feature behaviour while loading or on error"
+ * discipline: an admin shell (or a public page, through `cogenta serve`'s
+ * own separate live read of the same store) must never flash "unbranded"
+ * for a site that never touched this setting.
+ */
+export function useBrandingSettings(): BrandingSettings {
+  const state = useSiteSettingsState()
+  if (state.status !== 'ready') {
+    return { showCogentaBranding: true, customLogoMediaId: null }
+  }
+  const byKey = new Map(state.settings.map((setting) => [setting.key, setting.value]))
+  const showCogentaBranding = byKey.get('branding.showCogentaBranding')
+  const customLogoMediaId = byKey.get('branding.customLogoMediaId')
+  return {
+    showCogentaBranding: showCogentaBranding !== false,
+    customLogoMediaId:
+      typeof customLogoMediaId === 'string' && customLogoMediaId !== '' ? customLogoMediaId : null,
+  }
+}
+
+/** `general.title`, read the same defensive way — `''` (unset) normalised to `null`, never blocking a caller that only wants a fallback label. */
+export function useSiteTitle(): string | null {
+  const state = useSiteSettingsState()
+  if (state.status !== 'ready') return null
+  const title = state.settings.find((setting) => setting.key === 'general.title')?.value
+  return typeof title === 'string' && title !== '' ? title : null
+}
+
 export function SiteSettingsProvider({ children }: { readonly children: ReactNode }): JSX.Element {
   const [state, setState] = useState<SiteSettingsState>({ status: 'loading' })
 

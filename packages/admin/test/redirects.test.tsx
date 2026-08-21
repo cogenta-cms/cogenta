@@ -8,7 +8,19 @@ import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
  * L10 task 2). Unlike taxonomies or menus, there is no reader role here: the
  * screen itself refuses to render for anyone but an admin, matching the
  * server's own door.
+ *
+ * Fiche 21 task 3 merges this screen under `/seo`'s "Redirections" tab — the
+ * form, table and sub-panels below are unchanged, only reached one click
+ * deeper (nav "SEO" then the "Redirections" tab) and gated by `SeoRoute`'s
+ * own admin check rather than a check of its own.
  */
+
+// Every test now pays for one more navigation and one more tab switch than
+// before this fiche (`goToRedirects`, below) on top of its own real API
+// round trips — the default per-test timeout was already close to the edge
+// for the heavier scenarios (CSV import preview, the not-found log) even
+// before that extra cost.
+vi.setConfig({ testTimeout: 30_000 })
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
 
@@ -24,8 +36,10 @@ function signedIn(roles: readonly string[]): void {
 
 async function goToRedirects(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Redirections' }))
-  await screen.findByRole('heading', { name: 'Redirections' })
+  fireEvent.click(screen.getByRole('link', { name: 'SEO' }))
+  await screen.findByRole('heading', { name: 'SEO', level: 1 })
+  fireEvent.click(screen.getByRole('tab', { name: 'Redirections' }))
+  await screen.findByRole('heading', { name: 'Redirections', level: 2 })
 }
 
 describe('the redirects screen', () => {
@@ -37,7 +51,12 @@ describe('the redirects screen', () => {
     window.history.pushState(null, '', '/redirects')
     render(<App />)
 
-    expect(await screen.findByRole('alert')).toBeDefined()
+    // `/redirects` now resolves via a `<Navigate>` redirect to `/seo`
+    // (fiche 21 task 3, the same pattern `/site-plan` → `/create-site`
+    // already uses) before `SeoRoute`'s own admin check ever runs — one
+    // extra render pass past the default `findBy*` timeout on a cold mount,
+    // exactly as `site-plan.test.tsx` already documents for its own case.
+    expect(await screen.findByRole('alert', undefined, { timeout: 5000 })).toBeDefined()
     expect(screen.queryByLabelText('Depuis')).toBeNull()
   })
 

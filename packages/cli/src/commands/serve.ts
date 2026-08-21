@@ -264,7 +264,13 @@ import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
-import { buildSitemapFiles, collectRoutedResources, renderRobots, seoSiteFor } from './seo.js'
+import {
+  buildSitemapFiles,
+  collectRoutedResources,
+  readSeoRenderDefaults,
+  renderRobots,
+  seoSiteFor,
+} from './seo.js'
 import { createSitePlanning } from './site-plan.js'
 import { cssEtag, loadThemeCss } from './theme-css.js'
 import {
@@ -1833,6 +1839,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       gateway,
       permissions,
       site: seoSiteFor(site),
+      // Read fresh on every diagnostic scan / preview (fiche 21 task 3) —
+      // see `SeoRouterOptions.titleDefaults`'s own doc comment for why this
+      // is a getter rather than a value captured once at server startup.
+      titleDefaults: async () => {
+        const defaults = await readSeoRenderDefaults(siteSettingsStore)
+        return {
+          titleTemplate: defaults.titleTemplate,
+          collectionTitleTemplates: defaults.collectionTitleTemplates,
+        }
+      },
     }),
     // The review queue (`schema@2.1`, ADR-0027, fiche 37 task 3).
     reviewRouter,
@@ -3533,6 +3549,7 @@ export function createRequestListener(
               )
               return typeof setting?.value === 'string' ? setting.value : null
             },
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
           context,
         )
@@ -3701,6 +3718,12 @@ export function createRequestListener(
               // that would not itself become a body difference.
               analyticsBeacon: {},
               menuRouter: site.menuRouter,
+              // Present for the same reason `homePath` is on the public GET
+              // below: the L16 fidelity test asserts this preview's `<head>`
+              // differs from the published page's by *only* `noindex` and the
+              // missing canonical — a title template applied to one but not
+              // the other would be a second, spurious difference.
+              seo: () => readSeoRenderDefaults(site.siteSettingsStore),
               // `comments` deliberately absent here, unlike the public render
               // below: the thread's own form embeds a render timestamp
               // (`_ts`, the minimum-fill-delay field, fiche 15 task 6) that
@@ -3792,10 +3815,12 @@ export function createRequestListener(
           res.writeHead(405, { allow: 'GET' }).end()
           return
         }
-        const seoSite = seoSiteFor(site.site)
+        const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
+        const seoSite = seoSiteFor(site.site, seoDefaults)
         const files = buildSitemapFiles(
           seoSite,
           await collectRoutedResources(site.collections, site.gateway),
+          seoDefaults.sitemapCollectionSettings,
         )
         const file = files.find((candidate) => candidate.path === url.pathname)
         if (file !== undefined) {
@@ -3900,6 +3925,10 @@ export function createRequestListener(
             )
             return typeof setting?.value === 'string' ? setting.value : null
           },
+          // The SEO title templates, default description, Twitter handle and
+          // default social image an admin set from `/seo` (fiche 21 task 3),
+          // read fresh — same "no restart" contract as `homePath` above.
+          seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           comments: {
             action: '/api/comments',
             forEntry: (commentCollection: string, entryId: string, locale: string | null) =>

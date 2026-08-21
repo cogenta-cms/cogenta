@@ -105,6 +105,24 @@ describe('Open Graph and Twitter Card', () => {
     expect((contentOf(tags, 'description') ?? '').length).toBeLessThanOrEqual(160)
   })
 
+  it('falls back to the site-wide default image when the entry has none of its own', () => {
+    const tags = buildMetaTags(site, makeArticle(), {
+      fallbackImage: { url: 'https://example.com/default-share.png' },
+    })
+
+    expect(contentOf(tags, 'og:image')).toBe('https://example.com/default-share.png')
+    expect(contentOf(tags, 'twitter:card')).toBe('summary_large_image')
+  })
+
+  it('prefers the entry’s own image over the site-wide default', () => {
+    const tags = buildMetaTags(site, makeArticle({ values: { cover: 'c' } }), {
+      resolvers,
+      fallbackImage: { url: 'https://example.com/default-share.png' },
+    })
+
+    expect(contentOf(tags, 'og:image')).toBe('https://cdn.example.com/cover.jpg')
+  })
+
   it('lists only the other languages in og:locale:alternate', () => {
     const resources = [
       makeArticle({ id: 'src', locale: 'en', values: { slug: 'hello' } }),

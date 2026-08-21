@@ -319,3 +319,96 @@ describe('cogenta serve — sitemap, robots and redirects (L10 task 2)', () => {
     }
   })
 })
+
+describe('cogenta serve — editable SEO settings (fiche 21 task 3)', () => {
+  it('applies a saved title template, default description and Twitter handle to a live page, without a restart', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      // No excerpt for this entry, so its description comes only from the
+      // site-wide default once one is set.
+      await seed(root, [{ title: 'Hello world', slug: 'hello-world' }])
+
+      const unstyled = await (await fetch(`${server.base}/hello-world`)).text()
+      expect(unstyled).toContain('<title>Hello world</title>')
+      expect(unstyled).not.toContain('name="description"')
+
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createSiteSettingsStore, SITE_SETTINGS_SITE_SCOPE } = await import('@cogenta/schema')
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      const settings = createSiteSettingsStore({ db })
+      await settings.set('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE, '%title% — Test site', null)
+      await settings.set(
+        'seo.defaultMetaDescription',
+        SITE_SETTINGS_SITE_SCOPE,
+        'The site-wide fallback description.',
+        null,
+      )
+      await settings.set('seo.twitterHandle', SITE_SETTINGS_SITE_SCOPE, '@testsite', null)
+      await db.close()
+
+      // No restart, no re-request of a different route: the very next fetch
+      // of the same page carries the new settings.
+      const styled = await (await fetch(`${server.base}/hello-world`)).text()
+      expect(styled).toContain('<title>Hello world — Test site</title>')
+      expect(styled).toContain('<meta property="og:title" content="Hello world — Test site" />')
+      expect(styled).toContain(
+        '<meta name="description" content="The site-wide fallback description." />',
+      )
+      expect(styled).toContain('<meta name="twitter:site" content="@testsite" />')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('applies a site-wide default social image only when a page has none of its own', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      await seed(root, [{ title: 'Hello world', slug: 'hello-world' }])
+
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createSiteSettingsStore, SITE_SETTINGS_SITE_SCOPE } = await import('@cogenta/schema')
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      const settings = createSiteSettingsStore({ db })
+      await settings.set('seo.defaultSocialImageUrl', SITE_SETTINGS_SITE_SCOPE, '/share.png', null)
+      await db.close()
+
+      const html = await (await fetch(`${server.base}/hello-world`)).text()
+      expect(html).toContain('<meta property="og:image" content="https://example.com/share.png" />')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('excludes one collection from the sitemap and applies a per-collection changefreq/priority to another, live', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      await seed(root, [{ title: 'Published', slug: 'published' }])
+
+      const before = await (await fetch(`${server.base}/sitemap.xml`)).text()
+      expect(before).toContain('<loc>https://example.com/published</loc>')
+      expect(before).not.toContain('<changefreq>')
+
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createSiteSettingsStore, SITE_SETTINGS_SITE_SCOPE } = await import('@cogenta/schema')
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      const settings = createSiteSettingsStore({ db })
+      await settings.set(
+        'seo.sitemapCollectionSettings',
+        SITE_SETTINGS_SITE_SCOPE,
+        { page: { included: true, changefreq: 'weekly', priority: 0.7 } },
+        null,
+      )
+      await db.close()
+
+      const after = await (await fetch(`${server.base}/sitemap.xml`)).text()
+      expect(after).toContain('<loc>https://example.com/published</loc>')
+      expect(after).toContain('<changefreq>weekly</changefreq>')
+      expect(after).toContain('<priority>0.7</priority>')
+    } finally {
+      await server.stop()
+    }
+  })
+})

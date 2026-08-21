@@ -41,6 +41,13 @@ import {
  * Loop and self-redirect refusal is entirely the server's job: this screen
  * shows whatever it says rather than re-validating client-side, which would
  * only risk disagreeing with it.
+ *
+ * Fiche 21 task 3 merges this screen under `/seo`'s "Redirections" tab —
+ * `SeoRoute` already gates the whole screen to `admin` before any tab
+ * renders, so `RedirectsPanel` below carries no admin check or heading of
+ * its own, only the form, table and sub-panels. `/redirects` itself now
+ * just redirects to `/seo` (see `app.tsx`), the same pattern `/site-plan`
+ * already used for its own rename.
  */
 
 const STATUSES: readonly Redirect['status'][] = [301, 302, 307, 308, 410]
@@ -54,7 +61,7 @@ const STATUS_LABEL_KEY: Record<Redirect['status'], string> = {
   410: 'redirects.gone',
 }
 
-export function RedirectsRoute(): JSX.Element {
+export function RedirectsPanel(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
@@ -164,23 +171,18 @@ export function RedirectsRoute(): JSX.Element {
     }
   }
 
+  // Defense in depth only — `SeoRoute` already refuses this whole screen to
+  // a non-admin before this tab's panel ever mounts.
   if (!isAdmin) {
-    return (
-      <section aria-labelledby="redirects-heading">
-        <h1 id="redirects-heading">{t('redirects.heading')}</h1>
-        <p role="alert">{t('redirects.adminOnly')}</p>
-      </section>
-    )
+    return <p role="alert">{t('redirects.adminOnly')}</p>
   }
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
-    <section aria-labelledby="redirects-heading" className="flex flex-col gap-10">
+    <div className="flex flex-col gap-10">
       <div>
-        <h1 id="redirects-heading" className="m-0 text-xl leading-7 font-semibold">
-          {t('redirects.heading')}
-        </h1>
+        <h2 className="m-0 text-lg leading-7 font-semibold">{t('redirects.heading')}</h2>
         <p className="text-muted-foreground text-sm">{t('redirects.description')}</p>
       </div>
 
@@ -374,6 +376,6 @@ export function RedirectsRoute(): JSX.Element {
       {token !== null && <PatternPanel token={token} />}
       {token !== null && <NotFoundPanel token={token} onCreateRedirect={startCreateFromPath} />}
       {token !== null && <ImportExportPanel token={token} />}
-    </section>
+    </div>
   )
 }

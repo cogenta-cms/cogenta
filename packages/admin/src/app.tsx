@@ -35,7 +35,6 @@ import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
-import { RedirectsRoute } from './routes/redirects.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
 import { ReviewRoute } from './routes/review.js'
 import { RolesRoute } from './routes/roles.js'
@@ -113,7 +112,8 @@ export function App(): JSX.Element {
                 <Route path="commerce/payment" element={<CommercePaymentRoute />} />
                 <Route path="appearance" element={<AppearanceRoute />} />
                 <Route path="admin-appearance" element={<AdminAppearanceRoute />} />
-                <Route path="redirects" element={<RedirectsRoute />} />
+                {/* Merged into `/seo`'s "Redirections" tab (fiche 21 task 3) — an old bookmark or link still lands somewhere real. */}
+                <Route path="redirects" element={<Navigate to="/seo?tab=redirects" replace />} />
                 <Route path="seo" element={<SeoRoute />} />
                 <Route path="translations" element={<TranslationsRoute />} />
                 <Route path="search" element={<SearchRoute />} />

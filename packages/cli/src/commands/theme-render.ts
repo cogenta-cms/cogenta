@@ -33,6 +33,7 @@ import {
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
 } from '@cogenta/theme-canonical'
+import type { SeoRenderDefaults } from './seo.js'
 import { alternatesForEntry, renderSeoHead, seoSiteFor } from './seo.js'
 import { minifyCss } from './theme-css.js'
 
@@ -196,6 +197,15 @@ export interface ThemeRenderOptions {
    * seeds its home page at.
    */
   readonly homePath?: () => Promise<string | null>
+  /**
+   * The admin-editable `seo.*` site settings (fiche 21 task 3) — title
+   * templates, the default social image, and per-collection sitemap hints.
+   * Read fresh on every request, like `homePath` above, for the same reason:
+   * a title template an admin just saved must show up on the very next page
+   * view. Absent means this fiche never ran — every page renders exactly as
+   * it did before it.
+   */
+  readonly seo?: () => Promise<SeoRenderDefaults>
   /**
    * Fiche 35 task 6: a thin bar rendered for an authenticated visitor of the
    * *public* site, linking straight back into the admin. `false`/absent by
@@ -966,7 +976,13 @@ async function renderEntryPage(
   // from the real entry and the real collection (L10 task 1). Nothing here
   // decides what is indexable — `buildMetaTags` asks `isPublished` itself, so
   // a preview render carries `noindex` without this caller remembering to.
-  const seoSite = seoSiteFor(options.site)
+  //
+  // `seoSettings` (fiche 21 task 3) is fetched once here, read fresh on every
+  // render rather than cached at server startup — see `ThemeRenderOptions.seo`'s
+  // own doc comment. It feeds both the site-wide fields below (`description`,
+  // `twitterSite`) and the per-page title template/fallback image.
+  const seoSettings = options.seo === undefined ? null : await options.seo()
+  const seoSite = seoSiteFor(options.site, seoSettings)
   const resource = { collection, entry }
   const alternates = await alternatesForEntry(
     seoSite,
@@ -1001,6 +1017,7 @@ async function renderEntryPage(
   const head = renderSeoHead(seoSite, resource, {
     ...(alternates.length === 0 ? {} : { alternates }),
     ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
+    ...(seoSettings === null ? {} : { seo: seoSettings }),
   })
 
   const siteName = escapeAttribute(options.site.name)

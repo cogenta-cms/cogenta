@@ -1,11 +1,18 @@
 import { type AccessContext, ANONYMOUS, type ContentGateway } from '@cogenta/api'
 import { isCogentaError } from '@cogenta/core'
-import type { CollectionDefinition, ContentEntry } from '@cogenta/schema'
 import {
+  type CollectionDefinition,
+  type ContentEntry,
+  SITE_SETTINGS_SITE_SCOPE,
+  type SiteSettingsStore,
+} from '@cogenta/schema'
+import {
+  absoluteUrl,
   alternatesFor,
   buildJsonLd,
   buildMetaTags,
   buildSitemap,
+  type ChangeFrequency,
   groupTranslationFamilies,
   type HreflangAlternate,
   renderJsonLdScript,
@@ -14,6 +21,7 @@ import {
   type SeoImage,
   type SeoResource,
   type SeoSite,
+  type SitemapCollectionOverride,
   type SitemapFile,
   sitemapUrlsFor,
 } from '@cogenta/seo'
@@ -38,6 +46,24 @@ export interface SiteIdentity {
 }
 
 /**
+ * The live-editable half of `@cogenta/seo`'s output (fiche 21 task 3): what
+ * an admin set on the merged SEO screen's Général/Sitemap/Réseaux sociaux
+ * tabs, read straight from `@cogenta/schema`'s `seo.*` site settings — never
+ * cached at server startup, the same "read fresh on every request" contract
+ * `ThemeRenderOptions.homePath` already uses. Every field is the empty/absent
+ * state when nobody has set anything, so a site that never opens this screen
+ * renders exactly as it did before this fiche.
+ */
+export interface SeoRenderDefaults {
+  readonly titleTemplate: string
+  readonly collectionTitleTemplates: Readonly<Record<string, string>>
+  readonly defaultMetaDescription: string
+  readonly twitterHandle: string
+  readonly defaultSocialImageUrl: string
+  readonly sitemapCollectionSettings: Readonly<Record<string, SitemapCollectionOverride>>
+}
+
+/**
  * The site as the SEO layer sees it.
  *
  * `unprefixedDefaultLocale` is `true` because that is what this server
@@ -45,14 +71,124 @@ export interface SiteIdentity {
  * and `matchPath` then resolves `/blog/hello` as well as `/en/blog/hello`.
  * Saying otherwise would emit canonicals that redirect to themselves — the
  * exact failure `SeoSite`'s own doc comment warns about.
+ *
+ * `seo` is optional and, when present, only ever *adds* to what the bare
+ * `SiteIdentity` already says: an empty `defaultMetaDescription`/
+ * `twitterHandle` is left out entirely rather than passed as `''`, so a page
+ * that supplies its own description or the Twitter Card's absence is never
+ * overridden by a setting nobody actually set.
  */
-export function seoSiteFor(site: SiteIdentity): SeoSite {
+export function seoSiteFor(site: SiteIdentity, seo?: SeoRenderDefaults | null): SeoSite {
   return {
     baseUrl: site.url,
     name: site.name,
     defaultLocale: site.defaultLocale,
     locales: site.locales,
     unprefixedDefaultLocale: true,
+    ...(seo?.defaultMetaDescription ? { description: seo.defaultMetaDescription } : {}),
+    ...(seo?.twitterHandle ? { twitterSite: seo.twitterHandle } : {}),
+  }
+}
+
+/** `seo.defaultSocialImageUrl`, resolved to an absolute URL a social crawler can fetch without a session. */
+function fallbackImageFor(
+  site: SeoSite,
+  seo: SeoRenderDefaults | null | undefined,
+): SeoImage | undefined {
+  const url = seo?.defaultSocialImageUrl
+  if (url === undefined || url === '') return undefined
+  return { url: url.startsWith('http') ? url : absoluteUrl(site, url) }
+}
+
+const EMPTY_SEO_DEFAULTS: SeoRenderDefaults = {
+  titleTemplate: '',
+  collectionTitleTemplates: {},
+  defaultMetaDescription: '',
+  twitterHandle: '',
+  defaultSocialImageUrl: '',
+  sitemapCollectionSettings: {},
+}
+
+function stringSetting(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function recordSetting<T>(
+  value: unknown,
+  fallback: Readonly<Record<string, T>>,
+): Readonly<Record<string, T>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, T>)
+    : fallback
+}
+
+/**
+ * `seo.sitemapCollectionSettings` is stored with `''` sentinels for "no
+ * hint" (so an empty text/select input round-trips instead of becoming
+ * `NaN`/`undefined`) — `@cogenta/seo`'s own `SitemapCollectionOverride`
+ * has no such sentinel, so this is the one place the two shapes meet.
+ */
+function toSitemapOverrides(
+  raw: Readonly<
+    Record<
+      string,
+      { readonly included: boolean; readonly changefreq: string; readonly priority: number | '' }
+    >
+  >,
+): Readonly<Record<string, SitemapCollectionOverride>> {
+  const overrides: Record<string, SitemapCollectionOverride> = {}
+  for (const [name, entry] of Object.entries(raw)) {
+    overrides[name] = {
+      included: entry.included,
+      ...(entry.changefreq === '' ? {} : { changefreq: entry.changefreq as ChangeFrequency }),
+      ...(entry.priority === '' ? {} : { priority: entry.priority }),
+    }
+  }
+  return overrides
+}
+
+/**
+ * The live `seo.*` site settings (fiche 21 task 3), read fresh — never
+ * cached at server startup, the same contract `ThemeRenderOptions.homePath`
+ * already keeps for `reading.homePath`. A key nobody has ever written comes
+ * back as its registry default (an empty string, or `{}`), the same as the
+ * settings store itself does for any other group.
+ */
+export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<SeoRenderDefaults> {
+  const [
+    titleTemplate,
+    collectionTitleTemplates,
+    defaultMetaDescription,
+    sitemapCollectionSettings,
+    twitterHandle,
+    defaultSocialImageUrl,
+  ] = await Promise.all([
+    store.get('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.collectionTitleTemplates', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.defaultMetaDescription', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.sitemapCollectionSettings', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.twitterHandle', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.defaultSocialImageUrl', SITE_SETTINGS_SITE_SCOPE),
+  ])
+
+  return {
+    titleTemplate: stringSetting(titleTemplate?.value, EMPTY_SEO_DEFAULTS.titleTemplate),
+    collectionTitleTemplates: recordSetting(
+      collectionTitleTemplates?.value,
+      EMPTY_SEO_DEFAULTS.collectionTitleTemplates,
+    ),
+    defaultMetaDescription: stringSetting(
+      defaultMetaDescription?.value,
+      EMPTY_SEO_DEFAULTS.defaultMetaDescription,
+    ),
+    twitterHandle: stringSetting(twitterHandle?.value, EMPTY_SEO_DEFAULTS.twitterHandle),
+    defaultSocialImageUrl: stringSetting(
+      defaultSocialImageUrl?.value,
+      EMPTY_SEO_DEFAULTS.defaultSocialImageUrl,
+    ),
+    sitemapCollectionSettings: toSitemapOverrides(
+      recordSetting(sitemapCollectionSettings?.value, {}),
+    ),
   }
 }
 
@@ -170,6 +306,8 @@ export interface HeadOptions {
   readonly noindex?: boolean
   /** Overrides the derived title. Used for pages that are not one entry. */
   readonly title?: string
+  /** The admin-editable title templates and default social image (fiche 21 task 3). Absent behaves exactly as before that fiche. */
+  readonly seo?: SeoRenderDefaults | null
 }
 
 /**
@@ -186,11 +324,19 @@ export function renderSeoHead(
   resource: SeoResource,
   options: HeadOptions = {},
 ): string {
+  const fallbackImage = fallbackImageFor(site, options.seo)
+  const collectionTitleTemplates = options.seo?.collectionTitleTemplates
+
   const tags = buildMetaTags(site, resource, {
     ...(options.alternates === undefined ? {} : { alternates: options.alternates }),
     ...(options.media === undefined ? {} : { resolvers: { media: options.media } }),
     ...(options.noindex === undefined ? {} : { noindex: options.noindex }),
     ...(options.title === undefined ? {} : { title: options.title }),
+    ...(options.seo?.titleTemplate ? { titleTemplate: options.seo.titleTemplate } : {}),
+    ...(collectionTitleTemplates !== undefined && Object.keys(collectionTitleTemplates).length > 0
+      ? { collectionTitleTemplates }
+      : {}),
+    ...(fallbackImage === undefined ? {} : { fallbackImage }),
   })
 
   const parts = [renderMetaTags(tags)]
@@ -217,8 +363,16 @@ export function renderSeoHead(
 export function buildSitemapFiles(
   site: SeoSite,
   resources: readonly SeoResource[],
+  collectionOverrides?: Readonly<Record<string, SitemapCollectionOverride>>,
 ): readonly SitemapFile[] {
-  return buildSitemap(site, sitemapUrlsFor(site, resources))
+  return buildSitemap(
+    site,
+    sitemapUrlsFor(
+      site,
+      resources,
+      collectionOverrides === undefined ? {} : { collectionOverrides },
+    ),
+  )
 }
 
 export interface RobotsRenderOptions {

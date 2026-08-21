@@ -189,3 +189,40 @@ describe('sitemap URLs from content', () => {
     expect(sitemapUrlsFor(site, [resource])[0]?.lastmod).toBe('2026-03-04T05:06:07.000Z')
   })
 })
+
+describe('per-collection sitemap overrides', () => {
+  it('drops every URL of a collection explicitly excluded', () => {
+    const resources = [
+      makeArticle({ values: { slug: 'kept' } }),
+      makePage({ values: { slug: 'dropped' } }),
+    ]
+
+    const locs = sitemapUrlsFor(site, resources, {
+      collectionOverrides: { page: { included: false } },
+    }).map((url) => url.loc)
+
+    expect(locs).toEqual(['https://example.com/en/blog/kept'])
+  })
+
+  it('applies the collection changefreq and priority to every URL it contributes', () => {
+    const resources = [makeArticle({ values: { slug: 'hello' } })]
+
+    const [url] = sitemapUrlsFor(site, resources, {
+      collectionOverrides: { article: { changefreq: 'weekly', priority: 0.8 } },
+    })
+
+    expect(url?.changefreq).toBe('weekly')
+    expect(url?.priority).toBe(0.8)
+  })
+
+  it('leaves a collection with no override untouched', () => {
+    const resources = [makeArticle({ values: { slug: 'hello' } })]
+
+    const [url] = sitemapUrlsFor(site, resources, {
+      collectionOverrides: { page: { included: false } },
+    })
+
+    expect(url?.changefreq).toBeUndefined()
+    expect(url?.priority).toBeUndefined()
+  })
+})

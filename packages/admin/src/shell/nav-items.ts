@@ -177,12 +177,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
-    to: '/redirects',
-    labelKey: 'nav.redirects',
-    group: 'appearance',
-    visibleWhen: { kind: 'role', role: 'admin' },
-  },
-  {
+    // Merges the previous separate "Redirections" entry as a tab (fiche 21
+    // task 3) — one nav entry for both, `SeoRoute` gates the whole screen.
     to: '/seo',
     labelKey: 'nav.seo',
     group: 'appearance',

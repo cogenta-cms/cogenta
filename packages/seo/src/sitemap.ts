@@ -54,6 +54,20 @@ export interface SitemapFile {
   readonly urlCount: number
 }
 
+/**
+ * A site's own choice for one collection's contribution to the sitemap
+ * (fiche 21 task 3's "Sitemap" tab). `included: false` drops every entry of
+ * that collection outright — the same shape `isIndexable` already decides
+ * per-entry, just declared once per collection instead of per `seoNoindex`
+ * field. `changefreq`/`priority` are hints only (the protocol says crawlers
+ * may ignore either), applied to every URL the collection contributes.
+ */
+export interface SitemapCollectionOverride {
+  readonly included?: boolean
+  readonly changefreq?: ChangeFrequency
+  readonly priority?: number
+}
+
 export interface SitemapOptions extends IndexableOptions {
   readonly maxUrls?: number
   readonly maxBytes?: number
@@ -65,6 +79,8 @@ export interface SitemapOptions extends IndexableOptions {
   readonly chunkPath?: (index: number) => string
   /** `lastmod` of the index itself. Defaults to the newest child `lastmod`. */
   readonly lastmod?: string
+  /** Per-collection inclusion, `changefreq` and `priority`, keyed by collection name. Absent means every collection is included with neither hint set. */
+  readonly collectionOverrides?: Readonly<Record<string, SitemapCollectionOverride>>
 }
 
 const DEFAULT_INDEX_PATH = '/sitemap.xml'
@@ -258,9 +274,13 @@ export function sitemapUrlsFor(
 ): readonly SitemapUrl[] {
   const published = indexableResources(site, resources, options)
   const hreflang = buildHreflangMap(site, resources, options)
+  const overrides = options.collectionOverrides
 
   const urls: SitemapUrl[] = []
   for (const resource of published) {
+    const override = overrides?.[resource.collection.name]
+    if (override?.included === false) continue
+
     const loc = canonicalUrl(site, resource)
     if (loc === null) continue
 
@@ -268,6 +288,8 @@ export function sitemapUrlsFor(
     urls.push({
       loc,
       lastmod: resource.entry.updatedAt,
+      ...(override?.changefreq === undefined ? {} : { changefreq: override.changefreq }),
+      ...(override?.priority === undefined ? {} : { priority: override.priority }),
       ...(alternates === undefined ? {} : { alternates }),
     })
   }

@@ -306,6 +306,14 @@ export const NumberListIcon = icon(
   </>,
 )
 
+/** A code block (L21 task 5) — a framed rectangle rather than `InlineCodeIcon`'s bare chevrons, to read as "a block" next to the block buttons it sits among rather than as another inline mark. */
+export const CodeBlockIcon = icon(
+  <>
+    <rect x="2.5" y="4" width="15" height="12" rx="1.5" />
+    <path d="M7.3 8L5 10l2.3 2M12.7 8L15 10l-2.3 2" />
+  </>,
+)
+
 export const LinkIcon = icon(
   <path d="M8.2 11.8l3.6-3.6M6.6 5.9l1.3-1.3a3.1 3.1 0 0 1 4.4 4.4l-1.3 1.3M13.4 14.1l-1.3 1.3a3.1 3.1 0 0 1-4.4-4.4l1.3-1.3" />,
 )

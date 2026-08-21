@@ -1,4 +1,12 @@
-import { createContext, type JSX, type ReactNode, useContext, useEffect, useState } from 'react'
+import {
+  createContext,
+  type JSX,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { listSettings, type SiteSetting } from '../api/settings-client.js'
 import type { DateStyle, TimeStyle } from '../lib/format.js'
 
@@ -95,6 +103,42 @@ export function useSiteTitle(): string | null {
   if (state.status !== 'ready') return null
   const title = state.settings.find((setting) => setting.key === 'general.title')?.value
   return typeof title === 'string' && title !== '' ? title : null
+}
+
+/** The registry's own default (`site-settings-registry.ts`'s `content.newEntryDefaultBlocks`), kept in sync by hand for the reason `DEFAULT_TIME_ZONE` above already documents. */
+const DEFAULT_NEW_ENTRY_BLOCKS = 'prose'
+
+/**
+ * The starting set of blocks a fresh entry's `blocks` field is pre-filled
+ * with (L21 task 5) — parsed from the comma-separated setting into the list
+ * `entry-edit.tsx`'s new-entry flow feeds to the admin's own block
+ * vocabulary. An empty string is a real, deliberate choice ("no starting
+ * blocks"), not an error — filtering it away only happens after the split,
+ * on stray whitespace-only entries a hand-typed trailing comma could leave.
+ *
+ * `useMemo`d on the raw string, not recomputed into a fresh array on every
+ * render: `entry-edit.tsx`'s own prefill effect depends on this return value
+ * to know when to re-check its per-zone "already set" guard, and an array
+ * literal rebuilt every render would make that dependency change identity on
+ * every keystroke in the form, not just when the setting itself changes.
+ */
+export function useNewEntryDefaultBlocksSetting(): readonly string[] {
+  const state = useSiteSettingsState()
+  const raw =
+    state.status === 'ready'
+      ? (state.settings.find((setting) => setting.key === 'content.newEntryDefaultBlocks')?.value ??
+        DEFAULT_NEW_ENTRY_BLOCKS)
+      : DEFAULT_NEW_ENTRY_BLOCKS
+  const normalised = typeof raw === 'string' ? raw : DEFAULT_NEW_ENTRY_BLOCKS
+
+  return useMemo(
+    () =>
+      normalised
+        .split(',')
+        .map((type) => type.trim())
+        .filter((type) => type !== ''),
+    [normalised],
+  )
 }
 
 export function SiteSettingsProvider({ children }: { readonly children: ReactNode }): JSX.Element {

@@ -749,6 +749,16 @@ export function installMockFetch(
       scope: 'site',
       value: 'short',
     },
+    // L21 task 5's "blocs de départ" — mirrors
+    // packages/schema/src/store/site-settings-registry.ts's
+    // `content.newEntryDefaultBlocks`.
+    'content.newEntryDefaultBlocks': {
+      group: 'general',
+      order: 6,
+      uiType: 'string',
+      scope: 'site',
+      value: 'prose',
+    },
     'reading.homePath': { group: 'reading', order: 0, uiType: 'path', scope: 'site', value: '' },
     'reading.postsPerPage': {
       group: 'reading',

@@ -108,6 +108,11 @@
     "blockQuote": "Quote",
     "blockBullet": "Bulleted list",
     "blockNumber": "Numbered list",
+    "blockCode": "Code block",
+    "viewModeLabel": "View",
+    "viewRich": "Rich text",
+    "viewMarkdown": "Markdown",
+    "viewHtml": "HTML",
     "removeLink": "Remove link",
     "linkButton": "Link",
     "linkUrlLabel": "Link URL",
@@ -1619,6 +1624,12 @@
         },
         "dateStyle": { "label": "Date format", "help": "" },
         "timeStyle": { "label": "Time format", "help": "" }
+      },
+      "content": {
+        "newEntryDefaultBlocks": {
+          "label": "Starting blocks for a new page",
+          "help": "Comma-separated block type names, e.g. \"prose\". Pre-fills a new entry's blocks field instead of leaving it empty. Leave empty for no starting blocks."
+        }
       },
       "reading": {
         "homePath": {

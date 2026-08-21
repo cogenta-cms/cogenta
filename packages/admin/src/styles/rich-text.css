@@ -26,3 +26,35 @@
 .rich-text-media img {
   max-width: 12rem;
 }
+
+/*
+ * The editor-only code block (L21 task 5, `slate-types.ts`'s
+ * `CodeBlockElement`) — a monospace, whitespace-preserving frame in the
+ * editor, matching what it degrades to on save (a paragraph wrapped in the
+ * existing `code` mark, `convert.ts`'s `codeBlockSpans`).
+ */
+.rich-text-editor__code-block {
+  margin: 0;
+  overflow-x: auto;
+  border-radius: var(--radius-md, 0.375rem);
+  border: 1px solid var(--border);
+  background: var(--muted, var(--card));
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  white-space: pre-wrap;
+}
+
+.rich-text-editor__source-view {
+  width: 100%;
+  min-height: 12rem;
+  resize: vertical;
+  border-radius: var(--radius-md, 0.375rem);
+  border: 1px solid var(--input);
+  background: var(--card);
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--card-foreground);
+}

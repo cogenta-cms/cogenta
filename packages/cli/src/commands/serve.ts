@@ -11,6 +11,7 @@ import {
 } from '@cogenta/analytics'
 import {
   type AccessContext,
+  type AdminThemeRouter,
   type AgentsRouter,
   type AgentsRouterOptions,
   type AnalyticsRouter,
@@ -21,6 +22,7 @@ import {
   type AuthRouter,
   buildContentSchema,
   type ConfigStatusInput,
+  createAdminThemeRouter,
   createAgentsRouter,
   createAnalyticsRouter,
   createApiKeyExpiryNoticeSource,
@@ -202,12 +204,14 @@ import {
 } from '@cogenta/plugins'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
+  type AdminThemeStore,
   type BlockZones,
   buildPath,
   buildSchemaDocument,
   type CollectionDefinition,
   type ContentLifecycleEvent,
   type ContentStore,
+  createAdminThemeStore,
   createContentStore,
   createMaintenanceStore,
   createMenuStore,
@@ -221,6 +225,7 @@ import {
   createSiteSettingsStore,
   createTaxonomyStore,
   DEFAULT_TRASH_RETAIN_DAYS,
+  ensureAdminThemeTable,
   ensureMaintenanceTable,
   ensureMenuTables,
   ensureSiteSettingsTables,
@@ -540,6 +545,14 @@ interface Site {
    * a live value without an in-process HTTP round trip to itself.
    */
   readonly siteSettingsStore: SiteSettingsStore
+  /**
+   * `GET|PUT /api/admin-theme` — the admin's own runtime template +
+   * personalisation (L21 task 2), never the public site's (`themeRouter`,
+   * contract D — a distinct surface on purpose, see `admin-theme-router.ts`).
+   * Read is public (the login screen needs it before a session exists);
+   * write is `admin`-only, checked by the router itself.
+   */
+  readonly adminThemeRouter: AdminThemeRouter
   /**
    * `GET /api/shell-status` — fiche 35 task 3: one aggregated read for
    * every badge and feature flag the admin's chrome draws (trash count,
@@ -1427,6 +1440,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensureSiteSettingsTables(db)
   const siteSettingsStore: SiteSettingsStore = createSiteSettingsStore({ db })
 
+  // The admin's own runtime theme (L21 task 2) — same one-fixed-table
+  // treatment, admin-role-only to write, public to read (the login screen
+  // needs it before a session exists).
+  await ensureAdminThemeTable(db)
+  const adminThemeStore: AdminThemeStore = createAdminThemeStore({ db })
+
   const gateway = createContentGateway({ collections, stores, permissions })
 
   // Resolves an `entry`-kind menu item to a display label, public route and
@@ -1742,6 +1761,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       defaultLocale: site.defaultLocale,
     }),
     siteSettingsStore,
+    adminThemeRouter: createAdminThemeRouter({ store: adminThemeStore }),
     commerceRouter: createCommerceAdminRouter({
       catalog: commerceCatalog,
       orders: commerceOrders,
@@ -2611,6 +2631,34 @@ async function recordSiteSettingsAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+async function recordAdminThemeAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (method !== 'PUT') return
+  if (response.status < 200 || response.status >= 300) return
+
+  const active = (
+    response.body as {
+      readonly data?: { readonly active?: { readonly templateId?: unknown } }
+    } | null
+  )?.data?.active
+  const templateId = typeof active?.templateId === 'string' ? active.templateId : null
+  if (templateId === null) return
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'admin_theme.update',
+      diff: { templateId },
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
 function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   res.writeHead(response.status, response.headers)
   // A string body (the audit log's CSV export, fiche 21 task 2) is written
@@ -3244,6 +3292,20 @@ export function createRequestListener(
         const response = await site.siteSettingsRouter.handle(request, context)
         writeRestResponse(res, response)
         await recordSiteSettingsAudit(site, actor, req.method ?? 'GET', response, logger)
+        return
+      }
+
+      // The admin's own runtime template + personalisation (L21 task 2) —
+      // distinct from `/api/theme` (contract D, the public site's own
+      // theming, `themeRouter` above): read is public (the login screen
+      // paints in the chosen template before a session exists), write is
+      // admin-only, checked by the router itself.
+      if (url.pathname === '/api/admin-theme') {
+        const body = req.method === 'PUT' ? await readBody(req) : undefined
+        const request = toRestRequest(req, url, body)
+        const response = await site.adminThemeRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordAdminThemeAudit(site, actor, req.method ?? 'GET', response, logger)
         return
       }
 

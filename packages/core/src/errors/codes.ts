@@ -420,6 +420,10 @@ export const ERROR_CODES = [
   'SITE_SETTING_UNKNOWN',
   'SITE_SETTING_INVALID',
 
+  // Admin theme — the admin's own runtime template + personalisation (L21 task 2)
+  'ADMIN_THEME_TEMPLATE_UNKNOWN',
+  'ADMIN_THEME_INVALID',
+
   // Health, migrations and maintenance tools (fiche 24)
   'MAINT_TOOL_UNKNOWN',
   'MAINT_TOOL_RUN_NOT_FOUND',

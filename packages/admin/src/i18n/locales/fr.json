@@ -218,6 +218,7 @@
     "commerceShipping": "Livraison",
     "commercePayment": "Paiement",
     "appearance": "Apparence",
+    "adminAppearance": "Apparence de l'admin",
     "redirects": "Redirections",
     "seo": "SEO",
     "translations": "Traductions",
@@ -1504,6 +1505,30 @@
         "md": "Moyenne"
       }
     }
+  },
+  "adminAppearance": {
+    "heading": "Apparence de l'admin",
+    "description": "Choisissez un modèle pour l'interface de cet admin et personnalisez-le — distinct d'« Apparence », qui est le thème du site public.",
+    "adminOnly": "Seul le rôle admin peut lire ou modifier l'apparence de l'admin.",
+    "loadError": "Impossible de charger le thème de l'admin.",
+    "saveError": "Ce changement n'a pas pu être enregistré.",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré.",
+    "galleryHeading": "Modèles",
+    "customizeHeading": "Personnaliser",
+    "customizeDescription": "Ces réglages surchargent les jetons du modèle choisi. Vider un champ revient à la valeur du modèle.",
+    "activeLabel": "Actif",
+    "chooseAction": "Utiliser ce modèle",
+    "primaryColorLabel": "Couleur primaire",
+    "backgroundColorLabel": "Couleur de fond",
+    "textColorLabel": "Couleur du texte",
+    "displayFontLabel": "Police d'affichage",
+    "bodyFontLabel": "Police de texte",
+    "radiusLabel": "Rayon des coins",
+    "logoLabel": "Logo de l'admin",
+    "resetFieldAction": "Revenir au modèle",
+    "saveAction": "Enregistrer",
+    "previewNote": "Le reste de cet admin reflète déjà vos changements — cet écran en hérite aussi."
   },
   "settings": {
     "heading": "Réglages du site",

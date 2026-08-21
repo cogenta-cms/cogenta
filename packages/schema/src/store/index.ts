@@ -6,6 +6,35 @@
  * leaks past this folder, and no SQL is written outside it.
  */
 
+export type {
+  AdminThemeRecord,
+  AdminThemeStore,
+  AdminThemeStoreOptions,
+} from './admin-theme-store.js'
+export { createAdminThemeStore } from './admin-theme-store.js'
+export {
+  ADMIN_THEME_OVERRIDES_LENGTH,
+  ADMIN_THEME_SINGLETON_ID,
+  ADMIN_THEME_TABLE,
+  ensureAdminThemeTable,
+} from './admin-theme-tables.js'
+export type {
+  AdminThemeColorTokens,
+  AdminThemeFontOption,
+  AdminThemeOverrides,
+  AdminThemeRadiusTokens,
+  AdminThemeTemplate,
+  AdminThemeTemplateId,
+} from './admin-theme-templates.js'
+export {
+  ADMIN_THEME_FONTS,
+  ADMIN_THEME_TEMPLATE_IDS,
+  ADMIN_THEME_TEMPLATES,
+  adminThemeFontById,
+  adminThemeOverridesSchema,
+  adminThemeTemplateById,
+  DEFAULT_ADMIN_THEME_TEMPLATE_ID,
+} from './admin-theme-templates.js'
 export {
   booleanColumn,
   columnTypeFor,

@@ -977,6 +977,84 @@ export function installMockFetch(
     return merged
   }
 
+  // `/api/admin-theme` (L21 task 2), stateful per `installMockFetch()` call —
+  // two fixed built-in templates (a reduced but real token set, not the
+  // full ~29-token list `@cogenta/schema`'s own constants carry: this mock
+  // only needs enough for the gallery and the personalisation form to
+  // render and round-trip, not a byte-for-byte copy of the server data).
+  const ADMIN_THEME_COLOR_TOKEN_KEYS = [
+    'background',
+    'foreground',
+    'card',
+    'cardForeground',
+    'muted',
+    'mutedForeground',
+    'border',
+    'input',
+    'ring',
+    'primary',
+    'primaryForeground',
+    'secondary',
+    'secondaryForeground',
+    'accent',
+    'accentForeground',
+    'destructive',
+    'destructiveForeground',
+    'destructiveSurface',
+    'success',
+    'successForeground',
+    'successSurface',
+    'warning',
+    'warningForeground',
+    'warningSurface',
+    'info',
+    'infoForeground',
+    'infoSurface',
+    'shadowCard',
+    'shadowRaised',
+    'shadowOverlay',
+  ] as const
+  function fillColorTokens(background: string, primary: string): Record<string, string> {
+    return Object.fromEntries(
+      ADMIN_THEME_COLOR_TOKEN_KEYS.map((key) => [
+        key,
+        key === 'background'
+          ? background
+          : key === 'primary' || key === 'ring'
+            ? primary
+            : '#888888',
+      ]),
+    )
+  }
+  const ADMIN_THEME_TEMPLATES = [
+    {
+      id: 'nightops',
+      name: 'Nightops',
+      description: 'A near-black console with one vivid signal-green accent.',
+      light: fillColorTokens('#fafafa', '#16a34a'),
+      dark: fillColorTokens('#0a0b0d', '#22c55e'),
+      radius: { sm: '0.375rem', md: '0.5rem', lg: '0.75rem', xl: '1rem' },
+      fontDisplay: 'space-grotesk',
+      fontBody: 'space-grotesk',
+    },
+    {
+      id: 'atelier',
+      name: 'Atelier',
+      description: 'Warm, unbleached paper and a burnt-orange accent.',
+      light: fillColorTokens('#f2ede2', '#c23d0a'),
+      dark: fillColorTokens('#14100b', '#ff7a3d'),
+      radius: { sm: '0.125rem', md: '0.25rem', lg: '0.375rem', xl: '0.5rem' },
+      fontDisplay: 'plex-mono',
+      fontBody: 'plex-sans',
+    },
+  ]
+  let adminTheme: {
+    templateId: string
+    overrides: Record<string, unknown>
+    updatedAt: string | null
+    updatedBy: string | null
+  } = { templateId: 'nightops', overrides: {}, updatedAt: null, updatedBy: null }
+
   // The editorial workflow's one entry (`schema@2.1`, ADR-0027), stateful per
   // `installMockFetch()` call for the same reason the site-plan fixture below
   // is: a submit → approve cycle has to be a real sequence a test can watch,
@@ -5239,6 +5317,38 @@ export function installMockFetch(
             anomalies: diagnostics?.anomalies ?? [],
           },
         })
+      }
+
+      // `/api/admin-theme` (L21 task 2) — the admin's own runtime template.
+      // Unlike `/api/theme` just below, `GET` needs no role at all: the login
+      // screen (mounted outside every admin-only guard) has to paint in
+      // whatever template an install picked before a session exists.
+      if (url.includes('/api/admin-theme')) {
+        if (method === 'GET') {
+          return json(200, { data: { active: adminTheme, templates: ADMIN_THEME_TEMPLATES } })
+        }
+        if (method === 'PUT') {
+          if (!user.roles.includes('admin')) {
+            return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+          }
+          const input = body as { templateId?: string; overrides?: Record<string, unknown> }
+          const templateId = input.templateId ?? adminTheme.templateId
+          if (!ADMIN_THEME_TEMPLATES.some((template) => template.id === templateId)) {
+            return json(400, {
+              error: {
+                code: 'ADMIN_THEME_TEMPLATE_UNKNOWN',
+                message: `"${templateId}" is not a built-in admin theme template.`,
+              },
+            })
+          }
+          adminTheme = {
+            templateId,
+            overrides: input.overrides ?? {},
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            updatedBy: user.id,
+          }
+          return json(200, { data: { active: adminTheme, templates: ADMIN_THEME_TEMPLATES } })
+        }
       }
 
       // `/api/theme` (fiche 14) — the appearance screen. Admin-only, every route.

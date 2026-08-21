@@ -274,6 +274,13 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   SITE_SETTING_UNKNOWN: 404,
   SITE_SETTING_INVALID: 400,
 
+  // Admin theme (L21 task 2). A `templateId` outside the two built-ins and an
+  // override the schema does not declare are both the caller's fault (400) —
+  // unlike a settings key, a template is not a registry an install extends,
+  // so there is no "not found" resource sense to reach for here.
+  ADMIN_THEME_TEMPLATE_UNKNOWN: 400,
+  ADMIN_THEME_INVALID: 400,
+
   // Migrations, surfaced through the health screen (fiche 24 task 2). A
   // destructive/checksum/lock refusal is a conflict with the database's own
   // state, not a malformed request; a plain failure keeps the default 500.

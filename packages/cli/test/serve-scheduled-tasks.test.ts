@@ -72,10 +72,11 @@ const TASK_NAMES = [
   'forms-purge',
   'channel-notifications',
   'analytics-purge',
+  'updates-auto-check',
 ].sort()
 
 describe('cogenta serve — /api/scheduled-tasks', () => {
-  it('lists the seven registered recurring jobs, not a 404', async () => {
+  it('lists the eight registered recurring jobs, not a 404', async () => {
     const root = await project()
     // Slow every tick way down: this test only cares that the route exists
     // and answers with real registrations, not that a sweep actually fires

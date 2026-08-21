@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
+import { AdminAppearanceRoute } from './routes/admin-appearance.js'
 import { AgentsRoute } from './routes/agents.js'
 import { AnalyticsRoute } from './routes/analytics.js'
 import { ApiKeysRoute } from './routes/api-keys.js'
@@ -52,6 +53,7 @@ import { SchemaProvider } from './schema/schema-context.js'
 import { SiteSettingsProvider } from './settings/site-settings-context.js'
 import { AppShell } from './shell/app-shell.js'
 import { ChromeStatusProvider } from './shell/shell-status-context.js'
+import { AdminThemeProvider } from './theme/admin-theme-context.js'
 import { ThemeProvider } from './theme/theme-context.js'
 
 /**
@@ -73,72 +75,75 @@ const ROUTER_BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
 export function App(): JSX.Element {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter basename={ROUTER_BASENAME}>
-          <Routes>
-            <Route path="login" element={<LoginRoute />} />
-            <Route path="forgot-password" element={<ForgotPasswordRoute />} />
-            <Route path="reset-password" element={<ResetPasswordRoute />} />
-            <Route
-              element={
-                <RequireAuth>
-                  <SchemaProvider>
-                    <SiteSettingsProvider>
-                      <ChromeStatusProvider>
-                        <AppShell />
-                      </ChromeStatusProvider>
-                    </SiteSettingsProvider>
-                  </SchemaProvider>
-                </RequireAuth>
-              }
-            >
-              <Route index element={<DashboardRoute />} />
-              <Route path="collections" element={<CollectionsRoute />} />
-              <Route path="collections/:name" element={<CollectionListRoute />} />
-              <Route path="collections/:name/new" element={<EntryEditRoute />} />
-              <Route path="collections/:name/:id" element={<EntryEditRoute />} />
-              <Route path="taxonomies" element={<TaxonomiesRoute />} />
-              <Route path="menus" element={<MenusRoute />} />
-              <Route path="commerce/products" element={<CommerceProductsRoute />} />
-              <Route path="commerce/orders" element={<CommerceOrdersRoute />} />
-              <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
-              <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
-              <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
-              <Route path="commerce/settings" element={<CommerceSettingsRoute />} />
-              <Route path="commerce/tax" element={<CommerceTaxRoute />} />
-              <Route path="commerce/shipping" element={<CommerceShippingRoute />} />
-              <Route path="commerce/payment" element={<CommercePaymentRoute />} />
-              <Route path="appearance" element={<AppearanceRoute />} />
-              <Route path="redirects" element={<RedirectsRoute />} />
-              <Route path="seo" element={<SeoRoute />} />
-              <Route path="translations" element={<TranslationsRoute />} />
-              <Route path="search" element={<SearchRoute />} />
-              <Route path="review" element={<ReviewRoute />} />
-              <Route path="ops-settings" element={<OpsSettingsRoute />} />
-              <Route path="health" element={<HealthRoute />} />
-              <Route path="tools" element={<ToolsRoute />} />
-              <Route path="scheduled" element={<ScheduledRoute />} />
-              <Route path="trash" element={<TrashRoute />} />
-              <Route path="assistant" element={<AssistantRoute />} />
-              <Route path="media" element={<MediaRoute />} />
-              <Route path="import" element={<ImportRoute />} />
-              <Route path="audit" element={<AuditRoute />} />
-              <Route path="analytics" element={<AnalyticsRoute />} />
-              <Route path="agents" element={<AgentsRoute />} />
-              <Route path="users" element={<UsersRoute />} />
-              <Route path="api-keys" element={<ApiKeysRoute />} />
-              <Route path="roles" element={<RolesRoute />} />
-              <Route path="comments" element={<CommentsRoute />} />
-              <Route path="forms" element={<FormsRoute />} />
-              <Route path="form-submissions" element={<FormSubmissionsRoute />} />
-              <Route path="profile" element={<ProfileRoute />} />
-              <Route path="settings" element={<SettingsRoute />} />
-              <Route path="site-plan" element={<SitePlanRoute />} />
-              <Route path="marketplace" element={<MarketplaceRoute />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+      <AdminThemeProvider>
+        <AuthProvider>
+          <BrowserRouter basename={ROUTER_BASENAME}>
+            <Routes>
+              <Route path="login" element={<LoginRoute />} />
+              <Route path="forgot-password" element={<ForgotPasswordRoute />} />
+              <Route path="reset-password" element={<ResetPasswordRoute />} />
+              <Route
+                element={
+                  <RequireAuth>
+                    <SchemaProvider>
+                      <SiteSettingsProvider>
+                        <ChromeStatusProvider>
+                          <AppShell />
+                        </ChromeStatusProvider>
+                      </SiteSettingsProvider>
+                    </SchemaProvider>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<DashboardRoute />} />
+                <Route path="collections" element={<CollectionsRoute />} />
+                <Route path="collections/:name" element={<CollectionListRoute />} />
+                <Route path="collections/:name/new" element={<EntryEditRoute />} />
+                <Route path="collections/:name/:id" element={<EntryEditRoute />} />
+                <Route path="taxonomies" element={<TaxonomiesRoute />} />
+                <Route path="menus" element={<MenusRoute />} />
+                <Route path="commerce/products" element={<CommerceProductsRoute />} />
+                <Route path="commerce/orders" element={<CommerceOrdersRoute />} />
+                <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
+                <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
+                <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
+                <Route path="commerce/settings" element={<CommerceSettingsRoute />} />
+                <Route path="commerce/tax" element={<CommerceTaxRoute />} />
+                <Route path="commerce/shipping" element={<CommerceShippingRoute />} />
+                <Route path="commerce/payment" element={<CommercePaymentRoute />} />
+                <Route path="appearance" element={<AppearanceRoute />} />
+                <Route path="admin-appearance" element={<AdminAppearanceRoute />} />
+                <Route path="redirects" element={<RedirectsRoute />} />
+                <Route path="seo" element={<SeoRoute />} />
+                <Route path="translations" element={<TranslationsRoute />} />
+                <Route path="search" element={<SearchRoute />} />
+                <Route path="review" element={<ReviewRoute />} />
+                <Route path="ops-settings" element={<OpsSettingsRoute />} />
+                <Route path="health" element={<HealthRoute />} />
+                <Route path="tools" element={<ToolsRoute />} />
+                <Route path="scheduled" element={<ScheduledRoute />} />
+                <Route path="trash" element={<TrashRoute />} />
+                <Route path="assistant" element={<AssistantRoute />} />
+                <Route path="media" element={<MediaRoute />} />
+                <Route path="import" element={<ImportRoute />} />
+                <Route path="audit" element={<AuditRoute />} />
+                <Route path="analytics" element={<AnalyticsRoute />} />
+                <Route path="agents" element={<AgentsRoute />} />
+                <Route path="users" element={<UsersRoute />} />
+                <Route path="api-keys" element={<ApiKeysRoute />} />
+                <Route path="roles" element={<RolesRoute />} />
+                <Route path="comments" element={<CommentsRoute />} />
+                <Route path="forms" element={<FormsRoute />} />
+                <Route path="form-submissions" element={<FormSubmissionsRoute />} />
+                <Route path="profile" element={<ProfileRoute />} />
+                <Route path="settings" element={<SettingsRoute />} />
+                <Route path="site-plan" element={<SitePlanRoute />} />
+                <Route path="marketplace" element={<MarketplaceRoute />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </AdminThemeProvider>
     </ThemeProvider>
   )
 }

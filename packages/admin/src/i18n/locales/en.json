@@ -219,6 +219,7 @@
     "commerceShipping": "Shipping",
     "commercePayment": "Payment",
     "appearance": "Appearance",
+    "adminAppearance": "Admin appearance",
     "redirects": "Redirects",
     "seo": "SEO",
     "translations": "Translations",
@@ -1500,6 +1501,30 @@
         "md": "Medium"
       }
     }
+  },
+  "adminAppearance": {
+    "heading": "Admin appearance",
+    "description": "Choose a template for this admin's own interface and personalise it — separate from \"Appearance\", which is the public site's own theme.",
+    "adminOnly": "Only the admin role may read or change the admin's own appearance.",
+    "loadError": "Could not load the admin theme.",
+    "saveError": "This change could not be saved.",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "galleryHeading": "Templates",
+    "customizeHeading": "Personalise",
+    "customizeDescription": "These levers override the chosen template's own tokens. Clearing a field returns to the template's own value.",
+    "activeLabel": "Active",
+    "chooseAction": "Use this template",
+    "primaryColorLabel": "Primary colour",
+    "backgroundColorLabel": "Background colour",
+    "textColorLabel": "Text colour",
+    "displayFontLabel": "Display font",
+    "bodyFontLabel": "Body font",
+    "radiusLabel": "Corner radius",
+    "logoLabel": "Admin logo",
+    "resetFieldAction": "Reset to template",
+    "saveAction": "Save",
+    "previewNote": "The rest of this admin already reflects your changes — this screen is themed by them too."
   },
   "settings": {
     "heading": "Site settings",

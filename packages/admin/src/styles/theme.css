@@ -72,6 +72,50 @@
   src: url("/fonts/jetbrains-mono-var.woff2") format("woff2");
 }
 
+/*
+ * IBM Plex Sans/Mono — "Atelier", the pre-Nightops direction this admin
+ * shipped with, recovered as a second built-in template (L21 task 2,
+ * `@cogenta/schema`'s `admin-theme-templates.ts`). Declared unconditionally,
+ * not only when Atelier is the checked-in default: an install can pick
+ * either built-in template at runtime, and both faces must already be
+ * loadable the moment that choice is made, without a rebuild.
+ */
+@font-face {
+  font-family: "Plex Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-sans-var.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-700.woff2") format("woff2");
+}
+
 :root {
   /* Surfaces, from furthest back to nearest front. Crisp, near-white — a
      console's daylight mode, not the previous warm unbleached paper. */

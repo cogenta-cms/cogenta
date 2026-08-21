@@ -10,10 +10,12 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router'
+import { fetchMediaBlobUrl } from '../api/media-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
 import { NotificationCenter } from '../notices/notification-center.js'
 import { useSchema } from '../schema/schema-context.js'
+import { useAdminTheme } from '../theme/admin-theme-context.js'
 import {
   AgentsIcon,
   AuditIcon,
@@ -125,7 +127,39 @@ export function AppShell(): JSX.Element {
 
   const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
+  const authToken = auth.state.status === 'authenticated' ? auth.state.token : null
   const chrome = chromeStatusOrFallback(chromeState)
+
+  // The admin's own personalised logo (L21 task 2), if one has been set —
+  // absent by default, which is what leaves the plain `//` text mark below
+  // exactly as it always was. `MediaPicker`'s own convention: a `blob:` URL
+  // fetched through the authenticated `/api/media/{id}/file` route, since a
+  // plain `<img src>` cannot carry a bearer token.
+  const adminTheme = useAdminTheme()
+  const logoMediaId = adminTheme.state?.active.overrides.logoMediaId ?? null
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (logoMediaId === null || authToken === null) {
+      setLogoUrl(null)
+      return
+    }
+    let cancelled = false
+    let objectUrl: string | null = null
+    fetchMediaBlobUrl(authToken, logoMediaId)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        objectUrl = url
+        setLogoUrl(url)
+      })
+      .catch(() => setLogoUrl(null))
+    return () => {
+      cancelled = true
+      if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
+    }
+  }, [logoMediaId, authToken])
 
   const collections = schemaState.status === 'ready' ? schemaState.schema.collections : null
   const taxonomiesPresent =
@@ -298,9 +332,13 @@ export function AppShell(): JSX.Element {
           <span aria-hidden="true">☰</span>
         </button>
         <span className="app-shell__brand">
-          <span className="app-shell__brand-mark" aria-hidden="true">
-            {'//'}
-          </span>
+          {logoUrl === null ? (
+            <span className="app-shell__brand-mark" aria-hidden="true">
+              {'//'}
+            </span>
+          ) : (
+            <img src={logoUrl} alt="" aria-hidden="true" className="app-shell__brand-logo" />
+          )}
           {t('shell.brand')}
         </span>
         {breadcrumb.length > 0 && (

@@ -46,6 +46,15 @@
   color: var(--color-primary);
 }
 
+/* The admin's own personalised logo (L21 task 2), shown in place of the
+   plain `//` mark once one is set — the brand's text name stays either way. */
+.app-shell__brand-logo {
+  height: 1.5em;
+  width: auto;
+  max-width: 8em;
+  object-fit: contain;
+}
+
 .app-shell__account {
   display: flex;
   align-items: center;

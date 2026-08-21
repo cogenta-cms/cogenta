@@ -6,6 +6,8 @@
  * live — the ones GraphQL shares rather than reimplements.
  */
 
+export type { AdminThemeRouter, AdminThemeRouterOptions } from './admin-theme-router.js'
+export { createAdminThemeRouter } from './admin-theme-router.js'
 export type {
   AgentRegistryLike,
   AgentSummary,

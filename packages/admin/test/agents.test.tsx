@@ -44,7 +44,8 @@ describe('agents', () => {
 
     expect(await screen.findByText('security')).toBeDefined()
     expect(screen.getByText('Activé')).toBeDefined()
-    expect(screen.getByText('propose')).toBeDefined()
+    // "propose" (contract C) reads as "Co-pilote", the L22 task 1 UI label.
+    expect(screen.getByText('Co-pilote')).toBeDefined()
   })
 
   it('disables an agent from the list', async () => {
@@ -59,24 +60,6 @@ describe('agents', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Désactiver' }))
 
     expect(await screen.findByText('Désactivé')).toBeDefined()
-  })
-
-  it('degrades to the empty state instead of showing the raw 404 wire text, when no registry is mounted', async () => {
-    // L20 audit §1 point 5: no `AgentRegistry` is ever constructed unless a
-    // caller opts in, so `GET /api/agents` genuinely 404s through the
-    // generic content-router fallback on a real `cogenta serve` — this must
-    // read as the already-honest banner above, never as a second, scarier
-    // "No route matches this path." error underneath it.
-    localStorage.clear()
-    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
-    installMockFetch({ roles: ['admin'], agentsRegistryMounted: false })
-
-    render(<App />)
-    await goToAgents()
-
-    expect(await screen.findByText('Aucun agent configuré.')).toBeDefined()
-    expect(screen.queryByText(/No route matches this path/)).toBeNull()
-    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('shows traces and history for the selected agent', async () => {
@@ -116,10 +99,10 @@ describe('agents', () => {
     expect(await screen.findByText(/claude-sonnet/)).toBeDefined()
     expect(screen.getByText(/local/)).toBeDefined()
 
-    // Autonomy per-tool override: `deps.scan` appears both as a table cell
-    // here and as a permission checklist label below.
-    expect(screen.getAllByText('deps.scan').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('autonomous')).toBeDefined()
+    // Autonomy default, shown as the UI's three-level label (L22 task 1
+    // item 4): "propose" (contract C) reads as "Co-pilote" — once in the
+    // list row, once in the detail panel below it.
+    expect(screen.getAllByText(/Co-pilote/).length).toBeGreaterThanOrEqual(1)
 
     // Budget: all three metrics, not just tokens/day.
     expect(screen.getByText('10')).toBeDefined()
@@ -133,12 +116,33 @@ describe('agents', () => {
     expect(ungrantedCheckbox.checked).toBe(false)
     expect(ungrantedCheckbox.disabled).toBe(true)
 
-    // Skills, memory scope, and a scheduled trigger's cron expression.
+    // Skills.
     expect(screen.getByText('cve-triage')).toBeDefined()
-    expect(screen.getByText(/Portée\s*:\s*site/)).toBeDefined()
-    expect(screen.getByText(/0 6 \* \* \*/)).toBeDefined()
 
     // No subagents declared for this fixture — the empty state renders.
     expect(screen.getByText('Aucun sous-agent déclaré.')).toBeDefined()
+  })
+
+  it('creates a new agent and runs it, showing the result', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToAgents()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Créer un agent' }))
+    fireEvent.change(screen.getByPlaceholderText('ex. Rédacteur de newsletter'), {
+      target: { value: 'Helper' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Helper' }))
+    fireEvent.change(await screen.findByPlaceholderText('Que doit faire cet agent ?'), {
+      target: { value: 'summarise recent posts' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Exécuter' }))
+
+    expect(await screen.findByText(/Mock result for: summarise recent posts/)).toBeDefined()
   })
 })

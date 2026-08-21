@@ -497,6 +497,22 @@ export const ERROR_CODES = [
   'UPDATE_CONFIRMATION_REQUIRED',
   'UPDATE_POLICY_INVALID',
 
+  // Agents — real execution runtime, providers, skills library (L22 task
+  // 1/1bis). `AGENT_SKILL_*` are deliberately distinct from the pre-existing
+  // `SKILL_UNKNOWN`/`SKILL_DEFINITION_INVALID` above (L7's marketplace skill
+  // registry) — a different store for a different concept, see
+  // `packages/agents/src/skills/library.ts`'s module comment.
+  'AGENT_DUPLICATE',
+  'AGENT_DISABLED',
+  'AGENT_NO_PROVIDER',
+  'AGENT_BUILTIN_UNDELETABLE',
+  'PROVIDER_NOT_CONFIGURED',
+  'AGENT_SKILL_UNKNOWN',
+  'AGENT_SKILL_DUPLICATE',
+  'AGENT_SKILL_BUILTIN_UNDELETABLE',
+  'AGENT_REGISTRY_READ_ONLY',
+  'AGENT_RUNTIME_UNAVAILABLE',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

@@ -202,3 +202,183 @@ describe('GET /api/agents/:name/history', () => {
     expect(response.body).toEqual({ data: [] })
   })
 })
+
+/** A minimal in-memory `AgentRegistryLike` that actually implements the L22 task 1 CRUD capabilities — `createAgentRegistry` (above) deliberately does not, since it wraps a fixed declaration array. */
+function crudCapableRegistry() {
+  const byName = new Map<string, Record<string, unknown>>()
+  const enabled = new Set<string>()
+  byName.set('security', { name: 'security', tools: ['deps.scan'], builtin: true })
+  enabled.add('security')
+
+  return {
+    list: () => [...byName.values()] as never,
+    get: (name: string) => byName.get(name) as never,
+    enable: (name: string) => {
+      enabled.add(name)
+    },
+    disable: (name: string) => {
+      enabled.delete(name)
+    },
+    isEnabled: (name: string) => enabled.has(name),
+    create: async (input: Record<string, unknown>) => {
+      const name = String(input['name'])
+      byName.set(name, { ...input, builtin: false })
+      enabled.add(name)
+    },
+    update: async (name: string, patch: Record<string, unknown>) => {
+      const existing = byName.get(name)
+      if (existing === undefined) throw new Error('unknown')
+      byName.set(name, { ...existing, ...patch })
+    },
+    remove: async (name: string) => {
+      byName.delete(name)
+      enabled.delete(name)
+    },
+    readIdentity: async () => ({ role: 'r', objectives: [] as readonly string[] }),
+  }
+}
+
+describe('POST /api/agents (create)', () => {
+  it('creates a new agent when the registry supports it', async () => {
+    const crud = createAgentsRouter({ agents: crudCapableRegistry() })
+    const response = await crud.handle(
+      {
+        method: 'POST',
+        path: '/api/agents',
+        query: {},
+        body: {
+          name: 'Helper',
+          identity: { role: 'r', objectives: [] },
+          model: { preferred: 'anthropic' },
+          tools: ['content.read'],
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(201)
+    expect((response.body as { data: { name: string } }).data.name).toBe('Helper')
+  })
+
+  it('answers AGENT_REGISTRY_READ_ONLY when the registry has no create()', async () => {
+    const registry = createAgentRegistry([securityAgent()])
+    const readOnly = createAgentsRouter({ agents: registry })
+    const response = await readOnly.handle(
+      { method: 'POST', path: '/api/agents', query: {}, body: { name: 'x' } },
+      ADMIN,
+    )
+    // 501, matching `SITE_PLAN_NO_PROVIDER`: nothing is broken, this
+    // instance's registry simply does not offer the capability.
+    expect(response.status).toBe(501)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'AGENT_REGISTRY_READ_ONLY',
+    )
+  })
+})
+
+describe('PATCH /api/agents/:name (update)', () => {
+  it('updates an existing agent', async () => {
+    const crud = createAgentsRouter({ agents: crudCapableRegistry() })
+    const response = await crud.handle(
+      {
+        method: 'PATCH',
+        path: '/api/agents/security',
+        query: {},
+        body: { tools: ['deps.scan', 'content.read'] },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: { tools: string[] } }).data.tools).toEqual([
+      'deps.scan',
+      'content.read',
+    ])
+  })
+})
+
+describe('DELETE /api/agents/:name (remove)', () => {
+  it('removes a non-builtin agent', async () => {
+    const crud = crudCapableRegistry()
+    const router2 = createAgentsRouter({ agents: crud })
+    await router2.handle(
+      {
+        method: 'POST',
+        path: '/api/agents',
+        query: {},
+        body: {
+          name: 'Removable',
+          identity: { role: 'r', objectives: [] },
+          model: { preferred: 'anthropic' },
+          tools: [],
+        },
+      },
+      ADMIN,
+    )
+    const response = await router2.handle(
+      { method: 'DELETE', path: '/api/agents/Removable', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect(crud.get('Removable')).toBeUndefined()
+  })
+})
+
+describe('POST /api/agents/:name/run', () => {
+  it('answers AGENT_RUNTIME_UNAVAILABLE when no runner is wired', async () => {
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/run',
+        query: {},
+        body: { instruction: 'go' },
+      },
+      ADMIN,
+    )
+    // 503, matching `ASSIST_UNAVAILABLE`: the route exists, this site
+    // simply has no live agent runner wired in.
+    expect(response.status).toBe(503)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'AGENT_RUNTIME_UNAVAILABLE',
+    )
+  })
+
+  it('invokes the wired runner and returns its summary', async () => {
+    const runner = {
+      run: async (name: string, instruction: string) => ({
+        agent: name,
+        stopReason: 'end_turn',
+        finalText: `did: ${instruction}`,
+        steps: 1,
+      }),
+    }
+    const withRunner = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+    })
+    const response = await withRunner.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/run',
+        query: {},
+        body: { instruction: 'scan now' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: { finalText: string } }).data.finalText).toBe('did: scan now')
+  })
+
+  it('refuses an empty instruction', async () => {
+    const runner = {
+      run: async () => ({ agent: 'x', stopReason: 'end_turn', finalText: null, steps: 0 }),
+    }
+    const withRunner = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+    })
+    const response = await withRunner.handle(
+      { method: 'POST', path: '/api/agents/security/run', query: {}, body: { instruction: '' } },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+})

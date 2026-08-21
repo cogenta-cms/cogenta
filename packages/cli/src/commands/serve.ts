@@ -12,8 +12,8 @@ import {
 import {
   type AccessContext,
   type AdminThemeRouter,
+  type AgentSkillsRouter,
   type AgentsRouter,
-  type AgentsRouterOptions,
   type AnalyticsRouter,
   type ApiKeysRouter,
   type AssistantRouter,
@@ -23,6 +23,7 @@ import {
   buildContentSchema,
   type ConfigStatusInput,
   createAdminThemeRouter,
+  createAgentSkillsRouter,
   createAgentsRouter,
   createAnalyticsRouter,
   createApiKeyExpiryNoticeSource,
@@ -51,6 +52,7 @@ import {
   createPendingMigrationsSource,
   createPermissionLayer,
   createPluginDisabledSource,
+  createProvidersRouter,
   createRecoveryCodeUsedNoticeSource,
   createRedirectRouter,
   createRestRouter,
@@ -87,6 +89,7 @@ import {
   type ObservabilityRouter,
   type OpsStatusRouter,
   type PermissionLayer,
+  type ProvidersRouter,
   type RedirectRouter,
   type RestRequest,
   type RestResponse,
@@ -280,6 +283,7 @@ import {
 } from '../update/index.js'
 import { getCliVersion } from '../version.js'
 import { serveAdminAsset } from './admin-assets.js'
+import { type AgentRuntimeAssembly, buildAgentRuntime } from './agent-runtime.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
@@ -614,8 +618,19 @@ interface Site {
    * and available, an in-process counter otherwise.
    */
   readonly requestQuota?: RateLimitDriver
-  /** Only set when a caller passes `agents` into `assembleSite` — no site constructs one today (R2: agents are optional, not a hard dependency of the CMS). */
+  /**
+   * `/api/agents` — L22 task 1: a real, persistent `AgentRegistry` this site
+   * actually runs (superagent + two example built-ins, seeded on first
+   * boot), not the pre-L22 read-only wrapper over a fixed declaration
+   * array. Set only when a caller passes `agentsRuntimeConfig` into
+   * `assembleSite` — a bare `Site` built by hand (tests included) goes on
+   * working unchanged with this omitted.
+   */
   readonly agentsRouter?: AgentsRouter
+  /** `/api/providers` — L22 task 1bis: which LLM providers this site has enabled, with a masked key. Same optionality as `agentsRouter`, built alongside it from the same `agentsRuntimeConfig`. */
+  readonly providersRouter?: ProvidersRouter
+  /** `/api/agent-skills` — L22 task 1bis: named instruction text an agent loads into its context. Same optionality as `agentsRouter`. */
+  readonly agentSkillsRouter?: AgentSkillsRouter
   /**
    * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
    *
@@ -781,8 +796,19 @@ interface AssembleSiteOptions {
     readonly database: HealthReport
     readonly storage: HealthReport
   }>
-  /** Optional: no caller constructs an agent registry today, and `/api/agents` simply is not mounted when this is absent — see `agentsRouter` on `Site`. */
-  readonly agents?: AgentsRouterOptions
+  /**
+   * L22 task 1/1bis. Absent in a test that does not care — `agentsRouter`/
+   * `providersRouter`/`agentSkillsRouter` are then simply not mounted on the
+   * returned `Site`, same posture as every other optional router here.
+   * `runServe` always passes one, so a real `cogenta serve` always has a
+   * live, persistent agent registry from its very first boot.
+   */
+  readonly agentsRuntimeConfig?: {
+    /** Where the three file stores (agent declarations, agent skills, provider config) live — `.cogenta/agents-runtime` under the project root, by convention. */
+    readonly dataDir: string
+    /** For `deps.scan`, which reads this site's own `package.json`. */
+    readonly projectRoot: string
+  }
   /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
   readonly sitePlans?: SitePlanRouterOptions
   /**
@@ -1422,6 +1448,33 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
   const mediaStore = createDatabaseMediaStore({ db })
 
+  // L22 task 1/1bis: the real agent runtime, built here — the one place
+  // `service` (this site's real `ContentService`) and `mediaStore` are both
+  // already in scope, exactly the way `content.*`/`media.*` contract-C
+  // tools need them (mirrors `packages/cli/src/commands/mcp.ts`'s own
+  // `buildSiteManifest`). `agentsRuntimeConfig` is optional so a caller
+  // that builds a bare `Site` by hand (tests included) is unaffected —
+  // `runServe` always supplies it.
+  const agentsRuntime: AgentRuntimeAssembly | undefined =
+    options.agentsRuntimeConfig === undefined
+      ? undefined
+      : await buildAgentRuntime({
+          dataDir: options.agentsRuntimeConfig.dataDir,
+          projectRoot: options.agentsRuntimeConfig.projectRoot,
+          signingKey: options.signingKey,
+          site: {
+            name: site.name,
+            url: site.url,
+            locales: site.locales,
+            defaultLocale: site.defaultLocale,
+          },
+          contentService: service,
+          mediaStore,
+          auditLog: auth.audit,
+          logger,
+        })
+  if (agentsRuntime !== undefined) logger.info(agentsRuntime.summary)
+
   const noticeDismissals = createNoticeDismissalStore(db)
   await noticeDismissals.ensureTable()
 
@@ -1997,7 +2050,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         ? {}
         : { documents: options.assistant.documents }),
     }),
-    ...(options.agents === undefined ? {} : { agentsRouter: createAgentsRouter(options.agents) }),
+    ...(agentsRuntime === undefined
+      ? {}
+      : {
+          agentsRouter: createAgentsRouter({
+            agents: agentsRuntime.agentRegistry,
+            audit: auth.audit,
+            runner: agentsRuntime.agentRunner,
+          }),
+          providersRouter: createProvidersRouter({ providers: agentsRuntime.providerRegistry }),
+          agentSkillsRouter: createAgentSkillsRouter({ skills: agentsRuntime.skillRegistry }),
+        }),
     ...(options.sitePlans === undefined
       ? {}
       : { sitePlanRouter: createSitePlanRouter(options.sitePlans) }),
@@ -3762,8 +3825,25 @@ export function createRequestListener(
       }
 
       if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
-        const request = toRestRequest(req, url, undefined)
+        // L22 task 1: create/update/run all carry a JSON body — the pre-L22
+        // enable/disable-only router never needed one, this one does.
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.agentsRouter.handle(request, context.actor))
+        return
+      }
+
+      if (url.pathname.startsWith('/api/providers') && site.providersRouter !== undefined) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.providersRouter.handle(request, context.actor))
+        return
+      }
+
+      if (url.pathname.startsWith('/api/agent-skills') && site.agentSkillsRouter !== undefined) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.agentSkillsRouter.handle(request, context.actor))
         return
       }
 
@@ -4568,6 +4648,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
     payment: loaded.config.payment,
+    // L22 task 1/1bis: always on for a real `cogenta serve` — the superagent
+    // and its two example built-ins exist in configuration from the very
+    // first boot (R2: nothing here attempts a network call without a
+    // configured provider, only `POST .../run` can, and it refuses first).
+    agentsRuntimeConfig: {
+      dataDir: join(projectRoot, '.cogenta', 'agents-runtime'),
+      projectRoot,
+    },
     emailTransport,
     configStatus: buildConfigStatus(loaded.config, loaded.secretHygiene),
     pendingMigrations: {

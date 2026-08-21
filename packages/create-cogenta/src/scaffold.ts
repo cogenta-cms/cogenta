@@ -3,8 +3,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  createFileAgentDeclarationStore,
+  createFileAgentSkillStore,
   createFileSitePlanStore,
   type DemoEntry,
+  ensureBuiltinAgentSkills,
+  ensureBuiltinAgents,
   type PlanDecisions,
   type SitePlanDraft,
 } from '@cogenta/agents'
@@ -259,6 +263,20 @@ export async function scaffoldSite(
     join(answers.targetDir, '.gitignore'),
     ['node_modules/', '.env', '.cogenta/'].join('\n') + '\n',
     'utf8',
+  )
+
+  // L22 task 1: the superagent ("Cogenta Agent", active by default) and its
+  // two disabled example built-ins exist in configuration from the very
+  // first boot — the same `.cogenta/agents-runtime/` directory `cogenta
+  // serve` (`@cogenta/cli`) reads and writes from. `ensureBuiltinAgents`/
+  // `ensureBuiltinAgentSkills` are idempotent, so a site scaffolded here and
+  // later `cogenta serve`d again never gets a second copy.
+  const agentsRuntimeDir = join(answers.targetDir, '.cogenta', 'agents-runtime')
+  await ensureBuiltinAgents(
+    createFileAgentDeclarationStore({ dir: join(agentsRuntimeDir, 'agents') }),
+  )
+  await ensureBuiltinAgentSkills(
+    createFileAgentSkillStore({ dir: join(agentsRuntimeDir, 'skills') }),
   )
 
   const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]

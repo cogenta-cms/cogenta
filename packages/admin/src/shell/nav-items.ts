@@ -263,6 +263,21 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    // L22 task 1bis: where a provider is actually configured — deliberately
+    // never gated on "a provider is already configured" (the one screen
+    // that turns one on cannot itself require one).
+    to: '/providers',
+    labelKey: 'nav.providers',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    to: '/agent-skills',
+    labelKey: 'nav.agentSkills',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     // Fiche 21 task 6: a screen dedicated to the MCP use case, parallel to
     // "Agents" rather than folded into the generic "Clés API" screen — same
     // underlying key store, different audience (wiring up an MCP client) and

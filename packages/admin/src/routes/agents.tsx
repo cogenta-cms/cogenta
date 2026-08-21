@@ -1,15 +1,21 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router'
+import { type AgentSkillSummary, listAgentSkills } from '../api/agent-skills-client.js'
 import {
   type AgentHistoryEntry,
+  type AgentRunSummary,
   type AgentSummary,
   type AgentTrace,
+  createAgent,
   disableAgent,
   enableAgent,
+  getAgentIdentity,
   listAgentHistory,
   listAgents,
   listAgentTraces,
+  removeAgent,
+  runAgent,
+  updateAgent,
 } from '../api/agents-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -19,7 +25,10 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
+  Field,
+  Input,
   Notice,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -33,12 +42,9 @@ import {
 /**
  * Contract C's taxonomy of tool permissions (`docs/04-contrats.md` §
  * "Contrat C — Outil agentique", `tools@1.1`), reproduced verbatim as a
- * fixed, ordered list — this is the same taxonomy `defineTool({ permissions
- * })` draws from, kept here by hand for the same structural reason
- * `agents-router.ts` stays untyped against `@cogenta/agents`: the admin
- * package must not gain a dependency on the tool-definition package just to
- * label a checklist. Adding a permission to the real taxonomy (a mineur
- * change, ADR-0020/0022's own rule) means adding its name here too.
+ * fixed, ordered list — the admin package must not gain a dependency on
+ * `@cogenta/agents` just to label a checklist. Adding a permission to the
+ * real taxonomy (a mineur change) means adding its name here too.
  */
 const CONTRACT_C_PERMISSIONS: readonly string[] = [
   'content.read',
@@ -49,47 +55,74 @@ const CONTRACT_C_PERMISSIONS: readonly string[] = [
   'media.write',
   'schema.read',
   'site.config_read',
-  'site.config_write',
   'deps.scan',
-  'deps.patch',
-  'build.trigger',
-  'deploy.trigger',
+  'document.extract_text',
   'http.fetch',
-  'channel.send',
-  'agent.delegate',
-  'memory.read',
-  'memory.write',
-  'document.extract',
 ]
 
 /**
- * L5 task 9 / L21 task 4: état, autonomie, budget, historique, traces — read
- * from `@cogenta/agents`' registry via `/api/agents`, admin only.
- *
- * **Fiche 30 task 1.** No `AgentRegistry` runs anywhere in this codebase —
- * enabling an agent here writes a stored configuration flag that nothing
- * reads back to actually run one. The table below is real (it reads and
- * writes that stored configuration, and the toggle really does persist), but
- * it configures a capability that does not exist yet. The banner says so in
- * plain language, every time this screen renders, so nobody can look at this
- * table and believe an agent is executing.
- *
- * **L21 task 4.** `AgentDeclaration` (contract C's `defineAgent`) models far
- * more than the enable toggle and the two read-only fields this screen used
- * to show: a full tool/permission list, per-tool autonomy overrides, all
- * three budget metrics (not just `tokensPerDay`), skills, subagents, a model
- * preference, a memory configuration, and triggers (including cron
- * schedules). All of it is now shown in the detail panel below — but as
- * **read-only** data, on purpose: nothing in `@cogenta/agents`' own
- * `AgentRegistry` can persist an edit to any of these fields today (only
- * `enable`/`disable` really mutate anything — see `registry.ts`), so an
- * editable control for them would have no real backend effect. Building one
- * anyway would be exactly the kind of inert control R6 forbids: a checkbox
- * that looks like it grants a permission but changes nothing. The two
- * fields a user might reasonably also want here — free-form
- * "responsibilities" or "systems" beyond the fixed contract C taxonomy —
- * have no backend model at all and are not fabricated; see the task's
- * closing report for why they are out of scope without a new data model.
+ * The three autonomy levels the admin offers (L22 task 1 item 4) — mapped
+ * onto contract C's four frozen `AutonomyLevel` strings the exact same way
+ * `@cogenta/agents`' `autonomy/levels.ts` does, hand-copied here for the
+ * same structural reason `CONTRACT_C_PERMISSIONS` is: this package stays
+ * undependent on the runtime package. `execute_with_approval` has no UI
+ * level of its own and is never produced by this screen; it still displays
+ * (as "co-pilot") if a hand-written agent used it.
+ */
+const AUTONOMY_UI_LEVELS = ['report-only', 'co-pilot', 'autopilot'] as const
+type AutonomyUiLevel = (typeof AUTONOMY_UI_LEVELS)[number]
+const UI_TO_LEVEL: Record<AutonomyUiLevel, string> = {
+  'report-only': 'observe',
+  'co-pilot': 'propose',
+  autopilot: 'autonomous',
+}
+const LEVEL_TO_UI: Record<string, AutonomyUiLevel> = {
+  observe: 'report-only',
+  propose: 'co-pilot',
+  execute_with_approval: 'co-pilot',
+  autonomous: 'autopilot',
+}
+
+interface EditState {
+  readonly role: string
+  readonly objectives: string
+  readonly style: string
+  readonly modelPreferred: string
+  readonly modelFallback: string
+  readonly tools: readonly string[]
+  readonly skills: readonly string[]
+  readonly subagents: readonly string[]
+  readonly autonomyUi: AutonomyUiLevel
+  readonly tokensPerDay: string
+  readonly callsPerHour: string
+}
+
+function emptyEdit(): EditState {
+  return {
+    role: '',
+    objectives: '',
+    style: '',
+    modelPreferred: 'anthropic',
+    modelFallback: '',
+    tools: [],
+    skills: [],
+    subagents: [],
+    autonomyUi: 'co-pilot',
+    tokensPerDay: '',
+    callsPerHour: '',
+  }
+}
+
+function toggleIn(list: readonly string[], value: string): readonly string[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value]
+}
+
+/**
+ * L22 task 1: the real, persistent `AgentRegistry` — superagent + two
+ * example built-ins, seeded on first boot, genuinely editable and runnable
+ * from this screen. Replaces the pre-L22 read-only wrapper: `@cogenta/api`'s
+ * `agents-router.ts` now backs `create`/`update`/`remove`/`run` with a real
+ * file store and a real execution loop (`@cogenta/agents`' `AgentRunner`).
  */
 export function AgentsRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -99,6 +132,7 @@ export function AgentsRoute(): JSX.Element {
   const isAdmin = roles.includes('admin')
 
   const [agents, setAgents] = useState<readonly AgentSummary[]>([])
+  const [skillOptions, setSkillOptions] = useState<readonly AgentSkillSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
@@ -107,27 +141,29 @@ export function AgentsRoute(): JSX.Element {
   const [history, setHistory] = useState<readonly AgentHistoryEntry[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
 
+  const [creating, setCreating] = useState(false)
+  const [createName, setCreateName] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [edit, setEdit] = useState<EditState>(emptyEdit())
+  const [saving, setSaving] = useState(false)
+
+  const [instruction, setInstruction] = useState('')
+  const [running, setRunning] = useState(false)
+  const [runResult, setRunResult] = useState<AgentRunSummary | null>(null)
+
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
     setLoading(true)
     setError(null)
     try {
-      setAgents(await listAgents(token))
+      const [foundAgents, foundSkills] = await Promise.all([
+        listAgents(token),
+        listAgentSkills(token).catch(() => []),
+      ])
+      setAgents(foundAgents)
+      setSkillOptions(foundSkills)
     } catch (caught) {
-      // `CONTENT_NOT_FOUND` here means exactly what the banner above already
-      // says in plain language: no `AgentRegistry` is constructed on this
-      // site, so `/api/agents` is never mounted (`packages/cli/src/commands/
-      // serve.ts`'s `site.agentsRouter`) and the request falls through to the
-      // generic "no route matches this path" 404. That is expected and
-      // already explained — showing its raw wire text as a second, separate
-      // error would just contradict the honest banner with a scary one, so
-      // this one specific case degrades to the same empty state as a site
-      // with no agents configured at all, rather than surfacing an error.
-      if (caught instanceof ApiError && caught.code === 'CONTENT_NOT_FOUND') {
-        setAgents([])
-      } else {
-        setError(caught instanceof ApiError ? caught.message : t('agents.loadError'))
-      }
+      setError(caught instanceof ApiError ? caught.message : t('agents.loadError'))
     } finally {
       setLoading(false)
     }
@@ -144,6 +180,8 @@ export function AgentsRoute(): JSX.Element {
       return
     }
     setDetailLoading(true)
+    setEditing(false)
+    setRunResult(null)
     void Promise.all([listAgentTraces(token, selected), listAgentHistory(token, selected)])
       .then(([foundTraces, foundHistory]) => {
         setTraces(foundTraces)
@@ -169,6 +207,124 @@ export function AgentsRoute(): JSX.Element {
     }
   }
 
+  async function submitCreate(): Promise<void> {
+    if (token === null || createName.trim().length === 0) return
+    setSaving(true)
+    setError(null)
+    try {
+      await createAgent(token, {
+        name: createName.trim(),
+        identity: { role: t('agents.newAgentDefaultRole'), objectives: [] },
+        model: { preferred: 'anthropic' },
+        tools: [],
+        autonomy: { default: 'propose' },
+      })
+      setCreateName('')
+      setCreating(false)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agents.saveError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function startEditing(agent: AgentSummary): Promise<void> {
+    if (token === null) return
+    setEditing(true)
+    setError(null)
+    try {
+      const identity = await getAgentIdentity(token, agent.name)
+      setEdit({
+        role: identity.role,
+        objectives: identity.objectives.join('\n'),
+        style: identity.style ?? '',
+        modelPreferred: agent.model?.preferred ?? 'anthropic',
+        modelFallback: agent.model?.fallback ?? '',
+        tools: agent.tools,
+        skills: agent.skills ?? [],
+        subagents: agent.subagents ?? [],
+        autonomyUi: LEVEL_TO_UI[agent.autonomy?.default ?? 'propose'] ?? 'co-pilot',
+        tokensPerDay: agent.budget?.tokensPerDay?.toString() ?? '',
+        callsPerHour: agent.budget?.callsPerHour?.toString() ?? '',
+      })
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agents.loadError'))
+      setEditing(false)
+    }
+  }
+
+  async function submitEdit(agent: AgentSummary): Promise<void> {
+    if (token === null) return
+    setSaving(true)
+    setError(null)
+    try {
+      const tokensPerDay = Number.parseInt(edit.tokensPerDay, 10)
+      const callsPerHour = Number.parseInt(edit.callsPerHour, 10)
+      await updateAgent(token, agent.name, {
+        identity: {
+          role: edit.role,
+          objectives: edit.objectives
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0),
+          ...(edit.style.trim().length > 0 ? { style: edit.style.trim() } : {}),
+        },
+        model: {
+          preferred: edit.modelPreferred,
+          ...(edit.modelFallback.trim().length > 0 ? { fallback: edit.modelFallback.trim() } : {}),
+        },
+        tools: edit.tools,
+        skills: edit.skills,
+        subagents: edit.subagents,
+        autonomy: { default: UI_TO_LEVEL[edit.autonomyUi] },
+        budget: {
+          ...(Number.isFinite(tokensPerDay) && edit.tokensPerDay !== '' ? { tokensPerDay } : {}),
+          ...(Number.isFinite(callsPerHour) && edit.callsPerHour !== '' ? { callsPerHour } : {}),
+        },
+      })
+      setEditing(false)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agents.saveError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRemove(agent: AgentSummary): Promise<void> {
+    if (token === null) return
+    setSaving(true)
+    setError(null)
+    try {
+      await removeAgent(token, agent.name)
+      setSelected(null)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agents.saveError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function submitRun(agent: AgentSummary): Promise<void> {
+    if (token === null || instruction.trim().length === 0) return
+    setRunning(true)
+    setError(null)
+    setRunResult(null)
+    try {
+      setRunResult(await runAgent(token, agent.name, instruction.trim()))
+      await Promise.all([
+        listAgentTraces(token, agent.name).then(setTraces),
+        listAgentHistory(token, agent.name).then(setHistory),
+      ])
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agents.runError'))
+    } finally {
+      setRunning(false)
+    }
+  }
+
   if (!isAdmin) {
     return (
       <section aria-labelledby="agents-heading">
@@ -179,21 +335,54 @@ export function AgentsRoute(): JSX.Element {
   }
 
   const selectedAgent = agents.find((agent) => agent.name === selected) ?? null
+  const otherAgentNames = agents
+    .map((agent) => agent.name)
+    .filter((name) => name !== selectedAgent?.name)
 
   return (
     <section aria-labelledby="agents-heading" className="flex flex-col gap-6">
-      <h1 id="agents-heading" className="m-0 text-xl leading-7 font-semibold">
-        {t('agents.heading')}
-      </h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 id="agents-heading" className="m-0 text-xl leading-7 font-semibold">
+          {t('agents.heading')}
+        </h1>
+        <Button size="sm" onClick={() => setCreating((value) => !value)}>
+          {t('agents.createAgent')}
+        </Button>
+      </div>
 
-      <Notice tone="warning" live="off" title={t('agents.runtimeNoticeTitle')}>
-        <p className="m-0">{t('agents.runtimeNoticeBody')}</p>
-        <p className="m-0 mt-2">
-          <Link to="/assistant">{t('agents.runtimeNoticeAssistantLink')}</Link>
-          {' — '}
-          {t('agents.runtimeNoticeDocs')}
-        </p>
-      </Notice>
+      {creating && (
+        <Card aria-labelledby="agents-create-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="agents-create-heading">{t('agents.createAgent')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label={t('agents.name')} className="min-w-[240px]">
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={createName}
+                    onChange={(event) => setCreateName(event.target.value)}
+                    placeholder={t('agents.newAgentNamePlaceholder')}
+                  />
+                )}
+              </Field>
+              <Button
+                disabled={saving || createName.trim().length === 0}
+                onClick={() => void submitCreate()}
+              >
+                {t('common.save')}
+              </Button>
+              <Button variant="ghost" onClick={() => setCreating(false)}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+            <p className="m-0 mt-2 text-xs opacity-80">{t('agents.newAgentHint')}</p>
+          </CardBody>
+        </Card>
+      )}
 
       {error !== null && (
         <Notice tone="danger" live="assertive">
@@ -227,7 +416,11 @@ export function AgentsRoute(): JSX.Element {
                     {agent.enabled ? t('agents.enabled') : t('agents.disabled')}
                   </TableCell>
                   <TableCell>{agent.model?.preferred ?? '—'}</TableCell>
-                  <TableCell>{agent.autonomy?.default ?? '—'}</TableCell>
+                  <TableCell>
+                    {t(
+                      `agents.autonomyLevel.${LEVEL_TO_UI[agent.autonomy?.default ?? ''] ?? 'co-pilot'}`,
+                    )}
+                  </TableCell>
                   <TableCell>
                     {agent.budget?.tokensPerDay ?? '—'} / {agent.usage?.tokensToday ?? 0}
                   </TableCell>
@@ -259,14 +452,212 @@ export function AgentsRoute(): JSX.Element {
             </CardTitle>
           </CardHeader>
           <CardBody>
-            <Notice tone="info" live="off">
-              <p className="m-0 text-sm">{t('agents.configReadOnlyNotice')}</p>
-            </Notice>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {!editing && (
+                <Button size="sm" onClick={() => void startEditing(selectedAgent)}>
+                  {t('agents.edit')}
+                </Button>
+              )}
+              {editing && (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={saving}
+                    onClick={() => void submitEdit(selectedAgent)}
+                  >
+                    {t('common.save')}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                    {t('common.cancel')}
+                  </Button>
+                </>
+              )}
+              {!selectedAgent.builtin && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={saving}
+                  onClick={() => void submitRemove(selectedAgent)}
+                >
+                  {t('agents.remove')}
+                </Button>
+              )}
+            </div>
 
             {detailLoading && <p>{t('common.loading')}</p>}
 
-            {!detailLoading && (
-              <div className="mt-4 flex flex-col gap-6">
+            {!detailLoading && editing && (
+              <div className="flex flex-col gap-4">
+                <Field label={t('agents.identityRole')}>
+                  {(control) => (
+                    <Input
+                      {...control}
+                      value={edit.role}
+                      onChange={(event) => setEdit({ ...edit, role: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field
+                  label={t('agents.identityObjectives')}
+                  description={t('agents.identityObjectivesHint')}
+                >
+                  {(control) => (
+                    <textarea
+                      {...control}
+                      className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
+                      rows={3}
+                      value={edit.objectives}
+                      onChange={(event) => setEdit({ ...edit, objectives: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('agents.identityStyle')}>
+                  {(control) => (
+                    <Input
+                      {...control}
+                      value={edit.style}
+                      onChange={(event) => setEdit({ ...edit, style: event.target.value })}
+                    />
+                  )}
+                </Field>
+
+                <div className="flex flex-wrap gap-3">
+                  <Field label={t('agents.modelPreferred', { model: '' })}>
+                    {(control) => (
+                      <Select
+                        {...control}
+                        value={edit.modelPreferred}
+                        onChange={(event) =>
+                          setEdit({ ...edit, modelPreferred: event.target.value })
+                        }
+                      >
+                        <option value="anthropic">anthropic</option>
+                        <option value="openai">openai</option>
+                        <option value="google">google</option>
+                      </Select>
+                    )}
+                  </Field>
+                  <Field label={t('agents.autonomy')}>
+                    {(control) => (
+                      <Select
+                        {...control}
+                        value={edit.autonomyUi}
+                        onChange={(event) =>
+                          setEdit({ ...edit, autonomyUi: event.target.value as AutonomyUiLevel })
+                        }
+                      >
+                        {AUTONOMY_UI_LEVELS.map((level) => (
+                          <option key={level} value={level}>
+                            {t(`agents.autonomyLevel.${level}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Field>
+                  <Field label={t('agents.budgetMetricTokensPerDay')}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="number"
+                        min={0}
+                        value={edit.tokensPerDay}
+                        onChange={(event) => setEdit({ ...edit, tokensPerDay: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('agents.budgetMetricCallsPerHour')}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="number"
+                        min={0}
+                        value={edit.callsPerHour}
+                        onChange={(event) => setEdit({ ...edit, callsPerHour: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                </div>
+
+                <div>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                    {t('agents.permissions')}
+                  </h3>
+                  <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
+                    {CONTRACT_C_PERMISSIONS.map((permission) => {
+                      const inputId = `agent-edit-permission-${permission}`
+                      return (
+                        <li key={permission} className="flex items-center gap-2">
+                          <input
+                            id={inputId}
+                            type="checkbox"
+                            checked={edit.tools.includes(permission)}
+                            onChange={() =>
+                              setEdit({ ...edit, tools: toggleIn(edit.tools, permission) })
+                            }
+                          />
+                          <label htmlFor={inputId}>{permission}</label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+
+                {skillOptions.length > 0 && (
+                  <div>
+                    <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                      {t('agents.skills')}
+                    </h3>
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                      {skillOptions.map((skill) => {
+                        const inputId = `agent-edit-skill-${skill.id}`
+                        return (
+                          <li key={skill.id} className="flex items-center gap-2">
+                            <input
+                              id={inputId}
+                              type="checkbox"
+                              checked={edit.skills.includes(skill.id)}
+                              onChange={() =>
+                                setEdit({ ...edit, skills: toggleIn(edit.skills, skill.id) })
+                              }
+                            />
+                            <label htmlFor={inputId}>{skill.name}</label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {otherAgentNames.length > 0 && (
+                  <div>
+                    <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                      {t('agents.subagents')}
+                    </h3>
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                      {otherAgentNames.map((name) => {
+                        const inputId = `agent-edit-subagent-${name}`
+                        return (
+                          <li key={name} className="flex items-center gap-2">
+                            <input
+                              id={inputId}
+                              type="checkbox"
+                              checked={edit.subagents.includes(name)}
+                              onChange={() =>
+                                setEdit({ ...edit, subagents: toggleIn(edit.subagents, name) })
+                              }
+                            />
+                            <label htmlFor={inputId}>{name}</label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!detailLoading && !editing && (
+              <div className="flex flex-col gap-6">
                 <div>
                   <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.model')}</h3>
                   {selectedAgent.model === undefined ? (
@@ -286,32 +677,11 @@ export function AgentsRoute(): JSX.Element {
                   </h3>
                   <p className="m-0 text-sm">
                     {t('agents.autonomyDefault', {
-                      level: selectedAgent.autonomy?.default ?? '—',
+                      level: t(
+                        `agents.autonomyLevel.${LEVEL_TO_UI[selectedAgent.autonomy?.default ?? ''] ?? 'co-pilot'}`,
+                      ),
                     })}
                   </p>
-                  {selectedAgent.autonomy?.overrides !== undefined &&
-                    Object.keys(selectedAgent.autonomy.overrides).length > 0 && (
-                      <TableRoot label={t('agents.autonomyOverrides')} className="mt-2">
-                        <Table>
-                          <TableHead>
-                            <TableRow>
-                              <TableHeader>{t('agents.tool')}</TableHeader>
-                              <TableHeader>{t('agents.level')}</TableHeader>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {Object.entries(selectedAgent.autonomy.overrides).map(
-                              ([tool, level]) => (
-                                <TableRow key={tool}>
-                                  <TableCell>{tool}</TableCell>
-                                  <TableCell>{level}</TableCell>
-                                </TableRow>
-                              ),
-                            )}
-                          </TableBody>
-                        </Table>
-                      </TableRoot>
-                    )}
                 </div>
 
                 <div>
@@ -358,7 +728,6 @@ export function AgentsRoute(): JSX.Element {
                   <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
                     {t('agents.permissions')}
                   </h3>
-                  <p className="m-0 mb-2 text-xs opacity-80">{t('agents.permissionsHint')}</p>
                   <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
                     {CONTRACT_C_PERMISSIONS.map((permission) => {
                       const granted = selectedAgent.tools.includes(permission)
@@ -383,8 +752,10 @@ export function AgentsRoute(): JSX.Element {
                 <div>
                   <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.skills')}</h3>
                   <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                    {(selectedAgent.skills ?? []).map((skill) => (
-                      <li key={skill}>{skill}</li>
+                    {(selectedAgent.skills ?? []).map((skillId) => (
+                      <li key={skillId}>
+                        {skillOptions.find((skill) => skill.id === skillId)?.name ?? skillId}
+                      </li>
                     ))}
                     {(selectedAgent.skills === undefined || selectedAgent.skills.length === 0) && (
                       <li>{t('agents.noSkills')}</li>
@@ -406,47 +777,41 @@ export function AgentsRoute(): JSX.Element {
                 </div>
 
                 <div>
-                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.memory')}</h3>
-                  {selectedAgent.memory === undefined ? (
-                    <p className="m-0 text-sm">{t('agents.memoryNone')}</p>
-                  ) : (
-                    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                      <li>
-                        {t('agents.memoryEpisodic')}:{' '}
-                        {selectedAgent.memory.episodic === true ? t('common.yes') : t('common.no')}
-                      </li>
-                      <li>
-                        {t('agents.memorySemantic')}:{' '}
-                        {selectedAgent.memory.semantic === true ? t('common.yes') : t('common.no')}
-                      </li>
-                      <li>
-                        {t('agents.memoryProcedural')}:{' '}
-                        {selectedAgent.memory.procedural === true
-                          ? t('common.yes')
-                          : t('common.no')}
-                      </li>
-                      <li>
-                        {t('agents.memoryScope')}: {selectedAgent.memory.scope ?? '—'}
-                      </li>
-                    </ul>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
-                    {t('agents.triggers')}
-                  </h3>
-                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                    {(selectedAgent.triggers ?? []).map((trigger, index) => (
-                      <li key={index}>
-                        {trigger.cron !== undefined
-                          ? t('agents.triggerSchedule', { on: trigger.on, cron: trigger.cron })
-                          : t('agents.triggerEvent', { on: trigger.on })}
-                      </li>
-                    ))}
-                    {(selectedAgent.triggers === undefined ||
-                      selectedAgent.triggers.length === 0) && <li>{t('agents.noTriggers')}</li>}
-                  </ul>
+                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.runNow')}</h3>
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
+                      rows={2}
+                      placeholder={t('agents.runInstructionPlaceholder')}
+                      value={instruction}
+                      onChange={(event) => setInstruction(event.target.value)}
+                      disabled={!selectedAgent.enabled}
+                    />
+                    <div>
+                      <Button
+                        size="sm"
+                        disabled={
+                          running || instruction.trim().length === 0 || !selectedAgent.enabled
+                        }
+                        onClick={() => void submitRun(selectedAgent)}
+                      >
+                        {running ? t('agents.running') : t('agents.run')}
+                      </Button>
+                    </div>
+                    {!selectedAgent.enabled && (
+                      <p className="m-0 text-xs opacity-80">{t('agents.runDisabledHint')}</p>
+                    )}
+                    {runResult !== null && (
+                      <Notice tone="info" live="polite">
+                        <p className="m-0 text-sm">
+                          {t('agents.runStopReason', { reason: runResult.stopReason })}
+                        </p>
+                        {runResult.finalText !== null && (
+                          <p className="m-0 mt-1 text-sm">{runResult.finalText}</p>
+                        )}
+                      </Notice>
+                    )}
+                  </div>
                 </div>
 
                 <div>

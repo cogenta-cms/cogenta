@@ -32,8 +32,7 @@ function collectPlainText(children: readonly Descendant[]): string {
 }
 
 function encodeLeaf(leaf: CustomText): string {
-  let body =
-    leaf.code === true ? '`' + leaf.text.replace(/`/g, '\\`') + '`' : escapeMdText(leaf.text)
+  let body = leaf.code === true ? `\`${leaf.text.replace(/`/g, '\\`')}\`` : escapeMdText(leaf.text)
   if (leaf.strong === true) body = `**${body}**`
   if (leaf.em === true) body = `_${body}_`
   return body

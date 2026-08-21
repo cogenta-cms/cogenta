@@ -37,7 +37,7 @@
 }
 
 .app-shell__footer-brand .app-shell__brand-logo {
-  height: 1.1em;
+  height: 1.75rem;
 }
 
 .app-shell__footer-version {
@@ -81,9 +81,12 @@
 }
 
 /* The admin's own personalised logo (L21 task 2), shown in place of the
-   plain `//` mark once one is set — the brand's text name stays either way. */
+   plain `//` mark once one is set — the brand's text name stays either way.
+   A fixed rem size, not em: the topbar's own font-size (1.05rem) made the
+   old `1.5em` render at ~25px, barely bigger than the "Cogenta" text next
+   to it — noticeably small against the 60px topbar. */
 .app-shell__brand-logo {
-  height: 1.5em;
+  height: 2.25rem;
   width: auto;
   max-width: 8em;
   object-fit: contain;

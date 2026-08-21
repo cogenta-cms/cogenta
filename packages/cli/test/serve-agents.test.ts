@@ -118,7 +118,7 @@ afterEach(async () => {
 })
 
 describe('cogenta serve — /api/agents with no LLM provider configured (R2)', () => {
-  it('lists the three seeded built-ins, the superagent enabled, the two examples disabled', async () => {
+  it('lists the four seeded built-ins, the superagent enabled, the three examples disabled', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
@@ -135,11 +135,14 @@ describe('cogenta serve — /api/agents with no LLM provider configured (R2)', (
     const body = (await response.json()) as {
       data: readonly { name: string; enabled: boolean; builtin: boolean }[]
     }
-    expect(body.data).toHaveLength(3)
+    // L22 task 3 adds a fourth built-in, "Site Monitor" — disabled by
+    // default, same as the other two examples.
+    expect(body.data).toHaveLength(4)
     const byName = new Map(body.data.map((a) => [a.name, a]))
     expect(byName.get('Cogenta Agent')).toMatchObject({ enabled: true, builtin: true })
     expect(byName.get('Security Scanner')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Content Watch')).toMatchObject({ enabled: false, builtin: true })
+    expect(byName.get('Site Monitor')).toMatchObject({ enabled: false, builtin: true })
   })
 
   it('refuses to run — with a code the admin can explain — before any network call is possible', async () => {

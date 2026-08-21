@@ -7,6 +7,7 @@ import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
 import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
 import { SAAS_DEMO_PAGES } from '../src/blueprints/saas.js'
+import { STORE_DEMO_PAGES } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
 /**
@@ -31,6 +32,7 @@ const BLUEPRINTS = {
   portfolio: PORTFOLIO_DEMO_PAGES,
   restaurant: RESTAURANT_DEMO_PAGES,
   saas: SAAS_DEMO_PAGES,
+  store: STORE_DEMO_PAGES,
   vitrine: VITRINE_DEMO_PAGES,
 } as const
 

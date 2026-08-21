@@ -6,14 +6,16 @@ import { magazineContentPack } from './magazine.js'
 import { portfolioContentPack } from './portfolio.js'
 import { restaurantContentPack } from './restaurant.js'
 import { saasContentPack } from './saas.js'
+import { storeContentPack } from './store.js'
 import { vitrineContentPack } from './vitrine.js'
 
 /**
  * Every blueprint beyond `blank` that has a real content pack, keyed by its
  * `Blueprint.id` (`./registry.js`). Every blueprint listed in `BLUEPRINTS`
- * now has one (L9 task 8, batch B) — `blank` remains the only one without,
- * which is honest: it is the empty schema by design, never `resolveBlueprint`
- * handing out an `available: false` blueprint.
+ * now has one (L9 task 8, batch B, plus `store` in L22 task 10) — `blank`
+ * remains the only one without, which is honest: it is the empty schema by
+ * design, never `resolveBlueprint` handing out an `available: false`
+ * blueprint.
  */
 export const BLUEPRINT_CONTENT_PACKS: Readonly<Record<string, BlueprintContentPack>> = {
   blog: blogContentPack,
@@ -24,4 +26,5 @@ export const BLUEPRINT_CONTENT_PACKS: Readonly<Record<string, BlueprintContentPa
   association: associationContentPack,
   restaurant: restaurantContentPack,
   saas: saasContentPack,
+  store: storeContentPack,
 }

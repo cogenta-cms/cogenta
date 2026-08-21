@@ -68,6 +68,13 @@ export function printRecap(input: RecapInput, out: Output): void {
     )
   } else if (skinOutcome?.kind === 'default') {
     out.warn(`@cogenta/theme-canonical default skin — kept because ${skinOutcome.reason}.`)
+  } else if (scaffold.skinSource === 'preset') {
+    out.ok(`"${resolvedBlueprint.blueprint.id}" starting skin — written to theme.tokens.json.`)
+    if (answers.llmProvider === 'none' || answers.siteDescription === undefined) {
+      out.detail(
+        'AI skin generation was not offered: it needs an LLM provider and a site description. Run `cogenta skin generate` later (a future CLI task) to try it.',
+      )
+    }
   } else {
     out.ok('@cogenta/theme-canonical default skin — written to theme.tokens.json.')
     if (answers.llmProvider === 'none' || answers.siteDescription === undefined) {

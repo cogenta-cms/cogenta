@@ -34,7 +34,12 @@
 
 .app-shell__brand {
   display: inline-flex;
-  align-items: baseline;
+  /* Not `baseline`: a browser aligns an <img>'s bottom edge to the text
+     baseline (images have no text baseline of their own), which pushes the
+     logo visibly above-and-off from "Cogenta" the moment a real image
+     replaces the plain `//` mark. `center` keeps both vertically centred on
+     the topbar regardless of which mark is showing. */
+  align-items: center;
   gap: 0.4em;
   font-family: var(--font-display);
   font-weight: 700;

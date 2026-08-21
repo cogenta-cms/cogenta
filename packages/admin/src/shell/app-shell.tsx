@@ -235,6 +235,15 @@ export function AppShell(): JSX.Element {
     setDrawerOpen(false)
   }, [location.pathname])
 
+  // The page itself scrolls (`.app-shell__content` has no height/overflow
+  // of its own — see shell.css), so react-router does not reset scroll on
+  // navigation the way a full page load would: clicking a nav link while
+  // scrolled down on the previous screen left the next one scrolled down
+  // too, showing nothing until the reader scrolled back up by hand.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [location.pathname])
+
   const breadcrumb = useMemo(
     () => breadcrumbFor(location.pathname, collections),
     [location.pathname, collections],

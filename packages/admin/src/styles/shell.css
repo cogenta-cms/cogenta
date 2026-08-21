@@ -37,7 +37,7 @@
 }
 
 .app-shell__footer-brand .app-shell__brand-logo {
-  height: 1.75rem;
+  height: 2.5rem;
 }
 
 .app-shell__footer-version {
@@ -55,7 +55,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  height: 60px;
+  height: 72px;
   padding: 0 var(--space-4);
   border-bottom: 1px solid var(--color-border);
   background: var(--card);
@@ -69,10 +69,10 @@
      replaces the plain `//` mark. `center` keeps both vertically centred on
      the topbar regardless of which mark is showing. */
   align-items: center;
-  gap: 0.4em;
+  gap: 0.5em;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1.3rem;
   letter-spacing: -0.01em;
 }
 
@@ -82,11 +82,11 @@
 
 /* The admin's own personalised logo (L21 task 2), shown in place of the
    plain `//` mark once one is set — the brand's text name stays either way.
-   A fixed rem size, not em: the topbar's own font-size (1.05rem) made the
-   old `1.5em` render at ~25px, barely bigger than the "Cogenta" text next
-   to it — noticeably small against the 60px topbar. */
+   A fixed rem size, not em: sized against the 72px topbar, not against
+   unrelated text — a first pass at 1.5em (~25px), then 2.25rem (~36px),
+   both still read as "minuscule" against a real product's own topbar. */
 .app-shell__brand-logo {
-  height: 2.25rem;
+  height: 3rem;
   width: auto;
   max-width: 8em;
   object-fit: contain;

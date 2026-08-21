@@ -37,7 +37,7 @@
 }
 
 .app-shell__footer-brand .app-shell__brand-logo {
-  height: 2.5rem;
+  height: 100px;
 }
 
 .app-shell__footer-version {
@@ -55,7 +55,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  height: 72px;
+  height: 116px;
   padding: 0 var(--space-4);
   border-bottom: 1px solid var(--color-border);
   background: var(--card);
@@ -86,7 +86,7 @@
    unrelated text — a first pass at 1.5em (~25px), then 2.25rem (~36px),
    both still read as "minuscule" against a real product's own topbar. */
 .app-shell__brand-logo {
-  height: 3rem;
+  height: 100px;
   width: auto;
   max-width: 8em;
   object-fit: contain;

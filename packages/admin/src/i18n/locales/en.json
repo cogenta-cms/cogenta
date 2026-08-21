@@ -240,6 +240,7 @@
     "providers": "Providers",
     "agentSkills": "Skills",
     "mcp": "MCP",
+    "channels": "Channels",
     "users": "Users",
     "apiKeys": "API keys",
     "roles": "Roles & permissions",
@@ -1414,6 +1415,19 @@
     "widgetVisitors": "Unique visitors",
     "widgetLink": "See the full analytics dashboard"
   },
+  "agentChat": {
+    "open": "Open chat with an agent",
+    "close": "Close",
+    "heading": "Chat with an agent",
+    "agentLabel": "Agent",
+    "noAgents": "No agent available",
+    "empty": "Ask this agent anything — it can read and, with your approval, write to this site.",
+    "thinking": "Thinking…",
+    "inputLabel": "Message",
+    "send": "Send",
+    "noReply": "(no reply)",
+    "sendError": "Could not reach this agent."
+  },
   "agents": {
     "heading": "Agents",
     "adminOnly": "Restricted to the \"admin\" role: this manages every agent's activation, tools and budget.",
@@ -2087,7 +2101,41 @@
     "confirmRevokeButton": "Revoke the key",
     "loadError": "Could not load the MCP key list.",
     "createError": "Could not create this MCP key.",
-    "revokeError": "Could not revoke this key."
+    "revokeError": "Could not revoke this key.",
+    "purposeLabel": "Purpose",
+    "purposeHint": "What this key is for — an MCP client, or a Chat API integration.",
+    "purposeMcp": "MCP client",
+    "purposeChat": "Chat API (talk to an agent over HTTP)",
+    "chatAgentLabel": "Agent",
+    "chatAgentHint": "Which agent the URL below will talk to. The key itself can call any agent this site has — it is scoped by role (admin), not by agent name.",
+    "chatAgentEmpty": "No agent is configured on this site yet.",
+    "chatKeyNote": "This key can call any agent on this site with the admin role — the URL below is only the endpoint for the agent you picked.",
+    "chatUrlLabel": "Chat endpoint",
+    "chatCurlLabel": "Example request (curl)",
+    "chatFormatLabel": "Request/response format"
+  },
+  "channels": {
+    "heading": "Channels",
+    "intro": "Link a personal Telegram, Slack or Discord account. Once linked, it can receive notices from this site.",
+    "chatHint": "As an admin, a linked account can also chat with an agent directly from the channel — send it a message, or \"@Agent Name: message\" to pick a specific one.",
+    "notAdminHint": "Chatting with an agent from a channel needs the admin role — linking still works, for notices.",
+    "name": {
+      "telegram": "Telegram",
+      "slack": "Slack",
+      "discord": "Discord"
+    },
+    "notLinked": "Not linked.",
+    "generateCode": "Generate a linking code",
+    "generating": "Generating…",
+    "unlink": "Unlink",
+    "linkedSince": "Linked since {{time}}.",
+    "codeTitle": "Linking code for {{channel}}",
+    "codeDismiss": "Hide",
+    "codeBody": "Send this code as a message to the Cogenta bot on {{channel}} to finish linking your account.",
+    "codeExpiry": "This code expires at {{time}} and can only be used once.",
+    "loadError": "Could not load your linked channels.",
+    "generateError": "Could not generate a linking code.",
+    "unlinkError": "Could not unlink this channel."
   },
   "rolesMatrix": {
     "heading": "Roles & permissions",

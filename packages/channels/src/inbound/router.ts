@@ -58,8 +58,32 @@ export interface CommandRouter {
   route(text: string, identity: ChannelIdentity): Promise<RouteResult>
 }
 
+/**
+ * A chat message's handler receives the raw, un-reparsed `text` in addition
+ * to everything a structured command's handler gets — free conversation has
+ * no `name`/`args` split to preserve, unlike `/approve 3f2c`.
+ */
+export type ChatHandler = (
+  input: CommandHandlerInput & { readonly text: string },
+) => Promise<void> | void
+
+/**
+ * L22 task 2's plug-in point for "conversation libre avec un agent depuis le
+ * canal" — the exact capability L6's own header comment named as explicitly
+ * out of scope for `CommandRouter` (see the top of this file). Rather than
+ * bolting free text onto the structured-command mechanism (which would make
+ * every first word a de-facto command name), a message that does not match
+ * any *registered* command name falls through to this handler instead of
+ * `{kind: 'unrecognized'}` — same authorization gate as a named command,
+ * just evaluated against `requiredRoles` given here instead of a
+ * per-command list, since there is no command name to look one up by.
+ */
 export interface CommandRouterOptions {
   readonly getUserRoles: (userId: string) => Promise<readonly string[]>
+  readonly chat?: {
+    readonly requiredRoles: readonly string[]
+    readonly handler: ChatHandler
+  }
 }
 
 /**
@@ -99,6 +123,24 @@ export function createCommandRouter(options: CommandRouterOptions): CommandRoute
 
       const command = commands.get(parsed.name)
       if (command === undefined) {
+        if (options.chat !== undefined) {
+          const decision = await authorizeInboundCommand(
+            identity,
+            options.chat.requiredRoles,
+            options.getUserRoles,
+          )
+          if (!decision.ok) {
+            if (decision.reason === 'unlinked') return { kind: 'unlinked', shouldReply: false }
+            return { kind: 'forbidden', shouldReply: true, userId: decision.userId }
+          }
+          await options.chat.handler({
+            args: parsed.args,
+            userId: decision.userId,
+            identity,
+            text,
+          })
+          return { kind: 'handled', shouldReply: false, userId: decision.userId }
+        }
         return { kind: 'unrecognized', shouldReply: true, commandName: parsed.name }
       }
 

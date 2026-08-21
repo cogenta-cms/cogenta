@@ -1,5 +1,7 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { AgentSummary } from '../api/agents-client.js'
+import { listAgents } from '../api/agents-client.js'
 import {
   type AdminApiKey,
   type CreatedApiKey,
@@ -51,6 +53,17 @@ import {
  * `ApiKeyStore` (`packages/cli/src/commands/mcp.ts`) — a role this screen's
  * key was not granted is refused by the same `PermissionLayer` REST uses,
  * exactly as it would be over HTTP (R4).
+ *
+ * L22 task 2 extends this screen rather than adding a fourth one for "Chat
+ * API": a "purpose" toggle. `mcp` keeps the existing free-text scope and
+ * client-config snippets unchanged; `chat` forces `scope: ['admin']` (the
+ * exact role `POST /api/agents/:name/run` itself already requires —
+ * `agents-router.ts`'s `requireAdmin`, so this key never grants more than
+ * that route already would) and shows the URL/curl for that route instead.
+ * The agent name is a display convenience picked here to build the URL, not
+ * something the key itself is restricted to — honestly labelled as such,
+ * since `ApiKeyStore` has no per-agent scoping and a key minted here can call
+ * `POST /api/agents/:name/run` for any agent this site has.
  */
 
 const EXPIRY_CHOICES = ['30d', '90d', '1y', 'never'] as const
@@ -88,6 +101,49 @@ function jsonSnippetFor(key: string): string {
     null,
     2,
   )
+}
+
+type KeyPurpose = 'mcp' | 'chat'
+
+function chatUrlFor(agentName: string): string {
+  return `${window.location.origin}/api/agents/${encodeURIComponent(agentName)}/run`
+}
+
+function chatCurlSnippetFor(agentName: string, key: string): string {
+  return [
+    `curl -X POST '${chatUrlFor(agentName)}' \\`,
+    `  -H 'Authorization: Bearer ${key}' \\`,
+    `  -H 'Content-Type: application/json' \\`,
+    `  -d '{"instruction": "How many orders came in today?"}'`,
+  ].join('\n')
+}
+
+/**
+ * One HTTP call, one conversational turn — the same request/response shape
+ * `runAssistTool`'s `POST /api/assistant/run` already uses (`assist-client.
+ * ts`), never a second streaming protocol. Multi-turn is the caller's own
+ * job: fold the running transcript into `instruction` before the next call,
+ * exactly what the admin's own floating chat widget does.
+ */
+function chatResponseFormatSnippet(): string {
+  return [
+    'Request  — POST, JSON body:',
+    '  { "instruction": "<your message>" }',
+    '',
+    'Response — 200, JSON body:',
+    '  {',
+    '    "data": {',
+    '      "agent": "<agent name>",',
+    '      "stopReason": "end_turn" | "max_tokens" | "max_steps" | "cancelled" | "budget_exceeded" | "max_duration" | "killed" | "errored",',
+    '      "finalText": "<the reply text, or null>",',
+    '      "steps": <number of tool-use steps taken>,',
+    '      "usage": { "inputTokens": <number>, "outputTokens": <number> }',
+    '    }',
+    '  }',
+    '',
+    'One turn per call — send the running conversation back inside',
+    '"instruction" on the next call for a multi-turn exchange.',
+  ].join('\n')
 }
 
 /** A labelled code block with its own "copy" button — the one interaction this screen adds over `api-keys.tsx`. */
@@ -142,10 +198,15 @@ export function McpRoute(): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const [creating, setCreating] = useState(false)
+  const [purpose, setPurpose] = useState<KeyPurpose>('mcp')
   const [newName, setNewName] = useState('')
   const [newScope, setNewScope] = useState('editor')
   const [newExpiry, setNewExpiry] = useState<ExpiryChoice>('90d')
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
+  const [createdPurpose, setCreatedPurpose] = useState<KeyPurpose>('mcp')
+
+  const [agents, setAgents] = useState<readonly AgentSummary[]>([])
+  const [chatAgentName, setChatAgentName] = useState('')
 
   const [revoking, setRevoking] = useState<AdminApiKey | null>(null)
 
@@ -166,21 +227,36 @@ export function McpRoute(): JSX.Element {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (token === null || !isAdmin) return
+    listAgents(token)
+      .then((list) => {
+        setAgents(list)
+        setChatAgentName((current) => current || (list[0]?.name ?? ''))
+      })
+      .catch(() => undefined) // The picker just stays empty — this list is a display convenience, never a security boundary.
+  }, [token, isAdmin])
+
   async function submitCreate(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
     setActionError(null)
     try {
+      // `chat` always mints an `admin`-scoped key — the exact role
+      // `POST /api/agents/:name/run` itself requires, never looser (R4): the
+      // free-text scope field only applies to an `mcp` purpose key.
       const result = await createApiKey(token, {
         name: newName,
-        scope: parseScope(newScope),
+        scope: purpose === 'chat' ? ['admin'] : parseScope(newScope),
         ...expiryFieldsFor(newExpiry),
       })
       setCreated(result)
+      setCreatedPurpose(purpose)
       setCreating(false)
       setNewName('')
       setNewScope('editor')
       setNewExpiry('90d')
+      setPurpose('mcp')
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('mcp.createError'))
@@ -239,10 +315,22 @@ export function McpRoute(): JSX.Element {
           <p>{t('mcp.createdBody')}</p>
           <p className="font-mono text-sm break-all">{created.key}</p>
           <p className="mt-2 font-semibold">{t('mcp.createdWarning')}</p>
-          <div className="mt-4 flex flex-col gap-4">
-            <CopyBlock label={t('mcp.cliLabel')} value={cliSnippetFor(created.key)} />
-            <CopyBlock label={t('mcp.jsonLabel')} value={jsonSnippetFor(created.key)} />
-          </div>
+          {createdPurpose === 'mcp' ? (
+            <div className="mt-4 flex flex-col gap-4">
+              <CopyBlock label={t('mcp.cliLabel')} value={cliSnippetFor(created.key)} />
+              <CopyBlock label={t('mcp.jsonLabel')} value={jsonSnippetFor(created.key)} />
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-col gap-4">
+              <p className="text-sm">{t('mcp.chatKeyNote')}</p>
+              <CopyBlock label={t('mcp.chatUrlLabel')} value={chatUrlFor(chatAgentName)} />
+              <CopyBlock
+                label={t('mcp.chatCurlLabel')}
+                value={chatCurlSnippetFor(chatAgentName, created.key)}
+              />
+              <CopyBlock label={t('mcp.chatFormatLabel')} value={chatResponseFormatSnippet()} />
+            </div>
+          )}
         </Notice>
       )}
 
@@ -313,6 +401,18 @@ export function McpRoute(): JSX.Element {
         closeLabel={t('mcp.close')}
       >
         <form onSubmit={submitCreate} className="flex flex-col gap-4">
+          <Field label={t('mcp.purposeLabel')} description={t('mcp.purposeHint')}>
+            {(control) => (
+              <Select
+                {...control}
+                value={purpose}
+                onChange={(event) => setPurpose(event.target.value as KeyPurpose)}
+              >
+                <option value="mcp">{t('mcp.purposeMcp')}</option>
+                <option value="chat">{t('mcp.purposeChat')}</option>
+              </Select>
+            )}
+          </Field>
           <Field label={t('mcp.nameLabel')} description={t('mcp.nameHint')}>
             {(control) => (
               <Input
@@ -323,16 +423,35 @@ export function McpRoute(): JSX.Element {
               />
             )}
           </Field>
-          <Field label={t('mcp.scopeLabel')} description={t('mcp.scopeHint')}>
-            {(control) => (
-              <Input
-                {...control}
-                required
-                value={newScope}
-                onChange={(event) => setNewScope(event.target.value)}
-              />
-            )}
-          </Field>
+          {purpose === 'chat' ? (
+            <Field label={t('mcp.chatAgentLabel')} description={t('mcp.chatAgentHint')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={chatAgentName}
+                  onChange={(event) => setChatAgentName(event.target.value)}
+                >
+                  {agents.length === 0 && <option value="">{t('mcp.chatAgentEmpty')}</option>}
+                  {agents.map((agent) => (
+                    <option key={agent.name} value={agent.name}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          ) : (
+            <Field label={t('mcp.scopeLabel')} description={t('mcp.scopeHint')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  required
+                  value={newScope}
+                  onChange={(event) => setNewScope(event.target.value)}
+                />
+              )}
+            </Field>
+          )}
           <Field
             label={t('mcp.expiryLabel')}
             description={newExpiry === 'never' ? t('mcp.expiryNeverWarning') : t('mcp.expiryHint')}

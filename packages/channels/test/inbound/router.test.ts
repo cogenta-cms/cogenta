@@ -120,3 +120,93 @@ describe('createCommandRouter — security', () => {
     )
   })
 })
+
+describe('createCommandRouter — chat fallback (L22 task 2)', () => {
+  it('with no chat option configured, an unmatched message still falls back to "unrecognized" (unchanged pre-L22 behaviour)', async () => {
+    const router = createCommandRouter({ getUserRoles: async () => ['admin'] })
+
+    const result = await router.route('create a menu with starters and mains', identity('user-1'))
+
+    expect(result).toEqual({ kind: 'unrecognized', shouldReply: true, commandName: 'create' })
+  })
+
+  it('a message that matches no registered command name is handed to the chat handler with the raw, un-reparsed text', async () => {
+    let received: { text: string; userId: string } | undefined
+    const router = createCommandRouter({
+      getUserRoles: async () => ['admin'],
+      chat: {
+        requiredRoles: ['admin'],
+        handler: ({ text, userId }) => {
+          received = { text, userId }
+        },
+      },
+    })
+
+    const result = await router.route('create a menu with starters and mains', identity('user-1'))
+
+    expect(result).toEqual({ kind: 'handled', shouldReply: false, userId: 'user-1' })
+    expect(received).toEqual({ text: 'create a menu with starters and mains', userId: 'user-1' })
+  })
+
+  it('a registered command still takes priority over the chat fallback', async () => {
+    let commandRan = false
+    let chatRan = false
+    const router = createCommandRouter({
+      getUserRoles: async () => ['admin'],
+      chat: {
+        requiredRoles: ['admin'],
+        handler: () => {
+          chatRan = true
+        },
+      },
+    })
+    router.register({
+      name: 'approve',
+      requiredRoles: [],
+      handler: () => {
+        commandRan = true
+      },
+    })
+
+    await router.route('/approve 1', identity('user-1'))
+
+    expect(commandRan).toBe(true)
+    expect(chatRan).toBe(false)
+  })
+
+  it('SECURITY: an unlinked identity gets no reply and the chat handler never runs, even with a chat fallback configured', async () => {
+    let chatRan = false
+    const router = createCommandRouter({
+      getUserRoles: async () => ['admin'],
+      chat: {
+        requiredRoles: [],
+        handler: () => {
+          chatRan = true
+        },
+      },
+    })
+
+    const result = await router.route('hello', identity(null))
+
+    expect(result).toEqual({ kind: 'unlinked', shouldReply: false })
+    expect(chatRan).toBe(false)
+  })
+
+  it('SECURITY: a linked user lacking the chat role is refused, not routed to the agent', async () => {
+    let chatRan = false
+    const router = createCommandRouter({
+      getUserRoles: async () => ['viewer'],
+      chat: {
+        requiredRoles: ['admin'],
+        handler: () => {
+          chatRan = true
+        },
+      },
+    })
+
+    const result = await router.route('hello', identity('user-1'))
+
+    expect(result).toEqual({ kind: 'forbidden', shouldReply: true, userId: 'user-1' })
+    expect(chatRan).toBe(false)
+  })
+})

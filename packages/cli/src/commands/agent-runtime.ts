@@ -93,6 +93,19 @@ export interface BuildAgentRuntimeOptions {
   readonly notFoundLog: NotFoundLogReader
   /** For `redirects.create` (L22 task 3). */
   readonly redirects: RedirectWriter
+  /**
+   * Injectable for tests — defaults to a fresh `createMemoryApprovalQueue()`.
+   * A non-reversible, side-effecting tool call (every core content/media
+   * write tool — `content.write_draft` included) always blocks on this
+   * queue regardless of an agent's own autonomy level (`with-autonomy.ts`'s
+   * `forcedApproval`, R6): nothing decides it on its own. A caller that
+   * wants to observe or decide pending requests (an approvals screen, a
+   * channel `/approve` command, or a test proving the *right* tool was
+   * proposed for a write) needs the same instance this runtime actually
+   * uses — hence this override and `AgentRuntimeAssembly.approvalQueue`
+   * below, rather than a queue this module keeps entirely to itself.
+   */
+  readonly approvalQueue?: ApprovalQueue
 }
 
 export interface AgentRuntimeAssembly {
@@ -104,7 +117,10 @@ export interface AgentRuntimeAssembly {
    * Exposed so `serve.ts` can build the L22 task 3 notice source
    * (`@cogenta/api`'s `createAgentApprovalsSource`) over the very same
    * queue `co-pilot` autonomy files into — never a second queue that would
-   * disagree with what the runner actually proposed.
+   * disagree with what the runner actually proposed. Also the exact queue
+   * L22 task 2's channel/chat surfaces (or a future approvals REST route)
+   * would decide a pending write against — see
+   * `BuildAgentRuntimeOptions.approvalQueue`.
    */
   readonly approvalQueue: ApprovalQueue
   readonly summary: string
@@ -421,11 +437,13 @@ export async function buildAgentRuntime(
     redirects: options.redirects,
   })
 
-  // Built once and handed both to the runner (where `co-pilot` autonomy
-  // files a request) and back out on `AgentRuntimeAssembly` (where
-  // `serve.ts` reads pending ones for the L22 task 3 notice source) — the
-  // same object, never two queues that could disagree.
-  const approvalQueue = createMemoryApprovalQueue()
+  // Built once (or reused from `options.approvalQueue`, injectable for
+  // tests) and handed both to the runner (where `co-pilot` autonomy files a
+  // request) and back out on `AgentRuntimeAssembly` (where `serve.ts` reads
+  // pending ones for the L22 task 3 notice source, and a channel/chat
+  // surface or future approvals route could decide one) — the same object,
+  // never two queues that could disagree.
+  const approvalQueue = options.approvalQueue ?? createMemoryApprovalQueue()
 
   const runner: AgentRunner = createAgentRunner({
     agents: agentStore,

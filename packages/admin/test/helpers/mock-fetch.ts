@@ -243,7 +243,7 @@ function articleCounts(rolesHeld: readonly string[]): Readonly<Partial<Record<st
   const canReadUnpublished = (['create', 'update', 'delete', 'publish'] as const).some((action) =>
     (permissions[action] ?? []).some((role) => rolesHeld.includes(role)),
   )
-  return canReadUnpublished ? all : { published: all['published'] }
+  return canReadUnpublished ? all : { published: all.published }
 }
 
 function json(status: number, body: unknown): Response {
@@ -382,6 +382,12 @@ export function installMockFetch(
       severity: string
       dismissible: boolean
       action?: { code: string; href: string }
+    }[]
+    /** What `GET /api/notices/channels` answers with (L22 task 2's "Canaux" screen) — no channel linked by default. */
+    readonly linkedChannels?: readonly {
+      channelName: string
+      channelUserId: string
+      linkedAt: string
     }[]
     /** What `GET /api/webhooks-status` answers with — no endpoint configured by default. */
     readonly webhooksStatus?: {
@@ -813,8 +819,8 @@ export function installMockFetch(
   // Kept in sync with `mockAgents.security.enabled` for the pre-existing
   // enable/disable tests, which read `securityAgentEnabled` directly.
   const syncSecurityEnabled = (): void => {
-    mockAgents['security'] = {
-      ...(mockAgents['security'] as MockAgent),
+    mockAgents.security = {
+      ...(mockAgents.security as MockAgent),
       enabled: securityAgentEnabled,
     }
   }
@@ -1695,6 +1701,14 @@ export function installMockFetch(
     },
   ]
 
+  // L22 task 2 — "Canaux". In-memory stand-in for `ChannelLinkStore`, scoped
+  // per test the same way `apiKeys` is: one signed-in account's own links,
+  // never another account's.
+  let linkedChannels: { channelName: string; channelUserId: string; linkedAt: string }[] = [
+    ...(options.linkedChannels ?? []),
+  ]
+  let channelLinkCodeCounter = 0
+
   // The marketplace catalog (L17). A static, fixed set of entries — the real
   // catalog is caller-assembled (`createMarketplaceCatalog`), so what matters
   // here is the transport, not a realistic directory. Three entries cover
@@ -1923,7 +1937,7 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
   }[] = (options.forms ?? []).map((form) => ({ ...form }))
-  const submissionCounter = 0
+  const _submissionCounter = 0
   let formSubmissions: {
     id: string
     formId: string
@@ -2143,6 +2157,49 @@ export function installMockFetch(
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
         return json(200, { data: notices })
+      }
+
+      // `/api/notices/channels/*` — L22 task 2's "Canaux" screen, on the same
+      // `ChannelLinkStore` fiche 38's notice delivery already exposed
+      // (`channel-settings-router.ts`, unmodified by this lot).
+      const channelLinkMatch =
+        /\/api\/notices\/channels(?:\/([^/?]+)(?:\/(link-code|preferences))?)?(?:\?.*)?$/u.exec(url)
+      if (channelLinkMatch !== null && url.includes('/api/notices/channels')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const [, rawChannelName, action] = channelLinkMatch
+
+        if (rawChannelName === undefined && method === 'GET') {
+          return json(200, { data: linkedChannels })
+        }
+
+        const channelName = decodeURIComponent(rawChannelName ?? '')
+
+        if (action === 'link-code' && method === 'POST') {
+          channelLinkCodeCounter += 1
+          if (!linkedChannels.some((link) => link.channelName === channelName)) {
+            linkedChannels = [
+              ...linkedChannels,
+              {
+                channelName,
+                channelUserId: `mock-${channelName}-user`,
+                linkedAt: '2026-03-06T00:00:00.000Z',
+              },
+            ]
+          }
+          return json(201, {
+            data: {
+              code: `MOCKCODE${channelLinkCodeCounter}`,
+              expiresAt: '2026-03-06T00:10:00.000Z',
+            },
+          })
+        }
+
+        if (action === undefined && method === 'DELETE') {
+          linkedChannels = linkedChannels.filter((link) => link.channelName !== channelName)
+          return new Response(null, { status: 204 })
+        }
       }
 
       // `/api/api-keys/*`. Admin-only, mirroring the real router: the raw
@@ -4521,11 +4578,11 @@ export function installMockFetch(
         const article = MOCK_SCHEMA.collections[0]
         const articlePermissions = article?.permissions as Record<string, readonly string[]>
         const canDraftArticle =
-          has(articlePermissions['create']) ||
-          has(articlePermissions['update']) ||
-          has(articlePermissions['delete']) ||
-          has(articlePermissions['publish'])
-        const canTrashArticle = has(articlePermissions['delete'])
+          has(articlePermissions.create) ||
+          has(articlePermissions.update) ||
+          has(articlePermissions.delete) ||
+          has(articlePermissions.publish)
+        const canTrashArticle = has(articlePermissions.delete)
         const draftCount = MOCK_ENTRIES.filter((entry) => entry.status === 'draft').length
         const publishedCount = MOCK_ENTRIES.filter((entry) => entry.status === 'published').length
 
@@ -4543,15 +4600,15 @@ export function installMockFetch(
 
         const memo = MOCK_SCHEMA.collections[1]
         const memoPermissions = memo?.permissions as Record<string, readonly string[]>
-        if (has(memoPermissions['read'])) {
+        if (has(memoPermissions.read)) {
           rows.push({
             collection: 'secret-memo',
             published: 0,
             total: 0,
-            draft: has(memoPermissions['create']) ? 0 : null,
-            scheduled: has(memoPermissions['create']) ? 0 : null,
-            archived: has(memoPermissions['create']) ? 0 : null,
-            trashed: has(memoPermissions['delete']) ? 0 : null,
+            draft: has(memoPermissions.create) ? 0 : null,
+            scheduled: has(memoPermissions.create) ? 0 : null,
+            archived: has(memoPermissions.create) ? 0 : null,
+            trashed: has(memoPermissions.delete) ? 0 : null,
           })
         }
 
@@ -5797,8 +5854,8 @@ export function installMockFetch(
         if (url.includes('/api/theme/preview') && method === 'POST') {
           const tokens = (body as { tokens?: Record<string, unknown> } | undefined)?.tokens
           const accent =
-            (tokens?.['color'] as Record<string, unknown> | undefined)?.['accent'] ??
-            (themeEffectiveTokens()['color'] as Record<string, unknown> | undefined)?.['accent']
+            (tokens?.color as Record<string, unknown> | undefined)?.accent ??
+            (themeEffectiveTokens().color as Record<string, unknown> | undefined)?.accent
           return json(200, {
             data: {
               html: `<!doctype html><html><head><style>:root{--cogenta-color-accent:${String(accent)}}</style></head><body>preview</body></html>`,

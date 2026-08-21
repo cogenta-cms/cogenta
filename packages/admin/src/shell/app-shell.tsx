@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { fetchMediaBlobUrl } from '../api/media-client.js'
+import { AgentChatWidget } from '../assist/agent-chat-widget.js'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
 import { NotificationCenter } from '../notices/notification-center.js'
@@ -635,6 +636,10 @@ export function AppShell(): JSX.Element {
         <Outlet />
       </main>
       <footer className="app-shell__footer">{renderFooter()}</footer>
+      {/* L22 task 2 — floating chat, admin-only (matches `POST
+          /api/agents/:name/run`'s own `requireAdmin`): a non-admin never
+          sees a button that would only ever answer 403. */}
+      {authToken !== null && roles.includes('admin') && <AgentChatWidget token={authToken} />}
     </div>
   )
 }

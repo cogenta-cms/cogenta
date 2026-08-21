@@ -133,6 +133,36 @@ describe('creating an MCP key', () => {
   })
 })
 
+describe('creating a Chat API key (L22 task 2)', () => {
+  it('forces admin scope, and shows the chat endpoint and curl example for the picked agent', async () => {
+    render(<App />)
+    await goToMcp()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle clé MCP' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Créer une clé MCP' })
+
+    fireEvent.change(within(dialog).getByLabelText('Usage'), { target: { value: 'chat' } })
+    // The free-text "Portée" field disappears — a chat key is always admin-scoped.
+    expect(within(dialog).queryByLabelText('Portée')).toBeNull()
+
+    fireEvent.change(within(dialog).getByLabelText('Nom'), {
+      target: { value: 'Chat integration' },
+    })
+    fireEvent.change(within(dialog).getByLabelText('Agent'), { target: { value: 'security' } })
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+
+    const rawKey = (await screen.findByText(/^cogenta_sk_mock/u)).textContent ?? ''
+    expect(screen.getByText(/\/api\/agents\/security\/run$/u)).toBeDefined()
+    expect(screen.getByText(new RegExp(`Authorization: Bearer ${rawKey}`, 'u'))).toBeDefined()
+    expect(screen.getByText(/One turn per call/u)).toBeDefined()
+
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getByText('Chat integration')).toBeDefined()
+      expect(within(screen.getByRole('table')).getByText('admin')).toBeDefined()
+    })
+  })
+})
+
 describe('revoking an MCP key', () => {
   it('marks it revoked after confirmation, through the design system modal rather than confirm()', async () => {
     render(<App />)

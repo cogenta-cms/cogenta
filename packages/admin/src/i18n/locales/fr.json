@@ -239,6 +239,7 @@
     "providers": "Fournisseurs",
     "agentSkills": "Compétences",
     "mcp": "MCP",
+    "channels": "Canaux",
     "users": "Utilisateurs",
     "apiKeys": "Clés API",
     "roles": "Rôles et permissions",
@@ -1413,6 +1414,19 @@
     "widgetVisitors": "Visiteurs uniques",
     "widgetLink": "Voir le tableau de bord complet"
   },
+  "agentChat": {
+    "open": "Ouvrir la discussion avec un agent",
+    "close": "Fermer",
+    "heading": "Discuter avec un agent",
+    "agentLabel": "Agent",
+    "noAgents": "Aucun agent disponible",
+    "empty": "Posez n'importe quelle question à cet agent — il peut lire, et avec votre approbation, écrire sur ce site.",
+    "thinking": "Réflexion…",
+    "inputLabel": "Message",
+    "send": "Envoyer",
+    "noReply": "(pas de réponse)",
+    "sendError": "Impossible de joindre cet agent."
+  },
   "agents": {
     "heading": "Agents",
     "adminOnly": "Réservé au rôle « admin » : cette page pilote l'activation, les outils et le budget de chaque agent.",
@@ -2089,7 +2103,41 @@
     "confirmRevokeButton": "Révoquer la clé",
     "loadError": "Impossible de charger la liste des clés MCP.",
     "createError": "Impossible de créer cette clé MCP.",
-    "revokeError": "Impossible de révoquer cette clé."
+    "revokeError": "Impossible de révoquer cette clé.",
+    "purposeLabel": "Usage",
+    "purposeHint": "Ce à quoi sert cette clé — un client MCP, ou une intégration à l'API de discussion.",
+    "purposeMcp": "Client MCP",
+    "purposeChat": "API de discussion (parler à un agent en HTTP)",
+    "chatAgentLabel": "Agent",
+    "chatAgentHint": "L'agent avec lequel l'URL ci-dessous discutera. La clé elle-même peut appeler n'importe quel agent de ce site — sa portée est un rôle (admin), pas un nom d'agent.",
+    "chatAgentEmpty": "Aucun agent n'est encore configuré sur ce site.",
+    "chatKeyNote": "Cette clé peut appeler n'importe quel agent de ce site avec le rôle admin — l'URL ci-dessous n'est que le point d'entrée de l'agent choisi.",
+    "chatUrlLabel": "Point d'entrée de discussion",
+    "chatCurlLabel": "Exemple de requête (curl)",
+    "chatFormatLabel": "Format de requête/réponse"
+  },
+  "channels": {
+    "heading": "Canaux",
+    "intro": "Liez un compte Telegram, Slack ou Discord personnel. Une fois lié, il peut recevoir les notices de ce site.",
+    "chatHint": "En tant qu'admin, un compte lié peut aussi discuter avec un agent directement depuis le canal — envoyez-lui un message, ou « @Nom de l'agent : message » pour en choisir un précis.",
+    "notAdminHint": "Discuter avec un agent depuis un canal demande le rôle admin — la liaison fonctionne quand même, pour les notices.",
+    "name": {
+      "telegram": "Telegram",
+      "slack": "Slack",
+      "discord": "Discord"
+    },
+    "notLinked": "Non lié.",
+    "generateCode": "Générer un code de liaison",
+    "generating": "Génération…",
+    "unlink": "Délier",
+    "linkedSince": "Lié depuis le {{time}}.",
+    "codeTitle": "Code de liaison pour {{channel}}",
+    "codeDismiss": "Masquer",
+    "codeBody": "Envoyez ce code en message au bot Cogenta sur {{channel}} pour terminer la liaison de votre compte.",
+    "codeExpiry": "Ce code expire à {{time}} et ne peut être utilisé qu'une seule fois.",
+    "loadError": "Impossible de charger vos canaux liés.",
+    "generateError": "Impossible de générer un code de liaison.",
+    "unlinkError": "Impossible de délier ce canal."
   },
   "rolesMatrix": {
     "heading": "Rôles et permissions",

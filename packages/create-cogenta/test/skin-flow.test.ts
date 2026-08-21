@@ -83,6 +83,9 @@ function scriptedPrompter(labels: readonly string[]): Prompter {
     async text() {
       throw new Error('not used by chooseSkin')
     },
+    async secret() {
+      throw new Error('not used by chooseSkin')
+    },
     async choice<T>(
       _question: string,
       options: readonly Choice<T>[],
@@ -123,6 +126,9 @@ describe('chooseSkin', () => {
       ...BASE,
       prompter: {
         async text() {
+          throw new Error('unused')
+        },
+        async secret() {
           throw new Error('unused')
         },
         async choice<T>(_q: string, options: readonly Choice<T>[]): Promise<T> {

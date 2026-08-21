@@ -75,4 +75,14 @@ describe('createInteractivePrompter', () => {
     expect(await promise).toBe(true)
     prompter.close()
   })
+
+  it('reads a secret value on a non-TTY stream the same way text() would — there is no terminal to mask on', async () => {
+    const { input, output, send } = io()
+    const prompter = createInteractivePrompter({ input, output })
+
+    const promise = prompter.secret('API key')
+    send('  sk-real-key  ')
+    expect(await promise).toBe('sk-real-key')
+    prompter.close()
+  })
 })

@@ -18,6 +18,18 @@ export interface Choice<T> {
  */
 export interface Prompter {
   text(question: string, defaultValue: string): Promise<string>
+  /**
+   * Like `text`, but for a value that must never be echoed back — an API
+   * key typed at setup was showing in plaintext on screen (and staying in
+   * the terminal's own scrollback) because it went through the same
+   * `rl.question` as "Site name". Masks each keystroke with `*` on a real
+   * TTY; on a non-TTY stream (a test's injected `PromptIO`, or input piped
+   * from a file) there is no terminal to mask on, so it degrades to the
+   * same unmasked read `text` already does — the value is still never
+   * echoed by a caller that logs it, only by the terminal a human is
+   * actually looking at.
+   */
+  secret(question: string): Promise<string>
   choice<T>(question: string, choices: readonly Choice<T>[], defaultIndex: number): Promise<T>
   confirm(question: string, defaultValue: boolean): Promise<boolean>
   close(): void
@@ -37,6 +49,42 @@ export function createInteractivePrompter(io: PromptIO): Prompter {
       const answer = await rl.question(`${question} (${defaultValue}): `)
       const trimmed = answer.trim()
       return trimmed === '' ? defaultValue : trimmed
+    },
+    async secret(question) {
+      const isRealTty = 'isTTY' in io.input && (io.input as NodeJS.ReadStream).isTTY === true
+      if (!isRealTty) {
+        // No terminal to mask on — a test's injected stream, or input
+        // piped from a file. The value is still never echoed by a caller
+        // that logs it; only a real terminal's own character echo is what
+        // this method exists to suppress.
+        const answer = await rl.question(`${question}: `)
+        return answer.trim()
+      }
+      // readline/promises has no built-in masked-input mode. The documented
+      // workaround: intercept the Interface's own output-writing for the
+      // duration of this one `question()` call, masking every character it
+      // echoes back except the prompt itself and the trailing newline —
+      // scoped to a single call on the SAME shared `rl`, never a second
+      // `readline.Interface` on the same stream, which would fight this
+      // one's listener state.
+      type WithInternalWrite = { _writeToOutput(text: string): void }
+      const withWrite = rl as unknown as WithInternalWrite
+      const original = withWrite._writeToOutput.bind(rl)
+      let promptWritten = false
+      withWrite._writeToOutput = (text: string) => {
+        if (!promptWritten) {
+          original(text)
+          promptWritten = text.endsWith(': ')
+          return
+        }
+        original(text.replace(/[^\r\n]/g, '*'))
+      }
+      try {
+        const answer = await rl.question(`${question}: `)
+        return answer.trim()
+      } finally {
+        withWrite._writeToOutput = original
+      }
     },
     async choice(question, choices, defaultIndex) {
       const fallback = choices[defaultIndex]
@@ -77,6 +125,9 @@ export function createDefaultsPrompter(): Prompter {
   return {
     async text(_question, defaultValue) {
       return defaultValue
+    },
+    async secret(_question) {
+      return ''
     },
     async choice(_question, choices, defaultIndex) {
       const fallback = choices[defaultIndex]

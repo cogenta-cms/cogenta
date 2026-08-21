@@ -74,7 +74,7 @@ async function collectLlmSetup(
 
   const option = LLM_PROVIDERS.find((entry) => entry.id === provider)
   const model = await prompter.text('Model', option?.defaultModel ?? '')
-  const apiKey = await prompter.text('API key', '')
+  const apiKey = await prompter.secret('API key')
   if (apiKey === '') return { provider, model }
 
   const validation = await validateApiKey({
@@ -492,6 +492,9 @@ async function runDocumentStepFromConfig(input: {
     prompter: {
       async text(_question, defaultValue) {
         return defaultValue
+      },
+      async secret(_question) {
+        return ''
       },
       async choice(_question, choices, defaultIndex) {
         return (choices[defaultIndex] ?? choices[0])?.value as never

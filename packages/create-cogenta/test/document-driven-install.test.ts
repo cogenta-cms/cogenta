@@ -171,6 +171,10 @@ function scriptedPrompter(script: {
       script.asked?.push(question)
       return script.texts?.find((entry) => question.includes(entry.match))?.answer ?? defaultValue
     },
+    async secret(question) {
+      script.asked?.push(question)
+      return script.texts?.find((entry) => question.includes(entry.match))?.answer ?? ''
+    },
     async choice<T>(question: string, choices: readonly Choice<T>[], defaultIndex: number) {
       script.asked?.push(question)
       const wanted = script.choices?.find((entry) => question.includes(entry.match))?.label
@@ -291,9 +295,12 @@ describe('installing from a specification document', () => {
       prompter: {
         async text(question, defaultValue) {
           defaults.push(`${question} => ${defaultValue}`)
-          if (question.includes('API key')) return 'sk-test'
           if (question.includes('Path(s) to the document')) return briefPath
           return defaultValue
+        },
+        async secret(question) {
+          if (question.includes('API key')) return 'sk-test'
+          return ''
         },
         async choice<T>(question: string, choices: readonly Choice<T>[], defaultIndex: number) {
           if (question.includes('LLM provider')) {

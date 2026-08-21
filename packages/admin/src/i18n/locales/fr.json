@@ -260,7 +260,8 @@
       "ai": "IA",
       "accounts": "Comptes",
       "ops": "Exploitation",
-      "settings": "Réglages"
+      "settings": "Réglages",
+      "help": "Aide"
     }
   },
   "breadcrumb": {

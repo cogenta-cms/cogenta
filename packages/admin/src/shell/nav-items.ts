@@ -1,8 +1,9 @@
 import type { ContentAction } from '../schema/types.js'
 
 /**
- * The seven top-level sections of the sidebar, in the order fiche 35 task 1
- * settles on — content first (what every role touches most), settings last.
+ * The top-level sections of the sidebar, in the order fiche 35 task 1
+ * settles on — content first (what every role touches most), settings last,
+ * `help` after it (added later, see the Documentation entry below).
  *
  * `openByDefault` is the fiche's own recommendation (§8): **Content** open,
  * everything else collapsed, with the actual open/closed state then
@@ -17,6 +18,7 @@ export type NavGroupId =
   | 'accounts'
   | 'ops'
   | 'settings'
+  | 'help'
 
 export interface NavGroup {
   readonly id: NavGroupId
@@ -32,6 +34,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   { id: 'accounts', labelKey: 'nav.groups.accounts', openByDefault: false },
   { id: 'ops', labelKey: 'nav.groups.ops', openByDefault: false },
   { id: 'settings', labelKey: 'nav.groups.settings', openByDefault: false },
+  // Its own group, not a Réglages tab: L22 task 7 grew this from a single
+  // reference screen into a real functional+technical documentation site
+  // (versioned, also published standalone) — burying it under Settings
+  // undersold it and hid it from anyone who wasn't already looking there.
+  { id: 'help', labelKey: 'nav.groups.help', openByDefault: false },
 ]
 
 /**
@@ -396,13 +403,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/settings', labelKey: 'nav.settings', group: 'settings', visibleWhen: { kind: 'always' } },
   { to: '/profile', labelKey: 'nav.profile', group: 'settings', visibleWhen: { kind: 'always' } },
   {
-    // Fiche 21 task 7 — a reference screen, not a domain screen, so it lives
-    // in Settings rather than getting a group of its own; open to every
-    // signed-in role, the same as Settings and Profile, since a viewer or
+    // Fiche 21 task 7 gave it a screen; L22 task 7 grew that screen into a
+    // real versioned documentation site. It outgrew Settings, so it gets its
+    // own group instead of hiding under a menu about personal preferences —
+    // open to every signed-in role, the same as before, since a viewer or
     // editor needs onboarding as much as an admin does.
     to: '/documentation',
     labelKey: 'nav.documentation',
-    group: 'settings',
+    group: 'help',
     visibleWhen: { kind: 'always' },
   },
 ]

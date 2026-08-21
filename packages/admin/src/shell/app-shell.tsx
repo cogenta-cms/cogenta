@@ -146,6 +146,7 @@ const GROUP_ICONS: Record<NavGroupId, ComponentType<IconProps>> = {
   accounts: UsersIcon,
   ops: SettingsIcon,
   settings: SettingsIcon,
+  help: DocumentationIcon,
 }
 
 function iconFor(item: NavItem): ComponentType<IconProps> {

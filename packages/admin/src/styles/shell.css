@@ -37,7 +37,7 @@
 }
 
 .app-shell__footer-brand .app-shell__brand-logo {
-  height: 100px;
+  height: 50px;
 }
 
 .app-shell__footer-version {
@@ -83,12 +83,12 @@
 /* The brand logo — Cogenta's own real asset (icon + wordmark baked in, see
    `app-shell.tsx`'s `COGENTA_LOGO_LIGHT_URL`/`COGENTA_LOGO_DARK_URL`) by
    default, or the admin's own personalised upload (L21 task 2) in its
-   place. 100px tall, an explicit size rather than a design judgment call.
+   place. 50px tall, an explicit size rather than a design judgment call.
    `max-width` is a fixed pixel value, not `em`: this class is also used
    inside the footer, whose own `font-size` (0.75rem) would otherwise cap an
    image sized in `em` far below its actual rendered height. */
 .app-shell__brand-logo {
-  height: 100px;
+  height: 50px;
   width: auto;
   max-width: 200px;
   object-fit: contain;

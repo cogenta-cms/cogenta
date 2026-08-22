@@ -37,4 +37,12 @@ describe('theme registry (fiche L23)', () => {
     const second = await resolveTheme(DEFAULT_THEME_NAME)
     expect(first).toBe(second)
   })
+
+  it('resolves the portfolio theme (fiche L23) with a real renderPage and renderChrome', async () => {
+    const theme = await resolveTheme('@cogenta/theme-portfolio')
+    expect(typeof theme.renderPage).toBe('function')
+    expect(typeof theme.renderChrome).toBe('function')
+    // Two genuinely installable themes, not one theme and a placeholder.
+    expect(theme).not.toBe(await resolveTheme(DEFAULT_THEME_NAME))
+  })
 })

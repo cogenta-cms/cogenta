@@ -54,6 +54,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'The reference theme: all twelve blocks, zero client JavaScript, a neutral, accessible default.',
     load: () => import('@cogenta/theme-canonical'),
   },
+  {
+    name: '@cogenta/theme-portfolio',
+    label: 'Portfolio',
+    description:
+      'An ultra-modern creative-portfolio theme: brutalist-meets-editorial display type, an electric accent, zero client JavaScript.',
+    load: () => import('@cogenta/theme-portfolio'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

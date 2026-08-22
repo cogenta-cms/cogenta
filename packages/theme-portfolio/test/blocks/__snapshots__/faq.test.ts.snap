@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderFaq > matches a stable snapshot 1`] = `"<section class="cg-block cg-faq" data-block="faq"><h2 class="cg-faq__title" data-field="title">Questions</h2><ul class="cg-faq__items"><li class="cg-faq__item"><details class="cg-faq__details"><summary class="cg-faq__question"><span>Can I change skin without a build?</span></summary><div class="cg-faq__answer"><p>Yes, and without a build.</p></div></details></li></ul></section>"`;

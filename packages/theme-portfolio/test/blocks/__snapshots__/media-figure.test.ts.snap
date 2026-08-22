@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderMediaFigure > matches a stable snapshot 1`] = `"<figure class="cg-block cg-figure" data-block="mediaFigure" data-align="wide" style="--cg-ratio:16 / 9"><div class="cg-figure__frame"><img class="cg-figure__media" src="/img/figure-800.avif" srcset="/img/figure-800.avif 800w" sizes="(min-width: 48rem) 42rem, 100vw" width="800" height="600" alt="A diagram of the two planes" loading="lazy" decoding="async"></div><figcaption class="cg-figure__caption"><span class="cg-figure__plate">The two planes</span><span class="cg-figure__credit" data-field="credit">Studio Cogenta</span></figcaption></figure>"`;

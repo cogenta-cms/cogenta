@@ -45,7 +45,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
-    "@cogenta/blocks": "workspace:*"
+    "@cogenta/blocks": "workspace:*",
+    "@cogenta/render": "workspace:*",
+    "@cogenta/theme-kit": "workspace:*"
   },
   "peerDependencies": {
     "astro": "catalog:"

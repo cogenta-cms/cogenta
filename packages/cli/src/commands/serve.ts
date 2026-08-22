@@ -304,7 +304,8 @@ import {
   seoSiteFor,
 } from './seo.js'
 import { createSitePlanning } from './site-plan.js'
-import { cssEtag, loadThemeCss } from './theme-css.js'
+import { createThemeCssResolver, cssEtag } from './theme-css.js'
+import { DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
   DEFAULT_IMAGE_ENDPOINT,
@@ -731,6 +732,16 @@ interface Site {
   }) => Promise<string | null>
   /** `/api/theme` (fiche 14). Absent only when this instance built no theme wiring — see `resolveStyles`. */
   readonly themeRouter?: ThemeRouter
+  /**
+   * The active theme *package* name (fiche L23) — `null` for the built-in
+   * default. Read live off the same theme-overrides row `resolveStyles`
+   * already reads, so a switch made from the appearance screen renders on
+   * the very next page view, no restart. `undefined` (not a function at all)
+   * under the same condition `themeRouter` is absent — a test harness with
+   * no theme wiring renders with the default theme, exactly as before this
+   * field existed.
+   */
+  readonly activeTheme?: () => Promise<string | null>
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -851,12 +862,20 @@ interface AssembleSiteOptions {
   /** `null` when neither the skin nor the theme stylesheet could be loaded — see `joinStyles`. */
   readonly styles?: string | null
   /**
-   * `theme.tokens.json`'s directory-independent CSS — the theme package's
-   * own stylesheet, loaded once, never a function of the request. Paired
-   * with `theme` below to let `resolveStyles()` recompute only the skin half
-   * (the tokens) on every call, not this.
+   * `theme.tokens.json`'s directory-independent CSS — the *default* theme
+   * package's own stylesheet, loaded once at startup. Used as-is by a caller
+   * that passes no `themeCssFor` (a test harness, mainly); a real `cogenta
+   * serve` boot passes both, and `resolveStyles()` prefers `themeCssFor` so a
+   * switched active theme's stylesheet is what actually gets served.
    */
   readonly themeCss?: string | null
+  /**
+   * Resolves any installed theme package's own stylesheet by name, memoised
+   * per name (`theme-css.ts`'s `createThemeCssResolver`) — what lets
+   * `resolveStyles()` serve the *currently active* theme's CSS rather than
+   * always the one `themeCss` above snapshot at startup (fiche L23).
+   */
+  readonly themeCssFor?: (themeName: string) => Promise<string | null>
   /** Fiche 14. Absent only in a test that does not care about appearance. */
   readonly theme?: ThemeRouterOptions
   /**
@@ -975,6 +994,21 @@ interface AssembleSiteOptions {
    * submission still stores, notifications are simply skipped (R1/R2).
    */
   readonly emailTransport?: EmailTransport
+}
+
+/**
+ * The active theme's own stylesheet, resolved live (fiche L23): reads the
+ * currently saved `activeTheme` off the same overrides row `resolveStyles`
+ * already reads, then resolves that theme's CSS through the memoised
+ * `themeCssFor` (real file I/O happens at most once per theme name, not per
+ * request). Falls back to the static `themeCss` snapshot when this instance
+ * built no `themeCssFor` — a test harness that only ever renders the default
+ * theme, mainly.
+ */
+async function themeCssForActive(options: AssembleSiteOptions): Promise<string | null> {
+  if (options.themeCssFor === undefined) return options.themeCss ?? null
+  const overrides = await (options.theme as ThemeRouterOptions).store.get()
+  return options.themeCssFor(overrides.activeTheme ?? DEFAULT_THEME_NAME)
 }
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
@@ -2115,22 +2149,31 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     resolveStyles:
       options.theme === undefined
         ? async () => styles
-        : () =>
-            computeEffectiveStyles(options.theme as ThemeRouterOptions, options.themeCss ?? null),
+        : async () =>
+            computeEffectiveStyles(
+              options.theme as ThemeRouterOptions,
+              await themeCssForActive(options),
+            ),
     ...(options.theme === undefined
       ? {}
       : {
-          previewStyles: (candidate: {
+          previewStyles: async (candidate: {
             readonly tokens?: Record<string, unknown>
             readonly additionalCss?: string
           }) =>
             computePreviewStyles(
               options.theme as ThemeRouterOptions,
-              options.themeCss ?? null,
+              await themeCssForActive(options),
               candidate,
             ),
         }),
     ...(options.theme === undefined ? {} : { themeRouter: createThemeRouter(options.theme) }),
+    ...(options.theme === undefined
+      ? {}
+      : {
+          activeTheme: async () =>
+            (await (options.theme as ThemeRouterOptions).store.get()).activeTheme,
+        }),
     security: options.security,
     health: options.health,
     tickScheduledPublishing: () => scheduledPublishQueue.tick(),
@@ -2329,6 +2372,16 @@ async function brandingForSite(site: Site): Promise<BrandingSettings> {
   const customLogoMediaId =
     typeof logoSetting?.value === 'string' && logoSetting.value !== '' ? logoSetting.value : null
   return { showCogentaBranding, customLogoMediaId, cogentaVersion: site.cogentaVersion }
+}
+
+/**
+ * The active theme *package* name (fiche L23), or `null` for the built-in
+ * default — `site.activeTheme` is absent only when this instance built no
+ * theme wiring (a test harness that does not care about appearance), which
+ * `theme-render.ts`'s own `themeFor` already treats identically to `null`.
+ */
+async function activeThemeForSite(site: Site): Promise<string | null> {
+  return site.activeTheme === undefined ? null : site.activeTheme()
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
@@ -3361,7 +3414,7 @@ export function createRequestListener(
         // redirect back to the page a no-JS `<form>` posted from
         // (`response.headers.location`, set only when the submission carried
         // `redirectTo`). No body follows a redirect.
-        if (response.headers?.['location'] !== undefined) {
+        if (response.headers?.location !== undefined) {
           res.writeHead(response.status, response.headers)
           res.end()
           return
@@ -3441,6 +3494,7 @@ export function createRequestListener(
             now: Date.now,
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
+            activeTheme: () => activeThemeForSite(site),
           }
           const html =
             definition === null
@@ -3975,6 +4029,7 @@ export function createRequestListener(
               // `theme-render-fidelity`-style byte equality still holds for
               // everything this preview *does* claim to show.
               branding: () => brandingForSite(site),
+              activeTheme: () => activeThemeForSite(site),
             },
             context,
           )
@@ -4092,6 +4147,7 @@ export function createRequestListener(
             styles: await site.resolveStyles(),
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
+            activeTheme: () => activeThemeForSite(site),
           },
           context,
         )
@@ -4117,6 +4173,7 @@ export function createRequestListener(
             now: Date.now,
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
+            activeTheme: () => activeThemeForSite(site),
           }
           const html =
             definition === null || !definition.active
@@ -4176,6 +4233,7 @@ export function createRequestListener(
               commentsForEntry(site, commentCollection, entryId, locale),
           },
           branding: () => brandingForSite(site),
+          activeTheme: () => activeThemeForSite(site),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
@@ -4506,7 +4564,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const rateLimitSelection = await createRateLimitRegistry({ logger }).select(
     loaded.config.rateLimit,
   )
-  const themeCss = await loadThemeCss({ read: (url) => readFile(url, 'utf8') })
+  // Memoised per theme *package* name (`createThemeCssResolver`) — reading
+  // and flattening a theme's stylesheet is real file I/O, so it happens once
+  // per theme this process actually renders with, not on every request that
+  // merely re-reads which one is currently active.
+  const themeCssFor = createThemeCssResolver({ read: (url) => readFile(url, 'utf8') })
+  const themeCss = await themeCssFor(DEFAULT_THEME_NAME)
   const styles = joinStyles(
     await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),
     themeCss,
@@ -4657,6 +4720,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     readOnly: options.readOnly ?? false,
     styles,
     themeCss,
+    themeCssFor,
     theme: await createThemeWiring({
       projectRoot,
       db: selection.instance,

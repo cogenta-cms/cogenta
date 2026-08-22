@@ -110,12 +110,6 @@ export async function inlineImports(entry: URL, options: InlineImportsOptions): 
 }
 
 /**
- * The whole theme stylesheet as one minified string, or `null` when the theme
- * package cannot be resolved — a site then renders with the skin's custom
- * properties alone rather than refusing to serve, the same degradation
- * `loadSkinCss` already chose for a missing `theme.tokens.json`.
- */
-/**
  * FNV-1a, 32 bits. A cache key, never a security boundary — and deliberately
  * not `node:crypto`, to match the hash `@cogenta/render` already uses for the
  * skin sheet's ETag rather than introduce a second convention beside it.
@@ -129,11 +123,47 @@ export function cssEtag(css: string): string {
   return `"${value.toString(16).padStart(8, '0')}"`
 }
 
-export async function loadThemeCss(options: InlineImportsOptions): Promise<string | null> {
+/**
+ * The whole theme stylesheet as one minified string, or `null` when the named
+ * theme package cannot be resolved — a site then renders with the skin's
+ * custom properties alone rather than refusing to serve, the same degradation
+ * `loadSkinCss` already chose for a missing `theme.tokens.json`.
+ *
+ * Every theme package publishes its stylesheet at the same `./styles/theme.css`
+ * export subpath (contract D, mirrored by every theme package's `package.json`)
+ * so this stays a one-line lookup regardless of which theme is active — a
+ * per-theme convention, not a per-theme code branch.
+ */
+export async function loadThemeCss(
+  options: InlineImportsOptions,
+  themeName: string,
+): Promise<string | null> {
   try {
-    const entry = new URL(import.meta.resolve('@cogenta/theme-canonical/styles/theme.css'))
+    const entry = new URL(import.meta.resolve(`${themeName}/styles/theme.css`))
     return minifyCss(await inlineImports(entry, options))
   } catch {
     return null
+  }
+}
+
+/**
+ * A theme's own stylesheet is code, not data — installing a second theme
+ * package is a redeploy, unlike the skin tokens `resolveStyles` re-reads on
+ * every request. So each theme's CSS is loaded and flattened once per name
+ * and kept for the life of the process, memoised by this factory rather than
+ * reloaded on a request that merely switched *which* already-installed theme
+ * is active — switching is still live (fiche L23): only the file I/O is not
+ * repeated for a theme this process has already read.
+ */
+export function createThemeCssResolver(
+  options: InlineImportsOptions,
+): (themeName: string) => Promise<string | null> {
+  const cache = new Map<string, Promise<string | null>>()
+  return (themeName) => {
+    const cached = cache.get(themeName)
+    if (cached !== undefined) return cached
+    const promise = loadThemeCss(options, themeName)
+    cache.set(themeName, promise)
+    return promise
   }
 }

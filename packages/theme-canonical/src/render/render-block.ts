@@ -1,5 +1,11 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
-import type { ContentEntry, RenderContext } from '../theme-contract.js'
+import {
+  type FetchedEntries,
+  type PageContent,
+  pageHasOwnHeading,
+  withBlockKey,
+} from '@cogenta/theme-kit'
+import type { RenderContext } from '../theme-contract.js'
 import { renderCollectionList } from './blocks/collection-list.js'
 import { renderCta } from './blocks/cta.js'
 import { renderEmbed } from './blocks/embed.js'
@@ -15,12 +21,13 @@ import { renderStats } from './blocks/stats.js'
 import { type HtmlElement, h } from './html.js'
 
 /**
- * Entries already fetched for the `collectionList` blocks on the page, by the
- * block's `_key`. Fetching happens in the Astro frontmatter, once per block,
- * before any markup is built — a renderer that could await would make the
- * number of round trips depend on the markup.
+ * `PageContent`/`FetchedEntries`/`pageHasOwnHeading`/`withBlockKey` are
+ * `@cogenta/theme-kit`'s own — re-exported here (rather than only imported)
+ * so this package's public surface still names them, exactly as it did
+ * before they moved to the package every theme now shares them from.
  */
-export type FetchedEntries = Readonly<Record<string, readonly ContentEntry[]>>
+export type { FetchedEntries, PageContent }
+export { pageHasOwnHeading, withBlockKey }
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -64,56 +71,6 @@ export function renderBlock(
       return null
     }
   }
-}
-
-export interface PageContent {
-  /** The entry's title. Rendered as the `h1` unless a hero already carries one. */
-  readonly title: string
-  readonly blocks: readonly VocabularyBlock[]
-}
-
-/**
- * A page has exactly one `h1`.
- *
- * A `hero` declares `headingLevel: 'h1'` and renders the title itself, so the
- * layout must not render a second one; without a hero, nothing else on the page
- * would — `prose` starts at `h2` — and the page would have no `h1` at all.
- */
-export function pageHasOwnHeading(blocks: readonly VocabularyBlock[]): boolean {
-  return blocks.some((block) => block._type === 'hero')
-}
-
-/**
- * Stamps the block's own `_key` onto the element it rendered to.
- *
- * The key is contract B's identity for a placed block — minted once, surviving
- * reorder, translation and version restore — so it is the one honest way for a
- * *reader* of the finished HTML to say "this piece of the page came from that
- * block". The visual page builder (L16) is such a reader: it shows the real
- * server-rendered page in an iframe and needs to map a clicked element back to
- * the block that produced it.
- *
- * Emitted on every render, never only in a builder mode. A preview that is
- * assembled differently from the published page is exactly the divergence the
- * builder exists to rule out — one render path, one output, and the fidelity
- * test can then assert byte equality rather than "close enough".
- *
- * It stays a data attribute and it stays out of the block renderers: no block
- * has to remember it, and nothing about layout or styling depends on it.
- *
- * Its companion is `data-field`, written by the block renderers themselves on
- * the single element that carries one plain-text field's whole value —
- * `hero`'s title, `quote`'s author, and so on. A field only earns the
- * attribute when it already had an element of its own: none of them changed
- * shape to get it, so the outline, the styling and the snapshots are the same
- * page they were, with one more attribute on some elements. Rich text and
- * repeated list items carry none, which is the honest answer — a builder
- * cannot edit them in place from a text node, and pretending otherwise would
- * be the divergence all of this exists to avoid.
- */
-function withBlockKey(element: HtmlElement | null, key: string): HtmlElement | null {
-  if (element === null) return null
-  return { ...element, attrs: { ...element.attrs, 'data-block-key': key } }
 }
 
 export function renderPage(

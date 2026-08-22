@@ -12,6 +12,7 @@ import type { CogentaConfig, DatabaseHandle } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
 import { mergeSkinTokens, renderSkin, validateSkin } from '@cogenta/render'
 import { createThemeStore, ensureThemeTable } from '@cogenta/schema'
+import { availableThemes } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
 
 /**
@@ -70,6 +71,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
 
   return {
     store: createThemeStore({ db: options.db }),
+    availableThemes: availableThemes(),
     loadFileTokens: async () => {
       try {
         return JSON.parse(await readFile(tokensPath, 'utf8')) as Record<string, unknown>

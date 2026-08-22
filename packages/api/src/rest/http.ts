@@ -62,7 +62,7 @@ const FIELD_NAMING_CODES: ReadonlySet<ErrorCode> = new Set([
 
 function fieldOf(error: CogentaError): string | undefined {
   if (!FIELD_NAMING_CODES.has(error.code)) return undefined
-  const field = error.details?.['field']
+  const field = error.details?.field
   return typeof field === 'string' ? field : undefined
 }
 
@@ -338,6 +338,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   SKIN_MOTION_NOT_REDUCED: 422,
   THEME_OVERRIDE_INVALID: 422,
   THEME_SKIN_NOT_FOUND: 404,
+  // `activeTheme` naming a package this instance has no registry entry for
+  // (fiche L23) — the same status every other `*_NOT_FOUND` in this table
+  // uses, and the same code `@cogenta/render`'s `loadTheme` already throws
+  // for the equivalent case on the Astro build path.
+  THEME_NOT_FOUND: 404,
   // Same shape as `SITE_PLAN_NO_PROVIDER`: nothing is broken, this instance
   // simply has no LLM provider configured (R2).
   THEME_NO_PROVIDER: 501,

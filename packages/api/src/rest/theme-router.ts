@@ -33,6 +33,7 @@ export interface ThemeOverridesLike {
   readonly logoDarkMediaId: string | null
   readonly faviconMediaId: string | null
   readonly shareImageMediaId: string | null
+  readonly activeTheme: string | null
   readonly updatedAt: string
   readonly updatedBy: string | null
 }
@@ -44,7 +45,16 @@ export interface SetThemeOverridesInputLike {
   readonly logoDarkMediaId?: string | null
   readonly faviconMediaId?: string | null
   readonly shareImageMediaId?: string | null
+  readonly activeTheme?: string | null
   readonly updatedBy?: string | null
+}
+
+/** One entry of the theme picker (fiche L23) — a package name and what an admin sees for it. */
+export interface AvailableThemeLike {
+  /** The package name a site's `activeTheme` overlay names, e.g. `@cogenta/theme-portfolio`. */
+  readonly name: string
+  readonly label: string
+  readonly description: string
 }
 
 export interface ThemeStoreLike {
@@ -107,6 +117,14 @@ export interface ThemeRouterOptions {
    * file rather than the schema file). Present only under `cogenta dev`.
    */
   readonly fileExporter?: (tokens: ThemeTokensLike) => Promise<void>
+  /**
+   * The theme packages this instance can actually resolve — always present,
+   * never empty: even an install with no LLM provider and no gallery entry
+   * can still switch its layout theme (R2). `GET /api/theme` echoes this list
+   * so the picker never hardcodes theme names of its own, and `PUT
+   * /api/theme/overrides` refuses an `activeTheme` that is not one of them.
+   */
+  readonly availableThemes: readonly AvailableThemeLike[]
   readonly basePath?: string
 }
 
@@ -204,9 +222,19 @@ function overridesPayload(overrides: ThemeOverridesLike): Record<string, unknown
     logoDarkMediaId: overrides.logoDarkMediaId,
     faviconMediaId: overrides.faviconMediaId,
     shareImageMediaId: overrides.shareImageMediaId,
+    activeTheme: overrides.activeTheme,
     updatedAt: overrides.updatedAt,
     updatedBy: overrides.updatedBy,
   }
+}
+
+function unknownTheme(name: string, available: readonly AvailableThemeLike[]): CogentaError {
+  return new CogentaError({
+    code: 'THEME_NOT_FOUND',
+    message: `No theme named "${name}" is available on this instance.`,
+    hint: `Available: ${available.map((theme) => theme.name).join(', ')}.`,
+    details: { name, available: available.map((theme) => theme.name) },
+  })
 }
 
 export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
@@ -248,6 +276,7 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
               })),
               aiAvailable: options.generator !== undefined,
               exportAvailable: options.fileExporter !== undefined,
+              availableThemes: options.availableThemes,
             },
           })
         }
@@ -273,6 +302,13 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
             options.validateTokens(merged)
           }
           checkAdditionalCss(body.additionalCss)
+          if (
+            body.activeTheme !== undefined &&
+            body.activeTheme !== null &&
+            !options.availableThemes.some((theme) => theme.name === body.activeTheme)
+          ) {
+            throw unknownTheme(body.activeTheme, options.availableThemes)
+          }
 
           const written = await options.store.set({ ...body, updatedBy: actor.id })
           return jsonResponse(200, { data: overridesPayload(written) })

@@ -39,6 +39,8 @@ export interface SearchPageOptions {
   readonly menus?: PageChromeMenus
   /** Same live branding read the rest of the public site uses (`theme-render.ts`). Absent means full Cogenta credit. */
   readonly branding?: () => Promise<BrandingSettings>
+  /** Same live active-theme read the rest of the public site uses (`theme-render.ts`). Absent renders with the default theme. */
+  readonly activeTheme?: () => Promise<string | null>
 }
 
 interface ResolvedHit {
@@ -179,6 +181,7 @@ ${main}
 </main>`,
       ...(options.menus === undefined ? {} : { menus: options.menus }),
       ...(options.branding === undefined ? {} : { branding: options.branding }),
+      ...(options.activeTheme === undefined ? {} : { activeTheme: options.activeTheme }),
     },
     context,
   )

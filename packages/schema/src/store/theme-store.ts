@@ -45,6 +45,17 @@ export interface ThemeOverridesState {
   readonly logoDarkMediaId: string | null
   readonly faviconMediaId: string | null
   readonly shareImageMediaId: string | null
+  /**
+   * The installed theme *package* rendering the public site — a name like
+   * `@cogenta/theme-portfolio`, resolved by `@cogenta/cli`'s theme registry
+   * against the packages actually installed. `null` means the built-in
+   * default (`@cogenta/theme-canonical`). Distinct from every field above,
+   * which only ever changes *colours* within whichever theme is active — this
+   * is the one field that changes which package renders the layout at all,
+   * and it is read live on every request the same way the others are, so
+   * switching it takes effect on the very next page view, no restart.
+   */
+  readonly activeTheme: string | null
   readonly updatedAt: string
   readonly updatedBy: string | null
 }
@@ -57,6 +68,7 @@ export interface SetThemeOverridesInput {
   readonly logoDarkMediaId?: string | null
   readonly faviconMediaId?: string | null
   readonly shareImageMediaId?: string | null
+  readonly activeTheme?: string | null
   readonly updatedBy?: string | null
 }
 
@@ -79,6 +91,7 @@ const EMPTY_STATE: Omit<ThemeOverridesState, 'updatedAt'> = {
   logoDarkMediaId: null,
   faviconMediaId: null,
   shareImageMediaId: null,
+  activeTheme: null,
   updatedBy: null,
 }
 
@@ -94,10 +107,24 @@ export async function ensureThemeTable(db: DatabaseHandle): Promise<void> {
     ${identifier('logo_dark_media_id', dialect)} ${textColumn(dialect, 64)},
     ${identifier('favicon_media_id', dialect)} ${textColumn(dialect, 64)},
     ${identifier('share_image_media_id', dialect)} ${textColumn(dialect, 64)},
+    ${identifier('active_theme', dialect)} ${textColumn(dialect, 200)},
     ${identifier('updated_at', dialect)} ${timestampColumn(dialect)} not null,
     ${identifier('updated_by', dialect)} ${textColumn(dialect, 128)}
   )`
   await db.query(statement)
+
+  // A database whose table predates `active_theme`: `create table if not
+  // exists` above is a no-op for it, so the column is added the same way
+  // every other in-place table growth in this codebase is
+  // (`menu-tables.ts`'s own `location`/`target_taxonomy` columns do the
+  // same). Failure here means the column already exists — the only realistic
+  // cause on a table this function has already run against — so it is
+  // swallowed exactly like that precedent.
+  await db
+    .query(
+      sql`alter table ${table} add column ${identifier('active_theme', dialect)} ${textColumn(dialect, 200)}`,
+    )
+    .catch(() => undefined)
 }
 
 type Row = Record<string, unknown>
@@ -119,14 +146,15 @@ function nullableJson(value: unknown): Record<string, unknown> | null {
 
 function toState(row: Row): ThemeOverridesState {
   return {
-    tokenOverrides: nullableJson(row['token_overrides']),
-    additionalCss: nullableText(row['additional_css']),
-    logoMediaId: nullableText(row['logo_media_id']),
-    logoDarkMediaId: nullableText(row['logo_dark_media_id']),
-    faviconMediaId: nullableText(row['favicon_media_id']),
-    shareImageMediaId: nullableText(row['share_image_media_id']),
-    updatedAt: text(row['updated_at']),
-    updatedBy: nullableText(row['updated_by']),
+    tokenOverrides: nullableJson(row.token_overrides),
+    additionalCss: nullableText(row.additional_css),
+    logoMediaId: nullableText(row.logo_media_id),
+    logoDarkMediaId: nullableText(row.logo_dark_media_id),
+    faviconMediaId: nullableText(row.favicon_media_id),
+    shareImageMediaId: nullableText(row.share_image_media_id),
+    activeTheme: nullableText(row.active_theme),
+    updatedAt: text(row.updated_at),
+    updatedBy: nullableText(row.updated_by),
   }
 }
 
@@ -152,6 +180,7 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
       readonly logoDarkMediaId: string | null
       readonly faviconMediaId: string | null
       readonly shareImageMediaId: string | null
+      readonly activeTheme: string | null
       readonly updatedBy: string | null
     },
     at: string,
@@ -164,11 +193,13 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
               ${idColumn}, ${identifier('token_overrides', dialect)}, ${identifier('additional_css', dialect)},
               ${identifier('logo_media_id', dialect)}, ${identifier('logo_dark_media_id', dialect)},
               ${identifier('favicon_media_id', dialect)}, ${identifier('share_image_media_id', dialect)},
+              ${identifier('active_theme', dialect)},
               ${identifier('updated_at', dialect)}, ${identifier('updated_by', dialect)}
             ) values (
               ${ROW_ID}, ${tokenOverridesJson}, ${next.additionalCss},
               ${next.logoMediaId}, ${next.logoDarkMediaId},
               ${next.faviconMediaId}, ${next.shareImageMediaId},
+              ${next.activeTheme},
               ${at}, ${next.updatedBy}
             )`,
       )
@@ -181,6 +212,7 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
                 ${identifier('logo_dark_media_id', dialect)} = ${next.logoDarkMediaId},
                 ${identifier('favicon_media_id', dialect)} = ${next.faviconMediaId},
                 ${identifier('share_image_media_id', dialect)} = ${next.shareImageMediaId},
+                ${identifier('active_theme', dialect)} = ${next.activeTheme},
                 ${identifier('updated_at', dialect)} = ${at},
                 ${identifier('updated_by', dialect)} = ${next.updatedBy}
             where ${idColumn} = ${ROW_ID}`,
@@ -193,6 +225,7 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
       logoDarkMediaId: next.logoDarkMediaId,
       faviconMediaId: next.faviconMediaId,
       shareImageMediaId: next.shareImageMediaId,
+      activeTheme: next.activeTheme,
       updatedAt: at,
       updatedBy: next.updatedBy,
     }
@@ -231,6 +264,8 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
                 input.shareImageMediaId === undefined
                   ? current.shareImageMediaId
                   : input.shareImageMediaId,
+              activeTheme:
+                input.activeTheme === undefined ? current.activeTheme : input.activeTheme,
               updatedBy: input.updatedBy ?? null,
             },
             at,
@@ -243,6 +278,12 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
       db.transaction(
         async (tx) => {
           const existing = await rowOf(tx)
+          // `activeTheme` is deliberately *not* one of the fields this reset
+          // touches: "reset to file" is the appearance screen's skin-only
+          // undo, and it must not silently switch a site back to the
+          // default theme as a side effect of an editor discarding their
+          // colour changes.
+          const activeTheme = existing === null ? null : toState(existing).activeTheme
           const at = now().toISOString()
           return write(
             tx,
@@ -254,6 +295,7 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
               logoDarkMediaId: null,
               faviconMediaId: null,
               shareImageMediaId: null,
+              activeTheme,
               updatedBy,
             },
             at,

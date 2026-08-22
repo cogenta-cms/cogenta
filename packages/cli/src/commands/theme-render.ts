@@ -18,25 +18,25 @@ import {
 } from '@cogenta/schema'
 import type { SeoImage } from '@cogenta/seo'
 import {
-  query as collectionListQuery,
+  type ChromeNavLink,
+  buildCollectionListQuery as collectionListQuery,
   escapeAttribute,
-  escapeText,
   type FetchedEntries,
   type LinkTargetInput,
   type PageContent,
   type PublicComment,
   type RenderContext,
   renderCommentsSection,
-  renderPage,
   serialize,
   type ContentEntry as ThemeContentEntry,
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
-} from '@cogenta/theme-canonical'
+} from '@cogenta/theme-kit'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
 import type { SeoRenderDefaults } from './seo.js'
 import { alternatesForEntry, renderSeoHead, seoSiteFor } from './seo.js'
 import { minifyCss } from './theme-css.js'
+import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-registry.js'
 
 /**
  * The theme's own `ContentEntry`/`QueryRequest` (`theme-contract.ts`) are a
@@ -258,6 +258,17 @@ export interface ThemeRenderOptions {
    * Absent means the pre-task-8 behaviour: full Cogenta credit, unconditionally.
    */
   readonly branding?: () => Promise<BrandingSettings>
+  /**
+   * The name of the theme *package* to render this page with (fiche L23) —
+   * `@cogenta/theme-portfolio`, say. Read live per request, the same reasoning
+   * `branding`/`homePath` give: switching a site's theme from the appearance
+   * screen must show up on the very next page view, with no restart.
+   *
+   * Absent, or resolving to `null`, renders with `theme-registry.ts`'s
+   * `DEFAULT_THEME_NAME` (`@cogenta/theme-canonical`) — the pre-fiche-L23
+   * behaviour, unchanged for a site that has never touched this setting.
+   */
+  readonly activeTheme?: () => Promise<string | null>
 }
 
 /** `branding.showCogentaBranding` / `branding.customLogoMediaId`, resolved (fiche L21 task 8). */
@@ -283,6 +294,12 @@ async function brandingFor(
 ): Promise<BrandingSettings> {
   if (get === undefined) return DEFAULT_BRANDING
   return get()
+}
+
+/** Resolves the active theme module — `theme-registry.ts`'s own fallback covers an absent or unrecognised name. */
+async function themeFor(get: (() => Promise<string | null>) | undefined): Promise<ThemeModule> {
+  const name = get === undefined ? DEFAULT_THEME_NAME : await get()
+  return resolveTheme(name)
 }
 
 /**
@@ -556,40 +573,6 @@ async function fetchMenuLinksForSlot(
 }
 
 /**
- * A flat list of links (task 2's documented MVP): every item of the menu, in
- * the order the store returns them, regardless of `parent`/`depth`. A real
- * sub-menu render is left for later — the hierarchy is already in the data
- * (`parent`, `depth`), so nothing here would need to change to add it, only
- * this function's markup.
- *
- * A dead link is **hidden, never served** (fiche 09, task 4's decision): an
- * `entry`/`taxonomy`/`home` item whose target did not resolve to a public
- * route is dropped from the render entirely, on the theory that a menu
- * pointing at a 404 is worse than a menu with one fewer item — the same
- * distinction the admin's health check exists to catch *before* a visitor
- * hits it. A `submenu-placeholder` is not a dead link — it never had a
- * target — so it keeps rendering as an unlinked heading, exactly as before.
- *
- * `null`/empty renders nothing: the caller's slot stays exactly as empty as
- * it was before this was wired, for a site with no menu in that slot.
- */
-function renderMenuLinks(links: readonly ResolvedMenuLink[] | null): string {
-  if (links === null || links.length === 0) return ''
-  const items = links
-    .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
-    .map((link) => {
-      const label = escapeText(link.label)
-      const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
-      if (link.href === null) return `<li><span${titleAttr}>${label}</span></li>`
-      const href = escapeAttribute(link.href)
-      const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
-      return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
-    })
-    .join('')
-  return items === '' ? '' : `<ul class="cg-menu">${items}</ul>`
-}
-
-/**
  * The subset of `ThemeRenderOptions` the menu lookups actually read —
  * narrowed so `renderPageChrome` (below) can be called from a page that has
  * no `ThemeRenderOptions` of its own (`search-page.ts`, `forms-page.ts`)
@@ -613,6 +596,8 @@ export interface PageChromeOptions {
   readonly menus?: PageChromeMenus
   /** Same live read `ThemeRenderOptions.branding` documents — absent means full Cogenta credit, the pre-task-8 behaviour. */
   readonly branding?: () => Promise<BrandingSettings>
+  /** Same live read `ThemeRenderOptions.activeTheme` documents — absent renders with `DEFAULT_THEME_NAME`. */
+  readonly activeTheme?: () => Promise<string | null>
 }
 
 /**
@@ -635,10 +620,8 @@ export async function renderPageChrome(
   options: PageChromeOptions,
   context: AccessContext,
 ): Promise<string> {
-  const siteName = escapeAttribute(options.site.name)
-
-  let headerNav = ''
-  let footerNav = ''
+  let headerNav: readonly ChromeNavLink[] = []
+  let footerNav: readonly ChromeNavLink[] = []
   if (options.menus?.menuRouter !== undefined) {
     const [headerMenu, footerMenu] = await Promise.all([
       fetchMenuLinksForSlot(
@@ -656,11 +639,26 @@ export async function renderPageChrome(
         context,
       ),
     ])
-    headerNav = renderMenuLinks(headerMenu)
-    footerNav = renderMenuLinks(footerMenu)
+    headerNav = headerMenu ?? []
+    footerNav = footerMenu ?? []
   }
 
-  const branding = renderFooterBranding(await brandingFor(options.branding), DEFAULT_IMAGE_ENDPOINT)
+  const brandingHtml = renderFooterBranding(
+    await brandingFor(options.branding),
+    DEFAULT_IMAGE_ENDPOINT,
+  )
+  const theme = await themeFor(options.activeTheme)
+  const chrome = theme.renderChrome({
+    site: options.site,
+    locale: options.locale,
+    // Not locale-prefixed on purpose, matching this route's pre-existing
+    // behaviour — a genuine, pre-existing gap in a multi-locale deployment,
+    // tracked separately rather than folded into this change.
+    homeHref: '/',
+    headerNav,
+    footerNav,
+    brandingHtml,
+  })
 
   return `<!doctype html>
 <html lang="${escapeAttribute(options.locale)}" dir="auto">
@@ -673,9 +671,9 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
-<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
+${chrome.header}
 ${options.bodyHtml}
-<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}${branding}</div></footer>
+${chrome.footer}
 </body>
 </html>
 `
@@ -1017,7 +1015,8 @@ async function renderEntryPage(
   }
 
   const pageContent: PageContent = { title: entryTitle(entry), blocks }
-  const node = renderPage(pageContent, themeContext, fetchedEntries as FetchedEntries)
+  const theme = await themeFor(options.activeTheme)
+  const node = theme.renderPage(pageContent, themeContext, fetchedEntries as FetchedEntries)
   const bodyHtml = serialize(node)
 
   // The comment thread and form (fiche 15 task 6) — a property of the route,
@@ -1094,8 +1093,6 @@ async function renderEntryPage(
     ...(seoSettings === null ? {} : { seo: seoSettings }),
   })
 
-  const siteName = escapeAttribute(options.site.name)
-
   // Precaution 1 of 3 (fiche 35 task 6): only ever rendered for an actor
   // this request's own `resolveActor` actually authenticated — the flag
   // alone (set for every request on this path, anonymous included) is not
@@ -1131,12 +1128,20 @@ async function renderEntryPage(
       context,
     ),
   ])
-  const headerNav = renderMenuLinks(headerMenu)
-  const footerNav = renderMenuLinks(footerMenu)
-  const branding = renderFooterBranding(await brandingFor(options.branding), imageEndpoint)
+  const brandingHtml = renderFooterBranding(await brandingFor(options.branding), imageEndpoint)
+  const chrome = theme.renderChrome({
+    site: options.site,
+    locale: themeContext.locale,
+    // Not locale-prefixed on purpose, matching this route's pre-existing
+    // behaviour — see `renderPageChrome`'s own identical comment.
+    homeHref: '/',
+    headerNav: headerMenu ?? [],
+    footerNav: footerMenu ?? [],
+    brandingHtml,
+  })
 
   // The same frame `Base.astro` builds for a real Astro build: a skip link
-  // first, the site name as a header, the content, a footer. Rendering the
+  // first, the site's own chrome, the content, a footer. Rendering the
   // `<main>` alone — which this did until the theme's own stylesheet started
   // being served — left every page with no landmark to skip to and no way back
   // to the home page.
@@ -1152,10 +1157,10 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
 ${adminBar}
-<header class="cg-site-header"><div class="cg-site-header__inner"><a class="cg-site-header__home" href="/">${siteName}</a>${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}</div></header>
+${chrome.header}
 ${bodyHtml}
 ${commentsHtml}
-<footer class="cg-site-footer"><div class="cg-site-footer__inner"><span>${siteName}</span>${footerNav === '' ? '' : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`}${branding}</div></footer>
+${chrome.footer}
 ${analyticsBeaconTag(pathname, options.analyticsBeacon)}
 </body>
 </html>

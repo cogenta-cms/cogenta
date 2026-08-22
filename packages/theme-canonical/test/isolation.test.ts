@@ -111,7 +111,7 @@ describe('the manifest', () => {
   })
 
   it('claims the accessibility level the tests actually enforce', () => {
-    expect(manifest.a11y.verified).toBe('WCAG-2.2-AA')
+    expect(manifest.a11y?.verified).toBe('WCAG-2.2-AA')
   })
 
   it('needs nothing from the runtime beyond a static build', () => {

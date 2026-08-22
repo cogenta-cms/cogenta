@@ -495,6 +495,15 @@ export function installMockFetch(
         readonly label: string
         readonly description: string
       }[]
+      /**
+       * Simulates a server process running code from before this field
+       * existed (fiche L23 shipped it) — the key is genuinely absent from
+       * the JSON payload, not merely an empty array. A live restart-required
+       * version mismatch is exactly how this was first caught: a rebuilt
+       * admin bundle talking to a `cogenta serve` process still running the
+       * old `theme-router.js` it loaded at startup.
+       */
+      readonly omitAvailableThemesField?: boolean
     }
     /**
      * What `GET /api/config-status` answers with (fiche 23 task 5) — `null`
@@ -5991,7 +6000,7 @@ export function installMockFetch(
               skins: options.theme?.skins ?? [],
               aiAvailable: options.theme?.aiAvailable ?? false,
               exportAvailable: options.theme?.exportAvailable ?? false,
-              availableThemes,
+              ...(options.theme?.omitAvailableThemesField === true ? {} : { availableThemes }),
             },
           })
         }

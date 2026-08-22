@@ -187,6 +187,21 @@ describe('the appearance screen', () => {
 })
 
 describe('the appearance screen — theme picker (fiche L23)', () => {
+  it('renders without crashing when the server predates availableThemes (version-mismatch)', async () => {
+    // Caught live: a rebuilt admin bundle talking to a `cogenta serve`
+    // process still running the pre-L23 `theme-router.js` it loaded at
+    // startup answers GET /api/theme with no `availableThemes` key at all —
+    // `undefined.map()` crashed the whole screen. The picker must degrade to
+    // an empty list instead, same R1/R2 spirit as every other optional
+    // section on this screen (the AI panel, the skin gallery).
+    signedIn(['admin'], { omitAvailableThemesField: true })
+    render(<App />)
+    await goToAppearance()
+
+    expect(await screen.findByRole('heading', { name: 'Thème du site' })).toBeDefined()
+    expect(screen.queryByText('Canonical')).toBeNull()
+  })
+
   it('marks the built-in default active when no theme was ever chosen', async () => {
     signedIn(['admin'])
     render(<App />)

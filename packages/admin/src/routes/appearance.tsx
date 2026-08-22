@@ -440,7 +440,7 @@ export function AppearanceRoute(): JSX.Element {
                 </Notice>
               )}
               <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
-                {theme.availableThemes.map((candidate) => {
+                {(theme.availableThemes ?? []).map((candidate) => {
                   const active =
                     theme.overrides.activeTheme === candidate.name ||
                     (theme.overrides.activeTheme === null &&

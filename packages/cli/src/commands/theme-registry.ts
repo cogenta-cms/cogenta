@@ -61,6 +61,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'A confident, product-grid-native storefront: shoppable cards, a bold CTA accent, zero client JavaScript.',
     load: () => import('@cogenta/theme-ecommerce'),
   },
+  {
+    name: '@cogenta/theme-portfolio',
+    label: 'Portfolio',
+    description:
+      'An ultra-modern creative-portfolio theme: brutalist-meets-editorial display type, an electric accent, zero client JavaScript.',
+    load: () => import('@cogenta/theme-portfolio'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

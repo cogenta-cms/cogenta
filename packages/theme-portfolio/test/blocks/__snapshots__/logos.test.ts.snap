@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderLogos > matches a stable snapshot 1`] = `"<section class="cg-block cg-logos" data-block="logos"><h2 class="cg-logos__title" data-field="title">Selected clients</h2><ul class="cg-logos__items"><li class="cg-logo"><span class="cg-logo__index" aria-hidden="true">01</span><a class="cg-logo__link" href="https://acme.example" rel="noopener noreferrer"><img class="cg-logo__image" src="/img/acme.svg" width="160" height="40" alt="Acme" loading="lazy" decoding="async"></a></li><li class="cg-logo"><span class="cg-logo__index" aria-hidden="true">02</span><img class="cg-logo__image" src="/img/globex.svg" width="160" height="40" alt="Globex" loading="lazy" decoding="async"></li></ul></section>"`;

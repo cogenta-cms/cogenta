@@ -57,6 +57,7 @@
     "@cogenta/theme-canonical": "workspace:*",
     "@cogenta/theme-ecommerce": "workspace:*",
     "@cogenta/theme-kit": "workspace:*",
+    "@cogenta/theme-portfolio": "workspace:*",
     "graphql": "catalog:"
   },
   "devDependencies": {

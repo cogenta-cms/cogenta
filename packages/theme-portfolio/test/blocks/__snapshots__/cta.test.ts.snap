@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderCta > matches a stable snapshot 1`] = `"<section class="cg-block cg-cta" data-block="cta"><div class="cg-cta__frame"><h2 class="cg-cta__title" data-field="title">Let's talk about your project</h2><p class="cg-cta__text" data-field="text">One call, no obligation.</p><ul class="cg-actions" aria-label="Let&#39;s talk about your project"><li><a class="cg-action" data-emphasis="primary" href="/en/contact">Get in touch</a></li></ul></div></section>"`;

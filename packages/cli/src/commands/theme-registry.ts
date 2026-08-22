@@ -54,6 +54,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'The reference theme: all twelve blocks, zero client JavaScript, a neutral, accessible default.',
     load: () => import('@cogenta/theme-canonical'),
   },
+  {
+    name: '@cogenta/theme-ecommerce',
+    label: 'Storefront',
+    description:
+      'A confident, product-grid-native storefront: shoppable cards, a bold CTA accent, zero client JavaScript.',
+    load: () => import('@cogenta/theme-ecommerce'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

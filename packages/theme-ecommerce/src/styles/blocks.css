@@ -1,0 +1,941 @@
+/*
+ * The twelve vocabulary blocks, styled as a storefront: a product-card visual
+ * language runs through `featureGrid`, `gallery` and `collectionList`, a
+ * loud full-colour panel carries `cta`, and `logos`/`stats` read as trust and
+ * social proof rather than as document furniture.
+ *
+ * Nothing here declares a colour, a size, a radius or a duration of its own —
+ * every block composes the design system from `tokens.css`, which is what
+ * keeps a skin swap a whole-theme change rather than a per-block one.
+ */
+
+/* --- hero ------------------------------------------------------------- */
+
+.ce-hero {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: var(--ce-gap-loose);
+  align-items: center;
+  margin-block-start: var(--ce-s10);
+}
+
+/* A field of accent-tinted dots behind the copy — texture, not a picture, so
+   it never competes with the product shot for attention. Purely decorative:
+   it implies nothing about a discount or a claim the block does not carry. */
+.ce-hero::before {
+  content: "";
+  position: absolute;
+  inset-block-start: calc(var(--ce-s10) * -1);
+  inset-inline-start: calc(var(--ce-s10) * -1);
+  inline-size: min(26rem, 60%);
+  aspect-ratio: 1;
+  z-index: -1;
+  background-image: radial-gradient(var(--ce-accent-soft) 1.5px, transparent 1.5px);
+  background-size: var(--ce-s6) var(--ce-s6);
+  -webkit-mask-image: radial-gradient(circle at 30% 30%, black, transparent 70%);
+  mask-image: radial-gradient(circle at 30% 30%, black, transparent 70%);
+  pointer-events: none;
+}
+
+@media (min-width: 62rem) {
+  .ce-hero {
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: var(--ce-s20);
+  }
+}
+
+.ce-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ce-s2);
+  margin: 0 0 var(--ce-s6);
+  padding: var(--ce-s2) var(--ce-s4);
+  background: var(--ce-ink);
+  color: var(--ce-canvas);
+  border-radius: var(--ce-radius-pill);
+  font-size: var(--ce-text-xs);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
+}
+
+.ce-hero__eyebrow::before {
+  content: "";
+  inline-size: 0.5em;
+  block-size: 0.5em;
+  border-radius: 50%;
+  background: var(--ce-accent);
+}
+
+.ce-hero__title {
+  margin: 0;
+  font-size: var(--ce-text-3xl);
+  line-height: var(--ce-leading-tight);
+  letter-spacing: var(--ce-tracking-tight);
+  font-weight: var(--ce-weight-black);
+  text-wrap: balance;
+}
+
+@media (min-width: 62rem) {
+  .ce-hero__title {
+    font-size: calc(var(--ce-text-3xl) * 1.25);
+  }
+}
+
+.ce-hero__subtitle {
+  margin: var(--ce-s5) 0 0;
+  max-inline-size: var(--ce-measure-narrow);
+  font-size: var(--ce-text-lg);
+  line-height: var(--ce-leading-relaxed);
+  color: var(--ce-ink-muted);
+  text-wrap: pretty;
+}
+
+.ce-hero__media {
+  position: relative;
+}
+
+.ce-hero__image {
+  inline-size: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--ce-radius-xl);
+  box-shadow: var(--ce-elevation-3), var(--ce-ring);
+}
+
+/* --- prose --------------------------------------------------------------- */
+
+.ce-prose {
+  max-inline-size: var(--ce-measure);
+  margin-inline: auto;
+  line-height: var(--ce-leading-relaxed);
+}
+
+.ce-prose > :first-child {
+  margin-block-start: 0;
+}
+
+.ce-prose > :last-child {
+  margin-block-end: 0;
+}
+
+.ce-prose h2,
+.ce-prose h3,
+.ce-prose h4 {
+  letter-spacing: var(--ce-tracking-snug);
+  line-height: var(--ce-leading-snug);
+  font-weight: var(--ce-weight-bold);
+  text-wrap: balance;
+}
+
+.ce-prose h2 {
+  margin-block: var(--ce-s12) var(--ce-s5);
+  font-size: var(--ce-text-xl);
+  letter-spacing: var(--ce-tracking-tight);
+}
+
+.ce-prose h3 {
+  margin-block: var(--ce-s10) var(--ce-s3);
+  font-size: var(--ce-text-lg);
+}
+
+.ce-prose h4 {
+  margin-block: var(--ce-s8) var(--ce-s2);
+  font-size: var(--ce-text-md);
+  text-transform: uppercase;
+  letter-spacing: var(--ce-tracking-wide);
+}
+
+.ce-prose p {
+  margin-block: var(--ce-s5);
+  text-wrap: pretty;
+}
+
+.ce-prose ul,
+.ce-prose ol {
+  margin-block: var(--ce-s5);
+  padding-inline-start: var(--ce-s6);
+}
+
+.ce-prose li {
+  margin-block: var(--ce-s2);
+  padding-inline-start: var(--ce-s1);
+}
+
+.ce-prose li::marker {
+  color: var(--ce-accent);
+  font-weight: var(--ce-weight-bold);
+}
+
+.ce-prose strong {
+  font-weight: var(--ce-weight-semibold);
+  color: var(--ce-ink);
+}
+
+.ce-prose blockquote {
+  margin-block: var(--ce-s8);
+  margin-inline: 0;
+  padding: var(--ce-s6) var(--ce-s7);
+  border-inline-start: 4px solid var(--ce-accent);
+  border-start-end-radius: var(--ce-radius-md);
+  border-end-end-radius: var(--ce-radius-md);
+  background: var(--ce-surface-sunken);
+  color: var(--ce-ink-muted);
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--ce-text-lg);
+  line-height: var(--ce-leading-normal);
+}
+
+.ce-prose blockquote > :first-child {
+  margin-block-start: 0;
+}
+
+.ce-prose blockquote > :last-child {
+  margin-block-end: 0;
+}
+
+.ce-prose code {
+  font-family: var(--cogenta-font-mono);
+  font-size: 0.875em;
+  background: var(--ce-surface-sunken);
+  border-radius: var(--ce-radius-sm);
+  box-shadow: var(--ce-ring);
+  padding: 0.15em 0.4em;
+}
+
+.cg-prose__figure {
+  margin-block: var(--ce-s8);
+  margin-inline: 0;
+}
+
+.cg-prose__figure img {
+  inline-size: 100%;
+  border-radius: var(--ce-radius-lg);
+  box-shadow: var(--ce-elevation-2);
+}
+
+.cg-prose__figure figcaption {
+  margin-block-start: var(--ce-s3);
+  color: var(--ce-ink-subtle);
+  font-size: var(--ce-text-sm);
+  line-height: var(--ce-leading-normal);
+}
+
+/* --- mediaFigure ----------------------------------------------------------
+   Framed like a swatch card, matching the same padded-panel language the
+   product grid cards use so a lone figure reads as part of the same
+   catalogue.
+   ------------------------------------------------------------------------- */
+
+.ce-figure {
+  margin-inline: auto;
+}
+
+.ce-figure[data-align="start"],
+.ce-figure[data-align="end"] {
+  max-inline-size: calc(var(--ce-measure) / 2);
+}
+
+.ce-figure[data-align="start"] {
+  float: inline-start;
+  margin-inline-end: var(--ce-s6);
+}
+
+.ce-figure[data-align="end"] {
+  float: inline-end;
+  margin-inline-start: var(--ce-s6);
+}
+
+.ce-figure[data-align="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.ce-figure__frame {
+  padding: var(--ce-s3);
+  background: var(--ce-surface-raised);
+  border-radius: var(--ce-radius-xl);
+  box-shadow: var(--ce-ring);
+}
+
+.ce-figure[data-align="full"] .ce-figure__frame {
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.ce-figure__media {
+  inline-size: 100%;
+  aspect-ratio: var(--ce-ratio, auto);
+  border-radius: var(--ce-radius-lg);
+}
+
+.ce-figure[data-align="full"] .ce-figure__media {
+  border-radius: 0;
+}
+
+.ce-figure__caption {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ce-s2);
+  margin-block-start: var(--ce-s4);
+  padding-inline-start: var(--ce-gutter);
+  color: var(--ce-ink-subtle);
+  font-size: var(--ce-text-sm);
+  line-height: var(--ce-leading-normal);
+  text-wrap: pretty;
+}
+
+.ce-figure[data-align="full"] .ce-figure__caption {
+  max-inline-size: var(--ce-measure);
+  margin-inline: auto;
+}
+
+.ce-figure__caption-text::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.5em;
+  block-size: 0.5em;
+  margin-inline-end: var(--ce-s2);
+  border-radius: 50%;
+  background: var(--ce-accent);
+  vertical-align: middle;
+}
+
+.ce-figure__credit {
+  color: var(--ce-ink-subtle);
+}
+
+.ce-figure__credit::before {
+  content: "— ";
+}
+
+/* --- featureGrid ------------------------------------------------------- */
+
+.ce-features__items {
+  display: grid;
+  gap: var(--ce-gap);
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.ce-feature {
+  overflow: hidden;
+  background: var(--ce-surface-raised);
+  border-radius: var(--ce-radius-lg);
+  box-shadow: var(--ce-ring);
+  transition:
+    box-shadow var(--ce-duration) var(--ce-ease),
+    transform var(--ce-duration) var(--ce-ease);
+}
+
+.ce-feature:hover {
+  box-shadow: var(--ce-elevation-2), var(--ce-ring-accent);
+  transform: translateY(-3px);
+}
+
+.ce-feature__frame {
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ce-accent-soft);
+}
+
+.ce-feature__icon {
+  display: block;
+  inline-size: var(--ce-s12);
+  block-size: var(--ce-s12);
+  border-radius: var(--ce-radius-lg);
+  background: var(--ce-surface);
+  box-shadow: var(--ce-ring-accent);
+}
+
+.ce-feature__body {
+  position: relative;
+  padding: var(--ce-s6);
+}
+
+.ce-feature__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.ce-feature__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ce-feature:hover .ce-feature__link {
+  color: var(--ce-accent);
+}
+
+.ce-feature__title {
+  margin: 0 0 var(--ce-s2);
+  font-size: var(--ce-text-md);
+  font-weight: var(--ce-weight-bold);
+  line-height: var(--ce-leading-snug);
+  letter-spacing: var(--ce-tracking-snug);
+  text-wrap: balance;
+}
+
+.ce-feature__text {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  line-height: var(--ce-leading-relaxed);
+  text-wrap: pretty;
+}
+
+/* --- cta ------------------------------------------------------------------
+   The loudest panel in the theme: full accent colour, not a tinted card —
+   the "shop the sale" strip that commits rather than hints.
+   ------------------------------------------------------------------------- */
+
+.ce-cta {
+  margin-block: var(--ce-section-y);
+}
+
+.ce-cta__panel {
+  position: relative;
+  overflow: hidden;
+  padding: var(--ce-s20) var(--ce-s10);
+  background: var(--ce-accent);
+  color: var(--ce-accent-fg);
+  border-radius: var(--ce-radius-xl);
+  text-align: center;
+}
+
+.ce-cta__panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--ce-accent-fg) 14%, transparent),
+    transparent 55%
+  );
+  pointer-events: none;
+}
+
+.ce-cta__panel > * {
+  position: relative;
+}
+
+.ce-cta__title {
+  margin: 0;
+  font-size: var(--ce-text-2xl);
+  line-height: var(--ce-leading-snug);
+  letter-spacing: var(--ce-tracking-tight);
+  font-weight: var(--ce-weight-black);
+  text-wrap: balance;
+}
+
+.ce-cta__text {
+  margin: var(--ce-s4) auto 0;
+  max-inline-size: var(--ce-measure-narrow);
+  color: color-mix(in oklab, var(--ce-accent-fg) 88%, transparent);
+  font-size: var(--ce-text-lg);
+  line-height: var(--ce-leading-relaxed);
+  text-wrap: pretty;
+}
+
+.ce-cta .cg-actions {
+  justify-content: center;
+}
+
+/* On the solid accent panel, the shared action styles are re-cast so a
+   "primary" action reads as the loudest element on the page and a
+   "secondary" one still meets AA against the panel — both pairs reuse the
+   accent/accentFg contrast contract D itself already validated. */
+.ce-cta .cg-action[data-emphasis="primary"] {
+  background: var(--ce-accent-fg);
+  color: var(--ce-accent);
+  box-shadow: none;
+}
+
+.ce-cta .cg-action[data-emphasis="primary"]:hover {
+  background: color-mix(in oklab, var(--ce-accent-fg) 85%, var(--ce-accent));
+  box-shadow: var(--ce-elevation-1);
+}
+
+.ce-cta .cg-action[data-emphasis="secondary"] {
+  background: transparent;
+  color: var(--ce-accent-fg);
+  box-shadow: inset 0 0 0 1.5px var(--ce-accent-fg);
+}
+
+.ce-cta .cg-action[data-emphasis="secondary"]:hover {
+  background: color-mix(in oklab, var(--ce-accent-fg) 16%, transparent);
+}
+
+/* --- gallery --------------------------------------------------------------
+   The lookbook strip. Consistent aspect ratios, generous gaps, a hover zoom
+   clipped by the frame so the tile itself never grows.
+   ------------------------------------------------------------------------- */
+
+.ce-gallery__items {
+  display: grid;
+  gap: var(--ce-gap-tight);
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+.ce-gallery__item {
+  overflow: hidden;
+  border-radius: var(--ce-radius-lg);
+  box-shadow: var(--ce-ring);
+}
+
+.ce-gallery__image {
+  inline-size: 100%;
+  block-size: 100%;
+  transition: transform var(--ce-duration-slow) var(--ce-ease);
+}
+
+.ce-gallery__item:hover .ce-gallery__image {
+  transform: scale(1.05);
+}
+
+.ce-gallery:not([data-layout="masonry"]) .ce-gallery__image {
+  aspect-ratio: 3 / 4;
+}
+
+.ce-gallery[data-layout="masonry"] .ce-gallery__items {
+  display: block;
+  columns: 3 15rem;
+  column-gap: var(--ce-gap-tight);
+}
+
+.ce-gallery[data-layout="masonry"] .ce-gallery__item {
+  break-inside: avoid;
+  margin-block-end: var(--ce-gap-tight);
+}
+
+.ce-gallery[data-layout="carousel"] .ce-gallery__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(16rem, 38%);
+}
+
+.ce-gallery[data-layout="carousel"] .ce-gallery__item {
+  scroll-snap-align: start;
+}
+
+/* --- quote ------------------------------------------------------------- */
+
+.ce-quote {
+  max-inline-size: var(--ce-page-narrow);
+  margin-inline: auto;
+  padding: var(--ce-s10) var(--ce-s8);
+  background: var(--ce-surface-raised);
+  border-radius: var(--ce-radius-xl);
+  box-shadow: var(--ce-ring);
+  text-align: center;
+}
+
+.ce-quote::before {
+  content: "\201C" / "";
+  display: block;
+  margin-block-end: calc(var(--ce-s3) * -1);
+  color: var(--ce-accent-soft);
+  font-family: var(--cogenta-font-serif);
+  font-size: calc(var(--ce-text-3xl) * 1.8);
+  line-height: 1;
+}
+
+.ce-quote__text {
+  margin: 0;
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--ce-text-2xl);
+  line-height: var(--ce-leading-snug);
+  letter-spacing: var(--ce-tracking-snug);
+  text-wrap: balance;
+}
+
+.ce-quote__attribution {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ce-s3);
+  margin-block-start: var(--ce-s8);
+  color: var(--ce-ink-subtle);
+  font-size: var(--ce-text-sm);
+}
+
+.ce-quote__avatar {
+  inline-size: var(--ce-s12);
+  block-size: var(--ce-s12);
+  border-radius: var(--ce-radius-pill);
+  box-shadow: var(--ce-ring);
+}
+
+.ce-quote__who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ce-s2);
+}
+
+.ce-quote__author {
+  font-weight: var(--ce-weight-bold);
+  color: var(--ce-ink);
+}
+
+.ce-quote__role::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.3em;
+  block-size: 0.3em;
+  border-radius: 50%;
+  background: var(--ce-ink-subtle);
+  vertical-align: middle;
+  margin-inline-end: var(--ce-s2);
+}
+
+/* --- faq --------------------------------------------------------------- */
+
+.ce-faq {
+  max-inline-size: var(--ce-page-narrow);
+  margin-inline: auto;
+}
+
+.ce-faq__items {
+  display: grid;
+  gap: var(--ce-s3);
+}
+
+.ce-faq__item {
+  background: var(--ce-surface-raised);
+  border-radius: var(--ce-radius-lg);
+  box-shadow: var(--ce-ring);
+  transition: box-shadow var(--ce-duration) var(--ce-ease);
+}
+
+.ce-faq__details[open] {
+  box-shadow: var(--ce-ring-accent);
+}
+
+.ce-faq__question {
+  display: flex;
+  align-items: center;
+  gap: var(--ce-s4);
+  padding: var(--ce-s5) var(--ce-s6);
+  font-weight: var(--ce-weight-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.ce-faq__question::-webkit-details-marker {
+  display: none;
+}
+
+.ce-faq__question-text {
+  flex: 1 1 auto;
+}
+
+.ce-faq__marker {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--ce-s8);
+  block-size: var(--ce-s8);
+  border-radius: 50%;
+  background: var(--ce-accent-soft);
+  transition:
+    background-color var(--ce-duration) var(--ce-ease),
+    transform var(--ce-duration) var(--ce-ease);
+}
+
+.ce-faq__marker::before {
+  content: "";
+  inline-size: 0.45em;
+  block-size: 0.45em;
+  border-inline-end: 2px solid var(--ce-accent-soft-fg);
+  border-block-end: 2px solid var(--ce-accent-soft-fg);
+  transform: translateY(-0.1em) rotate(45deg);
+  transition: transform var(--ce-duration) var(--ce-ease);
+}
+
+.ce-faq__details[open] .ce-faq__marker {
+  background: var(--ce-accent);
+}
+
+.ce-faq__details[open] .ce-faq__marker::before {
+  border-color: var(--ce-accent-fg);
+  transform: translateY(0.12em) rotate(-135deg);
+}
+
+.ce-faq__answer {
+  padding: 0 var(--ce-s6) var(--ce-s6);
+  color: var(--ce-ink-muted);
+  line-height: var(--ce-leading-relaxed);
+}
+
+.ce-faq__answer > :first-child {
+  margin-block-start: 0;
+}
+
+.ce-faq__answer > :last-child {
+  margin-block-end: 0;
+}
+
+/* --- stats ------------------------------------------------------------- */
+
+.ce-stats__items {
+  display: grid;
+  gap: var(--ce-gap);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  margin: 0;
+}
+
+.ce-stat {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--ce-s2);
+  padding: var(--ce-s7) var(--ce-s6);
+  background: var(--ce-surface-sunken);
+  border-radius: var(--ce-radius-lg);
+}
+
+.ce-stat__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ce-s1);
+  margin: 0;
+  color: var(--ce-accent);
+  font-size: calc(var(--ce-text-3xl) * 1.1);
+  font-weight: var(--ce-weight-black);
+  line-height: var(--ce-leading-tight);
+  letter-spacing: var(--ce-tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.ce-stat__unit {
+  font-size: var(--ce-text-lg);
+  font-weight: var(--ce-weight-medium);
+  color: var(--ce-ink-muted);
+}
+
+.ce-stat__label {
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-xs);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* --- logos ------------------------------------------------------------- */
+
+.ce-logos {
+  padding-block: var(--ce-s10);
+}
+
+.ce-logos__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.ce-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ce-s5) var(--ce-s8);
+}
+
+.ce-logo:not(:first-child) {
+  border-inline-start: 1px solid var(--ce-line-soft);
+}
+
+.ce-logo__image {
+  block-size: var(--ce-s10);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+  filter: grayscale(1);
+  opacity: 0.6;
+  transition:
+    opacity var(--ce-duration) var(--ce-ease),
+    filter var(--ce-duration) var(--ce-ease);
+}
+
+.ce-logo__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ce-radius-md);
+}
+
+.ce-logo:hover .ce-logo__image,
+.ce-logo__link:focus-visible .ce-logo__image {
+  opacity: 1;
+  filter: grayscale(0);
+}
+
+/* --- collectionList ---------------------------------------------------
+   The main product grid — the block every other card in the theme is built
+   to match.
+   ------------------------------------------------------------------------- */
+
+.ce-collection__items {
+  display: grid;
+  gap: var(--ce-gap);
+}
+
+.ce-collection[data-layout="grid"] .ce-collection__items {
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+
+.ce-collection[data-layout="carousel"] .ce-collection__items {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(17rem, 42%);
+}
+
+.ce-collection[data-layout="carousel"] .ce-entry {
+  scroll-snap-align: start;
+}
+
+.ce-entry__card {
+  position: relative;
+  padding: var(--ce-s6);
+  background: var(--ce-surface-raised);
+  border-radius: var(--ce-radius-lg);
+  box-shadow: var(--ce-ring);
+  transition:
+    box-shadow var(--ce-duration) var(--ce-ease),
+    transform var(--ce-duration) var(--ce-ease);
+}
+
+.ce-entry:hover .ce-entry__card {
+  box-shadow: var(--ce-elevation-2), var(--ce-ring-accent);
+  transform: translateY(-3px);
+}
+
+.ce-entry__badge {
+  display: inline-block;
+  margin-block-end: var(--ce-s3);
+  padding: var(--ce-s1) var(--ce-s3);
+  background: var(--ce-accent-soft);
+  color: var(--ce-accent-soft-fg);
+  border-radius: var(--ce-radius-pill);
+  font-size: var(--ce-text-xs);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
+}
+
+.ce-entry__title {
+  margin: 0;
+  font-size: var(--ce-text-lg);
+  font-weight: var(--ce-weight-bold);
+  line-height: var(--ce-leading-snug);
+  letter-spacing: var(--ce-tracking-snug);
+  text-wrap: balance;
+}
+
+.ce-entry__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ce-entry__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.ce-entry:hover .ce-entry__link {
+  color: var(--ce-accent);
+}
+
+.ce-entry__excerpt {
+  margin: var(--ce-s3) 0 0;
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-sm);
+  line-height: var(--ce-leading-relaxed);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.ce-collection__empty {
+  padding: var(--ce-s10);
+  background: var(--ce-surface-sunken);
+  border-radius: var(--ce-radius-lg);
+  color: var(--ce-ink-subtle);
+  text-align: center;
+}
+
+/* --- embed --------------------------------------------------------------- */
+
+.ce-embed {
+  aspect-ratio: var(--ce-ratio, 16 / 9);
+  max-inline-size: var(--ce-measure);
+  margin-inline: auto;
+}
+
+.ce-embed__frame {
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+  border-radius: var(--ce-radius-lg);
+}
+
+.ce-embed__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ce-s4);
+  block-size: 100%;
+  padding: var(--ce-s8);
+  background: var(--ce-surface-sunken);
+  color: var(--ce-ink-muted);
+  border: 1px dashed var(--ce-line-strong);
+  border-radius: var(--ce-radius-xl);
+  text-align: center;
+}
+
+.ce-embed__badge {
+  padding: var(--ce-s1) var(--ce-s4);
+  background: var(--ce-surface);
+  border-radius: var(--ce-radius-pill);
+  box-shadow: var(--ce-ring);
+  font-size: var(--ce-text-xs);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
+}
+
+.ce-embed__notice {
+  margin: 0;
+  max-inline-size: var(--ce-measure-narrow);
+  line-height: var(--ce-leading-relaxed);
+  text-wrap: pretty;
+}
+
+.ce-embed__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding: var(--ce-s3) var(--ce-s6);
+  background: var(--ce-accent);
+  color: var(--ce-accent-fg);
+  border-radius: var(--ce-radius-pill);
+  font-size: var(--ce-text-sm);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background-color var(--ce-duration) var(--ce-ease);
+}
+
+.ce-embed__link:hover {
+  background: var(--ce-accent-hover);
+}

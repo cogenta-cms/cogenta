@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`stats > renders to stable markup 1`] = `"<section class="ce-block ce-stats" data-block="stats"><h2 class="ce-stats__title" data-field="title">By the numbers</h2><dl class="ce-stats__items"><div class="ce-stat"><dt class="ce-stat__label">Orders shipped</dt><dd class="ce-stat__value">48<span class="ce-stat__unit">k+</span></dd></div><div class="ce-stat"><dt class="ce-stat__label">Average rating</dt><dd class="ce-stat__value">4.8<span class="ce-stat__unit">/5</span></dd></div></dl></section>"`;

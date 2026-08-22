@@ -391,6 +391,17 @@ majeur et impose une migration automatique du contenu déjà saisi.
 > (mêmes deux outils, pour qu'un agent puisse choisir une page de redirection)
 > réutilisent `content.read` telle quelle plutôt que d'ajouter une troisième entrée :
 > parcourir n'est pas un accès plus large que lire une entrée.
+>
+> **`tools@1.3` le 2026-08-22** (L24 tâche 2, l'agent « Cogenta Developer ») : ajout
+> de la permission `code.patch`. Même règle que `tools@1.1`/`tools@1.2` : aucune
+> signature existante ne change, l'ajout est par le bas. `code.patch` porte
+> `code.propose_patch` (`@cogenta/agents-builtin`, `sideEffects: true`,
+> `reversible: true` — son `revert` ferme la pull request sans la fusionner, comme
+> `deps.patch`) : ouvre une pull request portant le contenu complet d'un ou plusieurs
+> fichiers du dépôt, jamais une écriture directe. Construit sur le même `PrClient`
+> que `deps.patch` (`security/pr-client.ts`) plutôt que sur une seconde abstraction —
+> seule sa forme d'entrée diffère (un ensemble de fichiers arbitraire plutôt qu'un
+> bump de version d'une seule dépendance).
 
 ```ts
 defineTool({
@@ -439,6 +450,7 @@ http.fetch(domains[]) · channel.send(channel)
 agent.delegate · memory.read · memory.write
 document.extract
 logs.read · redirects.write
+code.patch
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -447,6 +459,12 @@ porte, `document.extract_text`, ne fait aucune E/S : il reçoit les octets, rend
 texte, et n'écrit nulle part. Le texte rendu est **de la donnée** (R8), jamais une
 instruction — l'agent qui l'exploite le passe par le canal `data` de
 `assembleContext`, jamais dans un prompt système.
+
+`code.patch` (ajoutée en `tools@1.3`, L24 tâche 2) autorise un agent à ouvrir une
+pull request portant un vrai changement de code du dépôt lui-même. Aucun outil ne
+porte cette permission avec un autre effet que « ouvrir une PR » : il n'existe et ne
+peut exister aucun chemin, à ce niveau d'autonomie ou à un autre, par lequel un agent
+écrit directement dans le dépôt.
 
 ### Définition d'un agent
 

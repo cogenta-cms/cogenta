@@ -11,6 +11,14 @@ export type {
 } from './content/topic-gaps.js'
 export { suggestTopicGaps } from './content/topic-gaps.js'
 export type { ContentFinding, ContentProvenance, ContentSeverity } from './content/types.js'
+export { designerAgent } from './designer/agent.js'
+export { developerAgent } from './developer/agent.js'
+export type {
+  CodePatchInput,
+  CodePatchOutput,
+  CodePatchToolOptions,
+} from './developer/patch-tool.js'
+export { createCodePatchTool } from './developer/patch-tool.js'
 export { performanceAgent } from './performance/agent.js'
 export { compareToBudget } from './performance/budget.js'
 export type { CruxFormFactor, QueryCruxOptions } from './performance/crux-client.js'

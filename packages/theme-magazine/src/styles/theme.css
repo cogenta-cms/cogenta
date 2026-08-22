@@ -1,0 +1,17 @@
+/*
+ * The magazine theme's stylesheet — the entry point, and nothing else.
+ *
+ *   tokens.css  the design system (and the Google Fonts `@import`),
+ *               derived entirely from the skin's `--cogenta-*` properties
+ *   base.css    document, accessibility floor, masthead/colophon, actions
+ *   blocks.css  the twelve vocabulary blocks
+ *
+ * Not one colour, font, radius, duration or shadow is written literally in
+ * any of the three: every value comes from a `--cogenta-<group>-<name>`
+ * property produced from the skin's tokens, or from a `--cg-*` property
+ * composed from those.
+ */
+
+@import "./tokens.css";
+@import "./base.css";
+@import "./blocks.css";

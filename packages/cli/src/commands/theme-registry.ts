@@ -54,6 +54,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'The reference theme: all twelve blocks, zero client JavaScript, a neutral, accessible default.',
     load: () => import('@cogenta/theme-canonical'),
   },
+  {
+    name: '@cogenta/theme-magazine',
+    label: 'Magazine',
+    description:
+      'An editorial magazine theme: print-inspired typography, a lead-story listing grid, zero client JavaScript.',
+    load: () => import('@cogenta/theme-magazine'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

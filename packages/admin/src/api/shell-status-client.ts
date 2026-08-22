@@ -23,6 +23,14 @@ export interface ShellStatus {
   readonly cogentaVersion: string
 }
 
-export function getShellStatus(token: string): Promise<ShellStatus> {
-  return request('/api/shell-status', { headers: authHeader(token) })
+/**
+ * `token` is optional: the route itself answers an anonymous caller too
+ * (every actor-gated field comes back `null`, `cogentaVersion` still real) —
+ * `login.tsx` reads the version this same way, before there is a session to
+ * send a token from.
+ */
+export function getShellStatus(token?: string | null): Promise<ShellStatus> {
+  return request('/api/shell-status', {
+    ...(token === undefined || token === null ? {} : { headers: authHeader(token) }),
+  })
 }

@@ -666,6 +666,7 @@ export async function renderPageChrome(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/png" href="${DEFAULT_LOGO_PATH}">
 ${options.headHtml}
 ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>

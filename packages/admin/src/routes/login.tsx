@@ -1,12 +1,32 @@
-import { type FormEvent, type JSX, useState } from 'react'
+import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
+import { getShellStatus } from '../api/shell-status-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 interface LocationState {
   readonly from?: { readonly pathname: string }
+}
+
+/**
+ * The mark and version above the card — present on every step (password,
+ * TOTP, recovery), never inside `<Card>`: a sign-in screen with no visible
+ * "which product is this" is disorienting the first time anyone sees it,
+ * and it was missing entirely before this. `/_cogenta/logo-cogenta.png` is
+ * the same public, unauthenticated asset the site's own footer credit and
+ * favicon already use — no separate branding lookup needed here.
+ */
+function LoginBrand({ version }: { readonly version: string | null }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
+      {version !== null && version !== '' && (
+        <span className="font-mono text-xs text-muted-foreground">v{version}</span>
+      )}
+    </div>
+  )
 }
 
 type Step =
@@ -44,6 +64,19 @@ export function LoginRoute(): JSX.Element {
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getShellStatus()
+      .then((status) => {
+        if (!cancelled) setVersion(status.cogentaVersion)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   /**
    * `ApiError#message` is the server's own English string (`@cogenta/auth`
@@ -148,7 +181,8 @@ export function LoginRoute(): JSX.Element {
 
   if (step.kind === 'totp') {
     return (
-      <main className="flex min-h-full items-center justify-center p-6">
+      <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
+        <LoginBrand version={version} />
         <Card className="w-full max-w-sm">
           <CardBody>
             <form
@@ -205,7 +239,8 @@ export function LoginRoute(): JSX.Element {
 
   if (step.kind === 'recovery') {
     return (
-      <main className="flex min-h-full items-center justify-center p-6">
+      <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
+        <LoginBrand version={version} />
         <Card className="w-full max-w-sm">
           <CardBody>
             <form
@@ -258,7 +293,8 @@ export function LoginRoute(): JSX.Element {
   }
 
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
+    <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
+      <LoginBrand version={version} />
       <Card className="w-full max-w-sm">
         <CardBody>
           <h1 id="login-heading" className="m-0 text-xl leading-7 font-semibold">

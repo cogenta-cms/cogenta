@@ -41,7 +41,11 @@ describe('agent skills', () => {
     expect(await screen.findByText(/Aucune compétence configurée/)).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Créer une compétence' }))
-    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Style guide' } })
+    fireEvent.change(screen.getByLabelText('Contenu SKILL.md'), {
+      target: {
+        value: '---\nname: Style guide\ndescription: House style.\n---\n\nUse British spelling.',
+      },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('Style guide')).toBeDefined()

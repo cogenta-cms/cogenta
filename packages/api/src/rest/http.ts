@@ -218,6 +218,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AGENT_SKILL_BUILTIN_UNDELETABLE: 409,
   AGENT_REGISTRY_READ_ONLY: 501,
   AGENT_RUNTIME_UNAVAILABLE: 503,
+  // Raised by `parseSkillFile` (`@cogenta/agents`) — a malformed `SKILL.md`
+  // submitted as-is (L24 task 4's `/api/agent-skills` `content` field) is a
+  // bad request, the same shape as any other `*_INVALID` input error below.
+  SKILL_DEFINITION_INVALID: 400,
 
   // Notice channel settings (fiche 38 tasks 3-4), reusing `@cogenta/channels`'
   // own error codes rather than inventing new ones for the same failures.

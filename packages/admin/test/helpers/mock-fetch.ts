@@ -9,6 +9,37 @@ export interface MockUser {
 export const USER: MockUser = { id: 'user-1', email: 'alice@example.com', roles: ['editor'] }
 export const VALID_TOKEN = 'valid-test-token'
 
+/**
+ * A miniature stand-in for `@cogenta/agents`' `parseSkillFile`/`renderSkillFile`
+ * (L24 task 4) — this file imports nothing but `vitest`, so the mock backend
+ * for `/api/agent-skills` reads/writes the same `---\nkey: value\n---\nbody`
+ * shape by hand rather than pulling in the real package.
+ */
+function parseMockSkillContent(content: string): {
+  name: string
+  description: string
+  instructions: string
+} {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(content)
+  if (match === null) return { name: '', description: '', instructions: content.trim() }
+  const [, frontmatter = '', body = ''] = match
+  const fields: Record<string, string> = {}
+  for (const line of frontmatter.split('\n')) {
+    const separatorIndex = line.indexOf(':')
+    if (separatorIndex === -1) continue
+    fields[line.slice(0, separatorIndex).trim()] = line.slice(separatorIndex + 1).trim()
+  }
+  return {
+    name: fields.name ?? '',
+    description: fields.description ?? '',
+    instructions: body.trim(),
+  }
+}
+
+function renderMockSkillContent(name: string, description: string, instructions: string): string {
+  return `---\nname: ${name}\ndescription: ${description}\n---\n\n${instructions}\n`
+}
+
 export const MOCK_SCHEMA = {
   contract: 'schema@2.0',
   taxonomies: [
@@ -854,6 +885,7 @@ export function installMockFetch(
     name: string
     description: string
     instructions: string
+    content: string
     enabledByDefault: boolean
     builtin: boolean
     createdAt: string
@@ -3631,16 +3663,16 @@ export function installMockFetch(
           if (method === 'GET') return json(200, { data: mockAgentSkills })
           if (method === 'POST') {
             const body = JSON.parse(String(init?.body ?? '{}')) as {
-              name?: string
-              description?: string
-              instructions?: string
+              content?: string
               enabledByDefault?: boolean
             }
+            const parsed = parseMockSkillContent(body.content ?? '')
             const created = {
               id: `skill-${mockAgentSkills.length + 1}`,
-              name: body.name ?? '',
-              description: body.description ?? '',
-              instructions: body.instructions ?? '',
+              name: parsed.name,
+              description: parsed.description,
+              instructions: parsed.instructions,
+              content: renderMockSkillContent(parsed.name, parsed.description, parsed.instructions),
               enabledByDefault: body.enabledByDefault ?? true,
               builtin: false,
               createdAt: '2026-03-01T00:00:00.000Z',
@@ -3653,10 +3685,32 @@ export function installMockFetch(
         const [, skillId] = skillMatch ?? []
         const index = mockAgentSkills.findIndex((skill) => skill.id === skillId)
         if (method === 'PATCH' && index >= 0) {
-          const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            content?: string
+            enabledByDefault?: boolean
+          }
           const existing = mockAgentSkills[index] as (typeof mockAgentSkills)[number]
-          mockAgentSkills[index] = { ...existing, ...body }
-          return json(200, { data: mockAgentSkills[index] })
+          const parsed = body.content !== undefined ? parseMockSkillContent(body.content) : null
+          const updated = {
+            ...existing,
+            ...(parsed === null
+              ? {}
+              : {
+                  name: parsed.name,
+                  description: parsed.description,
+                  instructions: parsed.instructions,
+                }),
+            ...(body.enabledByDefault === undefined
+              ? {}
+              : { enabledByDefault: body.enabledByDefault }),
+          }
+          updated.content = renderMockSkillContent(
+            updated.name,
+            updated.description,
+            updated.instructions,
+          )
+          mockAgentSkills[index] = updated
+          return json(200, { data: updated })
         }
         if (method === 'DELETE' && index >= 0) {
           mockAgentSkills.splice(index, 1)

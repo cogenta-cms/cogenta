@@ -110,7 +110,10 @@ export function createSkillRegistry(
       try {
         const { metadata } = parseSkillFile(input.displayName, input.rawContent)
         skillName = metadata.name
-        skillVersion = metadata.version
+        // `version` is optional on a skill file since L24 task 4 (a real
+        // Claude Code/Codex `SKILL.md` never carries one) — the marketplace
+        // still records whatever the submitter provided, `null` if absent.
+        skillVersion = metadata.version ?? null
       } catch (error) {
         status = 'rejected'
         rejectionCode = error instanceof CogentaError ? error.code : 'SKILL_DEFINITION_INVALID'

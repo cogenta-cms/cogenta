@@ -399,7 +399,7 @@ export type {
   SkinCandidate,
 } from './site-plan/types.js'
 export { createFileSkillStore } from './skills/file-store.js'
-export { parseSkillFile } from './skills/frontmatter.js'
+export { parseSkillFile, renderSkillFile } from './skills/frontmatter.js'
 export type {
   AgentSkill,
   AgentSkillInput,

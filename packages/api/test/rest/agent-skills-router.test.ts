@@ -9,6 +9,10 @@ import { ANONYMOUS } from '../../src/types.js'
 const ADMIN = { id: 'user-admin', roles: ['admin'] }
 const EDITOR = { id: 'user-editor', roles: ['editor'] }
 
+function contentOf(name: string, description: string, instructions: string): string {
+  return `---\nname: ${name}\ndescription: ${description}\n---\n\n${instructions}\n`
+}
+
 function fakeRegistry(): AgentSkillRegistryLike {
   const records = new Map<string, AgentSkillSummary>()
   let counter = 0
@@ -26,6 +30,7 @@ function fakeRegistry(): AgentSkillRegistryLike {
         name: input.name,
         description: input.description,
         instructions: input.instructions,
+        content: contentOf(input.name, input.description, input.instructions),
         enabledByDefault: input.enabledByDefault ?? true,
         builtin: false,
         createdAt: '2026-01-01T00:00:00.000Z',
@@ -37,7 +42,15 @@ function fakeRegistry(): AgentSkillRegistryLike {
     async update(id, patch) {
       const existing = records.get(id)
       if (existing === undefined) throw new Error('not found')
-      const updated = { ...existing, ...patch }
+      const updated = {
+        ...existing,
+        ...patch,
+        content: contentOf(
+          patch.name ?? existing.name,
+          patch.description ?? existing.description,
+          patch.instructions ?? existing.instructions,
+        ),
+      }
       records.set(id, updated)
       return updated
     },
@@ -74,12 +87,14 @@ describe('/api/agent-skills', () => {
         method: 'POST',
         path: '/api/agent-skills',
         query: {},
-        body: { name: 'Style', description: 'd', instructions: 'i' },
+        body: { content: contentOf('Style', 'd', 'i') },
       },
       ADMIN,
     )
     expect(created.status).toBe(201)
-    const id = (created.body as { data: AgentSkillSummary }).data.id
+    const createdSkill = (created.body as { data: AgentSkillSummary }).data
+    const id = createdSkill.id
+    expect(createdSkill.content).toBe(contentOf('Style', 'd', 'i'))
 
     const listed = await router.handle(
       { method: 'GET', path: '/api/agent-skills', query: {} },
@@ -92,7 +107,7 @@ describe('/api/agent-skills', () => {
         method: 'PATCH',
         path: `/api/agent-skills/${id}`,
         query: {},
-        body: { instructions: 'new instructions' },
+        body: { content: contentOf('Style', 'd', 'new instructions') },
       },
       ADMIN,
     )
@@ -117,5 +132,56 @@ describe('/api/agent-skills', () => {
       ADMIN,
     )
     expect(response.status).toBe(404)
+  })
+
+  it('rejects content with no frontmatter block', async () => {
+    const router = createAgentSkillsRouter({ skills: fakeRegistry() })
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/agent-skills',
+        query: {},
+        body: { content: 'not a skill file' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'SKILL_DEFINITION_INVALID',
+    )
+  })
+
+  // L24 task 4's acceptance criterion: a SKILL.md with no `version` field —
+  // exactly what a real Claude Code/Codex skill looks like, and what
+  // `.claude/skills/*/SKILL.md` in this very repo carries — imports without
+  // error, name/description/instructions taken straight from it.
+  it('imports a real Claude Code style SKILL.md (name + description only, no version)', async () => {
+    const router = createAgentSkillsRouter({ skills: fakeRegistry() })
+    const realSkillMd = [
+      '---',
+      'name: new-package',
+      'description: Use when creating a new @cogenta/* package in the monorepo — produces the exact skeleton (package.json, tsconfig, exports, test layout, changeset) that matches the project’s ESM-strict, publishable-package conventions.',
+      '---',
+      '',
+      '# Créer un paquet `@cogenta/*`',
+      '',
+      'Vérifie que le paquet est bien prévu par la spec du lot en cours.',
+      '',
+    ].join('\n')
+
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/agent-skills',
+        query: {},
+        body: { content: realSkillMd },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(201)
+    const created = (response.body as { data: AgentSkillSummary }).data
+    expect(created.name).toBe('new-package')
+    expect(created.description).toContain('Use when creating a new @cogenta/* package')
+    expect(created.instructions).toContain('Créer un paquet')
   })
 })

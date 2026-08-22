@@ -1,3 +1,4 @@
+import { parseSkillFile } from '@cogenta/agents'
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
@@ -8,6 +9,18 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
  * to avoid colliding with L7's marketplace skill registry — a different
  * concept entirely (see `@cogenta/agents`' `skills/library.ts` module
  * comment). Admin-only, same posture as `/api/agents` and `/api/providers`.
+ *
+ * **Wire contract changed in L24 task 4.** The admin screen now edits a
+ * skill as raw Markdown — the exact `SKILL.md` a real Claude Code/Codex
+ * skill ships as — rather than separate name/description/instructions form
+ * fields. `POST`/`PATCH` therefore take `{ content: string }`
+ * (frontmatter + body) instead of the three separate fields; this router
+ * parses it with the very same `parseSkillFile` the file-based stores use,
+ * and delegates the *structured* result to `AgentSkillRegistryLike` —
+ * which keeps that interface, and therefore `createSkillRegistryAdapter` in
+ * `@cogenta/cli`'s `agent-runtime.ts`, unchanged. Every response now also
+ * carries `content`, so a `GET` can feed the admin's editor without a
+ * second round trip to reconstruct it.
  */
 
 export interface AgentSkillSummary {
@@ -15,6 +28,8 @@ export interface AgentSkillSummary {
   readonly name: string
   readonly description: string
   readonly instructions: string
+  /** The exact `SKILL.md` text (frontmatter + body) this record renders to. */
+  readonly content: string
   readonly enabledByDefault: boolean
   readonly builtin: boolean
   readonly createdAt: string
@@ -119,6 +134,30 @@ function asRecord(body: unknown): Record<string, unknown> {
   return body as Record<string, unknown>
 }
 
+/**
+ * Parses the `content` field of a request body — a raw `SKILL.md` (frontmatter
+ * + body) — into the structured `{ name, description, instructions }` shape
+ * `AgentSkillRegistryLike` still speaks. Reuses `parseSkillFile` rather than
+ * a second Markdown/frontmatter reader (R9), so a malformed submission fails
+ * with the exact same `SKILL_DEFINITION_INVALID` a file-based skill store
+ * would raise for the same text.
+ */
+function parseContent(content: unknown): {
+  name: string
+  description: string
+  instructions: string
+} {
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new CogentaError({
+      code: 'AGENT_SKILL_UNKNOWN',
+      message: 'A skill needs a non-empty "content" (a SKILL.md — frontmatter and body).',
+      hint: 'Send { "content": "---\\nname: …\\ndescription: …\\n---\\n\\n…" }.',
+    })
+  }
+  const { metadata, instructions } = parseSkillFile('agent-skill', content)
+  return { name: metadata.name, description: metadata.description, instructions }
+}
+
 export function createAgentSkillsRouter(options: AgentSkillsRouterOptions): AgentSkillsRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
 
@@ -136,21 +175,12 @@ export function createAgentSkillsRouter(options: AgentSkillsRouterOptions): Agen
           if (method === 'GET') return jsonResponse(200, { data: await options.skills.list() })
           if (method === 'POST') {
             const body = asRecord(request.body)
-            const name = body['name']
-            const description = body['description']
-            const instructions = body['instructions']
-            if (typeof name !== 'string' || name.trim().length === 0) {
-              throw new CogentaError({
-                code: 'AGENT_SKILL_UNKNOWN',
-                message: 'A skill needs a non-empty "name".',
-                hint: 'Send { "name": "…", "description": "…", "instructions": "…" }.',
-              })
-            }
+            const { name, description, instructions } = parseContent(body['content'])
             const enabledByDefault = body['enabledByDefault']
             const created = await options.skills.create({
               name,
-              description: typeof description === 'string' ? description : '',
-              instructions: typeof instructions === 'string' ? instructions : '',
+              description,
+              instructions,
               ...(typeof enabledByDefault === 'boolean' ? { enabledByDefault } : {}),
             })
             return jsonResponse(201, { data: created })
@@ -168,14 +198,17 @@ export function createAgentSkillsRouter(options: AgentSkillsRouterOptions): Agen
 
         if (method === 'PATCH') {
           const body = asRecord(request.body)
-          const name = body['name']
-          const description = body['description']
-          const instructions = body['instructions']
+          const content = body['content']
           const enabledByDefault = body['enabledByDefault']
+          const parsed = content === undefined ? null : parseContent(content)
           const updated = await options.skills.update(id, {
-            ...(typeof name === 'string' ? { name } : {}),
-            ...(typeof description === 'string' ? { description } : {}),
-            ...(typeof instructions === 'string' ? { instructions } : {}),
+            ...(parsed === null
+              ? {}
+              : {
+                  name: parsed.name,
+                  description: parsed.description,
+                  instructions: parsed.instructions,
+                }),
             ...(typeof enabledByDefault === 'boolean' ? { enabledByDefault } : {}),
           })
           return jsonResponse(200, { data: updated })

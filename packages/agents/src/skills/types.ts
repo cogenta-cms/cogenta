@@ -1,6 +1,13 @@
 export interface SkillMetadata {
   readonly name: string
-  readonly version: string
+  /**
+   * Optional (L24 task 4): a real Claude Code/Codex `SKILL.md` never carries
+   * one. `file-store.ts`'s marketplace registry (L7) still requires and
+   * writes one at its own boundary (`install`/`registries` compare versions
+   * to decide "update available") — this type only relaxes what a skill
+   * *file* is allowed to omit, not what the marketplace needs to function.
+   */
+  readonly version?: string
   readonly description: string
 }
 

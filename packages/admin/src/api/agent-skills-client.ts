@@ -6,6 +6,11 @@ import { authHeader, request } from './http.js'
  * `@cogenta/agents`' `skills/library.ts`) — named `agent-skills` on the wire
  * for exactly that reason. Hand-mirrored from `@cogenta/api`'s
  * `agent-skills-router.ts`.
+ *
+ * **Wire contract changed in L24 task 4**: create/update now send raw
+ * Markdown (`content` — the full `SKILL.md`, frontmatter included) instead
+ * of separate name/description/instructions fields, matching the admin
+ * screen's raw-Markdown editor.
  */
 
 export interface AgentSkillSummary {
@@ -13,6 +18,8 @@ export interface AgentSkillSummary {
   readonly name: string
   readonly description: string
   readonly instructions: string
+  /** The exact `SKILL.md` text (frontmatter + body) this record renders to. */
+  readonly content: string
   readonly enabledByDefault: boolean
   readonly builtin: boolean
   readonly createdAt: string
@@ -26,9 +33,7 @@ export function listAgentSkills(token: string): Promise<readonly AgentSkillSumma
 export function createAgentSkill(
   token: string,
   input: {
-    readonly name: string
-    readonly description: string
-    readonly instructions: string
+    readonly content: string
     readonly enabledByDefault?: boolean
   },
 ): Promise<AgentSkillSummary> {
@@ -43,9 +48,7 @@ export function updateAgentSkill(
   token: string,
   id: string,
   patch: {
-    readonly name?: string
-    readonly description?: string
-    readonly instructions?: string
+    readonly content?: string
     readonly enabledByDefault?: boolean
   },
 ): Promise<AgentSkillSummary> {

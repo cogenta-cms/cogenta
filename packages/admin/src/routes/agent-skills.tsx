@@ -1,4 +1,4 @@
-import { Fragment, type JSX, useCallback, useEffect, useState } from 'react'
+import { type ChangeEvent, Fragment, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   type AgentSkillSummary,
@@ -15,8 +15,6 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
-  Field,
-  Input,
   Notice,
   Table,
   TableBody,
@@ -28,6 +26,8 @@ import {
   TableRow,
 } from '../ui/index.js'
 
+const NEW_SKILL_TEMPLATE = '---\nname: \ndescription: \n---\n\n'
+
 /**
  * L22 task 1bis's "Skills" screen: a named instruction text an agent loads
  * into its context — a different concept from L7's marketplace skill
@@ -36,6 +36,14 @@ import {
  * site-structure/menus); a new agent inherits every skill whose
  * `enabledByDefault` is true, and can exclude specific ones (the Agents
  * screen's own checklist).
+ *
+ * **Editor changed in L24 task 4**, per an explicit user decision: instead
+ * of separate name/description/instructions form fields generating a
+ * `SKILL.md` behind the scenes, this screen edits the raw Markdown directly
+ * — the exact `SKILL.md` text (frontmatter included) the store persists and
+ * a real Claude Code/Codex skill ships as. A skill copied verbatim from
+ * `.claude/skills/` (or any other standard agent) can be pasted or imported
+ * here and used as-is.
  */
 export function AgentSkillsRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -51,12 +59,10 @@ export function AgentSkillsRoute(): JSX.Element {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [instructions, setInstructions] = useState('')
+  const [content, setContent] = useState(NEW_SKILL_TEMPLATE)
+  const [enabledByDefault, setEnabledByDefault] = useState(true)
 
-  const [editDescription, setEditDescription] = useState('')
-  const [editInstructions, setEditInstructions] = useState('')
+  const [editContent, setEditContent] = useState('')
   const [editEnabledByDefault, setEditEnabledByDefault] = useState(true)
 
   const load = useCallback(async () => {
@@ -76,15 +82,28 @@ export function AgentSkillsRoute(): JSX.Element {
     void load()
   }, [load])
 
+  function readFileInto(
+    event: ChangeEvent<HTMLInputElement>,
+    setter: (value: string) => void,
+  ): void {
+    const [file] = event.target.files ?? []
+    event.target.value = ''
+    if (file === undefined) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setter(reader.result)
+    }
+    reader.readAsText(file)
+  }
+
   async function submitCreate(): Promise<void> {
-    if (token === null || name.trim().length === 0) return
+    if (token === null || content.trim().length === 0) return
     setBusy('create')
     setError(null)
     try {
-      await createAgentSkill(token, { name: name.trim(), description, instructions })
-      setName('')
-      setDescription('')
-      setInstructions('')
+      await createAgentSkill(token, { content, enabledByDefault })
+      setContent(NEW_SKILL_TEMPLATE)
+      setEnabledByDefault(true)
       setCreating(false)
       await load()
     } catch (caught) {
@@ -96,8 +115,7 @@ export function AgentSkillsRoute(): JSX.Element {
 
   function startEdit(skill: AgentSkillSummary): void {
     setEditingId(skill.id)
-    setEditDescription(skill.description)
-    setEditInstructions(skill.instructions)
+    setEditContent(skill.content)
     setEditEnabledByDefault(skill.enabledByDefault)
   }
 
@@ -107,8 +125,7 @@ export function AgentSkillsRoute(): JSX.Element {
     setError(null)
     try {
       await updateAgentSkill(token, id, {
-        description: editDescription,
-        instructions: editInstructions,
+        content: editContent,
         enabledByDefault: editEnabledByDefault,
       })
       setEditingId(null)
@@ -170,38 +187,35 @@ export function AgentSkillsRoute(): JSX.Element {
           </CardHeader>
           <CardBody>
             <div className="flex flex-col gap-3">
-              <Field label={t('agentSkills.name')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label={t('agentSkills.description')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field label={t('agentSkills.instructions')}>
-                {(control) => (
-                  <textarea
-                    {...control}
-                    className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
-                    rows={5}
-                    value={instructions}
-                    onChange={(event) => setInstructions(event.target.value)}
-                  />
-                )}
-              </Field>
+              <div>
+                <label htmlFor="agent-skill-create-import">{t('agentSkills.importLabel')}</label>
+                <input
+                  id="agent-skill-create-import"
+                  type="file"
+                  accept=".md,text/markdown,text/plain"
+                  onChange={(event) => readFileInto(event, setContent)}
+                />
+              </div>
+              <label htmlFor="agent-skill-create-content">{t('agentSkills.content')}</label>
+              <textarea
+                id="agent-skill-create-content"
+                className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card"
+                rows={14}
+                spellCheck={false}
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+              />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={enabledByDefault}
+                  onChange={(event) => setEnabledByDefault(event.target.checked)}
+                />
+                {t('agentSkills.enabledByDefault')}
+              </label>
               <div className="flex gap-2">
                 <Button
-                  disabled={busy === 'create' || name.trim().length === 0}
+                  disabled={busy === 'create' || content.trim().length === 0}
                   onClick={() => void submitCreate()}
                 >
                   {t('common.save')}
@@ -259,26 +273,28 @@ export function AgentSkillsRoute(): JSX.Element {
                     <TableRow key={`${skill.id}-edit`}>
                       <TableCell colSpan={4}>
                         <div className="flex flex-col gap-3 py-2">
-                          <Field label={t('agentSkills.description')}>
-                            {(control) => (
-                              <Input
-                                {...control}
-                                value={editDescription}
-                                onChange={(event) => setEditDescription(event.target.value)}
-                              />
-                            )}
-                          </Field>
-                          <Field label={t('agentSkills.instructions')}>
-                            {(control) => (
-                              <textarea
-                                {...control}
-                                className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
-                                rows={5}
-                                value={editInstructions}
-                                onChange={(event) => setEditInstructions(event.target.value)}
-                              />
-                            )}
-                          </Field>
+                          <div>
+                            <label htmlFor={`agent-skill-import-${skill.id}`}>
+                              {t('agentSkills.importLabel')}
+                            </label>
+                            <input
+                              id={`agent-skill-import-${skill.id}`}
+                              type="file"
+                              accept=".md,text/markdown,text/plain"
+                              onChange={(event) => readFileInto(event, setEditContent)}
+                            />
+                          </div>
+                          <label htmlFor={`agent-skill-content-${skill.id}`}>
+                            {t('agentSkills.content')}
+                          </label>
+                          <textarea
+                            id={`agent-skill-content-${skill.id}`}
+                            className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card"
+                            rows={14}
+                            spellCheck={false}
+                            value={editContent}
+                            onChange={(event) => setEditContent(event.target.value)}
+                          />
                           <label className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"
@@ -290,7 +306,7 @@ export function AgentSkillsRoute(): JSX.Element {
                           <div className="flex gap-2">
                             <Button
                               size="sm"
-                              disabled={busy === skill.id}
+                              disabled={busy === skill.id || editContent.trim().length === 0}
                               onClick={() => void submitEdit(skill.id)}
                             >
                               {t('common.save')}

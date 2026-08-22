@@ -1,6 +1,11 @@
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { parseSkillFile, renderSkillFile } from './frontmatter.js'
+import type { SkillMetadata } from './types.js'
+
+const SKILL_FILE = 'SKILL.md'
+const META_FILE = '.meta.json'
 
 /**
  * L22 task 1bis's "Skills" screen — a **different concept** from
@@ -15,13 +20,30 @@ import { CogentaError } from '@cogenta/core'
  * purpose — they are siblings, not a replacement) keeps the two distinct in
  * every import site rather than overloading `Skill`/`SkillStore`.
  *
- * Stored the same "one JSON file per record" way every other file store in
- * this package already does (R1) — the lot's own text names this as an
- * acceptable choice ("le store de contenu, ou le store de réglages
- * génériques... pas de nouvelle mécanique de stockage" if a generic one
- * already fits; this package has no content store of its own to reuse, so
- * it reuses its *own* already-established generic mechanism instead of
- * reaching into `@cogenta/schema` for one).
+ * **Storage format, changed in L24 task 4**: originally one JSON file per
+ * record (`<id>.json`). Now `<dir>/<id>/SKILL.md` (frontmatter + body),
+ * reusing `parseSkillFile`/`renderSkillFile` from `frontmatter.ts` rather
+ * than a second parser — the same format `file-store.ts`'s marketplace
+ * registry already speaks, and the format a real Claude Code/Codex skill
+ * ships in. This is what makes L24 task 4's acceptance criterion possible:
+ * a `SKILL.md` copied verbatim from `.claude/skills/` (or any other
+ * standard agent) is a valid `name`+`description`+body skill the moment it
+ * is dropped into this store's directory and given a matching `.meta.json`
+ * (or, read without one at all — see `readRecord` below).
+ *
+ * The fields this store needs that a portable `SKILL.md` has no room for
+ * (`enabledByDefault`, `builtin`, `createdAt`, `updatedAt`) are **not**
+ * folded into the frontmatter. Two options were open here (see
+ * `docs/lots/L24-langgraph-agents-avances.md` task 4): extra frontmatter
+ * keys (the parser already ignores keys it does not know), or a sidecar
+ * meta file. This store picks the sidecar (`.meta.json`, next to
+ * `SKILL.md`) **on purpose**: the whole point of this migration is
+ * portability — a skill authored here should export as a clean `SKILL.md`
+ * with nothing Cogenta-specific in it, and a `SKILL.md` imported here
+ * should not have its author's own frontmatter fields overwritten by this
+ * store's bookkeeping. Gluing `enabledByDefault`/`builtin`/timestamps into
+ * the frontmatter would make every skill this store ever touches carry
+ * Cogenta-only keys forever, defeating that.
  */
 
 export interface AgentSkill {
@@ -29,6 +51,17 @@ export interface AgentSkill {
   readonly name: string
   readonly description: string
   readonly instructions: string
+  /**
+   * The exact `SKILL.md` text on disk (frontmatter + body), rendered by
+   * `renderSkillFile` — what the admin's raw-Markdown editor (L24 task 4)
+   * reads and writes, and what a "copy this skill out" action would hand
+   * someone verbatim. Always the canonical rendering of `name`/`description`/
+   * `instructions` below: this store has one source of truth (the structured
+   * fields on `AgentSkillStore`'s contract, kept stable for its 11 existing
+   * call sites), and `content` is a derived, always-consistent view of it —
+   * never a second, independently-edited copy that could drift.
+   */
+  readonly content: string
   /**
    * "Par défaut, un nouvel agent hérite de tous les skills du site" (L22 task
    * 1bis) — a new agent's `AgentDeclaration.skills` is seeded with every
@@ -80,6 +113,13 @@ function skillUnknown(id: string): CogentaError {
   })
 }
 
+interface StoredMeta {
+  readonly enabledByDefault: boolean
+  readonly builtin: boolean
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
 export interface FileAgentSkillStoreOptions {
   readonly dir: string
   readonly now?: () => Date
@@ -89,14 +129,49 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
   const now = options.now ?? ((): Date => new Date())
   const ready = mkdir(options.dir, { recursive: true })
 
-  function fileFor(id: string): string {
-    return join(options.dir, `${id}.json`)
+  function dirFor(id: string): string {
+    return join(options.dir, id)
+  }
+
+  function skillFileFor(id: string): string {
+    return join(dirFor(id), SKILL_FILE)
+  }
+
+  function metaFileFor(id: string): string {
+    return join(dirFor(id), META_FILE)
+  }
+
+  /**
+   * Reads a skill without ever failing on a missing `.meta.json` — a folder
+   * dropped in by hand (a `SKILL.md` copied straight from `.claude/skills/`,
+   * exactly what L24 task 4's acceptance test does) is a perfectly good
+   * skill, just one this store has never seen before; it gets the same
+   * defaults `create()` would give a new one, and a `.meta.json` is written
+   * back the next time it is updated. A `.meta.json` that exists but will
+   * not parse *is* treated as corruption, and reported as such.
+   */
+  async function readMeta(id: string): Promise<StoredMeta> {
+    try {
+      const raw = await readFile(metaFileFor(id), 'utf8')
+      return JSON.parse(raw) as StoredMeta
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        const at = now().toISOString()
+        return { enabledByDefault: true, builtin: false, createdAt: at, updatedAt: at }
+      }
+      throw new CogentaError({
+        code: 'INTERNAL',
+        message: `Could not read metadata for skill "${id}".`,
+        hint: 'The .meta.json file may be corrupted; consider removing and recreating the skill.',
+        cause: error,
+      })
+    }
   }
 
   async function readRecord(id: string): Promise<AgentSkill | null> {
+    let raw: string
     try {
-      const raw = await readFile(fileFor(id), 'utf8')
-      return JSON.parse(raw) as AgentSkill
+      raw = await readFile(skillFileFor(id), 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw new CogentaError({
@@ -106,17 +181,57 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
         cause: error,
       })
     }
+    const { metadata, instructions } = parseSkillFile(skillFileFor(id), raw)
+    const meta = await readMeta(id)
+    return {
+      id,
+      name: metadata.name,
+      description: metadata.description,
+      instructions,
+      content: raw,
+      enabledByDefault: meta.enabledByDefault,
+      builtin: meta.builtin,
+      createdAt: meta.createdAt,
+      updatedAt: meta.updatedAt,
+    }
+  }
+
+  async function writeRecord(
+    id: string,
+    metadata: SkillMetadata,
+    instructions: string,
+    meta: StoredMeta,
+  ): Promise<AgentSkill> {
+    await mkdir(dirFor(id), { recursive: true })
+    const content = renderSkillFile(metadata, instructions)
+    await writeFile(skillFileFor(id), content, 'utf8')
+    await writeFile(metaFileFor(id), JSON.stringify(meta, null, 2), 'utf8')
+    return {
+      id,
+      name: metadata.name,
+      description: metadata.description,
+      instructions: instructions.trim(),
+      content,
+      ...meta,
+    }
   }
 
   return {
     async list() {
       await ready
-      const filenames = await readdir(options.dir, { withFileTypes: true }).catch(() => [])
+      const entries = await readdir(options.dir, { withFileTypes: true }).catch(() => [])
       const skills: AgentSkill[] = []
-      for (const entry of filenames) {
-        if (!entry.isFile() || !entry.name.endsWith('.json')) continue
-        const record = await readRecord(entry.name.replace(/\.json$/u, ''))
-        if (record !== null) skills.push(record)
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        try {
+          const record = await readRecord(entry.name)
+          if (record !== null) skills.push(record)
+        } catch {
+          // A folder without a valid SKILL.md (or with a corrupted sidecar)
+          // is not a skill this store can serve — skip it rather than fail
+          // the whole listing, same posture as the marketplace's
+          // `file-store.ts`.
+        }
       }
       return skills.sort((a, b) => a.name.localeCompare(b.name))
     },
@@ -139,34 +254,37 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
         })
       }
       const at = now().toISOString()
-      const record: AgentSkill = {
+      return writeRecord(
         id,
-        name: input.name,
-        description: input.description,
-        instructions: input.instructions,
-        enabledByDefault: input.enabledByDefault ?? true,
-        builtin,
-        createdAt: at,
-        updatedAt: at,
-      }
-      await writeFile(fileFor(id), JSON.stringify(record, null, 2), 'utf8')
-      return record
+        { name: input.name, description: input.description },
+        input.instructions,
+        {
+          enabledByDefault: input.enabledByDefault ?? true,
+          builtin,
+          createdAt: at,
+          updatedAt: at,
+        },
+      )
     },
 
     async update(id, patch) {
       await ready
       const existing = await readRecord(id)
       if (existing === null) throw skillUnknown(id)
-      const updated: AgentSkill = {
-        ...existing,
-        name: patch.name ?? existing.name,
-        description: patch.description ?? existing.description,
-        instructions: patch.instructions ?? existing.instructions,
-        enabledByDefault: patch.enabledByDefault ?? existing.enabledByDefault,
-        updatedAt: now().toISOString(),
-      }
-      await writeFile(fileFor(id), JSON.stringify(updated, null, 2), 'utf8')
-      return updated
+      return writeRecord(
+        id,
+        {
+          name: patch.name ?? existing.name,
+          description: patch.description ?? existing.description,
+        },
+        patch.instructions ?? existing.instructions,
+        {
+          enabledByDefault: patch.enabledByDefault ?? existing.enabledByDefault,
+          builtin: existing.builtin,
+          createdAt: existing.createdAt,
+          updatedAt: now().toISOString(),
+        },
+      )
     },
 
     async remove(id) {
@@ -180,7 +298,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
           hint: 'Edit its instructions instead, or exclude it from a specific agent.',
         })
       }
-      await rm(fileFor(id), { force: true })
+      await rm(dirFor(id), { recursive: true, force: true })
     },
   }
 }

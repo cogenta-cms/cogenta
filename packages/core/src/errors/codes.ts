@@ -513,6 +513,12 @@ export const ERROR_CODES = [
   'AGENT_REGISTRY_READ_ONLY',
   'AGENT_RUNTIME_UNAVAILABLE',
 
+  // Agent execution loop, migrated onto LangGraph.js (L24 task 1). Thrown
+  // only if the graph's own recursion ceiling is hit before `runAgentLoop`'s
+  // `max_steps` check has a chance to fire first — a bug in the graph's
+  // wiring, never a normal way for a run to end.
+  'AGENT_LOOP_RECURSION_LIMIT',
+
   // Channels — inbound chat bridge and `cogenta channels` process (L22 task 2)
   'CHANNEL_PROVIDER_NOT_CONFIGURED',
 

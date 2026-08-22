@@ -54,6 +54,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'The reference theme: all twelve blocks, zero client JavaScript, a neutral, accessible default.',
     load: () => import('@cogenta/theme-canonical'),
   },
+  {
+    name: '@cogenta/theme-entreprise',
+    label: 'Entreprise',
+    description:
+      'A confident, premium B2B theme: structured typography, real KPI/impact sections, a genuine dark mode.',
+    load: () => import('@cogenta/theme-entreprise'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

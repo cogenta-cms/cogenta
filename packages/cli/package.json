@@ -55,6 +55,7 @@
     "@cogenta/schema": "workspace:*",
     "@cogenta/seo": "workspace:*",
     "@cogenta/theme-canonical": "workspace:*",
+    "@cogenta/theme-entreprise": "workspace:*",
     "@cogenta/theme-kit": "workspace:*",
     "graphql": "catalog:"
   },

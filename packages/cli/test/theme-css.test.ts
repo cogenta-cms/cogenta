@@ -81,7 +81,10 @@ describe('inlineImports', () => {
 
 describe('the theme stylesheet cogenta serve actually sends', () => {
   it('resolves the real package and flattens its three layers into one sheet', async () => {
-    const css = await loadThemeCss({ read: (url) => readFile(url, 'utf8') })
+    const css = await loadThemeCss(
+      { read: (url) => readFile(url, 'utf8') },
+      '@cogenta/theme-canonical',
+    )
     expect(css).not.toBeNull()
     const sheet = css as string
     // One marker from each layer, so a lost `@import` fails here.
@@ -94,7 +97,10 @@ describe('the theme stylesheet cogenta serve actually sends', () => {
   })
 
   it('sends the design system, not just the skin variables it is built from', async () => {
-    const css = (await loadThemeCss({ read: (url) => readFile(url, 'utf8') })) as string
+    const css = (await loadThemeCss(
+      { read: (url) => readFile(url, 'utf8') },
+      '@cogenta/theme-canonical',
+    )) as string
     expect(css).toContain('light-dark(')
     expect(css).toContain('color-scheme:')
   })

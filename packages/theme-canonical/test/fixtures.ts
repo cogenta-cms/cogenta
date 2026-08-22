@@ -22,6 +22,7 @@ import type {
  */
 const MEDIA: Readonly<Record<string, ImageSource>> = {
   'media-hero': {
+    kind: 'image',
     src: '/img/hero-1200.avif',
     srcset: '/img/hero-600.avif 600w, /img/hero-1200.avif 1200w',
     width: 1200,
@@ -30,6 +31,7 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
     focal: { x: 0.5, y: 0.33 },
   },
   'media-figure': {
+    kind: 'image',
     src: '/img/figure-800.avif',
     srcset: '/img/figure-800.avif 800w',
     width: 800,
@@ -38,6 +40,7 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
     focal: null,
   },
   'media-gallery-1': {
+    kind: 'image',
     src: '/img/g1-400.avif',
     srcset: '',
     width: 400,
@@ -46,6 +49,7 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
     focal: null,
   },
   'media-gallery-2': {
+    kind: 'image',
     src: '/img/g2-400.avif',
     srcset: '',
     width: 400,
@@ -55,6 +59,7 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
   },
   // Decorative: the author's name is right beside it in text.
   'media-avatar': {
+    kind: 'image',
     src: '/img/avatar-96.avif',
     srcset: '',
     width: 96,
@@ -62,8 +67,17 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
     alt: '',
     focal: null,
   },
-  'logo-acme': { src: '/img/acme.svg', srcset: '', width: 160, height: 40, alt: '', focal: null },
+  'logo-acme': {
+    kind: 'image',
+    src: '/img/acme.svg',
+    srcset: '',
+    width: 160,
+    height: 40,
+    alt: '',
+    focal: null,
+  },
   'logo-globex': {
+    kind: 'image',
     src: '/img/globex.svg',
     srcset: '',
     width: 160,
@@ -72,6 +86,7 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
     focal: null,
   },
   'media-inline': {
+    kind: 'image',
     src: '/img/inline-800.avif',
     srcset: '',
     width: 800,
@@ -82,6 +97,7 @@ const MEDIA: Readonly<Record<string, ImageSource>> = {
 }
 
 const MISSING: ImageSource = {
+  kind: 'image',
   src: '/img/missing.svg',
   srcset: '',
   width: 1,

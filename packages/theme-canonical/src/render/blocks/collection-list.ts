@@ -1,5 +1,5 @@
 import type { CollectionListBlock } from '@cogenta/blocks'
-import type { ContentEntry, QueryRequest, RenderContext } from '../../theme-contract.js'
+import type { ContentEntry, RenderContext } from '../../theme-contract.js'
 import { entryDate, entryExcerpt, entryHref, entryTitle } from '../entry.js'
 import { blockHeadingTag, type HeadingTag, heading, nestedHeadingTag } from '../heading.js'
 import { type HtmlElement, h } from '../html.js'
@@ -8,21 +8,15 @@ import { type HtmlElement, h } from '../html.js'
  * The only block of the twelve that reads data at render time — contract B
  * marks it `runtime: 'server'` for that reason.
  *
- * The read is *not* done here. `query` builds the request, the `.astro`
- * component awaits `ctx.content.list(...)` in its frontmatter, and this
- * function stays a pure function of the entries it is handed. That keeps the
- * markup snapshot-testable and keeps the theme's single door to data — the
- * read-only content client — in one visible place.
+ * The read is *not* done here. `query` builds the request (`@cogenta/theme-kit`'s
+ * `buildCollectionListQuery`, shared across every theme since it derives
+ * purely from the block's own fields), the caller awaits `ctx.content.list(...)`
+ * before rendering starts, and this function stays a pure function of the
+ * entries it is handed. That keeps the markup snapshot-testable and keeps a
+ * theme's single door to data — the read-only content client — in one visible
+ * place.
  */
-export function query(block: CollectionListBlock): QueryRequest {
-  return {
-    collection: block.collection,
-    ...(block.filter === undefined ? {} : { filter: block.filter }),
-    ...(block.sort === undefined ? {} : { sort: block.sort }),
-    // Capped by contract B at 100; an absent limit still must not mean "all".
-    limit: block.limit ?? 10,
-  }
-}
+export { buildCollectionListQuery as query } from '@cogenta/theme-kit'
 
 function renderEntry(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   const date = entryDate(entry)

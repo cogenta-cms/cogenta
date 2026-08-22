@@ -46,10 +46,15 @@ function emptyOverrides(): ThemeOverridesLike {
     logoDarkMediaId: null,
     faviconMediaId: null,
     shareImageMediaId: null,
+    activeTheme: null,
     updatedAt: '2026-08-20T00:00:00.000Z',
     updatedBy: null,
   }
 }
+
+const AVAILABLE_THEMES = [
+  { name: '@cogenta/theme-canonical', label: 'Canonical', description: 'The reference theme.' },
+]
 
 function memoryStore(initial: ThemeOverridesLike = emptyOverrides()): ThemeStoreLike & {
   state: ThemeOverridesLike
@@ -80,13 +85,21 @@ function memoryStore(initial: ThemeOverridesLike = emptyOverrides()): ThemeStore
           input.shareImageMediaId === undefined
             ? box.state.shareImageMediaId
             : input.shareImageMediaId,
+        activeTheme: input.activeTheme === undefined ? box.state.activeTheme : input.activeTheme,
         updatedAt: '2026-08-20T01:00:00.000Z',
         updatedBy: input.updatedBy ?? null,
       }
       return box.state
     },
     async clear(updatedBy) {
-      box.state = { ...emptyOverrides(), updatedAt: '2026-08-20T02:00:00.000Z', updatedBy }
+      // Mirrors the real store: clearing the skin overrides never switches
+      // the site back to the default theme (`theme-store.ts`'s own reasoning).
+      box.state = {
+        ...emptyOverrides(),
+        activeTheme: box.state.activeTheme,
+        updatedAt: '2026-08-20T02:00:00.000Z',
+        updatedBy,
+      }
       return box.state
     },
   }
@@ -105,6 +118,7 @@ function router(overrides: {
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, patch) =>
       mergeSkinTokens(base as never, patch as never) as unknown as Record<string, unknown>,
+    availableThemes: AVAILABLE_THEMES,
     ...(overrides.skinGallery === undefined ? {} : { skinGallery: overrides.skinGallery }),
     ...(overrides.generator === undefined ? {} : { generator: overrides.generator }),
     ...(overrides.fileExporter === undefined ? {} : { fileExporter: overrides.fileExporter }),
@@ -237,6 +251,47 @@ describe('createThemeRouter — PUT /api/theme/overrides', () => {
     expect(response.status).toBe(200)
     expect(store.state.tokenOverrides).toBeNull()
     expect(store.state.additionalCss).toBeNull()
+  })
+
+  it('GET echoes the available themes for the picker', async () => {
+    const r = router({})
+    const response = await r.handle({ method: 'GET', path: '/api/theme', query: {} }, ADMIN)
+    expect(response.status).toBe(200)
+    const body = response.body as { data: { availableThemes: unknown } }
+    expect(body.data.availableThemes).toEqual(AVAILABLE_THEMES)
+  })
+
+  it('saves a valid activeTheme switch (fiche L23)', async () => {
+    const store = memoryStore()
+    const r = router({ store })
+    const response = await r.handle(
+      {
+        method: 'PUT',
+        path: '/api/theme/overrides',
+        query: {},
+        body: { activeTheme: '@cogenta/theme-canonical' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect(store.state.activeTheme).toBe('@cogenta/theme-canonical')
+  })
+
+  it('refuses an activeTheme this instance does not have installed', async () => {
+    const store = memoryStore()
+    const r = router({ store })
+    const response = await r.handle(
+      {
+        method: 'PUT',
+        path: '/api/theme/overrides',
+        query: {},
+        body: { activeTheme: '@cogenta/theme-does-not-exist' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
+    // Never partially applied: a refused switch must not have written anything.
+    expect(store.state.activeTheme).toBeNull()
   })
 })
 

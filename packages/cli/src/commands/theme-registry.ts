@@ -68,6 +68,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'An ultra-modern creative-portfolio theme: brutalist-meets-editorial display type, an electric accent, zero client JavaScript.',
     load: () => import('@cogenta/theme-portfolio'),
   },
+  {
+    name: '@cogenta/theme-entreprise',
+    label: 'Entreprise',
+    description:
+      'A confident, premium B2B theme: structured typography, real KPI/impact sections, a genuine dark mode.',
+    load: () => import('@cogenta/theme-entreprise'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

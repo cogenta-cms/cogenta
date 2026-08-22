@@ -1,0 +1,57 @@
+{
+  "name": "@cogenta/theme-entreprise",
+  "version": "0.1.0",
+  "description": "A confident, premium B2B theme for Cogenta: structured typography, real KPI/impact sections, a genuine dark mode, and zero client JavaScript.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./theme.config": {
+      "types": "./dist/theme.config.d.ts",
+      "default": "./dist/theme.config.js"
+    },
+    "./tokens.json": "./tokens.json",
+    "./styles/theme.css": "./src/styles/theme.css",
+    "./styles/*.css": "./src/styles/*.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "tokens.json"
+  ],
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cogenta-cms/cogenta.git",
+    "directory": "packages/theme-entreprise"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
+  },
+  "dependencies": {
+    "@cogenta/blocks": "workspace:*",
+    "@cogenta/render": "workspace:*",
+    "@cogenta/theme-kit": "workspace:*"
+  },
+  "peerDependencies": {
+    "astro": "catalog:"
+  },
+  "devDependencies": {
+    "astro": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -58,6 +58,7 @@
     "@cogenta/theme-ecommerce": "workspace:*",
     "@cogenta/theme-entreprise": "workspace:*",
     "@cogenta/theme-kit": "workspace:*",
+    "@cogenta/theme-magazine": "workspace:*",
     "@cogenta/theme-portfolio": "workspace:*",
     "graphql": "catalog:"
   },

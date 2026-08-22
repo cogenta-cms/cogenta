@@ -75,6 +75,13 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
       'A confident, premium B2B theme: structured typography, real KPI/impact sections, a genuine dark mode.',
     load: () => import('@cogenta/theme-entreprise'),
   },
+  {
+    name: '@cogenta/theme-magazine',
+    label: 'Magazine',
+    description:
+      'An editorial magazine theme: print-inspired typography, a lead-story listing grid, zero client JavaScript.',
+    load: () => import('@cogenta/theme-magazine'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`faq > renders to stable markup 1`] = `"<section class="ce-block ce-faq" data-block="faq"><h2 class="ce-faq__title" data-field="title">Shipping &amp; returns</h2><ul class="ce-faq__items"><li class="ce-faq__item"><details class="ce-faq__details"><summary class="ce-faq__question"><span class="ce-faq__question-text">How long does delivery take?</span><span class="ce-faq__marker" aria-hidden="true"></span></summary><div class="ce-faq__answer"><p>Yes, and without a build.</p></div></details></li></ul></section>"`;

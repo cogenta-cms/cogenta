@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`logos > renders to stable markup 1`] = `"<section class="ce-block ce-logos" data-block="logos"><h2 class="ce-logos__title" data-field="title">As seen in</h2><ul class="ce-logos__items"><li class="ce-logo"><a class="ce-logo__link" href="https://acme.example" rel="noopener noreferrer"><img class="ce-logo__image" src="/img/acme.svg" width="160" height="40" alt="Acme" loading="lazy" decoding="async"></a></li><li class="ce-logo"><img class="ce-logo__image" src="/img/globex.svg" width="160" height="40" alt="Globex" loading="lazy" decoding="async"></li></ul></section>"`;

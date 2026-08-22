@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`quote > renders to stable markup 1`] = `"<figure class="ce-block ce-quote" data-block="quote"><blockquote class="ce-quote__text"><p data-field="text">The fit is exactly what the size guide promised — first time that has ever happened.</p></blockquote><figcaption class="ce-quote__attribution"><img class="ce-quote__avatar" src="/img/avatar-96.avif" width="96" height="96" alt="" loading="lazy" decoding="async"><span class="ce-quote__who"><span class="ce-quote__author" data-field="author">A. Reviewer</span><span class="ce-quote__role" data-field="role">Verified buyer</span></span></figcaption></figure>"`;

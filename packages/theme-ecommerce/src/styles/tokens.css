@@ -1,0 +1,318 @@
+/*
+ * The storefront theme's design system.
+ *
+ * Contract D fixes a *closed* skin token set — seven colours, five type
+ * tokens, two spacing tokens, three radii, three motion tokens, two shadows —
+ * and refuses any skin that adds one. So this layer adds nothing to the skin:
+ * every value below is *derived* from `--cogenta-*` by composition (`calc`,
+ * `color-mix`, relative colour syntax). A skin swap rewrites the generated
+ * `--cogenta-*` sheet and this whole system follows, with no build step —
+ * contract D's hot swap, in practice.
+ *
+ * Two rules hold everywhere in this file and the two that import it:
+ *
+ * 1. **No colour literal.** Not one hex, `rgb()`, `hsl()` or bare `oklch()`.
+ *    Every colour is either a skin token or a function *of* a skin token, so
+ *    there is no colour on the page a skin cannot change. `isolation.test.ts`
+ *    enforces this on the source.
+ * 2. **No second scale.** The type steps come from `--cogenta-font-size-*`
+ *    and the spacing multiplier from `--cogenta-space-scale`, both emitted by
+ *    `renderSkin` from the same tokens the validator already checked.
+ *    Re-deriving them here would let this theme's idea of "large" drift from
+ *    the skin's.
+ */
+
+:where(:root) {
+  /* Lets the browser paint native controls, scrollbars and form widgets in
+     the right scheme, and is what makes `light-dark()` below resolve at
+     all. */
+  color-scheme: light dark;
+}
+
+:where(:root[data-theme="dark"]) {
+  color-scheme: dark;
+}
+
+:where(:root[data-theme="light"]) {
+  color-scheme: light;
+}
+
+/* --------------------------------------------------------------------------
+   Space — a slightly wider rhythm than a document theme, on purpose: a
+   product grid reads as "shoppable" partly through the air between cards.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --ce-density: var(--cogenta-space-scale, 1);
+  --ce-unit: calc(var(--cogenta-space-unit) * var(--ce-density));
+
+  --ce-s1: calc(var(--ce-unit) * 1);
+  --ce-s2: calc(var(--ce-unit) * 2);
+  --ce-s3: calc(var(--ce-unit) * 3);
+  --ce-s4: calc(var(--ce-unit) * 4);
+  --ce-s5: calc(var(--ce-unit) * 5);
+  --ce-s6: calc(var(--ce-unit) * 6);
+  --ce-s7: calc(var(--ce-unit) * 7);
+  --ce-s8: calc(var(--ce-unit) * 8);
+  --ce-s10: calc(var(--ce-unit) * 10);
+  --ce-s12: calc(var(--ce-unit) * 12);
+  --ce-s16: calc(var(--ce-unit) * 16);
+  --ce-s20: calc(var(--ce-unit) * 20);
+  --ce-s28: calc(var(--ce-unit) * 28);
+
+  --ce-gutter: var(--ce-s5);
+  --ce-gap-tight: var(--ce-s3);
+  --ce-gap: var(--ce-s5);
+  --ce-gap-loose: var(--ce-s10);
+  --ce-section-y: var(--ce-s20);
+
+  --ce-measure: 66ch;
+  --ce-measure-narrow: 44ch;
+  --ce-page: 80rem;
+  --ce-page-narrow: 50rem;
+}
+
+:where([data-density="compact"]) {
+  --ce-density: 0.75;
+}
+
+:where([data-density="comfortable"]) {
+  --ce-density: 1;
+}
+
+:where([data-density="spacious"]) {
+  --ce-density: 1.3;
+}
+
+/* --------------------------------------------------------------------------
+   Type — the skin's scale, named; plus the rhythm the scale does not carry.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --ce-text-xs: var(--cogenta-font-size-xs, 0.64rem);
+  --ce-text-sm: var(--cogenta-font-size-sm, 0.8rem);
+  --ce-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1rem));
+  --ce-text-lg: var(--cogenta-font-size-lg, 1.25rem);
+  --ce-text-xl: var(--cogenta-font-size-xl, 1.5625rem);
+  --ce-text-2xl: var(--cogenta-font-size-2xl, 1.9531rem);
+  --ce-text-3xl: var(--cogenta-font-size-3xl, 2.4414rem);
+
+  --ce-leading-tight: 1.04;
+  --ce-leading-snug: 1.18;
+  --ce-leading-normal: 1.5;
+  --ce-leading-relaxed: 1.68;
+
+  /* A display headline in a wide grotesk needs more negative tracking than a
+     document theme's serif-adjacent scale to stop looking loose; the "eyebrow"
+     / badge / label text needs a confident positive tracking to read as a
+     merchandising tag rather than a caption. */
+  --ce-tracking-tight: -0.03em;
+  --ce-tracking-snug: -0.015em;
+  --ce-tracking-normal: 0em;
+  --ce-tracking-wide: 0.1em;
+
+  --ce-weight-regular: 400;
+  --ce-weight-medium: 500;
+  --ce-weight-semibold: 600;
+  --ce-weight-bold: 700;
+  --ce-weight-black: 800;
+}
+
+/* --------------------------------------------------------------------------
+   Radius — the skin's three, plus the ends a card-heavy theme needs.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --ce-radius-xs: calc(var(--cogenta-radius-sm) / 2);
+  --ce-radius-sm: var(--cogenta-radius-sm);
+  --ce-radius-md: var(--cogenta-radius-md);
+  --ce-radius-lg: var(--cogenta-radius-lg);
+  /* Product cards and the promotional panel round harder than a button — the
+     shoppable-card language this theme leans on everywhere. Derived, so a
+     square skin (`radius.lg: 0`) stays square all the way up. */
+  --ce-radius-xl: calc(var(--cogenta-radius-lg) * 1.6);
+  --ce-radius-pill: 999rem;
+}
+
+/* --------------------------------------------------------------------------
+   Motion — snappier than a document theme's, on purpose: a storefront's
+   micro-interactions (card lift, button press) read as instantaneous.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --ce-duration-fast: calc(var(--cogenta-motion-duration) * 0.55);
+  --ce-duration: var(--cogenta-motion-duration);
+  --ce-duration-slow: calc(var(--cogenta-motion-duration) * 2.2);
+  --ce-ease: var(--cogenta-motion-easing);
+}
+
+/* --------------------------------------------------------------------------
+   Colour — one palette per scheme, both derived from the same seven tokens.
+   --------------------------------------------------------------------------
+
+   The block below declares the **light** palette in plain terms — this
+   theme's default skin is bright and airy, the way most product photography
+   wants its background to be. The scheme-aware values live in the
+   `@supports` block after it, and only there.
+
+   **The dark palette is a genuine second design, not an inversion.** Four
+   decisions separate it from a mechanical swap of `bg` and `fg`:
+
+   1. *Elevation is lightness, not shadow.* A shadow on a dark ground reads
+      as nothing, so a raised card is expressed as a step up in L —
+      sunken < canvas < surface < raised — with a hairline accent-tinted
+      ring standing in for the shadow a light card gets.
+   2. *The accent stays loud rather than pastel.* A storefront's "buy" colour
+      losing its punch in dark mode is a real regression, so the accent is
+      lifted in lightness but its chroma is barely reduced — it should still
+      read as the one colour on the page that means "act now".
+   3. *The accent's foreground follows the accent's own lightness*, computed
+      fresh rather than reused from the light skin: a lifted accent needs a
+      dark label to stay legible, the same way a light accent needs a light
+      one.
+   4. *Ink favours warmth over pure grey.* Body text keeps a trace of the
+      accent's hue at low chroma, which is what keeps a dark storefront from
+      reading as a generic dashboard.
+
+   Every ratio these values produce is computed for real, from this file, by
+   `test/design-system.test.ts`, in both schemes, against the AA body
+   threshold — none of the numbers above is a comment to be trusted blindly.
+
+   Known limit, matching `@cogenta/theme-canonical`'s own: the derivation
+   assumes a light-first skin (`bg` lighter than `fg`), which is this skin's
+   own default and every blueprint's. A skin that is already dark would need
+   a second colour group contract D does not have.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --ce-canvas: var(--cogenta-color-bg);
+  --ce-surface: var(--cogenta-color-bg);
+  --ce-surface-raised: var(--cogenta-color-bg);
+  --ce-surface-sunken: var(--cogenta-color-muted);
+  --ce-surface-tinted: color-mix(in oklab, var(--cogenta-color-accent) 9%, var(--cogenta-color-bg));
+
+  --ce-ink: var(--cogenta-color-fg);
+  --ce-ink-muted: var(--cogenta-color-muted-fg);
+  --ce-ink-subtle: color-mix(in oklab, var(--cogenta-color-muted-fg) 86%, var(--cogenta-color-bg));
+
+  --ce-accent: var(--cogenta-color-accent);
+  --ce-accent-fg: var(--cogenta-color-accent-fg);
+  --ce-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 82%, var(--cogenta-color-fg));
+  --ce-accent-soft: color-mix(in oklab, var(--cogenta-color-accent) 12%, var(--cogenta-color-bg));
+  --ce-accent-soft-fg: color-mix(
+    in oklab,
+    var(--cogenta-color-accent) 72%,
+    var(--cogenta-color-fg)
+  );
+
+  --ce-line: var(--cogenta-color-border);
+  --ce-line-soft: color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg));
+  --ce-line-strong: color-mix(in oklab, var(--cogenta-color-border) 60%, var(--cogenta-color-fg));
+
+  --ce-scrim: color-mix(in oklab, var(--cogenta-color-fg) 60%, transparent);
+}
+
+@supports (color: light-dark(currentColor, currentColor)) and
+  (color: oklch(from currentColor l c h)) {
+  :where(:root) {
+    --ce-canvas: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.155 calc(c * 0.65) h)
+    );
+    --ce-surface: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.2 calc(c * 0.58) h)
+    );
+    --ce-surface-raised: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.245 calc(c * 0.5) h)
+    );
+    --ce-surface-sunken: light-dark(
+      var(--cogenta-color-muted),
+      oklch(from var(--cogenta-color-fg) 0.115 calc(c * 0.75) h)
+    );
+    --ce-surface-tinted: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 9%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.24 calc(c * 0.55) h)
+    );
+
+    --ce-ink: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-accent) 0.94 0.014 h)
+    );
+    --ce-ink-muted: light-dark(
+      var(--cogenta-color-muted-fg),
+      oklch(from var(--cogenta-color-accent) 0.76 0.02 h)
+    );
+    --ce-ink-subtle: light-dark(
+      color-mix(in oklab, var(--cogenta-color-muted-fg) 86%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.65 0.018 h)
+    );
+
+    --ce-accent: light-dark(
+      var(--cogenta-color-accent),
+      oklch(from var(--cogenta-color-accent) 0.72 calc(c * 0.95) h)
+    );
+    --ce-accent-fg: light-dark(
+      var(--cogenta-color-accent-fg),
+      oklch(from var(--cogenta-color-accent) 0.15 calc(c * 0.6) h)
+    );
+    --ce-accent-hover: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 82%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.8 calc(c * 0.9) h)
+    );
+    --ce-accent-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 12%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.32 calc(c * 0.55) h)
+    );
+    --ce-accent-soft-fg: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 72%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.9 calc(c * 0.5) h)
+    );
+
+    --ce-line: light-dark(
+      var(--cogenta-color-border),
+      oklch(from var(--cogenta-color-accent) 0.32 calc(c * 0.25) h)
+    );
+    --ce-line-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.25 calc(c * 0.22) h)
+    );
+    --ce-line-strong: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 60%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.56 calc(c * 0.28) h)
+    );
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Elevation — a shadow in light, a lighter surface and an accent-tinted ring
+   in dark. `light-dark()` takes colours only, so these cannot use it: a
+   shadow is not a colour. They are the one place in this file where the dark
+   values are written under a media query and repeated for the explicit
+   toggle.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --ce-ring: inset 0 0 0 1px var(--ce-line);
+  --ce-ring-accent: inset 0 0 0 1.5px var(--ce-accent);
+
+  --ce-elevation-0: none;
+  --ce-elevation-1: var(--cogenta-shadow-sm);
+  --ce-elevation-2: var(--cogenta-shadow-md);
+  --ce-elevation-3: var(--cogenta-shadow-md), var(--cogenta-shadow-sm);
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) {
+    --ce-elevation-1: var(--ce-ring);
+    --ce-elevation-2: var(--ce-ring);
+    --ce-elevation-3: var(--ce-ring), var(--cogenta-shadow-md);
+  }
+}
+
+:where(:root[data-theme="dark"]) {
+  --ce-elevation-1: var(--ce-ring);
+  --ce-elevation-2: var(--ce-ring);
+  --ce-elevation-3: var(--ce-ring), var(--cogenta-shadow-md);
+}

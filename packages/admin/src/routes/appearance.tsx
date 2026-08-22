@@ -39,6 +39,7 @@ import {
   Notice,
   Select,
 } from '../ui/index.js'
+import { ThemeGalleryPreview } from './theme-gallery-preview.js'
 
 /**
  * "Apparence" (fiche 14) — the screen the fiche calls one of the CMS's three
@@ -452,6 +453,13 @@ export function AppearanceRoute(): JSX.Element {
                         active ? 'border-primary bg-accent/40' : 'border-border'
                       }`}
                     >
+                      {token !== null && (
+                        <ThemeGalleryPreview
+                          token={token}
+                          themeName={candidate.name}
+                          label={candidate.label}
+                        />
+                      )}
                       <span className="flex items-center justify-between gap-2">
                         <strong className="text-sm text-foreground">{candidate.label}</strong>
                         {active && (

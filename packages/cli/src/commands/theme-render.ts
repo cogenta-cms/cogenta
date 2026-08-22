@@ -22,7 +22,10 @@ import {
   buildCollectionListQuery as collectionListQuery,
   escapeAttribute,
   type FetchedEntries,
+  type ImageOptions,
+  type ImageSource,
   type LinkTargetInput,
+  type MediaReference,
   type PageContent,
   type PublicComment,
   type RenderContext,
@@ -1242,6 +1245,241 @@ export function joinStyles(skinCss: string | null, themeCss: string | null): str
     themeCss === null ? null : minifyCss(themeCss),
   ].filter((sheet): sheet is string => sheet !== null)
   return sheets.length === 0 ? null : sheets.join('\n')
+}
+
+/**
+ * The appearance screen's theme gallery preview (fiche L24 task 5) — one
+ * fixed, database-free demo page, rendered through whichever theme package
+ * is asked for by name.
+ *
+ * **Option (a) of the task's own note, chosen over (b) ("preview the site's
+ * real home page")**, for two reasons:
+ *
+ *  1. an admin comparing themes is often doing it *before* the site has any
+ *     content at all — the moment a real-home-page preview would have
+ *     nothing to show, or would 404 the whole comparison;
+ *  2. every candidate theme has to render the *same* page for the
+ *     comparison to mean anything. A real home page would let one theme's
+ *     card look richer than another's purely because that site's current
+ *     home happens to use more blocks — an artifact of this site's content,
+ *     not of the theme.
+ *
+ * The three blocks below (hero, collectionList, featureGrid) are the same
+ * shape `create-cogenta`'s "blog" blueprint seeds a real home page with
+ * (`packages/create-cogenta/src/blueprints/blog.ts`) — realistic content a
+ * theme actually has to lay out, not lorem ipsum — but the `collectionList`
+ * entries are fabricated in-process rather than queried, and nothing here
+ * ever touches `ContentGateway`/the database: a card in this gallery cannot
+ * leak draft or private content because it never reads content of any kind.
+ * `link()` and `image()` below reflect that — an entry link resolves to
+ * `'#'` rather than a real route, and `image()` refuses, because the demo
+ * page never references a real media asset in the first place.
+ */
+const GALLERY_PREVIEW_BLOCK_VERSION = '1.0.0'
+const GALLERY_PREVIEW_COLLECTION_LIST_KEY = 'gallery-preview-posts'
+
+function galleryPreviewPage(): PageContent {
+  return {
+    title: 'A site that looks like yours',
+    blocks: [
+      {
+        _key: 'gallery-preview-hero',
+        _type: 'hero',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        eyebrow: 'Preview',
+        title: 'A site that looks like yours',
+        subtitle:
+          'This is fixed demo content, shown identically across every theme, so you can compare layouts on equal footing.',
+        actions: [
+          { label: 'Get started', target: { href: '#' }, emphasis: 'primary' },
+          { label: 'Learn more', target: { href: '#' }, emphasis: 'secondary' },
+        ],
+      } as VocabularyBlock,
+      {
+        _key: GALLERY_PREVIEW_COLLECTION_LIST_KEY,
+        _type: 'collectionList',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: 'Latest posts',
+        collection: 'post',
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 3,
+        layout: 'list',
+      } as VocabularyBlock,
+      {
+        _key: 'gallery-preview-features',
+        _type: 'featureGrid',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: 'What you get',
+        items: [
+          {
+            _key: 'gallery-preview-feature-1',
+            icon: 'blocks',
+            title: 'Blocks, not HTML',
+            text: 'Every section of a page is structured data. The theme decides what it looks like.',
+          },
+          {
+            _key: 'gallery-preview-feature-2',
+            icon: 'content',
+            title: 'Your real content',
+            text: 'Switching themes never touches your entries — only how they are laid out.',
+          },
+          {
+            _key: 'gallery-preview-feature-3',
+            icon: 'zero-js',
+            title: 'No client JavaScript',
+            text: 'Every theme in this gallery ships zero executable client JavaScript.',
+          },
+        ],
+      } as VocabularyBlock,
+    ],
+  }
+}
+
+/** Three fabricated posts for the demo `collectionList` above — never a real query result. */
+function galleryPreviewEntries(locale: string): readonly ThemeContentEntry[] {
+  const posts: readonly { readonly title: string; readonly excerpt: string }[] = [
+    {
+      title: 'Welcome to your new site',
+      excerpt:
+        'A short introduction to what you can do here, once real content replaces this demo.',
+    },
+    {
+      title: 'How themes work',
+      excerpt: 'A theme lays out your content; it never stores any of it. Switch freely.',
+    },
+    {
+      title: 'Zero client JavaScript, by policy',
+      excerpt:
+        'Every theme in the gallery renders without shipping a single script to the browser.',
+    },
+  ]
+  return posts.map((post, index) => ({
+    id: `gallery-preview-${index}`,
+    collection: 'post',
+    locale,
+    status: 'published' as const,
+    title: post.title,
+    excerpt: post.excerpt,
+    createdAt: new Date(Date.now() - index * 86_400_000).toISOString(),
+  }))
+}
+
+/** Demo navigation for the gallery preview's header/footer — never a real menu lookup. */
+const GALLERY_PREVIEW_HEADER_NAV: readonly ChromeNavLink[] = [
+  { label: 'Home', href: '/', openInNewTab: false, kind: 'url', title: null },
+  { label: 'Blog', href: '#', openInNewTab: false, kind: 'url', title: null },
+  { label: 'About', href: '#', openInNewTab: false, kind: 'url', title: null },
+]
+const GALLERY_PREVIEW_FOOTER_NAV: readonly ChromeNavLink[] = [
+  { label: 'Privacy', href: '#', openInNewTab: false, kind: 'url', title: null },
+]
+
+export interface ThemeGalleryPreviewOptions {
+  readonly site: {
+    readonly name: string
+    readonly url: string
+    readonly locales: readonly string[]
+    readonly defaultLocale: string
+  }
+  /**
+   * The combined skin + *this candidate theme's* stylesheet, already
+   * resolved by the caller (`serve.ts`'s `themeGalleryStyles`) — never the
+   * currently active theme's own CSS, which is what `styles`/`resolveStyles`
+   * elsewhere in this file give. Inlined into the response as a `<style>`
+   * tag rather than linked, the same reasoning `/api/theme/preview` already
+   * gives: this HTML is consumed as `srcDoc` by the admin's own iframe, not
+   * served at a real URL on the site's own origin, so a `<link
+   * rel="stylesheet">` would either resolve against the wrong origin or
+   * serve the *active* theme's sheet regardless of which candidate this is.
+   */
+  readonly styles: string | null
+  readonly branding?: () => Promise<BrandingSettings>
+}
+
+/**
+ * Renders the fixed demo page above through `themeName`, resolved through
+ * the same `theme-registry.ts` every other theme lookup on this server uses.
+ * An unrecognised name is the caller's responsibility to refuse before
+ * calling this — `resolveTheme` itself falls back to the built-in default
+ * rather than throwing (see its own comment), which is the right behaviour
+ * for a live page render but not for a gallery card that claims to preview
+ * one specific theme.
+ */
+export async function renderThemeGalleryPreview(
+  themeName: string,
+  options: ThemeGalleryPreviewOptions,
+): Promise<string> {
+  const theme = await resolveTheme(themeName)
+  const locale = options.site.defaultLocale
+
+  const link = (target: LinkTargetInput): string => {
+    if (typeof target === 'string') return target
+    if ('path' in target) return target.path
+    // A demo entry has no real route — same "honest unresolvable answer" as
+    // `renderEntryPage`'s own `link`, just never populated here.
+    return '#'
+  }
+
+  const image = (media: MediaReference, _imageOptions?: ImageOptions): ImageSource => {
+    throw new CogentaError({
+      code: 'THEME_IMAGE_UNSUPPORTED',
+      message: `No media asset "${media}" is available to the theme gallery preview.`,
+      hint: 'This preview renders fixed, image-free demo content by design — see renderThemeGalleryPreview.',
+      details: { media },
+    })
+  }
+
+  const themeContext: RenderContext = {
+    site: options.site,
+    locale,
+    url: new URL('/', options.site.url),
+    t: (key) => key,
+    image,
+    link,
+    content: {
+      entry: async () => null,
+      byPath: async () => null,
+      list: async () => ({ items: [], nextCursor: null }),
+    },
+  }
+
+  const pageContent = galleryPreviewPage()
+  const fetchedEntries: FetchedEntries = {
+    [GALLERY_PREVIEW_COLLECTION_LIST_KEY]: galleryPreviewEntries(locale),
+  }
+  const bodyHtml = serialize(theme.renderPage(pageContent, themeContext, fetchedEntries))
+
+  const brandingHtml = renderFooterBranding(
+    await brandingFor(options.branding),
+    DEFAULT_IMAGE_ENDPOINT,
+  )
+  const chrome = theme.renderChrome({
+    site: options.site,
+    locale,
+    homeHref: '/',
+    headerNav: GALLERY_PREVIEW_HEADER_NAV,
+    footerNav: GALLERY_PREVIEW_FOOTER_NAV,
+    brandingHtml,
+  })
+
+  return `<!doctype html>
+<html lang="${escapeAttribute(locale)}" dir="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex, nofollow">
+<title>${escapeHtml(pageContent.title)}</title>
+${options.styles === null ? '' : `<style>${options.styles}</style>`}
+</head>
+<body>
+<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+${chrome.header}
+${bodyHtml}
+${chrome.footer}
+</body>
+</html>
+`
 }
 
 function escapeHtml(value: string): string {

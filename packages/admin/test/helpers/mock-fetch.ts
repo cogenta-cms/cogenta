@@ -5943,6 +5943,21 @@ export function installMockFetch(
           })
         }
 
+        // `/api/theme/gallery-preview` (fiche L24 task 5) — the theme
+        // gallery's own visual preview, one card per installed theme. The
+        // real route renders a fixed demo page through the named theme
+        // package; this mock only needs to answer with *some* real HTML that
+        // names the requested theme, so a test can assert the iframe
+        // actually receives a different document per card.
+        if (url.includes('/api/theme/gallery-preview') && method === 'POST') {
+          const requestedTheme = (body as { theme?: string } | undefined)?.theme ?? ''
+          return json(200, {
+            data: {
+              html: `<!doctype html><html><head><style>/* ${requestedTheme} */</style></head><body>gallery preview of ${requestedTheme}</body></html>`,
+            },
+          })
+        }
+
         if (url.includes('/api/theme/generate') && method === 'POST') {
           if (options.theme?.aiAvailable !== true) {
             return json(501, {

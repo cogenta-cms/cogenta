@@ -305,7 +305,7 @@ import {
 } from './seo.js'
 import { createSitePlanning } from './site-plan.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
-import { DEFAULT_THEME_NAME } from './theme-registry.js'
+import { availableThemes, DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
   DEFAULT_IMAGE_ENDPOINT,
@@ -315,6 +315,7 @@ import {
   renderDraftPage,
   renderMaintenancePage,
   renderRequestedPage,
+  renderThemeGalleryPreview,
   resolveEntry,
   STYLESHEET_PATH,
 } from './theme-render.js'
@@ -732,6 +733,17 @@ interface Site {
   }) => Promise<string | null>
   /** `/api/theme` (fiche 14). Absent only when this instance built no theme wiring — see `resolveStyles`. */
   readonly themeRouter?: ThemeRouter
+  /**
+   * The appearance screen's theme *gallery* preview (fiche L24 task 5): the
+   * combined skin + stylesheet for an arbitrary theme package **by name**,
+   * never just the currently active one — `resolveStyles`/`previewStyles`
+   * above both resolve against the active theme only, which is exactly the
+   * wrong resolution for "show me what theme X would look like without
+   * switching to it". Absent under the same condition every other theme
+   * field here is (`options.theme` absent — a test harness with no theme
+   * wiring).
+   */
+  readonly themeGalleryStyles?: (themeName: string) => Promise<string | null>
   /**
    * The active theme *package* name (fiche L23) — `null` for the built-in
    * default. Read live off the same theme-overrides row `resolveStyles`
@@ -2168,6 +2180,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             ),
         }),
     ...(options.theme === undefined ? {} : { themeRouter: createThemeRouter(options.theme) }),
+    ...(options.theme === undefined
+      ? {}
+      : {
+          themeGalleryStyles: async (themeName: string) =>
+            computeEffectiveStyles(
+              options.theme as ThemeRouterOptions,
+              options.themeCssFor === undefined
+                ? (options.themeCss ?? null)
+                : await options.themeCssFor(themeName),
+            ),
+        }),
     ...(options.theme === undefined
       ? {}
       : {
@@ -3891,6 +3914,61 @@ export function createRequestListener(
           'cache-control': 'no-store',
         })
         res.end(JSON.stringify({ data: { html: withPreviewCss } }))
+        return
+      }
+
+      // `/api/theme/gallery-preview` (fiche L24 task 5) — the appearance
+      // screen's visual preview of a candidate theme *package*, distinct
+      // from `/api/theme/preview` above (which previews a colour/token
+      // candidate on the site's own real home page, in the currently active
+      // theme). Checked before the generic `/api/theme` mount below for the
+      // same structural reason `/api/theme/preview` is: it needs
+      // `renderThemeGalleryPreview`, which that router cannot reach.
+      //
+      // Same principle as the visual page builder (L16) and the token
+      // preview above — an iframe on a real server render, never a static
+      // screenshot or a second React reimplementation of the twelve blocks.
+      // What differs here is the entry: there is no real page to show yet on
+      // a site with no content, so this renders one fixed, database-free
+      // demo page identically across every theme asked for — see
+      // `renderThemeGalleryPreview`'s own comment for why fixed content, the
+      // same across every card, is the fairer comparison. `site.gateway` is
+      // never touched, so this cannot leak a draft or private entry.
+      if (url.pathname === '/api/theme/gallery-preview') {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { allow: 'POST' }).end()
+          return
+        }
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may preview a theme.')
+          return
+        }
+        if (site.themeGalleryStyles === undefined) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This instance has no theme gallery preview.')
+          return
+        }
+        const body = (await readBody(req)) as { theme?: unknown } | undefined
+        const themeName = typeof body?.theme === 'string' ? body.theme : ''
+        if (!availableThemes().some((candidate) => candidate.name === themeName)) {
+          jsonError(
+            res,
+            404,
+            'THEME_NOT_FOUND',
+            `No theme named "${themeName}" is available on this instance.`,
+          )
+          return
+        }
+        const styles = await site.themeGalleryStyles(themeName)
+        const html = await renderThemeGalleryPreview(themeName, {
+          site: site.site,
+          styles,
+          branding: () => brandingForSite(site),
+        })
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(JSON.stringify({ data: { html } }))
         return
       }
 

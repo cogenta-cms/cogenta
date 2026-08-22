@@ -253,3 +253,46 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
     ).toBeDefined()
   })
 })
+
+describe('the appearance screen — theme gallery preview (fiche L24 task 5)', () => {
+  it('shows a real visual preview for every installed theme, not a placeholder', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+        },
+        {
+          name: '@cogenta/theme-portfolio',
+          label: 'Portfolio',
+          description: 'An ultra-modern portfolio theme.',
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    // One iframe per theme card, each fetched and rendered on its own —
+    // never a shared placeholder image, never the same document twice.
+    const canonicalFrame = (await screen.findByTitle(
+      'Aperçu du thème Canonical',
+    )) as HTMLIFrameElement
+    const portfolioFrame = (await screen.findByTitle(
+      'Aperçu du thème Portfolio',
+    )) as HTMLIFrameElement
+
+    await waitFor(() => {
+      expect(canonicalFrame.getAttribute('srcdoc')).toContain(
+        'gallery preview of @cogenta/theme-canonical',
+      )
+      expect(portfolioFrame.getAttribute('srcdoc')).toContain(
+        'gallery preview of @cogenta/theme-portfolio',
+      )
+    })
+    // Decorative: the picker's own "Sélectionner" button is what an admin
+    // acts through, not a tab stop inside the thumbnail.
+    expect(canonicalFrame.getAttribute('aria-hidden')).toBe('true')
+    expect(canonicalFrame.tabIndex).toBe(-1)
+  })
+})

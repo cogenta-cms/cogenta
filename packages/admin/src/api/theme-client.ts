@@ -120,3 +120,22 @@ export function previewTheme(
     body: JSON.stringify(input),
   })
 }
+
+/**
+ * The theme *gallery*'s visual preview (fiche L24 task 5) — a fixed,
+ * database-free demo page rendered through one candidate theme package,
+ * distinct from `previewTheme` above (a colour/token candidate on the site's
+ * own real home page, in the currently active theme). Every card in the
+ * gallery calls this once, by name, so switching which theme is shown never
+ * touches `PUT /api/theme/overrides`.
+ */
+export function previewThemeGallery(
+  token: string,
+  theme: string,
+): Promise<{ readonly html: string }> {
+  return request<{ readonly html: string }>('/api/theme/gallery-preview', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify({ theme }),
+  })
+}

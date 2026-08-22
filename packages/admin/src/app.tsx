@@ -38,6 +38,7 @@ import { MarketplaceRoute } from './routes/marketplace.js'
 import { McpRoute } from './routes/mcp.js'
 import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
+import { NotFoundRoute } from './routes/not-found.js'
 import { ObservabilityRoute } from './routes/observability.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
@@ -157,6 +158,7 @@ export function App(): JSX.Element {
                 {/* Old path (fiche 21, task 1 renamed it) — a bookmark or a link elsewhere in the app still lands somewhere real. */}
                 <Route path="site-plan" element={<Navigate to="/create-site" replace />} />
                 <Route path="marketplace" element={<MarketplaceRoute />} />
+                <Route path="*" element={<NotFoundRoute />} />
               </Route>
             </Routes>
           </BrowserRouter>

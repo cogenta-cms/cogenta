@@ -252,6 +252,39 @@ describe('cogenta serve — sign out everywhere else (fiche 18 task 2)', () => {
   })
 })
 
+describe('cogenta serve — failed sign-ins are audited', () => {
+  it('journals a wrong password, naming the attempted email, without recording a real actor', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+
+      await passwordLogin(server.base, 'admin@example.com', 'not the password')
+
+      const admin = await passwordLogin(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const adminToken = admin.data.session?.token
+      if (adminToken === undefined) throw new Error('expected a real admin session')
+
+      const audit = await fetch(`${server.base}/api/audit?action=auth.login_failed`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      expect(audit.status).toBe(200)
+      const body = (await audit.json()) as {
+        data: readonly { actorId: string | null; diff: { email?: string } | null }[]
+      }
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0]?.actorId).toBeNull()
+      expect(body.data[0]?.diff?.email).toBe('admin@example.com')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
 describe('cogenta serve — my activity (fiche 18 task 4)', () => {
   it('ignores any actor id supplied by the client and only ever shows the caller’s own activity', async () => {
     const root = await project()

@@ -1025,3 +1025,136 @@ describe('a themed page over HTTP', () => {
     }
   })
 })
+
+/**
+ * A `slug` field is not `required` (contract A): a routed collection can hold
+ * a published entry with no slug at all — a draft published without one, for
+ * instance. `theme-render.ts`'s `link()` used to let `buildPath` throw
+ * straight through `renderPage`, which turned one such entry, sitting inside
+ * a `collectionList` on another page, into a 500 for every visitor of that
+ * *other* page. One unresolvable target must degrade to `href="#"`, exactly
+ * like a target this render never fetched — never fail the whole page.
+ */
+async function themedProjectWithPosts(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'cogenta-theme-posts-'))
+  await writeFile(
+    join(root, 'cogenta.config.mjs'),
+    `export default {
+  site: { name: 'Themed site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+}
+`,
+    'utf8',
+  )
+  await writeFile(
+    join(root, 'cogenta.schema.mjs'),
+    `import { defineCollection, f } from '@cogenta/schema'
+
+export default [
+  defineCollection({
+    name: 'page',
+    labels: { singular: 'Page', plural: 'Pages' },
+    routing: { pattern: '/:slug' },
+    fields: {
+      title: f.text({ required: true, max: 200 }),
+      slug: f.slug({ from: 'title', unique: true }),
+      blocks: f.blocks({ required: true }),
+    },
+    indexes: [['slug']],
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  }),
+  defineCollection({
+    name: 'post',
+    labels: { singular: 'Post', plural: 'Posts' },
+    routing: { pattern: '/blog/:slug' },
+    fields: {
+      title: f.text({ required: true, max: 200 }),
+      slug: f.slug({ from: 'title', unique: true }),
+    },
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  }),
+]
+`,
+    'utf8',
+  )
+  return root
+}
+
+describe('a collectionList block linking to an entry with no slug', () => {
+  it('still renders the page, with a "#" link for the entry it cannot route', async () => {
+    const root = await themedProjectWithPosts()
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const page = defineCollection({
+      name: 'page',
+      labels: { singular: 'Page', plural: 'Pages' },
+      routing: { pattern: '/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+        blocks: f.blocks({ required: true }),
+      },
+      indexes: [['slug']],
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const post = defineCollection({
+      name: 'post',
+      labels: { singular: 'Post', plural: 'Posts' },
+      routing: { pattern: '/blog/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+      },
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await createSchemaTables(db, [page, post])
+    await createContentStore({ db, collection: page, defaultLocale: 'en' }).create({
+      status: 'published',
+      createdBy: null,
+      values: { title: 'Home', slug: 'home' },
+      blocks: {
+        blocks: [
+          {
+            key: 'recent-posts',
+            type: 'collectionList',
+            data: { collection: 'post', layout: 'list' },
+          },
+        ],
+      },
+    })
+    const posts = createContentStore({ db, collection: post, defaultLocale: 'en' })
+    await posts.create({
+      status: 'published',
+      createdBy: null,
+      values: { title: 'A proper post', slug: 'a-proper-post' },
+    })
+    // The reproduction: a published post whose slug was never set. Nothing in
+    // the collection schema forbids it, and it is exactly what crashed the
+    // real `local-playground` home page this test guards against.
+    await posts.create({
+      status: 'published',
+      createdBy: null,
+      values: { title: 'Slugless post' },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/`)
+      expect(response.status).toBe(200)
+
+      const html = await response.text()
+      expect(html).toContain('A proper post')
+      expect(html).toContain('href="/blog/a-proper-post"')
+      expect(html).toContain('Slugless post')
+      expect(html).toContain('href="#"')
+    } finally {
+      await server.stop()
+    }
+  })
+})

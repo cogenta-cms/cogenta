@@ -375,6 +375,7 @@
     "verify": "Vérifier",
     "passkeyRefused": "La clé d’accès a été refusée ou annulée.",
     "connectionFailed": "Connexion impossible.",
+    "incorrectPassword": "Adresse e-mail ou mot de passe incorrect.",
     "incorrectCode": "Code incorrect.",
     "forgotPassword": "Mot de passe oublié ?",
     "rememberMe": "Se souvenir de moi sur cet appareil",
@@ -1528,6 +1529,12 @@
   "dashboard": {
     "heading": "Tableau de bord",
     "healthHeading": "Santé du site",
+    "healthStatus": {
+      "ok": "opérationnel",
+      "degraded": "dégradé",
+      "down": "indisponible"
+    },
+    "healthDegradedHint": "Fonctionne sans service externe — normal sur une installation neuve. Détail sur l'écran Santé.",
     "adminOnly": "Réservé au rôle « admin ».",
     "database": "Base de données :",
     "storage": "Stockage :",
@@ -1540,7 +1547,7 @@
     "scheduledLoadError": "Impossible de charger les contenus programmés.",
     "analyticsLoadError": "Impossible de charger le widget de statistiques.",
     "backupsHeading": "État des sauvegardes",
-    "backupsBody": "Aucune sauvegarde configurée pour l'instant. Ce widget affichera la dernière sauvegarde, sa taille et son résultat dès que la fiche 26 (export et sauvegarde) sera livrée.",
+    "backupsBody": "La sauvegarde et la restauration existent, mais uniquement en ligne de commande (« cogenta backup », « cogenta restore ») — ce widget ne verra jamais de données tant qu'aucune API d'administration ne les expose.",
     "summaryHeading": "Résumé du contenu",
     "summaryLoadError": "Impossible de charger le résumé du contenu.",
     "summaryEmpty": "Aucune collection n'est lisible par votre rôle.",
@@ -1707,6 +1714,7 @@
     "saveError": "Ce réglage n'a pas pu être enregistré.",
     "saving": "Enregistrement…",
     "saved": "Enregistré.",
+    "savedNotice": "Modification enregistrée.",
     "provenanceEditable": "Modifiable ici.",
     "provenanceReadOnly": "Défini dans cogenta.config.mjs — lecture seule.",
     "tab": {
@@ -2582,6 +2590,11 @@
     "revoke": "Révoquer",
     "pendingHeading": "Nouvelles autorisations demandées",
     "pendingIntro": "Une nouvelle version de ce plugin demande des autorisations supplémentaires. Elles ne prendront effet qu'après votre accord."
+  },
+  "notFound": {
+    "heading": "Page introuvable",
+    "body": "Cette adresse ne correspond à aucun écran de l'administration — un lien obsolète, une faute de frappe, ou une fonctionnalité disponible uniquement en ligne de commande.",
+    "backToDashboard": "Retour au tableau de bord"
   },
   "marketplace": {
     "heading": "Marketplace",

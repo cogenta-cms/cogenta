@@ -141,6 +141,50 @@
     animation-delay: var(--reveal-delay, 0ms);
   }
 
+  /* `ui/modal.tsx` names these four animations on Radix's open/closed data
+     attributes so its `Dialog.Content` unmounts only once the exit animation
+     actually finishes (Radix Presence waits for a real `animationend`). An
+     `animation-name` with no matching `@keyframes` is a no-op visually, but
+     Chrome/Firefox never fire `animationend` for it either — so Presence
+     waited forever and the dialog stayed on screen, fully interactive, after
+     every close (✕, Cancel and Escape all "worked" internally, `data-state`
+     really did flip to `closed`, but nothing ever removed the node). */
+  @keyframes cg-admin-overlay-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes cg-admin-overlay-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes cg-admin-modal-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes cg-admin-modal-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
   .reveal-1 {
     --reveal-delay: 40ms;
   }

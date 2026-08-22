@@ -376,6 +376,7 @@
     "verify": "Verify",
     "passkeyRefused": "The passkey was refused or cancelled.",
     "connectionFailed": "Could not sign in.",
+    "incorrectPassword": "Incorrect email or password.",
     "incorrectCode": "Incorrect code.",
     "forgotPassword": "Forgot your password?",
     "rememberMe": "Remember me on this device",
@@ -1529,6 +1530,12 @@
   "dashboard": {
     "heading": "Dashboard",
     "healthHeading": "Site health",
+    "healthStatus": {
+      "ok": "operational",
+      "degraded": "degraded",
+      "down": "down"
+    },
+    "healthDegradedHint": "Working without an external service — normal on a fresh install. Details on the Health screen.",
     "adminOnly": "Restricted to the \"admin\" role.",
     "database": "Database:",
     "storage": "Storage:",
@@ -1541,7 +1548,7 @@
     "scheduledLoadError": "Could not load scheduled content.",
     "analyticsLoadError": "Could not load the analytics widget.",
     "backupsHeading": "Backup status",
-    "backupsBody": "No backup is configured yet. This widget will show the last backup, its size and its result once fiche 26 (export & backup) ships.",
+    "backupsBody": "Backup and restore exist, but command-line only (\"cogenta backup\", \"cogenta restore\") — this widget will stay empty until an admin API exposes them.",
     "summaryHeading": "Content summary",
     "summaryLoadError": "Could not load the content summary.",
     "summaryEmpty": "No collection is readable by your role.",
@@ -1708,6 +1715,7 @@
     "saveError": "This setting could not be saved.",
     "saving": "Saving…",
     "saved": "Saved.",
+    "savedNotice": "Change saved.",
     "provenanceEditable": "Editable here.",
     "provenanceReadOnly": "Defined in cogenta.config.mjs — read-only.",
     "tab": {
@@ -2580,6 +2588,11 @@
     "revoke": "Revoke",
     "pendingHeading": "New permissions requested",
     "pendingIntro": "A new version of this plugin requests additional permissions. They will not take effect until you approve them."
+  },
+  "notFound": {
+    "heading": "Page not found",
+    "body": "This address doesn't match any admin screen — a stale link, a typo, or a feature only available from the command line.",
+    "backToDashboard": "Back to the dashboard"
   },
   "marketplace": {
     "heading": "Marketplace",

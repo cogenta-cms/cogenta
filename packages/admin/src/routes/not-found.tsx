@@ -1,0 +1,29 @@
+import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
+import { buttonVariants } from '../ui/index.js'
+
+/**
+ * The wildcard route (`app.tsx`'s `path="*"`, last child, inside `AppShell`).
+ *
+ * Before this existed, any unmatched `/admin/*` URL — a typo, a bookmark to a
+ * route that moved, a deliberately CLI-only feature someone still tried to
+ * reach by URL — rendered a totally blank page: no sidebar, no heading, no
+ * way back except the browser's own Back button, because react-router
+ * renders nothing at all when no `<Route>` in the tree matches. This is the
+ * one route that always matches, so the shell (sidebar, header) keeps
+ * rendering around it and the page says what happened.
+ */
+export function NotFoundRoute(): JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <main className="flex flex-col items-start gap-4 p-6">
+      <h1 className="m-0 text-xl leading-7 font-semibold">{t('notFound.heading')}</h1>
+      <p className="m-0 max-w-prose text-sm text-muted-foreground">{t('notFound.body')}</p>
+      <Link className={buttonVariants({ variant: 'primary' })} to="/">
+        {t('notFound.backToDashboard')}
+      </Link>
+    </main>
+  )
+}

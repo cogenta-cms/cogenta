@@ -2631,8 +2631,34 @@ async function recordAuthAudit(
   pathname: string,
   response: RestResponse,
   logger: Logger,
+  body?: unknown,
 ): Promise<void> {
-  if (response.status < 200 || response.status >= 300) return
+  if (response.status < 200 || response.status >= 300) {
+    // A refused password attempt is the "who is trying to get in" signal a
+    // security-conscious admin expects an audit log to carry (WordPress and
+    // its security plugins log these too) — only the first step, though:
+    // TOTP, recovery-code and passkey completion reuse the same
+    // `AUTH_INVALID_CREDENTIALS`-family codes for a different meaning each
+    // time, so recording those here under one generic action would misname
+    // what actually failed.
+    if (pathname.endsWith('/api/auth/login') && method === 'POST') {
+      const email =
+        body !== null &&
+        typeof body === 'object' &&
+        typeof (body as { email?: unknown }).email === 'string'
+          ? (body as { email: string }).email
+          : null
+      await site.auth.audit
+        .record({
+          actorId: null,
+          actorRoles: [],
+          action: 'auth.login_failed',
+          ...(email === null ? {} : { diff: { email } }),
+        })
+        .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+    }
+    return
+  }
 
   if (pathname.endsWith('/api/auth/session') && method === 'DELETE') {
     await site.auth.audit
@@ -3268,7 +3294,15 @@ export function createRequestListener(
         const request = toRestRequest(req, url, body)
         const response = await site.authRouter.handle(request)
         writeRestResponse(res, response)
-        await recordAuthAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        await recordAuthAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          response,
+          logger,
+          body,
+        )
         // A refused sign-in is the only clock a brute-force alert can honestly
         // have here (L14 task 4) — see `security-alerts.ts` for why not a timer.
         await site.securityAlerts?.observe(response.status)

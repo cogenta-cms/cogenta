@@ -45,6 +45,35 @@ export function LoginRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  /**
+   * `ApiError#message` is the server's own English string (`@cogenta/auth`
+   * never localises it — a stable log/API contract, not UI copy). Falling
+   * back to it unconditionally was showing "Incorrect email or password."
+   * in the middle of an otherwise French screen. `@cogenta/auth` reuses the
+   * same handful of codes (`AUTH_INVALID_CREDENTIALS` in particular) across
+   * password, TOTP and recovery-code checks with a different meaning each
+   * time, so the right translation is whichever key the *caller* already
+   * expects for its own step — this only ever substitutes on a code the
+   * step in question is known to actually produce; anything else falls back
+   * to the raw server message rather than guess at a translation for it.
+   */
+  function loginErrorMessage(
+    caught: unknown,
+    networkFailureKey: string,
+    expectedKey: string = networkFailureKey,
+  ): string {
+    if (!(caught instanceof ApiError)) return t(networkFailureKey)
+    switch (caught.code) {
+      case 'AUTH_INVALID_CREDENTIALS':
+      case 'AUTH_USER_NOT_FOUND':
+      case 'AUTH_RECOVERY_CODE_INVALID':
+      case 'AUTH_WEBAUTHN_FAILED':
+        return t(expectedKey)
+      default:
+        return caught.message
+    }
+  }
+
   if (auth.state.status === 'authenticated') {
     const from = (location.state as LocationState | null)?.from?.pathname ?? '/'
     return <Navigate to={from} replace />
@@ -63,7 +92,7 @@ export function LoginRoute(): JSX.Element {
     } catch (caught) {
       // A cancelled browser prompt throws too, and is not worth an alarming
       // message — "try again" covers both that and a genuine failure.
-      setError(caught instanceof ApiError ? caught.message : t('login.passkeyRefused'))
+      setError(loginErrorMessage(caught, 'login.passkeyRefused'))
     } finally {
       setSubmitting(false)
     }
@@ -81,7 +110,7 @@ export function LoginRoute(): JSX.Element {
         setStep({ kind: 'totp', ticket: result.ticket })
       }
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('login.connectionFailed'))
+      setError(loginErrorMessage(caught, 'login.connectionFailed', 'login.incorrectPassword'))
     } finally {
       setSubmitting(false)
     }
@@ -96,7 +125,7 @@ export function LoginRoute(): JSX.Element {
       await auth.completeTotp(step.ticket, code)
       goToIntendedDestination()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('login.incorrectCode'))
+      setError(loginErrorMessage(caught, 'login.incorrectCode'))
     } finally {
       setSubmitting(false)
     }
@@ -111,7 +140,7 @@ export function LoginRoute(): JSX.Element {
       await auth.completeRecoveryCode(step.ticket, recoveryCode)
       goToIntendedDestination()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('login.recoveryCodeIncorrect'))
+      setError(loginErrorMessage(caught, 'login.recoveryCodeIncorrect'))
     } finally {
       setSubmitting(false)
     }

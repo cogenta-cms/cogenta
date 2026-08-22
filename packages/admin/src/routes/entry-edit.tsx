@@ -47,6 +47,7 @@ import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { useAutosave } from '../collections/use-autosave.js'
 import { validateEntry } from '../collections/validate-entry.js'
 import { previewPermalink } from '../lib/permalink.js'
+import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -207,6 +208,10 @@ export function EntryEditRoute(): JSX.Element {
   const defaultBlockTypes = useNewEntryDefaultBlocksSetting()
 
   const [values, setValues] = useState<Record<string, unknown>>({})
+  /** The last value auto-filled into each slug field, keyed by field name —
+   * lets `setFieldValue` tell "still what we suggested" from "the editor
+   * changed it" without a separate touched/untouched flag to keep in sync. */
+  const autoFilledSlugRef = useRef<Record<string, string>>({})
   const [blocks, setBlocks] = useState<BlockZones>({})
   const [locale, setLocale] = useState(defaultLocale)
   const [translationOf, setTranslationOf] = useState<string | null>(null)
@@ -484,7 +489,34 @@ export function EntryEditRoute(): JSX.Element {
   }, [token, isNew, id, name])
 
   function setFieldValue(field: string, value: unknown): void {
-    setValues((current) => ({ ...current, [field]: value }))
+    setValues((current) => {
+      const next = { ...current, [field]: value }
+      // A slug field derived from this one (`f.slug({ from: 'title' })`):
+      // propose it the way WordPress/Drupal/Strapi do — fill it in as the
+      // title is typed, keystroke by keystroke, until the editor overrides
+      // it. "Overrides" means the slug no longer matches what *we* last put
+      // there — never touched at all (a blank new entry) counts the same
+      // way, but a real slug already on an existing entry (loaded from the
+      // server, never auto-filled by this session) never matches our own
+      // ref and so is never silently rewritten.
+      if (typeof value === 'string') {
+        for (const candidate of collection?.fields ?? []) {
+          if (candidate.kind !== 'slug') continue
+          if (candidate.options['from'] !== field) continue
+          const existing = current[candidate.name]
+          const autoFillable =
+            existing === undefined ||
+            existing === null ||
+            existing === '' ||
+            existing === autoFilledSlugRef.current[candidate.name]
+          if (!autoFillable) continue
+          const generated = slugify(value)
+          autoFilledSlugRef.current[candidate.name] = generated
+          next[candidate.name] = generated
+        }
+      }
+      return next
+    })
     if (errors[field] !== undefined) {
       setErrors((current) => {
         const next = { ...current }
@@ -818,6 +850,12 @@ export function EntryEditRoute(): JSX.Element {
     setDuplicateError(null)
     try {
       const copy = await duplicateEntry(token, name, id)
+      // `navigate()` only changes the `:id` param — this component instance
+      // is reused, not remounted, so a status banner from *this* entry (e.g.
+      // "Statut changé en Publié.") would otherwise still be showing on the
+      // fresh draft copy a moment later, describing an action that never
+      // happened to it.
+      setStatusMessage(null)
       navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(copy.id)}`)
     } catch (caught) {
       setDuplicateError(caught instanceof ApiError ? caught.message : t('entryEdit.duplicateError'))

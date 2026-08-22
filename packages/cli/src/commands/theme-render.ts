@@ -7,7 +7,7 @@ import {
   type QueryRequest,
 } from '@cogenta/api'
 import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, isCogentaError } from '@cogenta/core'
 import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
 import {
   type BlockZones,
@@ -945,15 +945,26 @@ async function renderEntryPage(
       // doesn't build one.
       return '#'
     }
-    return buildPath(
-      targetCollection,
-      Object.fromEntries(
-        Object.entries(found.values).filter(
-          (pair): pair is [string, string] => typeof pair[1] === 'string',
+    try {
+      return buildPath(
+        targetCollection,
+        Object.fromEntries(
+          Object.entries(found.values).filter(
+            (pair): pair is [string, string] => typeof pair[1] === 'string',
+          ),
         ),
-      ),
-      found.locale ?? undefined,
-    )
+        found.locale ?? undefined,
+      )
+    } catch (error) {
+      // A route param can be missing on real content — a routed collection's
+      // slug-kind field is not `required`, so a saved-but-incomplete entry
+      // (a draft published without a slug, for instance) is reachable through
+      // a `collectionList` or a rich-text link long before anyone fixes it.
+      // One unresolvable target must not fail the whole page: the same "the
+      // honest answer is unresolvable" rule above applies here too.
+      if (isCogentaError(error) && error.code === 'CONTENT_ROUTE_INVALID') return '#'
+      throw error
+    }
   }
 
   const themeContext: RenderContext = {

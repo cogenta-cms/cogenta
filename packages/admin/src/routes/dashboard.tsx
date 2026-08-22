@@ -12,6 +12,7 @@ import {
   listEntries,
 } from '../api/content-client.js'
 import { getSiteHealth, type SiteHealth } from '../api/health-client.js'
+import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   type DashboardWidgetId,
@@ -82,14 +83,23 @@ const STATUS_DOT: Record<SiteHealth[keyof SiteHealth]['status'], string> = {
 }
 
 function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth] }): JSX.Element {
+  const { t } = useTranslation()
   return (
-    <span className="inline-flex items-center gap-2 rounded-sm border border-border bg-card px-2.5 py-1 font-mono text-xs">
-      <span
-        className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[report.status]}`}
-        aria-hidden="true"
-      />
-      {report.driver} <span className="text-muted-foreground">({report.tier})</span> —{' '}
-      {report.status}
+    <span className="flex flex-col gap-1">
+      <span className="inline-flex items-center gap-2 rounded-sm border border-border bg-card px-2.5 py-1 font-mono text-xs">
+        <span
+          className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[report.status]}`}
+          aria-hidden="true"
+        />
+        {report.driver} <span className="text-muted-foreground">({report.tier})</span> —{' '}
+        {t(`dashboard.healthStatus.${report.status}`)}
+      </span>
+      {/* A raw "degraded" badge, unexplained, reads as an incident to a
+          non-technical admin — it almost always just means "no external
+          service configured", which is the expected state on a fresh site. */}
+      {report.status !== 'ok' && (
+        <span className="text-xs text-muted-foreground">{t('dashboard.healthDegradedHint')}</span>
+      )}
     </span>
   )
 }
@@ -129,6 +139,9 @@ export function DashboardRoute(): JSX.Element {
 
   const [activity, setActivity] = useState<readonly AuditEntry[]>([])
   const [activityError, setActivityError] = useState<string | null>(null)
+  /** id → email, the same lookup `audit.tsx` already builds — a raw UUID next
+   * to an action reads as noise, not as "who did this". */
+  const [actorNames, setActorNames] = useState<ReadonlyMap<string, string>>(new Map())
 
   const [scheduled, setScheduled] = useState<readonly ScheduledItem[]>([])
   const [scheduledError, setScheduledError] = useState<string | null>(null)
@@ -169,6 +182,22 @@ export function DashboardRoute(): JSX.Element {
       cancelled = true
     }
   }, [token, isAdmin, t])
+
+  useEffect(() => {
+    if (token === null || !isAdmin) {
+      setActorNames(new Map())
+      return
+    }
+    let cancelled = false
+    listUsers(token)
+      .then((users) => {
+        if (!cancelled) setActorNames(new Map(users.map((user) => [user.id, user.email])))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [token, isAdmin])
 
   useEffect(() => {
     if (token === null || !isAdmin) return
@@ -550,7 +579,10 @@ export function DashboardRoute(): JSX.Element {
               >
                 <span className="font-mono text-xs text-muted-foreground">{entry.at}</span>
                 <br />
-                <span className="font-medium">{entry.actorId ?? '—'}</span> — {entry.action}
+                <span className="font-medium">
+                  {entry.actorId === null ? '—' : (actorNames.get(entry.actorId) ?? entry.actorId)}
+                </span>{' '}
+                — {entry.action}
                 {entry.collection !== null && (
                   <span className="text-muted-foreground"> ({entry.collection})</span>
                 )}

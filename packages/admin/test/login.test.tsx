@@ -35,15 +35,18 @@ describe('password login', () => {
     expect(localStorage.getItem('cogenta.session.token')).toBeTruthy()
   })
 
-  it('shows the server error and stays on the form for a wrong password', async () => {
+  it('shows a translated error and stays on the form for a wrong password', async () => {
     installMockFetch()
     render(<App />)
 
     await fillAndSubmitPassword(USER.email, 'wrong')
 
+    // The server's `AUTH_INVALID_CREDENTIALS` message is English-only (a
+    // stable API string, not UI copy) — the screen maps it to a real French
+    // string rather than leaking it verbatim into an otherwise French UI.
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
-      'Incorrect email or password.',
+      'Adresse e-mail ou mot de passe incorrect.',
     )
     expect(screen.queryByRole('heading', { name: 'Tableau de bord' })).toBeNull()
   })
@@ -86,7 +89,7 @@ describe('passkey login', () => {
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
-      'The passkey response could not be verified.',
+      'La clé d’accès a été refusée ou annulée.',
     )
   })
 })
@@ -116,10 +119,7 @@ describe('MFA-required login', () => {
     fireEvent.change(screen.getByLabelText('Code'), { target: { value: '000000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Vérifier' }))
 
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'Incorrect verification code.',
-    )
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Code incorrect.')
     expect(screen.getByRole('heading', { name: 'Code de vérification' })).toBeDefined()
   })
 })
@@ -163,7 +163,7 @@ describe('recovery-code login', () => {
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
-      'This recovery code is not valid.',
+      "Ce code de récupération n'est pas valide.",
     )
     expect(screen.getByRole('heading', { name: 'Code de récupération' })).toBeDefined()
   })

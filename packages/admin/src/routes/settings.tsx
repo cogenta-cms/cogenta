@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { readConfigStatus } from '../api/ops-status-client.js'
@@ -71,6 +71,17 @@ export function SettingsRoute(): JSX.Element {
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notFoundPath, setNotFoundPath] = useState<string | null>(null)
+  // Every field auto-saves on blur with no "Save" button — the only tell that
+  // it worked was a network request nobody but a developer would think to
+  // check. A brief, self-dismissing confirmation is the whole fix.
+  const [justSaved, setJustSaved] = useState(false)
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (savedTimeoutRef.current !== null) clearTimeout(savedTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (token === null || !isAdmin) return
@@ -123,6 +134,9 @@ export function SettingsRoute(): JSX.Element {
     if (token === null) return
     await writeSetting(token, key, value, settingLocale ?? undefined)
     await reload()
+    if (savedTimeoutRef.current !== null) clearTimeout(savedTimeoutRef.current)
+    setJustSaved(true)
+    savedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500)
   }
 
   // Fiche 22 tâche 8, part 3 — the four `navigation.*` keys always travel
@@ -168,6 +182,12 @@ export function SettingsRoute(): JSX.Element {
       {loadError !== null && (
         <Notice tone="danger" live="assertive">
           <p>{loadError}</p>
+        </Notice>
+      )}
+
+      {justSaved && (
+        <Notice tone="success" live="polite">
+          <p>{t('settings.savedNotice')}</p>
         </Notice>
       )}
 

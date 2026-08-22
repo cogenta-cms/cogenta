@@ -63,7 +63,7 @@ describe('dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     expect(await screen.findByRole('heading', { name: 'État des sauvegardes' })).toBeDefined()
-    expect(screen.getByText(/Aucune sauvegarde configurée/u)).toBeDefined()
+    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
     expect(screen.queryByRole('heading', { name: 'CVE ouvertes' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Core Web Vitals' })).toBeNull()
   })

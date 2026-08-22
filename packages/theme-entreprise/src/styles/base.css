@@ -325,7 +325,9 @@ img {
 
 .cg-site-footer__brand-logo {
   display: block;
-  block-size: 1.4em;
+  /* Explicit pixels, not `em`: relative sizing cascaded from the footer's
+     own small font-size and made the credit mark unreadably tiny. */
+  block-size: 25px;
   inline-size: auto;
 }
 

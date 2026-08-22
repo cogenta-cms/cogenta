@@ -256,7 +256,10 @@ img {
 
 .cg-site-footer__brand-logo {
   display: block;
-  block-size: 1.5em;
+  /* Explicit pixels, not `em`: a footer's own small font-size cascaded into
+     this and made the credit mark unreadably tiny — the same class of bug
+     the admin shell's own logo had before its fix. */
+  block-size: 25px;
   inline-size: auto;
 }
 

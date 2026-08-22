@@ -239,6 +239,8 @@ export function AppearanceRoute(): JSX.Element {
   const [candidates, setCandidates] = useState<readonly SkinCandidate[] | null>(null)
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
+  const [switchingTheme, setSwitchingTheme] = useState<string | null>(null)
+  const [switchThemeError, setSwitchThemeError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -334,6 +336,30 @@ export function AppearanceRoute(): JSX.Element {
     await load()
   }
 
+  /**
+   * Switches which theme *package* renders the public site (fiche L23) —
+   * distinct from every other action on this screen, which only ever
+   * changes colours within whichever theme is active. Read live off the
+   * same overrides row `resolveStyles`/`renderEntryPage` already read on
+   * every request, so this takes effect on the very next page view, no
+   * restart — unlike L19's site-plan applier, which genuinely does need one.
+   */
+  async function switchTheme(name: string | null): Promise<void> {
+    if (token === null) return
+    setSwitchingTheme(name ?? '')
+    setSwitchThemeError(null)
+    try {
+      await saveThemeOverrides(token, { activeTheme: name })
+      await load()
+    } catch (caught) {
+      setSwitchThemeError(
+        caught instanceof ApiError ? caught.message : t('appearance.themeSwitchError'),
+      )
+    } finally {
+      setSwitchingTheme(null)
+    }
+  }
+
   async function generate(): Promise<void> {
     if (token === null || description.trim() === '') return
     setGenerating(true)
@@ -397,6 +423,61 @@ export function AppearanceRoute(): JSX.Element {
                 : t('appearance.provenanceOverridden')}
             </p>
           </Notice>
+
+          <Card aria-labelledby="appearance-theme-heading">
+            <CardHeader>
+              <CardTitle>
+                <h2 id="appearance-theme-heading">{t('appearance.themeHeading')}</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-3">
+              <p className="m-0 text-sm text-muted-foreground">
+                {t('appearance.themeDescription')}
+              </p>
+              {switchThemeError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{switchThemeError}</p>
+                </Notice>
+              )}
+              <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
+                {theme.availableThemes.map((candidate) => {
+                  const active =
+                    theme.overrides.activeTheme === candidate.name ||
+                    (theme.overrides.activeTheme === null &&
+                      candidate.name === '@cogenta/theme-canonical')
+                  return (
+                    <li
+                      key={candidate.name}
+                      className={`flex flex-col gap-2 rounded-md border p-3 ${
+                        active ? 'border-primary bg-accent/40' : 'border-border'
+                      }`}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <strong className="text-sm text-foreground">{candidate.label}</strong>
+                        {active && (
+                          <span className="text-xs font-medium text-primary">
+                            {t('appearance.themeActive')}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{candidate.description}</span>
+                      <Button
+                        type="button"
+                        variant={active ? 'secondary' : 'primary'}
+                        size="sm"
+                        disabled={active || switchingTheme !== null}
+                        onClick={() => void switchTheme(candidate.name)}
+                      >
+                        {switchingTheme === candidate.name
+                          ? t('appearance.themeSwitching')
+                          : t('appearance.themeSelectAction')}
+                      </Button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </CardBody>
+          </Card>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="flex flex-col gap-4">

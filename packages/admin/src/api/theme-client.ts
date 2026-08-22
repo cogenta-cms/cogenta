@@ -13,8 +13,17 @@ export interface ThemeOverrides {
   readonly logoDarkMediaId: string | null
   readonly faviconMediaId: string | null
   readonly shareImageMediaId: string | null
+  /** The active theme *package* name (fiche L23), or `null` for the built-in default. */
+  readonly activeTheme: string | null
   readonly updatedAt: string
   readonly updatedBy: string | null
+}
+
+/** One entry of the theme gallery — a package this instance can render the public site with. */
+export interface AvailableTheme {
+  readonly name: string
+  readonly label: string
+  readonly description: string
 }
 
 export interface GallerySkin {
@@ -32,6 +41,7 @@ export interface ThemeState {
   readonly skins: readonly GallerySkin[]
   readonly aiAvailable: boolean
   readonly exportAvailable: boolean
+  readonly availableThemes: readonly AvailableTheme[]
 }
 
 export interface SkinCandidate {
@@ -54,6 +64,7 @@ export function saveThemeOverrides(
     readonly logoDarkMediaId?: string | null
     readonly faviconMediaId?: string | null
     readonly shareImageMediaId?: string | null
+    readonly activeTheme?: string | null
   },
 ): Promise<ThemeOverrides> {
   return request<ThemeOverrides>('/api/theme/overrides', {

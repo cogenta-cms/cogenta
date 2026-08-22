@@ -487,6 +487,14 @@ export function installMockFetch(
         readonly rationale: string
         readonly tokens: Record<string, unknown>
       }[]
+      /** The active theme *package* name (fiche L23), `null` for the built-in default. */
+      readonly activeTheme?: string | null
+      /** The theme packages this mocked instance can offer — the canonical default alone unless a test overrides it. */
+      readonly availableThemes?: readonly {
+        readonly name: string
+        readonly label: string
+        readonly description: string
+      }[]
     }
     /**
      * What `GET /api/config-status` answers with (fiche 23 task 5) — `null`
@@ -1209,6 +1217,7 @@ export function installMockFetch(
     logoDarkMediaId: string | null
     faviconMediaId: string | null
     shareImageMediaId: string | null
+    activeTheme: string | null
     updatedAt: string
     updatedBy: string | null
   } = {
@@ -1218,9 +1227,17 @@ export function installMockFetch(
     logoDarkMediaId: null,
     faviconMediaId: null,
     shareImageMediaId: null,
+    activeTheme: options.theme?.activeTheme ?? null,
     updatedAt: '2026-01-01T00:00:00.000Z',
     updatedBy: null,
   }
+  const availableThemes = options.theme?.availableThemes ?? [
+    {
+      name: '@cogenta/theme-canonical',
+      label: 'Canonical',
+      description: 'The reference theme: all twelve blocks, zero client JavaScript.',
+    },
+  ]
   function themeEffectiveTokens(): Record<string, unknown> {
     const file = options.theme?.fileTokens ?? DEFAULT_THEME_TOKENS
     if (themeOverrides.tokenOverrides === null) return file
@@ -5908,6 +5925,16 @@ export function installMockFetch(
             logoDarkMediaId?: string | null
             faviconMediaId?: string | null
             shareImageMediaId?: string | null
+            activeTheme?: string | null
+          }
+          if (
+            input.activeTheme !== undefined &&
+            input.activeTheme !== null &&
+            !availableThemes.some((theme) => theme.name === input.activeTheme)
+          ) {
+            return json(404, {
+              error: { code: 'THEME_NOT_FOUND', message: 'No such theme.' },
+            })
           }
           themeOverrides = {
             tokenOverrides:
@@ -5932,6 +5959,8 @@ export function installMockFetch(
               input.shareImageMediaId === undefined
                 ? themeOverrides.shareImageMediaId
                 : input.shareImageMediaId,
+            activeTheme:
+              input.activeTheme === undefined ? themeOverrides.activeTheme : input.activeTheme,
             updatedAt: '2026-01-02T00:00:00.000Z',
             updatedBy: user.id,
           }
@@ -5946,6 +5975,7 @@ export function installMockFetch(
             logoDarkMediaId: null,
             faviconMediaId: null,
             shareImageMediaId: null,
+            activeTheme: themeOverrides.activeTheme,
             updatedAt: '2026-01-03T00:00:00.000Z',
             updatedBy: user.id,
           }
@@ -5961,6 +5991,7 @@ export function installMockFetch(
               skins: options.theme?.skins ?? [],
               aiAvailable: options.theme?.aiAvailable ?? false,
               exportAvailable: options.theme?.exportAvailable ?? false,
+              availableThemes,
             },
           })
         }

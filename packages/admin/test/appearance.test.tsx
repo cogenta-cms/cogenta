@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -182,6 +182,59 @@ describe('the appearance screen', () => {
 
     expect(
       await screen.findByRole('button', { name: 'Exporter vers theme.tokens.json' }),
+    ).toBeDefined()
+  })
+})
+
+describe('the appearance screen — theme picker (fiche L23)', () => {
+  it('marks the built-in default active when no theme was ever chosen', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+
+    const canonicalCard = (await screen.findByText('Canonical')).closest('li')
+    expect(canonicalCard).not.toBeNull()
+    expect(canonicalCard?.textContent).toContain('Actif')
+    // The active theme's own action is disabled — visible, never hidden, so
+    // the card's shape stays identical across every theme in the list.
+    const selectButton = within(canonicalCard as HTMLElement).getByRole('button', {
+      name: 'Sélectionner',
+    })
+    expect((selectButton as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('lists every installed theme and switches to the one an admin picks', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+        },
+        {
+          name: '@cogenta/theme-portfolio',
+          label: 'Portfolio',
+          description: 'An ultra-modern portfolio theme.',
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    await screen.findByText('Portfolio')
+    const portfolioCard = screen.getByText('Portfolio').closest('li') as HTMLElement
+    fireEvent.click(within(portfolioCard).getByRole('button', { name: 'Sélectionner' }))
+
+    await waitFor(() => {
+      const refreshedCard = screen.getByText('Portfolio').closest('li') as HTMLElement
+      expect(within(refreshedCard).queryByText('Actif')).not.toBeNull()
+    })
+    // Switching theme never touches the skin's own provenance notice — a
+    // layout switch is not a colour override.
+    expect(
+      screen.getByText(
+        "Chaque valeur affichée ici vient de theme.tokens.json — rien n'a encore été surchargé.",
+      ),
     ).toBeDefined()
   })
 })

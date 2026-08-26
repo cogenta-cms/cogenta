@@ -79,6 +79,7 @@ import {
   type HealthRouter,
   type ImportRouter,
   type InvitedUserEvent,
+  isMultipartFormData,
   type MarketplaceRouter,
   type MediaImageProcessor,
   type MediaRouter,
@@ -91,6 +92,7 @@ import {
   type OpsStatusRouter,
   type PermissionLayer,
   type ProvidersRouter,
+  parseMultipartFormData,
   type RedirectRouter,
   type RestRequest,
   type RestResponse,
@@ -105,6 +107,7 @@ import {
   type SitePlanRouter,
   type SitePlanRouterOptions,
   type SiteSettingsRouter,
+  streamSubmissionsCsv,
   type TaxonomyRouter,
   type ThemeRouter,
   type ThemeRouterOptions,
@@ -1075,10 +1078,27 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const redirectPatterns = createRedirectPatternStore({ db })
   await redirectPatterns.ensureTable()
 
-  // Forms (contract G, ADR-0026, fiche 16). Always mounted — see `Site.formStore`'s
+  // Fiche 47 task 4 — moved ahead of its previous position (originally built
+  // alongside the notice-to-channel bridge, further down this function) so
+  // the forms router below can reuse the very same registry rather than a
+  // second one: one live Slack/Discord/Telegram/webhook adapter set per
+  // site, not two independently configured ones for two different features.
+  const channelRegistry = options.channels?.registry ?? createChannelRegistry([])
+
+  // Forms (contract G, ADR-0026 + fiche 47). Always mounted — see `Site.formStore`'s
   // own comment for why this, unlike commerce, is not opt-in.
   await ensureFormsTables(db)
   const formStore = createFormStore(db)
+  // Derived, never the raw signing key itself — same discipline
+  // `commentsIpHashSecret` already follows a little further down this
+  // function: a leak of this one purpose-specific value must not also be a
+  // leak of the JWT signing key. Found necessary by a security review of
+  // fiche 47 task 2/3: a `file` field's value carried across a multi-step
+  // form's pages must be signed, or a client could forge one (claim any
+  // `storageKey` exists) without ever uploading a real byte.
+  const formFileSigningSecret = createHash('sha256')
+    .update(`${options.signingKey}:form-file-token`)
+    .digest('hex')
   const formsRouter = createFormsRouter({
     forms: formStore,
     // Falls back to an in-process limiter rather than leaving the public
@@ -1086,6 +1106,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     // the same fallback `resolveActor`'s own `requestQuota` parameter takes.
     rateLimit: options.requestQuota ?? createMemoryRateLimiter(),
     ...(options.emailTransport === undefined ? {} : { emailTransport: options.emailTransport }),
+    // Fiche 47 task 3 — the same storage driver media uploads already use;
+    // a `file` field answers `FORM_FILE_REJECTED` rather than silently
+    // accepting bytes when a site somehow has none (never true in practice,
+    // `storage` is always resolved by `runServe`, but the router itself
+    // stays honest about the dependency rather than assuming it).
+    storage,
+    fileSigningSecret: formFileSigningSecret,
+    // Fiche 47 task 4 — absent channels simply mean no `notifyChannels`
+    // entry ever fires (R1), the same shape `emailTransport` already has.
+    channelRegistry,
     adminUrl: new URL('/admin', site.url).toString(),
   })
 
@@ -1575,7 +1605,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensurePreferenceTables(db)
   const channelLinks = createChannelLinkStore(db)
   const channelPreferences = createPreferenceStore(db)
-  const channelRegistry = options.channels?.registry ?? createChannelRegistry([])
+  // `channelRegistry` itself is built earlier in this function, right before
+  // the forms router, and reused here rather than rebuilt.
   const channelDispatcher = createNotificationDispatcher({
     db,
     registry: channelRegistry,
@@ -2229,7 +2260,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
  */
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
 
-async function readRawBody(req: IncomingMessage): Promise<string | undefined> {
+async function readRawBodyBuffer(req: IncomingMessage): Promise<Buffer | undefined> {
   const chunks: Buffer[] = []
   let total = 0
   let tooLarge = false
@@ -2255,26 +2286,38 @@ async function readRawBody(req: IncomingMessage): Promise<string | undefined> {
     })
   }
   if (chunks.length === 0) return undefined
-  const text = Buffer.concat(chunks).toString('utf8')
-  return text.trim().length === 0 ? undefined : text
+  return Buffer.concat(chunks)
 }
 
 /**
- * `application/x-www-form-urlencoded` — the one body shape this server
- * accepts besides JSON, needed for the public comment form (fiche 15 task 6)
- * and public form submissions (fiche 16 task 3): "sans JavaScript, le
- * formulaire doit fonctionner (un POST HTML classique)". A real
- * `<form method="post">` with no `enctype` sends exactly this content type;
- * every other route on this server still only ever sends JSON, so this
- * branch never fires for them. A repeated key (a `choiceMulti` field's
- * checkboxes) collects into an array rather than keeping only the last
- * value, which is what a naive `Object.fromEntries` would silently do.
+ * `application/x-www-form-urlencoded` — the plain no-JS `<form>` shape
+ * (public comment form, fiche 15 task 6; public form submissions, fiche 16
+ * task 3: "sans JavaScript, le formulaire doit fonctionner") — and, since
+ * fiche 47 task 3, real `multipart/form-data` too: the one shape a browser's
+ * own `<input type="file">` forces its enclosing `<form>` into, with no
+ * JavaScript involved. Parsed with the exact same zero-dependency parser
+ * `@cogenta/api`'s media route already relies on
+ * (`parseMultipartFormData`/`isMultipartFormData`), read here as raw bytes
+ * rather than as UTF-8 text — decoding a binary upload as UTF-8 first would
+ * corrupt it before the parser ever saw it. Every other route on this server
+ * still only ever sends JSON, so neither branch fires for them. A repeated
+ * urlencoded key (a `choiceMulti` field's checkboxes) collects into an array
+ * rather than keeping only the last value, which is what a naive
+ * `Object.fromEntries` would silently do.
  */
 async function readBody(req: IncomingMessage): Promise<unknown> {
-  const text = await readRawBody(req)
-  if (text === undefined) return undefined
+  const buffer = await readRawBodyBuffer(req)
+  if (buffer === undefined || buffer.length === 0) return undefined
 
   const contentType = req.headers['content-type'] ?? ''
+
+  if (contentType.includes('multipart/form-data')) {
+    return parseMultipartFormData(buffer, contentType)
+  }
+
+  const text = buffer.toString('utf8')
+  if (text.trim().length === 0) return undefined
+
   if (contentType.includes('application/x-www-form-urlencoded')) {
     const params = new URLSearchParams(text)
     const body: Record<string, string | string[]> = {}
@@ -3023,6 +3066,56 @@ async function serveMediaFile(
 }
 
 /**
+ * `GET /api/forms/submissions/export.csv` — fiche 47 task 9's server-streamed
+ * export. Admin-only (the same role `forms-router.ts`'s own `requireAdmin`
+ * checks for every other submissions route), handled directly for the same
+ * reason `serveMediaFile` is: a streamed body has no shape `RestResponse`'s
+ * JSON contract can carry. Rows are written to the response as
+ * `streamSubmissionsCsv` (`@cogenta/api`) produces them — the whole export
+ * is never held in memory at once, which is the point of this task over the
+ * client-side, 200-row-capped export `form-submissions.tsx` already has.
+ */
+async function serveFormsSubmissionsExport(
+  site: Site,
+  actor: AccessContext['actor'],
+  url: URL,
+  res: ServerResponse,
+): Promise<void> {
+  if (!actor.roles.includes('admin')) {
+    jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may export submissions.')
+    return
+  }
+
+  const formId = url.searchParams.get('formId') ?? undefined
+  const status = url.searchParams.get('status') ?? undefined
+  const from = url.searchParams.get('from') ?? undefined
+  const to = url.searchParams.get('to') ?? undefined
+  const query = url.searchParams.get('q') ?? undefined
+
+  res.writeHead(200, {
+    'content-type': 'text/csv; charset=utf-8',
+    'content-disposition': 'attachment; filename="form-submissions.csv"',
+    'cache-control': 'no-store',
+  })
+  // UTF-8 BOM — same reason `admin/src/lib/csv.ts`'s `downloadCsv` prepends
+  // one: without it, Excel guesses the wrong codepage for accented text.
+  res.write('﻿')
+  try {
+    for await (const chunk of streamSubmissionsCsv(site.formStore, {
+      ...(formId === undefined ? {} : { formId }),
+      ...(status === undefined ? {} : { status }),
+      ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
+      ...(query === undefined ? {} : { query }),
+    })) {
+      res.write(chunk)
+    }
+  } finally {
+    res.end()
+  }
+}
+
+/**
  * `GET /_image?id=…&w=…` — the public delivery endpoint for images.
  *
  * **Public on purpose, and only for images.** A `<img src>` in a published
@@ -3362,6 +3455,18 @@ export function createRequestListener(
         return
       }
 
+      // Fiche 47 task 9 — same reasoning as `serveMediaFile`: a streamed CSV
+      // body has no shape `RestResponse`'s JSON-only contract can carry, so
+      // it is handled directly rather than through `formsRouter`.
+      if (url.pathname === '/api/forms/submissions/export.csv') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        await serveFormsSubmissionsExport(site, actor, url, res)
+        return
+      }
+
       if (url.pathname === '/api/graphql') {
         if (req.method !== 'POST') {
           res.writeHead(405, { allow: 'POST' }).end()
@@ -3518,10 +3623,16 @@ export function createRequestListener(
       // normal JSON admin route.
       if (url.pathname.startsWith('/api/forms')) {
         const submitMatch = /^\/api\/forms\/([^/]+)\/submit$/u.exec(url.pathname)
+        const submitContentType = req.headers['content-type'] ?? ''
+        // Fiche 47 task 3: a step (or a step containing a `file` field)
+        // arrives as `multipart/form-data`, not `application/x-www-form-urlencoded`
+        // — both are a plain no-JS `<form method="post">`, never a JSON API
+        // client, so both get the HTML treatment below.
         const isHtmlSubmit =
           submitMatch !== null &&
           req.method === 'POST' &&
-          (req.headers['content-type'] ?? '').includes('application/x-www-form-urlencoded')
+          (submitContentType.includes('application/x-www-form-urlencoded') ||
+            submitContentType.includes('multipart/form-data'))
 
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -3531,6 +3642,12 @@ export function createRequestListener(
 
         if (isHtmlSubmit) {
           const formName = submitMatch[1] as string
+          const postedFields: Record<string, unknown> = isMultipartFormData(body)
+            ? { ...body.fields }
+            : typeof body === 'object' && body !== null
+              ? (body as Record<string, unknown>)
+              : {}
+
           if (response.status === 201) {
             const data = (
               response.body as { readonly data: { readonly redirectTo: string | null } }
@@ -3538,6 +3655,47 @@ export function createRequestListener(
             const location = data.redirectTo ?? `/forms/${encodeURIComponent(formName)}?submitted=1`
             res.writeHead(303, { location, 'cache-control': 'no-store' })
             res.end()
+            return
+          }
+
+          if (response.status === 202) {
+            // Fiche 47 task 2 — an intermediate multi-step page: render the
+            // next step directly in this same response, no redirect. The
+            // definition is already known to exist (the router only answers
+            // 202 after finding it), so this never has to handle "not found"
+            // here.
+            const data = (
+              response.body as {
+                readonly data: {
+                  readonly nextStep: number
+                  readonly ts: string
+                  readonly values: Record<string, unknown>
+                }
+              }
+            ).data
+            const definition = await site.formStore.definitions.readByName(formName)
+            const formPageOptions = {
+              site: site.site,
+              styles: await site.resolveStyles(),
+              now: Date.now,
+              menus: { menuRouter: site.menuRouter },
+              branding: () => brandingForSite(site),
+              activeTheme: () => activeThemeForSite(site),
+            }
+            const html =
+              definition === null
+                ? await renderFormNotFoundPage(formPageOptions, context)
+                : await renderFormPage(
+                    definition,
+                    { step: data.nextStep, accumulated: data.values, ts: data.ts },
+                    formPageOptions,
+                    context,
+                  )
+            res.writeHead(definition === null ? 404 : 200, {
+              'content-type': 'text/html; charset=utf-8',
+              'cache-control': 'no-store',
+            })
+            res.end(html)
             return
           }
 
@@ -3553,6 +3711,23 @@ export function createRequestListener(
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
           }
+          // A failure on a multi-step form only ever comes from the final
+          // step's real validation (an intermediate step never calls it —
+          // see `forms-router.ts`'s own comment), so redisplaying "the last
+          // step, with everything posted" is always the right page.
+          const stepsCount = definition?.steps.length ?? 0
+          const accumulatedFromBody = (() => {
+            const raw = postedFields['_accumulated']
+            if (typeof raw !== 'string' || raw.trim() === '') return {}
+            try {
+              const parsed: unknown = JSON.parse(raw)
+              return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : {}
+            } catch {
+              return {}
+            }
+          })()
           const html =
             definition === null
               ? await renderFormNotFoundPage(formPageOptions, context)
@@ -3562,10 +3737,16 @@ export function createRequestListener(
                     errorMessage:
                       errorBody.error?.message ?? 'This submission could not be accepted.',
                     errorField: errorBody.error?.field ?? null,
-                    values:
-                      typeof body === 'object' && body !== null
-                        ? (body as Record<string, unknown>)
-                        : {},
+                    values: { ...accumulatedFromBody, ...postedFields },
+                    ...(stepsCount > 1
+                      ? {
+                          step: stepsCount - 1,
+                          accumulated: accumulatedFromBody,
+                          ...(typeof postedFields['_ts'] === 'string'
+                            ? { ts: postedFields['_ts'] }
+                            : {}),
+                        }
+                      : {}),
                   },
                   formPageOptions,
                   context,

@@ -383,6 +383,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   FORM_HONEYPOT_TRIGGERED: 400,
   FORM_SUBMITTED_TOO_FAST: 400,
   FORM_AUTORESPONDER_RATE_LIMITED: 429,
+  // Fiche 47 — logic, steps, files, multi-channel notifications, CAPTCHA.
+  FORM_FILE_REJECTED: 400,
+  FORM_CAPTCHA_REQUIRED: 400,
+  FORM_CAPTCHA_FAILED: 400,
+  FORM_STEP_INVALID: 400,
 }
 
 export function statusFor(code: ErrorCode): number {

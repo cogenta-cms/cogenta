@@ -61,9 +61,18 @@ async function createContactForm(
   return ((await response.json()) as { data: { id: string; name: string } }).data
 }
 
+function unescapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&quot;/gu, '"')
+    .replace(/&#39;/gu, "'")
+    .replace(/&lt;/gu, '<')
+    .replace(/&gt;/gu, '>')
+    .replace(/&amp;/gu, '&')
+}
+
 function extractHidden(html: string, name: string): string {
   const match = new RegExp(`name="${name}"[^>]*value="([^"]*)"`, 'u').exec(html)
-  return match?.[1] ?? ''
+  return unescapeHtmlAttribute(match?.[1] ?? '')
 }
 
 /** A `_ts` old enough to clear the minimum-fill-delay check without a real test making a real wait. */
@@ -368,6 +377,355 @@ describe('cogenta serve — /api/forms and /forms/{name}', () => {
         const body = (await after.json()) as { data: readonly unknown[] }
         if (body.data.length !== 0) throw new Error('not purged yet')
       })
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
+// ------------------------------------------------------------- fiche 47
+
+describe('cogenta serve — fiche 47: logic, steps, files, CSV export', () => {
+  it('never requires or validates a field masked by an unmet showIf condition, with no JavaScript at all', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token, {
+        fields: [
+          { name: 'email', label: 'E-mail', kind: 'email', required: true },
+          {
+            name: 'contactMethod',
+            label: 'Contact method',
+            kind: 'choiceSingle',
+            required: true,
+            choices: ['email', 'phone'],
+          },
+          {
+            name: 'phone',
+            label: 'Phone',
+            kind: 'phone',
+            required: true,
+            showIf: { field: 'contactMethod', operator: 'equals', value: 'phone' },
+          },
+        ],
+      })
+
+      // "phone" would fail (not a real phone number) and is required — but
+      // its condition (contactMethod === "phone") is unmet.
+      const body = new URLSearchParams({
+        _gotcha: '',
+        _ts: staleTs(),
+        email: 'visitor@example.com',
+        contactMethod: 'email',
+        phone: 'nonsense',
+      })
+      const submit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        redirect: 'manual',
+        body,
+      })
+      expect(submit.status).toBe(303)
+
+      const list = await fetch(`${server.base}/api/forms/submissions`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const listed = (await list.json()) as {
+        data: readonly { values: Record<string, unknown> }[]
+      }
+      expect(listed.data[0]?.values['phone']).toBeUndefined()
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('walks a real multi-step form to completion with no JavaScript: plain chained POSTs, one real submission at the end', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token, {
+        steps: [
+          { name: 'step1', label: 'Contact', fieldNames: ['email'] },
+          { name: 'step2', label: 'Message', fieldNames: ['message'] },
+        ],
+      })
+
+      // Step 0: the dedicated page shows only the first step's field.
+      const stepOnePage = await fetch(`${server.base}/forms/contact`)
+      const stepOneHtml = await stepOnePage.text()
+      expect(stepOneHtml).toContain('name="email"')
+      expect(stepOneHtml).not.toContain('name="message"')
+      expect(stepOneHtml).toContain('name="_step"')
+
+      const stepOneSubmit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          _gotcha: '',
+          _ts: staleTs(),
+          _step: '0',
+          email: 'visitor@example.com',
+        }),
+      })
+      expect(stepOneSubmit.status).toBe(200)
+      const stepTwoHtml = await stepOneSubmit.text()
+      // No redirect between steps — the next step is rendered directly.
+      expect(stepTwoHtml).toContain('name="message"')
+      expect(stepTwoHtml).not.toContain('name="email"')
+      const accumulated = extractHidden(stepTwoHtml, '_accumulated')
+      expect(JSON.parse(accumulated)).toMatchObject({ email: 'visitor@example.com' })
+      const carriedTs = extractHidden(stepTwoHtml, '_ts')
+
+      const finalSubmit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        redirect: 'manual',
+        body: new URLSearchParams({
+          _gotcha: '',
+          _ts: carriedTs,
+          _step: '1',
+          _accumulated: accumulated,
+          message: 'Hello from step two.',
+        }),
+      })
+      expect(finalSubmit.status).toBe(303)
+
+      const list = await fetch(`${server.base}/api/forms/submissions`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const listed = (await list.json()) as {
+        data: readonly { values: Record<string, unknown> }[]
+      }
+      expect(listed.data).toHaveLength(1)
+      expect(listed.data[0]?.values).toEqual({
+        email: 'visitor@example.com',
+        message: 'Hello from step two.',
+      })
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('accepts a real file upload, sniffed and stored, over a real multipart/form-data POST with no JavaScript', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token, {
+        fields: [
+          { name: 'email', label: 'E-mail', kind: 'email', required: true },
+          { name: 'resume', label: 'Resume', kind: 'file', required: true },
+        ],
+      })
+
+      const page = await fetch(`${server.base}/forms/contact`)
+      const html = await page.text()
+      expect(html).toContain('type="file"')
+      expect(html).toContain('enctype="multipart/form-data"')
+
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+      const form = new FormData()
+      form.set('_gotcha', '')
+      form.set('_ts', staleTs())
+      form.set('email', 'visitor@example.com')
+      form.set('resume', new Blob([png], { type: 'image/png' }), 'resume.png')
+
+      const submit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        redirect: 'manual',
+        body: form,
+      })
+      expect(submit.status).toBe(303)
+
+      const list = await fetch(`${server.base}/api/forms/submissions`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const listed = (await list.json()) as {
+        data: readonly { values: { resume: { filename: string; storageKey: string } } }[]
+      }
+      expect(listed.data[0]?.values.resume.filename).toBe('resume.png')
+      expect(listed.data[0]?.values.resume.storageKey).toContain('forms/')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('refuses a file whose real bytes are not one of the accepted categories, over the real multipart route', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token, {
+        fields: [
+          { name: 'email', label: 'E-mail', kind: 'email', required: true },
+          { name: 'resume', label: 'Resume', kind: 'file', required: true },
+        ],
+      })
+
+      // An ELF binary's real magic bytes, dressed up as a .pdf.
+      const elf = new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+      const form = new FormData()
+      form.set('_gotcha', '')
+      form.set('_ts', staleTs())
+      form.set('email', 'visitor@example.com')
+      form.set('resume', new Blob([elf], { type: 'application/pdf' }), 'resume.pdf')
+
+      const submit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        body: form,
+      })
+      expect(submit.status).toBe(400)
+
+      const list = await fetch(`${server.base}/api/forms/submissions`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(((await list.json()) as { data: readonly unknown[] }).data).toHaveLength(0)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('streams a CSV export, admin-only, still guarding a formula-leading value (CWE-1236)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token)
+
+      await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          _gotcha: '',
+          _ts: staleTs(),
+          email: 'a@b.com',
+          message: '=cmd|/c calc',
+        }),
+      })
+
+      const anonymous = await fetch(`${server.base}/api/forms/submissions/export.csv`)
+      expect(anonymous.status).toBe(403)
+
+      const exported = await fetch(`${server.base}/api/forms/submissions/export.csv`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(exported.status).toBe(200)
+      expect(exported.headers.get('content-type')).toContain('text/csv')
+      const csv = await exported.text()
+      expect(csv).toContain("'=cmd|/c calc")
+      expect(csv).not.toContain(',=cmd|/c calc')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('duplicates a form as an independent, inactive copy via the admin API', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const created = await createContactForm(server.base, token)
+
+      const response = await fetch(`${server.base}/api/forms/${created.id}/duplicate`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(201)
+      const copy = (await response.json()) as { data: { id: string; active: boolean } }
+      expect(copy.data.id).not.toBe(created.id)
+      expect(copy.data.active).toBe(false)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('carries a real uploaded file across a multi-step form, and refuses a tampered carried value', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token, {
+        fields: [
+          { name: 'email', label: 'E-mail', kind: 'email', required: true },
+          { name: 'resume', label: 'Resume', kind: 'file', required: true },
+          { name: 'message', label: 'Message', kind: 'longText', required: true },
+        ],
+        steps: [
+          { name: 'step1', label: 'Contact', fieldNames: ['email', 'resume'] },
+          { name: 'step2', label: 'Message', fieldNames: ['message'] },
+        ],
+      })
+
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+      const step1Form = new FormData()
+      step1Form.set('_gotcha', '')
+      step1Form.set('_ts', staleTs())
+      step1Form.set('_step', '0')
+      step1Form.set('email', 'visitor@example.com')
+      step1Form.set('resume', new Blob([png], { type: 'image/png' }), 'resume.png')
+
+      const step1Submit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        body: step1Form,
+      })
+      expect(step1Submit.status).toBe(200)
+      const step2Html = await step1Submit.text()
+      const accumulated = extractHidden(step2Html, '_accumulated')
+      const parsedAccumulated = JSON.parse(accumulated) as Record<string, unknown>
+      // The file value carried in the hidden field is a signed token, never
+      // the raw {filename, mimeType, size, storageKey} object — closing the
+      // forgery hole a security review of this exact flow found.
+      expect(typeof parsedAccumulated['resume']).toBe('string')
+      const carriedTs = extractHidden(step2Html, '_ts')
+
+      const legitimateFinal = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        redirect: 'manual',
+        body: new URLSearchParams({
+          _gotcha: '',
+          _ts: carriedTs,
+          _step: '1',
+          _accumulated: accumulated,
+          message: 'Hello from step two.',
+        }),
+      })
+      expect(legitimateFinal.status).toBe(303)
+
+      const list = await fetch(`${server.base}/api/forms/submissions`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const listed = (await list.json()) as {
+        data: readonly { values: { resume: { filename: string } } }[]
+      }
+      expect(listed.data).toHaveLength(1)
+      expect(listed.data[0]?.values.resume.filename).toBe('resume.png')
+
+      // Now tamper with the signed token before replaying the final step —
+      // must be refused, not accepted with a mutated file reference.
+      const tamperedAccumulated = JSON.stringify({
+        ...parsedAccumulated,
+        resume: `${parsedAccumulated['resume']}-tampered`,
+      })
+      const tamperedFinal = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          _gotcha: '',
+          _ts: carriedTs,
+          _step: '1',
+          _accumulated: tamperedAccumulated,
+          message: 'Should not be stored.',
+        }),
+      })
+      expect(tamperedFinal.status).toBe(400)
+
+      const listAfter = await fetch(`${server.base}/api/forms/submissions`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(((await listAfter.json()) as { data: readonly unknown[] }).data).toHaveLength(1)
     } finally {
       await server.stop()
     }

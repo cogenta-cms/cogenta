@@ -1,5 +1,17 @@
 import { CogentaError } from '@cogenta/core'
-import type { FormDefinition, FormFieldDefinition, RecordedConsent } from './types.js'
+import { isFieldVisible } from './conditions.js'
+import {
+  FORM_CONDITION_OPERATORS,
+  FORM_FILE_CATEGORIES,
+  type FormCaptchaConfig,
+  type FormDefinition,
+  type FormFieldDefinition,
+  type FormFileValue,
+  type FormNotifyChannel,
+  type FormStepDefinition,
+  isFormFileValue,
+  type RecordedConsent,
+} from './types.js'
 
 /**
  * Full server-side validation, independent of whatever the client did or
@@ -20,7 +32,7 @@ const MAX_TEXT_LENGTH = 2_000
 const MAX_LONG_TEXT_LENGTH = 20_000
 
 export interface ValidatedSubmission {
-  readonly values: Readonly<Record<string, string | readonly string[]>>
+  readonly values: Readonly<Record<string, string | readonly string[] | FormFileValue>>
   readonly consents: readonly RecordedConsent[]
 }
 
@@ -54,7 +66,10 @@ function validateField(
   field: FormFieldDefinition,
   raw: unknown,
   now: () => number,
-): { readonly value: string | readonly string[] | undefined; readonly consent?: RecordedConsent } {
+): {
+  readonly value: string | readonly string[] | FormFileValue | undefined
+  readonly consent?: RecordedConsent
+} {
   const present =
     raw !== undefined &&
     raw !== null &&
@@ -115,6 +130,17 @@ function validateField(
       }
       return { value: values }
     }
+    case 'file': {
+      // The router (`@cogenta/api`'s `forms-router.ts`) is the only layer
+      // that ever sees raw bytes — it resolves an uploaded multipart file
+      // (or a JSON-carried value from an earlier multi-step page) into a
+      // `FormFileValue` *before* calling this function. This package never
+      // touches a `StorageDriver`, so all it can check here is the shape.
+      if (!isFormFileValue(raw)) {
+        throw invalid(field.name, 'must be a file already uploaded to this field')
+      }
+      return { value: raw }
+    }
     case 'consent': {
       const value = readRawString(raw, field)
       const agreed = value === 'true' || value === 'on' || value === '1' || value === 'yes'
@@ -170,10 +196,17 @@ export function validateSubmission(
     if (!known.has(key)) throw invalid(key, 'is not a field on this form')
   }
 
-  const values: Record<string, string | readonly string[]> = {}
+  const values: Record<string, string | readonly string[] | FormFileValue> = {}
   const consents: RecordedConsent[] = []
 
   for (const field of definition.fields) {
+    // Fiche 47 task 1: a field masked by an unmet `showIf` is neither
+    // required nor validated — whatever was submitted under its name (if
+    // anything) is silently discarded, never stored. Evaluated against the
+    // *raw* submission, so it works identically with or without JavaScript
+    // having toggled anything on screen.
+    if (!isFieldVisible(field, rawValues)) continue
+
     const outcome = validateField(field, rawValues[field.name], now)
     if (outcome.value !== undefined) values[field.name] = outcome.value
     if (outcome.consent !== undefined) consents.push(outcome.consent)
@@ -225,5 +258,131 @@ export function validateDefinitionFields(fields: readonly FormFieldDefinition[])
         hint: 'A consent field must carry the exact text shown to whoever ticks it — this is what has probative value later.',
       })
     }
+    if (field.kind === 'file' && field.acceptCategories !== undefined) {
+      for (const category of field.acceptCategories) {
+        if (!(FORM_FILE_CATEGORIES as readonly string[]).includes(category)) {
+          throw new CogentaError({
+            code: 'FORM_DEFINITION_INVALID',
+            message: `"${category}" is not a file category.`,
+            hint: `Use one of: ${FORM_FILE_CATEGORIES.join(', ')}.`,
+          })
+        }
+      }
+    }
+    if (field.kind === 'file' && field.maxSizeBytes !== undefined && field.maxSizeBytes <= 0) {
+      throw new CogentaError({
+        code: 'FORM_DEFINITION_INVALID',
+        message: `"${field.name}" needs a positive maximum file size.`,
+        hint: 'Set maxSizeBytes to a positive number of bytes, or omit it to use the default.',
+      })
+    }
+  }
+
+  // A second pass for `showIf`: every field name has to be known before a
+  // condition can be checked against one, which is why this is not folded
+  // into the loop above.
+  for (const field of fields) {
+    if (field.showIf === undefined) continue
+    if (!(FORM_CONDITION_OPERATORS as readonly string[]).includes(field.showIf.operator)) {
+      throw new CogentaError({
+        code: 'FORM_DEFINITION_INVALID',
+        message: `"${field.showIf.operator}" is not a condition operator.`,
+        hint: `Use one of: ${FORM_CONDITION_OPERATORS.join(', ')}.`,
+      })
+    }
+    if (field.showIf.field === field.name) {
+      throw new CogentaError({
+        code: 'FORM_DEFINITION_INVALID',
+        message: `"${field.name}" cannot depend on its own value.`,
+        hint: 'A showIf condition must name a different field.',
+      })
+    }
+    if (!seen.has(field.showIf.field)) {
+      throw new CogentaError({
+        code: 'FORM_DEFINITION_INVALID',
+        message: `"${field.name}"'s condition names an unknown field "${field.showIf.field}".`,
+        hint: 'showIf.field must be the name of another field on this form.',
+      })
+    }
+  }
+}
+
+/** Task 2 — every field must belong to exactly one step when a form declares any. Absent/empty `steps` means single-page, unchecked here. */
+export function validateFormSteps(
+  fields: readonly FormFieldDefinition[],
+  steps: readonly FormStepDefinition[],
+): void {
+  if (steps.length === 0) return
+
+  const fieldNames = new Set(fields.map((field) => field.name))
+  const assigned = new Set<string>()
+
+  for (const step of steps) {
+    if (step.name.trim() === '') {
+      throw new CogentaError({
+        code: 'FORM_STEP_INVALID',
+        message: 'Every step needs a name.',
+        hint: 'Give each step a short, stable identifier.',
+      })
+    }
+    if (step.fieldNames.length === 0) {
+      throw new CogentaError({
+        code: 'FORM_STEP_INVALID',
+        message: `Step "${step.name}" has no fields.`,
+        hint: 'Every step must show at least one field.',
+      })
+    }
+    for (const name of step.fieldNames) {
+      if (!fieldNames.has(name)) {
+        throw new CogentaError({
+          code: 'FORM_STEP_INVALID',
+          message: `Step "${step.name}" names an unknown field "${name}".`,
+          hint: 'Every step field must be a real field on this form.',
+        })
+      }
+      if (assigned.has(name)) {
+        throw new CogentaError({
+          code: 'FORM_STEP_INVALID',
+          message: `"${name}" is assigned to more than one step.`,
+          hint: 'Every field belongs to exactly one step.',
+        })
+      }
+      assigned.add(name)
+    }
+  }
+
+  for (const name of fieldNames) {
+    if (!assigned.has(name)) {
+      throw new CogentaError({
+        code: 'FORM_STEP_INVALID',
+        message: `"${name}" is not assigned to any step.`,
+        hint: 'Every field must belong to exactly one step once a form declares steps.',
+      })
+    }
+  }
+}
+
+/** Task 4 — a channel/target pair must at least be non-empty text; `@cogenta/api`'s router is what actually knows whether `channel` names a configured adapter. */
+export function validateNotifyChannels(channels: readonly FormNotifyChannel[]): void {
+  for (const entry of channels) {
+    if (entry.channel.trim() === '' || entry.target.trim() === '') {
+      throw new CogentaError({
+        code: 'FORM_DEFINITION_INVALID',
+        message: 'Every notification channel needs both a channel name and a target.',
+        hint: 'Set both "channel" (e.g. "slack") and "target" (that channel’s own destination id).',
+      })
+    }
+  }
+}
+
+/** Task 10 — enabling the CAPTCHA without both keys is a misconfiguration caught at save time, not at the first anonymous submission. */
+export function validateCaptchaConfig(captcha: FormCaptchaConfig): void {
+  if (!captcha.enabled) return
+  if ((captcha.siteKey ?? '').trim() === '' || (captcha.secretKey ?? '').trim() === '') {
+    throw new CogentaError({
+      code: 'FORM_DEFINITION_INVALID',
+      message: 'Enabling the CAPTCHA requires both a site key and a secret key.',
+      hint: 'Get a Turnstile site key and secret key, or leave the CAPTCHA disabled.',
+    })
   }
 }

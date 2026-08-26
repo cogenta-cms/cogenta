@@ -201,7 +201,10 @@ describe('the form submissions screen', () => {
     await screen.findAllByText('Contact us')
 
     fireEvent.click(screen.getByRole('button', { name: 'Exporter en CSV' }))
-    expect(clickSpy).toHaveBeenCalled()
+    // Fiche 47 task 9 — the export is now a real fetch to the server-streamed
+    // route (`downloadSubmissionsCsv`), so the download only happens after
+    // that response resolves.
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
   })
 
   it('has no serious accessibility violations', async () => {

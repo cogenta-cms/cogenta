@@ -5,10 +5,16 @@ import { ApiError } from '../api/client.js'
 import {
   createForm,
   deleteForm,
+  duplicateForm,
+  FORM_CONDITION_OPERATORS,
   FORM_FIELD_KINDS,
+  type FormCaptchaConfig,
+  type FormConditionOperator,
   type FormDefinition,
   type FormFieldDefinition,
   type FormFieldKind,
+  type FormNotifyChannel,
+  type FormStepDefinition,
   listForms,
   updateForm,
 } from '../api/forms-client.js'
@@ -36,16 +42,23 @@ import {
 } from '../ui/index.js'
 
 /**
- * Fiche 16 task 2 — the form builder. Reuses `RepeaterField` (fiche 03 task
- * 2) for the list of fields rather than a second repeater component: a
- * form's field list is exactly the same shape a block's `f.list(...)` is —
- * an ordered, add/remove/reorder list of small typed rows — the builder's
- * only job is to describe *what one row looks like*.
+ * Fiche 16 task 2 (base) + fiche 47 tasks 1-3 — the form builder. Reuses
+ * `RepeaterField` (fiche 03 task 2) for the list of fields rather than a
+ * second repeater component: a form's field list is exactly the same shape
+ * a block's `f.list(...)` is — an ordered, add/remove/reorder list of small
+ * typed rows — the builder's only job is to describe *what one row looks
+ * like*.
  *
- * Conditional fields are explicitly out of scope for this first version
- * (ADR-0026's own renoncement): every row shows every property regardless of
- * `kind`, with help text on the ones that only apply to some kinds.
+ * Conditional logic (`showIf`) and steps are edited as plain per-row text
+ * rather than a second visual graph/wizard builder — deliberately: this
+ * screen was already brutish-but-honest for every other property (ADR-0026's
+ * own choice), and a field referencing another field by name is no harder to
+ * type correctly than a choice list already is. `step` is a free-text label:
+ * every row sharing the same non-empty `step` becomes one step, in the order
+ * rows first introduce a new step name.
  */
+
+const NO_CONDITION = '' as const
 
 const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
   { name: 'name', kind: 'text', required: true, localized: false, options: {} },
@@ -61,6 +74,20 @@ const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
   { name: 'help', kind: 'text', required: false, localized: false, options: {} },
   { name: 'choicesText', kind: 'text', required: false, localized: false, options: {} },
   { name: 'consentText', kind: 'text', required: false, localized: false, options: {} },
+  { name: 'step', kind: 'text', required: false, localized: false, options: {} },
+  { name: 'showIfField', kind: 'text', required: false, localized: false, options: {} },
+  {
+    name: 'showIfOperator',
+    kind: 'select',
+    required: false,
+    localized: false,
+    options: {
+      options: [{ value: NO_CONDITION }, ...FORM_CONDITION_OPERATORS.map((value) => ({ value }))],
+    },
+  },
+  { name: 'showIfValue', kind: 'text', required: false, localized: false, options: {} },
+  { name: 'acceptCategoriesText', kind: 'text', required: false, localized: false, options: {} },
+  { name: 'maxSizeBytes', kind: 'text', required: false, localized: false, options: {} },
 ]
 
 interface FieldEditorRow {
@@ -71,6 +98,12 @@ interface FieldEditorRow {
   readonly help?: string
   readonly choicesText?: string
   readonly consentText?: string
+  readonly step?: string
+  readonly showIfField?: string
+  readonly showIfOperator?: FormConditionOperator | typeof NO_CONDITION
+  readonly showIfValue?: string
+  readonly acceptCategoriesText?: string
+  readonly maxSizeBytes?: string
   readonly _key?: string
 }
 
@@ -83,7 +116,26 @@ function rowsFromFields(fields: readonly FormFieldDefinition[]): FieldEditorRow[
     help: field.help ?? '',
     choicesText: (field.choices ?? []).join(', '),
     consentText: field.consentText ?? '',
+    step: '',
+    showIfField: field.showIf?.field ?? '',
+    showIfOperator: field.showIf?.operator ?? NO_CONDITION,
+    showIfValue: field.showIf?.value ?? '',
+    acceptCategoriesText: (field.acceptCategories ?? []).join(', '),
+    maxSizeBytes: field.maxSizeBytes !== undefined ? String(field.maxSizeBytes) : '',
   }))
+}
+
+/** Reattaches `step` from the definition's own `steps` list — `rowsFromFields` above cannot know it (a field only knows its own name), so this is applied once, right after loading an existing form into the draft. */
+function withStepColumn(
+  rows: readonly FieldEditorRow[],
+  steps: readonly FormStepDefinition[],
+): FieldEditorRow[] {
+  if (steps.length === 0) return [...rows]
+  const stepByField = new Map<string, string>()
+  for (const step of steps) {
+    for (const name of step.fieldNames) stepByField.set(name, step.name)
+  }
+  return rows.map((row) => ({ ...row, step: stepByField.get(row.name) ?? '' }))
 }
 
 function fieldsFromRows(rows: readonly FieldEditorRow[]): readonly FormFieldDefinition[] {
@@ -104,7 +156,68 @@ function fieldsFromRows(rows: readonly FieldEditorRow[]): readonly FormFieldDefi
     ...(row.kind === 'consent' && row.consentText !== undefined && row.consentText.trim() !== ''
       ? { consentText: row.consentText.trim() }
       : {}),
+    ...(row.showIfField !== undefined &&
+    row.showIfField.trim() !== '' &&
+    row.showIfOperator !== undefined &&
+    row.showIfOperator !== NO_CONDITION
+      ? {
+          showIf: {
+            field: row.showIfField.trim(),
+            operator: row.showIfOperator,
+            ...(row.showIfValue !== undefined && row.showIfValue.trim() !== ''
+              ? { value: row.showIfValue.trim() }
+              : {}),
+          },
+        }
+      : {}),
+    ...(row.kind === 'file' &&
+    row.acceptCategoriesText !== undefined &&
+    row.acceptCategoriesText.trim() !== ''
+      ? {
+          acceptCategories: row.acceptCategoriesText
+            .split(',')
+            .map((value) => value.trim())
+            .filter((value) => value !== '') as readonly NonNullable<
+            FormFieldDefinition['acceptCategories']
+          >[number][],
+        }
+      : {}),
+    ...(row.kind === 'file' && row.maxSizeBytes !== undefined && row.maxSizeBytes.trim() !== ''
+      ? { maxSizeBytes: Number(row.maxSizeBytes) }
+      : {}),
   }))
+}
+
+/** Groups rows by their `step` text into `FormStepDefinition[]`, in first-appearance order. Rows with a blank `step` are simply not part of any step — a single-page form when every row leaves it blank. */
+function stepsFromRows(rows: readonly FieldEditorRow[]): readonly FormStepDefinition[] {
+  const order: string[] = []
+  const fieldNamesByStep = new Map<string, string[]>()
+  for (const row of rows) {
+    const step = (row.step ?? '').trim()
+    if (step === '') continue
+    if (!fieldNamesByStep.has(step)) {
+      fieldNamesByStep.set(step, [])
+      order.push(step)
+    }
+    fieldNamesByStep.get(step)?.push(row.name.trim())
+  }
+  return order.map((name) => ({ name, label: name, fieldNames: fieldNamesByStep.get(name) ?? [] }))
+}
+
+function parseNotifyChannels(text: string): readonly FormNotifyChannel[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .map((line) => {
+      const [channel, ...rest] = line.split(':')
+      return { channel: (channel ?? '').trim(), target: rest.join(':').trim() }
+    })
+    .filter((entry) => entry.channel !== '' && entry.target !== '')
+}
+
+function notifyChannelsToText(channels: readonly FormNotifyChannel[]): string {
+  return channels.map((entry) => `${entry.channel}:${entry.target}`).join('\n')
 }
 
 interface DraftState {
@@ -119,6 +232,12 @@ interface DraftState {
   readonly autoresponderEnabled: boolean
   readonly autoresponderBody: string
   readonly retainDays: string
+  /** Task 4 — one "channel:target" pair per line. */
+  readonly notifyChannelsText: string
+  /** Task 10 — off by default, per fiche § pièges. */
+  readonly captchaEnabled: boolean
+  readonly captchaSiteKey: string
+  readonly captchaSecretKey: string
 }
 
 const BLANK_DRAFT: DraftState = {
@@ -133,6 +252,10 @@ const BLANK_DRAFT: DraftState = {
   autoresponderEnabled: false,
   autoresponderBody: '',
   retainDays: '180',
+  notifyChannelsText: '',
+  captchaEnabled: false,
+  captchaSiteKey: '',
+  captchaSecretKey: '',
 }
 
 function draftFromForm(form: FormDefinition): DraftState {
@@ -140,7 +263,7 @@ function draftFromForm(form: FormDefinition): DraftState {
     id: form.id,
     name: form.name,
     label: form.label,
-    rows: rowsFromFields(form.fields),
+    rows: withStepColumn(rowsFromFields(form.fields), form.steps),
     active: form.active,
     confirmationMessage: form.confirmationMessage,
     redirectTo: form.redirectTo ?? '',
@@ -148,6 +271,10 @@ function draftFromForm(form: FormDefinition): DraftState {
     autoresponderEnabled: form.autoresponder.enabled,
     autoresponderBody: form.autoresponder.body ?? '',
     retainDays: String(form.retainDays),
+    notifyChannelsText: notifyChannelsToText(form.notifyChannels),
+    captchaEnabled: form.captcha.enabled,
+    captchaSiteKey: form.captcha.siteKey ?? '',
+    captchaSecretKey: form.captcha.secretKey ?? '',
   }
 }
 
@@ -204,6 +331,13 @@ export function FormsRoute(): JSX.Element {
         .split(',')
         .map((value) => value.trim())
         .filter((value) => value !== '')
+      const captcha: FormCaptchaConfig = draft.captchaEnabled
+        ? {
+            enabled: true,
+            siteKey: draft.captchaSiteKey.trim(),
+            secretKey: draft.captchaSecretKey.trim(),
+          }
+        : { enabled: false }
       const input = {
         name: draft.name,
         label: draft.label,
@@ -214,6 +348,9 @@ export function FormsRoute(): JSX.Element {
         notifyEmails,
         autoresponder: { enabled: draft.autoresponderEnabled, body: draft.autoresponderBody },
         retainDays: Number(draft.retainDays) || 180,
+        steps: stepsFromRows(draft.rows),
+        notifyChannels: parseNotifyChannels(draft.notifyChannelsText),
+        captcha,
       }
       if (wasNew) await createForm(token, input)
       else await updateForm(token, draft.id as string, input)
@@ -239,6 +376,18 @@ export function FormsRoute(): JSX.Element {
       await load()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('forms.deleteError'))
+    }
+  }
+
+  /** Task 11 — a real, independent, inactive copy (never a template that must be renamed before anything works). */
+  async function duplicate(id: string): Promise<void> {
+    if (token === null) return
+    try {
+      const copy = await duplicateForm(token, id)
+      setNotice(t('forms.duplicateSuccess', { label: copy.label }))
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('forms.duplicateError'))
     }
   }
 
@@ -324,6 +473,14 @@ export function FormsRoute(): JSX.Element {
                         {t('forms.viewSubmissions')}
                       </Button>
                     </Link>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void duplicate(form.id)}
+                    >
+                      {t('forms.duplicate')}
+                    </Button>
                     {confirmDeleteId === form.id ? (
                       <>
                         <Button
@@ -507,6 +664,52 @@ function FormEditor({
             />
           )}
         </Field>
+
+        <Field label={t('forms.notifyChannels')} description={t('forms.notifyChannelsHelp')}>
+          {(control) => (
+            <textarea
+              {...control}
+              className="min-h-20 rounded-md border border-border bg-background px-3 py-2 text-sm"
+              value={draft.notifyChannelsText}
+              onChange={(event) => onChange({ ...draft, notifyChannelsText: event.target.value })}
+            />
+          )}
+        </Field>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.captchaEnabled}
+              onChange={(event) => onChange({ ...draft, captchaEnabled: event.target.checked })}
+            />
+            {t('forms.captchaEnabled')}
+          </label>
+          <p className="text-xs text-muted-foreground">{t('forms.captchaWarning')}</p>
+        </div>
+        {draft.captchaEnabled && (
+          <>
+            <Field label={t('forms.captchaSiteKey')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  value={draft.captchaSiteKey}
+                  onChange={(event) => onChange({ ...draft, captchaSiteKey: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field label={t('forms.captchaSecretKey')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="password"
+                  value={draft.captchaSecretKey}
+                  onChange={(event) => onChange({ ...draft, captchaSecretKey: event.target.value })}
+                />
+              )}
+            </Field>
+          </>
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input

@@ -3,18 +3,23 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
+  addSubmissionNote,
   bulkSubmissionAction,
+  downloadSubmissionsCsv,
   eraseSubmissionsByEmail,
   type FormDefinition,
+  type FormFileValue,
   type FormSubmission,
+  type FormSubmissionNote,
   type FormSubmissionStatus,
+  isFormFileValue,
   listForms,
+  listSubmissionNotes,
   listSubmissions,
   markSubmissionStatus,
   searchSubmissionsByEmail,
 } from '../api/forms-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { downloadCsv, toCsv } from '../lib/csv.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
@@ -33,16 +38,21 @@ import {
 } from '../ui/index.js'
 
 /**
- * Fiche 16 task 4 — submissions, per form or across every form: read, mark
- * read/archived/spam, bulk actions, CSV export (reusing `lib/csv.ts`), and
- * the GDPR minimum from task 7 — a search (and erasure) by e-mail address
- * across every submission, for a data subject's export/deletion request.
+ * Fiche 16 task 4 (base) + fiche 47 tasks 7-9 — submissions, per form or
+ * across every form: read, mark read/archived/spam, bulk actions, full-text
+ * + date-range search, internal notes, the referrer already stored but
+ * never shown before fiche 47, a server-streamed CSV export (never capped
+ * at what one page loaded — `downloadSubmissionsCsv`), and the GDPR minimum
+ * from task 7 of fiche 16 — a search (and erasure) by e-mail address across
+ * every submission, for a data subject's export/deletion request.
  */
 
 const STATUSES: readonly FormSubmissionStatus[] = ['new', 'read', 'archived', 'spam']
 
-function valueText(value: string | readonly string[]): string {
-  return typeof value === 'string' ? value : value.join(', ')
+function valueText(value: string | readonly string[] | FormFileValue): string {
+  if (typeof value === 'string') return value
+  if (isFormFileValue(value)) return value.filename
+  return value.join(', ')
 }
 
 export function FormSubmissionsRoute(): JSX.Element {
@@ -56,6 +66,9 @@ export function FormSubmissionsRoute(): JSX.Element {
 
   const formId = searchParams.get('formId') ?? ''
   const statusFilter = (searchParams.get('status') ?? '') as FormSubmissionStatus | ''
+  const queryFilter = searchParams.get('q') ?? ''
+  const fromFilter = searchParams.get('from') ?? ''
+  const toFilter = searchParams.get('to') ?? ''
 
   const [forms, setForms] = useState<readonly FormDefinition[]>([])
   const [submissions, setSubmissions] = useState<readonly FormSubmission[] | null>(null)
@@ -65,6 +78,12 @@ export function FormSubmissionsRoute(): JSX.Element {
   const [emailQuery, setEmailQuery] = useState('')
   const [gdprResults, setGdprResults] = useState<readonly FormSubmission[] | null>(null)
   const [gdprMessage, setGdprMessage] = useState<string | null>(null)
+  const [searchInput, setSearchInput] = useState(queryFilter)
+  const [notesBySubmission, setNotesBySubmission] = useState<
+    Readonly<Record<string, readonly FormSubmissionNote[]>>
+  >({})
+  const [noteDrafts, setNoteDrafts] = useState<Readonly<Record<string, string>>>({})
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -74,6 +93,9 @@ export function FormSubmissionsRoute(): JSX.Element {
         listSubmissions(token, {
           ...(formId === '' ? {} : { formId }),
           ...(statusFilter === '' ? {} : { status: statusFilter }),
+          ...(queryFilter === '' ? {} : { query: queryFilter }),
+          ...(fromFilter === '' ? {} : { from: new Date(fromFilter).toISOString() }),
+          ...(toFilter === '' ? {} : { to: new Date(toFilter).toISOString() }),
           limit: 200,
         }),
       ])
@@ -83,7 +105,7 @@ export function FormSubmissionsRoute(): JSX.Element {
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('formSubmissions.loadError'))
     }
-  }, [token, formId, statusFilter, t])
+  }, [token, formId, statusFilter, queryFilter, fromFilter, toFilter, t])
 
   useEffect(() => {
     void load()
@@ -132,20 +154,47 @@ export function FormSubmissionsRoute(): JSX.Element {
     }
   }
 
-  function exportCsv(): void {
-    if (submissions === null || submissions.length === 0) return
-    const fieldNames = [
-      ...new Set(submissions.flatMap((submission) => Object.keys(submission.values))),
-    ]
-    const header = ['id', 'form', 'status', 'submittedAt', ...fieldNames]
-    const rows = submissions.map((submission) => [
-      submission.id,
-      submission.formName,
-      submission.status,
-      submission.submittedAt,
-      ...fieldNames.map((name) => valueText(submission.values[name] ?? '')),
-    ])
-    downloadCsv('form-submissions.csv', toCsv([header, ...rows]))
+  /** Fiche 47 task 9 — the server-streamed export, applying the exact same filters as the current view. No longer capped at the 200-row page this screen loads for display. */
+  async function exportCsv(): Promise<void> {
+    if (token === null) return
+    setExporting(true)
+    setError(null)
+    try {
+      await downloadSubmissionsCsv(token, {
+        ...(formId === '' ? {} : { formId }),
+        ...(statusFilter === '' ? {} : { status: statusFilter }),
+        ...(queryFilter === '' ? {} : { query: queryFilter }),
+        ...(fromFilter === '' ? {} : { from: new Date(fromFilter).toISOString() }),
+        ...(toFilter === '' ? {} : { to: new Date(toFilter).toISOString() }),
+      })
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('formSubmissions.exportError'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function loadNotes(submissionId: string): Promise<void> {
+    if (token === null) return
+    try {
+      const notes = await listSubmissionNotes(token, submissionId)
+      setNotesBySubmission((prev) => ({ ...prev, [submissionId]: notes }))
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('formSubmissions.notesLoadError'))
+    }
+  }
+
+  async function saveNote(submissionId: string): Promise<void> {
+    if (token === null) return
+    const body = (noteDrafts[submissionId] ?? '').trim()
+    if (body === '') return
+    try {
+      await addSubmissionNote(token, submissionId, body)
+      setNoteDrafts((prev) => ({ ...prev, [submissionId]: '' }))
+      await loadNotes(submissionId)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('formSubmissions.notesSaveError'))
+    }
   }
 
   async function runGdprSearch(): Promise<void> {
@@ -222,13 +271,59 @@ export function FormSubmissionsRoute(): JSX.Element {
             </Select>
           )}
         </Field>
+        <Field label={t('formSubmissions.filterFrom')}>
+          {(control) => (
+            <Input
+              {...control}
+              type="date"
+              value={fromFilter}
+              onChange={(event) =>
+                setSearchParams((prev) => setParam(prev, 'from', event.target.value))
+              }
+            />
+          )}
+        </Field>
+        <Field label={t('formSubmissions.filterTo')}>
+          {(control) => (
+            <Input
+              {...control}
+              type="date"
+              value={toFilter}
+              onChange={(event) =>
+                setSearchParams((prev) => setParam(prev, 'to', event.target.value))
+              }
+            />
+          )}
+        </Field>
+        <Field label={t('formSubmissions.filterQuery')}>
+          {(control) => (
+            <Input
+              {...control}
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  setSearchParams((prev) => setParam(prev, 'q', searchInput))
+                }
+              }}
+            />
+          )}
+        </Field>
         <Button
           type="button"
           variant="secondary"
-          onClick={exportCsv}
-          disabled={!submissions?.length}
+          onClick={() => setSearchParams((prev) => setParam(prev, 'q', searchInput))}
         >
-          {t('formSubmissions.exportCsv')}
+          {t('formSubmissions.search')}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void exportCsv()}
+          disabled={exporting}
+        >
+          {exporting ? t('common.loading') : t('formSubmissions.exportCsv')}
         </Button>
       </div>
 
@@ -315,7 +410,13 @@ export function FormSubmissionsRoute(): JSX.Element {
                         type="button"
                         size="sm"
                         variant="ghost"
-                        onClick={() => setOpenId(openId === submission.id ? null : submission.id)}
+                        onClick={() => {
+                          const opening = openId !== submission.id
+                          setOpenId(opening ? submission.id : null)
+                          if (opening && notesBySubmission[submission.id] === undefined) {
+                            void loadNotes(submission.id)
+                          }
+                        }}
                         aria-expanded={openId === submission.id}
                       >
                         {openId === submission.id
@@ -376,7 +477,62 @@ export function FormSubmissionsRoute(): JSX.Element {
                               </dd>
                             </div>
                           ))}
+                          {/* Fiche 47 task 8: "référent stocké mais jamais affiché" — shown from here on. */}
+                          <div className="contents">
+                            <dt className="font-medium">{t('formSubmissions.referrer')}</dt>
+                            <dd className="m-0">
+                              {submission.referrer ?? t('formSubmissions.noReferrer')}
+                            </dd>
+                          </div>
                         </dl>
+
+                        <div className="mt-4 border-t border-border pt-3">
+                          <h3 className="m-0 mb-2 text-sm font-semibold">
+                            {t('formSubmissions.notesHeading')}
+                          </h3>
+                          <ul className="mb-2 flex flex-col gap-1 text-sm">
+                            {(notesBySubmission[submission.id] ?? []).length === 0 && (
+                              <li className="text-muted-foreground">
+                                {t('formSubmissions.notesEmpty')}
+                              </li>
+                            )}
+                            {(notesBySubmission[submission.id] ?? []).map((note) => (
+                              <li key={note.id}>
+                                <span className="font-medium">{note.authorLabel}</span>
+                                {' — '}
+                                {note.body}{' '}
+                                <span className="text-muted-foreground">
+                                  ({new Date(note.createdAt).toLocaleString()})
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <Field label={t('formSubmissions.addNoteLabel')}>
+                              {(control) => (
+                                <Input
+                                  {...control}
+                                  value={noteDrafts[submission.id] ?? ''}
+                                  onChange={(event) =>
+                                    setNoteDrafts((prev) => ({
+                                      ...prev,
+                                      [submission.id]: event.target.value,
+                                    }))
+                                  }
+                                />
+                              )}
+                            </Field>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void saveNote(submission.id)}
+                              disabled={(noteDrafts[submission.id] ?? '').trim() === ''}
+                            >
+                              {t('formSubmissions.addNote')}
+                            </Button>
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}

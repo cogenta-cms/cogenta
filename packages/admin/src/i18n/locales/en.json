@@ -1260,7 +1260,16 @@
     "autoresponderBody": "Automatic reply message",
     "retainDays": "Retention (days)",
     "retainDaysHelp": "Submissions older than this are purged automatically.",
-    "activeToggle": "Accepting submissions"
+    "activeToggle": "Accepting submissions",
+    "duplicate": "Duplicate",
+    "duplicateSuccess": "\"{{label}}\" was duplicated (inactive, review it before switching it on).",
+    "duplicateError": "The form could not be duplicated.",
+    "notifyChannels": "Notify by channel",
+    "notifyChannelsHelp": "One \"channel:target\" pair per line, e.g. slack:C0123456. The channel must already be configured for this site.",
+    "captchaEnabled": "Require a CAPTCHA (Cloudflare Turnstile) before accepting a submission",
+    "captchaWarning": "Off by default. Enabling this requires the Turnstile widget script for this form only — every other part of this form still works with no JavaScript at all.",
+    "captchaSiteKey": "Turnstile site key",
+    "captchaSecretKey": "Turnstile secret key"
   },
   "formSubmissions": {
     "heading": "Submissions",
@@ -1305,7 +1314,20 @@
     "gdprSearch": "Search",
     "gdprErase": "Erase all",
     "gdprErased": "{{count}} submission(s) erased.",
-    "gdprNoResults": "No submission found for this address."
+    "gdprNoResults": "No submission found for this address.",
+    "filterFrom": "From",
+    "filterTo": "To",
+    "filterQuery": "Search",
+    "search": "Apply filters",
+    "exportError": "The export could not be downloaded.",
+    "referrer": "Referrer",
+    "noReferrer": "—",
+    "notesHeading": "Internal notes",
+    "notesEmpty": "No notes yet.",
+    "addNoteLabel": "Add a note",
+    "addNote": "Add note",
+    "notesLoadError": "Could not load notes.",
+    "notesSaveError": "The note could not be saved."
   },
   "audit": {
     "heading": "Audit log",
@@ -1757,14 +1779,26 @@
           "label": "Site title",
           "help": "Shown in the browser tab and search results when a page has none of its own."
         },
-        "tagline": { "label": "Tagline", "help": "A short description of the site." },
-        "adminEmail": { "label": "Administration email", "help": "" },
+        "tagline": {
+          "label": "Tagline",
+          "help": "A short description of the site."
+        },
+        "adminEmail": {
+          "label": "Administration email",
+          "help": ""
+        },
         "timeZone": {
           "label": "Time zone",
           "help": "An IANA zone name, e.g. Europe/Paris. Governs scheduled publication and every date shown in this admin."
         },
-        "dateStyle": { "label": "Date format", "help": "" },
-        "timeStyle": { "label": "Time format", "help": "" }
+        "dateStyle": {
+          "label": "Date format",
+          "help": ""
+        },
+        "timeStyle": {
+          "label": "Time format",
+          "help": ""
+        }
       },
       "content": {
         "newEntryDefaultBlocks": {
@@ -1777,14 +1811,20 @@
           "label": "Homepage",
           "help": "The path served at /, e.g. /home. Leave empty to keep the default (/home)."
         },
-        "postsPerPage": { "label": "Items per page", "help": "" }
+        "postsPerPage": {
+          "label": "Items per page",
+          "help": ""
+        }
       },
       "discussion": {
         "enabled": {
           "label": "Allow comments",
           "help": "Site-wide default. A collection or an entry can still turn this off."
         },
-        "moderationRequired": { "label": "Comments must be approved before showing", "help": "" },
+        "moderationRequired": {
+          "label": "Comments must be approved before showing",
+          "help": ""
+        },
         "allowAnonymous": {
           "label": "Allow comments from visitors without an account",
           "help": ""
@@ -1793,22 +1833,34 @@
           "label": "Auto-close comments after (days)",
           "help": "0 disables auto-close."
         },
-        "maxNestingDepth": { "label": "Maximum reply depth", "help": "" },
+        "maxNestingDepth": {
+          "label": "Maximum reply depth",
+          "help": ""
+        },
         "notifyEmail": {
           "label": "Notify this address of new comments",
           "help": "Leave empty to disable e-mail notifications."
         }
       },
       "media": {
-        "maxUploadSizeMb": { "label": "Maximum upload size (MB)", "help": "" }
+        "maxUploadSizeMb": {
+          "label": "Maximum upload size (MB)",
+          "help": ""
+        }
       },
       "privacy": {
         "policyPath": {
           "label": "Privacy policy page",
           "help": "A site-relative path, e.g. /privacy."
         },
-        "cookieBannerEnabled": { "label": "Show a cookie banner", "help": "" },
-        "cookieBannerMessage": { "label": "Cookie banner message", "help": "" },
+        "cookieBannerEnabled": {
+          "label": "Show a cookie banner",
+          "help": ""
+        },
+        "cookieBannerMessage": {
+          "label": "Cookie banner message",
+          "help": ""
+        },
         "dataRetentionNote": {
           "label": "Data retention note",
           "help": "Shown to visitors, purely informational — nothing here changes what is actually retained."
@@ -2547,7 +2599,10 @@
     "localeLabel": "Interface language",
     "localeHint": "Your own preference for this admin's language — takes effect immediately in this browser.",
     "localeUnset": "Use the site default",
-    "localeOption": { "fr": "Français", "en": "English" },
+    "localeOption": {
+      "fr": "Français",
+      "en": "English"
+    },
     "avatarLabel": "Avatar",
     "avatarChoose": "Choose an image",
     "avatarChange": "Change the image",

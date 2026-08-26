@@ -1143,7 +1143,7 @@ Concrètement : un commentaire porte l'identité de sa cible (`collection`, `ent
 
 ## ADR-0026 — Les formulaires vivent dans un contrat G séparé ; route dédiée avant bloc
 
-**Statut** : Acté
+**Statut** : Acté — renoncement (champ fichier, champs conditionnels) amendé par ADR-0030
 
 **Contexte** — La fiche 16 constate qu'un site Cogenta publié n'a aujourd'hui aucun moyen d'être contacté. Les briques existent séparément (`@cogenta/channels` sait notifier par e-mail/Slack/Discord/webhook signé ; le contrat A sait modéliser des données structurées) mais rien ne les relie. Trois questions se posent : où vit la définition d'un formulaire, comment il arrive sur une page alors que le contrat B est figé, et si les soumissions sont stockées.
 
@@ -1179,3 +1179,27 @@ Concrètement : un commentaire porte l'identité de sa cible (`collection`, `ent
 **Renoncement assumé** — `reviewState` reste à quatre valeurs fixes, pas un workflow multi-étapes configurable (option (c) écartée pour cette raison précise) ; la permission par propriétaire couvre « ses propres entrées », pas une délégation hiérarchique (un chef d'équipe voyant les entrées de son équipe) — hors périmètre.
 
 **Écarté** — (a) Ajouter `pending` à `ContentStatus` : casse tout `switch` exhaustif, l'argument même qui a fait pencher pour `deletedAt` orthogonal en ADR-0022. (c) Table de workflow séparée : plus flexible mais l'état devient invisible dans une lecture directe d'entrée. (d) Taxonomie « état éditorial » : zéro contrat touché, mais aucune règle de transition ni permission propre — un contributeur pourrait s'auto-approuver.
+
+---
+
+## ADR-0030 — Le renoncement « pas de champ fichier, pas de champs conditionnels » d'ADR-0026 est levé
+
+**Statut** : Acté
+
+**Contexte** — ADR-0026 renonçait explicitement, pour la première version du contrat G, à deux choses : un champ `file` (« pour ne pas ouvrir la surface téléversement/antivirus sans besoin prouvé ») et les champs conditionnels (« hors périmètre de cette première version »). La fiche 47 (parité avec les constructeurs de formulaires premium — Gravity Forms/WPForms) chiffre les deux comme tâches concrètes, avec un besoin désormais prouvé : un formulaire de candidature ou de support sans pièce jointe, et un formulaire sans logique conditionnelle, sont les deux lacunes les plus citées face à ces outils. La décision de rouvrir ces deux points précis a été tranchée en direct avec l'utilisateur le 2026-08-26, au moment de cadrer la fiche 47 (consignée dans `docs/plans/47-formulaires-et-soumissions-premium.md` §8) — cette ADR met cette décision dans le registre append-only plutôt que de la laisser vivre seulement dans un document de planification, contract-guardian ayant à raison signalé qu'un renoncement explicitement acté ne devrait pas être renversé par une simple note dans `docs/04-contrats.md`.
+
+**Décision** — Le contrat G monte en **`forms@1.1`**, additif :
+
+1. **Champ `file`** — dixième type de champ. La surface antivirus qu'ADR-0026 redoutait n'est pas ouverte par une analyse de contenu malveillant (aucune n'existe dans ce lot, assumé ci-dessous), mais mitigée par trois garanties structurelles : la catégorie réelle est lue sur les octets (jamais un nom de fichier ni un `Content-Type` déclaré — même discipline que `verifyRealType` du pipeline média, L10 tâche 5), une taille maximale plafonnée matériellement (`FORM_FILE_HARD_MAX_BYTES`, non contournable par la configuration d'un formulaire), et le fichier stocké n'est **jamais servi publiquement** — contrairement à `/_image` pour la médiathèque, aucune route de téléchargement n'existe pour un fichier de formulaire à ce stade (un admin ne peut pas non plus le récupérer aujourd'hui — lacune fonctionnelle assumée, pas un risque de sécurité en soi).
+2. **Champs conditionnels (`showIf`)** — une condition (`field`/`operator`/`value`) évaluée côté serveur contre la soumission brute ; un champ masqué n'est ni requis ni validé, avec ou sans JavaScript.
+3. **Corollaire de sécurité, trouvé et corrigé pendant l'implémentation** — une revue de sécurité dédiée (§ ci-dessous) a montré qu'un champ `file` porté à travers un formulaire à étapes (`_accumulated`, fiche 47 tâche 2, elle aussi nouvelle) ne pouvait pas se contenter d'une vérification de forme (`isFormFileValue`) : un client pouvait forger une valeur `{filename, mimeType, size, storageKey}` sans jamais envoyer un octet réel. La valeur portée d'une étape à l'autre est donc **signée** (HMAC, clé dérivée de `COGENTA_AUTH_SIGNING_KEY` — jamais un second secret, même discipline que `commentsIpHashSecret`) ; seul le routeur qui l'a signée peut la faire accepter à l'étape suivante.
+
+**Justification** — Le principe de « ne pas rediscuter une décision actée » protège contre un contournement silencieux, pas contre un changement d'avis assumé et tracé. ADR-0026 documentait déjà ce renoncement comme une prudence temporaire liée à l'absence de besoin prouvé, non comme un refus de principe ; la fiche 47 fournit ce besoin, et cette ADR trace formellement le changement plutôt que de le laisser implicite dans le code ou dans un simple commentaire de `docs/04-contrats.md`.
+
+**Conséquences** — `packages/forms` gagne `file-field.ts` (sniffing par octets, plafond dur, signature/vérification de jeton) et `conditions.ts` (`showIf`) ; `FORM_FIELD_KINDS` passe de neuf à dix valeurs, `FormFieldDefinition` gagne trois propriétés optionnelles. Aucune forme existante n'est changée de sens — un consommateur `forms@1.0` qui ignore ces champs garde le comportement d'avant. `docs/04-contrats.md` § Contrat G est mis à jour en conséquence (`forms@1.1`).
+
+**Renoncement assumé** — Aucun scan antiviral/malware réel n'est ajouté par cette décision : la mitigation reste « type réel vérifié par octets + taille plafonnée + jamais servi publiquement », pas une analyse de contenu. Un fichier de formulaire accepté n'est aujourd'hui récupérable par personne, pas même un admin légitime — capacité de téléchargement authentifié hors périmètre de cette fiche, à ouvrir séparément. Le bloc `form` du contrat B reste hors périmètre (RFC toujours ouverte, non traitée par cette ADR).
+
+**Écarté** — Accepter la valeur `file` carriée d'une étape à l'autre sur la seule foi de sa forme (`isFormFileValue`) : c'est précisément la faille que la revue de sécurité a trouvée et que cette décision ferme par la signature.
+
+---

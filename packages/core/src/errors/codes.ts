@@ -483,6 +483,11 @@ export const ERROR_CODES = [
   'FORM_SUBMITTED_TOO_FAST',
   'FORM_CONSENT_REQUIRED',
   'FORM_AUTORESPONDER_RATE_LIMITED',
+  // Fiche 47 — logic, steps, files, multi-channel notifications, CAPTCHA.
+  'FORM_FILE_REJECTED',
+  'FORM_CAPTCHA_REQUIRED',
+  'FORM_CAPTCHA_FAILED',
+  'FORM_STEP_INVALID',
 
   // A package's own `package.json` could not be read to determine its
   // version (`readOwnPackageVersion`) — a broken install, not a user mistake.

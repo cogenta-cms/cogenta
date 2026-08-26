@@ -1,6 +1,6 @@
 import type { AccessContext } from '@cogenta/api'
 import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
-import { HONEYPOT_FIELD, TIMESTAMP_FIELD } from '@cogenta/forms'
+import { HONEYPOT_FIELD, isFormFileValue, TIMESTAMP_FIELD } from '@cogenta/forms'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from './theme-render.js'
 
@@ -18,6 +18,16 @@ import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from '.
  * a tapé". `createRequestListener` (`serve.ts`) calls `renderFormPage` again
  * with the just-submitted values whenever `POST /api/forms/{name}/submit`
  * answers anything but success.
+ *
+ * Fiche 47 adds multi-step (task 2) without a single line of client
+ * JavaScript: each step is its own `<form method="post">` POSTing to the
+ * exact same submit endpoint, carrying everything answered so far forward
+ * as one hidden `_accumulated` JSON field plus the original page-load
+ * timestamp (`_ts`, never refreshed step to step — `checkFillDelay` in
+ * `@cogenta/forms` needs it to stay meaningful across the whole flow).
+ * `serve.ts` is what decides, from the router's own response, whether to
+ * render the next step or the confirmation/error view — this file only ever
+ * renders one page at a time and never itself decides what "next" means.
  */
 
 export interface FormPageSite {
@@ -44,8 +54,14 @@ export interface FormPageState {
   readonly submitted?: boolean
   readonly errorMessage?: string | null
   readonly errorField?: string | null
-  /** The visitor's own values, from the request that just failed — never lost. */
+  /** The visitor's own values, from the request that just failed (or that a step just answered) — never lost. */
   readonly values?: Readonly<Record<string, unknown>>
+  /** Task 2 — the step to render, 0-based. Absent means step 0 (or the only page, for a single-page form). */
+  readonly step?: number
+  /** Task 2 — everything answered on earlier steps, carried forward verbatim as the next request's `_accumulated`. */
+  readonly accumulated?: Readonly<Record<string, unknown>>
+  /** Task 2 — the original page-load timestamp; re-emitted unchanged rather than refreshed to `options.now()` once a flow is under way. */
+  readonly ts?: string
 }
 
 function labelFor(field: FormFieldDefinition): string {
@@ -134,6 +150,22 @@ function renderField(field: FormFieldDefinition, state: FormPageState): string {
         .join('')
       break
     }
+    case 'file': {
+      // Fiche 47 task 3. A file input can never be pre-filled by a server
+      // (browsers refuse it, for good reason) — the best this can do on
+      // redisplay is say what is already on file, from a value already
+      // resolved to a `FormFileValue` (carried forward via `_accumulated`,
+      // or accepted earlier in this very flow before another field failed).
+      const already = state.values?.[field.name]
+      const note = isFormFileValue(already)
+        ? `<p class="cg-form__help">Already uploaded: ${escapeHtmlText(already.filename)}. Choose a new file only to replace it.</p>`
+        : ''
+      return fieldWrapper(
+        field,
+        hasError,
+        `<input type="file" id="${id}" name="${name}"${invalid}${describedBy}>${note}`,
+      )
+    }
     case 'consent': {
       const isChecked = fieldValueText(state, field.name) === 'true' ? ' checked' : ''
       return `<div class="cg-form__field cg-form__field--consent">
@@ -191,9 +223,26 @@ ${body}
   )
 }
 
+function stepFieldsOf(
+  definition: FormDefinition,
+  stepIndex: number,
+): { readonly fields: readonly FormFieldDefinition[]; readonly isFinalStep: boolean } {
+  const stepsCount = definition.steps.length
+  if (stepsCount <= 1) return { fields: definition.fields, isFinalStep: true }
+
+  const clamped = Math.min(Math.max(stepIndex, 0), stepsCount - 1)
+  const step = definition.steps[clamped]
+  const names = new Set(step?.fieldNames ?? [])
+  return {
+    fields: definition.fields.filter((field) => names.has(field.name)),
+    isFinalStep: clamped >= stepsCount - 1,
+  }
+}
+
 /**
- * The whole page: the form itself, or its confirmation view under
- * `?submitted=1` when the form has no `redirectTo` of its own.
+ * The whole page: the form itself (one step of it, for a multi-step form),
+ * or its confirmation view under `?submitted=1` when the form has no
+ * `redirectTo` of its own.
  */
 export function renderFormPage(
   definition: FormDefinition,
@@ -203,22 +252,44 @@ export function renderFormPage(
 ): Promise<string> {
   if (state.submitted === true) return confirmationPage(definition, options, context)
 
+  const stepIndex = state.step ?? 0
+  const { fields: stepFields, isFinalStep } = stepFieldsOf(definition, stepIndex)
+  const isMultiStep = definition.steps.length > 1
+
   const errorBanner =
     state.errorMessage != null
       ? `<p class="cg-form__error" role="alert">${escapeHtmlText(state.errorMessage)}</p>`
       : ''
 
-  const fields = definition.fields.map((field) => renderField(field, state)).join('\n')
+  const fields = stepFields.map((field) => renderField(field, state)).join('\n')
+
+  const ts = state.ts ?? String(options.now())
+  const needsMultipart = stepFields.some((field) => field.kind === 'file')
+
+  const stepHiddenFields = isMultiStep
+    ? `<input type="hidden" name="_step" value="${stepIndex}">
+<input type="hidden" name="_accumulated" value="${escapeHtmlAttribute(JSON.stringify(state.accumulated ?? {}))}">`
+    : ''
+
+  const captcha =
+    isFinalStep && definition.captcha.enabled
+      ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<div class="cf-turnstile" data-sitekey="${escapeHtmlAttribute(definition.captcha.siteKey ?? '')}"></div>`
+      : ''
+
+  const submitLabel = isFinalStep ? 'Send' : 'Next'
 
   const body = `${errorBanner}
-<form class="cg-form" method="post" action="/api/forms/${encodeURIComponent(definition.name)}/submit">
+<form class="cg-form" method="post" action="/api/forms/${encodeURIComponent(definition.name)}/submit"${needsMultipart ? ' enctype="multipart/form-data"' : ''}>
 ${fields}
+${stepHiddenFields}
 <div class="cg-form__honeypot" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
 <label for="cg-form-hp">Leave this field empty</label>
 <input type="text" id="cg-form-hp" name="${HONEYPOT_FIELD}" tabindex="-1" autocomplete="off" value="">
 </div>
-<input type="hidden" name="${TIMESTAMP_FIELD}" value="${options.now()}">
-<button type="submit">Send</button>
+<input type="hidden" name="${TIMESTAMP_FIELD}" value="${escapeHtmlAttribute(ts)}">
+${captcha}
+<button type="submit">${submitLabel}</button>
 </form>`
 
   return shell(definition.label, body, options, context)

@@ -61,8 +61,13 @@ export { parseCsv, stringifyCsv } from './csv.js'
 export type { DependencySource, ResponseDependencies } from './dependencies.js'
 export { collectDependencies } from './dependencies.js'
 export { FILTER_PREFIX, parseFilter } from './filter.js'
-export type { FormsRequestContext, FormsRouter, FormsRouterOptions } from './forms-router.js'
-export { createFormsRouter } from './forms-router.js'
+export type {
+  FormsRequestContext,
+  FormsRouter,
+  FormsRouterOptions,
+  StreamSubmissionsCsvFilters,
+} from './forms-router.js'
+export { createFormsRouter, streamSubmissionsCsv } from './forms-router.js'
 export type {
   AuditIntegrityStatus,
   DiskUsageStatus,

@@ -637,7 +637,7 @@ export function installMockFetch(
       readonly status: 'pending' | 'approved' | 'spam' | 'trash'
       readonly createdAt?: string
     }[]
-    /** Seeds `/api/forms` (contract G, ADR-0026) — see `forms.tsx`. */
+    /** Seeds `/api/forms` (contract G, ADR-0026 + fiche 47). */
     readonly forms?: readonly {
       readonly id: string
       readonly name: string
@@ -649,6 +649,13 @@ export function installMockFetch(
       readonly notifyEmails: readonly string[]
       readonly autoresponder: { readonly enabled: boolean; readonly body?: string }
       readonly retainDays: number
+      readonly steps?: readonly Record<string, unknown>[]
+      readonly notifyChannels?: readonly Record<string, unknown>[]
+      readonly captcha?: {
+        readonly enabled: boolean
+        readonly siteKey?: string
+        readonly secretKey?: string
+      }
       readonly createdAt: string
       readonly updatedAt: string
     }[]
@@ -1979,7 +1986,7 @@ export function installMockFetch(
     createdAt: number
   }[] = []
 
-  // Forms (contract G, ADR-0026) — see `forms.tsx`/`form-submissions.tsx`.
+  // Forms (contract G, ADR-0026 + fiche 47) — see `forms.tsx`/`form-submissions.tsx`.
   let formCounter = 0
   let formDefs: {
     id: string
@@ -1992,9 +1999,26 @@ export function installMockFetch(
     notifyEmails: readonly string[]
     autoresponder: { enabled: boolean; body?: string }
     retainDays: number
+    steps: readonly Record<string, unknown>[]
+    notifyChannels: readonly Record<string, unknown>[]
+    captcha: { enabled: boolean; siteKey?: string; secretKey?: string }
     createdAt: string
     updatedAt: string
-  }[] = (options.forms ?? []).map((form) => ({ ...form }))
+  }[] = (options.forms ?? []).map((form) => ({
+    ...form,
+    steps: form.steps ?? [],
+    notifyChannels: form.notifyChannels ?? [],
+    captcha: form.captcha ?? { enabled: false },
+  }))
+  let formNotes: {
+    id: string
+    submissionId: string
+    authorId: string | null
+    authorLabel: string
+    body: string
+    createdAt: string
+  }[] = []
+  let formNoteCounter = 0
   const _submissionCounter = 0
   let formSubmissions: {
     id: string
@@ -6412,6 +6436,27 @@ export function installMockFetch(
         if (segments[0] === 'submissions') {
           const rest = segments.slice(1)
 
+          // Fiche 47 task 9 — the streamed export. A plain CSV body, not
+          // JSON, mirroring `serveFormsSubmissionsExport`'s own content type.
+          if (rest.length === 1 && rest[0] === 'export.csv' && method === 'GET') {
+            const formId = parsed.searchParams.get('formId')
+            const filtered = formSubmissions.filter((s) => formId === null || s.formId === formId)
+            const columns = [...new Set(filtered.flatMap((s) => Object.keys(s.values)))]
+            const rows = [
+              ['id', 'form', 'status', 'submittedAt', 'referrer', ...columns],
+              ...filtered.map((s) => [
+                s.id,
+                s.formName,
+                s.status,
+                s.submittedAt,
+                s.referrer ?? '',
+                ...columns.map((c) => String(s.values[c] ?? '')),
+              ]),
+            ]
+            const csv = rows.map((row) => row.join(',')).join('\r\n')
+            return new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })
+          }
+
           if (rest.length === 0 && method === 'GET') {
             const formId = parsed.searchParams.get('formId')
             const status = parsed.searchParams.get('status')
@@ -6463,6 +6508,26 @@ export function installMockFetch(
             })
             return json(200, { data: { updated } })
           }
+          if (rest.length === 2 && rest[1] === 'notes') {
+            const submissionId = rest[0] as string
+            if (method === 'GET') {
+              return json(200, { data: formNotes.filter((n) => n.submissionId === submissionId) })
+            }
+            if (method === 'POST') {
+              formNoteCounter += 1
+              const note = {
+                id: `note-${formNoteCounter}`,
+                submissionId,
+                authorId: user.id,
+                authorLabel: user.id,
+                body: body.body as string,
+                createdAt: '2026-03-01T00:00:00.000Z',
+              }
+              formNotes.push(note)
+              return json(201, { data: note })
+            }
+          }
+
           if (rest.length === 1) {
             const submission = formSubmissions.find((s) => s.id === rest[0])
             if (submission === undefined) {
@@ -6477,6 +6542,7 @@ export function installMockFetch(
             }
             if (method === 'DELETE') {
               formSubmissions = formSubmissions.filter((s) => s.id !== submission.id)
+              formNotes = formNotes.filter((n) => n.submissionId !== submission.id)
               return new Response(null, { status: 204 })
             }
           }
@@ -6500,11 +6566,32 @@ export function installMockFetch(
               enabled: false,
             },
             retainDays: (body.retainDays as number | undefined) ?? 180,
+            steps: (body.steps as Record<string, unknown>[] | undefined) ?? [],
+            notifyChannels: (body.notifyChannels as Record<string, unknown>[] | undefined) ?? [],
+            captcha: (body.captcha as { enabled: boolean } | undefined) ?? { enabled: false },
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
           }
           formDefs.push(created)
           return json(201, { data: created })
+        }
+        if (segments.length === 2 && segments[1] === 'duplicate' && method === 'POST') {
+          const existing = formDefs.find((f) => f.id === segments[0])
+          if (existing === undefined) {
+            return json(404, { error: { code: 'FORM_UNKNOWN', message: 'No such form.' } })
+          }
+          formCounter += 1
+          const copy = {
+            ...existing,
+            id: `form-${formCounter}`,
+            name: `${existing.name}-copy`,
+            label: `${existing.label} (copy)`,
+            active: false,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+          }
+          formDefs.push(copy)
+          return json(201, { data: copy })
         }
         if (segments.length === 1) {
           const existing = formDefs.find((f) => f.id === segments[0])

@@ -1,10 +1,11 @@
 import {
   type AlertChannelMessage,
+  type ChannelRegistry,
   createEmailAdapter,
   type EmailTransport,
 } from '@cogenta/channels'
 import { CogentaError, type RateLimitDriver } from '@cogenta/core'
-import type { FormDefinition, FormSubmission } from './types.js'
+import type { FormDefinition, FormNotifyChannel, FormSubmission } from './types.js'
 
 /**
  * Notifications for a new submission — "réutiliser l'adaptateur e-mail
@@ -72,6 +73,49 @@ export async function notifyNewSubmission(
       sent.push(email)
     } catch {
       failed.push(email)
+    }
+  }
+  return { sent, failed }
+}
+
+export interface NotifyChannelsOptions {
+  readonly registry: ChannelRegistry
+  readonly definition: FormDefinition
+  readonly submission: FormSubmission
+  readonly adminUrl: string
+}
+
+/**
+ * Fiche 47 task 4 — the multi-channel half of a submission notification,
+ * built the same way `notifyNewSubmission` builds the e-mail one: reusing
+ * `buildSubmissionAlert` (never a second message shape) and the adapters
+ * `@cogenta/channels` already has, never a new transport of this package's
+ * own (R1/R9). A channel this form names but the site never configured (no
+ * live adapter of that name in the registry), or a channel whose `send`
+ * itself fails, is recorded as `failed` and every other configured channel
+ * still gets tried — the same "never throws on one bad recipient" contract
+ * `notifyNewSubmission` already holds for e-mail addresses.
+ */
+export async function notifyChannels(options: NotifyChannelsOptions): Promise<{
+  readonly sent: readonly FormNotifyChannel[]
+  readonly failed: readonly FormNotifyChannel[]
+}> {
+  if (options.definition.notifyChannels.length === 0) return { sent: [], failed: [] }
+
+  const message = buildSubmissionAlert(options.definition, options.submission, options.adminUrl)
+  const sent: FormNotifyChannel[] = []
+  const failed: FormNotifyChannel[] = []
+
+  for (const entry of options.definition.notifyChannels) {
+    if (!options.registry.has(entry.channel)) {
+      failed.push(entry)
+      continue
+    }
+    try {
+      await options.registry.get(entry.channel).send({ id: entry.target }, message)
+      sent.push(entry)
+    } catch {
+      failed.push(entry)
     }
   }
   return { sent, failed }

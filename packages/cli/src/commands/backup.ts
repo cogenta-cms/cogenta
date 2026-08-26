@@ -25,7 +25,9 @@ import {
   createRedirectStore,
   createSchemaTables,
   ensureMenuTables,
+  ensurePatternTables,
   MENU_TABLES,
+  PATTERN_TABLE,
   REDIRECTS_TABLE,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
@@ -126,7 +128,7 @@ async function tablesFor(cwd: string): Promise<readonly string[]> {
     collections,
     taxonomies,
     before: [...Object.values(AUTH_TABLES), MEDIA_TABLE],
-    after: [MENU_TABLES.menus, MENU_TABLES.items, REDIRECTS_TABLE],
+    after: [MENU_TABLES.menus, MENU_TABLES.items, REDIRECTS_TABLE, PATTERN_TABLE],
   })
 }
 
@@ -146,6 +148,7 @@ async function ensureAllTables(
   await createSchemaTables(db, collections, taxonomies)
   await ensureAuthTables(db)
   await ensureMenuTables(db)
+  await ensurePatternTables(db)
   await createRedirectStore({ db }).ensureTable()
   // The media store creates its table lazily on first call; `list()` is the
   // cheapest one that does so without writing anything.

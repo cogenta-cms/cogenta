@@ -134,6 +134,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   MENU_ITEM_INVALID: 400,
   MENU_CYCLE: 400,
 
+  // Patterns — the page builder's motif/model library (fiche 43 sub-chantier A)
+  PATTERN_UNKNOWN: 404,
+  PATTERN_INVALID: 400,
+
   SCHEMA_INVALID: 400,
   BLOCK_UNKNOWN: 400,
   BLOCK_INVALID: 400,

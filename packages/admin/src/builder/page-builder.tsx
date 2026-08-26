@@ -3,13 +3,20 @@ import { useTranslation } from 'react-i18next'
 import { renderDraft } from '../api/builder-client.js'
 import { ApiError } from '../api/client.js'
 import type { ContentBlock } from '../api/content-client.js'
+import type { Pattern } from '../api/patterns-client.js'
 import { BlockForm } from '../blocks/block-form.js'
 import { blockDefinition } from '../blocks/vocabulary.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 import {
   insertBlock,
   moveBlock,
+  moveSelectionDown,
+  moveSelectionUp,
+  parseClipboardBlocks,
+  pasteBlocks,
   removeBlock,
+  removeBlocks,
+  serialiseBlocksForClipboard,
   setInlineText,
   updateBlockData,
 } from './block-moves.js'
@@ -17,12 +24,15 @@ import { BlockOutline } from './block-outline.js'
 import { BlockPicker } from './block-picker.js'
 import type { History } from './history.js'
 import { canRedo, canUndo, createHistory, push, redo, reset, undo } from './history.js'
+import { PatternPicker } from './pattern-picker.js'
+import { applyTemplateBlocks, insertPatternBlocks } from './patterns.js'
 import { PreviewFrame } from './preview-frame.js'
 import type { Viewport } from './viewports.js'
 import { VIEWPORTS } from './viewports.js'
 
 /**
- * The visual page builder (L16).
+ * The visual page builder (L16, extended by fiche 05 and fiche 43
+ * sub-chantiers A/B/E/F).
  *
  * What it is *not* is as important as what it is: there is no React copy of
  * the twelve blocks anywhere in this admin. The middle of the screen is an
@@ -44,6 +54,14 @@ import { VIEWPORTS } from './viewports.js'
 
 /** Long enough that a held key does not queue a render per character. */
 const PREVIEW_DEBOUNCE_MS = 300
+
+/** Whether a keyboard shortcut should fall through to normal text editing instead of acting on the block selection. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
 
 export function PageBuilder({
   token,
@@ -68,12 +86,30 @@ export function PageBuilder({
   const [history, setHistory] = useState<History<readonly ContentBlock[]>>(() =>
     createHistory(blocks),
   )
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  /**
+   * The group selection (fiche 43 sub-chantier E): a plain click in the
+   * outline or the preview replaces it with one key; `Shift`+click in the
+   * outline toggles a key into or out of it. The detail panel below only
+   * ever shows a form when this names exactly one block — the same
+   * "selecting several hides the single-block editor" rule Gutenberg uses,
+   * since a `BlockForm` has no way to edit two different blocks' fields at
+   * once.
+   */
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set())
+  /**
+   * Locked blocks (fiche 43 sub-chantier E) — admin-only, session-only: a
+   * flag this component keeps for the length of one editing session, never
+   * written to contract B or the server. It protects a composed header or
+   * footer from an accidental drag or delete; it is not a persisted
+   * property of the block, so it resets the next time this entry is opened.
+   */
+  const [lockedKeys, setLockedKeys] = useState<ReadonlySet<string>>(new Set())
   const [viewport, setViewport] = useState<Viewport>('desktop')
   const [chromeVisible, setChromeVisible] = useState(true)
   const [html, setHtml] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [clipboardNotice, setClipboardNotice] = useState<string | null>(null)
 
   /**
    * The last list this component handed upward.
@@ -88,6 +124,7 @@ export function PageBuilder({
   useEffect(() => {
     if (blocks === emitted.current) return
     setHistory(reset(blocks))
+    setSelectedKeys(new Set())
   }, [blocks])
 
   const present = history.present
@@ -138,8 +175,35 @@ export function PageBuilder({
     }
   }, [token, collection, entryId, zone, present, t])
 
+  /** Every selected key that is not locked — what a group move/remove/copy actually operates on. */
+  function movableSelection(): ReadonlySet<string> {
+    if (lockedKeys.size === 0) return selectedKeys
+    const movable = new Set<string>()
+    for (const key of selectedKeys) if (!lockedKeys.has(key)) movable.add(key)
+    return movable
+  }
+
+  /**
+   * A locked block must stay exactly where it is — not merely "never move on
+   * its own", or a neighbour's ordinary move (a row button, a drag) would
+   * push it aside as a side effect. `moveBlock` reshuffles every block
+   * between the old and new position (a splice, not a pairwise swap), so
+   * the guard checks that whole range rather than just the two endpoints.
+   */
   function handleMove(key: string, toIndex: number): void {
-    if (disabled) return
+    if (disabled || lockedKeys.has(key)) return
+    if (lockedKeys.size > 0) {
+      const from = present.findIndex((block) => block.key === key)
+      if (from === -1) return
+      const clampedTo = Math.max(0, Math.min(toIndex, present.length - 1))
+      const [lo, hi] = from <= clampedTo ? [from, clampedTo] : [clampedTo, from]
+      for (let i = lo; i <= hi; i += 1) {
+        const candidate = present[i]
+        if (candidate !== undefined && candidate.key !== key && lockedKeys.has(candidate.key)) {
+          return
+        }
+      }
+    }
     commit(moveBlock(present, key, toIndex))
   }
 
@@ -148,13 +212,17 @@ export function PageBuilder({
     const inserted = insertBlock(present, type, atIndex)
     if (inserted.key === null) return
     commit(inserted.blocks)
-    setSelectedKey(inserted.key)
+    setSelectedKeys(new Set([inserted.key]))
   }
 
   function handleRemove(key: string): void {
-    if (disabled) return
+    if (disabled || lockedKeys.has(key)) return
     commit(removeBlock(present, key))
-    if (selectedKey === key) setSelectedKey(null)
+    if (selectedKeys.has(key)) {
+      const next = new Set(selectedKeys)
+      next.delete(key)
+      setSelectedKeys(next)
+    }
   }
 
   function handleInlineEdit(key: string, field: string, text: string): void {
@@ -165,14 +233,133 @@ export function PageBuilder({
     commit(setInlineText(present, key, field, text))
   }
 
-  /** Ctrl/⌘+Z and Ctrl/⌘+Shift+Z, the two every editor already knows. */
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return
-    event.preventDefault()
-    step(event.shiftKey ? redo : undo)
+  // ---- Selection (fiche 43 sub-chantier E) ---------------------------------
+
+  /** A plain click in the outline: replaces the selection with one block. */
+  function handleOutlineSelect(key: string, additive: boolean): void {
+    if (!additive) {
+      setSelectedKeys(new Set([key]))
+      return
+    }
+    const next = new Set(selectedKeys)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setSelectedKeys(next)
   }
 
-  const selected = present.find((block) => block.key === selectedKey) ?? null
+  /** A click in the preview: always a plain (non-additive) selection — multi-select is scoped to the outline list. */
+  function handlePreviewSelect(key: string): void {
+    setSelectedKeys(new Set([key]))
+  }
+
+  function handleToggleLock(key: string): void {
+    if (disabled) return
+    const next = new Set(lockedKeys)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setLockedKeys(next)
+  }
+
+  function handleMoveSelectionUp(): void {
+    if (disabled) return
+    commit(moveSelectionUp(present, movableSelection(), lockedKeys))
+  }
+
+  function handleMoveSelectionDown(): void {
+    if (disabled) return
+    commit(moveSelectionDown(present, movableSelection(), lockedKeys))
+  }
+
+  function handleRemoveSelection(): void {
+    if (disabled) return
+    const movable = movableSelection()
+    commit(removeBlocks(present, movable))
+    const remaining = new Set(selectedKeys)
+    for (const key of movable) remaining.delete(key)
+    setSelectedKeys(remaining)
+  }
+
+  // ---- Copy / paste (fiche 05 task 2, fiche 43 sub-chantier B) ------------
+
+  async function copySelection(): Promise<void> {
+    const toCopy = present.filter((block) => selectedKeys.has(block.key))
+    if (toCopy.length === 0) return
+    try {
+      await navigator.clipboard.writeText(serialiseBlocksForClipboard(toCopy))
+      setClipboardNotice(t('builder.copiedNotice', { count: toCopy.length }))
+    } catch {
+      setClipboardNotice(t('builder.clipboardUnavailable'))
+    }
+  }
+
+  async function pasteFromClipboard(): Promise<void> {
+    let text: string
+    try {
+      text = await navigator.clipboard.readText()
+    } catch {
+      setClipboardNotice(t('builder.clipboardUnavailable'))
+      return
+    }
+    const result = parseClipboardBlocks(text)
+    if (result.kind === 'not-ours') return
+    if (result.kind === 'unknown-type') {
+      setClipboardNotice(t('builder.pasteUnknownType', { type: result.type }))
+      return
+    }
+    if (disabled) return
+    commit(pasteBlocks(present, result.blocks, present.length))
+    setClipboardNotice(null)
+  }
+
+  /** `Ctrl/⌘+Z`/`Ctrl/⌘+Shift+Z` (undo/redo), `Ctrl/⌘+C`/`Ctrl/⌘+V` (copy/paste the selection) — every shortcut an editor already knows from any other document tool. */
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (!(event.ctrlKey || event.metaKey)) return
+    const key = event.key.toLowerCase()
+
+    if (key === 'z') {
+      event.preventDefault()
+      step(event.shiftKey ? redo : undo)
+      return
+    }
+
+    // Copy/paste must not steal the shortcut from an ordinary text field —
+    // the search box, a `BlockForm` input — where the same keys mean "copy
+    // this text", not "copy this block".
+    if (isEditableTarget(event.target)) return
+
+    if (key === 'c' && selectedKeys.size > 0) {
+      event.preventDefault()
+      void copySelection()
+      return
+    }
+    if (key === 'v') {
+      event.preventDefault()
+      void pasteFromClipboard()
+    }
+  }
+
+  function handleInsertPattern(pattern: Pattern): void {
+    if (disabled) return
+    const inserted = insertPatternBlocks(present, pattern, present.length)
+    commit(inserted.blocks)
+    setSelectedKeys(new Set(inserted.keys))
+  }
+
+  /**
+   * Applying a full-page template: `PatternPicker` has already asked for
+   * explicit confirmation (its own `Modal`) before this is ever called —
+   * this function itself has no notion of "are you sure", on purpose, so
+   * there is exactly one place in the whole feature that can silently skip
+   * it.
+   */
+  function handleApplyTemplate(pattern: Pattern): void {
+    if (disabled) return
+    commit(applyTemplateBlocks(pattern))
+    setSelectedKeys(new Set())
+  }
+
+  const singleSelected = selectedKeys.size === 1 ? ([...selectedKeys][0] ?? null) : null
+  const selected = present.find((block) => block.key === singleSelected) ?? null
   const selectedDefinition = selected === null ? undefined : blockDefinition(selected.type)
 
   return (
@@ -227,6 +414,15 @@ export function PageBuilder({
       </div>
 
       {error !== null && <Notice tone="danger">{error}</Notice>}
+      {clipboardNotice !== null && (
+        <Notice
+          tone="info"
+          onDismiss={() => setClipboardNotice(null)}
+          dismissLabel={t('builder.clipboardDismiss')}
+        >
+          {clipboardNotice}
+        </Notice>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_20rem]">
         <div className="flex flex-col gap-4">
@@ -239,11 +435,16 @@ export function PageBuilder({
             <CardBody>
               <BlockOutline
                 blocks={present}
-                selectedKey={selectedKey}
-                onSelect={setSelectedKey}
+                selectedKeys={selectedKeys}
+                lockedKeys={lockedKeys}
+                onSelect={handleOutlineSelect}
                 onMove={handleMove}
                 onInsert={handleInsert}
                 onRemove={handleRemove}
+                onToggleLock={handleToggleLock}
+                onMoveSelectionUp={handleMoveSelectionUp}
+                onMoveSelectionDown={handleMoveSelectionDown}
+                onRemoveSelection={handleRemoveSelection}
                 disabled={disabled}
               />
             </CardBody>
@@ -262,16 +463,34 @@ export function PageBuilder({
               />
             </CardBody>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h3>{t('builder.patterns.heading')}</h3>
+              </CardTitle>
+            </CardHeader>
+            <CardBody>
+              <PatternPicker
+                token={token}
+                disabled={disabled}
+                blocks={present}
+                selectedKeys={selectedKeys}
+                onInsertPattern={handleInsertPattern}
+                onApplyTemplate={handleApplyTemplate}
+              />
+            </CardBody>
+          </Card>
         </div>
 
         <PreviewFrame
           html={html}
           viewport={viewport}
-          selectedKey={selectedKey}
+          selectedKey={singleSelected}
           chromeVisible={chromeVisible && !disabled}
           title={t('builder.previewTitle')}
           handlers={{
-            onSelect: setSelectedKey,
+            onSelect: handlePreviewSelect,
             onMove: handleMove,
             onInsert: handleInsert,
             onInlineEdit: handleInlineEdit,
@@ -285,7 +504,9 @@ export function PageBuilder({
             </CardTitle>
           </CardHeader>
           <CardBody>
-            {selected === null || selectedDefinition === undefined ? (
+            {selectedKeys.size > 1 ? (
+              <p className="text-sm text-muted-foreground">{t('builder.detailMultiple')}</p>
+            ) : selected === null || selectedDefinition === undefined ? (
               <p className="text-sm text-muted-foreground">{t('builder.detailEmpty')}</p>
             ) : (
               <BlockForm

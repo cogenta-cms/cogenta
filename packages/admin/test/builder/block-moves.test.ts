@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { ContentBlock } from '../../src/api/content-client.js'
 import {
+  blocksOfKeys,
+  CLIPBOARD_FORMAT,
   indexOfKey,
   insertBlock,
   isInlineEditable,
   moveBlock,
+  moveSelectionDown,
+  moveSelectionUp,
+  parseClipboardBlocks,
+  pasteBlocks,
   removeBlock,
+  removeBlocks,
+  serialiseBlocksForClipboard,
   setInlineText,
 } from '../../src/builder/block-moves.js'
 
@@ -146,5 +154,84 @@ describe('finding a block by its key', () => {
   it('answers -1 rather than 0 for a key that is absent', () => {
     expect(indexOfKey(BLOCKS, 'missing')).toBe(-1)
     expect(indexOfKey(BLOCKS, 'a')).toBe(0)
+  })
+})
+
+describe('copy / paste (fiche 05 task 2, fiche 43 sub-chantier B)', () => {
+  it('round-trips a selection through the clipboard payload', () => {
+    const text = serialiseBlocksForClipboard([BLOCKS[0] as ContentBlock, BLOCKS[2] as ContentBlock])
+    const parsed = parseClipboardBlocks(text)
+    expect(parsed.kind).toBe('blocks')
+    if (parsed.kind === 'blocks') {
+      expect(parsed.blocks).toEqual([BLOCKS[0], BLOCKS[2]])
+    }
+  })
+
+  it('ignores plain text that never came from this builder, rather than erroring', () => {
+    expect(parseClipboardBlocks('just some copied text').kind).toBe('not-ours')
+    expect(parseClipboardBlocks('{"unrelated":true}').kind).toBe('not-ours')
+  })
+
+  it('refuses a pasted block whose type this site does not declare, naming it', () => {
+    const text = JSON.stringify({
+      format: CLIPBOARD_FORMAT,
+      blocks: [{ key: 'x', type: 'carousel-of-doom', data: {} }],
+    })
+    const parsed = parseClipboardBlocks(text)
+    expect(parsed).toEqual({ kind: 'unknown-type', type: 'carousel-of-doom' })
+  })
+
+  it('pastes with a fresh key per block, never the copied ones', () => {
+    const copied = [BLOCKS[0] as ContentBlock]
+    const pasted = pasteBlocks(BLOCKS, copied, 1)
+    expect(pasted).toHaveLength(4)
+    expect(pasted[1]?.type).toBe('hero')
+    expect(pasted[1]?.key).not.toBe('a')
+    // Every key in the result is still unique.
+    expect(new Set(keys(pasted)).size).toBe(4)
+  })
+
+  it('pasting the same clipboard twice never collides on a key', () => {
+    const copied = [BLOCKS[0] as ContentBlock]
+    const once = pasteBlocks(BLOCKS, copied, 0)
+    const twice = pasteBlocks(once, copied, 0)
+    expect(new Set(keys(twice)).size).toBe(keys(twice).length)
+  })
+
+  it('is a no-op for an empty paste', () => {
+    expect(pasteBlocks(BLOCKS, [], 0)).toBe(BLOCKS)
+  })
+})
+
+describe('multi-select group actions (fiche 05 task 5, fiche 43 sub-chantier E)', () => {
+  it('captures exactly the selected blocks, in page order', () => {
+    expect(blocksOfKeys(BLOCKS, new Set(['c', 'a']))).toEqual([BLOCKS[0], BLOCKS[2]])
+  })
+
+  it('removes a whole selection as one edit', () => {
+    expect(keys(removeBlocks(BLOCKS, new Set(['a', 'c'])))).toEqual(['b'])
+  })
+
+  it('returns the same array for an empty selection', () => {
+    expect(removeBlocks(BLOCKS, new Set())).toBe(BLOCKS)
+  })
+
+  it('moves a contiguous selection up as a unit', () => {
+    // [a, b*, c*] -> b and c bubble past a together.
+    expect(keys(moveSelectionUp(BLOCKS, new Set(['b', 'c'])))).toEqual(['b', 'c', 'a'])
+  })
+
+  it('moves a scattered selection up, each member by one slot', () => {
+    // [a*, b, c*] -> a cannot move further (already at the top); c swaps with b.
+    expect(keys(moveSelectionUp(BLOCKS, new Set(['a', 'c'])))).toEqual(['a', 'c', 'b'])
+  })
+
+  it('moves a selection down as a unit', () => {
+    expect(keys(moveSelectionDown(BLOCKS, new Set(['a', 'b'])))).toEqual(['c', 'a', 'b'])
+  })
+
+  it('does not move a selection already at the boundary it is heading toward', () => {
+    expect(moveSelectionUp(BLOCKS, new Set(['a']))).toBe(BLOCKS)
+    expect(moveSelectionDown(BLOCKS, new Set(['c']))).toBe(BLOCKS)
   })
 })

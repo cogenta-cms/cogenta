@@ -74,6 +74,10 @@ export const ERROR_CODES = [
   'MENU_ITEM_INVALID',
   'MENU_CYCLE',
 
+  // Patterns — the page builder's motif/model library (fiche 43 sub-chantier A)
+  'PATTERN_UNKNOWN',
+  'PATTERN_INVALID',
+
   // Blocks
   'BLOCK_UNKNOWN',
   'BLOCK_INVALID',

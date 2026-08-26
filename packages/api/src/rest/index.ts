@@ -130,6 +130,8 @@ export type {
 export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
+export type { PatternRouter, PatternRouterOptions } from './pattern-router.js'
+export { createPatternRouter } from './pattern-router.js'
 export type {
   ProviderCatalogEntrySummary,
   ProviderRegistryLike,

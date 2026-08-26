@@ -50,6 +50,7 @@ import {
   createNoticeRouter,
   createObservabilityRouter,
   createOpsStatusRouter,
+  createPatternRouter,
   createPendingMigrationsSource,
   createPermissionLayer,
   createPluginDisabledSource,
@@ -89,6 +90,7 @@ import {
   type NoticeRouter,
   type ObservabilityRouter,
   type OpsStatusRouter,
+  type PatternRouter,
   type PermissionLayer,
   type ProvidersRouter,
   type RedirectRouter,
@@ -231,6 +233,7 @@ import {
   createMaintenanceStore,
   createMenuStore,
   createNotFoundLogStore,
+  createPatternStore,
   createRedirectPatternStore,
   createRedirectStore,
   createScheduledPublishFailureStore,
@@ -243,10 +246,12 @@ import {
   ensureAdminThemeTable,
   ensureMaintenanceTable,
   ensureMenuTables,
+  ensurePatternTables,
   ensureSiteSettingsTables,
   type MaintenanceStore,
   type MenuStore,
   type NotFoundLogStore,
+  type PatternStore,
   type RedirectPatternStore,
   type RedirectStore,
   registerScheduledPublishing,
@@ -535,6 +540,13 @@ interface Site {
   readonly marketplaceRouter: MarketplaceRouter
   /** `/api/menus/*` — navigation menus. Not schema-declared like a taxonomy: created and edited entirely at runtime, so this is always mounted, empty until the admin (or the API) creates the first one. */
   readonly menuRouter: MenuRouter
+  /**
+   * `/api/patterns/*` — the page builder's motif/model library (fiche 43
+   * sub-chantier A). Not schema-declared either: one fixed table, the same
+   * one-fixed-table treatment as `menuRouter` above, always mounted and
+   * empty until an editor saves the first selection as a pattern.
+   */
+  readonly patternRouter: PatternRouter
   /**
    * `/api/commerce/*` — contract E's back office (ADR-0024), mounted for the
    * first time. `@cogenta/commerce`'s tables are only created and this
@@ -1608,6 +1620,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensureMenuTables(db)
   const menuStore: MenuStore = createMenuStore({ db })
 
+  // The page builder's motif/model library (fiche 43 sub-chantier A). Same
+  // one-fixed-table treatment as menus — a pattern is not schema-declared
+  // content either.
+  await ensurePatternTables(db)
+  const patternStore: PatternStore = createPatternStore({ db })
+
   // Editorial site settings (fiche 23, ADR-0025): not schema-declared either
   // — a rédacteur's tagline or homepage choice is not part of the content
   // model — so this gets the same one-fixed-table treatment as menus.
@@ -1931,6 +1949,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       resolveEntry: resolveMenuEntry,
       resolveTerm: resolveMenuTerm,
     }),
+    patternRouter: createPatternRouter({ store: patternStore }),
     siteSettingsRouter: createSiteSettingsRouter({
       store: siteSettingsStore,
       defaultLocale: site.defaultLocale,
@@ -3432,6 +3451,18 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.menuRouter.handle(request, context))
+        return
+      }
+
+      // The page builder's motif/model library (fiche 43 sub-chantier A):
+      // also not schema-declared, also its own fixed door — admin/editor on
+      // every method, the same reasoning `redirectRouter` below already
+      // applies to a builder fixture that is never content a visitor reads.
+      if (url.pathname.startsWith('/api/patterns')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.patternRouter.handle(request, context))
         return
       }
 

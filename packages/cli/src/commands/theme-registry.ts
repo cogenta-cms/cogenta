@@ -1,3 +1,4 @@
+import type { BlockRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import type {
   ChromeInput,
@@ -24,6 +25,15 @@ export interface ThemeModule {
     page: PageContent,
     ctx: RenderContext,
     entries?: FetchedEntries,
+    /**
+     * The block registry a stored block's type is resolved against —
+     * `@cogenta/blocks`'s twelve-turned-seventeen by default. A site with
+     * blocks of its own (a theme, or a theme-shipping plugin) passes its own,
+     * wider registry, so an active theme that does not implement one of them
+     * still renders its declared `fallback` (fiche 43, sous-chantier C(ii))
+     * instead of a silently blank slot.
+     */
+    registry?: BlockRegistry,
   ) => HtmlElement
   readonly renderChrome: (input: ChromeInput) => ChromeResult
 }

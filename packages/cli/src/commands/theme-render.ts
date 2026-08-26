@@ -6,7 +6,7 @@ import {
   type MenuRouter,
   type QueryRequest,
 } from '@cogenta/api'
-import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
+import type { BlockRegistry, RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
 import {
@@ -187,6 +187,16 @@ export interface ThemeRenderOptions {
   readonly headerMenuLocation?: string
   /** The `location` whose assigned menu renders in the page footer. Defaults to `DEFAULT_FOOTER_MENU_LOCATION`. */
   readonly footerMenuLocation?: string
+  /**
+   * The block registry a stored block's type is resolved against before
+   * `theme.renderPage` renders it — `@cogenta/blocks`'s shared vocabulary by
+   * default. A site with blocks of its own (fiche 43, sous-chantier C(ii))
+   * passes its own registry here, so that an active theme not implementing
+   * one of them still renders its declared `fallback` rather than a silently
+   * blank slot. No built-in theme declares one today; this is the wiring a
+   * theme package (or a theme-shipping plugin) that does can rely on.
+   */
+  readonly blocks?: BlockRegistry
   /**
    * The path served at `/` (fiche 23 task 4) — a real, honest replacement
    * for the `/home` fallback this file used to hardcode.
@@ -1031,7 +1041,12 @@ async function renderEntryPage(
 
   const pageContent: PageContent = { title: entryTitle(entry), blocks }
   const theme = await themeFor(options.activeTheme)
-  const node = theme.renderPage(pageContent, themeContext, fetchedEntries as FetchedEntries)
+  const node = theme.renderPage(
+    pageContent,
+    themeContext,
+    fetchedEntries as FetchedEntries,
+    options.blocks,
+  )
   const bodyHtml = serialize(node)
 
   // The comment thread and form (fiche 15 task 6) — a property of the route,

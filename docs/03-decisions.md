@@ -142,10 +142,7 @@ l'écosystème. Les adaptateurs Astro couvrent nativement les trois profils de d
 
 ## ADR-0009 — Contenu hybride : champs typés + blocs sémantiques
 
-**Statut** : Acté. **Élargie par ADR-0028** (2026-08-26) sur le seul point « le
-vocabulaire doit rester petit, une dizaine de blocs, pas cinquante » — la règle absolue
-(donnée sémantique uniquement, jamais de HTML/CSS) et le mécanisme de repli restent
-inchangés et non rediscutés. Voir ADR-0028 pour le texte complet du renoncement.
+**Statut** : Acté
 
 **Décision** — Un type de contenu possède des champs typés, plus une zone de blocs
 optionnelle. Le noyau définit un **vocabulaire fermé de blocs sémantiques** que tout
@@ -1182,80 +1179,3 @@ Concrètement : un commentaire porte l'identité de sa cible (`collection`, `ent
 **Renoncement assumé** — `reviewState` reste à quatre valeurs fixes, pas un workflow multi-étapes configurable (option (c) écartée pour cette raison précise) ; la permission par propriétaire couvre « ses propres entrées », pas une délégation hiérarchique (un chef d'équipe voyant les entrées de son équipe) — hors périmètre.
 
 **Écarté** — (a) Ajouter `pending` à `ContentStatus` : casse tout `switch` exhaustif, l'argument même qui a fait pencher pour `deletedAt` orthogonal en ADR-0022. (c) Table de workflow séparée : plus flexible mais l'état devient invisible dans une lecture directe d'entrée. (d) Taxonomie « état éditorial » : zéro contrat touché, mais aucune règle de transition ni permission propre — un contributeur pourrait s'auto-approuver.
-
----
-
-## ADR-0028 — Le vocabulaire de blocs s'élargit à dix-sept (`blocks@2.0`) ; ADR-0009 rouverte sur ce seul point
-
-**Statut** : Acté
-
-**Contexte** — ADR-0009 fixait le vocabulaire de blocs comme « une dizaine, pas
-cinquante » et en a fait une conséquence structurelle : chaque bloc ajouté est une dette
-imposée à chaque auteur de thème, pour toujours. Douze blocs ont tenu ce plafond depuis
-`blocks@1.0` (2026-08-13). Fiche 43 (Cogenta Page Builder) documente que le socle
-d'édition visuelle (L16) est solide mais que le vocabulaire lui-même ne couvre pas les
-sections qu'un site marketing/agence réel demande couramment — tableau de tarifs,
-témoignages, accordéon, ligne de chiffres clés, bandeau de logos — et que le mécanisme de
-repli existant (`BlockRegistry.resolveRenderable`, un thème peut ajouter son propre bloc
-s'il déclare un repli) répond seulement au besoin d'un thème isolé, jamais à la demande
-d'un vocabulaire partagé et portable entre thèmes.
-
-**Décision** — Rouvrir ADR-0009, **sur ce seul point** : la taille du vocabulaire. Décidé
-en conversation directe avec l'utilisateur le 2026-08-26, qui a explicitement demandé un
-constructeur de page « ultra complet façon WordPress/Elementor » après un test de L23, et
-a validé les deux RFC ci-dessous sans le délai de sept jours habituel (projet en mode
-développement, encore sans contributeur externe à consulter — voir la dérogation notée
-dans les deux fichiers).
-
-1. **Contrat B monte en `blocks@2.0`** (RFC 0001, `docs/rfc/0001-widen-block-vocabulary.md`) :
-   cinq blocs ajoutés au sommet des douze — `testimonial`, `pricingTable`, `accordion`,
-   `statCounter`, `logoStrip`. Chacun nomme un `fallback` vers le vocabulaire v1
-   (`prose`, `featureGrid`, `mediaFigure`), contrairement aux douze premiers
-   (`fallback: null`, ils *sont* le repli) : un thème construit avant `blocks@2.0` les
-   rend dégradés, jamais perdus.
-2. **Contrat B gagne `variant`** (RFC 0002, `docs/rfc/0002-per-block-visual-variant.md`) :
-   un champ optionnel partagé `{ background?, spacing?, align?, width? }` sur l'enveloppe
-   de tout bloc — jetons sémantiques fermés, jamais une valeur CSS ou une couleur (la
-   règle absolue d'ADR-0009 tient sans changement). Chaque thème résout chaque valeur
-   vers son propre jeton ; absent = rendu inchangé.
-3. **Ce qu'ADR-0009 continue d'interdire, sans exception** : `f.blocks()` reste refusé
-   dans le schéma d'un bloc — l'imbrication est la porte d'entrée d'un constructeur de
-   mise en page en colonnes/sections libres, hors périmètre de cette réouverture (fiche
-   43, sous-chantiers « Bloquants »). La règle absolue (donnée sémantique uniquement,
-   jamais de HTML/CSS/classe) tient elle aussi sans changement — vérifiée par
-   `contract-guardian` sur les cinq nouveaux blocs et sur `variant`.
-
-**Pourquoi une montée majeure, pas mineure malgré une addition pure** — `docs/04-contrats.md`
-classait initialement « ajouter un bloc » comme mineur. Ce n'est pas praticable ici : le
-rendu de chaque thème (`render-block.ts`) est un `switch` exhaustif sur
-`VocabularyBlock`, vérifié `never` à la compilation — un bloc ajouté au vocabulaire est
-donc une rupture de compilation réelle pour tout thème existant, même si aucun contenu
-n'a jamais pu utiliser ces cinq types avant cette version (rien à migrer côté données).
-`docs/04-contrats.md` documente cette reclassification comme la règle pour cette
-catégorie précise de changement, décidée au cas par cas par RFC plutôt que par défaut.
-
-**Renoncement assumé** — Le vocabulaire n'est plus « une dizaine » (il en compte
-dix-sept), ce qu'ADR-0009 présentait comme la garantie qui rend praticable la promesse
-« change de thème, le contenu s'adapte ». Le renoncement est jugé acceptable parce que
-le mécanisme même qui rendait cette promesse tenable — le repli déclaré — s'applique
-identiquement aux cinq nouveaux blocs, et parce que les cinq in-house themes
-(`theme-canonical`, `theme-portfolio`, `theme-magazine`, `theme-ecommerce`,
-`theme-entreprise`) les implémentent tous directement avec un rendu distinct par thème,
-jamais un recolorage : la dette « un bloc ajouté coûte à chaque auteur de thème » est
-payée dans ce lot même, pas différée à un futur auteur de thème tiers. Un vocabulaire à
-cinquante resterait refusé — ce lot n'ouvre pas la porte à un ajout non justifié par RFC.
-
-**Conséquences** — `packages/blocks` (`vocabulary.ts`, `variant.ts`, `define-block.ts`,
-`types.ts`), les cinq paquets de thème, `@cogenta/theme-kit` (`resolveBlockForRender`,
-`withBlockVariant`), `@cogenta/cli` (passage optionnel d'un `BlockRegistry` de site) et
-le panneau d'apparence de bloc dans `@cogenta/admin`. `docs/04-contrats.md` mis à jour.
-Changesets `major` pour `@cogenta/blocks` et les cinq thèmes, `minor` pour
-`@cogenta/theme-kit` et `@cogenta/cli` (wiring additif). `contract-guardian` a revu le
-changement (verdict : conforme, deux notes de gouvernance — absence des fichiers RFC dans
-l'arbre de travail et absence de cette ADR — toutes deux corrigées avant ce commit).
-
-**Écarté** — Attendre le délai de sept jours de discussion publique habituel du
-processus de RFC (`docs/rfc/README.md`) : ce délai suppose des contributeurs externes à
-consulter, qui n'existent pas encore pour ce projet en pre-alpha ; le texte des deux RFC
-reste la justification écrite complète, prêt à être déposé comme vraie issue GitHub si le
-projet s'ouvre un jour à des contributions externes.

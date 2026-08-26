@@ -293,6 +293,84 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
       field('consentRequired', 'boolean', { required: true }),
     ],
   },
+  // ---- blocks@2.0 (RFC 0001), fiche 43 sous-chantier C-i ---------------------
+  {
+    name: 'testimonial',
+    label: 'Témoignage',
+    fields: [
+      field('quote', 'richText', { required: true, localized: true }),
+      // Mirrors `testimonialAttributionSchema` ({name, role?, avatar?}) opaquely,
+      // same choice as `collectionList`'s `filter`/`sort` — a single nested
+      // object has no admin editor of its own yet.
+      field('attribution', 'json', { required: true }),
+    ],
+  },
+  {
+    name: 'pricingTable',
+    label: 'Tableau de tarifs',
+    fields: [
+      field('title', 'text', { localized: true }),
+      listField(
+        'tiers',
+        [
+          itemField('name', 'text', { required: true }),
+          itemField('price', 'text', { required: true }),
+          itemField('interval', 'text'),
+          // Array of strings — opaque JSON, same reasoning as
+          // `testimonial.attribution` above. `sample: []` is valid on the
+          // real side too: `features` has no `.min()`, only `.max(20)`.
+          itemField('features', 'json', { required: true, options: { sample: [] } }),
+          // A nested Action object, `.optional()` on the real side — never
+          // included in a generated sample (see the test's own skip-if-not-
+          // required rule), so it needs no sample value here.
+          itemField('action', 'json'),
+          itemField('highlighted', 'boolean'),
+        ],
+        { required: true, localized: true, min: 1 },
+      ),
+    ],
+  },
+  {
+    name: 'accordion',
+    label: 'Accordéon',
+    fields: [
+      field('title', 'text', { localized: true }),
+      listField(
+        'items',
+        [
+          itemField('question', 'text', { required: true }),
+          itemField('answer', 'richText', { required: true }),
+        ],
+        { required: true, localized: true, min: 1 },
+      ),
+    ],
+  },
+  {
+    name: 'statCounter',
+    label: 'Chiffres clés',
+    fields: [
+      field('title', 'text', { localized: true }),
+      listField(
+        'stats',
+        [
+          itemField('value', 'text', { required: true }),
+          itemField('label', 'text', { required: true }),
+        ],
+        { required: true, localized: true, min: 1 },
+      ),
+    ],
+  },
+  {
+    name: 'logoStrip',
+    label: 'Bandeau de logos',
+    fields: [
+      listField('logos', [itemField('media', 'media', { required: true })], {
+        required: true,
+        min: 1,
+      }),
+      field('caption', 'text', { localized: true }),
+    ],
+  },
 ]
 
 export function blockDefinition(type: string): BlockDefinition | undefined {

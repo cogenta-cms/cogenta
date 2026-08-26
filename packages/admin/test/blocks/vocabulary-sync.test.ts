@@ -61,6 +61,18 @@ function sampleFor(kind: ItemFieldKind, options: Readonly<Record<string, unknown
       return '#112233'
     case 'relation':
       return '01920000-0000-7000-8000-000000000000'
+    case 'json': {
+      // Opaque by construction — no shape to introspect the way the other
+      // kinds have. A required `json` item field must carry an explicit
+      // `options.sample` (e.g. `[]` for an array-shaped field like
+      // `pricingTable.tiers[].features`) rather than guess one generically,
+      // which would silently pass for an array-shaped field and just as
+      // silently fail for an object-shaped one.
+      if ('sample' in options) return options['sample']
+      throw new Error(
+        `item field "${kind}" is required but declares no options.sample for vocabulary-sync.test.ts to use`,
+      )
+    }
     default:
       throw new Error(`vocabulary-sync.test.ts has no sample builder for item field kind "${kind}"`)
   }

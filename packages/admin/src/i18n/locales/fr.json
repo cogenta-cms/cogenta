@@ -1261,7 +1261,16 @@
     "autoresponderBody": "Message de l'accusé de réception",
     "retainDays": "Rétention (jours)",
     "retainDaysHelp": "Les soumissions plus anciennes sont purgées automatiquement.",
-    "activeToggle": "Accepte les soumissions"
+    "activeToggle": "Accepte les soumissions",
+    "duplicate": "Dupliquer",
+    "duplicateSuccess": "« {{label}} » a été dupliqué (inactif, à relire avant activation).",
+    "duplicateError": "Le formulaire n’a pas pu être dupliqué.",
+    "notifyChannels": "Notifier par canal",
+    "notifyChannelsHelp": "Une paire « canal:cible » par ligne, par exemple slack:C0123456. Le canal doit déjà être configuré pour ce site.",
+    "captchaEnabled": "Exiger un CAPTCHA (Cloudflare Turnstile) avant d’accepter une soumission",
+    "captchaWarning": "Désactivé par défaut. L’activer nécessite le script du widget Turnstile pour ce formulaire uniquement — le reste du formulaire continue de fonctionner sans JavaScript.",
+    "captchaSiteKey": "Clé de site Turnstile",
+    "captchaSecretKey": "Clé secrète Turnstile"
   },
   "formSubmissions": {
     "heading": "Soumissions",
@@ -1306,7 +1315,20 @@
     "gdprSearch": "Rechercher",
     "gdprErase": "Tout effacer",
     "gdprErased": "{{count}} soumission(s) effacée(s).",
-    "gdprNoResults": "Aucune soumission trouvée pour cette adresse."
+    "gdprNoResults": "Aucune soumission trouvée pour cette adresse.",
+    "filterFrom": "Du",
+    "filterTo": "Au",
+    "filterQuery": "Recherche",
+    "search": "Filtrer",
+    "exportError": "L’export n’a pas pu être téléchargé.",
+    "referrer": "Provenance",
+    "noReferrer": "—",
+    "notesHeading": "Notes internes",
+    "notesEmpty": "Aucune note pour le moment.",
+    "addNoteLabel": "Ajouter une note",
+    "addNote": "Ajouter",
+    "notesLoadError": "Impossible de charger les notes.",
+    "notesSaveError": "La note n’a pas pu être enregistrée."
   },
   "audit": {
     "heading": "Journal d'audit",
@@ -1766,14 +1788,26 @@
           "label": "Titre du site",
           "help": "Affiché dans l'onglet du navigateur et les résultats de recherche quand une page n'en a pas de propre."
         },
-        "tagline": { "label": "Accroche", "help": "Une courte description du site." },
-        "adminEmail": { "label": "E-mail d'administration", "help": "" },
+        "tagline": {
+          "label": "Accroche",
+          "help": "Une courte description du site."
+        },
+        "adminEmail": {
+          "label": "E-mail d'administration",
+          "help": ""
+        },
         "timeZone": {
           "label": "Fuseau horaire",
           "help": "Un nom de fuseau IANA, ex. Europe/Paris. Gouverne la publication programmée et toutes les dates affichées dans cet admin."
         },
-        "dateStyle": { "label": "Format de date", "help": "" },
-        "timeStyle": { "label": "Format d'heure", "help": "" }
+        "dateStyle": {
+          "label": "Format de date",
+          "help": ""
+        },
+        "timeStyle": {
+          "label": "Format d'heure",
+          "help": ""
+        }
       },
       "content": {
         "newEntryDefaultBlocks": {
@@ -1786,7 +1820,10 @@
           "label": "Page d'accueil",
           "help": "Le chemin servi à /, ex. /home. Laisser vide pour garder le défaut (/home)."
         },
-        "postsPerPage": { "label": "Éléments par page", "help": "" }
+        "postsPerPage": {
+          "label": "Éléments par page",
+          "help": ""
+        }
       },
       "discussion": {
         "enabled": {
@@ -1805,22 +1842,34 @@
           "label": "Fermer les commentaires après (jours)",
           "help": "0 désactive la fermeture automatique."
         },
-        "maxNestingDepth": { "label": "Profondeur maximale des réponses", "help": "" },
+        "maxNestingDepth": {
+          "label": "Profondeur maximale des réponses",
+          "help": ""
+        },
         "notifyEmail": {
           "label": "Notifier cette adresse des nouveaux commentaires",
           "help": "Laisser vide pour désactiver la notification."
         }
       },
       "media": {
-        "maxUploadSizeMb": { "label": "Taille maximale de téléversement (Mo)", "help": "" }
+        "maxUploadSizeMb": {
+          "label": "Taille maximale de téléversement (Mo)",
+          "help": ""
+        }
       },
       "privacy": {
         "policyPath": {
           "label": "Page de politique de confidentialité",
           "help": "Un chemin relatif au site, ex. /confidentialite."
         },
-        "cookieBannerEnabled": { "label": "Afficher un bandeau cookies", "help": "" },
-        "cookieBannerMessage": { "label": "Message du bandeau cookies", "help": "" },
+        "cookieBannerEnabled": {
+          "label": "Afficher un bandeau cookies",
+          "help": ""
+        },
+        "cookieBannerMessage": {
+          "label": "Message du bandeau cookies",
+          "help": ""
+        },
         "dataRetentionNote": {
           "label": "Note de rétention des données",
           "help": "Affichée aux visiteurs, purement informative — rien ici ne change ce qui est réellement conservé."
@@ -2625,7 +2674,10 @@
     "localeLabel": "Langue de l'interface",
     "localeHint": "Votre préférence pour la langue de cet admin — prend effet immédiatement dans ce navigateur.",
     "localeUnset": "Utiliser la langue par défaut du site",
-    "localeOption": { "fr": "Français", "en": "English" },
+    "localeOption": {
+      "fr": "Français",
+      "en": "English"
+    },
     "avatarLabel": "Avatar",
     "avatarChoose": "Choisir une image",
     "avatarChange": "Changer l'image",

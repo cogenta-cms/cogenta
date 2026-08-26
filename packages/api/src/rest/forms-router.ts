@@ -1,21 +1,35 @@
-import type { EmailTransport } from '@cogenta/channels'
-import { CogentaError, type RateLimitDriver } from '@cogenta/core'
+import { randomUUID } from 'node:crypto'
+import type { ChannelRegistry, EmailTransport } from '@cogenta/channels'
+import { CogentaError, type RateLimitDriver, type StorageDriver } from '@cogenta/core'
 import {
+  assertAllowedFormFile,
   checkFillDelay,
   checkHoneypot,
   checkSubmitRateLimit,
+  contentTypeForCategory,
+  csvHeaderRow,
+  csvSubmissionRow,
+  csvValueColumns,
+  type FormDefinition,
   type FormStore,
+  type FormSubmission,
   hashIp,
+  isFormFileValue,
   notifyNewSubmission,
   sendAutoresponder,
+  notifyChannels as sendChannelNotifications,
+  signFormFileToken,
   type UpdateFormDefinitionInput,
+  verifyCaptcha,
+  verifyFormFileToken,
 } from '@cogenta/forms'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import { isMultipartFormData } from './multipart.js'
 
 /**
- * `/api/forms` (contract G, ADR-0026) — form definitions and their
- * submissions, plus the CMS's second public write route:
+ * `/api/forms` (contract G, ADR-0026 + fiche 47) — form definitions and
+ * their submissions, plus the CMS's second public write route:
  * `POST /api/forms/{name}/submit`.
  *
  * Everything under this mount point except that one route is admin-only,
@@ -24,13 +38,29 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
  * declared). The submit route checks nothing about the caller's identity at
  * all: it is meant to be reached by an anonymous visitor, and its own
  * defences (honeypot, minimum fill delay, rate limit, full server-side
- * validation) are what stand in for a permission check there.
+ * validation, and now byte-sniffed file uploads and an optional CAPTCHA)
+ * are what stand in for a permission check there.
  */
 
 export interface FormsRouterOptions {
   readonly forms: FormStore
   /** Absent on a site with no e-mail transport configured (R1/R2) — notifications and the autoresponder are then silently skipped, never a hard failure of the submission itself. */
   readonly emailTransport?: EmailTransport
+  /** Fiche 47 task 4 — absent means every `notifyChannels` entry a form declares simply never fires (R1: no channel adapters configured, no notification, never a broken submit). */
+  readonly channelRegistry?: ChannelRegistry
+  /** Fiche 47 task 3 — absent means a `file` field always answers `FORM_FILE_REJECTED`: a form cannot silently accept an upload it has nowhere safe to put. */
+  readonly storage?: StorageDriver
+  /**
+   * Fiche 47 tasks 2/3 — signs a `file` field's value when it has to survive
+   * to a later step of a multi-step form (`_accumulated`), so a client can
+   * carry it forward but never forge or edit it (a security review found
+   * exactly this hole: without signing, a hand-crafted `{filename,
+   * mimeType, size, storageKey}` was accepted with no real upload at all).
+   * Absent means a `file` field simply cannot survive past the step it was
+   * uploaded on — the same honest degradation `storage` being absent
+   * already has, never a silently-trusted unsigned value.
+   */
+  readonly fileSigningSecret?: string
   readonly rateLimit: RateLimitDriver
   /** Where the "review this submission" link in a notification e-mail points. */
   readonly adminUrl: string
@@ -126,6 +156,38 @@ function noRoute(): CogentaError {
   })
 }
 
+/** Letters, digits, dot, dash, underscore — the same whitelist `media-router.ts`'s own `sanitiseFilename` uses for the same reason (a storage key built from an attacker-controlled filename). */
+function sanitiseFileName(filename: string): string {
+  const cleaned = filename.replace(/[^a-zA-Z0-9._-]/gu, '-')
+  return cleaned.length === 0 ? 'file' : cleaned
+}
+
+function definitionInputFromBody(body: Record<string, unknown>) {
+  return {
+    ...(typeof body['active'] === 'boolean' ? { active: body['active'] } : {}),
+    ...(typeof body['confirmationMessage'] === 'string'
+      ? { confirmationMessage: body['confirmationMessage'] }
+      : {}),
+    ...(body['redirectTo'] === null || typeof body['redirectTo'] === 'string'
+      ? { redirectTo: body['redirectTo'] as string | null }
+      : {}),
+    ...(Array.isArray(body['notifyEmails'])
+      ? { notifyEmails: body['notifyEmails'] as string[] }
+      : {}),
+    ...(typeof body['autoresponder'] === 'object' && body['autoresponder'] !== null
+      ? { autoresponder: body['autoresponder'] as never }
+      : {}),
+    ...(typeof body['retainDays'] === 'number' ? { retainDays: body['retainDays'] } : {}),
+    ...(Array.isArray(body['steps']) ? { steps: body['steps'] as never } : {}),
+    ...(Array.isArray(body['notifyChannels'])
+      ? { notifyChannels: body['notifyChannels'] as never }
+      : {}),
+    ...(typeof body['captcha'] === 'object' && body['captcha'] !== null
+      ? { captcha: body['captcha'] as never }
+      : {}),
+  }
+}
+
 export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const now = options.now ?? Date.now
@@ -145,6 +207,14 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
         const { actor } = context
         if (segments[0] === 'submissions')
           return await submissionsRoute(request, actor, segments.slice(1), method)
+
+        if (segments.length === 2 && segments[1] === 'duplicate') {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          requireAdmin(actor)
+          return jsonResponse(201, {
+            data: await forms.definitions.duplicate(segments[0] as string),
+          })
+        }
 
         if (segments.length === 0) return await definitionsCollectionRoute(request, actor, method)
         if (segments.length === 1)
@@ -183,20 +253,7 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
         name: stringField(body, 'name'),
         label: stringField(body, 'label'),
         fields: fields as never,
-        ...(typeof body['active'] === 'boolean' ? { active: body['active'] } : {}),
-        ...(typeof body['confirmationMessage'] === 'string'
-          ? { confirmationMessage: body['confirmationMessage'] }
-          : {}),
-        ...(body['redirectTo'] === null || typeof body['redirectTo'] === 'string'
-          ? { redirectTo: body['redirectTo'] as string | null }
-          : {}),
-        ...(Array.isArray(body['notifyEmails'])
-          ? { notifyEmails: body['notifyEmails'] as string[] }
-          : {}),
-        ...(typeof body['autoresponder'] === 'object' && body['autoresponder'] !== null
-          ? { autoresponder: body['autoresponder'] as never }
-          : {}),
-        ...(typeof body['retainDays'] === 'number' ? { retainDays: body['retainDays'] } : {}),
+        ...definitionInputFromBody(body),
       })
       return jsonResponse(201, { data: created })
     }
@@ -221,20 +278,7 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
         ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
         ...(typeof body['label'] === 'string' ? { label: body['label'] } : {}),
         ...(Array.isArray(body['fields']) ? { fields: body['fields'] as never } : {}),
-        ...(typeof body['active'] === 'boolean' ? { active: body['active'] } : {}),
-        ...(typeof body['confirmationMessage'] === 'string'
-          ? { confirmationMessage: body['confirmationMessage'] }
-          : {}),
-        ...(body['redirectTo'] === null || typeof body['redirectTo'] === 'string'
-          ? { redirectTo: body['redirectTo'] as string | null }
-          : {}),
-        ...(Array.isArray(body['notifyEmails'])
-          ? { notifyEmails: body['notifyEmails'] as string[] }
-          : {}),
-        ...(typeof body['autoresponder'] === 'object' && body['autoresponder'] !== null
-          ? { autoresponder: body['autoresponder'] as never }
-          : {}),
-        ...(typeof body['retainDays'] === 'number' ? { retainDays: body['retainDays'] } : {}),
+        ...definitionInputFromBody(body),
       }
       return jsonResponse(200, { data: await forms.definitions.update(id, patch) })
     }
@@ -248,17 +292,109 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
   // ---------------------------------------------------------------- submit (public)
 
   /**
-   * Always answers JSON — the same discipline `createSearchRouter` follows,
-   * with `search-page.ts` as the public HTML wrapper around it rather than
-   * HTML logic living in the router itself. Here that wrapper is
-   * `@cogenta/cli`'s `forms-page.ts`: it is the one that can render this
-   * site's actual theme, re-displaying submitted values and field errors
-   * accessibly on a validation failure and issuing the redirect on success —
-   * this package has no theme to render with, and must not invent one.
+   * Resolves every `file` field this request can answer: a real upload
+   * (sniffed against `field.acceptCategories`/`maxSizeBytes` and stored,
+   * fiche 47 task 3) or a value carried forward from an earlier multi-step
+   * page as a *signed* token inside `_accumulated` (fiche 47 task 2).
+   * Mutates `raw` in place — the only place in this whole flow that ever
+   * sees actual file bytes. Returns the storage keys freshly written this
+   * call, so the caller can delete them if the rest of the request later
+   * fails (never a value carried from an earlier, already-accepted step —
+   * only what this exact call itself just stored).
    *
-   * No actor check: this route is reached by an anonymous visitor by
-   * design. Its own defences (honeypot, minimum fill delay, per-IP rate
-   * limit, full server-side validation) are what stand in for one.
+   * **Trust boundary, load-bearing**: a security review of this function
+   * found that a plain JSON submission (`Content-Type: application/json`)
+   * could hand this a `{filename, mimeType, size, storageKey}` object
+   * *directly* as the field's value — no multipart upload at all — and the
+   * old code trusted it outright, since `isFormFileValue` only checks
+   * shape. That let an anonymous visitor claim any `storageKey` exists
+   * without ever sending a byte. The fix: the *only* two ways a `file`
+   * field's value survives to `validateSubmission` are (1) a real upload
+   * this exact call just sniffed and stored, or (2) a token this exact
+   * router previously signed with `signFormFileToken` — verified here with
+   * `verifyFormFileToken`, never a bare shape check on client-supplied
+   * text. Anything else for a `file` field, including a raw object, is
+   * dropped; `validateSubmission`'s own required-ness check then refuses
+   * the submission honestly rather than this function refusing silently.
+   */
+  async function resolveFileFields(
+    definition: FormDefinition,
+    request: RestRequest,
+    raw: Record<string, unknown>,
+  ): Promise<readonly string[]> {
+    const multipart = isMultipartFormData(request.body) ? request.body : null
+    const writtenKeys: string[] = []
+
+    for (const field of definition.fields) {
+      if (field.kind !== 'file') continue
+
+      const uploaded = multipart?.files.find((file) => file.fieldName === field.name)
+      if (uploaded !== undefined) {
+        if (options.storage === undefined) {
+          throw new CogentaError({
+            code: 'FORM_FILE_REJECTED',
+            message: `This form's "${field.name}" field cannot accept a file — no storage is configured for this site.`,
+            hint: 'Ask an operator to configure storage before enabling a file field.',
+            details: { field: field.name },
+          })
+        }
+        const category = assertAllowedFormFile(field, uploaded.data)
+        const storageKey = `forms/${definition.id}/${randomUUID()}/${sanitiseFileName(uploaded.filename)}`
+        await options.storage.put(storageKey, Buffer.from(uploaded.data), {
+          contentType: contentTypeForCategory(category),
+        })
+        writtenKeys.push(storageKey)
+        raw[field.name] = {
+          filename: uploaded.filename,
+          mimeType: contentTypeForCategory(category),
+          size: uploaded.data.length,
+          storageKey,
+        }
+        continue
+      }
+
+      const carried = raw[field.name]
+      if (
+        typeof carried === 'string' &&
+        carried.trim() !== '' &&
+        options.fileSigningSecret !== undefined
+      ) {
+        const verified = verifyFormFileToken(
+          options.fileSigningSecret,
+          { formId: definition.id, fieldName: field.name },
+          carried,
+        )
+        if (verified !== null) {
+          raw[field.name] = verified
+          continue
+        }
+      }
+      // A raw object, an unsigned/mis-signed string, or nothing at all —
+      // never trusted. Deleted rather than left as-is so `isFormFileValue`
+      // in `validate.ts` cannot be reached with attacker-controlled shape.
+      delete raw[field.name]
+    }
+
+    return writtenKeys
+  }
+
+  function firstCaptchaToken(fields: Readonly<Record<string, unknown>>): string | undefined {
+    const value = fields['cf-turnstile-response'] ?? fields['_captchaToken']
+    return typeof value === 'string' ? value : undefined
+  }
+
+  /**
+   * Always answers JSON — the same discipline `createSearchRouter` follows,
+   * with `@cogenta/cli`'s `forms-page.ts` as the public HTML wrapper around
+   * it. No actor check: this route is reached by an anonymous visitor by
+   * design.
+   *
+   * Fiche 47 task 2's multi-step flow lives entirely here: an intermediate
+   * step never calls `forms.submissions.submit` (so it is never itself
+   * validated against required-ness — deliberate, see `types.ts`'s own
+   * `FormStepDefinition` doc) and answers `status: 'step'` instead of a real
+   * submission; the final step merges everything accumulated so far and
+   * runs the exact same single-page path this route already had.
    */
   async function handleSubmit(
     request: RestRequest,
@@ -268,10 +404,12 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
   ): Promise<RestResponse> {
     if (method !== 'POST') return methodNotAllowed(['POST'])
 
-    const body = asRecord(request.body ?? {})
+    const textFields: Record<string, unknown> = isMultipartFormData(request.body)
+      ? { ...request.body.fields }
+      : asRecord(request.body ?? {})
 
-    checkHoneypot(body)
-    checkFillDelay(body, now)
+    checkHoneypot(textFields)
+    checkFillDelay(textFields, now)
 
     const ipHash = clientIp === '' || clientIp === 'unknown' ? null : hashIp(clientIp)
     await checkSubmitRateLimit(options.rateLimit, formName, ipHash)
@@ -285,40 +423,135 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
       })
     }
 
-    const submission = await forms.submissions.submit(formName, body, {
-      ip: ipHash,
-      referrer: request.headers?.['referer'] ?? null,
-      userAgent: request.headers?.['user-agent'] ?? null,
-    })
+    const stepsCount = definition.steps.length
+    const isMultiStep = stepsCount > 1
 
-    if (options.emailTransport !== undefined) {
-      await notifyNewSubmission({
-        transport: options.emailTransport,
-        definition,
-        submission,
-        adminUrl: `${options.adminUrl}/form-submissions/${submission.id}`,
-      }).catch(() => undefined)
-
-      const emailField = definition.fields.find((field) => field.kind === 'email')
-      const recipient = emailField === undefined ? undefined : submission.values[emailField.name]
-      if (typeof recipient === 'string' && recipient !== '') {
-        await sendAutoresponder({
-          transport: options.emailTransport,
-          definition,
-          recipientEmail: recipient,
-          rateLimit: options.rateLimit,
-        }).catch(() => undefined)
+    let accumulated: Record<string, unknown> = {}
+    if (isMultiStep) {
+      const rawAccumulated = textFields['_accumulated']
+      if (typeof rawAccumulated === 'string' && rawAccumulated.trim() !== '') {
+        try {
+          const parsed: unknown = JSON.parse(rawAccumulated)
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            accumulated = parsed as Record<string, unknown>
+          }
+        } catch {
+          // A tampered/corrupted _accumulated is treated as empty — the
+          // fields this very request carries still apply, and the final
+          // validation pass will refuse anything genuinely missing.
+        }
       }
     }
 
-    return jsonResponse(201, {
-      data: {
-        id: submission.id,
-        status: 'submitted',
-        redirectTo: definition.redirectTo,
-        confirmationMessage: definition.confirmationMessage,
-      },
-    })
+    const merged: Record<string, unknown> = { ...accumulated, ...textFields }
+    delete merged['_accumulated']
+
+    const writtenFileKeys = await resolveFileFields(definition, request, merged)
+
+    // A security review's second finding: a real file this call just wrote
+    // to storage must not become an orphan if anything after this point
+    // fails (a bad CAPTCHA, a missing required field on another step) — an
+    // anonymous, rate-limited-but-not-zero route is still a route, and
+    // "write first, maybe never finish the request" is a real disk-fill
+    // vector across enough attempts. Never touches a key carried forward
+    // from an earlier, already-accepted step (`writtenFileKeys` only ever
+    // holds what *this* call itself stored).
+    async function cleanupWrittenFiles(): Promise<void> {
+      if (options.storage === undefined) return
+      for (const key of writtenFileKeys) {
+        await options.storage.delete(key).catch(() => undefined)
+      }
+    }
+
+    const rawStep = Number(textFields['_step'] ?? 0)
+    const stepIndex = Number.isInteger(rawStep) && rawStep >= 0 ? rawStep : 0
+    const isFinalStep = !isMultiStep || stepIndex >= stepsCount - 1
+
+    if (isMultiStep && !isFinalStep) {
+      const carried: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(merged)) {
+        if (key.startsWith('_') && key !== '_ts') continue
+        const field = definition.fields.find((candidate) => candidate.name === key)
+        if (field?.kind === 'file') {
+          // Never carry a raw file value forward as plain JSON (that is
+          // exactly the forgeable shape the security review flagged) — sign
+          // it, or drop it when signing is not configured for this site.
+          if (isFormFileValue(value) && options.fileSigningSecret !== undefined) {
+            carried[key] = signFormFileToken(
+              options.fileSigningSecret,
+              { formId: definition.id, fieldName: field.name },
+              value,
+            )
+          }
+          continue
+        }
+        carried[key] = value
+      }
+      return jsonResponse(202, {
+        data: {
+          status: 'step',
+          formName: definition.name,
+          nextStep: stepIndex + 1,
+          ts: typeof textFields['_ts'] === 'string' ? textFields['_ts'] : String(now()),
+          values: carried,
+        },
+      })
+    }
+
+    try {
+      await verifyCaptcha({
+        captcha: definition.captcha,
+        token: firstCaptchaToken(textFields),
+        remoteIp: clientIp,
+      })
+
+      const submission = await forms.submissions.submit(formName, merged, {
+        ip: ipHash,
+        referrer: request.headers?.['referer'] ?? null,
+        userAgent: request.headers?.['user-agent'] ?? null,
+      })
+
+      if (options.emailTransport !== undefined) {
+        await notifyNewSubmission({
+          transport: options.emailTransport,
+          definition,
+          submission,
+          adminUrl: `${options.adminUrl}/form-submissions/${submission.id}`,
+        }).catch(() => undefined)
+
+        const emailField = definition.fields.find((field) => field.kind === 'email')
+        const recipient = emailField === undefined ? undefined : submission.values[emailField.name]
+        if (typeof recipient === 'string' && recipient !== '') {
+          await sendAutoresponder({
+            transport: options.emailTransport,
+            definition,
+            recipientEmail: recipient,
+            rateLimit: options.rateLimit,
+          }).catch(() => undefined)
+        }
+      }
+
+      if (options.channelRegistry !== undefined) {
+        await sendChannelNotifications({
+          registry: options.channelRegistry,
+          definition,
+          submission,
+          adminUrl: `${options.adminUrl}/form-submissions/${submission.id}`,
+        }).catch(() => undefined)
+      }
+
+      return jsonResponse(201, {
+        data: {
+          id: submission.id,
+          status: 'submitted',
+          redirectTo: definition.redirectTo,
+          confirmationMessage: definition.confirmationMessage,
+        },
+      })
+    } catch (error) {
+      await cleanupWrittenFiles()
+      throw error
+    }
   }
 
   // ---------------------------------------------------------------- submissions
@@ -338,11 +571,17 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
       const status = typeof query['status'] === 'string' ? query['status'] : undefined
       const cursor = typeof query['cursor'] === 'string' ? query['cursor'] : undefined
       const limit = typeof query['limit'] === 'string' ? Number(query['limit']) : undefined
+      const from = typeof query['from'] === 'string' ? query['from'] : undefined
+      const to = typeof query['to'] === 'string' ? query['to'] : undefined
+      const search = typeof query['q'] === 'string' ? query['q'] : undefined
       const result = await forms.submissions.list({
         ...(formId === undefined ? {} : { formId }),
         ...(status === undefined ? {} : { status: status as never }),
         ...(cursor === undefined ? {} : { cursor }),
         ...(limit === undefined || Number.isNaN(limit) ? {} : { limit }),
+        ...(from === undefined ? {} : { from }),
+        ...(to === undefined ? {} : { to }),
+        ...(search === undefined ? {} : { query: search }),
       })
       return jsonResponse(200, { data: result.items, nextCursor: result.nextCursor })
     }
@@ -406,6 +645,22 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
       })
     }
 
+    if (rest.length === 2 && rest[1] === 'notes') {
+      const submissionId = rest[0] as string
+      if (method === 'GET') {
+        return jsonResponse(200, { data: await forms.submissions.listNotes(submissionId) })
+      }
+      if (method === 'POST') {
+        const body = asRecord(request.body)
+        const note = await forms.submissions.addNote(submissionId, stringField(body, 'body'), {
+          id: actor.id,
+          label: actor.id ?? 'admin',
+        })
+        return jsonResponse(201, { data: note })
+      }
+      return methodNotAllowed(['GET', 'POST'])
+    }
+
     if (rest.length === 1) {
       const id = rest[0] as string
       if (method === 'GET') {
@@ -444,4 +699,81 @@ function submissionNotFound(id: string): CogentaError {
     message: `No submission with id "${id}".`,
     hint: 'It may have been deleted.',
   })
+}
+
+export interface StreamSubmissionsCsvFilters {
+  readonly formId?: string
+  readonly status?: string
+  readonly from?: string
+  readonly to?: string
+  readonly query?: string
+}
+
+const CSV_EXPORT_PAGE_SIZE = 500
+// Bounds the column-discovery pre-pass for a cross-form export (see below) —
+// the same "operator-triggered, never a hot path" cap `MAX_QUERY_SCAN_ROWS`
+// already documents in `@cogenta/forms`'s `store.ts`.
+const CSV_COLUMN_SCAN_ROWS = 2_000
+
+async function* paginate(
+  forms: FormStore,
+  filters: StreamSubmissionsCsvFilters,
+  limit: number,
+): AsyncGenerator<readonly FormSubmission[]> {
+  let cursor: string | undefined
+  for (;;) {
+    const page = await forms.submissions.list({
+      ...filters,
+      status: filters.status as never,
+      limit,
+      ...(cursor === undefined ? {} : { cursor }),
+    })
+    yield page.items
+    if (page.nextCursor === null) return
+    cursor = page.nextCursor
+  }
+}
+
+/**
+ * Task 9 — the server-streamed CSV export, reusing `csvHeaderRow`/
+ * `csvSubmissionRow` (which reuse `csvField`'s CWE-1236 guard — the
+ * non-regression this task explicitly requires, checked in
+ * `packages/forms/test/csv.test.ts`). Exported for `@cogenta/cli`'s
+ * `serve.ts`, which streams the HTTP response directly (outside
+ * `RestResponse`'s JSON-only shape — same reasoning as `/api/media/{id}/file`).
+ *
+ * A CSV header has to be fixed before the first row is written, which is at
+ * odds with "stream, never buffer the whole thing": for a single form
+ * (`filters.formId` set — the common case, `form-submissions.tsx` always
+ * filters to one when exporting) the column set is simply that form's own
+ * field names, no scan needed. Exporting across every form at once has no
+ * such fixed set, so it pays a bounded pre-pass (`CSV_COLUMN_SCAN_ROWS`) to
+ * discover columns before the real, unbounded streaming pass — a value
+ * outside that pre-pass's window contributes a column-less cell rather than
+ * growing the header mid-stream, which is the honest limit of not buffering
+ * the whole export.
+ */
+export async function* streamSubmissionsCsv(
+  forms: FormStore,
+  filters: StreamSubmissionsCsvFilters,
+): AsyncGenerator<string> {
+  let columns: readonly string[]
+  if (filters.formId !== undefined) {
+    const definition = await forms.definitions.read(filters.formId)
+    columns = definition === null ? [] : definition.fields.map((field) => field.name)
+  } else {
+    const discovered = new Set<string>()
+    let scanned = 0
+    for await (const page of paginate(forms, filters, CSV_EXPORT_PAGE_SIZE)) {
+      for (const name of csvValueColumns(page)) discovered.add(name)
+      scanned += page.length
+      if (scanned >= CSV_COLUMN_SCAN_ROWS) break
+    }
+    columns = [...discovered]
+  }
+
+  yield csvHeaderRow(columns)
+  for await (const page of paginate(forms, filters, CSV_EXPORT_PAGE_SIZE)) {
+    for (const submission of page) yield csvSubmissionRow(submission, columns)
+  }
 }

@@ -12,15 +12,26 @@ import { TABLES } from './tables.js'
 import type {
   AutoresponderConfig,
   CreateFormDefinitionInput,
+  FormCaptchaConfig,
   FormDefinition,
   FormFieldDefinition,
+  FormFileValue,
+  FormNotifyChannel,
+  FormStepDefinition,
   FormSubmission,
+  FormSubmissionNote,
   FormSubmissionStatus,
   RecordedConsent,
   UpdateFormDefinitionInput,
 } from './types.js'
 import { emailValueOf, FORM_FIELD_KINDS } from './types.js'
-import { validateDefinitionFields, validateSubmission } from './validate.js'
+import {
+  validateCaptchaConfig,
+  validateDefinitionFields,
+  validateFormSteps,
+  validateNotifyChannels,
+  validateSubmission,
+} from './validate.js'
 
 // Reserved: `forms-router.ts` mounts submission management under
 // `/api/forms/submissions/*`, so a form literally named "submissions" would
@@ -31,8 +42,16 @@ const RESERVED_NAMES = new Set(['submissions'])
 const DEFAULT_RETAIN_DAYS = 180
 const DEFAULT_CONFIRMATION = 'Thank you — your message has been received.'
 const DEFAULT_AUTORESPONDER: AutoresponderConfig = { enabled: false }
+const DEFAULT_CAPTCHA: FormCaptchaConfig = { enabled: false }
 const SUBMISSION_STATUSES: readonly FormSubmissionStatus[] = ['new', 'read', 'archived', 'spam']
 const DAY_MS = 24 * 60 * 60 * 1000
+// Fiche 47 task 7: a text search across `values_json`/`consents_json` is a
+// full application-side scan (the same honest tradeoff `searchByEmail`
+// already makes) rather than a dialect-specific `LIKE`, whose case
+// sensitivity differs across SQLite/Postgres/MySQL. Bounded so an
+// operator-triggered search on a very large form cannot become an unbounded
+// read — this route is never a hot path.
+const MAX_QUERY_SCAN_ROWS = 5_000
 
 function slugName(raw: string): string {
   return raw
@@ -53,8 +72,20 @@ interface DefinitionRow {
   notify_emails: unknown
   autoresponder: unknown
   retain_days: unknown
+  // Grown in place (`ensureFormsTables`'s `alter table` block) — `null` on
+  // any row written before fiche 47, which is why these three decode with a
+  // fallback rather than through `toJson`'s "this row was not written by
+  // this package" refusal.
+  steps: unknown
+  notify_channels: unknown
+  captcha: unknown
   created_at: unknown
   updated_at: unknown
+}
+
+function toJsonOrDefault<T>(value: unknown, what: string, fallback: T): T {
+  if (value === null || value === undefined || value === '') return fallback
+  return toJson<T>(value, what)
 }
 
 function decodeDefinition(row: DefinitionRow): FormDefinition {
@@ -69,6 +100,13 @@ function decodeDefinition(row: DefinitionRow): FormDefinition {
     notifyEmails: toJson<readonly string[]>(row.notify_emails, 'form.notify_emails'),
     autoresponder: toJson<AutoresponderConfig>(row.autoresponder, 'form.autoresponder'),
     retainDays: toInt(row.retain_days, 'form.retain_days'),
+    steps: toJsonOrDefault<readonly FormStepDefinition[]>(row.steps, 'form.steps', []),
+    notifyChannels: toJsonOrDefault<readonly FormNotifyChannel[]>(
+      row.notify_channels,
+      'form.notify_channels',
+      [],
+    ),
+    captcha: toJsonOrDefault<FormCaptchaConfig>(row.captcha, 'form.captcha', DEFAULT_CAPTCHA),
     createdAt: toText(row.created_at, 'form.created_at'),
     updatedAt: toText(row.updated_at, 'form.updated_at'),
   }
@@ -102,12 +140,50 @@ function decodeSubmission(row: SubmissionRow): FormSubmission {
   }
 }
 
+interface NoteRow {
+  id: unknown
+  submission_id: unknown
+  author_id: unknown
+  author_label: unknown
+  body: unknown
+  created_at: unknown
+}
+
+function decodeNote(row: NoteRow): FormSubmissionNote {
+  return {
+    id: toText(row.id, 'note.id'),
+    submissionId: toText(row.submission_id, 'note.submission_id'),
+    authorId: toNullableText(row.author_id),
+    authorLabel: toText(row.author_label, 'note.author_label'),
+    body: toText(row.body, 'note.body'),
+    createdAt: toText(row.created_at, 'note.created_at'),
+  }
+}
+
 function formUnknown(name: string): CogentaError {
   return new CogentaError({
     code: 'FORM_UNKNOWN',
     message: `No form named "${name}".`,
     hint: 'Check the form name, or create it first.',
   })
+}
+
+/** A submission value as plain text — a file field contributes its filename, never its bytes. */
+function submissionValueText(value: string | readonly string[] | FormFileValue): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.join(' ')
+  return (value as FormFileValue).filename
+}
+
+/** Task 7's text search: every value and every consent's recorded wording, matched case-insensitively. */
+function submissionMatchesQuery(submission: FormSubmission, needleLower: string): boolean {
+  for (const value of Object.values(submission.values)) {
+    if (submissionValueText(value).toLowerCase().includes(needleLower)) return true
+  }
+  for (const consent of submission.consents) {
+    if (consent.text.toLowerCase().includes(needleLower)) return true
+  }
+  return false
 }
 
 export interface SubmitOptions {
@@ -121,6 +197,18 @@ export interface ListSubmissionsOptions {
   readonly status?: FormSubmissionStatus
   readonly limit?: number
   readonly cursor?: string
+  /** Task 7 — an ISO instant; only submissions at or after it. Applied in SQL, same as `cursor`. */
+  readonly from?: string
+  /** Task 7 — an ISO instant; only submissions at or before it. */
+  readonly to?: string
+  /**
+   * Task 7 — free text, matched case-insensitively against a submission's
+   * own field values and consent text. Applied in application code after the
+   * SQL filters above narrow the scan (see `MAX_QUERY_SCAN_ROWS`'s own
+   * comment) — the honest cost of a form whose values are free-form JSON
+   * with no dialect-portable full-text index.
+   */
+  readonly query?: string
 }
 
 export interface ListSubmissionsResult {
@@ -139,6 +227,8 @@ export interface FormDefinitionStore {
   list(): Promise<readonly FormDefinition[]>
   update(id: string, input: UpdateFormDefinitionInput): Promise<FormDefinition>
   remove(id: string): Promise<void>
+  /** Task 11 — a real, independent copy: its own id, an available name derived from the original's, inactive by default so a duplicate never starts silently accepting submissions, and no submissions carried over. */
+  duplicate(id: string): Promise<FormDefinition>
 }
 
 export interface FormSubmissionStore {
@@ -161,6 +251,13 @@ export interface FormSubmissionStore {
   deleteByEmail(email: string): Promise<number>
   /** Removes submissions older than each form's own `retainDays` (ADR-0022's `purgeExpired` model, applied to submissions rather than content). */
   purgeExpired(): Promise<PurgeReport>
+  /** Task 8 — an operator's own note. Never shown to the visitor, never included in a CSV export. */
+  addNote(
+    submissionId: string,
+    body: string,
+    author: { id: string | null; label: string },
+  ): Promise<FormSubmissionNote>
+  listNotes(submissionId: string): Promise<readonly FormSubmissionNote[]>
 }
 
 export interface FormStore {
@@ -172,6 +269,7 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
   const d = db.dialect
   const definitionsTable = identifier(TABLES.definitions, d)
   const submissionsTable = identifier(TABLES.submissions, d)
+  const notesTable = identifier(TABLES.submissionNotes, d)
 
   async function readDefinitionRow(id: string): Promise<FormDefinition | null> {
     const result = await db.query<DefinitionRow>(
@@ -216,6 +314,9 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
         }
       }
       validateDefinitionFields(input.fields)
+      validateFormSteps(input.fields, input.steps ?? [])
+      validateNotifyChannels(input.notifyChannels ?? [])
+      validateCaptchaConfig(input.captcha ?? DEFAULT_CAPTCHA)
 
       if ((await readDefinitionByNameRow(name)) !== null) {
         throw new CogentaError({
@@ -230,12 +331,15 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
       await db.query(sql`
         insert into ${definitionsTable}
           (id, name, label, fields, active, confirmation_message, redirect_to,
-           notify_emails, autoresponder, retain_days, created_at, updated_at)
+           notify_emails, autoresponder, retain_days, steps, notify_channels, captcha,
+           created_at, updated_at)
         values (${id}, ${name}, ${input.label}, ${JSON.stringify(input.fields)},
                 ${fromBool(input.active ?? true, d)}, ${input.confirmationMessage ?? DEFAULT_CONFIRMATION},
                 ${input.redirectTo ?? null}, ${JSON.stringify(input.notifyEmails ?? [])},
                 ${JSON.stringify(input.autoresponder ?? DEFAULT_AUTORESPONDER)},
-                ${input.retainDays ?? DEFAULT_RETAIN_DAYS}, ${at}, ${at})`)
+                ${input.retainDays ?? DEFAULT_RETAIN_DAYS}, ${JSON.stringify(input.steps ?? [])},
+                ${JSON.stringify(input.notifyChannels ?? [])},
+                ${JSON.stringify(input.captcha ?? DEFAULT_CAPTCHA)}, ${at}, ${at})`)
 
       const created = await readDefinitionRow(id)
       if (created === null) {
@@ -281,6 +385,14 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
         }
         validateDefinitionFields(nextFields)
       }
+      const nextSteps = input.steps ?? existing.steps
+      if (input.steps !== undefined || input.fields !== undefined) {
+        validateFormSteps(nextFields, nextSteps)
+      }
+      const nextNotifyChannels = input.notifyChannels ?? existing.notifyChannels
+      if (input.notifyChannels !== undefined) validateNotifyChannels(nextNotifyChannels)
+      const nextCaptcha = input.captcha ?? existing.captcha
+      if (input.captcha !== undefined) validateCaptchaConfig(nextCaptcha)
 
       let nextName = existing.name
       if (input.name !== undefined) {
@@ -314,6 +426,9 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
           notify_emails = ${JSON.stringify(input.notifyEmails ?? existing.notifyEmails)},
           autoresponder = ${JSON.stringify(input.autoresponder ?? existing.autoresponder)},
           retain_days = ${input.retainDays ?? existing.retainDays},
+          steps = ${JSON.stringify(nextSteps)},
+          notify_channels = ${JSON.stringify(nextNotifyChannels)},
+          captcha = ${JSON.stringify(nextCaptcha)},
           updated_at = ${at}
         where id = ${id}`)
 
@@ -331,6 +446,43 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
     remove: async (id) => {
       await db.query(sql`delete from ${submissionsTable} where form_id = ${id}`)
       await db.query(sql`delete from ${definitionsTable} where id = ${id}`)
+    },
+
+    duplicate: async (id) => {
+      const existing = await readDefinitionRow(id)
+      if (existing === null) {
+        throw new CogentaError({
+          code: 'FORM_UNKNOWN',
+          message: `No form with id "${id}".`,
+          hint: 'It may have been deleted.',
+        })
+      }
+
+      let candidate = `${existing.name}-copy`
+      let suffix = 2
+      while ((await readDefinitionByNameRow(candidate)) !== null) {
+        candidate = `${existing.name}-copy-${suffix}`
+        suffix += 1
+      }
+
+      return definitions.create({
+        name: candidate,
+        label: `${existing.label} (copy)`,
+        fields: existing.fields,
+        // Never active: a duplicate must not start accepting real
+        // submissions before an operator has reviewed the copy (its route,
+        // its notifications, its CAPTCHA secret) — the same caution
+        // `active: true` by default elsewhere would defeat.
+        active: false,
+        confirmationMessage: existing.confirmationMessage,
+        redirectTo: existing.redirectTo,
+        notifyEmails: existing.notifyEmails,
+        autoresponder: existing.autoresponder,
+        retainDays: existing.retainDays,
+        steps: existing.steps,
+        notifyChannels: existing.notifyChannels,
+        captcha: existing.captcha,
+      })
     },
   }
 
@@ -378,16 +530,28 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
       if (options.formId !== undefined) clauses.push(sql`form_id = ${options.formId}`)
       if (options.status !== undefined) clauses.push(sql`status = ${options.status}`)
       if (options.cursor !== undefined) clauses.push(sql`submitted_at < ${options.cursor}`)
+      if (options.from !== undefined) clauses.push(sql`submitted_at >= ${options.from}`)
+      if (options.to !== undefined) clauses.push(sql`submitted_at <= ${options.to}`)
 
       let where: SqlFragment = unsafeRaw('')
       for (const [index, clause] of clauses.entries()) {
         where = index === 0 ? sql`where ${clause}` : sql`${where} and ${clause}`
       }
 
+      const needle = options.query?.trim().toLowerCase() ?? ''
+      const hasQuery = needle !== ''
+      // With a text query, the row count after filtering is not knowable in
+      // SQL, so the cheap `limit + 1` "is there another page" trick is
+      // replaced by pulling a bounded superset and filtering/paginating in
+      // memory (see `MAX_QUERY_SCAN_ROWS`'s own comment above).
+      const sqlLimit = hasQuery ? MAX_QUERY_SCAN_ROWS : limit + 1
+
       const result = await db.query<SubmissionRow>(
-        sql`select * from ${submissionsTable} ${where} order by submitted_at desc limit ${limit + 1}`,
+        sql`select * from ${submissionsTable} ${where} order by submitted_at desc limit ${sqlLimit}`,
       )
-      const rows = result.rows.map(decodeSubmission)
+      let rows = result.rows.map(decodeSubmission)
+      if (hasQuery) rows = rows.filter((submission) => submissionMatchesQuery(submission, needle))
+
       const hasMore = rows.length > limit
       const items = hasMore ? rows.slice(0, limit) : rows
       return { items, nextCursor: hasMore ? (items[items.length - 1]?.submittedAt ?? null) : null }
@@ -432,12 +596,14 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
     },
 
     remove: async (id) => {
+      await db.query(sql`delete from ${notesTable} where submission_id = ${id}`)
       await db.query(sql`delete from ${submissionsTable} where id = ${id}`)
     },
 
     bulkRemove: async (ids) => {
       let count = 0
       for (const id of ids) {
+        await db.query(sql`delete from ${notesTable} where submission_id = ${id}`)
         const result = await db.query(sql`delete from ${submissionsTable} where id = ${id}`)
         count += result.rowsAffected
       }
@@ -481,6 +647,7 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
       const matches = await submissions.searchByEmail(email)
       let count = 0
       for (const match of matches) {
+        await db.query(sql`delete from ${notesTable} where submission_id = ${match.id}`)
         const result = await db.query(sql`delete from ${submissionsTable} where id = ${match.id}`)
         count += result.rowsAffected
       }
@@ -492,12 +659,59 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
       let purged = 0
       for (const form of forms) {
         const cutoff = new Date(now() - form.retainDays * DAY_MS).toISOString()
+        const expiredResult = await db.query<{ id: unknown }>(
+          sql`select id from ${submissionsTable} where form_id = ${form.id} and submitted_at < ${cutoff}`,
+        )
+        for (const row of expiredResult.rows) {
+          await db.query(sql`delete from ${notesTable} where submission_id = ${row.id}`)
+        }
         const result = await db.query(
           sql`delete from ${submissionsTable} where form_id = ${form.id} and submitted_at < ${cutoff}`,
         )
         purged += result.rowsAffected
       }
       return { purged }
+    },
+
+    addNote: async (submissionId, body, author) => {
+      const submission = await readSubmissionRow(submissionId)
+      if (submission === null) {
+        throw new CogentaError({
+          code: 'FORM_SUBMISSION_NOT_FOUND',
+          message: `No submission with id "${submissionId}".`,
+          hint: 'It may have been deleted.',
+        })
+      }
+      const trimmed = body.trim()
+      if (trimmed === '') {
+        throw new CogentaError({
+          code: 'FORM_SUBMISSION_INVALID',
+          message: 'A note needs some text.',
+          hint: 'Write something before saving the note.',
+        })
+      }
+      const id = newId(now)
+      const at = new Date(now()).toISOString()
+      await db.query(sql`
+        insert into ${notesTable} (id, submission_id, author_id, author_label, body, created_at)
+        values (${id}, ${submissionId}, ${author.id}, ${author.label}, ${trimmed}, ${at})`)
+      const result = await db.query<NoteRow>(sql`select * from ${notesTable} where id = ${id}`)
+      const row = result.rows[0]
+      if (row === undefined) {
+        throw new CogentaError({
+          code: 'INTERNAL',
+          message: 'The note was not stored.',
+          hint: 'Check that the forms tables exist (ensureFormsTables).',
+        })
+      }
+      return decodeNote(row)
+    },
+
+    listNotes: async (submissionId) => {
+      const result = await db.query<NoteRow>(
+        sql`select * from ${notesTable} where submission_id = ${submissionId} order by created_at asc`,
+      )
+      return result.rows.map(decodeNote)
     },
   }
 

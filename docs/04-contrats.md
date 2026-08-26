@@ -968,8 +968,12 @@ champ optionnel est mineur ; changer le sens d'un statut ou la forme du fil est 
 
 ## Contrat G — Formulaires
 
-> **Acté (ADR-0026), non figé.** Ce contrat repose sur l'**ADR-0026**, actée dans
-> `docs/03-decisions.md`. La fiche 16 est son premier et seul consommateur.
+> **Acté (ADR-0026, amendement rédigé en ADR-0031, en attente d'insertion humaine dans
+> `docs/03-decisions.md`), non figé.** Ce contrat repose sur l'**ADR-0026**, actée dans
+> `docs/03-decisions.md` ; son renoncement initial sur le champ `file` et les champs
+> conditionnels est levé par l'**ADR-0031** (texte rédigé, remis à l'humain — voir
+> `docs/plans/47-formulaires-et-soumissions-premium.md` §8). La fiche 16 est son premier
+> consommateur, la fiche 47 le second.
 
 ### Pourquoi un contrat séparé et pas une extension du contrat A
 
@@ -984,26 +988,44 @@ ordre que ce que le contrat A a jamais eu à porter.
 ```
 FormDefinition  nom unique, libellé, liste de champs typés, actif, message de
                 confirmation ou redirection, destinataires de notification,
-                accusé de réception (désactivé par défaut), rétention (jours)
+                accusé de réception (désactivé par défaut), rétention (jours),
+                étapes (fiche 47), canaux de notification (fiche 47),
+                CAPTCHA (fiche 47, désactivé par défaut)
 FormSubmission  formulaire, valeurs, consentements horodatés (texte figé au
                 moment du recueil), statut (nouveau | lu | archivé |
                 indésirable), IP hachée (jamais en clair), référent, horodatage
+FormSubmissionNote  note d'opérateur (fiche 47) — jamais montrée au visiteur,
+                jamais exportée
 ```
 
-Ni l'un ni l'autre ne porte `status` de contenu, `version`, `translationOf` ni
-`deletedAt`, et aucun ne passe par `ContentStore`.
+Ni `FormDefinition` ni `FormSubmission` ne porte `status` de contenu, `version`,
+`translationOf` ni `deletedAt`, et aucun ne passe par `ContentStore`.
 
 ### Champs
 
-Neuf types, fermés : `text`, `longText`, `email`, `phone`, `number`, `date`,
-`choiceSingle`, `choiceMulti`, `consent`. **Pas de champ `file`** dans cette première
-version — décision délibérée, pour ne pas ouvrir la surface téléversement/antivirus sans
-besoin prouvé (voir le renoncement assumé de l'ADR).
+Dix types, fermés : `text`, `longText`, `email`, `phone`, `number`, `date`,
+`choiceSingle`, `choiceMulti`, `consent`, **`file`** (fiche 47 tâche 3 — réouverture du
+renoncement de l'ADR-0026, tracée en **ADR-0031**, rédigée et en attente d'insertion
+humaine). Un champ `file` restreint sa catégorie acceptée
+(`image`/`pdf`/`document`/`text`, sniffée sur les octets réels, jamais sur le nom de
+fichier ni le `Content-Type` déclaré) et sa taille maximale, plafonnée dans tous les cas
+par un maximum matériel non configurable.
+
+Tout champ, quel que soit son type, peut porter `showIf` (fiche 47 tâche 1) : une
+condition (`field`/`operator`/`value`) évaluée côté serveur contre la soumission brute —
+un champ masqué n'est ni requis ni validé, avec ou sans JavaScript.
 
 Un champ `consent` porte son propre texte (`consentText`), et c'est ce texte exact —
 jamais celui d'aujourd'hui — qui est copié, horodaté, sur chaque soumission qui le coche :
 c'est lui qui a valeur probante, pas la définition du formulaire au moment où on la
 consulte.
+
+### Étapes (fiche 47 tâche 2)
+
+`FormDefinition.steps`, optionnel : chaque champ appartient à exactement une étape.
+Rendu en `<form>` chaînés, aucun cadriciel client — chaque étape intermédiaire répond
+`202 {status:'step', nextStep, values}` sans jamais créer de soumission ; seule l'étape
+finale valide et enregistre, exactement comme un formulaire à page unique.
 
 ### La route publique
 
@@ -1011,9 +1033,14 @@ consulte.
 les commentaires (contrat F). Mêmes exigences : limitation de débit par IP et par
 formulaire, champ piège, délai minimal de remplissage, validation serveur complète
 indépendante du client. Elle **fonctionne sans JavaScript** — un `POST`
-`application/x-www-form-urlencoded` classique — et répond par une redirection vers la
-page de confirmation en cas de succès ; une soumission refusée réaffiche ce que le
-visiteur a tapé, jamais un formulaire vidé.
+`application/x-www-form-urlencoded` classique, ou `multipart/form-data` dès qu'un champ
+`file` est présent — et répond par une redirection vers la page de confirmation en cas de
+succès ; une soumission refusée réaffiche ce que le visiteur a tapé, jamais un formulaire
+vidé. Un CAPTCHA (Cloudflare Turnstile, fiche 47 tâche 10) peut être exigé sur la
+dernière étape — désactivé par défaut, jamais obligatoire pour un formulaire qui ne l'a
+pas explicitement activé, et seule fonctionnalité de ce contrat qui suppose du
+JavaScript (le reste du formulaire continue de fonctionner sans, même sur ce
+formulaire-là).
 
 Arrivée sur une page : une **route dédiée** (`GET /forms/{name}`), rendue par le gabarit
 comme `/search` (L10) — le contrat B est figé et un bloc `form` exige une RFC, ouverte en
@@ -1023,8 +1050,9 @@ parallèle sans bloquer cette fiche.
 
 Rétention configurable par formulaire (`retainDays`), purgée automatiquement sur le
 modèle exact d'ADR-0022 (`retainDays`/`purgeExpired`, appliqué aux soumissions plutôt
-qu'au contenu). Recherche et effacement par adresse e-mail à travers toutes les
-soumissions — le minimum qu'exige une demande d'export ou de suppression RGPD.
+qu'au contenu). Recherche (par e-mail, ou plein texte + plage de dates depuis fiche 47
+tâche 7) et effacement par adresse e-mail à travers toutes les soumissions — le minimum
+qu'exige une demande d'export ou de suppression RGPD.
 
 ### Notifications
 
@@ -1032,13 +1060,20 @@ Réutilisent l'adaptateur e-mail existant de `@cogenta/channels` (jamais un seco
 transport) et son format `AlertChannelMessage`. L'accusé de réception au visiteur est
 **désactivé par défaut** et limité en débit indépendamment de la limite de soumission :
 un e-mail envoyé au nom du site vers une adresse fournie par un anonyme, sans plafond,
-est un relais de spam en puissance.
+est un relais de spam en puissance. Depuis la fiche 47 tâche 4, `FormDefinition.notifyChannels`
+peut nommer des canaux supplémentaires (Slack/Discord/Telegram/webhook), tous réutilisant
+le `ChannelRegistry` déjà existant de `@cogenta/channels` — jamais un second système de
+notification.
 
 ### Versionnement
 
-`forms@1.0` (ADR-0026, non figé). Ajouter un type de champ ou un statut de soumission
-est mineur ; changer le sens d'un statut existant ou la forme d'un consentement
-enregistré est majeur.
+`forms@1.1` (ADR-0026 amendement rédigé en ADR-0031, en attente d'insertion humaine, non
+figé) — passé de `1.0` par la fiche 47 :
+champ `file`, `showIf`, `steps`, `notifyChannels`, `captcha`, notes d'opérateur, tous
+additifs, aucune forme existante changée de sens. Ajouter un type de champ ou un statut
+de soumission reste
+mineur ; changer le sens d'un statut existant ou la forme d'un consentement enregistré
+reste majeur.
 
 ---
 

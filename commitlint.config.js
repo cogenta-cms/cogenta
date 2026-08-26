@@ -25,6 +25,7 @@ export default {
         'fleet',
         'commerce',
         'comments',
+        'forms',
         'analytics',
         'observability',
         'db',

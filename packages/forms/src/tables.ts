@@ -17,6 +17,7 @@ export const TABLES = {
   definitions: 'cogenta_forms_definitions',
   submissions: 'cogenta_forms_submissions',
   autoresponderSends: 'cogenta_forms_autoresponder_sends',
+  submissionNotes: 'cogenta_forms_submission_notes',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -90,6 +91,36 @@ export async function ensureFormsTables(db: DatabaseHandle): Promise<void> {
       sent_at ${t64} not null
     )`)
 
+  // Fiche 47 task 8 — an operator's own note on a submission, never shown to
+  // the visitor and never exported: a separate table (not a column on the
+  // submission row) because a submission can carry several, each with its
+  // own author and timestamp.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.submissionNotes, d)} (
+      id ${t64} not null primary key,
+      submission_id ${t64} not null,
+      author_id ${t64},
+      author_label ${t255} not null,
+      body ${long} not null,
+      created_at ${t64} not null
+    )`)
+
+  // Fiche 47 tasks 2/4/10 — three columns added to an already-shipped table.
+  // `create table if not exists` above is a no-op against a database that
+  // predates them, so they are grown in place the same way every other
+  // in-place table growth in this codebase is (`menu-tables.ts`'s own
+  // comment says why): failure here means the column already exists, the
+  // only realistic cause once this function has already run once, so it is
+  // swallowed exactly like the index statements below.
+  const columnStatements: SqlFragment[] = [
+    sql`alter table ${identifier(TABLES.definitions, d)} add column ${identifier('steps', d)} ${long}`,
+    sql`alter table ${identifier(TABLES.definitions, d)} add column ${identifier('notify_channels', d)} ${long}`,
+    sql`alter table ${identifier(TABLES.definitions, d)} add column ${identifier('captcha', d)} ${long}`,
+  ]
+  for (const statement of columnStatements) {
+    await db.query(statement).catch(() => undefined)
+  }
+
   await ensureIndexes(db)
 }
 
@@ -100,6 +131,7 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
     ['cogenta_forms_submissions_status', TABLES.submissions, 'status'],
     ['cogenta_forms_submissions_submitted_at', TABLES.submissions, 'submitted_at'],
     ['cogenta_forms_autoresponder_email', TABLES.autoresponderSends, 'email'],
+    ['cogenta_forms_notes_submission', TABLES.submissionNotes, 'submission_id'],
   ]
 
   for (const [name, table, column] of wanted) {

@@ -21,7 +21,12 @@ export function runFormsContract(label: string, open: () => Promise<FormsFixture
         db = fixture.db
         await ensureFormsTables(db)
       }
-      for (const table of [TABLES.submissions, TABLES.definitions, TABLES.autoresponderSends]) {
+      for (const table of [
+        TABLES.submissionNotes,
+        TABLES.submissions,
+        TABLES.definitions,
+        TABLES.autoresponderSends,
+      ]) {
         await db.query({ parts: [`delete from ${quote(table, db.dialect)}`], values: [] })
       }
       clock = Date.parse('2026-01-01T00:00:00.000Z')
@@ -231,6 +236,255 @@ export function runFormsContract(label: string, open: () => Promise<FormsFixture
       expect(await store.submissions.read(old.id)).toBeNull()
       expect(await store.submissions.read(fresh.id)).not.toBeNull()
       void form
+    })
+
+    // ------------------------------------------------------------- fiche 47
+
+    it('never validates or requires a field masked by an unmet showIf condition', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [
+          {
+            name: 'contactMethod',
+            label: 'Contact method',
+            kind: 'choiceSingle',
+            required: true,
+            choices: ['email', 'phone'],
+          },
+          {
+            name: 'phone',
+            label: 'Phone',
+            kind: 'phone',
+            required: true,
+            showIf: { field: 'contactMethod', operator: 'equals', value: 'phone' },
+          },
+        ],
+      })
+
+      // "phone" would normally be required and rejected as malformed — but
+      // its condition is unmet, so it is neither.
+      const submission = await store.submissions.submit('contact', {
+        contactMethod: 'email',
+        phone: 'not-a-phone-number-at-all',
+      })
+      expect(submission.values).toEqual({ contactMethod: 'email' })
+    })
+
+    it('refuses a showIf condition naming an unknown field, at create time', async () => {
+      await expect(
+        store.definitions.create({
+          name: 'contact',
+          label: 'Contact',
+          fields: [
+            {
+              name: 'phone',
+              label: 'Phone',
+              kind: 'phone',
+              required: true,
+              showIf: { field: 'doesNotExist', operator: 'equals', value: 'x' },
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: 'FORM_DEFINITION_INVALID' })
+    })
+
+    it('accepts a submission whose file field carries an already-resolved value', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'attachment', label: 'Attachment', kind: 'file', required: true }],
+      })
+
+      const fileValue = {
+        filename: 'resume.pdf',
+        mimeType: 'application/pdf',
+        size: 1234,
+        storageKey: 'forms/x/y/resume.pdf',
+      }
+      const submission = await store.submissions.submit('contact', { attachment: fileValue })
+      expect(submission.values['attachment']).toEqual(fileValue)
+    })
+
+    it('refuses a file field submitted as a bare string, not a resolved value', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'attachment', label: 'Attachment', kind: 'file', required: true }],
+      })
+      await expect(
+        store.submissions.submit('contact', { attachment: 'not-a-file-value' }),
+      ).rejects.toMatchObject({ code: 'FORM_SUBMISSION_INVALID' })
+    })
+
+    it('validates that every field belongs to exactly one step once a form declares steps', async () => {
+      await expect(
+        store.definitions.create({
+          name: 'contact',
+          label: 'Contact',
+          fields: [
+            { name: 'email', label: 'E-mail', kind: 'email', required: true },
+            { name: 'message', label: 'Message', kind: 'longText', required: true },
+          ],
+          steps: [{ name: 'step1', label: 'Step 1', fieldNames: ['email'] }],
+        }),
+      ).rejects.toMatchObject({ code: 'FORM_STEP_INVALID' })
+    })
+
+    it('accepts a well-formed multi-step definition', async () => {
+      const form = await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [
+          { name: 'email', label: 'E-mail', kind: 'email', required: true },
+          { name: 'message', label: 'Message', kind: 'longText', required: true },
+        ],
+        steps: [
+          { name: 'step1', label: 'Step 1', fieldNames: ['email'] },
+          { name: 'step2', label: 'Step 2', fieldNames: ['message'] },
+        ],
+      })
+      expect(form.steps).toHaveLength(2)
+    })
+
+    it('refuses a notifyChannels entry missing a channel or a target', async () => {
+      await expect(
+        store.definitions.create({
+          name: 'contact',
+          label: 'Contact',
+          fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+          notifyChannels: [{ channel: '', target: 'C123' }],
+        }),
+      ).rejects.toMatchObject({ code: 'FORM_DEFINITION_INVALID' })
+    })
+
+    it('refuses enabling the CAPTCHA without both keys configured', async () => {
+      await expect(
+        store.definitions.create({
+          name: 'contact',
+          label: 'Contact',
+          fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+          captcha: { enabled: true },
+        }),
+      ).rejects.toMatchObject({ code: 'FORM_DEFINITION_INVALID' })
+    })
+
+    it('duplicates a form as an independent, inactive copy with an available name', async () => {
+      const original = await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+        active: true,
+        notifyEmails: ['owner@example.com'],
+      })
+
+      const copy = await store.definitions.duplicate(original.id)
+      expect(copy.id).not.toBe(original.id)
+      expect(copy.name).toBe('contact-copy')
+      expect(copy.active).toBe(false)
+      expect(copy.notifyEmails).toEqual(['owner@example.com'])
+
+      // Editing the original afterwards never touches the copy.
+      await store.definitions.update(original.id, { label: 'Contact (renamed)' })
+      const reread = await store.definitions.read(copy.id)
+      expect(reread?.label).toBe('Contact (copy)')
+    })
+
+    it('picks a fresh available name when duplicating the same form twice', async () => {
+      const original = await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+      })
+      const first = await store.definitions.duplicate(original.id)
+      const second = await store.definitions.duplicate(original.id)
+      expect(first.name).toBe('contact-copy')
+      expect(second.name).toBe('contact-copy-2')
+    })
+
+    it('filters submissions by a date range', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+      })
+      const early = await store.submissions.submit('contact', { email: 'early@example.com' })
+      clock += 10 * 24 * 60 * 60 * 1000
+      const late = await store.submissions.submit('contact', { email: 'late@example.com' })
+
+      const cutoff = new Date(now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+      const result = await store.submissions.list({ from: cutoff })
+      expect(result.items.map((item) => item.id)).toEqual([late.id])
+      void early
+    })
+
+    it('finds a submission by free-text search across its values', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [
+          { name: 'email', label: 'E-mail', kind: 'email', required: true },
+          { name: 'message', label: 'Message', kind: 'longText', required: true },
+        ],
+      })
+      await store.submissions.submit('contact', {
+        email: 'a@example.com',
+        message: 'I need help with billing',
+      })
+      await store.submissions.submit('contact', {
+        email: 'b@example.com',
+        message: 'General question',
+      })
+
+      const result = await store.submissions.list({ query: 'BILLING' })
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]?.values['email']).toBe('a@example.com')
+    })
+
+    it('adds and lists internal notes on a submission, oldest first', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+      })
+      const submission = await store.submissions.submit('contact', { email: 'a@example.com' })
+
+      await store.submissions.addNote(submission.id, 'First note', { id: 'user-1', label: 'Alice' })
+      clock += 1000
+      await store.submissions.addNote(submission.id, 'Second note', { id: 'user-2', label: 'Bob' })
+
+      const notes = await store.submissions.listNotes(submission.id)
+      expect(notes.map((note) => note.body)).toEqual(['First note', 'Second note'])
+      expect(notes[0]?.authorLabel).toBe('Alice')
+    })
+
+    it('refuses an empty note', async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+      })
+      const submission = await store.submissions.submit('contact', { email: 'a@example.com' })
+      await expect(
+        store.submissions.addNote(submission.id, '   ', { id: null, label: 'admin' }),
+      ).rejects.toMatchObject({ code: 'FORM_SUBMISSION_INVALID' })
+    })
+
+    it("removes a submission's notes along with the submission itself", async () => {
+      await store.definitions.create({
+        name: 'contact',
+        label: 'Contact',
+        fields: [{ name: 'email', label: 'E-mail', kind: 'email', required: true }],
+      })
+      const submission = await store.submissions.submit('contact', { email: 'a@example.com' })
+      await store.submissions.addNote(submission.id, 'A note', { id: null, label: 'admin' })
+
+      await store.submissions.remove(submission.id)
+      // Re-adding after the submission is gone must fail loudly, not
+      // silently create an orphaned note.
+      await expect(
+        store.submissions.addNote(submission.id, 'Too late', { id: null, label: 'admin' }),
+      ).rejects.toMatchObject({ code: 'FORM_SUBMISSION_NOT_FOUND' })
     })
   })
 }

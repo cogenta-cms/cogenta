@@ -129,6 +129,37 @@ arrêt, pas dégradation silencieuse. Alerte sur le canal.
 jamais de celles de l'agent. Sans cette règle, un canal Telegram devient une porte
 dérobée avec droits admin. Liaison compte ↔ identité de canal vérifiée, révocable.
 
+**Client MCP externe (fiche 58)** — Un serveur MCP `stdio` tiers est un exécutable
+arbitraire que Cogenta `spawn`, avec les privilèges OS complets du process Cogenta.
+Contrairement à `@cogenta/plugins`, il n'existe **aucun** isolat `worker_threads`+`vm`
+pour ce cas — c'est un compromis assumé, pas un oubli (voir la fiche pour le verdict
+complet de la revue `security-reviewer` du 2026-08-26, NO-GO tel qu'écrit, GO
+conditionnel). Le plancher de sandboxing réellement en place :
+- **Aucun héritage implicite de l'environnement.** `spawn` reçoit exactement
+  `options.env ?? {}` — jamais `process.env` — donc un secret configuré par variable
+  d'environnement (dont `COGENTA_AUTH_SIGNING_KEY`) n'atteint jamais un serveur tiers
+  sauf à être explicitement listé dans l'environnement de sa propre connexion.
+- **Un répertoire de travail dédié**, créé et vidé pour chaque connexion — jamais
+  `process.cwd()`, qui pour `cogenta serve` est la racine du projet du site.
+- **`stdio` toujours entièrement en `pipe`**, jamais `inherit` — stderr est capturé,
+  journalisé via le logger structuré (qui porte sa propre politique de rédaction), et
+  plafonné en taille.
+- **Un timeout dur par appel JSON-RPC** qui tue le process et rejette tout appel en
+  attente sur la même connexion — un serveur qui ne répond jamais ne peut pas bloquer
+  un run indéfiniment.
+- **Un veilleur mémoire/CPU au mieux**, par sondage du PID (`ps`/PowerShell, aucune
+  dépendance native) — une vraie limite reste au niveau de l'hébergement (cgroup, Job
+  Object Windows), à documenter comme prérequis, jamais comme une garantie du code.
+- **Confirmation explicite et honnête, obligatoire, à la création de toute connexion
+  `stdio`** — même esprit que `deps.patch autonomous` : refusée structurellement
+  (`MCP_CONNECTION_CONFIRMATION_REQUIRED`) tant que l'appelant n'a pas explicitement
+  reconnu que ce binaire tourne sans sandbox, avec les privilèges complets du serveur.
+- **Une permission par outil distant explicitement coché**
+  (`mcp.external:<connexionId>.<nomOutilDistant>`, contrat C `tools@1.4`) — jamais une
+  permission par connexion : la case à cocher par outil de l'écran « MCP Clients » est
+  la seule surface offerte à un agent, un outil découvert mais jamais coché n'existe
+  pour aucun agent.
+
 ## 9. Sauvegardes
 
 - Chiffrées au repos, clé distincte de celle de la base

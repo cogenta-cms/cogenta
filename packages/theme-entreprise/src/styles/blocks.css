@@ -1,5 +1,6 @@
 /*
- * The twelve vocabulary blocks — this theme's own layouts.
+ * The seventeen vocabulary blocks (`blocks@2.0`, RFC 0001) — this theme's
+ * own layouts.
  *
  * Nothing here declares a colour, a size, a radius or a duration of its
  * own: a block composes the design system from `tokens.css` and nothing
@@ -885,4 +886,387 @@
   background: var(--cg-accent);
   color: var(--cg-accent-fg);
   border-color: var(--cg-accent);
+}
+
+/* --- testimonial → client outcome panel (blocks@2.0, RFC 0001) ----------- */
+
+/* Mirrors `quote`'s bordered-plate language but reversed and widened: the
+   accent rule sits on the trailing edge and the attribution moves beside
+   the quote on wide screens rather than below it — a "client outcome"
+   callout is read as heavier evidence than a short pull-quote, so it earns
+   more width and its own two-column shape. */
+.cg-testimonial {
+  display: grid;
+  gap: var(--cg-s6);
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+  padding: var(--cg-s10);
+  border-inline-end: 3px solid var(--cg-accent);
+  border-block: 1px solid var(--cg-line);
+  border-inline-start: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-md) 0 0 var(--cg-radius-md);
+  background: var(--cg-surface-sunken);
+}
+
+@media (min-width: 56rem) {
+  .cg-testimonial {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--cg-s10);
+  }
+
+  .cg-testimonial__attribution {
+    flex-direction: column;
+    align-items: flex-start;
+    min-inline-size: 14rem;
+    padding-inline-start: var(--cg-s8);
+    border-inline-start: 1px solid var(--cg-line-soft);
+  }
+}
+
+.cg-testimonial__quote {
+  margin: 0;
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-xl);
+  font-style: italic;
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-snug);
+  text-wrap: balance;
+}
+
+.cg-testimonial__quote p {
+  margin: 0;
+}
+
+.cg-testimonial__quote p + p {
+  margin-block-start: var(--cg-s4);
+}
+
+.cg-testimonial__attribution {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s2);
+  font-style: normal;
+}
+
+.cg-testimonial__avatar {
+  inline-size: var(--cg-s10);
+  block-size: var(--cg-s10);
+  border-radius: var(--cg-radius-pill);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-testimonial__who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s1);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-subtle);
+}
+
+.cg-testimonial__name {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+/* --- pricingTable → plan comparison (blocks@2.0, RFC 0001) --------------- */
+
+.cg-pricing__title {
+  margin: 0 0 var(--cg-s8);
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-pricing__tiers {
+  display: grid;
+  gap: var(--cg-s6);
+  margin: 0;
+}
+
+@media (min-width: 48rem) {
+  .cg-pricing__tiers {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    align-items: start;
+  }
+}
+
+.cg-pricing__tier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s5);
+  padding: var(--cg-s8);
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-lg);
+  background: var(--cg-surface);
+  box-shadow: var(--cg-elevation-1);
+}
+
+/* The one visual cue emphasis earns: a lifted border and a shadow, never a
+   fill — this theme spends colour sparingly and reserves a solid accent
+   surface for `statCounter`'s own "impact" band. */
+.cg-pricing__tier[data-highlighted="true"] {
+  border-color: var(--cg-accent);
+  box-shadow: var(--cg-elevation-3);
+}
+
+.cg-pricing__name {
+  margin: 0;
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-snug);
+}
+
+.cg-pricing__price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s1);
+  margin: 0;
+}
+
+.cg-pricing__amount {
+  font-size: var(--cg-text-3xl);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-tight);
+  color: var(--cg-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-pricing__interval {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-pricing__features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: var(--cg-s5) 0 0;
+  border-block-start: 1px solid var(--cg-line-soft);
+  list-style: none;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-normal);
+}
+
+.cg-pricing__feature {
+  padding-inline-start: var(--cg-s5);
+  position: relative;
+}
+
+/* A hairline check mark drawn from two borders, matching `faq`'s own
+   no-icon-font discipline. */
+.cg-pricing__feature::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.5em;
+  inline-size: 0.55em;
+  block-size: 0.3em;
+  border-inline-start: 2px solid var(--cg-accent);
+  border-block-end: 2px solid var(--cg-accent);
+  transform: translateY(-60%) rotate(-45deg);
+}
+
+.cg-pricing__action {
+  margin-block-start: auto;
+  padding-block-start: var(--cg-s2);
+}
+
+.cg-pricing__action .cg-action {
+  inline-size: 100%;
+  justify-content: center;
+}
+
+/* --- accordion → specification panels (blocks@2.0, RFC 0001) ------------- */
+
+.cg-panels {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+}
+
+.cg-panels__title {
+  margin: 0 0 var(--cg-s6);
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-panels__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s3);
+  margin: 0;
+}
+
+.cg-panels__item {
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-surface);
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-panels__item:has(.cg-panels__details[open]) {
+  border-color: var(--cg-line-strong);
+}
+
+.cg-panels__question {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s4);
+  padding: var(--cg-s5) var(--cg-s6);
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.cg-panels__question::-webkit-details-marker {
+  display: none;
+}
+
+.cg-panels__question-text {
+  flex: 1;
+}
+
+.cg-panels__details[open] .cg-panels__question {
+  color: var(--cg-accent);
+}
+
+/* A chevron drawn from two borders, rotating open — distinct from `faq`'s
+   plus/minus mark so the two disclosure widgets read as their own things. */
+.cg-panels__chevron {
+  flex: none;
+  inline-size: 0.6em;
+  block-size: 0.6em;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-panels__details[open] .cg-panels__chevron {
+  transform: rotate(-135deg);
+}
+
+.cg-panels__answer {
+  padding: 0 var(--cg-s6) var(--cg-s6);
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+}
+
+.cg-panels__answer > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-panels__answer > :last-child {
+  margin-block-end: 0;
+}
+
+/* --- statCounter → impact band (blocks@2.0, RFC 0001) -------------------- */
+
+/* The one block that spends a solid accent fill rather than this theme's
+   usual hairline-and-white restraint: a narrower, single-figure counter is
+   meant to read as a confident headline claim, not a quiet ledger entry —
+   `stats` already gives that quieter treatment its own place. */
+.cg-kpis {
+  padding: var(--cg-s10) var(--cg-s8);
+  border-radius: var(--cg-radius-lg);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}
+
+.cg-kpis__title {
+  margin: 0 0 var(--cg-s8);
+  font-size: var(--cg-text-xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-kpis__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--cg-s8);
+  margin: 0;
+}
+
+.cg-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s2);
+}
+
+.cg-kpi__label {
+  order: 2;
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+
+.cg-kpi__value {
+  order: 1;
+  margin: 0;
+  font-size: var(--cg-text-3xl);
+  font-weight: var(--cg-weight-bold);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- logoStrip → press row (blocks@2.0, RFC 0001) ------------------------- */
+
+/* Denser and full-colour, unlike `logos`'s held-back grayscale client
+   cards: a press/"as seen in" strip reads as a fact, not an invitation to
+   click, so nothing here dims until interaction. */
+.cg-logo-band {
+  margin: 0;
+}
+
+.cg-logo-band__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-logo-band__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cg-s3) var(--cg-s6);
+  border-inline-start: 1px solid var(--cg-line-soft);
+}
+
+.cg-logo-band__item:first-child {
+  border-inline-start: 0;
+}
+
+.cg-logo-band__image {
+  block-size: var(--cg-s8);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+}
+
+.cg-logo-band__caption {
+  margin-block-start: var(--cg-s5);
+  color: var(--cg-ink-subtle);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  text-align: center;
 }

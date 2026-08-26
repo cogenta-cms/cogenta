@@ -64,7 +64,7 @@ describe('renderPage', () => {
     for (const tag of images) expect(tag).toMatch(/\salt="/)
   })
 
-  it('renders all twelve blocks in the vocabulary without any returning null', () => {
+  it('renders all seventeen blocks in the vocabulary without any returning null', () => {
     for (const block of ALL_BLOCKS) {
       expect(renderBlock(block, ctx, entries), `${block._type} must render`).not.toBeNull()
     }

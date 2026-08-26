@@ -224,6 +224,42 @@ const FAQ_ANSWER: RichTextDocument = [
   },
 ]
 
+const TESTIMONIAL_QUOTE: RichTextDocument = [
+  {
+    _key: 't1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      { _key: 'ts1', _type: 'span', text: 'They gave us a ', marks: [] },
+      { _key: 'ts2', _type: 'span', text: 'plan we could hold them to', marks: ['strong'] },
+      {
+        _key: 'ts3',
+        _type: 'span',
+        text: ', and every milestone since has landed on the date they gave us.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
+const ACCORDION_ANSWER: RichTextDocument = [
+  {
+    _key: 'p1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      {
+        _key: 'ps1',
+        _type: 'span',
+        text: 'Every environment is provisioned from the same manifest, reviewed the same way.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
 const VERSION = '1.0.0'
 
 /**
@@ -353,9 +389,83 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     ratio: '16:9',
     consentRequired: true,
   },
+  testimonial: {
+    _key: 'b-testimonial',
+    _type: 'testimonial',
+    _version: VERSION,
+    quote: TESTIMONIAL_QUOTE,
+    attribution: {
+      name: 'A. Client',
+      role: 'VP Engineering, Globex',
+      avatar: 'media-avatar',
+    },
+  },
+  pricingTable: {
+    _key: 'b-pricing',
+    _type: 'pricingTable',
+    _version: VERSION,
+    title: 'Engagement tiers',
+    tiers: [
+      {
+        _key: 'p1',
+        name: 'Advisory',
+        price: '$4,500',
+        interval: '/month',
+        features: ['One weekly session', 'Written recommendations', 'Email support'],
+        action: { label: 'Start advisory', target: { href: '/contact' } },
+      },
+      {
+        _key: 'p2',
+        name: 'Embedded',
+        price: '$12,000',
+        interval: '/month',
+        features: [
+          'A named engagement lead',
+          'Weekly written status report',
+          'Fixed-scope milestones',
+          'Priority support',
+        ],
+        action: {
+          label: 'Book a call',
+          target: { href: '/contact' },
+          emphasis: 'primary',
+        },
+        highlighted: true,
+      },
+    ],
+  },
+  accordion: {
+    _key: 'b-accordion',
+    _type: 'accordion',
+    _version: VERSION,
+    title: 'How delivery works',
+    items: [
+      { _key: 'ac1', question: 'Is every environment reproducible?', answer: ACCORDION_ANSWER },
+    ],
+  },
+  statCounter: {
+    _key: 'b-counters',
+    _type: 'statCounter',
+    _version: VERSION,
+    title: 'Since 2019',
+    stats: [
+      { _key: 'c1', value: '140+', label: 'Engagements delivered' },
+      { _key: 'c2', value: '11', label: 'Countries served' },
+    ],
+  },
+  logoStrip: {
+    _key: 'b-logo-strip',
+    _type: 'logoStrip',
+    _version: VERSION,
+    logos: [
+      { _key: 'ls1', media: 'logo-acme' },
+      { _key: 'ls2', media: 'logo-globex' },
+    ],
+    caption: 'As seen in the portfolios of',
+  },
 }
 
-/** The twelve, in contract B's order. */
+/** The seventeen, in contract B's order (`blocks@2.0`, RFC 0001). */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,
@@ -369,4 +479,9 @@ export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.logos,
   BLOCKS.collectionList,
   BLOCKS.embed,
+  BLOCKS.testimonial,
+  BLOCKS.pricingTable,
+  BLOCKS.accordion,
+  BLOCKS.statCounter,
+  BLOCKS.logoStrip,
 ]

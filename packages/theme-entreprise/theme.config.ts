@@ -3,9 +3,10 @@ import { defineTheme } from '@cogenta/render'
 /**
  * Contract D — Thème, `theme@1.0`/`1.1`.
  *
- * `implements` lists the twelve blocks of contract B in the order the
- * contract lists them — see `@cogenta/theme-canonical/theme.config.ts` for
- * why that order matters (installation refuses an incomplete theme).
+ * `implements` lists the seventeen blocks of contract B (`blocks@2.0`, RFC
+ * 0001) in the order the contract lists them — see
+ * `@cogenta/theme-canonical/theme.config.ts` for why that order matters
+ * (installation refuses an incomplete theme).
  *
  * `runtime: 'static'` describes what this theme package itself needs; the
  * one block in the vocabulary that reads at request time (`collectionList`)
@@ -14,9 +15,9 @@ import { defineTheme } from '@cogenta/render'
  */
 export default defineTheme({
   name: 'entreprise',
-  version: '1.0.0',
+  version: '1.1.0',
   engine: '^1.0.0',
-  blocks: '^1.0.0',
+  blocks: '^2.0.0',
   implements: [
     'hero',
     'prose',
@@ -30,6 +31,11 @@ export default defineTheme({
     'logos',
     'collectionList',
     'embed',
+    'testimonial',
+    'pricingTable',
+    'accordion',
+    'statCounter',
+    'logoStrip',
   ],
   collections: ['article', 'page'],
   runtime: 'static',

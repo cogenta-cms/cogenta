@@ -752,6 +752,15 @@ export function installMockFetch(
      */
     readonly invitationEmailAvailable?: boolean
     /**
+     * Fiche 67 task 2: seeds this many synthetic image assets into the media
+     * library before the test starts, so a test can exercise `media.tsx`'s
+     * cursor pagination (`GET /api/media`'s `limit`/`after`, only respected
+     * by this mock once this many items actually exist) without uploading
+     * dozens of real files through the form one at a time. Zero by default,
+     * the same empty library every media test saw before this fiche.
+     */
+    readonly mediaSeedCount?: number
+    /**
      * `true` (the default) mocks a site with an `AgentRegistry` mounted, the
      * way this suite always has. `false` reproduces the real, honest shape
      * of `cogenta serve` today (L20 audit §1 point 5): no registry is ever
@@ -2094,6 +2103,24 @@ export function installMockFetch(
     createdAt: string
     createdBy: string | null
   }[] = []
+  for (let i = 0; i < (options.mediaSeedCount ?? 0); i += 1) {
+    mediaCounter += 1
+    media.push({
+      id: `media-seed-${mediaCounter}`,
+      kind: 'image',
+      filename: `seed-${mediaCounter}.png`,
+      mimeType: 'image/png',
+      size: 10,
+      width: null,
+      height: null,
+      alt: `Seed image ${mediaCounter}`,
+      decorative: false,
+      decorativeJustification: null,
+      focal: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      createdBy: USER.id,
+    })
+  }
 
   vi.stubGlobal(
     'fetch',
@@ -4017,9 +4044,23 @@ export function installMockFetch(
         if (id === undefined && method === 'GET') {
           const parsed = new URL(url, 'http://localhost')
           const kindFilter = parsed.searchParams.get('kind')
-          const items =
+          const filtered =
             kindFilter === null ? media : media.filter((item) => item.kind === kindFilter)
-          return json(200, { data: items, page: { hasMore: false, nextCursor: null } })
+          // Fiche 67 task 2: `media.tsx` now sends real `limit`/`after`
+          // (`nextCursor` from the previous page, the id of its last item —
+          // an opaque mock convention, not a claim about the real store's
+          // cursor format). Absent `limit`/`after` returns everything in one
+          // page, byte for byte what this mock always did before this fiche.
+          const limitRaw = parsed.searchParams.get('limit')
+          const limit = limitRaw === null ? undefined : Number(limitRaw)
+          const after = parsed.searchParams.get('after')
+          const startIndex =
+            after === null ? 0 : filtered.findIndex((item) => item.id === after) + 1
+          const pageSize = limit ?? filtered.length
+          const items = filtered.slice(startIndex, startIndex + pageSize)
+          const hasMore = startIndex + pageSize < filtered.length
+          const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null
+          return json(200, { data: items, page: { hasMore, nextCursor } })
         }
 
         if (id === undefined && method === 'POST') {

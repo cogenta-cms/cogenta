@@ -101,3 +101,38 @@ describe('media library', () => {
     await waitFor(() => expect(screen.getByText('Aucun média.')).toBeDefined())
   })
 })
+
+/**
+ * Fiche 67 task 2 — this screen's own client (`listMedia`) exposed a cursor
+ * since L2 (`hasMore`/`nextCursor`); this route never sent `limit` or
+ * consumed either field, so every request just loaded the store's own
+ * default page in full. Proven here against a library bigger than one page,
+ * the same way `users.tsx`'s pre-existing "load more" is proven elsewhere.
+ */
+describe('media library pagination', () => {
+  it('loads the first page, then the rest on "load more"', async () => {
+    installMockFetch({ mediaSeedCount: 30 })
+    render(<App />)
+    await goToMedia()
+
+    expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(25)
+    expect(screen.queryByText('seed-30.png')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Charger la suite' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(30)
+    })
+    expect(screen.getByText('seed-30.png')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Charger la suite' })).toBeNull()
+  })
+
+  it('shows no "load more" control when the library fits on one page', async () => {
+    installMockFetch({ mediaSeedCount: 3 })
+    render(<App />)
+    await goToMedia()
+
+    expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(3)
+    expect(screen.queryByRole('button', { name: 'Charger la suite' })).toBeNull()
+  })
+})

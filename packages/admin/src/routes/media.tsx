@@ -6,16 +6,31 @@ import { useAuth } from '../auth/auth-context.js'
 import { MediaDetail } from '../media/media-detail.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { UploadForm } from '../media/upload-form.js'
-import { Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '../ui/index.js'
+import { Card, CardBody, CardHeader, CardTitle, Modal, Notice, Pagination } from '../ui/index.js'
 
-/** L2 task 11: upload, list, focal point, alt-text/decorative — no crop, no variant picker, since the render pipeline already produces those lazily from the original. */
+const PAGE_SIZE = 25
+
+/**
+ * L2 task 11: upload, list, focal point, alt-text/decorative — no crop, no
+ * variant picker, since the render pipeline already produces those lazily
+ * from the original.
+ *
+ * Fiche 67 task 2: the cursor this screen's own client (`listMedia`) had
+ * exposed since L2 but this route never consumed — every request loaded the
+ * store's own default page in full. `Pagination`'s cursor variant, the same
+ * one `users.tsx` migrated to, is what makes that omission visible and easy
+ * to fix in one place.
+ */
 export function MediaRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
 
   const [items, setItems] = useState<readonly MediaAsset[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -24,8 +39,10 @@ export function MediaRoute(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      const page = await listMedia(token)
+      const page = await listMedia(token, { limit: PAGE_SIZE })
       setItems(page.items)
+      setHasMore(page.hasMore)
+      setNextCursor(page.nextCursor)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
     } finally {
@@ -36,6 +53,21 @@ export function MediaRoute(): JSX.Element {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function loadMore(): Promise<void> {
+    if (token === null || nextCursor === null) return
+    setLoadingMore(true)
+    try {
+      const page = await listMedia(token, { limit: PAGE_SIZE, cursor: nextCursor })
+      setItems((current) => [...current, ...page.items])
+      setHasMore(page.hasMore)
+      setNextCursor(page.nextCursor)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   if (token === null) return <p>{t('common.loading')}</p>
 
@@ -91,6 +123,17 @@ export function MediaRoute(): JSX.Element {
             <li className="text-sm text-muted-foreground">{t('media.empty')}</li>
           )}
         </ul>
+      )}
+
+      {!loading && (
+        <Pagination
+          variant="cursor"
+          hasMore={hasMore}
+          loading={loadingMore}
+          onLoadMore={() => void loadMore()}
+          loadMoreLabel={t('media.loadMore')}
+          loadingLabel={t('common.loading')}
+        />
       )}
 
       <Modal

@@ -29,6 +29,7 @@ import {
   Input,
   Modal,
   Notice,
+  Pagination,
   Select,
   Table,
   TableBody,
@@ -700,12 +701,15 @@ export function UsersRoute(): JSX.Element {
         </TableRoot>
       )}
 
-      {!loading && hasMore && (
-        <div>
-          <Button variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>
-            {loadingMore ? t('common.loading') : t('users.loadMore')}
-          </Button>
-        </div>
+      {!loading && (
+        <Pagination
+          variant="cursor"
+          hasMore={hasMore}
+          loading={loadingMore}
+          onLoadMore={() => void loadMore()}
+          loadMoreLabel={t('users.loadMore')}
+          loadingLabel={t('common.loading')}
+        />
       )}
 
       <Modal

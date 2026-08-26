@@ -709,7 +709,8 @@
     "deleteError": "Could not delete this media asset.",
     "focalLoadError": "Could not load the image.",
     "focalUpdateError": "Could not update the focal point.",
-    "focalHint": "Click the image to set the focal point."
+    "focalHint": "Click the image to set the focal point.",
+    "loadMore": "Load more"
   },
   "collectionList": {
     "tableLabel": "Content",

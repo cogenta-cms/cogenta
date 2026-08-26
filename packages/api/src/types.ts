@@ -1,4 +1,9 @@
-import type { CollectionDefinition, ContentAction, TaxonomyDefinition } from '@cogenta/schema'
+import type {
+  CollectionDefinition,
+  ContentAction,
+  NormalisedPermissionRule,
+  TaxonomyDefinition,
+} from '@cogenta/schema'
 
 /**
  * The seam between the permission layer, REST and GraphQL.
@@ -90,6 +95,22 @@ export interface PermissionLayer {
   ): AccessDecision
 
   assertTerm(action: ContentAction, taxonomy: TaxonomyDefinition, context: AccessContext): void
+
+  /**
+   * The rule actually governing this action on this collection right now —
+   * the database override when one exists, `collection.permissions[action]`
+   * otherwise (fiche 63, ADR-0028: the same table-then-file priority `can()`
+   * uses internally). Exists so a caller that needs to reason about a
+   * rule's *shape* before calling `can()`/`assert()` — chiefly "does it
+   * declare `own: true`, and so do I need this entry's owner before I can
+   * decide?" — never reads `collection.permissions[action]` directly and
+   * risks silently ignoring an active override. Read-only: it does not
+   * check any role, it only resolves which rule would be checked.
+   */
+  ruleFor(action: ContentAction, collection: CollectionDefinition): NormalisedPermissionRule
+
+  /** `ruleFor`, for a taxonomy's terms. */
+  ruleForTerm(action: ContentAction, taxonomy: TaxonomyDefinition): NormalisedPermissionRule
 }
 
 /**

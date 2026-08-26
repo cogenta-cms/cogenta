@@ -1,5 +1,10 @@
 import { isCogentaError } from '@cogenta/core'
-import type { CollectionDefinition, ContentAction } from '@cogenta/schema'
+import {
+  type CollectionDefinition,
+  type ContentAction,
+  defineTaxonomy,
+  type RolePermissionOverrides,
+} from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import {
   assertAuthenticated,
@@ -300,5 +305,166 @@ describe('assertAuthenticated', () => {
 
   it('is silent for a signed-in actor', () => {
     expect(() => assertAuthenticated(contextFor('editor'))).not.toThrow()
+  })
+})
+
+/**
+ * Fiche 63, ADR-0028: role permission overrides in the database. The whole
+ * contract is one sentence — checked before `collection.permissions`, never
+ * after — so every test here proves the direction, not merely that an
+ * override "does something".
+ */
+describe('database role permission overrides (fiche 63, ADR-0028)', () => {
+  type Rule = { readonly roles: readonly string[]; readonly own?: boolean }
+
+  function overridesFrom(
+    collectionRules: Readonly<Record<string, Rule>> = {},
+    taxonomyRules: Readonly<Record<string, Rule>> = {},
+  ): RolePermissionOverrides {
+    return {
+      getCollectionRule: (collection, action) => {
+        const rule = collectionRules[`${collection}:${action}`]
+        return rule === undefined ? undefined : { roles: rule.roles, own: rule.own ?? false }
+      },
+      getTaxonomyRule: (taxonomy, action) => {
+        const rule = taxonomyRules[`${taxonomy}:${action}`]
+        return rule === undefined ? undefined : { roles: rule.roles, own: rule.own ?? false }
+      },
+    }
+  }
+
+  it('falls straight through to the file when the overlay has nothing for this target', () => {
+    const withEmptyOverrides = createPermissionLayer({
+      collections: COLLECTIONS,
+      rolePermissionOverrides: overridesFrom(),
+    })
+    // Byte-for-byte the same answer as a layer with no overlay wired in at
+    // all, for every cell of the matrix already proven above — an absent
+    // override must never change a single decision.
+    for (const [collection, table] of MATRIX) {
+      for (const [action, row] of Object.entries(table) as [ContentAction, RoleRow][]) {
+        for (const role of Object.keys(row)) {
+          expect(withEmptyOverrides.can(action, collection, contextFor(role)).allowed).toBe(
+            layer.can(action, collection, contextFor(role)).allowed,
+          )
+        }
+      }
+    }
+  })
+
+  it('a table override widens access the file alone would refuse', () => {
+    // The file grants `article.create` to editor/admin only (see collections.ts).
+    const widened = createPermissionLayer({
+      collections: COLLECTIONS,
+      rolePermissionOverrides: overridesFrom({ 'article:create': { roles: ['viewer'] } }),
+    })
+    expect(widened.can('create', article, contextFor('viewer')).allowed).toBe(true)
+  })
+
+  it('a table override REPLACES the file rule, it does not merge with it', () => {
+    // The override names only "viewer" — editor, who the file alone would
+    // still allow, is no longer granted once an override exists for this
+    // exact (collection, action).
+    const replaced = createPermissionLayer({
+      collections: COLLECTIONS,
+      rolePermissionOverrides: overridesFrom({ 'article:create': { roles: ['viewer'] } }),
+    })
+    expect(replaced.can('create', article, contextFor('editor')).allowed).toBe(false)
+  })
+
+  it('a table override can narrow access the file alone would grant — including for admin', () => {
+    // The file grants `article.delete` to admin. An empty override roles
+    // list is a deliberate "nobody", and it must actually win.
+    const narrowed = createPermissionLayer({
+      collections: COLLECTIONS,
+      rolePermissionOverrides: overridesFrom({ 'article:delete': { roles: [] } }),
+    })
+    expect(narrowed.can('delete', article, contextFor('admin')).allowed).toBe(false)
+  })
+
+  it('never lets the file re-open a door the table already closed — priority is table, then file, never the reverse', () => {
+    // Simulates exactly the scenario ADR-0028 names: a deployment regresses
+    // `cogenta.schema.*` back to a wider rule, while the database override
+    // (an admin's earlier, deliberate narrowing) is still in place.
+    const regressedFile: CollectionDefinition = {
+      ...article,
+      permissions: { ...article.permissions, delete: ['editor', 'admin'] },
+    }
+    const guarded = createPermissionLayer({
+      collections: [regressedFile],
+      rolePermissionOverrides: overridesFrom({ 'article:delete': { roles: [] } }),
+    })
+    expect(guarded.can('delete', regressedFile, contextFor('admin')).allowed).toBe(false)
+    expect(guarded.can('delete', regressedFile, contextFor('editor')).allowed).toBe(false)
+  })
+
+  it('carries "own" from the override, not from the file', () => {
+    const ownOnly = createPermissionLayer({
+      collections: COLLECTIONS,
+      rolePermissionOverrides: overridesFrom({
+        'article:update': { roles: ['editor'], own: true },
+      }),
+    })
+    const context: AccessContext = { actor: { id: 'author-1', roles: ['editor'] } }
+    expect(ownOnly.can('update', article, context, 'author-1').allowed).toBe(true)
+    expect(ownOnly.can('update', article, context, 'someone-else').allowed).toBe(false)
+  })
+
+  it('an override also governs draft access, through the same effective rule', () => {
+    // The file already lets "viewer" read `page`, but never author it
+    // (`create` is admin-only) — so a viewer never sees a draft. An override
+    // that grants `create` to "viewer" must be what `canReadUnpublished`
+    // reasons about too, since it derives draft access from the very same
+    // authoring actions `grantedRoles` now reads through the overlay.
+    const withoutOverride = createPermissionLayer({ collections: COLLECTIONS })
+    const context: AccessContext = { actor: { id: 'u', roles: ['viewer'] } }
+    expect(withoutOverride.canReadUnpublished(page, context).allowed).toBe(false)
+
+    const opened = createPermissionLayer({
+      collections: COLLECTIONS,
+      rolePermissionOverrides: overridesFrom({ 'page:create': { roles: ['viewer'] } }),
+    })
+    expect(opened.canReadUnpublished(page, context).allowed).toBe(true)
+  })
+
+  describe('the same priority on a taxonomy', () => {
+    const category = defineTaxonomy({
+      name: 'category',
+      labels: { singular: { en: 'Category' } },
+      permissions: { read: ['public'], create: ['editor'] },
+    })
+
+    it('falls back to the file when no override exists', () => {
+      const withNoOverride = createPermissionLayer({
+        collections: COLLECTIONS,
+        rolePermissionOverrides: overridesFrom(),
+      })
+      expect(withNoOverride.canTerm('create', category, contextFor('editor')).allowed).toBe(true)
+      expect(withNoOverride.canTerm('create', category, contextFor('viewer')).allowed).toBe(false)
+    })
+
+    it('a table override replaces the taxonomy file rule', () => {
+      const widened = createPermissionLayer({
+        collections: COLLECTIONS,
+        rolePermissionOverrides: overridesFrom({}, { 'category:create': { roles: ['viewer'] } }),
+      })
+      expect(widened.canTerm('create', category, contextFor('viewer')).allowed).toBe(true)
+      expect(widened.canTerm('create', category, contextFor('editor')).allowed).toBe(false)
+    })
+
+    it('a collection and a same-named taxonomy each read their own override', () => {
+      const sameName = createPermissionLayer({
+        collections: [{ ...article, name: 'category' }],
+        rolePermissionOverrides: overridesFrom(
+          { 'category:read': { roles: ['viewer'] } },
+          { 'category:read': { roles: ['admin'] } },
+        ),
+      })
+      expect(
+        sameName.can('read', { ...article, name: 'category' }, contextFor('viewer')).allowed,
+      ).toBe(true)
+      expect(sameName.canTerm('read', category, contextFor('viewer')).allowed).toBe(false)
+      expect(sameName.canTerm('read', category, contextFor('admin')).allowed).toBe(true)
+    })
   })
 })

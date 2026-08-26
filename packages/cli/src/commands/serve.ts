@@ -58,6 +58,7 @@ import {
   createRedirectRouter,
   createRestRouter,
   createReviewRouter,
+  createRolePermissionRouter,
   createScheduledPublishFailedSource,
   createScheduledTasksRouter,
   createSearchRouter,
@@ -96,6 +97,7 @@ import {
   type RestResponse,
   type RestRouter,
   type ReviewRouter,
+  type RolePermissionRouter,
   resolveActor,
   roleState,
   type ScheduledTasksRouter,
@@ -233,6 +235,8 @@ import {
   createNotFoundLogStore,
   createRedirectPatternStore,
   createRedirectStore,
+  createRolePermissionOverlay,
+  createRolePermissionStore,
   createScheduledPublishFailureStore,
   createScheduledTaskRegistry,
   createSchemaTables,
@@ -249,6 +253,7 @@ import {
   type NotFoundLogStore,
   type RedirectPatternStore,
   type RedirectStore,
+  type RolePermissionStore,
   registerScheduledPublishing,
   type ScheduledTaskRegistry,
   type SchemaDocument,
@@ -561,6 +566,19 @@ interface Site {
    * not a convention someone could accidentally violate.
    */
   readonly redirectPatterns: RedirectPatternStore
+  /**
+   * Fiche 63, ADR-0028 — the database-backed override layer of a role's
+   * permissions. Exposed so `cogenta roles export` and the admin route below
+   * share the exact same store a running `cogenta serve` reads, never a
+   * second connection to the same table.
+   */
+  readonly rolePermissionStore: RolePermissionStore
+  /**
+   * `/api/role-permissions` — admin-only reads and writes of the override
+   * table above; a write calls the overlay's `refresh()` before answering,
+   * which is what makes the very next request already see it.
+   */
+  readonly rolePermissionRouter: RolePermissionRouter
   /**
    * The log of public URLs that answered a 404 (fiche 12 task 1). Written on
    * the public GET path in this file's own request handler, read and
@@ -1466,7 +1484,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     { logger },
   )
 
-  const permissions = createPermissionLayer({ collections })
+  // Fiche 63, ADR-0028: a role's grant on a collection or taxonomy action can
+  // live in the database, checked by `PermissionLayer` *before* falling back
+  // to this site's `cogenta.schema.*` — never the other way around. The
+  // overlay's first `list()` happens here, once, before the layer that
+  // consults it is ever built; `rolePermissionRouter` (mounted below) calls
+  // `refresh()` after every write so the very next request already sees it,
+  // with no restart.
+  const rolePermissionStore = createRolePermissionStore({ db, collections, taxonomies })
+  const rolePermissionOverlay = await createRolePermissionOverlay(rolePermissionStore)
+
+  const permissions = createPermissionLayer({
+    collections,
+    rolePermissionOverrides: rolePermissionOverlay,
+  })
   const service = createContentService({
     collections,
     permissions,
@@ -1962,6 +1993,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     commentsSettingsStore,
     redirectRouter: createRedirectRouter({ store: redirects, patterns: redirectPatterns }),
     redirectPatterns,
+    rolePermissionStore,
+    rolePermissionRouter: createRolePermissionRouter({
+      store: rolePermissionStore,
+      overlay: rolePermissionOverlay,
+    }),
     formStore,
     formsRouter,
     tickFormsPurge: async () => (await formStore.submissions.purgeExpired()).purged,
@@ -2613,6 +2649,55 @@ async function recordMediaAudit(
       ...(entryId === undefined ? {} : { entryId }),
     })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+/**
+ * Fiche 63, ADR-0028 — "aucun changement de permission sans... entrée
+ * d'audit systématique": every successful `PUT`/`DELETE` on
+ * `/api/role-permissions` is journaled unconditionally, never gated on
+ * whether the admin's confirmation dialog was shown (that lives entirely in
+ * `packages/admin`; the server side of "systematic" is that a write cannot
+ * land without also producing this entry).
+ */
+async function recordRolePermissionAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+
+  if (method === 'PUT') {
+    const data = (response.body as { readonly data?: Record<string, unknown> } | null)?.data
+    await site.auth.audit
+      .record({
+        actorId: actor.id,
+        actorRoles: actor.roles,
+        action: 'role_permission.set',
+        ...(data === undefined ? {} : { diff: data }),
+      })
+      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+    return
+  }
+
+  if (method === 'DELETE') {
+    const [targetType, targetName, permAction] = pathname
+      .replace(/^\/api\/role-permissions\/?/u, '')
+      .split('/')
+      .filter((segment) => segment.length > 0)
+    await site.auth.audit
+      .record({
+        actorId: actor.id,
+        actorRoles: actor.roles,
+        action: 'role_permission.remove',
+        ...(targetType === undefined || targetName === undefined || permAction === undefined
+          ? {}
+          : { diff: { targetType, targetName, action: permAction } }),
+      })
+      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+  }
 }
 
 /**
@@ -3505,6 +3590,28 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.redirectRouter.handle(request, context))
+        return
+      }
+
+      // Fiche 63, ADR-0028: a role's grant on a collection or taxonomy
+      // action, writable in production without a deploy cycle. Admin-only,
+      // checked by the router itself; a successful write is journaled
+      // unconditionally (`recordRolePermissionAudit`), the server half of
+      // "aucun changement de permission sans... entrée d'audit systématique".
+      if (url.pathname.startsWith('/api/role-permissions')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        const response = await site.rolePermissionRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordRolePermissionAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          response,
+          logger,
+        )
         return
       }
 

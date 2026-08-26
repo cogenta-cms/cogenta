@@ -251,6 +251,16 @@ propriétaire ; refusé à la définition). `PermissionLayer.can()`/`.assert()` 
 alors l'acteur au `createdBy` de l'entrée ; sans cette information, l'accès est refusé
 par défaut.
 
+**Surcouche en base (fiche 63, ADR-0028) — hors contrat.** `PermissionLayer` peut
+consulter une table `cogenta_role_permissions`, propre au site et jamais versionnée,
+qui **remplace** — n'ajoute jamais à — la règle d'un couple (collection ou taxonomie,
+action) quand une ligne y existe ; en son absence, la règle reste exactement celle que
+ce document décrit ci-dessus. La table prime toujours sur le fichier, jamais l'inverse.
+Ceci ne change ni la forme de `CollectionDefinition.permissions` ni celle de
+`TaxonomyDefinition.permissions` : le contrat A reste `schema@2.1`, sans montée de
+version — c'est le point de décision de `PermissionLayer`, pas le vocabulaire du
+schéma, qui gagne une seconde source.
+
 ### Migrations
 
 Le schéma génère les migrations. Une migration porte : une version, une direction

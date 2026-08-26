@@ -30,7 +30,10 @@ import {
   createContentStore,
   createNotFoundLogStore,
   createRedirectStore,
+  createRolePermissionOverlay,
+  createRolePermissionStore,
   createSchemaTables,
+  type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
 import { buildAgentRuntime } from './agent-runtime.js'
@@ -275,8 +278,11 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
   }
 
   let collections: readonly CollectionDefinition[]
+  let taxonomies: readonly TaxonomyDefinition[]
   try {
-    collections = (await loadSchemaModule(projectRoot)).collections
+    const loadedSchema = await loadSchemaModule(projectRoot)
+    collections = loadedSchema.collections
+    taxonomies = loadedSchema.taxonomies
   } catch (error) {
     return reportFailure(stderr, error)
   }
@@ -289,7 +295,17 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
     await createSchemaTables(db, collections, [])
     await ensureChannelTables(db)
 
-    const permissions = createPermissionLayer({ collections })
+    // Fiche 63, ADR-0028: same reasoning as `cogenta mcp` — `cogenta
+    // channels` builds its own `PermissionLayer` and must consult the same
+    // override table, or an inbound chat command could keep an already
+    // revoked grant until this long-lived process restarts.
+    const rolePermissionOverlay = await createRolePermissionOverlay(
+      createRolePermissionStore({ db, collections, taxonomies }),
+    )
+    const permissions = createPermissionLayer({
+      collections,
+      rolePermissionOverrides: rolePermissionOverlay,
+    })
     const storeFor = storeForFactory(db, collections)
     const contentService = createContentService({ collections, permissions, storeFor })
     const mediaStore = createDatabaseMediaStore({ db })

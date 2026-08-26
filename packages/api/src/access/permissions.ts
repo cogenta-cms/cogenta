@@ -2,7 +2,9 @@ import { CogentaError } from '@cogenta/core'
 import {
   type CollectionDefinition,
   type ContentAction,
+  type NormalisedPermissionRule,
   normalisePermissionRule,
+  type RolePermissionOverrides,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { AccessContext, AccessDecision, PermissionLayer, PreviewGrant } from '../types.js'
@@ -47,11 +49,20 @@ export interface PermissionLayerOptions {
   readonly collections?: readonly CollectionDefinition[]
   /** Injectable clock, so an expiry can be tested without waiting for it. */
   readonly now?: () => number
+  /**
+   * The database-backed role permission overrides (fiche 63, ADR-0028) —
+   * checked **before** `collection.permissions`/`taxonomy.permissions`, never
+   * after. Absent means every check falls straight through to the file, byte
+   * for byte the behaviour before this option existed: a site that never
+   * wrote an override behaves exactly as it always has.
+   */
+  readonly rolePermissionOverrides?: RolePermissionOverrides
 }
 
 export function createPermissionLayer(options: PermissionLayerOptions = {}): PermissionLayer {
   const declaredRoles = new Set<string>(options.roles ?? DEFAULT_ROLES)
   const now = options.now ?? Date.now
+  const overrides = options.rolePermissionOverrides
 
   // `public` is the role of every request that carries no session. A site that
   // forgot to declare it would still hand it out, so it always exists.
@@ -59,11 +70,37 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
 
   assertDeclaredRoles(declaredRoles, options.collections ?? [])
 
+  /**
+   * The rule a collection action is actually judged by: the database
+   * override when one exists for this exact `(collection, action)` pair,
+   * the file's own rule otherwise. Checking the table first and falling back
+   * to the file — never the reverse — is the whole of ADR-0028's contract:
+   * a deployment that regressed the file must never silently widen what an
+   * admin had already narrowed in production.
+   */
+  function effectiveCollectionRule(
+    action: ContentAction,
+    collection: CollectionDefinition,
+  ): NormalisedPermissionRule {
+    const override = overrides?.getCollectionRule(collection.name, action)
+    if (override !== undefined) return override
+    return normalisePermissionRule(collection.permissions[action])
+  }
+
+  function effectiveTaxonomyRule(
+    action: ContentAction,
+    taxonomy: TaxonomyDefinition,
+  ): NormalisedPermissionRule {
+    const override = overrides?.getTaxonomyRule(taxonomy.name, action)
+    if (override !== undefined) return override
+    return normalisePermissionRule(taxonomy.permissions[action])
+  }
+
   function grantedRoles(
     action: ContentAction,
     collection: CollectionDefinition,
   ): readonly string[] {
-    return normalisePermissionRule(collection.permissions[action]).roles
+    return effectiveCollectionRule(action, collection).roles
   }
 
   /**
@@ -104,7 +141,7 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
      */
     ownerId?: string | null,
   ): AccessDecision {
-    const rule = normalisePermissionRule(collection.permissions[action])
+    const rule = effectiveCollectionRule(action, collection)
     const allowedRoles = rule.roles
 
     // Deny by default: a collection that never mentions an action grants it to
@@ -203,9 +240,11 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
     context: AccessContext,
   ): AccessDecision {
     // A term has no author, so `own` (`schema@2.1`) has no meaning here —
-    // `normalisePermissionRule` reads only `.roles`, the same as every other
+    // `effectiveTaxonomyRule` reads only `.roles`, the same as every other
     // caller that does not carry an entry to compare against.
-    const allowedRoles = normalisePermissionRule(taxonomy.permissions[action]).roles
+    // `createRolePermissionStore.set` already refuses `own` on a taxonomy
+    // override before it is ever written, so this is never silently dropped.
+    const allowedRoles = effectiveTaxonomyRule(action, taxonomy).roles
     if (allowedRoles.length === 0) {
       return {
         allowed: false,
@@ -259,6 +298,8 @@ export function createPermissionLayer(options: PermissionLayerOptions = {}): Per
         taxonomy: taxonomy.name,
       })
     },
+    ruleFor: effectiveCollectionRule,
+    ruleForTerm: effectiveTaxonomyRule,
   }
 }
 

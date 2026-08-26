@@ -10,6 +10,7 @@ import { runImport } from './commands/import.js'
 import { runLinks } from './commands/links.js'
 import { runMcp } from './commands/mcp.js'
 import { runMigrate } from './commands/migrate.js'
+import { runRoles } from './commands/roles.js'
 import { runServe } from './commands/serve.js'
 import { runSkin } from './commands/skin.js'
 import { runUpdate } from './commands/update.js'
@@ -34,6 +35,8 @@ export type { McpOptions } from './commands/mcp.js'
 export { runMcp } from './commands/mcp.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
+export type { RolesOptions, RolesSubcommand } from './commands/roles.js'
+export { runRoles } from './commands/roles.js'
 export type { ServeOptions } from './commands/serve.js'
 export { loadCollections, runServe } from './commands/serve.js'
 export type { SkinOptions, SkinSubcommand } from './commands/skin.js'
@@ -71,6 +74,7 @@ Commands
   skin validate <tokens.json>   Check a token file against contract D
   skin apply <tokens.json>      Validate, then make it the active skin
   skin generate --description "…"   Generate a skin from a description
+  roles export     Freeze the role permission override table into a file
   serve, dev       Run the content and auth API over HTTP
   mcp              Run an MCP server over stdin/stdout, exposing this site's tools
   channels         Connect Telegram/Slack/Discord and chat with an agent from there
@@ -92,7 +96,8 @@ Options
   --cwd <path>            Run as if from this directory
   --no-color              Never colour the output (NO_COLOR is honoured too)
   --verbose               Send structured driver logs to stderr
-  --out <path>            generate types: where to write the declarations
+  --out <path>            generate types: where to write the declarations;
+                          roles export: where to write the file (default cogenta.role-permissions.json)
   --description <text>    skin generate: free text describing the site
   --external              links check: also follow links that leave the site
   --collections <a,b,c>   export: only these collections (default: all)
@@ -370,6 +375,18 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.description === 'string'
         ? { description: parsed.values.description }
         : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'roles') {
+    return runRoles({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.out === 'string' ? { file: parsed.values.out } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

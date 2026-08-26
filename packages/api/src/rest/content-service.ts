@@ -10,7 +10,6 @@ import {
   type DuplicateInput,
   type EntryState,
   enrichWordDiffs,
-  normalisePermissionRule,
   type RouteMatch,
   resolveUrl,
   type SortOrder,
@@ -376,7 +375,12 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     id: string,
     existing?: ContentEntry | null,
   ): Promise<void> {
-    const rule = normalisePermissionRule(target.permissions[action])
+    // The *effective* rule — a database override (fiche 63, ADR-0028) can
+    // add `own: true` to an action the file never marked that way, and this
+    // must see it: reading `target.permissions[action]` directly here would
+    // silently skip fetching the entry's owner, and `permissions.assert`
+    // would then refuse even the entry's own author.
+    const rule = permissions.ruleFor(action, target)
     if (!rule.own) {
       permissions.assert(action, target, context)
       return

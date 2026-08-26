@@ -1979,6 +1979,20 @@ export function installMockFetch(
     createdAt: number
   }[] = []
 
+  // Role permission overrides (fiche 63, ADR-0028) — see `roles.tsx`.
+  // Empty by default, exactly as a real site that has never written one:
+  // every "byCollection" matrix cell falls through to the schema's own
+  // `permissions` block, which `MOCK_SCHEMA` already declares.
+  let rolePermissionOverrides: {
+    targetType: 'collection' | 'taxonomy'
+    targetName: string
+    action: 'read' | 'create' | 'update' | 'delete' | 'publish'
+    roles: string[]
+    own: boolean
+    updatedAt: string
+    updatedBy: string | null
+  }[] = []
+
   // Forms (contract G, ADR-0026) — see `forms.tsx`/`form-submissions.tsx`.
   let formCounter = 0
   let formDefs: {
@@ -5715,6 +5729,70 @@ export function installMockFetch(
             })
           }
           return new Response(null, { status: 204 })
+        }
+      }
+
+      // `/api/role-permissions` (fiche 63, ADR-0028) — admin-only on every
+      // method, like the real router. GET lists every override; PUT writes
+      // one; DELETE reverts one target/action back to the schema file.
+      if (url.includes('/api/role-permissions')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Access denied: role permission overrides can only be written by admin.',
+            },
+          })
+        }
+
+        if (method === 'GET') {
+          return json(200, { data: rolePermissionOverrides })
+        }
+
+        if (method === 'PUT') {
+          const targetType = body.targetType as 'collection' | 'taxonomy'
+          const targetName = body.targetName as string
+          const action = body.action as 'read' | 'create' | 'update' | 'delete' | 'publish'
+          const roles = (body.roles ?? []) as string[]
+          const own = (body.own as boolean | undefined) ?? false
+          rolePermissionOverrides = rolePermissionOverrides.filter(
+            (row) =>
+              !(
+                row.targetType === targetType &&
+                row.targetName === targetName &&
+                row.action === action
+              ),
+          )
+          const record = {
+            targetType,
+            targetName,
+            action,
+            roles,
+            own,
+            updatedAt: '2026-08-26T00:00:00.000Z',
+            updatedBy: user.id,
+          }
+          rolePermissionOverrides.push(record)
+          return json(200, { data: record })
+        }
+
+        if (method === 'DELETE') {
+          const parsed = new URL(url, 'http://localhost')
+          const segments = parsed.pathname
+            .replace(/^.*\/api\/role-permissions\/?/u, '')
+            .split('/')
+            .filter((segment) => segment !== '')
+          const [targetType, targetName, action] = segments
+          const before = rolePermissionOverrides.length
+          rolePermissionOverrides = rolePermissionOverrides.filter(
+            (row) =>
+              !(
+                row.targetType === targetType &&
+                row.targetName === targetName &&
+                row.action === action
+              ),
+          )
+          return json(200, { data: { removed: rolePermissionOverrides.length !== before } })
         }
       }
 

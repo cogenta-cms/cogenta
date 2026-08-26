@@ -153,6 +153,11 @@ export type {
   ReviewRouterOptions,
 } from './review-router.js'
 export { createReviewRouter } from './review-router.js'
+export type {
+  RolePermissionRouter,
+  RolePermissionRouterOptions,
+} from './role-permissions-router.js'
+export { createRolePermissionRouter } from './role-permissions-router.js'
 export type { RestRouter, RestRouterOptions } from './router.js'
 export { createRestRouter } from './router.js'
 export type {

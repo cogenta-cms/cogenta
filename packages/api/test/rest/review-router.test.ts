@@ -173,3 +173,67 @@ describe('GET /api/review', () => {
     expect(response.status).toBe(405)
   })
 })
+
+/**
+ * Fiche 63, ADR-0028 regression: `scopeCollections`'s `holdsRole` used to
+ * read `collection.permissions[action]` directly (the file only), so a
+ * database override granting `publish` to a role the file never named left
+ * that collection invisible to that role's "pending" queue — even though
+ * `PermissionLayer.can('publish', …)` itself would already have allowed the
+ * action. Fixed by reading `PermissionLayer.ruleFor()` instead.
+ */
+describe('the review queue with a database permission override', () => {
+  let directory: string
+  let db: DatabaseHandle
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'cogenta-review-override-'))
+    db = await createSqliteHandle({ url: join(directory, 'review-override.db') })
+    await createSchemaTables(db, COLLECTIONS)
+  })
+
+  afterEach(async () => {
+    await db.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  it('a "publish" override for a new role widens that role\'s pending queue', async () => {
+    const stores = new Map<string, ContentStore>()
+    const storeFor = (collection: CollectionDefinition): ContentStore => {
+      const existing = stores.get(collection.name)
+      if (existing !== undefined) return existing
+      const created = createContentStore({ db, collection, siblings: COLLECTIONS })
+      stores.set(collection.name, created)
+      return created
+    }
+    const article = storeFor(ARTICLE)
+
+    const overriddenRouter = createReviewRouter({
+      collections: COLLECTIONS,
+      permissions: createPermissionLayer({
+        collections: COLLECTIONS,
+        roles: [...ROLES, 'lead'],
+        rolePermissionOverrides: {
+          getCollectionRule: (collection, action) =>
+            collection === 'review_article' && action === 'publish'
+              ? { roles: ['lead'], own: false }
+              : undefined,
+          getTaxonomyRule: () => undefined,
+        },
+      }),
+      storeFor,
+    })
+
+    const entry = await article.create({ values: { title: 'X' }, createdBy: CONTRIBUTOR.id })
+    await article.submitForReview(entry.id, { by: CONTRIBUTOR.id })
+
+    const lead: AccessContext = { actor: { id: 'user-lead', roles: ['lead'] } }
+    const response = await overriddenRouter.handle(
+      { method: 'GET', path: '/api/review', query: { scope: 'pending' } },
+      lead,
+    )
+    expect(response.status).toBe(200)
+    const items = (response.body as { data: readonly ReviewQueueItem[] }).data
+    expect(items.map((item) => item.entry.id)).toContain(entry.id)
+  })
+})

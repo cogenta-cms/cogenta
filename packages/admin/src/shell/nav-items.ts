@@ -285,12 +285,27 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
-    // Fiche 21 task 6: a screen dedicated to the MCP use case, parallel to
-    // "Agents" rather than folded into the generic "Clés API" screen — same
-    // underlying key store, different audience (wiring up an MCP client) and
+    // Fiche 21 task 6: a screen dedicated to managing *this site's own* MCP
+    // server, parallel to "Agents" rather than folded into the generic
+    // "Clés API" screen — same underlying key store, different audience
+    // (wiring up an MCP client like Claude Desktop/Cursor to this site) and
     // a client config snippet the generic screen has no reason to show.
+    // Renamed "MCP Server" (fiche 58 task 1) once fiche 58 added the
+    // opposite direction below (`/mcp-clients`) — the plain "MCP" label had
+    // become ambiguous between the two.
     to: '/mcp',
-    labelKey: 'nav.mcp',
+    labelKey: 'nav.mcpServer',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    // Fiche 58 tasks 2-6: the opposite direction from the entry above —
+    // external MCP servers this site's own agents may consume, never this
+    // site's own server. Security-sensitive (a `stdio` connection spawns an
+    // arbitrary third-party executable), admin-only like every other screen
+    // in this "ai" group.
+    to: '/mcp-clients',
+    labelKey: 'nav.mcpClients',
     group: 'ai',
     visibleWhen: { kind: 'role', role: 'admin' },
   },

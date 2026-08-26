@@ -36,6 +36,7 @@ import { ImportRoute } from './routes/import.js'
 import { LoginRoute } from './routes/login.js'
 import { MarketplaceRoute } from './routes/marketplace.js'
 import { McpRoute } from './routes/mcp.js'
+import { McpClientsRoute } from './routes/mcp-clients.js'
 import { MediaRoute } from './routes/media.js'
 import { MenusRoute } from './routes/menus.js'
 import { NotFoundRoute } from './routes/not-found.js'
@@ -141,6 +142,7 @@ export function App(): JSX.Element {
                 <Route path="providers" element={<ProvidersRoute />} />
                 <Route path="agent-skills" element={<AgentSkillsRoute />} />
                 <Route path="mcp" element={<McpRoute />} />
+                <Route path="mcp-clients" element={<McpClientsRoute />} />
                 <Route path="channels" element={<ChannelsRoute />} />
                 <Route path="users" element={<UsersRoute />} />
                 <Route path="api-keys" element={<ApiKeysRoute />} />

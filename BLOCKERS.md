@@ -1110,3 +1110,29 @@ malformée, conflit `--api-key`/`--email`) et une suite dédiée dans
 `packages/admin/test/mcp/mcp.test.tsx` (liste, création avec la
 configuration client réellement collée dans le DOM — pas un texte
 générique —, copie presse-papiers, révocation, non-admin, accessibilité).
+
+## 19. Fiche 58 — client MCP externe : Postgres/MySQL/MariaDB non exécutés pour `mcp_connections`
+
+La table `mcp_connections` (`packages/mcp/src/registry/tables.ts`,
+`ensureMcpConnectionTables`) et son `McpConnectionStore`
+(`packages/mcp/src/registry/store.ts`) ne sont testés que contre SQLite
+(`packages/mcp/test/registry/store.test.ts`, `:memory:`). Aucune suite
+d'intégration Postgres/MySQL/MariaDB n'existe pour cette table — ni écrite
+ni skippée bruyamment, contrairement à la pratique habituelle du dépôt pour
+une table de contenu (`@cogenta/schema`). Ce n'est pas un oubli au sens où
+d'autres registres de configuration comparables suivent déjà la même
+convention sans intégration trois-bases écrite : `@cogenta/plugins`'s
+`ensurePluginTables` (grants/disabled/usage) et `@cogenta/agents`'s
+`ProviderConfigStore` (fichiers, pas même une table SQL) n'en ont pas non
+plus — `mcp_connections` est un état d'exécution/registre par instance
+serveur, pas du contenu qu'un site publie ou qu'un utilisateur final lit,
+la même distinction qui justifie l'absence d'intégration trois-bases pour
+ces deux précédents. Le SQL lui-même est écrit avec le même souci de
+portabilité dialecte que le reste du dépôt (`identifier`/`sql`/`unsafeRaw`
+via `@cogenta/core`, `booleanColumn` reprenant exactement la convention de
+`@cogenta/auth`'s `tables.ts` — `postgres` → `boolean`, sinon `tinyint`),
+donc le risque réel de divergence Postgres/MySQL est faible, mais **non
+prouvé** par un test réel contre ces deux moteurs. À vérifier si Docker
+redevient disponible sur une machine de développement, avant de considérer
+la fiche 58 aussi rigoureusement close que L13/L15/L18 le sont sur ce point
+précis.

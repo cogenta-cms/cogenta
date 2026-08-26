@@ -402,6 +402,23 @@ majeur et impose une migration automatique du contenu déjà saisi.
 > que `deps.patch` (`security/pr-client.ts`) plutôt que sur une seconde abstraction —
 > seule sa forme d'entrée diffère (un ensemble de fichiers arbitraire plutôt qu'un
 > bump de version d'une seule dépendance).
+>
+> **`tools@1.4` le 2026-08-26** (fiche 58 tâche 6, client MCP externe) : ajout de la
+> forme paramétrée `mcp.external:<connexionId>.<nomOutilDistant>` à la taxonomie.
+> Même règle que les montées précédentes : aucune signature d'outil existante ne
+> change, l'ajout est par le bas. **Une permission par outil distant explicitement
+> coché par l'admin, jamais par connexion** — `mcp.external.<connexion>` a été
+> rejeté par la revue `security-reviewer` du 2026-08-26 (voir
+> `docs/lots/58-mcp-serveur-et-client-externe.md`) : il aurait autorisé
+> indifféremment tous les outils cochés d'une même connexion, quel que soit leur
+> risque réel (un `read_file` et un `send_email` sur le même serveur), ce qui
+> contredit directement le principe « case à cocher par outil » et affaiblit R4 (« un
+> outil déclare ses permissions », pas sa connexion). Portée après `:`, cohérente
+> avec la convention déjà en usage (`http.fetch:api.exemple.com`). Cette forme n'est
+> jamais déclarée par le serveur distant lui-même — `wrapMcpTool` (`@cogenta/mcp`)
+> n'appelle jamais `tools/list` pour la construire ; elle est toujours assemblée par
+> le câblage runtime (`@cogenta/mcp`'s `buildMcpToolDefinitions`) à partir de l'id de
+> connexion et du nom d'outil distant que l'admin a explicitement coché.
 
 ```ts
 defineTool({
@@ -451,6 +468,7 @@ agent.delegate · memory.read · memory.write
 document.extract
 logs.read · redirects.write
 code.patch
+mcp.external:<connexionId>.<nomOutilDistant>
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -465,6 +483,19 @@ pull request portant un vrai changement de code du dépôt lui-même. Aucun outi
 porte cette permission avec un autre effet que « ouvrir une PR » : il n'existe et ne
 peut exister aucun chemin, à ce niveau d'autonomie ou à un autre, par lequel un agent
 écrit directement dans le dépôt.
+
+`mcp.external:<connexionId>.<nomOutilDistant>` (ajoutée en `tools@1.4`, fiche 58 tâche
+6) autorise un agent à appeler **un** outil précis d'**une** connexion MCP externe
+précise — jamais une connexion entière. Portée par un exécutable tiers réellement
+spawné (`stdio`, `@cogenta/mcp`'s `createMcpStdioClient`), sans aucun isolat
+`worker_threads`+`vm` comme `@cogenta/plugins` : le plancher de sécurité est
+l'environnement explicite (jamais un héritage de `process.env`), un répertoire de
+travail dédié, un timeout dur par appel qui tue le process, un veilleur mémoire/CPU
+au mieux, et une confirmation explicite obligatoire à la création de toute connexion
+`stdio` (voir `docs/05-securite.md`, section correspondante). Aucun outil distant
+n'est jamais exposé implicitement : l'admin coche chaque outil un par un depuis
+l'écran « MCP Clients », et le nom d'un outil jamais vu dans le dernier `tools/list`
+réel est refusé.
 
 ### Définition d'un agent
 

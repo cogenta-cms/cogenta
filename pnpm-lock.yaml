@@ -384,6 +384,9 @@ importers:
       '@cogenta/forms':
         specifier: workspace:*
         version: link:../forms
+      '@cogenta/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema

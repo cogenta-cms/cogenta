@@ -518,7 +518,7 @@ export const AssistantIcon = icon(
   </>,
 )
 
-/** "MCP" (`/mcp`) — a plug, the connector metaphor for wiring up an external client. */
+/** "MCP Server" (`/mcp`) and "MCP Clients" (`/mcp-clients`, fiche 58) — a plug, the connector metaphor for wiring up an external client or server. */
 export const McpIcon = icon(
   <>
     <path d="M7 2.5v4M13 2.5v4" />

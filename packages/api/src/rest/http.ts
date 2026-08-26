@@ -222,6 +222,17 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AGENT_SKILL_BUILTIN_UNDELETABLE: 409,
   AGENT_REGISTRY_READ_ONLY: 501,
   AGENT_RUNTIME_UNAVAILABLE: 503,
+  // MCP external connection registry (fiche 58 tasks 2/3) —
+  // `mcp-connections-router.ts`. `MCP_CONNECTION_CONFIRMATION_REQUIRED` and
+  // `MCP_CONNECTION_TOOL_NOT_DISCOVERED` are 400s, not 403s: the caller
+  // themselves is already admin (`requireAdmin` throws its own `FORBIDDEN`
+  // first) — what is wrong is the *request*, missing the mandatory
+  // confirmation or naming a tool never actually discovered on the wire.
+  MCP_CONNECTION_NOT_FOUND: 404,
+  MCP_CONNECTION_INVALID: 400,
+  MCP_CONNECTION_AUTH_INVALID: 400,
+  MCP_CONNECTION_CONFIRMATION_REQUIRED: 400,
+  MCP_CONNECTION_TOOL_NOT_DISCOVERED: 400,
   // Raised by `parseSkillFile` (`@cogenta/agents`) — a malformed `SKILL.md`
   // submitted as-is (L24 task 4's `/api/agent-skills` `content` field) is a
   // bad request, the same shape as any other `*_INVALID` input error below.

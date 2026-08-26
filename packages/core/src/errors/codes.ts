@@ -222,6 +222,24 @@ export const ERROR_CODES = [
   // MCP server (L21) — "cogenta mcp --api-key"
   'MCP_ACTOR_API_KEY_INVALID',
 
+  // MCP client sandboxing floor (fiche 58 task 1bis) — stdio-client.ts's
+  // hard per-call timeout, cancellation, process lifecycle and best-effort
+  // resource watchdog.
+  'MCP_CLIENT_CALL_TIMEOUT',
+  'MCP_CLIENT_CALL_ABORTED',
+  'MCP_CLIENT_PROCESS_EXITED',
+  'MCP_CLIENT_SPAWN_FAILED',
+  'MCP_CLIENT_CLOSED',
+  'MCP_CLIENT_RESOURCE_EXCEEDED',
+
+  // MCP external connection registry (fiche 58 tasks 2/3) — "MCP Clients"
+  // admin screen and its backing store.
+  'MCP_CONNECTION_NOT_FOUND',
+  'MCP_CONNECTION_INVALID',
+  'MCP_CONNECTION_AUTH_INVALID',
+  'MCP_CONNECTION_CONFIRMATION_REQUIRED',
+  'MCP_CONNECTION_TOOL_NOT_DISCOVERED',
+
   // Agents — privacy (L4)
   'PRIVACY_NO_DATA_LEAVES_VIOLATION',
 

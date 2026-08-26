@@ -38,6 +38,7 @@ import {
   type RedirectWriter,
   resolveProviderRegistryConfig,
   type ToolDefinition,
+  type ToolRegistry,
 } from '@cogenta/agents'
 import type {
   AgentRegistryLike,
@@ -48,6 +49,7 @@ import type {
 } from '@cogenta/api'
 import type { AuditLog } from '@cogenta/auth'
 import type { Logger, MediaStore } from '@cogenta/core'
+import { buildMcpToolDefinitions, type McpConnectionStore } from '@cogenta/mcp'
 import { buildPath, type CollectionDefinition } from '@cogenta/schema'
 
 /**
@@ -105,6 +107,13 @@ export interface BuildAgentRuntimeOptions {
    * below, rather than a queue this module keeps entirely to itself.
    */
   readonly approvalQueue?: ApprovalQueue
+  /**
+   * Fiche 58 task 4 — external MCP connections this site has configured.
+   * Optional so a caller that builds a runtime without the registry (an
+   * older call site, a test) is unaffected: omitted, no MCP tool is ever
+   * wired in, exactly as if no connection existed.
+   */
+  readonly mcpConnections?: McpConnectionStore
 }
 
 export interface AgentRuntimeAssembly {
@@ -123,6 +132,24 @@ export interface AgentRuntimeAssembly {
    */
   readonly approvalQueue: ApprovalQueue
   readonly summary: string
+  /**
+   * Fiche 58 task 4 — rebuilds the MCP portion of this runtime's tool
+   * registry from `BuildAgentRuntimeOptions.mcpConnections`'s *current*
+   * state and swaps it in live. `serve.ts`'s `mcp-connections-router.ts`
+   * `onMutated` hook calls this after every create/enable/disable/remove/
+   * test/expose-tools mutation — the same "no restart needed" guarantee
+   * `/api/providers` already gives (`createLiveProviderRegistry.refresh`).
+   * A no-op when `mcpConnections` was never supplied.
+   */
+  refreshMcpTools(): Promise<void>
+  /**
+   * Closes every `McpClient` (and removes every sandbox working directory)
+   * the *current* MCP tool assembly holds. A no-op when no MCP connection
+   * was ever wired in. Call once, on server shutdown (`serve.ts`'s
+   * `dispose`) — never mid-run, which would pull a live tool out from
+   * under an agent still using it.
+   */
+  mcpDispose(): Promise<void>
 }
 
 /**
@@ -268,6 +295,8 @@ function buildToolRegistry(options: {
   readonly collections: readonly CollectionDefinition[]
   readonly notFoundLog: NotFoundLogReader
   readonly redirects: RedirectWriter
+  /** Fiche 58 task 4 — every checked remote tool of every enabled MCP connection, already wrapped as a Contract C `ToolDefinition` by `buildMcpToolDefinitions`. Merged in exactly like every core tool above: an agent grants itself one by naming it in its own `tools` list, same as `content.read`. */
+  readonly mcpDefinitions: readonly ToolDefinition[]
 }) {
   const contentServiceLike: ContentServiceLike = contentServiceLikeOf(options.contentService)
   const contentBrowseServiceLike = contentBrowseServiceLikeOf(
@@ -289,6 +318,7 @@ function buildToolRegistry(options: {
     createContentCollectionsTool(contentBrowseServiceLike),
     createContentListTool(contentBrowseServiceLike),
     createRedirectCreateTool(options.redirects),
+    ...options.mcpDefinitions,
   ]
   return createToolRegistry(definitions)
 }
@@ -415,6 +445,29 @@ function createProviderRegistryAdapter(
 }
 
 /**
+ * Fiche 58 task 4's "no restart needed" half — same idiom as
+ * `createLiveProviderRegistry` above, applied to the whole tool registry
+ * rather than just the provider one: `replace` swaps which underlying
+ * `ToolRegistry` `list`/`get` read from, so an agent mid-run that already
+ * holds a reference to this wrapper sees the new set on its very next
+ * lookup, while a call already dispatched to an old `ExecutableTool`
+ * finishes against the client it was actually built with (never torn out
+ * from under it — see `refreshMcpTools`'s own comment on disposal order).
+ */
+function createLiveToolRegistry(initial: ToolRegistry): ToolRegistry & {
+  replace(next: ToolRegistry): void
+} {
+  let current = initial
+  return {
+    list: () => current.list(),
+    get: (name) => current.get(name),
+    replace(next) {
+      current = next
+    },
+  }
+}
+
+/**
  * Assembles the whole L22 task 1/1bis runtime for one site: three file
  * stores (agents, agent skills, provider config — all under `dataDir`, R1),
  * the real tool registry, and the one `AgentRunner` this site's `/api/agents`
@@ -446,14 +499,38 @@ export async function buildAgentRuntime(
   const liveProviders = createLiveProviderRegistry(providerStore)
   await liveProviders.refresh()
 
-  const tools = buildToolRegistry({
+  const coreToolOptions = {
     contentService: options.contentService,
     mediaStore: options.mediaStore,
     projectRoot: options.projectRoot,
     collections: options.collections,
     notFoundLog: options.notFoundLog,
     redirects: options.redirects,
-  })
+  }
+
+  // Fiche 58 task 4 — built once, here, before the tool registry: every
+  // enabled connection with at least one checked tool gets its own
+  // sandboxed `McpClient` (`../client/stdio-client.js`'s floor — no
+  // inherited environment, a dedicated cwd, a hard per-call timeout, a
+  // best-effort resource watchdog), shared by every one of that
+  // connection's exposed tools. A connection that fails to initialize is
+  // logged and skipped, never thrown — one misbehaving external server
+  // must not keep this whole runtime from starting (R2's own posture,
+  // applied here to a different kind of "capability that may be absent").
+  let mcpAssembly =
+    options.mcpConnections === undefined
+      ? { definitions: [] as readonly ToolDefinition[], dispose: async () => undefined }
+      : await buildMcpToolDefinitions({ store: options.mcpConnections, logger: options.logger })
+
+  // A live wrapper, not a fixed `ToolRegistry`: `refreshMcpTools` below
+  // swaps what it points at, so an admin creating a connection or checking
+  // a new tool from the "MCP Clients" screen takes effect on this
+  // runtime's very next `createAgentRunner` lookup — no `cogenta serve`
+  // restart, the same "no restart needed" guarantee `liveProviders`
+  // already gives `/api/providers`.
+  const tools = createLiveToolRegistry(
+    buildToolRegistry({ ...coreToolOptions, mcpDefinitions: mcpAssembly.definitions }),
+  )
 
   // Built once (or reused from `options.approvalQueue`, injectable for
   // tests) and handed both to the runner (where `co-pilot` autonomy files a
@@ -485,6 +562,45 @@ export async function buildAgentRuntime(
   )
   const skillRegistry = createSkillRegistryAdapter(skillStore)
 
+  /**
+   * Fiche 58 task 4 — rebuilds the MCP portion of the tool registry from
+   * the connection store's *current* state (every enabled connection,
+   * whatever is exposed right now) and swaps it into `tools` atomically
+   * (`createLiveToolRegistry`'s `replace`). The *old* clients are closed
+   * only after the swap, never before: a tool call already in flight
+   * against the previous `McpClient` finishes normally, and nothing new
+   * can be dispatched to it once `tools.replace` has taken effect.
+   */
+  async function doRefreshMcpTools(): Promise<void> {
+    if (options.mcpConnections === undefined) return
+    const nextAssembly = await buildMcpToolDefinitions({
+      store: options.mcpConnections,
+      logger: options.logger,
+    })
+    const previous = mcpAssembly
+    tools.replace(
+      buildToolRegistry({ ...coreToolOptions, mcpDefinitions: nextAssembly.definitions }),
+    )
+    mcpAssembly = nextAssembly
+    await previous.dispose()
+  }
+
+  // Serialised, not called bare: two `refreshMcpTools()` calls racing (an
+  // admin's own double-click on "test connection", or two REST calls
+  // overlapping) would otherwise let one call's freshly-built assembly —
+  // including its own genuinely spawned `stdio` processes and sandbox
+  // directories — be overwritten by the other's `mcpAssembly = ...` before
+  // ever being disposed, leaking an unsandboxed process that outlives even
+  // this runtime's own `mcpDispose()` at shutdown (found by the fiche 58
+  // security review). Chaining onto the same promise, success or failure,
+  // guarantees at most one `doRefreshMcpTools` runs at a time and every
+  // built assembly is either adopted or disposed, never orphaned.
+  let refreshChain: Promise<void> = Promise.resolve()
+  function refreshMcpTools(): Promise<void> {
+    refreshChain = refreshChain.then(doRefreshMcpTools, doRefreshMcpTools)
+    return refreshChain
+  }
+
   const configuredProviders = (await providerStore.list()).filter((p) => p.enabled)
   const summary =
     configuredProviders.length === 0
@@ -493,5 +609,14 @@ export async function buildAgentRuntime(
           .map((p) => p.provider)
           .join(', ')})`
 
-  return { agentRegistry, agentRunner, providerRegistry, skillRegistry, approvalQueue, summary }
+  return {
+    agentRegistry,
+    agentRunner,
+    providerRegistry,
+    skillRegistry,
+    approvalQueue,
+    summary,
+    refreshMcpTools,
+    mcpDispose: () => mcpAssembly.dispose(),
+  }
 }

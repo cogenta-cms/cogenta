@@ -40,8 +40,8 @@ afterEach(() => {
 
 async function goToMcp(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'MCP' }))
-  await screen.findByRole('heading', { name: 'MCP' })
+  fireEvent.click(screen.getByRole('link', { name: 'Serveur MCP' }))
+  await screen.findByRole('heading', { name: 'Serveur MCP' })
 }
 
 describe('the MCP key list', () => {

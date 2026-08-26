@@ -447,7 +447,12 @@ function IntegrityPanel({
                 ? t('audit.integrityNeverRun')
                 : t('audit.integrityLastChecked', {
                     at: status.lastCheckedAt,
-                    mode: status.lastMode ?? '?',
+                    mode:
+                      status.lastMode === null
+                        ? '?'
+                        : t(`audit.integrityMode.${status.lastMode}`, {
+                            defaultValue: status.lastMode,
+                          }),
                   })}
           </p>
         </div>

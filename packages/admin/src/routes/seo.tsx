@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
@@ -60,6 +61,24 @@ import { RedirectsPanel } from './redirects.js'
 
 const TAB_ORDER = ['general', 'sitemap', 'social', 'redirects', 'diagnostics'] as const
 type TabId = (typeof TAB_ORDER)[number]
+
+/**
+ * `createSeoRouter`'s `reason` (`@cogenta/api`) is prose meant for an API
+ * response, in English, by AGENTS.md's own "code in English" rule — but the
+ * diagnostics tab renders it straight into a French admin screen (found
+ * auditing the SEO screen end to end, 2026-08-26: "This collection declares
+ * no route." sitting in an otherwise fully French table). Only the two
+ * reasons the router actually emits are mapped; an unrecognised future
+ * reason still shows, in whatever language the server sent it, rather than
+ * silently disappearing.
+ */
+function translatedSitemapReason(t: TFunction, reason: string | null): string {
+  if (reason === 'This collection declares no route.') return t('seo.reasonNoRoute')
+  if (reason === 'This collection is not readable by the "public" role.') {
+    return t('seo.reasonNotPublicRole')
+  }
+  return reason ?? '—'
+}
 
 function isTabId(value: string | null): value is TabId {
   return TAB_ORDER.includes(value as TabId)
@@ -619,7 +638,7 @@ function DiagnosticsTab({ active }: { readonly active: boolean }): JSX.Element {
                         </TableCell>
                         <TableCell>{report.urlCount}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {report.reason ?? '—'}
+                          {translatedSitemapReason(t, report.reason)}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -1059,6 +1059,8 @@
     "includedColumn": "Dans le sitemap",
     "urlCountColumn": "URL",
     "reasonColumn": "Pourquoi pas",
+    "reasonNoRoute": "Cette collection ne déclare aucune route.",
+    "reasonNotPublicRole": "Cette collection n'est pas lisible par le rôle « public ».",
     "includedYes": "Oui",
     "includedNo": "Non",
     "robotsHeading": "robots.txt",
@@ -1389,6 +1391,10 @@
     "integrityHeading": "Vérification d'intégrité planifiée",
     "integrityNeverRun": "Pas encore vérifié.",
     "integrityLastChecked": "Dernière vérification {{at}} ({{mode}}).",
+    "integrityMode": {
+      "incremental": "incrémentale",
+      "full": "complète"
+    },
     "integrityOk": "Chaîne intacte lors de la dernière vérification.",
     "integrityBroken": "La vérification planifiée a trouvé la chaîne rompue à l'entrée {{entryId}}. Considérez comme non fiable toute entrée à partir de ce point.",
     "retentionUnbounded": "Aucune purge n'est configurée pour ce journal : il conserve toutes les entrées et croît sans limite."
@@ -1582,6 +1588,10 @@
       "ok": "opérationnel",
       "degraded": "dégradé",
       "down": "indisponible"
+    },
+    "healthTier": {
+      "optimal": "optimal",
+      "degraded": "dégradé"
     },
     "healthDegradedHint": "Fonctionne sans service externe — normal sur une installation neuve. Détail sur l'écran Santé.",
     "adminOnly": "Réservé au rôle « admin ».",
@@ -1898,7 +1908,11 @@
         },
         "priceDisplay": {
           "label": "Affichage des prix",
-          "help": "Les prix du catalogue sont affichés TTC ou HT."
+          "help": "Les prix du catalogue sont affichés TTC ou HT.",
+          "options": {
+            "ttc": "TTC (taxes comprises)",
+            "ht": "HT (hors taxes)"
+          }
         },
         "countriesServed": {
           "label": "Pays servis",
@@ -1974,7 +1988,13 @@
       "updates": {
         "autoUpdatePolicy": {
           "label": "Mises à jour automatiques",
-          "help": "Désactivé par défaut. Une fois activé, le site vérifie npm chaque jour et applique toute mise à jour correspondante — jamais une dont le changelog mentionne un contrat figé, toujours laissée pour relecture manuelle."
+          "help": "Désactivé par défaut. Une fois activé, le site vérifie npm chaque jour et applique toute mise à jour correspondante — jamais une dont le changelog mentionne un contrat figé, toujours laissée pour relecture manuelle.",
+          "options": {
+            "off": "Désactivé — vérifie seulement, n'applique jamais automatiquement",
+            "patch": "Versions correctives (patch) uniquement",
+            "patch-minor": "Versions correctives et mineures",
+            "patch-minor-major": "Versions correctives, mineures et majeures"
+          }
         }
       }
     }
@@ -3222,6 +3242,10 @@
     "errorTitle": "Une erreur est survenue",
     "driversHeading": "Pilotes",
     "driversIntro": "{{count}} problème(s) à corriger. Un pilote marqué « dégradé » est normal sur une installation neuve — cela signifie qu'aucun service externe (Redis, S3, …) n'est configuré, pas que quelque chose est cassé.",
+    "tier": {
+      "optimal": "optimal",
+      "degraded": "dégradé"
+    },
     "reasonNamed": "configuré explicitement",
     "reasonFirstAvailable": "premier pilote disponible",
     "reasonFallback": "après repli sur : {{skipped}}",
@@ -3305,6 +3329,16 @@
     "loadError": "Impossible de charger les tâches planifiées.",
     "runError": "Impossible d'exécuter cette tâche.",
     "retryError": "Impossible de relancer ce travail.",
+    "taskName": {
+      "scheduled-publish": "Publie les entrées dont l'heure programmée est atteinte, et vide la file d'outils.",
+      "not-found-purge": "Purge les entrées du journal 404 passé le délai de rétention du site.",
+      "audit-integrity": "Vérifie que la chaîne de hachage du journal d'audit n'a pas été altérée.",
+      "trash-purge": "Supprime définitivement le contenu de la corbeille passé le délai de rétention du site.",
+      "forms-purge": "Purge les soumissions de formulaire passé le délai de rétention RGPD propre à chaque formulaire.",
+      "channel-notifications": "Envoie toute notification groupée en attente vers son canal.",
+      "analytics-purge": "Purge les événements de vue de page passé le délai de rétention configuré du site.",
+      "updates-auto-check": "Vérifie sur npm une nouvelle version de @cogenta/core/@cogenta/cli, et l'applique si la politique de mise à jour automatique l'autorise et qu'aucun risque de rupture de contrat n'a été signalé."
+    },
     "tasksHeading": "Tâches",
     "columnTask": "Tâche",
     "columnLastRun": "Dernière exécution",

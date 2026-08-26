@@ -182,7 +182,9 @@ describe('Diagnostic — read-only reports (fiche 13 task 2)', () => {
 
     expect(await screen.findByText('page')).toBeDefined()
     expect(screen.getByText('memo')).toBeDefined()
-    expect(screen.getByText('This collection is not readable by the "public" role.')).toBeDefined()
+    expect(
+      screen.getByText("Cette collection n'est pas lisible par le rôle « public »."),
+    ).toBeDefined()
   })
 
   it('warns loudly when robots.txt disallows everything', async () => {

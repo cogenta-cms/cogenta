@@ -160,7 +160,9 @@ export function ScheduledRoute(): JSX.Element | null {
               {tasks.map((task) => (
                 <tr key={task.name}>
                   <th scope="row" className="font-normal">
-                    <span className="font-medium">{task.description}</span>
+                    <span className="font-medium">
+                      {t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })}
+                    </span>
                     {task.overdue && (
                       <span
                         role="status"
@@ -256,7 +258,11 @@ export function ScheduledRoute(): JSX.Element | null {
           onOpenChange={(open) => {
             if (!open) setConfirmTarget(null)
           }}
-          title={t('scheduled.confirmTitle', { name: confirmTarget.description })}
+          title={t('scheduled.confirmTitle', {
+            name: t(`scheduled.taskName.${confirmTarget.name}`, {
+              defaultValue: confirmTarget.description,
+            }),
+          })}
           closeLabel={t('common.cancel')}
           footer={
             <>

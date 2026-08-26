@@ -58,6 +58,17 @@ export interface ItemFieldDefinition {
   readonly localized: boolean
   readonly admin?: FieldAdminMeta
   readonly options: Readonly<Record<string, unknown>>
+  /**
+   * Admin-editor-only: hide this row's input unless a sibling field in the
+   * same item currently holds one of `equals`. Never read by contract B or
+   * by `fieldsFromRows`-style save logic — purely how `RepeaterField`
+   * decides what to render, so an item with, say, `kind: 'email'` doesn't
+   * show `choicesText`/`consentText`/file-only inputs that can never apply
+   * to it (found auditing the forms builder screen end to end, 2026-08-26:
+   * every property for every field kind was shown at once, unlike any
+   * comparable form builder).
+   */
+  readonly visibleWhen?: { readonly field: string; readonly equals: readonly unknown[] }
 }
 
 function itemField(

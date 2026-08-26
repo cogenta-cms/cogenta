@@ -91,8 +91,11 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
           className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[report.status]}`}
           aria-hidden="true"
         />
-        {report.driver} <span className="text-muted-foreground">({report.tier})</span> —{' '}
-        {t(`dashboard.healthStatus.${report.status}`)}
+        {report.driver}{' '}
+        <span className="text-muted-foreground">
+          ({t(`dashboard.healthTier.${report.tier}`, { defaultValue: report.tier })})
+        </span>{' '}
+        — {t(`dashboard.healthStatus.${report.status}`)}
       </span>
       {/* A raw "degraded" badge, unexplained, reads as an incident to a
           non-technical admin — it almost always just means "no external

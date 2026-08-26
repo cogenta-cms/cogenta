@@ -15,7 +15,12 @@ import { Field, Input, Select } from '../ui/index.js'
  * registry entry with an existing `uiType` needs no change to this file at
  * all, only a translation for its label under
  * `settings.field.<key>.label`/`.help` (falling back to the raw key when
- * even that is missing, never to a blank or a crash).
+ * even that is missing, never to a blank or a crash). A `select` option's
+ * own label follows the same convention one level deeper,
+ * `settings.field.<key>.options.<value>`, falling back to the registry's own
+ * (English) `option.label` — the registry lives in `@cogenta/schema`, which
+ * has no i18n of its own, so an option nobody has translated yet still shows
+ * something instead of a blank row.
  *
  * Each field saves itself: text-like fields on blur (so a partial edit is
  * never sent mid-keystroke), boolean/select-like fields immediately on
@@ -258,7 +263,9 @@ export function SiteSettingsField({
             >
               {(setting.options ?? []).map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(`settings.field.${setting.key}.options.${option.value}`, {
+                    defaultValue: option.label,
+                  })}
                 </option>
               ))}
             </Select>

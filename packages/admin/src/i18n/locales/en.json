@@ -1060,6 +1060,8 @@
     "includedColumn": "In the sitemap",
     "urlCountColumn": "URLs",
     "reasonColumn": "Why not",
+    "reasonNoRoute": "This collection declares no route.",
+    "reasonNotPublicRole": "This collection is not readable by the \"public\" role.",
     "includedYes": "Yes",
     "includedNo": "No",
     "robotsHeading": "robots.txt",
@@ -1390,6 +1392,10 @@
     "integrityHeading": "Scheduled integrity check",
     "integrityNeverRun": "Not checked yet.",
     "integrityLastChecked": "Last checked {{at}} ({{mode}}).",
+    "integrityMode": {
+      "incremental": "incremental",
+      "full": "full"
+    },
     "integrityOk": "Chain intact as of the last check.",
     "integrityBroken": "The scheduled check found the chain broken at entry {{entryId}}. Treat every entry from this point on as untrusted.",
     "retentionUnbounded": "No purge is configured for this log: it keeps every entry and grows without limit."
@@ -1583,6 +1589,10 @@
       "ok": "operational",
       "degraded": "degraded",
       "down": "down"
+    },
+    "healthTier": {
+      "optimal": "optimal",
+      "degraded": "degraded"
     },
     "healthDegradedHint": "Working without an external service — normal on a fresh install. Details on the Health screen.",
     "adminOnly": "Restricted to the \"admin\" role.",
@@ -1899,7 +1909,11 @@
         },
         "priceDisplay": {
           "label": "Price display",
-          "help": "Whether catalogue prices are shown tax-inclusive or tax-exclusive."
+          "help": "Whether catalogue prices are shown tax-inclusive or tax-exclusive.",
+          "options": {
+            "ttc": "Tax-inclusive (TTC)",
+            "ht": "Tax-exclusive (HT)"
+          }
         },
         "countriesServed": {
           "label": "Countries served",
@@ -1975,7 +1989,13 @@
       "updates": {
         "autoUpdatePolicy": {
           "label": "Automatic updates",
-          "help": "Off by default. When set, the site checks npm daily and applies any update that fits — never one whose changelog mentions a frozen contract, which is always left for manual review."
+          "help": "Off by default. When set, the site checks npm daily and applies any update that fits — never one whose changelog mentions a frozen contract, which is always left for manual review.",
+          "options": {
+            "off": "Off — check only, never apply automatically",
+            "patch": "Patch releases only",
+            "patch-minor": "Patch and minor releases",
+            "patch-minor-major": "Patch, minor and major releases"
+          }
         }
       }
     }
@@ -3223,6 +3243,10 @@
     "errorTitle": "Something went wrong",
     "driversHeading": "Drivers",
     "driversIntro": "{{count}} problem(s) to fix. A driver marked \"degraded\" is expected on a fresh install — it means no external service (Redis, S3, …) is configured, not that something is broken.",
+    "tier": {
+      "optimal": "optimal",
+      "degraded": "degraded"
+    },
     "reasonNamed": "explicitly configured",
     "reasonFirstAvailable": "first available driver",
     "reasonFallback": "after falling back from: {{skipped}}",
@@ -3306,6 +3330,16 @@
     "loadError": "Could not load scheduled tasks.",
     "runError": "Could not run this task.",
     "retryError": "Could not retry this job.",
+    "taskName": {
+      "scheduled-publish": "Publish entries whose scheduled time has come, and drain the tools queue.",
+      "not-found-purge": "Purge 404 log entries past the site's retention window.",
+      "audit-integrity": "Verify the audit log hash chain has not been tampered with.",
+      "trash-purge": "Permanently delete trashed content past the site's retention window.",
+      "forms-purge": "Purge form submissions past each form's own GDPR retention window.",
+      "channel-notifications": "Flush any due grouped notification to its channel.",
+      "analytics-purge": "Purge page-view events past the site's configured retention window.",
+      "updates-auto-check": "Check npm for a newer @cogenta/core/@cogenta/cli, and apply it when the auto-update policy allows and no contract risk was flagged."
+    },
     "tasksHeading": "Tasks",
     "columnTask": "Task",
     "columnLastRun": "Last run",

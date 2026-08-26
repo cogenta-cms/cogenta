@@ -43,7 +43,11 @@ describe('scheduled tasks', () => {
     await goToScheduled()
 
     expect(await screen.findByText('Scheduled publication')).toBeDefined()
-    expect(screen.getByText('Trash purge')).toBeDefined()
+    expect(
+      screen.getByText(
+        'Supprime définitivement le contenu de la corbeille passé le délai de rétention du site.',
+      ),
+    ).toBeDefined()
     expect(screen.getByText('Réussie')).toBeDefined()
     expect(screen.getByText('En retard')).toBeDefined()
     expect(screen.getByText('Jamais exécutée')).toBeDefined()
@@ -82,7 +86,9 @@ describe('scheduled tasks', () => {
 
     render(<App />)
     await goToScheduled()
-    await screen.findByText('Trash purge')
+    await screen.findByText(
+      'Supprime définitivement le contenu de la corbeille passé le délai de rétention du site.',
+    )
 
     const buttons = screen.getAllByRole('button', { name: 'Exécuter maintenant' })
     // The second registered task (trash-purge) is destructive.

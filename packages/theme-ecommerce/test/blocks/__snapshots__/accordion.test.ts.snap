@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`accordion > renders to stable markup 1`] = `"<section class="ce-block ce-accordion" data-block="accordion"><h2 class="ce-accordion__title" data-field="title">Shipping details</h2><ul class="ce-accordion__items"><li class="ce-accordion__item"><details class="ce-accordion__details"><summary class="ce-accordion__question"><span class="ce-accordion__question-text">What is the delivery window?</span><span class="ce-accordion__marker" aria-hidden="true"></span></summary><div class="ce-accordion__answer"><p>Orders over $75 ship free within 3–5 days.</p></div></details></li></ul></section>"`;

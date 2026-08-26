@@ -52,7 +52,7 @@ Si la réponse est « oui, mais ce serait moins pratique », la RFC est refusée
 | Contrat | Figé | Version |
 |---|---|---|
 | A — schéma de contenu | **oui**, depuis le 2026-08-13 | `schema@1.0` |
-| B — vocabulaire de blocs | **oui**, depuis le 2026-08-13 | `blocks@1.0` |
+| B — vocabulaire de blocs | **oui**, depuis le 2026-08-13 | `blocks@2.0` (RFC 0001/0002, 2026-08-26) |
 | C — outil agentique | **oui**, depuis le 2026-08-14 (ADR-0020) | `tools@1.0` |
 | D — thème | **oui**, depuis le 2026-08-13 | `theme@1.1` |
 

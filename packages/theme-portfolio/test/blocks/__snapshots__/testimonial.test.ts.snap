@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderTestimonial > matches a stable snapshot 1`] = `"<figure class="cg-block cg-testimonial" data-block="testimonial"><blockquote class="cg-testimonial__quote"><p>They shipped a design system and a working site in the same sprint.</p></blockquote><figcaption class="cg-testimonial__attribution"><img class="cg-testimonial__avatar" src="/img/avatar-96.avif" width="96" height="96" alt="" loading="lazy" decoding="async"><span class="cg-testimonial__names"><span class="cg-testimonial__name">A. Reviewer</span><span class="cg-testimonial__role">Client, Globex</span></span></figcaption></figure>"`;

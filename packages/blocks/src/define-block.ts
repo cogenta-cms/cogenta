@@ -8,10 +8,11 @@ import {
   HEADING_LEVELS,
   type PlacedBlock,
 } from './types.js'
+import { blockVariantSchema } from './variant.js'
 import { isBlockVersion } from './version.js'
 
 /** Reserved by the envelope. A field may not shadow one. */
-const RESERVED_FIELDS = new Set(['_key', '_type', '_version'])
+const RESERVED_FIELDS = new Set(['_key', '_type', '_version', 'variant'])
 
 /** Matches the vocabulary's own names: `hero`, `mediaFigure`, `collectionList`. */
 const BLOCK_NAME = /^[a-z][a-zA-Z0-9]*$/
@@ -52,6 +53,10 @@ export function defineBlock<const N extends string, const S extends BlockSchema>
     _key: z.string().min(1),
     _type: z.literal(name),
     _version: z.string().refine(isBlockVersion, { error: 'must be a major.minor.patch version' }),
+    // Envelope, not a schema field (`blocks@2.0`, RFC 0002) — every block
+    // gains it uniformly, so it is added here rather than by each of the
+    // seventeen `defineBlock` calls repeating it.
+    variant: blockVariantSchema.optional(),
   }
 
   for (const [field, definition] of Object.entries(schema)) {

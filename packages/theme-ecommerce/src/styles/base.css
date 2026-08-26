@@ -164,6 +164,64 @@ img {
   padding-inline: var(--ce-gutter);
 }
 
+/* --- per-block visual variant (blocks@2.0, RFC 0002) ----------------------
+   `withBlockVariant` (`@cogenta/theme-kit`) stamps one `data-variant-<axis>`
+   attribute per axis an author actually set — never all four, never one this
+   theme does not resolve. Two attribute selectors give every rule here the
+   same specificity, (0,2,0), which is what lets it override `.ce-block`
+   above regardless of source order, without `!important` anywhere.
+
+   `background: 'image'` has no theme mechanism to attach an actual image to
+   a block instance (RFC 0002 adds only the semantic token, not a media
+   field) — resolved to the same tinted surface as the closest honest
+   approximation this theme has, rather than silently doing nothing with a
+   stated author intent.
+   ------------------------------------------------------------------------- */
+
+[data-block][data-variant-background="muted"],
+[data-block][data-variant-background="image"] {
+  padding-block: var(--ce-s10);
+  border-radius: var(--ce-radius-lg);
+}
+
+[data-block][data-variant-background="muted"] {
+  background: var(--ce-surface-sunken);
+}
+
+[data-block][data-variant-background="image"] {
+  background: var(--ce-surface-tinted);
+}
+
+[data-block][data-variant-spacing="compact"] {
+  margin-block: calc(var(--ce-section-y) / 2);
+}
+
+/* No rule for "comfortable": it names this theme's existing default, so an
+   author who picks it explicitly gets exactly what an absent `variant`
+   already gave them — the whole point of "theme default" being a real,
+   selectable option and not only the absence of a choice. */
+
+[data-block][data-variant-spacing="spacious"] {
+  margin-block: calc(var(--ce-section-y) * 1.6);
+}
+
+[data-block][data-variant-align="start"] {
+  text-align: start;
+}
+
+[data-block][data-variant-align="center"] {
+  text-align: center;
+}
+
+[data-block][data-variant-align="end"] {
+  text-align: end;
+}
+
+[data-block][data-variant-width="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
 .ce-page__title {
   max-inline-size: var(--ce-page);
   margin-inline: auto;

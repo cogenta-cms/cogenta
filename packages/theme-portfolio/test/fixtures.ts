@@ -235,6 +235,37 @@ const FAQ_ANSWER: RichTextDocument = [
   },
 ]
 
+const TESTIMONIAL_QUOTE: RichTextDocument = [
+  {
+    _key: 't1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      {
+        _key: 'ts1',
+        _type: 'span',
+        text: 'They shipped a design system and a working site in the same sprint.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
+const ACCORDION_ANSWER: RichTextDocument = [
+  {
+    _key: 'ac1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      { _key: 'acs1', _type: 'span', text: 'Yes — see the ', marks: [] },
+      { _key: 'acs2', _type: 'span', text: 'process page', marks: ['ac-m1'] },
+      { _key: 'acs3', _type: 'span', text: ' for the full breakdown.', marks: [] },
+    ],
+    markDefs: [{ _key: 'ac-m1', _type: 'internalLink', collection: 'page', id: 'process' }],
+  },
+]
+
 const VERSION = '1.0.0'
 
 /**
@@ -364,9 +395,68 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     ratio: '16:9',
     consentRequired: true,
   },
+  testimonial: {
+    _key: 'b-testimonial',
+    _type: 'testimonial',
+    _version: VERSION,
+    quote: TESTIMONIAL_QUOTE,
+    attribution: { name: 'A. Reviewer', role: 'Client, Globex', avatar: 'media-avatar' },
+  },
+  pricingTable: {
+    _key: 'b-pricing',
+    _type: 'pricingTable',
+    _version: VERSION,
+    title: 'Plans',
+    tiers: [
+      {
+        _key: 'p1',
+        name: 'Studio',
+        price: '$1,200',
+        interval: '/mo',
+        features: ['Two projects', 'Async reviews'],
+        action: { label: 'Start', target: { href: '/contact' }, emphasis: 'secondary' },
+      },
+      {
+        _key: 'p2',
+        name: 'Partner',
+        price: '$3,800',
+        interval: '/mo',
+        features: ['Unlimited projects', 'Dedicated pod', 'Same-day reviews'],
+        action: { label: 'Talk to us', target: { href: '/contact' }, emphasis: 'primary' },
+        highlighted: true,
+      },
+    ],
+  },
+  accordion: {
+    _key: 'b-accordion',
+    _type: 'accordion',
+    _version: VERSION,
+    title: 'How we work',
+    items: [{ _key: 'ac1', question: 'Do you share the process?', answer: ACCORDION_ANSWER }],
+  },
+  statCounter: {
+    _key: 'b-counter',
+    _type: 'statCounter',
+    _version: VERSION,
+    title: 'By the numbers',
+    stats: [
+      { _key: 'sc1', value: '48', label: 'Studios shipped' },
+      { _key: 'sc2', value: '12', label: 'Countries' },
+    ],
+  },
+  logoStrip: {
+    _key: 'b-logostrip',
+    _type: 'logoStrip',
+    _version: VERSION,
+    logos: [
+      { _key: 'ls1', media: 'logo-acme' },
+      { _key: 'ls2', media: 'logo-globex' },
+    ],
+    caption: 'As seen in',
+  },
 }
 
-/** The twelve, in contract B's order. */
+/** The seventeen of `blocks@2.0`, in contract B's order. */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,
@@ -380,4 +470,9 @@ export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.logos,
   BLOCKS.collectionList,
   BLOCKS.embed,
+  BLOCKS.testimonial,
+  BLOCKS.pricingTable,
+  BLOCKS.accordion,
+  BLOCKS.statCounter,
+  BLOCKS.logoStrip,
 ]

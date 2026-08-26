@@ -3003,6 +3003,36 @@
       "confirmTemplateApply": "Replace the page",
       "importUnknownType": "Could not import: \"{{type}}\" is not a block this site's vocabulary declares.",
       "importInvalid": "This file is not a valid pattern export."
+    },
+    "variant": {
+      "heading": "Appearance",
+      "default": "Theme default",
+      "backgroundLabel": "Background",
+      "background": {
+        "default": "Theme default",
+        "muted": "Muted",
+        "image": "Image"
+      },
+      "spacingLabel": "Spacing",
+      "spacing": {
+        "default": "Theme default",
+        "compact": "Compact",
+        "comfortable": "Comfortable",
+        "spacious": "Spacious"
+      },
+      "alignLabel": "Alignment",
+      "align": {
+        "default": "Theme default",
+        "start": "Start",
+        "center": "Center",
+        "end": "End"
+      },
+      "widthLabel": "Width",
+      "width": {
+        "default": "Theme default",
+        "contained": "Contained",
+        "full": "Full-bleed"
+      }
     }
   },
   "assist": {

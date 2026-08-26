@@ -3,17 +3,17 @@ import { defineTheme } from '@cogenta/theme-kit'
 /**
  * Contract D — Thème, `theme@1.0`/`1.1`.
  *
- * `implements` lists the twelve blocks of contract B in the order the
- * contract lists them. `runtime: 'static'` describes what this theme itself
- * needs to render a page — `collectionList` stays `runtime: 'server'` in the
- * vocabulary regardless, and it is that block, not this manifest, that forces
- * a server for the pages that use it.
+ * `implements` lists the seventeen blocks of contract B (`blocks@2.0`, RFC
+ * 0001) in the order the contract lists them. `runtime: 'static'` describes
+ * what this theme itself needs to render a page — `collectionList` stays
+ * `runtime: 'server'` in the vocabulary regardless, and it is that block, not
+ * this manifest, that forces a server for the pages that use it.
  */
 export default defineTheme({
   name: 'magazine',
-  version: '1.0.0',
+  version: '1.1.0',
   engine: '^1.0.0',
-  blocks: '^1.0.0',
+  blocks: '^2.0.0',
   implements: [
     'hero',
     'prose',
@@ -27,6 +27,11 @@ export default defineTheme({
     'logos',
     'collectionList',
     'embed',
+    'testimonial',
+    'pricingTable',
+    'accordion',
+    'statCounter',
+    'logoStrip',
   ],
   collections: ['article', 'page'],
   runtime: 'static',

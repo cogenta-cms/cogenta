@@ -237,6 +237,40 @@ const FAQ_ANSWER: RichTextDocument = [
   },
 ]
 
+const TESTIMONIAL_QUOTE: RichTextDocument = [
+  {
+    _key: 't1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      {
+        _key: 'ts1',
+        _type: 'span',
+        text: 'They ran my obituary for the guild newsletter without a single typo.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
+const ACCORDION_ANSWER: RichTextDocument = [
+  {
+    _key: 'aa1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      {
+        _key: 'aas1',
+        _type: 'span',
+        text: 'Only the composing stick, and only if asked.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
 const VERSION = '1.0.0'
 
 type BlockOfType<T extends VocabularyBlock['_type']> = Extract<VocabularyBlock, { _type: T }>
@@ -361,9 +395,69 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     ratio: '16:9',
     consentRequired: true,
   },
+  testimonial: {
+    _key: 'b-testimonial',
+    _type: 'testimonial',
+    _version: VERSION,
+    quote: TESTIMONIAL_QUOTE,
+    attribution: { name: 'D. Okonkwo', role: 'Subscriber since 1998', avatar: 'media-avatar' },
+  },
+  pricingTable: {
+    _key: 'b-pricing',
+    _type: 'pricingTable',
+    _version: VERSION,
+    title: 'Subscription rates',
+    tiers: [
+      {
+        _key: 'p1',
+        name: 'Digital',
+        price: '$4',
+        interval: '/mo',
+        features: ['Weekly archive access', 'No print delivery'],
+      },
+      {
+        _key: 'p2',
+        name: 'Print + digital',
+        price: '$12',
+        interval: '/mo',
+        features: ['Four issues a year, mailed flat', 'Full digital archive'],
+        action: { label: 'Subscribe', target: { href: '/subscribe/print' }, emphasis: 'primary' },
+        highlighted: true,
+      },
+    ],
+  },
+  accordion: {
+    _key: 'b-accordion',
+    _type: 'accordion',
+    _version: VERSION,
+    title: 'House style, briefly',
+    items: [
+      { _key: 'a1', question: 'Do you sell the composing equipment?', answer: ACCORDION_ANSWER },
+    ],
+  },
+  statCounter: {
+    _key: 'b-stat-counter',
+    _type: 'statCounter',
+    _version: VERSION,
+    title: 'This edition',
+    stats: [
+      { _key: 'sc1', value: '4', label: 'Working machines' },
+      { _key: 'sc2', value: '1928', label: 'Founding year' },
+    ],
+  },
+  logoStrip: {
+    _key: 'b-logo-strip',
+    _type: 'logoStrip',
+    _version: VERSION,
+    logos: [
+      { _key: 'ls1', media: 'logo-acme' },
+      { _key: 'ls2', media: 'logo-globex' },
+    ],
+    caption: 'Printed with type and ink donated by',
+  },
 }
 
-/** The twelve, in contract B's order. */
+/** The seventeen, in contract B's order (`blocks@2.0`, RFC 0001). */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,
@@ -377,4 +471,9 @@ export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.logos,
   BLOCKS.collectionList,
   BLOCKS.embed,
+  BLOCKS.testimonial,
+  BLOCKS.pricingTable,
+  BLOCKS.accordion,
+  BLOCKS.statCounter,
+  BLOCKS.logoStrip,
 ]

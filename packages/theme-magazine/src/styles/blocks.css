@@ -1,7 +1,7 @@
 /*
- * The twelve vocabulary blocks, in contract-B order. Nothing here declares a
- * colour, a size or a duration of its own — every block composes the design
- * system from `tokens.css`.
+ * The seventeen vocabulary blocks (`blocks@2.0`, RFC 0001), in contract-B
+ * order. Nothing here declares a colour, a size or a duration of its own —
+ * every block composes the design system from `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -13,7 +13,10 @@
 .cg-mailbag__title,
 .cg-figures__title,
 .cg-press__title,
-.cg-issue__title {
+.cg-issue__title,
+.cg-dossier__title,
+.cg-tally__title,
+.cg-ratecard__title {
   margin: 0 0 var(--cg-s8);
   font-size: var(--cg-text-xl);
   text-wrap: balance;
@@ -24,7 +27,10 @@
 .cg-mailbag__items,
 .cg-contactsheet__items,
 .cg-issue__rest,
-.cg-issue__frames {
+.cg-issue__frames,
+.cg-dossier__entries,
+.cg-ratecard__tiers,
+.cg-imprint__items {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -933,4 +939,315 @@
 .cg-sidenote__link:hover {
   color: var(--cg-accent-hover);
   border-block-end-color: var(--cg-accent-hover);
+}
+
+/* --- testimonial: the reader's letter (blocks@2.0, RFC 0001) --------------- */
+
+/* A boxed letter to the editor, not a second pull quote: `quote` already owns
+   this theme's one "loud" gesture (the giant mark and heavy rule of
+   `cg-pullquote`), so a testimonial is set at body size inside a framed,
+   tinted panel instead — the way a magazine runs its reader-mail column. */
+.cg-letter {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+  padding: var(--cg-s8);
+  border: 1px solid var(--cg-rule);
+  border-inline-start: 4px solid var(--cg-accent);
+  background: var(--cg-paper-panel);
+  box-shadow: var(--cg-elevation-1);
+}
+
+.cg-letter__quote {
+  margin: 0;
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-serif);
+  font-style: italic;
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
+}
+
+.cg-letter__quote > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-letter__quote > :last-child {
+  margin-block-end: 0;
+}
+
+.cg-letter__byline {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s6);
+  padding-block-start: var(--cg-s5);
+  border-block-start: 1px solid var(--cg-rule-soft);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-letter__avatar {
+  inline-size: var(--cg-s10);
+  block-size: var(--cg-s10);
+  object-fit: cover;
+  box-shadow: var(--cg-ring);
+}
+
+.cg-letter__names {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s2);
+  flex-wrap: wrap;
+}
+
+.cg-letter__name {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-letter__role {
+  color: var(--cg-ink-faint);
+}
+
+.cg-letter__role::before {
+  content: "\2014";
+  margin-inline-end: var(--cg-s2);
+}
+
+/* --- pricingTable: the rate card (blocks@2.0, RFC 0001) --------------------- */
+
+/* A classified-ads rate card: tiers set side by side, separated by the
+   theme's one visible column rule (the same device `hero` and
+   `collectionList` use), rather than a set of raised cards — a print page
+   has no elevation to raise a card off of. */
+.cg-ratecard__title {
+  text-align: center;
+}
+
+.cg-ratecard__tiers {
+  display: grid;
+  gap: var(--cg-s10);
+  padding-block: var(--cg-s8);
+  border-block: 3px double var(--cg-rule-heavy);
+}
+
+@media (min-width: 46rem) {
+  .cg-ratecard__tiers {
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0;
+  }
+
+  .cg-ratecard__tier {
+    padding-inline: var(--cg-s8);
+    border-inline-start: 1px solid var(--cg-rule-soft);
+  }
+
+  .cg-ratecard__tier:first-child {
+    border-inline-start: 0;
+  }
+}
+
+.cg-ratecard__tier {
+  padding-block: var(--cg-s2);
+  text-align: center;
+}
+
+/* `highlighted` is an editorial signal, not a colour: `data-highlighted`
+   picks up a tint and an inset top rule; `aria-current` (set by the renderer)
+   is what actually announces it. */
+.cg-ratecard__tier[data-highlighted="true"] {
+  background: var(--cg-accent-tint);
+  box-shadow: inset 0 3px 0 var(--cg-accent);
+}
+
+.cg-ratecard__name {
+  margin: 0 0 var(--cg-s2);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-ratecard__price {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--cg-s1);
+  margin: 0 0 var(--cg-s5);
+  font-family: var(--cogenta-font-serif);
+}
+
+.cg-ratecard__amount {
+  color: var(--cg-accent);
+  font-weight: var(--cg-weight-black);
+  font-size: var(--cg-text-2xl);
+}
+
+.cg-ratecard__interval {
+  color: var(--cg-ink-faint);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-ratecard__features {
+  margin: 0 0 var(--cg-s6);
+  padding: 0;
+  list-style: none;
+  color: var(--cg-ink-soft);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-relaxed);
+}
+
+.cg-ratecard__feature:not(:last-child) {
+  padding-block-end: var(--cg-s1);
+  margin-block-end: var(--cg-s1);
+  border-block-end: 1px solid var(--cg-rule-soft);
+}
+
+/* --- accordion: the reference dossier (blocks@2.0, RFC 0001) ---------------- */
+
+/* Shares `faq`'s `<details>`/`<summary>` mechanics — expanding, keyboard
+   operation and the announced expanded state all come from the browser, at
+   zero bytes of JavaScript — but its own markup and typography, so the two
+   blocks can diverge further later without one depending on the other: a
+   coloured margin rule instead of a numeral, a rotating angle mark instead
+   of a plus sign. */
+.cg-dossier {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+}
+
+.cg-dossier__entry {
+  border-inline-start: 3px solid var(--cg-rule-soft);
+  padding-inline-start: var(--cg-s5);
+  margin-block-end: var(--cg-s1);
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-dossier__entry:has(.cg-dossier__details[open]) {
+  border-inline-start-color: var(--cg-accent);
+}
+
+.cg-dossier__term {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s3);
+  padding-block: var(--cg-s4);
+  font-family: var(--cogenta-font-sans);
+  font-weight: var(--cg-weight-semibold);
+  font-size: var(--cg-text-md);
+  letter-spacing: var(--cg-tracking-snug);
+  cursor: pointer;
+  list-style: none;
+}
+
+.cg-dossier__term::-webkit-details-marker {
+  display: none;
+}
+
+.cg-dossier__term::after {
+  content: "\203A";
+  margin-inline-start: auto;
+  color: var(--cg-accent);
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-lg);
+  line-height: 1;
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-dossier__details[open] .cg-dossier__term::after {
+  transform: rotate(90deg);
+}
+
+.cg-dossier__definition {
+  padding: 0 0 var(--cg-s5);
+  max-inline-size: var(--cg-measure);
+  color: var(--cg-ink-soft);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-relaxed);
+}
+
+.cg-dossier__definition > :first-child {
+  margin-block-start: 0;
+}
+
+.cg-dossier__definition > :last-child {
+  margin-block-end: 0;
+}
+
+/* --- statCounter: the circulation tally (blocks@2.0, RFC 0001) -------------- */
+
+/* Narrower than `stats`'s own `cg-figures` (no `unit`, no column rules): a
+   single running line of figures over a shared baseline rule, the way a
+   masthead prints its circulation and edition counts along one strip. */
+.cg-tally__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s8) var(--cg-s10);
+  margin: 0;
+  padding-block: var(--cg-s5);
+  border-block: 1px solid var(--cg-rule);
+}
+
+.cg-tally__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s3);
+}
+
+.cg-tally__value {
+  margin: 0;
+  color: var(--cg-accent);
+  font-family: var(--cogenta-font-serif);
+  font-weight: var(--cg-weight-black);
+  font-size: var(--cg-text-2xl);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-tally__label {
+  color: var(--cg-ink-faint);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* --- logoStrip: the imprint line (blocks@2.0, RFC 0001) --------------------- */
+
+/* The lighter-weight "as used by" strip next to `logos`'s own titled, linked
+   press row: no name, no url, no title — a plain band of marks with an
+   optional caption underneath, the way a colophon credits its supporters
+   along the bottom of a masthead page. */
+.cg-imprint {
+  text-align: center;
+}
+
+.cg-imprint__items {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--cg-s8);
+}
+
+.cg-imprint__image {
+  block-size: var(--cg-s8);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.cg-imprint__caption {
+  margin-block-start: var(--cg-s4);
+  color: var(--cg-ink-faint);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-xs);
+  font-style: italic;
+  letter-spacing: var(--cg-tracking-wide);
 }

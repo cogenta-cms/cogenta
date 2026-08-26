@@ -215,6 +215,26 @@ const PROSE_BODY: RichTextDocument = [
   { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The admin, mid-review' },
 ]
 
+const ACCORDION_ANSWER: RichTextDocument = [
+  {
+    _key: 'aa1',
+    _type: 'block',
+    style: 'normal',
+    children: [{ _key: 'aas1', _type: 'span', text: 'Yes — nothing here is scripted.', marks: [] }],
+    markDefs: [],
+  },
+]
+
+const TESTIMONIAL_QUOTE: RichTextDocument = [
+  {
+    _key: 't1',
+    _type: 'block',
+    style: 'normal',
+    children: [{ _key: 'ts1', _type: 'span', text: 'It runs itself, genuinely.', marks: [] }],
+    markDefs: [],
+  },
+]
+
 const FAQ_ANSWER: RichTextDocument = [
   {
     _key: 'a1',
@@ -354,9 +374,67 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     ratio: '16:9',
     consentRequired: true,
   },
+  testimonial: {
+    _key: 'b-testimonial',
+    _type: 'testimonial',
+    _version: VERSION,
+    quote: TESTIMONIAL_QUOTE,
+    attribution: { name: 'R. Editor', role: 'Publisher', avatar: 'media-avatar' },
+  },
+  pricingTable: {
+    _key: 'b-pricing',
+    _type: 'pricingTable',
+    _version: VERSION,
+    title: 'Plans',
+    tiers: [
+      {
+        _key: 'p1',
+        name: 'Starter',
+        price: '$0',
+        interval: '/mo',
+        features: ['One site', 'Community support'],
+      },
+      {
+        _key: 'p2',
+        name: 'Pro',
+        price: '$29',
+        interval: '/mo',
+        features: ['Unlimited sites', 'Priority support'],
+        action: { label: 'Choose Pro', target: { href: '/pricing/pro' }, emphasis: 'primary' },
+        highlighted: true,
+      },
+    ],
+  },
+  accordion: {
+    _key: 'b-accordion',
+    _type: 'accordion',
+    _version: VERSION,
+    title: 'How it works',
+    items: [{ _key: 'a1', question: 'Does it need JavaScript?', answer: ACCORDION_ANSWER }],
+  },
+  statCounter: {
+    _key: 'b-stat-counter',
+    _type: 'statCounter',
+    _version: VERSION,
+    title: 'Trusted by',
+    stats: [
+      { _key: 'sc1', value: '4', label: 'Databases supported' },
+      { _key: 'sc2', value: '17', label: 'Vocabulary blocks' },
+    ],
+  },
+  logoStrip: {
+    _key: 'b-logo-strip',
+    _type: 'logoStrip',
+    _version: VERSION,
+    logos: [
+      { _key: 'ls1', media: 'logo-acme' },
+      { _key: 'ls2', media: 'logo-globex' },
+    ],
+    caption: 'As used by',
+  },
 }
 
-/** The twelve, in contract B's order. */
+/** The seventeen of `blocks@2.0`, in contract B's order. */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,
@@ -370,4 +448,9 @@ export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.logos,
   BLOCKS.collectionList,
   BLOCKS.embed,
+  BLOCKS.testimonial,
+  BLOCKS.pricingTable,
+  BLOCKS.accordion,
+  BLOCKS.statCounter,
+  BLOCKS.logoStrip,
 ]

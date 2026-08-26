@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`logoStrip > renders to stable markup 1`] = `"<figure class="ce-block ce-logo-strip" data-block="logoStrip"><ul class="ce-logo-strip__items"><li class="ce-logo-strip__item"><img class="ce-logo-strip__image" src="/img/acme.svg" width="160" height="40" alt="" loading="lazy" decoding="async"></li><li class="ce-logo-strip__item"><img class="ce-logo-strip__image" src="/img/globex.svg" width="160" height="40" alt="" loading="lazy" decoding="async"></li></ul><figcaption class="ce-logo-strip__caption" data-field="caption">As seen in</figcaption></figure>"`;

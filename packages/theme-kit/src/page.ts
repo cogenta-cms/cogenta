@@ -1,4 +1,12 @@
-import type { CollectionListBlock, VocabularyBlock } from '@cogenta/blocks'
+import {
+  type AnyBlockDefinition,
+  type BlockRegistry,
+  type BlockVariant,
+  type CollectionListBlock,
+  type UnknownPlacedBlock,
+  type VocabularyBlock,
+  vocabularyRegistry,
+} from '@cogenta/blocks'
 import type { ContentEntry, QueryRequest } from './contract.js'
 import type { HtmlElement } from './html.js'
 
@@ -46,6 +54,95 @@ export function pageHasOwnHeading(blocks: readonly VocabularyBlock[]): boolean {
 export function withBlockKey(element: HtmlElement | null, key: string): HtmlElement | null {
   if (element === null) return null
   return { ...element, attrs: { ...element.attrs, 'data-block-key': key } }
+}
+
+/**
+ * Stamps a placed block's `variant` (`blocks@2.0`, RFC 0002) onto the
+ * element it rendered to, as one `data-variant-<axis>` attribute per axis
+ * actually set. A theme's CSS then selects `[data-variant-background="muted"]`
+ * and resolves it to its own token, exactly the indirection `theme.tokens.json`
+ * already uses for colour — no second place a variant value lives.
+ *
+ * An axis left unset by the author emits no attribute at all, which is what
+ * makes "unset" and "this theme's default" the same thing on the render
+ * side: a theme that implements no variant at all needs zero code changes,
+ * and one that implements only `background` can ignore the rest safely.
+ *
+ * Applied once, inside every theme's `renderBlock`, rather than by each of
+ * the seventeen block renderers — the same shared-envelope reasoning that
+ * put `variant` on `BlockIdentity` instead of on each block's own schema.
+ */
+export function withBlockVariant(
+  element: HtmlElement | null,
+  variant: BlockVariant | undefined,
+): HtmlElement | null {
+  if (element === null || variant === undefined) return element
+  const attrs: Record<string, string> = {}
+  if (variant.background !== undefined) attrs['data-variant-background'] = variant.background
+  if (variant.spacing !== undefined) attrs['data-variant-spacing'] = variant.spacing
+  if (variant.align !== undefined) attrs['data-variant-align'] = variant.align
+  if (variant.width !== undefined) attrs['data-variant-width'] = variant.width
+  if (Object.keys(attrs).length === 0) return element
+  return { ...element, attrs: { ...element.attrs, ...attrs } }
+}
+
+/**
+ * Resolves any placed block — one of the shared vocabulary, or a block a
+ * theme ships of its own — to something a theme's `renderBlock` (an
+ * exhaustive `switch` over `VocabularyBlock`, deliberately, so a thirteenth
+ * shared type still fails to compile until every theme handles it) can
+ * actually take.
+ *
+ * `BlockRegistry.resolveRenderable` already carries the anti-lock-in half of
+ * contract B — a theme's private block must name a `fallback`, walked until
+ * something the active theme actually implements is reached — but before
+ * this function nothing on the render path ever called it: a stored block
+ * whose exact type the active theme did not implement rendered as `null`, a
+ * silently blank slot rather than the degraded-but-present block the
+ * contract promises (fiche 43, sous-chantier C(ii)).
+ *
+ * `knownNames` is what the caller's own `renderBlock` switch actually
+ * handles — `VOCABULARY_NAMES` for every one of the five in-house themes
+ * today, since none of them ships a block of its own yet. A theme (or a
+ * theme-shipping plugin) that does passes its own, wider list.
+ *
+ * Only ever widens what a caller can *pass in*, never what contract B's
+ * closed vocabulary is: the fallback's own shape is what gets rendered, and
+ * only when the stored data actually validates as an instance of it. A
+ * private block earns real, undegraded rendering by an active theme that
+ * implements it directly; this is the safety net for every other case, not a
+ * data-mapping engine — data that does not fit the fallback's shape yields
+ * `null` for that one block, never a thrown error that would take the whole
+ * page down with it.
+ */
+export function resolveBlockForRender(
+  block: VocabularyBlock | UnknownPlacedBlock,
+  knownNames: readonly string[],
+  registry: BlockRegistry = vocabularyRegistry,
+): UnknownPlacedBlock | null {
+  if (knownNames.includes(block._type)) {
+    // A member of the closed `VocabularyBlock` union does not structurally
+    // satisfy `UnknownPlacedBlock`'s index signature (each member is built
+    // from a mapped type, which TypeScript never treats as implicitly
+    // indexable) — the cast states what is already true at the value level:
+    // every field of a placed block is `unknown` to a caller this generic.
+    return block as unknown as UnknownPlacedBlock
+  }
+
+  let definition: AnyBlockDefinition | undefined
+  try {
+    definition = registry.resolveRenderable(block._type, knownNames)
+  } catch {
+    // Not registered at all, or its fallback chain loops back on itself —
+    // nothing safe to guess. The block is dropped, not the page.
+    return null
+  }
+  if (definition === undefined) return null
+
+  const candidate = { ...block, _type: definition.name }
+  const parsed = definition.validator.safeParse(candidate)
+  if (!parsed.success) return null
+  return parsed.data as UnknownPlacedBlock
 }
 
 /**

@@ -7,11 +7,19 @@ import { richTextDocumentSchema } from './rich-text.js'
 import type { BlockValue } from './types.js'
 
 /**
- * Contract B, "Le vocabulaire v1 — douze blocs", frozen at `blocks@1.0`.
+ * Contract B, "Le vocabulaire — v1 douze blocs (`blocks@1.0`), élargi à
+ * dix-sept en `blocks@2.0`" (RFC 0001, `docs/rfc/0001-widen-block-vocabulary.md`,
+ * reopening ADR-0009 — "the vocabulary must stay small" — with the user's
+ * explicit direct request for an "ultra complete" page builder, 2026-08-26).
  *
- * The vocabulary stays small and predictable on purpose (ADR-0009). Every block
- * here has `fallback: null` — they *are* the fallback; only a block a theme
- * ships of its own must name one.
+ * The original twelve still have `fallback: null` — they *are* the fallback;
+ * only a block a theme ships of its own, or one of the five added below, must
+ * name one. Each of the five names a **standard-vocabulary** fallback rather
+ * than `null`: unlike the original twelve, a site that switches to a theme
+ * built before `blocks@2.0` still renders these — degraded, never lost,
+ * exactly the anti-lock-in guarantee `BlockRegistry.resolveRenderable`
+ * already gives a *theme's own* private block, now also given to a block this
+ * package itself introduces after a theme was already shipped.
  *
  * Nothing below stores a class, a colour, a size or a piece of markup. Where the
  * contract names a field that reads presentational, the values are recast as
@@ -340,9 +348,175 @@ export const embedBlock = defineBlock({
 })
 
 // ---------------------------------------------------------------------------
+// testimonial (blocks@2.0, RFC 0001)
+// ---------------------------------------------------------------------------
 
-/** The twelve, in the order contract B lists them. */
-export const VOCABULARY = [
+/**
+ * A single person's attribution, not a repeated list: unlike `quote`'s own
+ * flat `author`/`role`/`avatar` fields, this is the shape a testimonial wall
+ * of many themes reaches for (name, role, photo, grouped) — kept as one
+ * `json` field rather than three top-level ones so the grouping is explicit
+ * data, not an accident of adjacent field names.
+ */
+const testimonialAttributionSchema = z.strictObject({
+  name: plainTextSchema.min(1).max(160),
+  role: plainTextSchema.max(160).optional(),
+  /** A media library identifier, exactly like every other media reference in the vocabulary. */
+  avatar: z.string().min(1).optional(),
+})
+
+export type TestimonialAttribution = z.infer<typeof testimonialAttributionSchema>
+
+export const testimonialBlock = defineBlock({
+  name: 'testimonial',
+  version: VERSION,
+  runtime: 'static',
+  // Degrades to `text`(`prose`) — the quote's own body survives as an
+  // attributed paragraph; only the dedicated attribution layout is lost.
+  fallback: 'prose',
+  a11y: { headingLevel: 'none' },
+  schema: {
+    quote: f.richText({ required: true, localized: true }),
+    attribution: f.json(testimonialAttributionSchema, { required: true }),
+  },
+})
+
+// ---------------------------------------------------------------------------
+// pricingTable (blocks@2.0, RFC 0001)
+// ---------------------------------------------------------------------------
+
+/**
+ * `price` is a formatted string, not a numeric/currency type — no billing
+ * logic lives here (contract E, `@cogenta/commerce`, owns real money; this is
+ * a marketing display of a plan, editable and localizable as free text).
+ */
+const pricingTierSchema = z.strictObject({
+  _key: itemKey,
+  name: plainTextSchema.min(1).max(120),
+  price: plainTextSchema.min(1).max(64),
+  interval: plainTextSchema.max(64).optional(),
+  features: z.array(plainTextSchema.min(1).max(200)).max(20),
+  action: actionSchema.optional(),
+  /** Editorial emphasis on one tier — a "most popular" ribbon, say — never a colour or a class. */
+  highlighted: z.boolean().optional(),
+})
+
+export type PricingTier = z.infer<typeof pricingTierSchema>
+
+export const pricingTableBlock = defineBlock({
+  name: 'pricingTable',
+  version: VERSION,
+  runtime: 'static',
+  // Degrades to `featureGrid` — each tier renders as a card (name/features),
+  // losing price emphasis and the side-by-side comparison layout.
+  fallback: 'featureGrid',
+  a11y: { headingLevel: 'h2' },
+  schema: {
+    title: f.text({ max: 200, localized: true }),
+    tiers: f.list(pricingTierSchema, { required: true, min: 1, localized: true }),
+  },
+})
+
+// ---------------------------------------------------------------------------
+// accordion (blocks@2.0, RFC 0001)
+// ---------------------------------------------------------------------------
+
+/**
+ * Shaped exactly like `faq`'s own items on purpose: an accordion is the same
+ * question/answer data a FAQ is, offered under the vocabulary as a distinct
+ * block because "accordion" and "FAQ" are different editorial intents even
+ * when the underlying content shape coincides (a features accordion is not a
+ * frequently-asked-question list, and forcing an author to file one as the
+ * other is exactly the kind of vocabulary-too-small friction RFC 0001 exists
+ * to relieve).
+ */
+const accordionItemSchema = z.strictObject({
+  _key: itemKey,
+  question: plainTextSchema.min(1).max(320),
+  answer: richTextDocumentSchema,
+})
+
+export type AccordionItem = z.infer<typeof accordionItemSchema>
+
+export const accordionBlock = defineBlock({
+  name: 'accordion',
+  version: VERSION,
+  runtime: 'static',
+  // Degrades to `prose` — items rendered as a flat sequence of heading + body.
+  fallback: 'prose',
+  a11y: { headingLevel: 'h2' },
+  schema: {
+    title: f.text({ max: 200, localized: true }),
+    items: f.list(accordionItemSchema, { required: true, min: 1, localized: true }),
+  },
+})
+
+// ---------------------------------------------------------------------------
+// statCounter (blocks@2.0, RFC 0001)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately narrower than `stats` (no `unit`): a counter row is meant for
+ * a big, animated-in-spirit figure and its label, not the fuller statistic
+ * shape `stats` already covers — two blocks for two editorial intents, the
+ * same reasoning as `accordion` next to `faq` above.
+ */
+const statCounterItemSchema = z.strictObject({
+  _key: itemKey,
+  value: plainTextSchema.min(1).max(32),
+  label: plainTextSchema.min(1).max(160),
+})
+
+export type StatCounterItem = z.infer<typeof statCounterItemSchema>
+
+export const statCounterBlock = defineBlock({
+  name: 'statCounter',
+  version: VERSION,
+  runtime: 'static',
+  // Degrades to `featureGrid` — each stat rendered as a card.
+  fallback: 'featureGrid',
+  a11y: { headingLevel: 'h2' },
+  schema: {
+    title: f.text({ max: 200, localized: true }),
+    stats: f.list(statCounterItemSchema, { required: true, min: 1, localized: true }),
+  },
+})
+
+// ---------------------------------------------------------------------------
+// logoStrip (blocks@2.0, RFC 0001)
+// ---------------------------------------------------------------------------
+
+/**
+ * No per-logo `name`/`url`, unlike `logos`: a strip is the lighter-weight
+ * "as seen in" / social-proof row, never a set of links to the organisations
+ * shown, so there is no accessible-name field to require. The image's own
+ * alt text (set once, in the media library) is what names each logo, exactly
+ * as `logos` already falls back to when a link is absent.
+ */
+const logoStripItemSchema = z.strictObject({
+  _key: itemKey,
+  media: z.string().min(1),
+})
+
+export type LogoStripItem = z.infer<typeof logoStripItemSchema>
+
+export const logoStripBlock = defineBlock({
+  name: 'logoStrip',
+  version: VERSION,
+  runtime: 'static',
+  // Degrades to `mediaFigure` — only the first logo renders, as a simple image.
+  fallback: 'mediaFigure',
+  a11y: { headingLevel: 'none' },
+  schema: {
+    logos: f.list(logoStripItemSchema, { required: true, min: 1 }),
+    caption: f.text({ max: 320, localized: true }),
+  },
+})
+
+// ---------------------------------------------------------------------------
+
+/** The twelve of `blocks@1.0`, in the order contract B lists them. */
+export const VOCABULARY_V1 = [
   heroBlock,
   proseBlock,
   mediaFigureBlock,
@@ -356,6 +530,18 @@ export const VOCABULARY = [
   collectionListBlock,
   embedBlock,
 ] as const
+
+/** The five RFC 0001 added on top, in the order the RFC lists them. */
+export const VOCABULARY_V2_ADDITIONS = [
+  testimonialBlock,
+  pricingTableBlock,
+  accordionBlock,
+  statCounterBlock,
+  logoStripBlock,
+] as const
+
+/** The full seventeen of `blocks@2.0`. */
+export const VOCABULARY = [...VOCABULARY_V1, ...VOCABULARY_V2_ADDITIONS] as const
 
 export const VOCABULARY_NAMES = VOCABULARY.map((block) => block.name)
 
@@ -371,6 +557,11 @@ export type StatsBlock = BlockValue<typeof statsBlock>
 export type LogosBlock = BlockValue<typeof logosBlock>
 export type CollectionListBlock = BlockValue<typeof collectionListBlock>
 export type EmbedBlock = BlockValue<typeof embedBlock>
+export type TestimonialBlock = BlockValue<typeof testimonialBlock>
+export type PricingTableBlock = BlockValue<typeof pricingTableBlock>
+export type AccordionBlock = BlockValue<typeof accordionBlock>
+export type StatCounterBlock = BlockValue<typeof statCounterBlock>
+export type LogoStripBlock = BlockValue<typeof logoStripBlock>
 
 /** Every block of the vocabulary, as a discriminated union on `_type`. */
 export type VocabularyBlock =
@@ -386,3 +577,8 @@ export type VocabularyBlock =
   | LogosBlock
   | CollectionListBlock
   | EmbedBlock
+  | TestimonialBlock
+  | PricingTableBlock
+  | AccordionBlock
+  | StatCounterBlock
+  | LogoStripBlock

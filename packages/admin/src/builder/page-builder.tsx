@@ -1,3 +1,4 @@
+import type { BlockVariant } from '@cogenta/blocks'
 import { type JSX, type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { renderDraft } from '../api/builder-client.js'
@@ -22,6 +23,7 @@ import {
 } from './block-moves.js'
 import { BlockOutline } from './block-outline.js'
 import { BlockPicker } from './block-picker.js'
+import { BlockVariantControl } from './block-variant.js'
 import type { History } from './history.js'
 import { canRedo, canUndo, createHistory, push, redo, reset, undo } from './history.js'
 import { PatternPicker } from './pattern-picker.js'
@@ -245,6 +247,29 @@ export function PageBuilder({
     if (next.has(key)) next.delete(key)
     else next.add(key)
     setSelectedKeys(next)
+  }
+
+  /**
+   * `variant` (RFC 0002) lives inside `data`, exactly like any of a block's
+   * own schema fields — there is no separate envelope slot for it on the
+   * wire (`ContentBlock` is `{key, type, data}`), so `updateBlockData` is
+   * genuinely the only mechanism needed here, per the RFC's own decision.
+   * `undefined` deletes the key entirely rather than storing an explicit
+   * `variant: undefined`, so a block nobody ever touched here still writes
+   * byte-for-byte the same `data` it always did.
+   */
+  function handleVariantChange(
+    key: string,
+    block: ContentBlock,
+    variant: BlockVariant | undefined,
+  ): void {
+    if (disabled) return
+    if (variant === undefined) {
+      const { variant: _dropped, ...rest } = block.data
+      commit(updateBlockData(present, key, rest))
+      return
+    }
+    commit(updateBlockData(present, key, { ...block.data, variant }))
   }
 
   /** A click in the preview: always a plain (non-additive) selection — multi-select is scoped to the outline list. */
@@ -509,13 +534,20 @@ export function PageBuilder({
             ) : selected === null || selectedDefinition === undefined ? (
               <p className="text-sm text-muted-foreground">{t('builder.detailEmpty')}</p>
             ) : (
-              <BlockForm
-                idPrefix={`builder-${selected.key}`}
-                definition={selectedDefinition}
-                data={selected.data}
-                disabled={disabled}
-                onChange={(data) => commit(updateBlockData(present, selected.key, data))}
-              />
+              <div className="flex flex-col gap-4">
+                <BlockForm
+                  idPrefix={`builder-${selected.key}`}
+                  definition={selectedDefinition}
+                  data={selected.data}
+                  disabled={disabled}
+                  onChange={(data) => commit(updateBlockData(present, selected.key, data))}
+                />
+                <BlockVariantControl
+                  variant={selected.data.variant as BlockVariant | undefined}
+                  disabled={disabled}
+                  onChange={(variant) => handleVariantChange(selected.key, selected, variant)}
+                />
+              </div>
             )}
           </CardBody>
         </Card>

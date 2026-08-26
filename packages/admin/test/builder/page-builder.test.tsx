@@ -290,6 +290,36 @@ describe('what a whole visual session hands back (L16 acceptance)', () => {
     }
   })
 
+  it('lets an editor pick a per-block visual variant, written through updateBlockData', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness onChange={onChange} />)
+
+    const outline = screen.getByRole('list', { name: 'Blocs de la page' })
+    fireEvent.click(within(outline).getByRole('button', { name: /Héros/u }))
+    fireEvent.change(screen.getByLabelText('Fond'), { target: { value: 'muted' } })
+
+    const last = onChange.mock.calls.at(-1)?.[0] ?? []
+    const hero = last.find((block) => block.key === 'k-hero')
+    expect(hero?.data['variant']).toEqual({ background: 'muted' })
+    // The block's own fields travelled untouched alongside the new variant.
+    expect(hero?.data['title']).toBe('A CMS that runs itself')
+  })
+
+  it('clears an axis back to "theme default" rather than storing an explicit default token', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness onChange={onChange} />)
+
+    const outline = screen.getByRole('list', { name: 'Blocs de la page' })
+    fireEvent.click(within(outline).getByRole('button', { name: /Héros/u }))
+    fireEvent.change(screen.getByLabelText('Fond'), { target: { value: 'muted' } })
+    fireEvent.change(screen.getByLabelText('Fond'), { target: { value: '' } })
+
+    const last = onChange.mock.calls.at(-1)?.[0] ?? []
+    const hero = last.find((block) => block.key === 'k-hero')
+    // No `variant` key at all — not `{}` — once every axis is back to default.
+    expect(Object.keys(hero?.data ?? {})).not.toContain('variant')
+  })
+
   it('keeps every key stable through a whole session — no block is re-minted by moving', async () => {
     const emitted: (readonly ContentBlock[])[] = []
     render(<Harness onChange={(blocks) => emitted.push(blocks)} />)

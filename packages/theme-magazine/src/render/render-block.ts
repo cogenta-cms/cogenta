@@ -1,4 +1,4 @@
-import type { VocabularyBlock } from '@cogenta/blocks'
+import { type BlockRegistry, VOCABULARY_NAMES, type VocabularyBlock } from '@cogenta/blocks'
 import {
   type FetchedEntries,
   type HtmlElement,
@@ -6,8 +6,11 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
+  resolveBlockForRender,
   withBlockKey,
+  withBlockVariant,
 } from '@cogenta/theme-kit'
+import { renderAccordion } from './blocks/accordion.js'
 import { renderCollectionList } from './blocks/collection-list.js'
 import { renderCta } from './blocks/cta.js'
 import { renderEmbed } from './blocks/embed.js'
@@ -15,49 +18,83 @@ import { renderFaq } from './blocks/faq.js'
 import { renderFeatureGrid } from './blocks/feature-grid.js'
 import { renderGallery } from './blocks/gallery.js'
 import { renderHero } from './blocks/hero.js'
+import { renderLogoStrip } from './blocks/logo-strip.js'
 import { renderLogos } from './blocks/logos.js'
 import { renderMediaFigure } from './blocks/media-figure.js'
+import { renderPricingTable } from './blocks/pricing-table.js'
 import { renderProse } from './blocks/prose.js'
 import { renderQuote } from './blocks/quote.js'
+import { renderStatCounter } from './blocks/stat-counter.js'
 import { renderStats } from './blocks/stats.js'
+import { renderTestimonial } from './blocks/testimonial.js'
 
 export function renderBlock(
   block: VocabularyBlock,
   ctx: RenderContext,
   entries: FetchedEntries = {},
+  registry?: BlockRegistry,
 ): HtmlElement | null {
-  switch (block._type) {
+  // `block`'s type says `VocabularyBlock`, but the value crossing this
+  // boundary from stored content is not always literally one of the shared
+  // vocabulary — resolving here is what turns an unimplemented theme-private
+  // block into its declared fallback instead of a silently blank slot.
+  const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
+  if (resolved === null) return null
+  const known = resolved as unknown as VocabularyBlock
+  // `withBlockVariant` (blocks@2.0, RFC 0002) is applied once here, after
+  // dispatch, rather than inside each of the seventeen block renderers —
+  // `variant` is envelope data every block carries identically, exactly the
+  // same reasoning `withBlockKey` in `renderPage` already follows for `_key`.
+  return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
+}
+
+function renderKnownBlock(
+  known: VocabularyBlock,
+  ctx: RenderContext,
+  entries: FetchedEntries,
+): HtmlElement | null {
+  switch (known._type) {
     case 'hero':
-      return renderHero(block, ctx)
+      return renderHero(known, ctx)
     case 'prose':
-      return renderProse(block, ctx)
+      return renderProse(known, ctx)
     case 'mediaFigure':
-      return renderMediaFigure(block, ctx)
+      return renderMediaFigure(known, ctx)
     case 'featureGrid':
-      return renderFeatureGrid(block, ctx)
+      return renderFeatureGrid(known, ctx)
     case 'cta':
-      return renderCta(block, ctx)
+      return renderCta(known, ctx)
     case 'gallery':
-      return renderGallery(block, ctx)
+      return renderGallery(known, ctx)
     case 'quote':
-      return renderQuote(block, ctx)
+      return renderQuote(known, ctx)
     case 'faq':
-      return renderFaq(block, ctx)
+      return renderFaq(known, ctx)
     case 'stats':
-      return renderStats(block, ctx)
+      return renderStats(known, ctx)
     case 'logos':
-      return renderLogos(block, ctx)
+      return renderLogos(known, ctx)
     case 'collectionList':
-      return renderCollectionList(block, ctx, entries[block._key] ?? [])
+      return renderCollectionList(known, ctx, entries[known._key] ?? [])
     case 'embed':
-      return renderEmbed(block, ctx)
+      return renderEmbed(known, ctx)
+    case 'testimonial':
+      return renderTestimonial(known, ctx)
+    case 'pricingTable':
+      return renderPricingTable(known, ctx)
+    case 'accordion':
+      return renderAccordion(known, ctx)
+    case 'statCounter':
+      return renderStatCounter(known, ctx)
+    case 'logoStrip':
+      return renderLogoStrip(known, ctx)
     default: {
-      // Exhaustive over contract B's twelve: `block` is `never` here, so a
-      // thirteenth block stops this package compiling until it is
-      // implemented. `null`, not a throw — a theme has no `@cogenta/core`
-      // error types to reach for (contract D refuses that import), and a
-      // fallback block is the render layer's decision, not the theme's.
-      const unreachable: never = block
+      // Exhaustive over contract B's vocabulary: `known` is `never` here, so
+      // a block this package does not implement stops it compiling until it
+      // is. `null`, not a throw — a theme has no `@cogenta/core` error types
+      // to reach for (contract D refuses that import), and a fallback block
+      // is the render layer's decision, not the theme's.
+      const unreachable: never = known
       void unreachable
       return null
     }
@@ -75,11 +112,14 @@ export function renderPage(
   page: PageContent,
   ctx: RenderContext,
   entries: FetchedEntries = {},
+  registry?: BlockRegistry,
 ): HtmlElement {
   return h(
     'main',
     { class: 'cg-main', id: 'cg-main' },
     pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'cg-page__title' }, page.title),
-    page.blocks.map((block) => withBlockKey(renderBlock(block, ctx, entries), block._key)),
+    page.blocks.map((block) =>
+      withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
+    ),
   )
 }

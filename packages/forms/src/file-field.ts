@@ -144,6 +144,27 @@ export function assertAllowedFormFile(
 }
 
 /**
+ * Which field a signed token is good for — a second security-review pass on
+ * this exact scheme found that without this, a token legitimately issued
+ * for a real upload on one field (say, an `image`-only "photo" field) could
+ * be replayed as the value of an *unrelated* `file` field on the same or a
+ * different form (say, a `pdf`-only "attachment" field): the signature was
+ * valid, so `resolveFileFields` accepted it without re-checking that
+ * field's own `acceptCategories`. Binding the signature to `formId` and
+ * `fieldName` (mixed into what is hashed, not just embedded in the JSON
+ * payload a client could otherwise edit) makes a token useless anywhere
+ * but the exact field it was issued for.
+ */
+export interface FormFileTokenContext {
+  readonly formId: string
+  readonly fieldName: string
+}
+
+function scopedPayload(context: FormFileTokenContext, payload: string): string {
+  return `${context.formId}:${context.fieldName}:${payload}`
+}
+
+/**
  * A `FormFileValue` carried forward across a multi-step form's pages
  * (`_accumulated`) is client-supplied text like everything else in that
  * blob — a security review of this exact file field found that trusting its
@@ -156,22 +177,35 @@ export function assertAllowedFormFile(
  * follows) is what turns "a client can carry this forward" into "a client
  * cannot forge or edit this": the router's own `resolveFileFields` never
  * accepts a raw carried-forward object again, only a token this function
- * itself produced.
+ * itself produced. See `FormFileTokenContext`'s own doc for why the token
+ * is additionally scoped to the exact form and field it was issued for.
  */
-export function signFormFileToken(secret: string, value: FormFileValue): string {
+export function signFormFileToken(
+  secret: string,
+  context: FormFileTokenContext,
+  value: FormFileValue,
+): string {
   const payload = Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
-  const signature = createHmac('sha256', secret).update(payload).digest('base64url')
+  const signature = createHmac('sha256', secret)
+    .update(scopedPayload(context, payload))
+    .digest('base64url')
   return `${payload}.${signature}`
 }
 
-/** `null` for a missing/malformed/mis-signed token — the caller treats that exactly like the field being absent, never like a shape error worth a different message (nothing about *why* a forged token failed should be observable). */
-export function verifyFormFileToken(secret: string, token: string): FormFileValue | null {
+/** `null` for a missing/malformed/mis-signed/wrong-field token — the caller treats that exactly like the field being absent, never like a shape error worth a different message (nothing about *why* a forged token failed should be observable). */
+export function verifyFormFileToken(
+  secret: string,
+  context: FormFileTokenContext,
+  token: string,
+): FormFileValue | null {
   const separator = token.lastIndexOf('.')
   if (separator === -1) return null
   const payload = token.slice(0, separator)
   const signature = token.slice(separator + 1)
 
-  const expected = createHmac('sha256', secret).update(payload).digest('base64url')
+  const expected = createHmac('sha256', secret)
+    .update(scopedPayload(context, payload))
+    .digest('base64url')
   const provided = Buffer.from(signature, 'utf8')
   const wanted = Buffer.from(expected, 'utf8')
   if (provided.length !== wanted.length || !timingSafeEqual(provided, wanted)) return null

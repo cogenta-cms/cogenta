@@ -359,7 +359,11 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
         carried.trim() !== '' &&
         options.fileSigningSecret !== undefined
       ) {
-        const verified = verifyFormFileToken(options.fileSigningSecret, carried)
+        const verified = verifyFormFileToken(
+          options.fileSigningSecret,
+          { formId: definition.id, fieldName: field.name },
+          carried,
+        )
         if (verified !== null) {
           raw[field.name] = verified
           continue
@@ -473,7 +477,11 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
           // exactly the forgeable shape the security review flagged) — sign
           // it, or drop it when signing is not configured for this site.
           if (isFormFileValue(value) && options.fileSigningSecret !== undefined) {
-            carried[key] = signFormFileToken(options.fileSigningSecret, value)
+            carried[key] = signFormFileToken(
+              options.fileSigningSecret,
+              { formId: definition.id, fieldName: field.name },
+              value,
+            )
           }
           continue
         }

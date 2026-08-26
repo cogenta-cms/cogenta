@@ -684,7 +684,7 @@ describe('file field — fiche 47 task 3', () => {
   })
 
   it('accepts a real file value signed by this router and carried forward, and rejects a tampered one', async () => {
-    await createFileForm()
+    const form = await createFileForm()
     const storage = fakeStorage()
     const genuine = {
       filename: 'resume.png',
@@ -692,7 +692,8 @@ describe('file field — fiche 47 task 3', () => {
       size: 12,
       storageKey: 'forms/real-form-id/real-upload-id/resume.png',
     }
-    const signed = signFormFileToken(TEST_FILE_SIGNING_SECRET, genuine)
+    const context = { formId: form.id, fieldName: 'resume' }
+    const signed = signFormFileToken(TEST_FILE_SIGNING_SECRET, context, genuine)
 
     // A genuinely signed token is accepted (shape ends up identical to the
     // signed value — the router trusts its own signature).
@@ -714,7 +715,37 @@ describe('file field — fiche 47 task 3', () => {
     // Flipping one character in the signed payload must be rejected, not
     // silently accepted with a mutated file value.
     const tampered = `${signed.slice(0, -1)}${signed.endsWith('a') ? 'b' : 'a'}`
-    expect(verifyFormFileToken(TEST_FILE_SIGNING_SECRET, tampered)).toBeNull()
+    expect(verifyFormFileToken(TEST_FILE_SIGNING_SECRET, context, tampered)).toBeNull()
+  })
+
+  it('refuses a token signed for a different field — closes the cross-field replay a second security review found', async () => {
+    const form = await createFileForm()
+    const storage = fakeStorage()
+    const genuine = {
+      filename: 'resume.png',
+      mimeType: 'image/png',
+      size: 12,
+      storageKey: 'forms/real-form-id/real-upload-id/resume.png',
+    }
+    // Signed for a *different* field on the same form.
+    const wrongFieldToken = signFormFileToken(
+      TEST_FILE_SIGNING_SECRET,
+      { formId: form.id, fieldName: 'some-other-field' },
+      genuine,
+    )
+    const response = await router({ storage }).handle(
+      request('POST', '/api/forms/apply/submit', {
+        body: {
+          [HONEYPOT_FIELD]: '',
+          [TIMESTAMP_FIELD]: String(clock - 5_000),
+          email: 'a@b.com',
+          resume: wrongFieldToken,
+        },
+      }),
+      AS_ANONYMOUS,
+    )
+    expect(response.status).toBe(400)
+    expect(await forms.submissions.list()).toMatchObject({ items: [] })
   })
 })
 

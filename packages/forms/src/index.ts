@@ -16,6 +16,7 @@ export {
   csvValueColumns,
   toCsvRow,
 } from './csv.js'
+export type { FormFileTokenContext } from './file-field.js'
 export {
   assertAllowedFormFile,
   contentTypeForCategory,

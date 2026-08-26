@@ -286,6 +286,14 @@ historique de relecture à perdre.
 ## Contrat B — Vocabulaire de blocs
 
 > **Figé en `blocks@1.0` le 2026-08-13.**
+>
+> **Monté en `blocks@2.0` le 2026-08-26** (RFC 0001,
+> `docs/rfc/0001-widen-block-vocabulary.md`) : cinq blocs ajoutés au sommet des douze,
+> décidé en direct avec l'utilisateur (« page builder ultra complet façon
+> WordPress/Elementor »), rouvrant explicitement ADR-0009 (« le vocabulaire doit rester
+> petit, une dizaine de blocs ») — renoncement assumé, tracé dans l'ADR elle-même. Voir
+> « Le vocabulaire v2 — les cinq ajoutés » et « Versionnement » ci-dessous pour ce que
+> ça change et pourquoi c'est une montée **majeure** malgré une addition pure.
 
 **Règle absolue** : un bloc stocke de la donnée sémantique. Jamais de HTML, jamais de
 classes CSS, jamais de valeur de style.
@@ -307,6 +315,27 @@ classes CSS, jamais de valeur de style.
 | `collectionList` | collection, filter, sort, limit, layout | Liste dynamique |
 | `embed` | provider, url, ratio, consentRequired | Contenu externe |
 
+### Le vocabulaire v2 — les cinq ajoutés (`blocks@2.0`)
+
+| Bloc | Données | Rôle | Repli |
+|---|---|---|---|
+| `testimonial` | quote (richText), attribution{name, role?, avatar?} | Témoignage attribué | `prose` |
+| `pricingTable` | title?, tiers[{name, price, interval?, features[], action?, highlighted?}] | Tableau de tarifs | `featureGrid` |
+| `accordion` | title?, items[{question, answer (richText)}] | Accordéon (intention éditoriale distincte de `faq`, forme identique) | `prose` |
+| `statCounter` | title?, stats[{value, label}] | Ligne de chiffres clés, sans unité (plus étroit que `stats`) | `featureGrid` |
+| `logoStrip` | logos[{media}], caption? | Bandeau de logos sans lien ni nom par logo (plus léger que `logos`) | `mediaFigure` |
+
+Chacun des cinq porte un `fallback` vers un bloc du vocabulaire v1 — contrairement aux
+douze premiers (`fallback: null`, ils *sont* le repli), ceux-ci se dégradent proprement
+sur un thème construit avant `blocks@2.0` plutôt que de disparaître, exactement la
+garantie anti-verrouillage que `BlockRegistry.resolveRenderable` offrait déjà à un bloc
+propre à un thème — désormais offerte aussi à un bloc que ce paquet ajoute après qu'un
+thème a déjà été livré. Voir `packages/blocks/src/vocabulary.ts` pour la forme Zod
+exacte de chacun.
+
+**Aucun contenu existant n'est affecté** : aucun site n'a jamais pu créer ces cinq types
+avant cette montée, donc il n'y a rien à migrer.
+
 ### Schéma d'un bloc
 
 Un bloc décrit ses champs avec **les mêmes types `f.*` que le contrat A**, restreints à
@@ -317,9 +346,11 @@ Un seul système de types pour le contenu et pour les blocs : un validateur, un 
 d'admin, une cible pour la génération par IA. Un second vocabulaire doublerait la surface
 sans rien apporter.
 
-**Pas d'imbrication en v1** : `f.blocks()` n'est pas disponible dans le schéma d'un bloc.
-Le vocabulaire doit rester petit et prévisible (ADR-0009) ; l'imbrication est la porte
-d'entrée d'un constructeur de mise en page, ce que Cogenta n'est pas.
+**Toujours pas d'imbrication** : `f.blocks()` n'est pas disponible dans le schéma d'un
+bloc, `blocks@2.0` compris. ADR-0009 est rouverte pour la *taille* du vocabulaire (v1
+douze, v2 dix-sept), pas pour cette limite précise : l'imbrication reste la porte
+d'entrée d'un constructeur de mise en page en colonnes/sections libres, explicitement
+hors v2 (fiche 43, § « Bloquants »).
 
 ### Actions
 
@@ -365,8 +396,19 @@ versions, et de ne réindexer pour le RAG que les blocs réellement modifiés.
 
 ### Versionnement
 
-`blocks@1.x`. Ajouter un bloc est mineur. Modifier le schéma d'un bloc existant est
-majeur et impose une migration automatique du contenu déjà saisi.
+Modifier le schéma d'un bloc existant reste majeur et impose une migration automatique
+du contenu déjà saisi — inchangé.
+
+Ajouter un bloc était classé mineur à la rédaction initiale de ce contrat. **La montée
+`blocks@1.0` → `blocks@2.0` (RFC 0001) le reclasse en majeur pour cette catégorie de
+changement**, sans revenir sur le principe général : `packages/blocks/src/render-block.ts`
+de chaque thème (`switch` sur `VocabularyBlock`) est **exhaustif et vérifié `never`** —
+un thème qui ne gagne pas de nouveau `case` par bloc ajouté cesse de compiler, ce qui est
+un changement cassant pour tout thème existant, même quand la donnée elle-même ne change
+pas pour un site qui n'a jamais pu créer ces blocs. Un bloc futur qui préciserait déjà un
+`fallback` vers le vocabulaire v1 pourrait redevenir un ajout mineur si sa RFC le
+justifie — la décision reste au cas par cas, tracée dans la RFC qui l'introduit, jamais
+un défaut silencieux.
 
 ---
 

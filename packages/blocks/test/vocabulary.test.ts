@@ -17,8 +17,17 @@ import { INVALID_DATA, VALID_DATA } from './fixtures.js'
 
 const byName = new Map<string, AnyBlockDefinition>(VOCABULARY.map((block) => [block.name, block]))
 
+/** The five `blocks@2.0` additions (RFC 0001) — each names a v1 fallback, unlike the twelve. */
+const V2_ADDITIONS = new Set([
+  'testimonial',
+  'pricingTable',
+  'accordion',
+  'statCounter',
+  'logoStrip',
+])
+
 describe('the vocabulary', () => {
-  it('holds exactly the twelve blocks of contract B, in the order the contract lists them', () => {
+  it('holds exactly the seventeen blocks of contract B, in the order the contract lists them', () => {
     expect(VOCABULARY_NAMES).toEqual([
       'hero',
       'prose',
@@ -32,11 +41,32 @@ describe('the vocabulary', () => {
       'logos',
       'collectionList',
       'embed',
+      'testimonial',
+      'pricingTable',
+      'accordion',
+      'statCounter',
+      'logoStrip',
     ])
   })
 
-  it('leaves every standard block without a fallback, because they are the fallback', () => {
-    for (const block of VOCABULARY) expect(block.fallback).toBeNull()
+  it('leaves every v1 block without a fallback, because they are the fallback', () => {
+    for (const block of VOCABULARY) {
+      if (V2_ADDITIONS.has(block.name)) continue
+      expect(block.fallback).toBeNull()
+    }
+  })
+
+  it('gives every blocks@2.0 addition a fallback into the v1 vocabulary, never null', () => {
+    // Widened to `Set<string>` explicitly: `block.fallback` is a plain
+    // `string | null` (a definition's fallback is not restricted to the
+    // vocabulary's own literal name union), so the set it is checked against
+    // must accept any string too, not just `VOCABULARY_NAMES`'s narrow type.
+    const v1Names: Set<string> = new Set(VOCABULARY_NAMES.filter((name) => !V2_ADDITIONS.has(name)))
+    for (const block of VOCABULARY) {
+      if (!V2_ADDITIONS.has(block.name)) continue
+      expect(block.fallback).not.toBeNull()
+      expect(v1Names.has(block.fallback ?? '')).toBe(true)
+    }
   })
 
   it('declares every standard block at version 1.0.0 of the frozen vocabulary', () => {

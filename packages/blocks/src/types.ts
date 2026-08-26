@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import type { BlockData, BlockSchema } from './field.js'
+import type { BlockVariant } from './variant.js'
 
 /**
  * Contract B, "Manifeste de bloc", frozen at `blocks@1.0` on 2026-08-13.
@@ -43,6 +44,14 @@ export interface BlockIdentity<N extends string = string> {
    * from. Without it, a migration is a guess.
    */
   readonly _version: string
+  /**
+   * Optional per-instance visual variant (`blocks@2.0`, RFC 0002). Part of
+   * the envelope every block carries — not a field a block's own `schema`
+   * declares — so it applies uniformly to all seventeen without any of them
+   * having to opt in. Absent on all content written before this contract
+   * version, and rendered byte-for-byte as before: purely additive.
+   */
+  readonly variant?: BlockVariant
 }
 
 /** A block as it is stored inside a content entry. */

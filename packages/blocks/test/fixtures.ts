@@ -90,6 +90,36 @@ export const VALID_DATA: Readonly<Record<string, Record<string, unknown>>> = {
     ratio: '16:9',
     consentRequired: true,
   },
+  testimonial: {
+    quote: paragraph('It runs itself, genuinely.'),
+    attribution: { name: 'R. Editor', role: 'Publisher', avatar: 'media-07' },
+  },
+  pricingTable: {
+    title: 'Plans',
+    tiers: [
+      { _key: 't1', name: 'Starter', price: '$0', features: ['One site'] },
+      {
+        _key: 't2',
+        name: 'Pro',
+        price: '$29',
+        interval: '/mo',
+        features: ['Unlimited sites'],
+        highlighted: true,
+      },
+    ],
+  },
+  accordion: {
+    title: 'How it works',
+    items: [{ _key: 'a1', question: 'Does it need JavaScript?', answer: paragraph('No.') }],
+  },
+  statCounter: {
+    title: 'Trusted by',
+    stats: [{ _key: 's1', value: '17', label: 'Vocabulary blocks' }],
+  },
+  logoStrip: {
+    logos: [{ _key: 'l1', media: 'media-08' }],
+    caption: 'As used by',
+  },
 }
 
 /** One sample per block that must be refused, and the field that must be named. */
@@ -117,4 +147,9 @@ export const INVALID_DATA: Readonly<
     data: { provider: 'youtube', url: 'nonsense', consentRequired: true },
     field: 'url',
   },
+  testimonial: { data: { attribution: { name: 'R. Editor' } }, field: 'quote' },
+  pricingTable: { data: { tiers: [] }, field: 'tiers' },
+  accordion: { data: { items: [{ _key: 'a1', question: 'Why?' }] }, field: 'items' },
+  statCounter: { data: { stats: [{ _key: 's1', value: '17' }] }, field: 'stats' },
+  logoStrip: { data: { logos: [] }, field: 'logos' },
 }

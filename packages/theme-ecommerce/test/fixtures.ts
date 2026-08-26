@@ -223,6 +223,40 @@ const FAQ_ANSWER: RichTextDocument = [
   },
 ]
 
+const TESTIMONIAL_QUOTE: RichTextDocument = [
+  {
+    _key: 't1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      {
+        _key: 'ts1',
+        _type: 'span',
+        text: 'The fit is exactly what the size guide promised — first time that has ever happened.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
+const ACCORDION_ANSWER: RichTextDocument = [
+  {
+    _key: 'ac1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      {
+        _key: 'acs1',
+        _type: 'span',
+        text: 'Orders over $75 ship free within 3–5 days.',
+        marks: [],
+      },
+    ],
+    markDefs: [],
+  },
+]
+
 const VERSION = '1.0.0'
 
 /**
@@ -352,9 +386,72 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     ratio: '16:9',
     consentRequired: true,
   },
+  testimonial: {
+    _key: 'b-testimonial',
+    _type: 'testimonial',
+    _version: VERSION,
+    quote: TESTIMONIAL_QUOTE,
+    attribution: { name: 'A. Reviewer', role: 'Verified buyer', avatar: 'media-avatar' },
+  },
+  pricingTable: {
+    _key: 'b-pricing',
+    _type: 'pricingTable',
+    _version: VERSION,
+    title: 'Choose your plan',
+    tiers: [
+      {
+        _key: 'tier-standard',
+        name: 'Standard',
+        price: '$12',
+        interval: '/mo',
+        features: ['Free shipping over $75', 'Standard returns'],
+        action: { label: 'Choose Standard', target: { href: '/shop/standard' } },
+      },
+      {
+        _key: 'tier-plus',
+        name: 'Plus',
+        price: '$24',
+        interval: '/mo',
+        features: ['Free shipping, no minimum', 'Extended returns', 'Early access drops'],
+        action: {
+          label: 'Choose Plus',
+          target: { href: '/shop/plus' },
+          emphasis: 'primary',
+        },
+        highlighted: true,
+      },
+    ],
+  },
+  accordion: {
+    _key: 'b-accordion',
+    _type: 'accordion',
+    _version: VERSION,
+    title: 'Shipping details',
+    items: [{ _key: 'acc1', question: 'What is the delivery window?', answer: ACCORDION_ANSWER }],
+  },
+  statCounter: {
+    _key: 'b-counters',
+    _type: 'statCounter',
+    _version: VERSION,
+    title: 'Trusted at scale',
+    stats: [
+      { _key: 'sc1', value: '48k+', label: 'Orders shipped' },
+      { _key: 'sc2', value: '4.8/5', label: 'Average rating' },
+    ],
+  },
+  logoStrip: {
+    _key: 'b-logostrip',
+    _type: 'logoStrip',
+    _version: VERSION,
+    caption: 'As seen in',
+    logos: [
+      { _key: 'ls1', media: 'logo-acme' },
+      { _key: 'ls2', media: 'logo-globex' },
+    ],
+  },
 }
 
-/** The twelve, in contract B's order. */
+/** The seventeen of `blocks@2.0`, in contract B's order. */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,
@@ -368,4 +465,9 @@ export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.logos,
   BLOCKS.collectionList,
   BLOCKS.embed,
+  BLOCKS.testimonial,
+  BLOCKS.pricingTable,
+  BLOCKS.accordion,
+  BLOCKS.statCounter,
+  BLOCKS.logoStrip,
 ]

@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`testimonial > renders to stable markup 1`] = `"<figure class="ce-block ce-testimonial" data-block="testimonial"><blockquote class="ce-testimonial__quote"><p>The fit is exactly what the size guide promised — first time that has ever happened.</p></blockquote><figcaption class="ce-testimonial__attribution"><img class="ce-testimonial__avatar" src="/img/avatar-96.avif" width="96" height="96" alt="" loading="lazy" decoding="async"><span class="ce-testimonial__who"><span class="ce-testimonial__name">A. Reviewer</span><span class="ce-testimonial__role">Verified buyer</span></span></figcaption></figure>"`;

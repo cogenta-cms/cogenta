@@ -1158,3 +1158,90 @@ describe('a collectionList block linking to an entry with no slug', () => {
     }
   })
 })
+
+/**
+ * The gap a real end-to-end pass through the admin found (2026-08-26): the
+ * admin's "Prévisualiser" button has always minted a real, working
+ * `?preview=` token (`POST /{collection}/{id}/preview`, `router.ts`) and
+ * pointed it at the site's own themed page URL, but this dispatcher never
+ * read that query parameter — every preview link 404'd (`CONTENT_NOT_FOUND`)
+ * before `COGENTA_PREVIEW_SIGNING_KEY` was even set, and 500'd afterwards,
+ * because `renderRequestedPage`'s `context` had no way to carry the grant.
+ * `createContentGateway`'s own `list()` already has the preview overlay
+ * built in (`graphql/gateway.ts`, "the preview overlay") — the only thing
+ * missing was folding `?preview=` into `context.preview` here, once, for
+ * every transport this dispatcher serves.
+ */
+describe('the themed page route honours a preview link, not just the REST API', () => {
+  it("renders a draft's real page through the same ?preview= token the admin's own preview button mints", async () => {
+    const root = await themedProjectWithPosts()
+    const savedKey = process.env['COGENTA_PREVIEW_SIGNING_KEY']
+    process.env['COGENTA_PREVIEW_SIGNING_KEY'] = 'f'.repeat(64)
+    const server = await startServer(root)
+    try {
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createUserStore, createCredentialStore, ensureAuthTables } = await import(
+        '@cogenta/auth'
+      )
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      await ensureAuthTables(db)
+      const users = createUserStore(db)
+      const credentials = createCredentialStore(db)
+      const user = await users.create({ email: 'editor@example.com', roles: ['editor'] })
+      await credentials.setPassword(user.id, 'correct horse battery staple')
+      await db.close()
+
+      const token = await login(server.base, 'editor@example.com', 'correct horse battery staple')
+      const auth = { authorization: `Bearer ${token}` }
+
+      const created = await fetch(`${server.base}/api/content/page`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...auth },
+        body: JSON.stringify({
+          values: { title: 'A draft page, previewed', slug: 'a-draft-page-previewed' },
+          blocks: { blocks: [{ key: 'b1', type: 'prose', data: { body: [] } }] },
+        }),
+      })
+      const createdBody = (await created.json()) as {
+        data: { id: string; status: string; values: { slug: string } }
+      }
+      expect(createdBody.data.status).toBe('draft')
+
+      const minted = await fetch(`${server.base}/api/content/page/${createdBody.data.id}/preview`, {
+        method: 'POST',
+        headers: auth,
+      })
+      const mintedBody = (await minted.json()) as { data?: { url: string }; error?: unknown }
+      if (mintedBody.data === undefined) {
+        throw new Error(`preview mint failed: ${JSON.stringify(mintedBody)}`)
+      }
+      expect(typeof mintedBody.data.url).toBe('string')
+
+      // The exact link the admin's "Prévisualiser" button opens — a real
+      // page URL on the site's own origin, not an API endpoint.
+      const previewUrl = new URL(mintedBody.data.url)
+      const pageResponse = await fetch(`${server.base}${previewUrl.pathname}${previewUrl.search}`)
+      expect(pageResponse.status).toBe(200)
+      const html = await pageResponse.text()
+      expect(html).toContain('A draft page, previewed')
+
+      // The same path with no token: an anonymous visitor sees nothing —
+      // the draft stays invisible, exactly as it did before this token
+      // existed.
+      const withoutToken = await fetch(`${server.base}${previewUrl.pathname}`)
+      expect(withoutToken.status).toBe(404)
+
+      // A malformed token must never turn "your link is bad" into a 500:
+      // the request just proceeds as an anonymous visitor and the draft
+      // 404s the same honest way.
+      const badToken = await fetch(
+        `${server.base}${previewUrl.pathname}${previewUrl.search}-corrupted`,
+      )
+      expect(badToken.status).toBe(404)
+    } finally {
+      if (savedKey === undefined) delete process.env['COGENTA_PREVIEW_SIGNING_KEY']
+      else process.env['COGENTA_PREVIEW_SIGNING_KEY'] = savedKey
+      await server.stop()
+    }
+  })
+})

@@ -254,9 +254,16 @@ export async function scaffoldSite(
   // file at is readable by all of them — exactly the file that holds the key
   // signing every admin session. POSIX-only in effect (Windows ACLs ignore
   // it), which is the platform this actually protects against.
+  // `COGENTA_PREVIEW_SIGNING_KEY` (`@cogenta/api`'s `preview-token.ts`) signs
+  // the unauthenticated draft-preview link — a second, independent key so a
+  // leak of one never grants the other. Generated here for the same reason
+  // as the auth key above: without it, "Prévisualiser"/"Preview" throws
+  // `CONFIG_INVALID` on the very first click, a real onboarding trap found
+  // by testing a freshly scaffolded site end to end.
   await writeFile(
     join(answers.targetDir, '.env'),
-    `COGENTA_AUTH_SIGNING_KEY=${randomBytes(32).toString('base64')}\n`,
+    `COGENTA_AUTH_SIGNING_KEY=${randomBytes(32).toString('base64')}\n` +
+      `COGENTA_PREVIEW_SIGNING_KEY=${randomBytes(32).toString('base64')}\n`,
     { encoding: 'utf8', mode: 0o600 },
   )
   await writeFile(

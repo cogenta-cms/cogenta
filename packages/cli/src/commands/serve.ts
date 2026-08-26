@@ -60,6 +60,7 @@ import {
   createPendingMigrationsSource,
   createPermissionLayer,
   createPluginDisabledSource,
+  createPreviewTokens,
   createPromptTemplatesRouter,
   createProvidersRouter,
   createRecoveryCodeUsedNoticeSource,
@@ -3460,7 +3461,26 @@ export function createRequestListener(
         ),
         site.requestQuota === undefined ? {} : { requestQuota: site.requestQuota },
       )
-      const context: AccessContext = { actor }
+      // The `?preview=` token the admin's "Prévisualiser" button issues
+      // (`POST /{collection}/{id}/preview`, `router.ts`) is only ever
+      // consumed here for the public *page* route below — `createContentGateway`'s
+      // own `list()` already has the preview overlay built in (it merges the
+      // one granted entry into an otherwise published-only page), so folding
+      // the grant into `context` here is the entire integration: nothing in
+      // `theme-render.ts` needs to know a preview even happened. A missing or
+      // invalid token is never a 500 — it just means this request proceeds as
+      // an ordinary anonymous visitor, and an unpublished page 404s exactly
+      // as it always did.
+      const previewToken = url.searchParams.get('preview')
+      let preview: AccessContext['preview']
+      if (previewToken !== null) {
+        try {
+          preview = createPreviewTokens().verify(previewToken)
+        } catch (error) {
+          logger.warn('preview token rejected', { error: String(error) })
+        }
+      }
+      const context: AccessContext = { actor, ...(preview === undefined ? {} : { preview }) }
 
       // Maintenance mode (fiche 24 task 5): every visitor of the *public*
       // site gets a 503 while it is on — `/api/*` and `/admin*` stay

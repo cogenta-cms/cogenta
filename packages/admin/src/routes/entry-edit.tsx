@@ -53,6 +53,7 @@ import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { SeoPanel } from '../seo/seo-panel.js'
 import { useNewEntryDefaultBlocksSetting } from '../settings/site-settings-context.js'
+import { cn } from '../ui/cn.js'
 import { Button, Card, CardBody, Input, Label, Modal, Notice, Select } from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
@@ -1158,7 +1159,25 @@ export function EntryEditRoute(): JSX.Element {
       )}
 
       <form onSubmit={(event) => void submit(event)}>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div
+          className={cn(
+            'grid gap-6 lg:items-start',
+            // The page builder's own three panels (outline, live preview,
+            // detail form) need the full width of the screen to be usable —
+            // Elementor/Divi/Gutenberg all give their canvas the whole
+            // viewport, never a fraction of it. Reserving another 20rem here
+            // for this sidebar *on top of* the builder's own 20rem detail
+            // panel left the live preview squeezed into a sliver a few
+            // hundred pixels wide, scaled down to a thumbnail (found testing
+            // the fiche 43 merge end to end, 2026-08-26). `lg:grid-cols-1`
+            // reuses the same narrow-screen stacking this grid already had —
+            // the sidebar still renders in full below the builder, in the
+            // same `lg:order-2` position, just never squeezed sideways.
+            editorMode === 'visual' && blockZone !== undefined
+              ? 'lg:grid-cols-1'
+              : 'lg:grid-cols-[minmax(0,1fr)_20rem]',
+          )}
+        >
           {/* Sidebar first in the DOM: on a narrow screen (below 1024px, the
               lot's own threshold) it therefore sits above the form instead of
               in a hidden drawer — "un statut invisible est un statut qu'on

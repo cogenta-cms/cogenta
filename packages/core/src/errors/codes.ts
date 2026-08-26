@@ -522,6 +522,15 @@ export const ERROR_CODES = [
   // Channels — inbound chat bridge and `cogenta channels` process (L22 task 2)
   'CHANNEL_PROVIDER_NOT_CONFIGURED',
 
+  // LLM provider catalog (fiche 56): `provider` widened from a closed
+  // 3-literal union to a free string, validated at the write boundary
+  // instead. A malformed identifier (empty, or not the slug shape a
+  // filename can safely be built from) is distinct from a name that is
+  // simply not in the built-in catalog and needs an explicit `baseUrl` to
+  // be usable as a custom OpenAI-compatible endpoint.
+  'PROVIDER_ID_INVALID',
+  'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

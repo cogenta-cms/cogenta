@@ -14,9 +14,7 @@ import {
   type ImageProviderClient,
   ingestReferenceDocument,
   MAX_DOCUMENT_BYTES,
-  PROVIDER_NAMES,
   type ProviderClient,
-  type ProviderName,
   REFERENCE_DOCUMENT_COLLECTION,
   type ReferenceDocumentRecord,
   removeReferenceDocumentVectors,
@@ -145,29 +143,23 @@ export async function isAssistantCollectionEnabled(
   return map[collectionName] !== false
 }
 
-function isProviderName(value: string): value is ProviderName {
-  return (PROVIDER_NAMES as readonly string[]).includes(value)
-}
-
 /**
  * The text client, or nothing.
  *
- * A configured provider whose name this build does not know, or whose API key
- * is missing, produces `undefined` and a warning — never a throw. An operator
- * who mistyped a provider name should get a site that works with the assistant
- * off, plus a log line saying exactly that.
+ * Fiche 56 widened `provider` to a free string validated by
+ * `createProviderRegistry` itself (a catalog id, or any id paired with a
+ * `baseUrl` for a custom OpenAI-compatible endpoint) — so this no longer
+ * duplicates that check against a fixed 3-name list (the exact
+ * desynchronisation trap `CONTRACT_C_PERMISSIONS` already taught this
+ * codebase to avoid). A provider this build cannot resolve, or whose API key
+ * is missing, produces `undefined` and a warning — never a throw. An
+ * operator who mistyped a provider name should get a site that works with
+ * the assistant off, plus a log line saying exactly that.
  */
 function textProvider(options: BuildAssistantOptions): ProviderClient | undefined {
   const llm = options.config.llm
   if (llm === undefined) return undefined
 
-  if (!isProviderName(llm.provider)) {
-    options.logger.warn('unknown LLM provider, the writing assistant stays off', {
-      provider: llm.provider,
-      known: PROVIDER_NAMES,
-    })
-    return undefined
-  }
   if (llm.apiKey === undefined) {
     options.logger.warn(
       'LLM provider configured with no API key, the writing assistant stays off',
@@ -179,14 +171,22 @@ function textProvider(options: BuildAssistantOptions): ProviderClient | undefine
     return undefined
   }
 
-  const registry = createProviderRegistry({
-    [llm.provider]: {
-      apiKey: llm.apiKey,
-      model: llm.model,
-      ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
-    },
-  })
-  return registry.get(llm.provider)
+  try {
+    const registry = createProviderRegistry({
+      [llm.provider]: {
+        apiKey: llm.apiKey,
+        model: llm.model,
+        ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
+      },
+    })
+    return registry.get(llm.provider)
+  } catch (error) {
+    options.logger.warn('LLM provider could not be resolved, the writing assistant stays off', {
+      provider: llm.provider,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
 }
 
 function imageProvider(options: BuildAssistantOptions): ImageProviderClient | undefined {

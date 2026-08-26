@@ -5,10 +5,24 @@ import { authHeader, request } from './http.js'
  * screen. Hand-mirrored from `@cogenta/api`'s `providers-router.ts`, same
  * reason every other `*-client.ts` in this directory copies its
  * server-side shape by hand.
+ *
+ * Fiche 56: the built-in provider list used to be a hand-copied constant
+ * here (`KNOWN_PROVIDERS`) that had to be kept in sync with
+ * `@cogenta/agents`' own `PROVIDER_NAMES` by hand — exactly the
+ * desynchronisation risk this repo already hit once with
+ * `CONTRACT_C_PERMISSIONS`. `getProviderCatalog` reads it from the server
+ * instead; nothing in this file hard-codes a provider id any more.
  */
 
-export const KNOWN_PROVIDERS = ['anthropic', 'openai', 'google'] as const
-export type ProviderName = (typeof KNOWN_PROVIDERS)[number]
+export type ProviderWireFormat = 'openai-compatible' | 'anthropic' | 'google'
+
+export interface ProviderCatalogEntry {
+  readonly id: string
+  readonly label: string
+  readonly wireFormat: ProviderWireFormat
+  readonly defaultBaseUrl: string
+  readonly knownModels: readonly string[]
+}
 
 export interface ProviderSummary {
   readonly provider: string
@@ -18,6 +32,10 @@ export interface ProviderSummary {
   /** Never the real key — the last 4 characters only, e.g. "••••cdef". */
   readonly maskedKey: string
   readonly updatedAt: string
+}
+
+export function getProviderCatalog(token: string): Promise<readonly ProviderCatalogEntry[]> {
+  return request('/api/providers/catalog', { headers: authHeader(token) })
 }
 
 export function listProviders(token: string): Promise<readonly ProviderSummary[]> {

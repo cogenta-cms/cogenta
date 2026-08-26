@@ -175,6 +175,11 @@ export {
   createAnthropicClient,
   parseAnthropicResponse,
 } from './providers/anthropic.js'
+export type {
+  ProviderCatalogEntry,
+  ProviderWireFormat,
+} from './providers/catalog.js'
+export { findProviderCatalogEntry, KNOWN_PROVIDER_CATALOG } from './providers/catalog.js'
 export type { GoogleClientConfig, GoogleRequestBody } from './providers/google.js'
 export { buildGoogleRequest, createGoogleClient, parseGoogleResponse } from './providers/google.js'
 export type { OpenAiImageClientConfig, OpenAiImageRequestBody } from './providers/image/openai.js'
@@ -211,8 +216,12 @@ export type {
 export { clampCount, IMAGE_DIMENSIONS, IMAGE_SIZES } from './providers/image/types.js'
 export type { OpenAiClientConfig, OpenAiRequestBody } from './providers/openai.js'
 export { buildOpenAiRequest, createOpenAiClient, parseOpenAiResponse } from './providers/openai.js'
-export type { ProviderName, ProviderRegistryConfig } from './providers/registry.js'
-export { createProviderRegistry, PROVIDER_NAMES } from './providers/registry.js'
+export type {
+  ProviderEntryConfig,
+  ProviderName,
+  ProviderRegistryConfig,
+} from './providers/registry.js'
+export { createProviderRegistry } from './providers/registry.js'
 export { resolveProviderRegistryConfig } from './providers/resolve.js'
 export type {
   FileProviderConfigStoreOptions,

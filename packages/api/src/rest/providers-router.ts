@@ -9,6 +9,13 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
  * accepted back out of this router — `StoredProviderConfig` (this file's
  * `ProviderSummary`) carries `maskedKey` only, matching the lot's own words
  * ("jamais affichée en clair une fois enregistrée").
+ *
+ * Fiche 56 widened `provider` from a fixed 3-name taxonomy to any catalog id
+ * (OpenRouter, DeepSeek, Qwen, GLM, …) or an operator-chosen custom id paired
+ * with its own `baseUrl`. `GET /api/providers/catalog` is new — it exists so
+ * `@cogenta/admin`'s model picker reads the catalog from the server instead
+ * of duplicating it by hand (the exact desynchronisation risk this repo
+ * already hit once with `CONTRACT_C_PERMISSIONS`).
  */
 
 export interface ProviderSummary {
@@ -20,8 +27,19 @@ export interface ProviderSummary {
   readonly updatedAt: string
 }
 
+/** Plain data — deliberately not importing `@cogenta/agents`' own `ProviderCatalogEntry` type, so this package's production code never depends on a package it only lists as a devDependency (see `packages/cli/src/commands/agent-runtime.ts`'s `providerCatalogSummary`, which is the one place a real catalog is supplied). */
+export interface ProviderCatalogEntrySummary {
+  readonly id: string
+  readonly label: string
+  readonly wireFormat: string
+  readonly defaultBaseUrl: string
+  readonly knownModels: readonly string[]
+}
+
 export interface ProviderRegistryLike {
+  /** Built-in catalog ids — used only to decide whether a POST needs an explicit `baseUrl` (an id outside this list is a custom endpoint). Not an exhaustive list of what PATCH/DELETE may target: an already-saved custom provider is validated against the store's own state, not this list. */
   readonly names: readonly string[]
+  readonly catalog: readonly ProviderCatalogEntrySummary[]
   list(): Promise<readonly ProviderSummary[]>
   upsert(input: {
     readonly provider: string
@@ -49,6 +67,9 @@ export interface ProvidersRouter {
 }
 
 const DEFAULT_BASE_PATH = '/api/providers'
+
+/** Reserved: `GET /api/providers/catalog` would otherwise be indistinguishable from a provider named "catalog". */
+const CATALOG_SEGMENT = 'catalog'
 
 function requireAdmin(actor: Actor): void {
   if (actor.roles.includes('admin')) return
@@ -92,22 +113,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Provider routes are /api/providers and /api/providers/:provider.',
-  })
-}
-
-/**
- * Deliberately `QUERY_INVALID` (400), not `PROVIDER_UNKNOWN` (503, "this
- * runtime has no client configured for a provider it knows how to build") —
- * the two are different failures: this one is a malformed request (a name
- * outside the fixed three-provider taxonomy), the caller's to fix; that one
- * is a run refusing because nothing was ever configured, R2's normal state.
- */
-function unknownProvider(name: string, known: readonly string[]): CogentaError {
-  return new CogentaError({
-    code: 'QUERY_INVALID',
-    message: `"${name}" is not a supported LLM provider.`,
-    hint: `Known providers: ${known.join(', ')}.`,
+    hint: 'Provider routes are /api/providers, /api/providers/catalog and /api/providers/:provider.',
   })
 }
 
@@ -124,11 +130,6 @@ function asRecord(body: unknown): Record<string, unknown> {
 
 export function createProvidersRouter(options: ProvidersRouterOptions): ProvidersRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
-
-  function requireKnown(name: string): void {
-    if (!options.providers.names.includes(name))
-      throw unknownProvider(name, options.providers.names)
-  }
 
   return {
     handle: async (request, actor) => {
@@ -149,8 +150,21 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
             const name = body['provider']
             const apiKey = body['apiKey']
             const model = body['model']
-            if (typeof name !== 'string' || !options.providers.names.includes(name)) {
-              throw unknownProvider(String(name), options.providers.names)
+            if (typeof name !== 'string' || name.trim().length === 0) {
+              throw new CogentaError({
+                code: 'PROVIDER_ID_INVALID',
+                message: 'A provider needs a non-empty "provider" id.',
+                hint: 'Send { "provider": "…", "apiKey": "…", "model": "…" }.',
+              })
+            }
+            const baseUrl = body['baseUrl']
+            const hasBaseUrl = typeof baseUrl === 'string' && baseUrl.trim().length > 0
+            if (!options.providers.names.includes(name) && !hasBaseUrl) {
+              throw new CogentaError({
+                code: 'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
+                message: `"${name}" is not a built-in provider — a custom provider needs a non-empty "baseUrl".`,
+                hint: `Known providers: ${options.providers.names.join(', ')}. Or add "baseUrl" for a custom OpenAI-compatible endpoint.`,
+              })
             }
             if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
               throw new CogentaError({
@@ -166,13 +180,12 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
                 hint: 'Send { "provider": "…", "apiKey": "…", "model": "…" }.',
               })
             }
-            const baseUrl = body['baseUrl']
             const enabled = body['enabled']
             const saved = await options.providers.upsert({
               provider: name,
               apiKey,
               model,
-              ...(typeof baseUrl === 'string' && baseUrl.length > 0 ? { baseUrl } : {}),
+              ...(hasBaseUrl ? { baseUrl: baseUrl as string } : {}),
               ...(typeof enabled === 'boolean' ? { enabled } : {}),
             })
             return jsonResponse(201, { data: saved })
@@ -180,9 +193,22 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
           return methodNotAllowed(['GET', 'POST'])
         }
 
-        if (extra !== undefined) throw noRoute()
-        requireKnown(provider)
+        // GET /api/providers/catalog — the built-in provider list, for the
+        // admin's model picker. Checked before treating `provider` as an id.
+        if (provider === CATALOG_SEGMENT) {
+          if (extra !== undefined) throw noRoute()
+          if (method !== 'GET') return methodNotAllowed(['GET'])
+          return jsonResponse(200, { data: options.providers.catalog })
+        }
 
+        if (extra !== undefined) throw noRoute()
+
+        // PATCH/DELETE target whatever is actually saved — `upsert`'s own
+        // write-time validation (`store.ts`'s `assertValidProviderId`/
+        // `assertResolvable`) is what kept a bogus id from ever being saved;
+        // re-checking it here against `names` would reject a legitimately
+        // saved custom provider. A provider that was never saved surfaces
+        // as `PROVIDER_NOT_CONFIGURED` from the store itself, same as before.
         if (method === 'PATCH') {
           const body = asRecord(request.body)
           const enabled = body['enabled']

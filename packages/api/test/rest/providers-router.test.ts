@@ -12,7 +12,23 @@ const EDITOR = { id: 'user-editor', roles: ['editor'] }
 function fakeRegistry(): ProviderRegistryLike & { records: Map<string, ProviderSummary> } {
   const records = new Map<string, ProviderSummary>()
   return {
-    names: ['anthropic', 'openai', 'google'],
+    names: ['anthropic', 'openai', 'google', 'openrouter', 'deepseek', 'qwen', 'glm'],
+    catalog: [
+      {
+        id: 'anthropic',
+        label: 'Anthropic',
+        wireFormat: 'anthropic',
+        defaultBaseUrl: 'https://api.anthropic.com/v1/messages',
+        knownModels: ['claude-sonnet-5'],
+      },
+      {
+        id: 'openrouter',
+        label: 'OpenRouter',
+        wireFormat: 'openai-compatible',
+        defaultBaseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+        knownModels: ['openai/gpt-5.2-chat-latest'],
+      },
+    ],
     records,
     async list() {
       return [...records.values()]
@@ -84,7 +100,7 @@ describe('POST /api/providers', () => {
     expect(JSON.stringify(response.body)).toContain('maskedKey')
   })
 
-  it('refuses an unknown provider name', async () => {
+  it('refuses a name outside the catalog with no baseUrl (fiche 56)', async () => {
     const router = createProvidersRouter({ providers: fakeRegistry() })
     const response = await router.handle(
       {
@@ -96,6 +112,46 @@ describe('POST /api/providers', () => {
       ADMIN,
     )
     expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
+    )
+  })
+
+  it('accepts a name outside the catalog when a baseUrl is given (a custom OpenAI-compatible endpoint)', async () => {
+    const router = createProvidersRouter({ providers: fakeRegistry() })
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: {
+          provider: 'my-vllm-server',
+          apiKey: 'sk-local',
+          model: 'llama-3',
+          baseUrl: 'https://vllm.internal/v1/chat/completions',
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(201)
+    expect((response.body as { data: ProviderSummary }).data.provider).toBe('my-vllm-server')
+  })
+
+  it('GET /api/providers/catalog lists the built-in catalog, admin-only', async () => {
+    const router = createProvidersRouter({ providers: fakeRegistry() })
+    const forbidden = await router.handle(
+      { method: 'GET', path: '/api/providers/catalog', query: {} },
+      EDITOR,
+    )
+    expect(forbidden.status).toBe(403)
+
+    const response = await router.handle(
+      { method: 'GET', path: '/api/providers/catalog', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as { data: readonly { id: string }[] }
+    expect(body.data.map((entry) => entry.id)).toContain('openrouter')
   })
 
   it('lists configured providers with masked keys', async () => {

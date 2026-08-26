@@ -315,3 +315,243 @@ describe('cogenta serve — /api/agents runs a real tool-calling loop once a pro
     expect(historyBody.data.some((entry) => entry.action === 'agent.tool.media.read')).toBe(false)
   })
 })
+
+interface OpenAiScriptedResponse {
+  readonly choices: readonly {
+    readonly message: {
+      readonly content: string | null
+      readonly tool_calls?: readonly {
+        readonly id: string
+        readonly type: 'function'
+        readonly function: { readonly name: string; readonly arguments: string }
+      }[]
+    }
+    readonly finish_reason: 'stop' | 'tool_calls'
+  }[]
+  readonly usage: { readonly prompt_tokens: number; readonly completion_tokens: number }
+}
+
+interface FakeOpenAiCompatible {
+  readonly url: string
+  readonly requests: unknown[]
+  close(): Promise<void>
+}
+
+/** A minimal, real HTTP server answering the OpenAI Chat Completions wire shape — fiche 56's "custom OpenAI-compatible endpoint", the same real-server technique `startFakeAnthropic` above already uses for the native adapter. */
+async function startFakeOpenAiCompatible(
+  responses: readonly OpenAiScriptedResponse[],
+): Promise<FakeOpenAiCompatible> {
+  let index = 0
+  const requests: unknown[] = []
+  const server: Server = createServer((req, res) => {
+    const chunks: Buffer[] = []
+    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    req.on('end', () => {
+      requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      const response = responses[index]
+      index += 1
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(response))
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') {
+    throw new Error('fake OpenAI-compatible server has no port')
+  }
+  return {
+    url: `http://127.0.0.1:${address.port}/v1/chat/completions`,
+    requests,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  }
+}
+
+/**
+ * Fiche 56, end to end: a provider id absent from the built-in catalog,
+ * saved with its own `baseUrl`, actually drives a real agent run against a
+ * real (local) OpenAI-compatible server — not just a unit-level construction
+ * check. `GET /api/providers/catalog` is exercised alongside it, admin-only,
+ * proving the catalog route this fiche adds is really mounted by `cogenta
+ * serve`.
+ */
+describe('cogenta serve — a custom OpenAI-compatible provider (fiche 56)', () => {
+  it('GET /api/providers/catalog lists the built-in catalog, admin-only', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const anonymous = await fetch(`${server.base}/api/providers/catalog`)
+    expect(anonymous.status).toBe(403)
+
+    const response = await fetch(`${server.base}/api/providers/catalog`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { data: readonly { id: string }[] }
+    const ids = body.data.map((entry) => entry.id)
+    expect(ids).toEqual(
+      expect.arrayContaining(['anthropic', 'openai', 'google', 'openrouter', 'deepseek', 'qwen']),
+    )
+  })
+
+  it('runs a real tool-calling loop against a custom id + baseUrl, over real HTTP', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const fake = await startFakeOpenAiCompatible([
+      {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call-1',
+                  type: 'function',
+                  function: { name: 'site.config_read', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      },
+      {
+        choices: [
+          {
+            message: { content: 'This site is called Test site.' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      },
+    ])
+    fakeProviders.push(fake)
+
+    // No `custom: true` flag to send: an id outside the catalog is only
+    // ever valid alongside a non-empty `baseUrl` — that pairing *is* what
+    // "custom" means, both at the router and at `store.ts`'s write boundary.
+    const configured = await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        provider: 'my-vllm-server',
+        apiKey: 'sk-local-test-key',
+        model: 'llama-3',
+        baseUrl: fake.url,
+      }),
+    })
+    expect(configured.status).toBe(201)
+    expect(JSON.stringify(await configured.clone().json())).not.toContain('sk-local-test-key')
+
+    const created = await fetch(`${server.base}/api/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        name: 'Custom Provider Agent',
+        identity: { role: 'Only ever reads site config.', objectives: [] },
+        model: { preferred: 'my-vllm-server' },
+        tools: ['site.config_read'],
+        autonomy: { default: 'autonomous' },
+      }),
+    })
+    expect(created.status).toBe(201)
+
+    const run = await fetch(
+      `${server.base}/api/agents/${encodeURIComponent('Custom Provider Agent')}/run`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ instruction: 'What is this site called?' }),
+      },
+    )
+    expect(run.status).toBe(200)
+    const runBody = (await run.json()) as { data: { finalText: string | null } }
+    expect(runBody.data.finalText).toBe('This site is called Test site.')
+    // The custom endpoint really was called twice, over real HTTP — never
+    // literally "openai" (the shared client's default `name`), which is
+    // exactly what `client.name` reporting its real catalog/custom id fixes.
+    expect(fake.requests).toHaveLength(2)
+  })
+
+  it('refuses a name outside the catalog with no baseUrl before anything is saved', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const response = await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ provider: 'not-a-real-provider', apiKey: 'x', model: 'x' }),
+    })
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
+    )
+  })
+
+  // Security review of this fiche: widening `provider` to a free string
+  // removed the fixed 3-name allowlist `PATCH`/`DELETE /api/providers/:provider`
+  // used to gate on — over real HTTP, `%2e%2e%2F` in the path segment decodes
+  // to `../` only *after* `segmentsOf()` has already split on literal `/`,
+  // so it survives as one segment carrying real slashes. The fix lives in
+  // `@cogenta/agents`' `store.ts` (`fileFor` now validates on every method,
+  // not only `upsert`) — this proves it end to end, over the real router,
+  // real server and real filesystem, not just the unit-level store test.
+  it('a path-traversal-shaped provider id in PATCH/DELETE is rejected, never reaching the filesystem', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const encodedTraversal = '%2e%2e%2Fagents%2Fsome-agent'
+
+    const patched = await fetch(`${server.base}/api/providers/${encodedTraversal}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled: false }),
+    })
+    expect(patched.status).toBe(400)
+    expect(((await patched.json()) as { error: { code: string } }).error.code).toBe(
+      'PROVIDER_ID_INVALID',
+    )
+
+    const deleted = await fetch(`${server.base}/api/providers/${encodedTraversal}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(deleted.status).toBe(400)
+    expect(((await deleted.json()) as { error: { code: string } }).error.code).toBe(
+      'PROVIDER_ID_INVALID',
+    )
+
+    // The server, and this site's built-in agent registry, are unharmed.
+    const agents = await fetch(`${server.base}/api/agents`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(agents.status).toBe(200)
+    const agentsBody = (await agents.json()) as { data: readonly { name: string }[] }
+    expect(agentsBody.data.some((agent) => agent.name === 'Cogenta Agent')).toBe(true)
+  })
+})

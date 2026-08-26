@@ -119,7 +119,7 @@ export function parseOpenAiResponse(body: OpenAiResponseBody): ChatResponse {
   if (choice === undefined) {
     throw new CogentaError({
       code: 'PROVIDER_RESPONSE_INVALID',
-      message: 'OpenAI returned no choices.',
+      message: 'The OpenAI-compatible endpoint returned no choices.',
       hint: 'Retry the request; this is not something the caller can fix by itself.',
     })
   }
@@ -147,7 +147,7 @@ function parseArguments(raw: string): Readonly<Record<string, unknown>> {
   } catch (cause) {
     throw new CogentaError({
       code: 'PROVIDER_RESPONSE_INVALID',
-      message: "OpenAI's tool call arguments were not valid JSON.",
+      message: "The endpoint's tool call arguments were not valid JSON.",
       hint: 'This is a vendor-side malformed response; retry the request.',
       cause,
     })
@@ -159,15 +159,27 @@ export interface OpenAiClientConfig {
   readonly model: string
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
+  /**
+   * The provider id this client reports itself as — `client.name`, used by
+   * the privacy allowlist (`assertProviderAllowed`) and by anything logging
+   * or citing "which provider answered". Defaults to `'openai'`, but every
+   * `wireFormat: 'openai-compatible'` catalog entry (fiche 56: OpenRouter,
+   * DeepSeek, Qwen, GLM, or an operator's custom endpoint) passes its own
+   * catalog id here — without this, every one of them would misreport
+   * itself as literally `'openai'`, silently defeating a "no data leaves
+   * this machine" policy scoped to a different vendor.
+   */
+  readonly name?: string
 }
 
 /** API key injected at the runtime boundary — never in a prompt or tool input (rule R7). */
 export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
   const doFetch = config.fetchImpl ?? fetch
   const url = config.baseUrl ?? DEFAULT_BASE_URL
+  const name = config.name ?? 'openai'
 
   return {
-    name: 'openai',
+    name,
     model: config.model,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const response = await doFetch(url, {
@@ -181,8 +193,8 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
       }).catch((cause: unknown) => {
         throw new CogentaError({
           code: 'PROVIDER_REQUEST_FAILED',
-          message: 'The request to OpenAI could not be sent.',
-          hint: 'Check network connectivity and COGENTA_OPENAI_API_KEY.',
+          message: `The request to "${name}" could not be sent.`,
+          hint: "Check network connectivity and this provider's saved API key.",
           cause,
         })
       })
@@ -190,15 +202,15 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
       if (response.status === 429) {
         throw new CogentaError({
           code: 'PROVIDER_RATE_LIMITED',
-          message: 'OpenAI rate-limited this request.',
+          message: `"${name}" rate-limited this request.`,
           hint: 'Retry with backoff, or lower callsPerHour for this agent.',
         })
       }
       if (!response.ok) {
         throw new CogentaError({
           code: 'PROVIDER_REQUEST_FAILED',
-          message: `OpenAI returned status ${response.status}.`,
-          hint: 'Check the request and COGENTA_OPENAI_API_KEY.',
+          message: `"${name}" returned status ${response.status}.`,
+          hint: "Check the request and this provider's saved API key.",
           details: { status: response.status },
         })
       }

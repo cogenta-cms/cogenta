@@ -57,4 +57,55 @@ describe('providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retirer' }))
     expect(await screen.findByText(/Aucun fournisseur configuré/)).toBeDefined()
   })
+
+  it('the model select fills the free-text model field for the selected provider', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByLabelText('Modèle connu'), {
+      target: { value: 'claude-sonnet-5' },
+    })
+
+    expect(screen.getByPlaceholderText('ex. claude-sonnet-4')).toHaveProperty(
+      'value',
+      'claude-sonnet-5',
+    )
+  })
+
+  it('a custom provider (fiche 56) requires a baseUrl and saves under its own id', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByLabelText('Fournisseur'), { target: { value: '__custom__' } })
+    fireEvent.change(screen.getByLabelText('Identifiant du fournisseur'), {
+      target: { value: 'my-vllm-server' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-local-secret' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'llama-3' },
+    })
+
+    // No baseUrl yet: a custom provider cannot resolve to a client, so Save
+    // stays disabled rather than letting the request fail server-side.
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('URL de base'), {
+      target: { value: 'https://vllm.internal/v1/chat/completions' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('my-vllm-server')).toBeDefined()
+  })
 })

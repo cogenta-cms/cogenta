@@ -877,9 +877,64 @@ export function installMockFetch(
     provider: string
     enabled: boolean
     model: string
+    baseUrl?: string
     maskedKey: string
     updatedAt: string
   }[] = []
+  // Mirrors `@cogenta/agents`' `KNOWN_PROVIDER_CATALOG` (fiche 56) closely
+  // enough for the admin's catalog-driven form — this file imports nothing
+  // but `vitest`, so it hand-copies the shape rather than the real data.
+  const MOCK_PROVIDER_CATALOG = [
+    {
+      id: 'anthropic',
+      label: 'Anthropic',
+      wireFormat: 'anthropic',
+      defaultBaseUrl: 'https://api.anthropic.com/v1/messages',
+      knownModels: ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    },
+    {
+      id: 'openai',
+      label: 'OpenAI',
+      wireFormat: 'openai-compatible',
+      defaultBaseUrl: 'https://api.openai.com/v1/chat/completions',
+      knownModels: ['gpt-5.2-chat-latest', 'gpt-5', 'gpt-5-mini'],
+    },
+    {
+      id: 'google',
+      label: 'Google',
+      wireFormat: 'google',
+      defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+      knownModels: ['gemini-3.1-pro', 'gemini-3.7-flash', 'gemini-2.5-flash-lite'],
+    },
+    {
+      id: 'openrouter',
+      label: 'OpenRouter',
+      wireFormat: 'openai-compatible',
+      defaultBaseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+      knownModels: ['openai/gpt-5.2-chat-latest', 'anthropic/claude-sonnet-5'],
+    },
+    {
+      id: 'deepseek',
+      label: 'DeepSeek',
+      wireFormat: 'openai-compatible',
+      defaultBaseUrl: 'https://api.deepseek.com/chat/completions',
+      knownModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+    },
+    {
+      id: 'qwen',
+      label: 'Qwen (DashScope)',
+      wireFormat: 'openai-compatible',
+      defaultBaseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+      knownModels: ['qwen3-max', 'qwen-plus', 'qwen-turbo'],
+    },
+    {
+      id: 'glm',
+      label: 'GLM (Zhipu / Z.ai)',
+      wireFormat: 'openai-compatible',
+      defaultBaseUrl: 'https://api.z.ai/api/openai/v1/chat/completions',
+      knownModels: ['glm-4.7', 'glm-4.6', 'glm-4.5-flash'],
+    },
+  ]
   const mockAgentSkills: {
     id: string
     name: string
@@ -3725,6 +3780,9 @@ export function installMockFetch(
             error: { code: 'FORBIDDEN', message: 'Only the admin role may manage providers.' },
           })
         }
+        if (url.includes('/api/providers/catalog') && method === 'GET') {
+          return json(200, { data: MOCK_PROVIDER_CATALOG })
+        }
         const providerMatch = /\/api\/providers\/([^/?]+)/u.exec(url)
         if (providerMatch === null) {
           if (method === 'GET') return json(200, { data: mockProviders })
@@ -3733,11 +3791,28 @@ export function installMockFetch(
               provider?: string
               apiKey?: string
               model?: string
+              baseUrl?: string
+            }
+            const providerId = body.provider ?? 'anthropic'
+            const isCatalogId = MOCK_PROVIDER_CATALOG.some((entry) => entry.id === providerId)
+            if (
+              !isCatalogId &&
+              (typeof body.baseUrl !== 'string' || body.baseUrl.trim().length === 0)
+            ) {
+              return json(400, {
+                error: {
+                  code: 'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
+                  message: `"${providerId}" is not a built-in provider — a custom provider needs a non-empty "baseUrl".`,
+                },
+              })
             }
             const created = {
-              provider: body.provider ?? 'anthropic',
+              provider: providerId,
               enabled: true,
               model: body.model ?? '',
+              ...(typeof body.baseUrl === 'string' && body.baseUrl.length > 0
+                ? { baseUrl: body.baseUrl }
+                : {}),
               maskedKey: `••••${(body.apiKey ?? '').slice(-4)}`,
               updatedAt: '2026-03-01T00:00:00.000Z',
             }

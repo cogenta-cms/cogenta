@@ -1,9 +1,10 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
-  KNOWN_PROVIDERS,
+  getProviderCatalog,
   listProviders,
+  type ProviderCatalogEntry,
   type ProviderSummary,
   removeProvider,
   saveProvider,
@@ -32,9 +33,23 @@ import {
 /**
  * L22 task 1bis's "Providers" screen: which LLM providers this site has
  * enabled, an API key (never shown again once saved — masked the same way
- * `create-cogenta`'s install prompt now is), and a default model. Every
- * agent's `model.preferred` names one of these three provider ids.
+ * `create-cogenta`'s install prompt now is), and a default model.
+ *
+ * Fiche 56 restructured the "add" form: the provider picker is driven by
+ * `GET /api/providers/catalog` (`@cogenta/agents`' `KNOWN_PROVIDER_CATALOG`)
+ * rather than a hard-coded three-name list, with an explicit "custom
+ * provider" choice for any other OpenAI-compatible endpoint (a self-hosted
+ * proxy, or a vendor not yet in the catalog) — the free-text model field
+ * (already supported before this fiche) is paired with a known-models
+ * picker for the selected provider, made an explicit concept rather than an
+ * unlabelled text box.
  */
+
+/** Sentinel provider selection meaning "not one of the catalog ids" — distinct from any real id, which `store.ts`'s `PROVIDER_ID_PATTERN` never produces starting with an underscore. */
+const CUSTOM_PROVIDER = '__custom__'
+/** Sentinel model-select value meaning "leave the free-text model field alone". */
+const CUSTOM_MODEL = ''
+
 export function ProvidersRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -43,13 +58,16 @@ export function ProvidersRoute(): JSX.Element {
   const isAdmin = roles.includes('admin')
 
   const [providers, setProviders] = useState<readonly ProviderSummary[]>([])
+  const [catalog, setCatalog] = useState<readonly ProviderCatalogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const [formProvider, setFormProvider] = useState<string>(KNOWN_PROVIDERS[0])
+  const [formProviderId, setFormProviderId] = useState<string>(CUSTOM_PROVIDER)
+  const [formCustomProviderId, setFormCustomProviderId] = useState('')
   const [formKey, setFormKey] = useState('')
   const [formModel, setFormModel] = useState('')
+  const [formModelChoice, setFormModelChoice] = useState<string>(CUSTOM_MODEL)
   const [formBaseUrl, setFormBaseUrl] = useState('')
 
   const load = useCallback(async () => {
@@ -57,7 +75,17 @@ export function ProvidersRoute(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      setProviders(await listProviders(token))
+      const [providerList, catalogList] = await Promise.all([
+        listProviders(token),
+        getProviderCatalog(token),
+      ])
+      setProviders(providerList)
+      setCatalog(catalogList)
+      setFormProviderId((current) =>
+        current === CUSTOM_PROVIDER && catalogList.length > 0
+          ? (catalogList[0]?.id ?? CUSTOM_PROVIDER)
+          : current,
+      )
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('providers.loadError'))
     } finally {
@@ -69,20 +97,47 @@ export function ProvidersRoute(): JSX.Element {
     void load()
   }, [load])
 
+  const selectedCatalogEntry = useMemo(
+    () => catalog.find((entry) => entry.id === formProviderId),
+    [catalog, formProviderId],
+  )
+  const isCustomProvider = formProviderId === CUSTOM_PROVIDER
+  const effectiveProviderId = isCustomProvider ? formCustomProviderId.trim() : formProviderId
+
+  function selectProvider(id: string): void {
+    setFormProviderId(id)
+    setFormModelChoice(CUSTOM_MODEL)
+  }
+
+  function selectKnownModel(modelId: string): void {
+    setFormModelChoice(modelId)
+    if (modelId !== CUSTOM_MODEL) setFormModel(modelId)
+  }
+
   async function submitSave(): Promise<void> {
-    if (token === null || formKey.trim().length === 0 || formModel.trim().length === 0) return
+    if (
+      token === null ||
+      formKey.trim().length === 0 ||
+      formModel.trim().length === 0 ||
+      effectiveProviderId.length === 0 ||
+      (isCustomProvider && formBaseUrl.trim().length === 0)
+    ) {
+      return
+    }
     setBusy('save')
     setError(null)
     try {
       await saveProvider(token, {
-        provider: formProvider,
+        provider: effectiveProviderId,
         apiKey: formKey.trim(),
         model: formModel.trim(),
         ...(formBaseUrl.trim().length > 0 ? { baseUrl: formBaseUrl.trim() } : {}),
       })
       setFormKey('')
       setFormModel('')
+      setFormModelChoice(CUSTOM_MODEL)
       setFormBaseUrl('')
+      setFormCustomProviderId('')
       await load()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
@@ -154,17 +209,30 @@ export function ProvidersRoute(): JSX.Element {
                 <select
                   {...control}
                   className="w-full appearance-none rounded-md border border-input bg-card px-3 py-2 text-sm"
-                  value={formProvider}
-                  onChange={(event) => setFormProvider(event.target.value)}
+                  value={formProviderId}
+                  onChange={(event) => selectProvider(event.target.value)}
                 >
-                  {KNOWN_PROVIDERS.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  {catalog.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
                     </option>
                   ))}
+                  <option value={CUSTOM_PROVIDER}>{t('providers.customProviderOption')}</option>
                 </select>
               )}
             </Field>
+            {isCustomProvider && (
+              <Field label={t('providers.customProviderId')} className="min-w-[200px]">
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={formCustomProviderId}
+                    onChange={(event) => setFormCustomProviderId(event.target.value)}
+                    placeholder={t('providers.customProviderIdPlaceholder')}
+                  />
+                )}
+              </Field>
+            )}
             <Field label={t('providers.apiKey')} className="min-w-[240px]">
               {(control) => (
                 <Input
@@ -177,17 +245,43 @@ export function ProvidersRoute(): JSX.Element {
                 />
               )}
             </Field>
+            {!isCustomProvider && (selectedCatalogEntry?.knownModels.length ?? 0) > 0 && (
+              <Field label={t('providers.knownModel')} className="min-w-[200px]">
+                {(control) => (
+                  <select
+                    {...control}
+                    className="w-full appearance-none rounded-md border border-input bg-card px-3 py-2 text-sm"
+                    value={formModelChoice}
+                    onChange={(event) => selectKnownModel(event.target.value)}
+                  >
+                    <option value={CUSTOM_MODEL}>{t('providers.customModelOption')}</option>
+                    {(selectedCatalogEntry?.knownModels ?? []).map((modelId) => (
+                      <option key={modelId} value={modelId}>
+                        {modelId}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+            )}
             <Field label={t('providers.model')} className="min-w-[180px]">
               {(control) => (
                 <Input
                   {...control}
                   value={formModel}
-                  onChange={(event) => setFormModel(event.target.value)}
+                  onChange={(event) => {
+                    setFormModel(event.target.value)
+                    setFormModelChoice(CUSTOM_MODEL)
+                  }}
                   placeholder={t('providers.modelPlaceholder')}
                 />
               )}
             </Field>
-            <Field label={t('providers.baseUrl')} className="min-w-[200px]">
+            <Field
+              label={t('providers.baseUrl')}
+              className="min-w-[200px]"
+              description={isCustomProvider ? t('providers.baseUrlRequiredForCustom') : undefined}
+            >
               {(control) => (
                 <Input
                   {...control}
@@ -199,7 +293,11 @@ export function ProvidersRoute(): JSX.Element {
             </Field>
             <Button
               disabled={
-                busy === 'save' || formKey.trim().length === 0 || formModel.trim().length === 0
+                busy === 'save' ||
+                formKey.trim().length === 0 ||
+                formModel.trim().length === 0 ||
+                effectiveProviderId.length === 0 ||
+                (isCustomProvider && formBaseUrl.trim().length === 0)
               }
               onClick={() => void submitSave()}
             >

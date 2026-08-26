@@ -2,17 +2,30 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
-import { PROVIDER_NAMES, type ProviderName } from './registry.js'
+import { findProviderCatalogEntry } from './catalog.js'
+import type { ProviderName } from './registry.js'
 
 /**
- * L22 task 1bis's "Providers" screen: which of the three text providers
- * (`PROVIDER_NAMES`) this site has configured, its API key, and its default
- * model — persisted so an operator can turn a provider on from the admin
- * instead of only via `COGENTA_LLM_API_KEY`/`cogenta.config.mjs`'s single
- * `llm` section (`@cogenta/core`'s `llmSchema`, unchanged and still the
- * install-time default — `agents/orchestrator.ts` imports it as the first
- * configured provider the first time this store is read, so an existing
- * site loses nothing by upgrading).
+ * L22 task 1bis's "Providers" screen: which LLM providers this site has
+ * configured, each one's API key, and its default model — persisted so an
+ * operator can turn a provider on from the admin instead of only via
+ * `COGENTA_LLM_API_KEY`/`cogenta.config.mjs`'s single `llm` section
+ * (`@cogenta/core`'s `llmSchema`, unchanged and still the install-time
+ * default — `agents/orchestrator.ts` imports it as the first configured
+ * provider the first time this store is read, so an existing site loses
+ * nothing by upgrading).
+ *
+ * Fiche 56 widened `provider` from the closed 3-literal union to a free
+ * string (`registry.ts`'s `ProviderName`) so a catalog id (OpenRouter,
+ * DeepSeek, Qwen, GLM, …) or an operator-chosen custom id both fit. `upsert`
+ * is the write boundary that keeps this safe: `assertValidProviderId` rejects
+ * anything that is not a plain slug (this store builds a filename directly
+ * from `provider` — see `fileFor` — so a malformed id is a path-traversal
+ * risk, not merely an aesthetic one), and a name absent from the catalog
+ * must carry its own `baseUrl` or it could never resolve to a working client
+ * (`registry.ts`'s `buildClient` throws `PROVIDER_CUSTOM_BASE_URL_REQUIRED`
+ * for exactly that case — this store refuses the same shape earlier, at the
+ * point an operator can still fix it, rather than at first agent run).
  *
  * "Jamais affichée en clair une fois enregistrée" (the lot's own words, same
  * discipline as `create-cogenta`'s masked key prompt) rules out storing the
@@ -30,6 +43,34 @@ import { PROVIDER_NAMES, type ProviderName } from './registry.js'
  * runtime hands straight to `createProviderRegistry` and never logs or
  * returns over the wire (R7).
  */
+
+/**
+ * A safe filename component and a reasonable admin-typed identifier: lower-
+ * case slug, 2-64 characters, no leading/trailing/doubled hyphen. Every
+ * catalog id in `catalog.ts` matches this by construction; the check exists
+ * for an operator-typed custom provider id.
+ */
+const PROVIDER_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+){0,10}$/u
+
+function assertValidProviderId(provider: string): void {
+  if (PROVIDER_ID_PATTERN.test(provider) && provider.length <= 64) return
+  throw new CogentaError({
+    code: 'PROVIDER_ID_INVALID',
+    message: `"${provider}" is not a valid provider id.`,
+    hint: 'Use lowercase letters, digits and single hyphens only (e.g. "openrouter", "my-vllm-server").',
+  })
+}
+
+/** A provider id the catalog does not know needs its own `baseUrl` — otherwise it could never resolve to a working client (see `registry.ts`'s `buildClient`). */
+function assertResolvable(provider: string, baseUrl: string | undefined): void {
+  if (findProviderCatalogEntry(provider) !== undefined) return
+  if (baseUrl !== undefined && baseUrl.trim().length > 0) return
+  throw new CogentaError({
+    code: 'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
+    message: `"${provider}" is not a built-in provider — a custom provider needs a non-empty "baseUrl".`,
+    hint: 'Add a baseUrl pointing at an OpenAI-compatible chat completions endpoint, or use a catalog provider id.',
+  })
+}
 
 export interface StoredProviderConfig {
   readonly provider: ProviderName
@@ -123,7 +164,21 @@ export function createFileProviderConfigStore(
   const key = deriveKey(options.signingKey)
   const ready = mkdir(options.dir, { recursive: true })
 
+  /**
+   * The one place every method that touches disk builds a path from
+   * `provider` — validating here, rather than only in `upsert`, is what
+   * closes the path-traversal gap `PATCH`/`DELETE /api/providers/:provider`
+   * would otherwise reopen: the router no longer allowlists `provider`
+   * against a fixed name list before calling `setEnabled`/`updateSettings`/
+   * `remove` (fiche 56 removed that gate to admit catalog and custom ids),
+   * so this store is the only remaining checkpoint before an attacker-
+   * controlled string like `../../agents/some-agent` reaches `readFile`/
+   * `writeFile`/`rm`. A caller of `get`/`decryptKey` on a malformed id gets
+   * the same `PROVIDER_ID_INVALID` an `upsert` would — never a silent
+   * "not found" that would let the check be bypassed by relying on ENOENT.
+   */
   function fileFor(provider: ProviderName): string {
+    assertValidProviderId(provider)
     return join(options.dir, `${provider}.json`)
   }
 
@@ -149,8 +204,13 @@ export function createFileProviderConfigStore(
   }
 
   async function readRecord(provider: ProviderName): Promise<EncryptedRecord | null> {
+    // `fileFor` (which validates `provider`) is called outside the try
+    // block on purpose: a `PROVIDER_ID_INVALID` it throws must propagate as
+    // itself, never be caught below and rewritten into a misleading
+    // "the file may be corrupted" `INTERNAL` error.
+    const path = fileFor(provider)
     try {
-      const raw = await readFile(fileFor(provider), 'utf8')
+      const raw = await readFile(path, 'utf8')
       return JSON.parse(raw) as EncryptedRecord
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
@@ -171,7 +231,7 @@ export function createFileProviderConfigStore(
       for (const filename of filenames) {
         if (!filename.endsWith('.json')) continue
         const provider = filename.replace(/\.json$/u, '') as ProviderName
-        if (!(PROVIDER_NAMES as readonly string[]).includes(provider)) continue
+        if (!PROVIDER_ID_PATTERN.test(provider)) continue
         const record = await readRecord(provider)
         if (record !== null) records.push(toSummary(record))
       }
@@ -186,6 +246,8 @@ export function createFileProviderConfigStore(
 
     async upsert(input) {
       await ready
+      assertValidProviderId(input.provider)
+      assertResolvable(input.provider, input.baseUrl)
       const { iv, authTag, ciphertext } = encrypt(input.apiKey)
       const record: EncryptedRecord = {
         provider: input.provider,
@@ -220,14 +282,17 @@ export function createFileProviderConfigStore(
       await ready
       const existing = await readRecord(provider)
       if (existing === null) throw providerNotConfigured(provider)
+      const nextBaseUrl =
+        patch.baseUrl !== undefined
+          ? patch.baseUrl
+          : existing.baseUrl === undefined
+            ? undefined
+            : existing.baseUrl
+      assertResolvable(provider, nextBaseUrl)
       const updated: EncryptedRecord = {
         ...existing,
         model: patch.model ?? existing.model,
-        ...(patch.baseUrl !== undefined
-          ? { baseUrl: patch.baseUrl }
-          : existing.baseUrl === undefined
-            ? {}
-            : { baseUrl: existing.baseUrl }),
+        ...(nextBaseUrl === undefined ? {} : { baseUrl: nextBaseUrl }),
         updatedAt: now().toISOString(),
       }
       await writeFile(fileFor(provider), JSON.stringify(updated, null, 2), 'utf8')

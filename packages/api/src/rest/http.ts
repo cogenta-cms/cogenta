@@ -267,6 +267,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   PROVIDER_RESPONSE_INVALID: 502,
   PROVIDER_TIMEOUT: 504,
   PROVIDER_RATE_LIMITED: 429,
+  // Provider catalog (fiche 56) — both describe a malformed write, never a
+  // server fault.
+  PROVIDER_ID_INVALID: 400,
+  PROVIDER_CUSTOM_BASE_URL_REQUIRED: 400,
 
   // A verified-broken chain is a server-side integrity failure, not
   // something the caller's request could have avoided — the default 500

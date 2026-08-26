@@ -31,11 +31,10 @@ import {
   createToolRegistry,
   ensureBuiltinAgentSkills,
   ensureBuiltinAgents,
+  KNOWN_PROVIDER_CATALOG,
   type MutableKillSwitch,
   type NotFoundLogReader,
-  PROVIDER_NAMES,
   type ProviderConfigStore,
-  type ProviderName,
   type RedirectWriter,
   resolveProviderRegistryConfig,
   type ToolDefinition,
@@ -235,16 +234,19 @@ function contentBrowseServiceLikeOf(
   }
 }
 
-function isProviderName(value: string): value is ProviderName {
-  return (PROVIDER_NAMES as readonly string[]).includes(value)
-}
-
 /**
  * Refreshed after every write to `ProviderConfigStore` (the providers
  * router calls `refresh()` after each mutation) — an admin who saves a new
  * key takes effect on the next agent run, no restart, without this
  * runtime's one long-lived `AgentRunner` (and the per-agent budget
  * trackers it holds) being torn down and rebuilt on every request.
+ *
+ * Fiche 56: `has`/`get` used to narrow an arbitrary `string` down to the
+ * closed `ProviderName` union before trusting `registry`'s own lookup —
+ * `ProviderName` is a plain string now (any catalog id or operator-chosen
+ * custom id `store.ts` accepted at write time), so `registry.has`/`get`
+ * already answer correctly for every key it was actually built with; no
+ * second allowlist to keep in sync here.
  */
 function createLiveProviderRegistry(store: ProviderConfigStore): AgentProviderRegistryLike & {
   refresh(): Promise<void>
@@ -254,8 +256,8 @@ function createLiveProviderRegistry(store: ProviderConfigStore): AgentProviderRe
     async refresh() {
       registry = createProviderRegistry(await resolveProviderRegistryConfig(store))
     },
-    has: (name) => isProviderName(name) && registry.has(name),
-    get: (name) => registry.get(name as ProviderName),
+    has: (name) => registry.has(name),
+    get: (name) => registry.get(name),
   }
 }
 
@@ -367,12 +369,28 @@ function createSkillRegistryAdapter(store: AgentSkillStore): AgentSkillRegistryL
   }
 }
 
+/** `@cogenta/api`'s `ProviderRegistryLike.catalog` shape — kept as a plain
+ * structural type here rather than importing `ProviderCatalogEntry` from
+ * `@cogenta/agents`, so `@cogenta/api` never needs a runtime dependency on
+ * `@cogenta/agents` (it is a devDependency only) to serve `GET
+ * /api/providers/catalog`; this module already depends on both. */
+function providerCatalogSummary(): readonly {
+  readonly id: string
+  readonly label: string
+  readonly wireFormat: string
+  readonly defaultBaseUrl: string
+  readonly knownModels: readonly string[]
+}[] {
+  return KNOWN_PROVIDER_CATALOG
+}
+
 function createProviderRegistryAdapter(
   store: ProviderConfigStore,
   onMutated: () => Promise<void>,
 ): ProviderRegistryLike {
   return {
-    names: [...PROVIDER_NAMES],
+    names: KNOWN_PROVIDER_CATALOG.map((entry) => entry.id),
+    catalog: providerCatalogSummary(),
     list: () => store.list(),
     async upsert(input) {
       const saved = await store.upsert(input as never)
@@ -380,17 +398,17 @@ function createProviderRegistryAdapter(
       return saved
     },
     async setEnabled(provider, enabled) {
-      const saved = await store.setEnabled(provider as ProviderName, enabled)
+      const saved = await store.setEnabled(provider, enabled)
       await onMutated()
       return saved
     },
     async updateSettings(provider, patch) {
-      const saved = await store.updateSettings(provider as ProviderName, patch)
+      const saved = await store.updateSettings(provider, patch)
       await onMutated()
       return saved
     },
     async remove(provider) {
-      await store.remove(provider as ProviderName)
+      await store.remove(provider)
       await onMutated()
     },
   }

@@ -5,6 +5,11 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
+  createFilePromptTemplateStore,
+  ensureBuiltinPromptTemplates,
+  type PromptTemplateStore,
+} from '@cogenta/agents'
+import {
   type AnalyticsStore,
   createAnalyticsStore,
   ensureAnalyticsTables,
@@ -53,6 +58,7 @@ import {
   createPendingMigrationsSource,
   createPermissionLayer,
   createPluginDisabledSource,
+  createPromptTemplatesRouter,
   createProvidersRouter,
   createRecoveryCodeUsedNoticeSource,
   createRedirectRouter,
@@ -90,6 +96,7 @@ import {
   type ObservabilityRouter,
   type OpsStatusRouter,
   type PermissionLayer,
+  type PromptTemplatesRouter,
   type ProvidersRouter,
   type RedirectRouter,
   type RestRequest,
@@ -634,6 +641,8 @@ interface Site {
   readonly providersRouter?: ProvidersRouter
   /** `/api/agent-skills` — L22 task 1bis: named instruction text an agent loads into its context. Same optionality as `agentsRouter`. */
   readonly agentSkillsRouter?: AgentSkillsRouter
+  /** `/api/prompt-templates` — fiche 45's shared prompt library. Same optionality as `agentsRouter`, built alongside it from the same `agentsRuntimeConfig`. */
+  readonly promptTemplatesRouter?: PromptTemplatesRouter
   /**
    * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
    *
@@ -2125,6 +2134,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           }),
           providersRouter: createProvidersRouter({ providers: agentsRuntime.providerRegistry }),
           agentSkillsRouter: createAgentSkillsRouter({ skills: agentsRuntime.skillRegistry }),
+          promptTemplatesRouter: createPromptTemplatesRouter({
+            templates: agentsRuntime.promptTemplateRegistry,
+          }),
         }),
     ...(options.sitePlans === undefined
       ? {}
@@ -4035,6 +4047,16 @@ export function createRequestListener(
         return
       }
 
+      if (
+        url.pathname.startsWith('/api/prompt-templates') &&
+        site.promptTemplatesRouter !== undefined
+      ) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.promptTemplatesRouter.handle(request, context.actor))
+        return
+      }
+
       // Driver connectivity/latency, not process metrics or uptime — the
       // same two live selections `cogenta doctor` reports from a terminal,
       // here queried from the running server instead. Admin-only: a
@@ -4704,6 +4726,17 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // does, and the `assistant.indexedCollections` toggle (L22 task 4) has to
   // be readable from the moment the first store wrap is built.
   const assistantSettings = createSiteSettingsStore({ db: selection.instance })
+  // Fiche 45 — built here (before `buildAgentRuntime`, inside `assembleSite`
+  // below, opens its own instance over the same directory) so the writing
+  // assistant's `assist.*` tools resolve their instruction text from the
+  // exact store the "Prompt Settings" admin screen edits. Two file-store
+  // instances over one directory is safe: neither caches, so an edit either
+  // makes is visible to the other on its next read (`agent-runtime.ts`'s own
+  // `PROMPT_TEMPLATES_SUBDIR` comment explains this in full).
+  const promptTemplates: PromptTemplateStore = createFilePromptTemplateStore({
+    dir: join(projectRoot, '.cogenta', 'agents-runtime', 'prompt-templates'),
+  })
+  await ensureBuiltinPromptTemplates(promptTemplates)
   const assistant = await buildAssistant({
     config: loaded.config,
     db: selection.instance,
@@ -4714,6 +4747,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // Beside the full-text index, never instead of it: the semantic half is
     // fused with this one by RRF (L18 task 5).
     fullText: searchIndex,
+    promptTemplates,
   })
   // The "Santé" / "Outils" screens (fiche 24). `migrator` is built once here
   // — not per request, unlike `cogenta migrate`'s own CLI invocation, which

@@ -42,6 +42,7 @@ import { NotFoundRoute } from './routes/not-found.js'
 import { ObservabilityRoute } from './routes/observability.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
 import { ProfileRoute } from './routes/profile.js'
+import { PromptSettingsRoute } from './routes/prompt-settings.js'
 import { ProvidersRoute } from './routes/providers.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
 import { ReviewRoute } from './routes/review.js'
@@ -140,6 +141,7 @@ export function App(): JSX.Element {
                 <Route path="agents" element={<AgentsRoute />} />
                 <Route path="providers" element={<ProvidersRoute />} />
                 <Route path="agent-skills" element={<AgentSkillsRoute />} />
+                <Route path="prompt-settings" element={<PromptSettingsRoute />} />
                 <Route path="mcp" element={<McpRoute />} />
                 <Route path="channels" element={<ChannelsRoute />} />
                 <Route path="users" element={<UsersRoute />} />

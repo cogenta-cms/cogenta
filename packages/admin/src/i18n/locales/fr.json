@@ -238,6 +238,7 @@
     "agents": "Agents",
     "providers": "Fournisseurs",
     "agentSkills": "Compétences",
+    "promptSettings": "Réglages des prompts",
     "mcp": "MCP",
     "channels": "Canaux",
     "users": "Utilisateurs",
@@ -1526,6 +1527,21 @@
     "noSkills": "Aucune compétence configurée.",
     "loadError": "Impossible de charger la liste des compétences.",
     "saveError": "Impossible d'enregistrer cette compétence."
+  },
+  "promptSettings": {
+    "heading": "Réglages des prompts",
+    "adminOnly": "Réservé au rôle « admin » : cette page gère le texte d'instruction que chaque outil de l'assistant envoie au modèle.",
+    "intro": "Chaque prompt utilitaire qu'un outil de l'assistant envoie réellement au modèle, éditable ici plutôt que codé en dur. Un espace réservé entre doubles accolades est rempli par l'outil au moment de l'appel — n'en retirez un que si vous retirez aussi ce qui en dépend. Un prompt intégré reste toujours modifiable, jamais supprimable, pour que le site garde un réglage par défaut fonctionnel.",
+    "createTemplate": "Créer un modèle",
+    "name": "Nom",
+    "description": "Description",
+    "category": "Catégorie",
+    "template": "Modèle",
+    "placeholderHint": "Un espace réservé ressemble à un nom de champ entre doubles accolades — un outil le remplace avant d'envoyer l'instruction au modèle. En retirer un peut changer ce que l'outil demande.",
+    "builtin": "Intégré",
+    "noTemplates": "Aucun modèle de prompt configuré.",
+    "loadError": "Impossible de charger la liste des modèles de prompt.",
+    "saveError": "Impossible d'enregistrer ce modèle de prompt."
   },
   "dashboard": {
     "heading": "Tableau de bord",

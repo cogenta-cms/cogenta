@@ -239,6 +239,7 @@
     "agents": "Agents",
     "providers": "Providers",
     "agentSkills": "Skills",
+    "promptSettings": "Prompt Settings",
     "mcp": "MCP",
     "channels": "Channels",
     "users": "Users",
@@ -1527,6 +1528,21 @@
     "noSkills": "No skills configured.",
     "loadError": "Could not load the skill list.",
     "saveError": "Could not save this skill."
+  },
+  "promptSettings": {
+    "heading": "Prompt Settings",
+    "adminOnly": "Restricted to the \"admin\" role: this manages the instruction text every writing-assistant tool sends the model.",
+    "intro": "Every utility prompt an assistant tool actually sends the model, editable here instead of hard-coded. A double-brace placeholder is filled in by the tool at call time — remove one only if you also remove what depends on it. A builtin can always be edited, never deleted, so the site always has a working default.",
+    "createTemplate": "Create template",
+    "name": "Name",
+    "description": "Description",
+    "category": "Category",
+    "template": "Template",
+    "placeholderHint": "A placeholder looks like two curly braces around a field name — a tool fills each one in before sending the instruction to the model. Removing one may change what the tool asks for.",
+    "builtin": "Builtin",
+    "noTemplates": "No prompt templates configured.",
+    "loadError": "Could not load the prompt template list.",
+    "saveError": "Could not save this prompt template."
   },
   "dashboard": {
     "heading": "Dashboard",

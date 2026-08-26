@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { resolveInstruction } from '../prompts/render.js'
+import type { PromptTemplateStore } from '../prompts/types.js'
 import { defineTool } from '../tools/define.js'
 import type { ToolDefinition } from '../tools/types.js'
 import type { AssistRuntime } from './runtime.js'
@@ -23,6 +25,13 @@ import { type Suggestion, SuggestionSchema, suggestion } from './suggestion.js'
  * `createAssistToolset` that returns an empty array, and the admin panel that
  * renders nothing — the tools are never registered at all rather than
  * registered and failing (R2, and the lot's own "absent, pas cassé" pitfall).
+ *
+ * Fiche 45: each tool's `instruction` — the one task line actually sent to
+ * the model — is resolved through `resolveInstruction` against an optional
+ * `PromptTemplateStore`, with the hard-coded string below as the fallback a
+ * never-migrated site keeps using unchanged. `role`/`objectives`/`RULES`
+ * stay in code on purpose — the R8 anti-injection boundary is not something
+ * a settings screen should be able to silently soften.
  */
 
 const PERMISSIONS = ['content.suggest'] as const
@@ -68,6 +77,7 @@ type RewriteInput = z.infer<typeof RewriteInput>
 
 export function createRewriteTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<RewriteInput, Suggestion> {
   const recipe: Recipe = {
     name: 'rewriter',
@@ -91,14 +101,19 @@ export function createRewriteTool(
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
+      const goalLine =
+        input.goal === undefined ? 'Improve its clarity and flow.' : `Goal: ${input.goal}`
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'rewrite',
+        fallback: () => ['Rewrite the passage in the DATA block.', goalLine, localeText].join(' '),
+        vars: { goalLine, localeLine: localeText },
+      })
       const text = await runtime.complete({
         agent: agentOf(recipe),
         tool: 'assist.rewrite',
-        instruction: [
-          'Rewrite the passage in the DATA block.',
-          input.goal === undefined ? 'Improve its clarity and flow.' : `Goal: ${input.goal}`,
-          localeLine(input.locale),
-        ].join(' '),
+        instruction,
         data: [{ source: 'entry field being edited', content: input.text }],
         signal: ctx.signal,
       })
@@ -112,8 +127,12 @@ export function createRewriteTool(
 const ProofreadInput = z.object({ text: TextInput, locale: z.string().max(35).optional() })
 type ProofreadInput = z.infer<typeof ProofreadInput>
 
+const PROOFREAD_REPLY_FORMAT =
+  'Reply with a JSON object: {"corrected": "<the corrected text>", "changes": ["<one short sentence per fix>"]}.'
+
 export function createProofreadTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<ProofreadInput, Suggestion> {
   const recipe: Recipe = {
     name: 'proofreader',
@@ -143,15 +162,19 @@ export function createProofreadTool(
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'proofread',
+        fallback: () =>
+          ['Proofread the text in the DATA block.', localeText, PROOFREAD_REPLY_FORMAT].join(' '),
+        vars: { localeLine: localeText, replyFormat: PROOFREAD_REPLY_FORMAT },
+      })
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
           tool: 'assist.proofread',
-          instruction: [
-            'Proofread the text in the DATA block.',
-            localeLine(input.locale),
-            'Reply with a JSON object: {"corrected": "<the corrected text>", "changes": ["<one short sentence per fix>"]}.',
-          ].join(' '),
+          instruction,
           data: [{ source: 'entry field being edited', content: input.text }],
           signal: ctx.signal,
         },
@@ -177,6 +200,7 @@ type SummariseInput = z.infer<typeof SummariseInput>
 
 export function createSummariseTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<SummariseInput, Suggestion> {
   const recipe: Recipe = {
     name: 'summariser',
@@ -199,14 +223,23 @@ export function createSummariseTool(
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
+      const maxWords = String(input.maxWords ?? 80)
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'summarise',
+        fallback: () =>
+          [
+            'Summarise the text in the DATA block.',
+            `Use at most ${maxWords} words.`,
+            localeText,
+          ].join(' '),
+        vars: { maxWords, localeLine: localeText },
+      })
       const text = await runtime.complete({
         agent: agentOf(recipe),
         tool: 'assist.summarise',
-        instruction: [
-          'Summarise the text in the DATA block.',
-          `Use at most ${input.maxWords ?? 80} words.`,
-          localeLine(input.locale),
-        ].join(' '),
+        instruction,
         data: [{ source: 'entry field being edited', content: input.text }],
         signal: ctx.signal,
       })
@@ -226,6 +259,7 @@ type TranslateInput = z.infer<typeof TranslateInput>
 
 export function createTranslateTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<TranslateInput, Suggestion> {
   const recipe: Recipe = {
     name: 'translator',
@@ -249,15 +283,21 @@ export function createTranslateTool(
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
+      const sourceLine =
+        input.sourceLocale === undefined ? '' : `The source language is ${input.sourceLocale}.`
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'translate',
+        fallback: () =>
+          [`Translate the text in the DATA block into ${input.targetLocale}.`, sourceLine]
+            .filter((part) => part.length > 0)
+            .join(' '),
+        vars: { targetLocale: input.targetLocale, sourceLine },
+      })
       const text = await runtime.complete({
         agent: agentOf(recipe),
         tool: 'assist.translate',
-        instruction: [
-          `Translate the text in the DATA block into ${input.targetLocale}.`,
-          input.sourceLocale === undefined ? '' : `The source language is ${input.sourceLocale}.`,
-        ]
-          .filter((part) => part.length > 0)
-          .join(' '),
+        instruction,
         data: [{ source: 'entry field being edited', content: input.text }],
         signal: ctx.signal,
       })
@@ -282,8 +322,11 @@ type MetaInput = z.infer<typeof MetaInput>
 /** What search engines truncate at. Not a hard limit here — a suggestion that overshoots is still useful, and the panel shows the count. */
 const META_DESCRIPTION_CHARS = 155
 
+const META_DESCRIPTION_REPLY_FORMAT = 'Reply with a JSON object: {"descriptions": ["…", "…", "…"]}.'
+
 export function createMetaDescriptionTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<MetaInput, Suggestion> {
   const recipe: Recipe = {
     name: 'meta-description-writer',
@@ -309,15 +352,23 @@ export function createMetaDescriptionTool(
     reversible: false,
     cost: 'low',
     async execute(input, ctx) {
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'meta-description',
+        fallback: () =>
+          [
+            'Write three meta descriptions for the page whose content is in the DATA block.',
+            localeText,
+            META_DESCRIPTION_REPLY_FORMAT,
+          ].join(' '),
+        vars: { localeLine: localeText, replyFormat: META_DESCRIPTION_REPLY_FORMAT },
+      })
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
           tool: 'assist.meta_description',
-          instruction: [
-            'Write three meta descriptions for the page whose content is in the DATA block.',
-            localeLine(input.locale),
-            'Reply with a JSON object: {"descriptions": ["…", "…", "…"]}.',
-          ].join(' '),
+          instruction,
           data: [
             ...(input.title === undefined ? [] : [{ source: 'entry title', content: input.title }]),
             { source: 'entry body', content: input.text },
@@ -341,7 +392,12 @@ const TitlesInput = z.object({
 })
 type TitlesInput = z.infer<typeof TitlesInput>
 
-export function createTitleTool(runtime: AssistRuntime): ToolDefinition<TitlesInput, Suggestion> {
+const TITLES_REPLY_FORMAT = 'Reply with a JSON object: {"titles": ["…"]}.'
+
+export function createTitleTool(
+  runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
+): ToolDefinition<TitlesInput, Suggestion> {
   const recipe: Recipe = {
     name: 'title-writer',
     description: 'Propose titles for an entry.',
@@ -365,16 +421,24 @@ export function createTitleTool(runtime: AssistRuntime): ToolDefinition<TitlesIn
     reversible: false,
     cost: 'low',
     async execute(input, ctx) {
-      const count = input.count ?? 5
+      const count = String(input.count ?? 5)
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'titles',
+        fallback: () =>
+          [
+            `Write ${count} candidate titles for the page whose content is in the DATA block.`,
+            localeText,
+            TITLES_REPLY_FORMAT,
+          ].join(' '),
+        vars: { count, localeLine: localeText, replyFormat: TITLES_REPLY_FORMAT },
+      })
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
           tool: 'assist.titles',
-          instruction: [
-            `Write ${count} candidate titles for the page whose content is in the DATA block.`,
-            localeLine(input.locale),
-            'Reply with a JSON object: {"titles": ["…"]}.',
-          ].join(' '),
+          instruction,
           data: [{ source: 'entry body', content: input.text }],
           signal: ctx.signal,
         },
@@ -396,7 +460,12 @@ const TagsInput = z.object({
 })
 type TagsInput = z.infer<typeof TagsInput>
 
-export function createTagsTool(runtime: AssistRuntime): ToolDefinition<TagsInput, Suggestion> {
+const TAGS_REPLY_FORMAT = 'Reply with a JSON object: {"tags": ["…"]}.'
+
+export function createTagsTool(
+  runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
+): ToolDefinition<TagsInput, Suggestion> {
   const recipe: Recipe = {
     name: 'tagger',
     description: 'Propose tags for an entry.',
@@ -420,15 +489,24 @@ export function createTagsTool(runtime: AssistRuntime): ToolDefinition<TagsInput
     reversible: false,
     cost: 'low',
     async execute(input, ctx) {
+      const count = String(input.count ?? 6)
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'tags',
+        fallback: () =>
+          [
+            `Propose at most ${count} tags for the content in the DATA block.`,
+            localeText,
+            TAGS_REPLY_FORMAT,
+          ].join(' '),
+        vars: { count, localeLine: localeText, replyFormat: TAGS_REPLY_FORMAT },
+      })
       const result = await runtime.completeJson(
         {
           agent: agentOf(recipe),
           tool: 'assist.tags',
-          instruction: [
-            `Propose at most ${input.count ?? 6} tags for the content in the DATA block.`,
-            localeLine(input.locale),
-            'Reply with a JSON object: {"tags": ["…"]}.',
-          ].join(' '),
+          instruction,
           data: [
             { source: 'entry body', content: input.text },
             ...(input.existing === undefined || input.existing.length === 0
@@ -471,6 +549,7 @@ type AltTextInput = z.infer<typeof AltTextInput>
  */
 export function createAltTextTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<AltTextInput, Suggestion> {
   const recipe: Recipe = {
     name: 'alt-text-writer',
@@ -494,13 +573,21 @@ export function createAltTextTool(
     reversible: false,
     cost: 'low',
     async execute(input, ctx) {
+      const localeText = localeLine(input.locale)
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'alt-text',
+        fallback: () =>
+          [
+            'Propose alt text for an image that appears in the content in the DATA block.',
+            localeText,
+          ].join(' '),
+        vars: { localeLine: localeText },
+      })
       const text = await runtime.complete({
         agent: agentOf(recipe),
         tool: 'assist.alt_text',
-        instruction: [
-          'Propose alt text for an image that appears in the content in the DATA block.',
-          localeLine(input.locale),
-        ].join(' '),
+        instruction,
         data: [
           { source: 'text around the image', content: input.context },
           ...(input.filename === undefined
@@ -521,15 +608,18 @@ export function createAltTextTool(
 }
 
 /** Every writing tool, in the order the assistant panel lists them. */
-export function createWritingTools(runtime: AssistRuntime): readonly ToolDefinition[] {
+export function createWritingTools(
+  runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
+): readonly ToolDefinition[] {
   return [
-    createRewriteTool(runtime),
-    createProofreadTool(runtime),
-    createSummariseTool(runtime),
-    createTranslateTool(runtime),
-    createMetaDescriptionTool(runtime),
-    createTitleTool(runtime),
-    createTagsTool(runtime),
-    createAltTextTool(runtime),
+    createRewriteTool(runtime, promptTemplates),
+    createProofreadTool(runtime, promptTemplates),
+    createSummariseTool(runtime, promptTemplates),
+    createTranslateTool(runtime, promptTemplates),
+    createMetaDescriptionTool(runtime, promptTemplates),
+    createTitleTool(runtime, promptTemplates),
+    createTagsTool(runtime, promptTemplates),
+    createAltTextTool(runtime, promptTemplates),
   ] as readonly ToolDefinition[]
 }

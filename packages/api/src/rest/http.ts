@@ -228,6 +228,20 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   CHANNEL_UNKNOWN: 404,
   CHANNEL_PREFERENCES_INVALID: 400,
 
+  // Prompt Settings (fiche 45) — same shape as `AGENT_SKILL_*` above: an
+  // unknown id is a 404, a conflict with the store's current state (a
+  // duplicate name, a builtin an admin tried to delete) is a 409, and a
+  // malformed create/update body is the caller's fault (400).
+  PROMPT_TEMPLATE_UNKNOWN: 404,
+  PROMPT_TEMPLATE_DUPLICATE: 409,
+  PROMPT_TEMPLATE_BUILTIN_UNDELETABLE: 409,
+  PROMPT_TEMPLATE_INVALID: 400,
+  // Only ever thrown by `@cogenta/agents`' `resolveInstruction`/
+  // `renderPromptTemplate`, deep inside an `assist.*` tool call — never by
+  // this router directly — but listed here so `statusFor` has a real answer
+  // rather than the 500 fallback if it ever surfaces on the wire.
+  PROMPT_TEMPLATE_PLACEHOLDER_UNRESOLVED: 400,
+
   // Site plans (L19). A missing draft is a 404; an undecided item and an
   // unknown decision id are both the caller's fault (400); "no provider
   // configured" is 501 rather than 500 — nothing is broken, this instance

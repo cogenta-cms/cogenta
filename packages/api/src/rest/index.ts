@@ -131,6 +131,13 @@ export { createOpsStatusRouter } from './ops-status-router.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
 export type {
+  PromptTemplateRegistryLike,
+  PromptTemplateSummary,
+  PromptTemplatesRouter,
+  PromptTemplatesRouterOptions,
+} from './prompt-templates-router.js'
+export { createPromptTemplatesRouter } from './prompt-templates-router.js'
+export type {
   ProviderRegistryLike,
   ProviderSummary,
   ProvidersRouter,

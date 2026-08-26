@@ -169,6 +169,23 @@ export { assertProviderAllowed } from './privacy/assert-provider-allowed.js'
 export { redactFields } from './privacy/redact-fields.js'
 export { redactText } from './privacy/redact-text.js'
 export type { NoDataLeavesPolicy, PiiKind, PiiMatch, RedactionResult } from './privacy/types.js'
+export type { ResolveInstructionOptions } from './prompts/render.js'
+export {
+  renderPromptTemplate,
+  renderTemplate,
+  resolveInstruction,
+} from './prompts/render.js'
+export { builtinPromptTemplateSeeds, ensureBuiltinPromptTemplates } from './prompts/seeds.js'
+export type { FilePromptTemplateStoreOptions } from './prompts/store.js'
+export { createFilePromptTemplateStore } from './prompts/store.js'
+export type {
+  PromptTemplate,
+  PromptTemplateCategory,
+  PromptTemplateInput,
+  PromptTemplatePatch,
+  PromptTemplateStore,
+} from './prompts/types.js'
+export { PROMPT_TEMPLATE_CATEGORIES } from './prompts/types.js'
 export type { AnthropicClientConfig, AnthropicRequestBody } from './providers/anthropic.js'
 export {
   buildAnthropicRequest,

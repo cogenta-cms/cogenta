@@ -1,4 +1,5 @@
 import type { SiteContext } from '../identity/context.js'
+import type { PromptTemplateStore } from '../prompts/types.js'
 import type { ImageProviderClient } from '../providers/image/types.js'
 import type { ProviderClient } from '../providers/types.js'
 import type { EmbeddingProvider } from '../rag/embeddings/types.js'
@@ -83,6 +84,8 @@ export interface AssistToolsetOptions {
   readonly site: SiteContext
   /** Fiche 30 task 3. Absent means no cap is tracked (the toolset still runs — only visibility and enforcement are lost). */
   readonly usage?: AssistUsageTracker
+  /** Fiche 45 — the shared prompt template library. Absent (or empty) means every tool below falls back to its own hard-coded instruction text unchanged. */
+  readonly promptTemplates?: PromptTemplateStore
 }
 
 const LABELS: Readonly<Record<string, { readonly label: string; readonly needs: string[] }>> = {
@@ -143,22 +146,29 @@ export function createAssistToolset(options: AssistToolsetOptions): AssistToolse
               }),
         })
 
+  const promptTemplates = options.promptTemplates
   const tools: ToolDefinition[] = [
     ...(runtime === undefined
       ? []
       : [
-          ...createWritingTools(runtime),
-          createClassifyTool(runtime) as ToolDefinition,
-          createModerateTool(runtime) as ToolDefinition,
-          createFaqTool(runtime) as ToolDefinition,
-          createSchemaOrgTool(runtime) as ToolDefinition,
+          ...createWritingTools(runtime, promptTemplates),
+          createClassifyTool(runtime, promptTemplates) as ToolDefinition,
+          createModerateTool(runtime, promptTemplates) as ToolDefinition,
+          createFaqTool(runtime, promptTemplates) as ToolDefinition,
+          createSchemaOrgTool(runtime, promptTemplates) as ToolDefinition,
         ]),
     ...(options.imageProvider === undefined
       ? []
       : [createGenerateImageTool(options.imageProvider) as ToolDefinition]),
     ...(runtime === undefined || options.search === undefined
       ? []
-      : [createContentChatTool({ runtime, search: options.search }) as ToolDefinition]),
+      : [
+          createContentChatTool({
+            runtime,
+            search: options.search,
+            ...(promptTemplates === undefined ? {} : { promptTemplates }),
+          }) as ToolDefinition,
+        ]),
     ...(options.vectors === undefined
       ? []
       : [createFindDuplicatesTool(options.vectors) as ToolDefinition]),

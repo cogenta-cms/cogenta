@@ -285,6 +285,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    // Fiche 45 — the shared prompt template library every `assist.*` tool's
+    // instruction text reads from. Admin-only nav entry (like `/agent-skills`
+    // and `/providers`) even though the API itself opens reading to any
+    // signed-in actor — a future consumer (fiche 43's page-builder button)
+    // reads the same route without needing this settings screen.
+    to: '/prompt-settings',
+    labelKey: 'nav.promptSettings',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     // Fiche 21 task 6: a screen dedicated to the MCP use case, parallel to
     // "Agents" rather than folded into the generic "Clés API" screen — same
     // underlying key store, different audience (wiring up an MCP client) and

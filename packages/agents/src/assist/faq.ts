@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { resolveInstruction } from '../prompts/render.js'
+import type { PromptTemplateStore } from '../prompts/types.js'
 import { defineTool } from '../tools/define.js'
 import type { ToolDefinition } from '../tools/types.js'
 import type { AssistRuntime } from './runtime.js'
@@ -43,7 +45,12 @@ const FaqOutput = z.object({
 })
 export type FaqDraft = z.infer<typeof FaqOutput>
 
-export function createFaqTool(runtime: AssistRuntime): ToolDefinition<FaqInput, FaqDraft> {
+const FAQ_REPLY_FORMAT = 'Reply with a JSON object: {"items": [{"question": "…", "answer": "…"}]}.'
+
+export function createFaqTool(
+  runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
+): ToolDefinition<FaqInput, FaqDraft> {
   const ModelFaq = z.object({
     items: z
       .array(z.object({ question: z.string().min(1), answer: z.string().min(1) }))
@@ -62,6 +69,22 @@ export function createFaqTool(runtime: AssistRuntime): ToolDefinition<FaqInput, 
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
+      const count = String(input.count ?? 5)
+      const localeText =
+        input.locale === undefined
+          ? 'Answer in the language of the content.'
+          : `Answer in ${input.locale}.`
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'faq-draft',
+        fallback: () =>
+          [
+            `Draft at most ${count} question-and-answer pairs from the content in the DATA block.`,
+            localeText,
+            FAQ_REPLY_FORMAT,
+          ].join(' '),
+        vars: { count, localeLine: localeText, replyFormat: FAQ_REPLY_FORMAT },
+      })
       const result = await runtime.completeJson(
         {
           agent: {
@@ -75,13 +98,7 @@ export function createFaqTool(runtime: AssistRuntime): ToolDefinition<FaqInput, 
             ],
           },
           tool: 'assist.faq_draft',
-          instruction: [
-            `Draft at most ${input.count ?? 5} question-and-answer pairs from the content in the DATA block.`,
-            input.locale === undefined
-              ? 'Answer in the language of the content.'
-              : `Answer in ${input.locale}.`,
-            'Reply with a JSON object: {"items": [{"question": "…", "answer": "…"}]}.',
-          ].join(' '),
+          instruction,
           data: [{ source: 'entry body', content: input.text }],
           signal: ctx.signal,
         },
@@ -113,6 +130,7 @@ export type SchemaDraft = z.infer<typeof SchemaOutput>
 
 export function createSchemaOrgTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<SchemaInput, SchemaDraft> {
   return defineTool({
     name: 'assist.schema_org_draft',
@@ -125,6 +143,16 @@ export function createSchemaOrgTool(
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'schema-org-draft',
+        fallback: () =>
+          [
+            `Write Schema.org JSON-LD of type ${input.type} for the content in the DATA block.`,
+            'Reply with only the JSON-LD object.',
+          ].join(' '),
+        vars: { type: input.type },
+      })
       const raw = await runtime.completeJson(
         {
           agent: {
@@ -138,10 +166,7 @@ export function createSchemaOrgTool(
             ],
           },
           tool: 'assist.schema_org_draft',
-          instruction: [
-            `Write Schema.org JSON-LD of type ${input.type} for the content in the DATA block.`,
-            'Reply with only the JSON-LD object.',
-          ].join(' '),
+          instruction,
           data: [
             ...(input.title === undefined ? [] : [{ source: 'entry title', content: input.title }]),
             ...(input.url === undefined ? [] : [{ source: 'entry url', content: input.url }]),

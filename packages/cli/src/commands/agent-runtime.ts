@@ -19,6 +19,7 @@ import {
   createDocumentExtractTool,
   createFileAgentDeclarationStore,
   createFileAgentSkillStore,
+  createFilePromptTemplateStore,
   createFileProviderConfigStore,
   createKillSwitch,
   createMediaReadTool,
@@ -31,9 +32,11 @@ import {
   createToolRegistry,
   ensureBuiltinAgentSkills,
   ensureBuiltinAgents,
+  ensureBuiltinPromptTemplates,
   type MutableKillSwitch,
   type NotFoundLogReader,
   PROVIDER_NAMES,
+  type PromptTemplateStore,
   type ProviderConfigStore,
   type ProviderName,
   type RedirectWriter,
@@ -45,6 +48,7 @@ import type {
   AgentRunnerLike,
   AgentSkillRegistryLike,
   ContentService,
+  PromptTemplateRegistryLike,
   ProviderRegistryLike,
 } from '@cogenta/api'
 import type { AuditLog } from '@cogenta/auth'
@@ -70,6 +74,17 @@ import { buildPath, type CollectionDefinition } from '@cogenta/schema'
 const AGENTS_SUBDIR = 'agents'
 const SKILLS_SUBDIR = 'skills'
 const PROVIDERS_SUBDIR = 'providers'
+/**
+ * Fiche 45 — under the same `dataDir` (`.cogenta/agents-runtime`)
+ * `runServe` also points its own, separately-constructed
+ * `PromptTemplateStore` at, ahead of this function (`buildAssistant` runs
+ * before `assembleSite`/`buildAgentRuntime` does). Two file-store instances
+ * pointed at the same directory is safe: neither caches across calls, so an
+ * edit either one makes is visible to the other on its very next read — the
+ * same property `createFileAgentSkillStore` already relies on for this
+ * reason.
+ */
+const PROMPT_TEMPLATES_SUBDIR = 'prompt-templates'
 
 export interface BuildAgentRuntimeOptions {
   /** `.cogenta/agents-runtime` under the project root, by convention — see `runServe`. */
@@ -113,6 +128,8 @@ export interface AgentRuntimeAssembly {
   readonly agentRunner: AgentRunnerLike
   readonly providerRegistry: ProviderRegistryLike
   readonly skillRegistry: AgentSkillRegistryLike
+  /** `/api/prompt-templates` (fiche 45) — the same store the assistant's `assist.*` tools resolve their instruction text against, so an edit here really does change what the next tool call sends the model. */
+  readonly promptTemplateRegistry: PromptTemplateRegistryLike
   /**
    * Exposed so `serve.ts` can build the L22 task 3 notice source
    * (`@cogenta/api`'s `createAgentApprovalsSource`) over the very same
@@ -367,6 +384,18 @@ function createSkillRegistryAdapter(store: AgentSkillStore): AgentSkillRegistryL
   }
 }
 
+function createPromptTemplateRegistryAdapter(
+  store: PromptTemplateStore,
+): PromptTemplateRegistryLike {
+  return {
+    list: () => store.list(),
+    get: (id) => store.get(id),
+    create: (input) => store.create(input),
+    update: (id, patch) => store.update(id, patch),
+    remove: (id) => store.remove(id),
+  }
+}
+
 function createProviderRegistryAdapter(
   store: ProviderConfigStore,
   onMutated: () => Promise<void>,
@@ -414,9 +443,13 @@ export async function buildAgentRuntime(
     dir: join(options.dataDir, PROVIDERS_SUBDIR),
     signingKey: options.signingKey,
   })
+  const promptTemplateStore = createFilePromptTemplateStore({
+    dir: join(options.dataDir, PROMPT_TEMPLATES_SUBDIR),
+  })
 
   await ensureBuiltinAgents(agentStore)
   await ensureBuiltinAgentSkills(skillStore)
+  await ensureBuiltinPromptTemplates(promptTemplateStore)
 
   const {
     registry: agentRegistry,
@@ -466,6 +499,7 @@ export async function buildAgentRuntime(
     liveProviders.refresh(),
   )
   const skillRegistry = createSkillRegistryAdapter(skillStore)
+  const promptTemplateRegistry = createPromptTemplateRegistryAdapter(promptTemplateStore)
 
   const configuredProviders = (await providerStore.list()).filter((p) => p.enabled)
   const summary =
@@ -475,5 +509,13 @@ export async function buildAgentRuntime(
           .map((p) => p.provider)
           .join(', ')})`
 
-  return { agentRegistry, agentRunner, providerRegistry, skillRegistry, approvalQueue, summary }
+  return {
+    agentRegistry,
+    agentRunner,
+    providerRegistry,
+    skillRegistry,
+    promptTemplateRegistry,
+    approvalQueue,
+    summary,
+  }
 }

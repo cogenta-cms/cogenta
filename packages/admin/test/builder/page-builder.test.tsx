@@ -33,12 +33,28 @@ function pageFor(blocks: readonly ContentBlock[]): string {
 }
 
 let sentBlocks: (readonly ContentBlock[])[] = []
+/**
+ * The pattern library `PatternPicker` (fiche 43 sub-chantier A) fetches on
+ * mount, on every render of this harness — empty by default, since what
+ * this file has to prove is the builder's own half, not the pattern feature
+ * (covered by `pattern-picker.test.tsx`). A test that needs a real library
+ * (inserting a motif, applying a model) sets these before rendering.
+ */
+let patternFixtures: readonly Record<string, unknown>[] = []
+let templateFixtures: readonly Record<string, unknown>[] = []
 
 beforeEach(() => {
   sentBlocks = []
+  patternFixtures = []
+  templateFixtures = []
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (_url: string, init?: RequestInit) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/patterns')) {
+        const kind = new URL(String(url), 'http://localhost').searchParams.get('kind')
+        const data = kind === 'template' ? templateFixtures : patternFixtures
+        return { ok: true, status: 200, json: async () => ({ data }) } as unknown as Response
+      }
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         blocks: Record<string, readonly ContentBlock[]>
       }
@@ -285,5 +301,209 @@ describe('what a whole visual session hands back (L16 acceptance)', () => {
     expect(last.map((block) => block.key)).toEqual(['k-hero', 'k-cta'])
     // And the data travelled with the key, not with the position.
     expect(last[0]?.data['title']).toBe('A CMS that runs itself')
+  })
+})
+
+const THREE_BLOCKS: readonly ContentBlock[] = [
+  { key: 'k-hero', type: 'hero', data: { title: 'Hero' } },
+  { key: 'k-quote', type: 'quote', data: { text: 'Quote' } },
+  { key: 'k-cta', type: 'cta', data: { title: 'CTA' } },
+]
+
+describe('multi-select and lock (fiche 05 task 5, fiche 43 sub-chantier E)', () => {
+  it('Shift-clicking builds a group selection, and removes it as one edit', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness initial={THREE_BLOCKS} onChange={onChange} />)
+
+    const outline = screen.getByRole('list', { name: 'Blocs de la page' })
+    fireEvent.click(within(outline).getByRole('button', { name: /Héros/u }))
+    fireEvent.click(within(outline).getByRole('button', { name: /Citation/u }), { shiftKey: true })
+
+    expect(screen.getByRole('group', { name: 'Blocs sélectionnés' })).not.toBeNull()
+    expect(screen.getByText('2 sélectionné(s)')).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer la sélection' }))
+
+    // One edit, not two: exactly one call carries the final, two-block result.
+    const last = onChange.mock.calls.at(-1)?.[0] ?? []
+    expect(last.map((block) => block.key)).toEqual(['k-cta'])
+  })
+
+  it('moves a group selection up together', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness initial={THREE_BLOCKS} onChange={onChange} />)
+
+    const outline = screen.getByRole('list', { name: 'Blocs de la page' })
+    fireEvent.click(within(outline).getByRole('button', { name: /Citation/u }))
+    fireEvent.click(within(outline).getByRole('button', { name: /Appel à action/u }), {
+      shiftKey: true,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monter la sélection' }))
+
+    expect(onChange.mock.calls.at(-1)?.[0]?.map((block) => block.key)).toEqual([
+      'k-quote',
+      'k-cta',
+      'k-hero',
+    ])
+  })
+
+  it('a locked block cannot be moved or removed from its own row', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness initial={THREE_BLOCKS} onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Verrouiller le bloc 1' }))
+    expect(
+      (screen.getByRole('button', { name: 'Descendre le bloc 1' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(
+      (screen.getByRole('button', { name: 'Retirer le bloc 1' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+
+    // Unlocking restores the ordinary buttons.
+    fireEvent.click(screen.getByRole('button', { name: 'Déverrouiller le bloc 1' }))
+    expect(
+      (screen.getByRole('button', { name: 'Descendre le bloc 1' }) as HTMLButtonElement).disabled,
+    ).toBe(false)
+  })
+
+  it('a locked block cannot be displaced by an unlocked neighbour moving past it either', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness initial={THREE_BLOCKS} onChange={onChange} />)
+
+    // Lock the header (block 1); the quote (block 2, unlocked) tries to move
+    // up past it. Its own "Monter" button is not disabled — only the *header*
+    // is locked — so the guard has to live in what the move actually does,
+    // not just in which buttons are greyed out.
+    fireEvent.click(screen.getByRole('button', { name: 'Verrouiller le bloc 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Monter le bloc 2' }))
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a locked block ignores a move even from the group toolbar', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness initial={THREE_BLOCKS} onChange={onChange} />)
+
+    const outline = screen.getByRole('list', { name: 'Blocs de la page' })
+    fireEvent.click(screen.getByRole('button', { name: 'Verrouiller le bloc 1' }))
+    fireEvent.click(within(outline).getByRole('button', { name: /Héros/u }))
+    fireEvent.click(within(outline).getByRole('button', { name: /Citation/u }), { shiftKey: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monter la sélection' }))
+
+    // Nothing moved: the only member of the selection allowed to move (the
+    // locked hero has no unselected neighbour above it to swap with anyway,
+    // and the quote's only neighbour above is the locked hero) stays put.
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('copy / paste (fiche 05 task 2, fiche 43 sub-chantier B)', () => {
+  beforeEach(() => {
+    Object.defineProperty(window.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined), readText: vi.fn() },
+      configurable: true,
+    })
+  })
+
+  it('copies the selected block and pastes it back with a fresh key', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness onChange={onChange} />)
+
+    const outline = screen.getByRole('list', { name: 'Blocs de la page' })
+    fireEvent.click(within(outline).getByText(/Héros/u))
+
+    // The shortcut handler sits on an ancestor `<div>`; firing on a real
+    // descendant exercises the actual bubbling path rather than a DOM query
+    // React would never itself produce (`onKeyDown` is not a reflected
+    // attribute).
+    fireEvent.keyDown(outline, { key: 'c', ctrlKey: true })
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining('cogenta/blocks@1'),
+      ),
+    )
+
+    const copiedText = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string
+    ;(navigator.clipboard.readText as ReturnType<typeof vi.fn>).mockResolvedValue(copiedText)
+
+    fireEvent.keyDown(outline, { key: 'v', ctrlKey: true })
+
+    await waitFor(() => expect(onChange.mock.calls.at(-1)?.[0]).toHaveLength(3))
+    const pasted = onChange.mock.calls.at(-1)?.[0] ?? []
+    expect(pasted.at(-1)?.type).toBe('hero')
+    expect(pasted.at(-1)?.key).not.toBe('k-hero')
+  })
+
+  it('does not steal the shortcut from an ordinary text field', async () => {
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Citation/u }))
+    onChange.mockClear()
+
+    const textField = screen.getByLabelText('text', { exact: false })
+    fireEvent.keyDown(textField, { key: 'v', ctrlKey: true })
+
+    // No block-level paste fired — the keystroke was left for the field itself.
+    expect(navigator.clipboard.readText).not.toHaveBeenCalled()
+  })
+})
+
+describe('patterns and page models (fiche 43 sub-chantier A)', () => {
+  it('inserts a saved motif, adding to whatever the page already has', async () => {
+    patternFixtures = [
+      {
+        id: 'pattern-1',
+        name: 'Argument band',
+        category: null,
+        kind: 'pattern',
+        blocks: [{ key: 'stored', type: 'quote', data: { text: 'Reused' } }],
+        provenance: 'human',
+        provenanceDetail: null,
+        createdAt: '2026-08-26T00:00:00.000Z',
+        updatedAt: '2026-08-26T00:00:00.000Z',
+      },
+    ]
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness onChange={onChange} />)
+
+    await screen.findByText('Argument band')
+    fireEvent.click(screen.getByRole('button', { name: 'Insérer' }))
+
+    const last = onChange.mock.calls.at(-1)?.[0] ?? []
+    expect(last.map((block) => block.type)).toEqual(['hero', 'cta', 'quote'])
+    // A fresh key, never the pattern's own stored one.
+    expect(last.at(-1)?.key).not.toBe('stored')
+  })
+
+  it('replaces the whole page with a model only after explicit confirmation', async () => {
+    templateFixtures = [
+      {
+        id: 'template-1',
+        name: 'Landing page',
+        category: null,
+        kind: 'template',
+        blocks: [{ key: 'stored', type: 'prose', data: { body: [] } }],
+        provenance: 'human',
+        provenanceDetail: null,
+        createdAt: '2026-08-26T00:00:00.000Z',
+        updatedAt: '2026-08-26T00:00:00.000Z',
+      },
+    ]
+    const onChange = vi.fn<(blocks: readonly ContentBlock[]) => void>()
+    render(<Harness onChange={onChange} />)
+
+    await screen.findByText('Landing page')
+    fireEvent.click(screen.getByRole('button', { name: 'Utiliser ce modèle' }))
+
+    // Nothing changed yet — the confirmation modal is up.
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Remplacer la page' }))
+
+    const last = onChange.mock.calls.at(-1)?.[0] ?? []
+    expect(last.map((block) => block.type)).toEqual(['prose'])
   })
 })

@@ -114,6 +114,25 @@ export {
   toSnakeCase,
   versionsTable,
 } from './naming.js'
+export type {
+  CreatePatternInput,
+  ListPatternsOptions,
+  Pattern,
+  PatternBlock,
+  PatternProvenanceDetail,
+  PatternStore,
+  PatternStoreOptions,
+  UpdatePatternInput,
+} from './pattern-store.js'
+export { createPatternStore } from './pattern-store.js'
+export type { PatternKind } from './pattern-tables.js'
+export {
+  ensurePatternTables,
+  PATTERN_CATEGORY_LENGTH,
+  PATTERN_KINDS,
+  PATTERN_NAME_LENGTH,
+  PATTERN_TABLE,
+} from './pattern-tables.js'
 export { withReadOnlyStore } from './read-only.js'
 export type { RedirectTrackingOptions } from './redirect-tracking.js'
 export { withRedirectTracking } from './redirect-tracking.js'

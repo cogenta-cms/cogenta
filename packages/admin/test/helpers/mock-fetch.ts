@@ -2009,6 +2009,23 @@ export function installMockFetch(
     submittedAt: string
   }[] = (options.formSubmissions ?? []).map((submission) => ({ ...submission }))
 
+  // The page builder's motif/model library (fiche 43 sub-chantier A) — see
+  // `builder/pattern-picker.tsx`. Empty by default: most tests that switch
+  // to the visual builder never touch this panel, and the fixture is only
+  // there so `PatternPicker`'s own mount-time fetch does not throw.
+  let pageBuilderPatternCounter = 0
+  let pageBuilderPatterns: {
+    id: string
+    name: string
+    category: string | null
+    kind: 'pattern' | 'template'
+    blocks: readonly { key: string; type: string; data: Record<string, unknown> }[]
+    provenance: 'human' | 'assisted' | 'generated'
+    provenanceDetail: Record<string, unknown> | null
+    createdAt: string
+    updatedAt: string
+  }[] = []
+
   // Prefix redirects (fiche 12 task 4) — see `redirects/pattern-panel.tsx`.
   let patternCounter = 0
   let redirectPatterns: {
@@ -6391,6 +6408,80 @@ export function installMockFetch(
           })
         }
         return json(200, { data: answer })
+      }
+
+      // `/api/patterns*` — the page builder's motif/model library (fiche 43
+      // sub-chantier A), admin/editor only, mirroring `pattern-router.ts`'s
+      // own fixed door.
+      if (url.includes('/api/patterns')) {
+        if (!user.roles.includes('admin') && !user.roles.includes('editor')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Access denied: patterns can only be managed by admin or editor.',
+            },
+          })
+        }
+        const parsed = new URL(url, 'http://localhost')
+        const segments = parsed.pathname
+          .replace(/^.*\/api\/patterns/, '')
+          .split('/')
+          .filter((segment) => segment.length > 0)
+
+        if (segments.length === 0) {
+          if (method === 'GET') {
+            const kind = parsed.searchParams.get('kind')
+            const filtered =
+              kind === null
+                ? pageBuilderPatterns
+                : pageBuilderPatterns.filter((p) => p.kind === kind)
+            return json(200, { data: filtered })
+          }
+          if (method === 'POST') {
+            pageBuilderPatternCounter += 1
+            const now = '2026-03-01T00:00:00.000Z'
+            const created = {
+              id: `pattern-${pageBuilderPatternCounter}`,
+              name: body.name as string,
+              category: (body.category as string | null | undefined) ?? null,
+              kind: body.kind as 'pattern' | 'template',
+              blocks: (body.blocks ?? []) as {
+                key: string
+                type: string
+                data: Record<string, unknown>
+              }[],
+              provenance:
+                (body.provenance as 'human' | 'assisted' | 'generated' | undefined) ?? 'human',
+              provenanceDetail:
+                (body.provenanceDetail as Record<string, unknown> | null | undefined) ?? null,
+              createdAt: now,
+              updatedAt: now,
+            }
+            pageBuilderPatterns.push(created)
+            return json(201, { data: created })
+          }
+        }
+
+        if (segments.length === 1) {
+          const id = segments[0]
+          const existing = pageBuilderPatterns.find((p) => p.id === id)
+          if (existing === undefined) {
+            return json(404, { error: { code: 'PATTERN_UNKNOWN', message: `No pattern "${id}".` } })
+          }
+          if (method === 'GET') return json(200, { data: existing })
+          if (method === 'PATCH') {
+            if (typeof body.name === 'string') existing.name = body.name
+            if (Object.hasOwn(body, 'category')) {
+              existing.category = body.category as string | null
+            }
+            existing.updatedAt = '2026-03-01T00:01:00.000Z'
+            return json(200, { data: existing })
+          }
+          if (method === 'DELETE') {
+            pageBuilderPatterns = pageBuilderPatterns.filter((p) => p.id !== id)
+            return new Response(null, { status: 204 })
+          }
+        }
       }
 
       // `/api/forms/*` (contract G, ADR-0026) — admin-only, mirroring

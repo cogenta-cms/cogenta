@@ -100,6 +100,8 @@ export type {
   MarketplaceUpdateResultLike,
 } from './marketplace-router.js'
 export { createMarketplaceRouter } from './marketplace-router.js'
+export type { McpConnectionsRouter, McpConnectionsRouterOptions } from './mcp-connections-router.js'
+export { createMcpConnectionsRouter } from './mcp-connections-router.js'
 export type {
   ImageSize,
   MediaImageProcessor,

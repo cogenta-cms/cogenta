@@ -38,6 +38,7 @@
     "@cogenta/channels": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/forms": "workspace:*",
+    "@cogenta/mcp": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/blocks": "workspace:*",
     "@cogenta/seo": "workspace:*",

@@ -3,9 +3,10 @@ import { defineTheme } from './src/theme-contract.js'
 /**
  * Contract D — Thème, `theme@1.0`.
  *
- * `implements` lists the twelve blocks of contract B in the order the contract
- * lists them. A theme that omits one fails installation, which is what
- * guarantees that switching theme never erases content.
+ * `implements` lists the seventeen blocks of contract B (`blocks@2.0`, RFC
+ * 0001) in the order the contract lists them. A theme that omits one fails
+ * installation, which is what guarantees that switching theme never erases
+ * content.
  *
  * `runtime: 'static'` describes what *this theme* needs, not what every block
  * on a page needs: `collectionList` is `runtime: 'server'` in the vocabulary
@@ -18,9 +19,12 @@ import { defineTheme } from './src/theme-contract.js'
  */
 export default defineTheme({
   name: 'canonical',
-  version: '1.0.0',
+  // Minor: the theme gained the five new blocks of `blocks@2.0` without any
+  // change to how it renders the twelve it already implemented — nothing a
+  // site authored before this stops rendering identically.
+  version: '1.1.0',
   engine: '^1.0.0',
-  blocks: '^1.0.0',
+  blocks: '^2.0.0',
   implements: [
     'hero',
     'prose',
@@ -34,6 +38,11 @@ export default defineTheme({
     'logos',
     'collectionList',
     'embed',
+    'testimonial',
+    'pricingTable',
+    'accordion',
+    'statCounter',
+    'logoStrip',
   ],
   collections: ['article', 'page'],
   runtime: 'static',

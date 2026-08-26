@@ -12,7 +12,7 @@ function render(type: keyof typeof BLOCKS): string {
   return node === null ? '' : serialize(node)
 }
 
-describe('the twelve vocabulary blocks', () => {
+describe('the vocabulary blocks', () => {
   for (const block of ALL_BLOCKS) {
     it(`renders ${block._type} to stable markup`, () => {
       expect(render(block._type)).toMatchSnapshot()

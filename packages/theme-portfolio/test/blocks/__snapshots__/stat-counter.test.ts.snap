@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderStatCounter > matches a stable snapshot 1`] = `"<section class="cg-block cg-counter" data-block="statCounter"><h2 class="cg-counter__title" data-field="title">By the numbers</h2><ul class="cg-counter__items"><li class="cg-counter__item"><span class="cg-counter__index" aria-hidden="true">01</span><span class="cg-counter__value">48</span><span class="cg-counter__label">Studios shipped</span></li><li class="cg-counter__item"><span class="cg-counter__index" aria-hidden="true">02</span><span class="cg-counter__value">12</span><span class="cg-counter__label">Countries</span></li></ul></section>"`;

@@ -1759,6 +1759,42 @@ export function installMockFetch(
     },
   ]
 
+  // Fiche 58 tasks 2-6 — "MCP Clients". In-memory stand-in for
+  // `McpConnectionStore`, mirroring the real store's own shape
+  // (`packages/mcp/src/registry/store.ts`'s `McpConnectionSummary`) closely
+  // enough that the screen's own request/response typing exercises for
+  // real, without re-implementing sandboxing or discovery — this mock's
+  // "test connection" always reports one fixed discovered tool, "greet".
+  let mcpConnectionCounter = 0
+  const mcpConnections: {
+    id: string
+    name: string
+    transport: 'stdio' | 'http'
+    command?: string
+    args: readonly string[]
+    url?: string
+    env: Record<string, string>
+    authKind: 'none' | 'api_key' | 'oauth'
+    hasSecret: boolean
+    secretEnvVar?: string
+    confirmedUnsandboxed: boolean
+    enabled: boolean
+    status: 'unverified' | 'ok' | 'error'
+    lastError?: string
+    discoveredTools: { name: string; description: string; inputSchema: Record<string, unknown> }[]
+    lastDiscoveredAt?: string
+    exposedTools: {
+      remoteName: string
+      localName: string
+      description: string
+      sideEffects: boolean
+      reversible: boolean
+      cost: 'low' | 'medium' | 'high'
+    }[]
+    createdAt: string
+    updatedAt: string
+  }[] = []
+
   // L22 task 2 — "Canaux". In-memory stand-in for `ChannelLinkStore`, scoped
   // per test the same way `apiKeys` is: one signed-in account's own links,
   // never another account's.
@@ -2360,6 +2396,130 @@ export function installMockFetch(
           }
           found.revokedAt = '2026-03-06T00:00:00.000Z'
           return new Response(null, { status: 204 })
+        }
+      }
+
+      // `/api/mcp-connections/*` (fiche 58). Admin-only, mirroring
+      // `packages/api/src/rest/mcp-connections-router.ts`: the mandatory
+      // confirmation for a `stdio` connection is enforced here too (never
+      // just assumed the screen already checked it), and "test connection"
+      // always discovers exactly one tool, "greet" — enough for the screen's
+      // own "absent, pas refusée" checkbox flow to be exercised for real.
+      const mcpConnectionsMatch =
+        /\/api\/mcp-connections(?:\/([^/?]+)(?:\/(test|exposed-tools))?)?(?:\?.*)?$/u.exec(url)
+      if (mcpConnectionsMatch !== null && url.includes('/api/mcp-connections')) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the admin role may manage MCP connections.',
+            },
+          })
+        }
+        const [, rawId, action] = mcpConnectionsMatch
+
+        if (rawId === undefined && method === 'GET') {
+          return json(200, { data: mcpConnections })
+        }
+
+        if (rawId === undefined && method === 'POST') {
+          if (body.transport === 'stdio' && body.confirmUnsandboxed !== true) {
+            return json(400, {
+              error: {
+                code: 'MCP_CONNECTION_CONFIRMATION_REQUIRED',
+                message: 'A "stdio" connection must explicitly confirm it is unsandboxed.',
+              },
+            })
+          }
+          mcpConnectionCounter += 1
+          const now = '2026-03-08T00:00:00.000Z'
+          const record = {
+            id: `mcp-conn-${mcpConnectionCounter}`,
+            name: String(body.name),
+            transport: body.transport as 'stdio' | 'http',
+            ...(typeof body.command === 'string' ? { command: body.command } : {}),
+            args: (body.args as readonly string[] | undefined) ?? [],
+            ...(typeof body.url === 'string' ? { url: body.url } : {}),
+            env: (body.env as Record<string, string> | undefined) ?? {},
+            authKind: (body.authKind as 'none' | 'api_key' | 'oauth' | undefined) ?? 'none',
+            hasSecret: typeof body.secret === 'string' && body.secret.length > 0,
+            ...(typeof body.secretEnvVar === 'string' ? { secretEnvVar: body.secretEnvVar } : {}),
+            confirmedUnsandboxed: true,
+            enabled: true,
+            status: 'unverified' as const,
+            discoveredTools: [],
+            exposedTools: [],
+            createdAt: now,
+            updatedAt: now,
+          }
+          mcpConnections.push(record)
+          return json(201, { data: record })
+        }
+
+        const found = mcpConnections.find((candidate) => candidate.id === rawId)
+        if (rawId !== undefined && found === undefined) {
+          return json(404, {
+            error: { code: 'MCP_CONNECTION_NOT_FOUND', message: 'No such connection.' },
+          })
+        }
+
+        if (rawId !== undefined && action === undefined && method === 'PATCH') {
+          if (found === undefined) throw new Error('unreachable')
+          if (typeof body.enabled === 'boolean') found.enabled = body.enabled
+          found.updatedAt = '2026-03-08T00:05:00.000Z'
+          return json(200, { data: found })
+        }
+
+        if (rawId !== undefined && action === undefined && method === 'DELETE') {
+          const index = mcpConnections.findIndex((candidate) => candidate.id === rawId)
+          if (index !== -1) mcpConnections.splice(index, 1)
+          return json(200, { data: { id: rawId, removed: true } })
+        }
+
+        if (rawId !== undefined && action === 'test' && method === 'POST') {
+          if (found === undefined) throw new Error('unreachable')
+          found.status = 'ok'
+          found.discoveredTools = [
+            { name: 'greet', description: 'Greets a person by name.', inputSchema: {} },
+          ]
+          found.lastDiscoveredAt = '2026-03-08T00:10:00.000Z'
+          found.updatedAt = found.lastDiscoveredAt
+          return json(200, { data: found })
+        }
+
+        if (rawId !== undefined && action === 'exposed-tools' && method === 'PUT') {
+          if (found === undefined) throw new Error('unreachable')
+          const discoveredNames = new Set(found.discoveredTools.map((tool) => tool.name))
+          const tools = (body.tools as readonly Record<string, unknown>[] | undefined) ?? []
+          for (const tool of tools) {
+            if (!discoveredNames.has(String(tool.remoteName))) {
+              return json(400, {
+                error: {
+                  code: 'MCP_CONNECTION_TOOL_NOT_DISCOVERED',
+                  message: `"${tool.remoteName}" was not discovered on this connection.`,
+                },
+              })
+            }
+          }
+          found.exposedTools = tools.map((tool) => ({
+            remoteName: String(tool.remoteName),
+            localName:
+              typeof tool.localName === 'string' && tool.localName.length > 0
+                ? tool.localName
+                : String(tool.remoteName),
+            description:
+              typeof tool.description === 'string' && tool.description.length > 0
+                ? tool.description
+                : String(tool.remoteName),
+            sideEffects: Boolean(tool.sideEffects),
+            reversible: Boolean(tool.reversible),
+            cost: (tool.cost as 'low' | 'medium' | 'high' | undefined) ?? 'low',
+          }))
+          found.updatedAt = '2026-03-08T00:15:00.000Z'
+          return json(200, { data: found })
         }
       }
 

@@ -120,6 +120,7 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/assistant': AssistantIcon,
   '/agents': AgentsIcon,
   '/mcp': McpIcon,
+  '/mcp-clients': McpIcon,
   '/create-site': SitePlanIcon,
   '/users': UsersIcon,
   '/api-keys': ApiKeysIcon,

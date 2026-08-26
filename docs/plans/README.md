@@ -157,6 +157,93 @@ refait. Les fiches marquées **socle** débloquent plusieurs autres.
 | 37 | [Workflow éditorial](37-workflow-editorial.md) | **Absent** | 8–10 j |
 | 38 | [Notifications et notices](38-notifications-et-notices.md) | Partiel | 3–4 j |
 
+## Vague 2 — corrections et extensions post-implémentation (2026-08-23)
+
+> Les fiches 01 à 38 ci-dessus ont depuis été **intégralement implémentées**
+> (soixante commits « fiche NN » sur `main` entre le 2026-08-19 et le 2026-08-22).
+> Ni ce README ni `CLAUDE.md` n'en gardaient trace avant la fiche
+> [69](69-mise-a-jour-documentation-projet.md) — voir son constat. La colonne
+> « État actuel » des fiches 01-38 ci-dessus est donc **obsolète** pour toute fiche
+> déjà fusionnée ; se fier au code, pas à cette page, avant de recoder quoi que ce
+> soit qu'elle décrit comme manquant.
+>
+> Après une passe de QA en direct sur l'admin par l'utilisateur, 30 retours ont été
+> analysés (un agent de recherche par thème, lecture du code réel avant toute
+> proposition) et transformés en 31 nouvelles fiches, 39 à 69, au même gabarit que
+> les précédentes. Constat transversal, revenu dans la majorité des recherches : le
+> travail **serveur** existant dépasse souvent largement ce que l'écran admin en
+> montre — plusieurs fiches ci-dessous sont d'abord du câblage d'API déjà écrite et
+> testée, pas des fonctionnalités à construire depuis zéro.
+
+### Fondations à construire en premier (débloquent plusieurs fiches)
+
+| Fondation | Fiche qui la construit | Fiches qui en dépendent |
+|---|---|---|
+| Composant de pagination réutilisable | [67](67-observabilite-details-pagination-retention.md) tâche 1 | 46, 47, 61, 62 |
+| Bibliothèque de prompts (« Prompt Settings ») | [45](45-prompt-settings.md) | 43 (bouton IA sur bloc), 44, 55 |
+| Catalogue de fournisseurs IA | [56](56-fournisseurs-ia-catalogue-complet.md) | 55 |
+
+Ces trois chantiers sont eux-mêmes indépendants l'un de l'autre — développables en
+parallèle dès le jour 1, dans trois worktrees distincts.
+
+### Décisions produit à prendre avant de coder (bloquent une partie, pas tout, de leur fiche)
+
+| Fiche | Décision | Ce qui reste parallélisable en attendant |
+|---|---|---|
+| [43](43-cogenta-page-builder.md) | Élargir le plafond de blocs (RFC contrat B, ADR-0009) ou achever le registre de blocs de thème déjà à moitié câblé | Sous-chantiers A/B/D/E/F (motifs, copier-coller, personnalisation par variante sémantique, UX, import/export) — zéro impact contrat |
+| [58](58-mcp-serveur-et-client-externe.md) | Sandboxing d'un serveur MCP externe (`spawn` d'un exécutable tiers) — revue `security-reviewer` obligatoire | Le renommage « MCP Server » et l'écran de gestion de clés côté serveur Cogenta |
+| [63](63-roles-et-permissions-personnalises.md) | Où vivent les permissions d'un rôle personnalisé : fichier versionné (mode `cogenta dev`, cohérent ADR-0010) ou table de site (ADR requise) | Rien en amont — c'est la première tâche de la fiche |
+| [47](47-formulaires-et-soumissions-premium.md) | Réintroduire un champ `file` (explicitement écarté par ADR-0026) | Logique conditionnelle, multi-étapes, notifications canaux, soumissions enrichies |
+
+### Table de parallélisation
+
+Numérotation continue à partir de 39. Une fiche sans dépendance listée est
+démarrable immédiatement, dans son propre worktree, sans attendre aucune des
+fondations ci-dessus (elle peut simplement en profiter si elles atterrissent
+avant).
+
+| # | Fiche | Dépend de | Taille |
+|---|---|---|---|
+| 39 | [Tableau de bord : widgets déplaçables et panneau de paramétrage](39-tableau-de-bord-widgets.md) | — | 1,5–2 j |
+| 40 | [Diagnostics et messages d'erreur de configuration](40-diagnostics-erreurs-configuration.md) | — | 1–2 j |
+| 41 | [Taxonomies : sous-catégories depuis l'éditeur](41-taxonomies-sous-categories.md) | — | 0,5–1 j |
+| 42 | [Éditeur de texte riche : zone visible et enrichissement](42-editeur-texte-riche.md) | — | qq heures + 1–2 j |
+| 43 | [Cogenta Page Builder (CPB)](43-cogenta-page-builder.md) | décision (voir ci-dessus) pour le sous-chantier C seulement | 4–5 j (+ inconnue pour C) |
+| 44 | [Éditeur d'entrée : extrait et génération IA](44-editeur-entree-extrait-ia.md) | 45 (peut démarrer sans, migrer ensuite) | 1–1,5 j |
+| 45 | [Prompt Settings](45-prompt-settings.md) | — (fondation) | 2–3 j |
+| 46 | [Médiathèque : dossiers et gestion de fichiers](46-mediatheque-dossiers.md) | pagination (67) pour la tâche (d) seulement | 6–9 j |
+| 47 | [Formulaires et soumissions : parité premium](47-formulaires-et-soumissions-premium.md) | décision `file` (voir ci-dessus) pour une tâche seulement | 12–16 j |
+| 48 | [Apparence (thème du site) : bouton Personnaliser et métadonnées](48-apparence-site-personnaliser.md) | — | 3–4 j |
+| 49 | [Apparence de l'admin : même traitement](49-apparence-admin-personnaliser.md) | — (aucun fichier partagé avec 48) | 2–3 j |
+| 50 | [SEO éditoriale avancée](50-seo-avancee.md) | — | 3–4 j |
+| 51 | [Cogenta Commerce : catalogue](51-commerce-catalogue.md) | — | 6–7 j |
+| 52 | [Cogenta Commerce : commandes et clients](52-commerce-commandes-clients.md) | — | 7–9 j |
+| 53 | [Cogenta Commerce : promotions et abonnements](53-commerce-promotions-abonnements.md) | — | 5–6 j |
+| 54 | [Cogenta Commerce : réglages boutique](54-commerce-reglages-boutique.md) | — | 1–2 j |
+| 55 | [Agents IA : création complète](55-agents-creation-complete.md) | 45, 56 | 2 j |
+| 56 | [Fournisseurs IA : catalogue complet](56-fournisseurs-ia-catalogue-complet.md) | — (fondation) | 2–3 j |
+| 57 | [Compétences : dossiers de référence standard](57-competences-dossiers-reference.md) | — | 2 j |
+| 58 | [MCP : serveur Cogenta et client externe](58-mcp-serveur-et-client-externe.md) | décision sécurité (voir ci-dessus) pour le client externe seulement | variable |
+| 59 | [Canaux : guides pas-à-pas](59-canaux-guides-pas-a-pas.md) | — | &lt; 1 semaine |
+| 60 | [Générer le site : conscience contextuelle](60-generer-le-site-contextuel.md) | — | proche d'une tâche L19 |
+| 61 | [Utilisateurs : cycle de vie complet](61-utilisateurs-cycle-de-vie.md) | — | 1,5 j |
+| 62 | [Clés API : cycle de vie complet](62-cles-api-cycle-de-vie.md) | — | 2 j |
+| 63 | [Rôles et permissions personnalisés](63-roles-et-permissions-personnalises.md) | décision (voir ci-dessus) | 3,5–7,5 j selon décision |
+| 64 | [Analytics : courbes et tendances](64-analytics-courbes-tendances.md) | — | 2–3 j |
+| 65 | [Import : déplacement vers Contenu et plateformes supplémentaires](65-import-contenu-plateformes.md) | — | 3–5 j |
+| 66 | [Mises à jour : écran autonome](66-mises-a-jour-ecran-autonome.md) | — | 0,5–1 j |
+| 67 | [Observabilité : détails, pagination transverse, rétention](67-observabilite-details-pagination-retention.md) | — (fondation pagination) | 5–7 j |
+| 68 | [Réglages généraux : fuseau, format de date, langues, marque](68-reglages-generaux.md) | — | 2–3 j (+1–2 j si langues) |
+| 69 | [Mise à jour de la documentation du projet](69-mise-a-jour-documentation-projet.md) | toutes les autres (tâche de clôture) | continu |
+
+**Lecture** : hormis les quatre décisions ci-dessus et les trois fondations, les
+**27 fiches restantes sont mutuellement indépendantes** — aucune ne modifie un
+fichier qu'une autre touche, confirmé fiche par fiche pendant la recherche
+(signalé explicitement quand deux fiches voisines partagent un risque, ex.
+48/49). Elles sont donc développables en autant de worktrees isolés que de
+capacité disponible, fusionnées une par une avec vérification complète avant et
+après chaque fusion — même discipline que L22/L23/L24.
+
 ## Ce que cet ensemble ne couvre pas
 
 Volontairement, et pas par oubli :

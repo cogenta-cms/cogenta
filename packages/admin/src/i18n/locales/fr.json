@@ -708,7 +708,8 @@
     "deleteError": "Impossible de supprimer ce média.",
     "focalLoadError": "Impossible de charger l’image.",
     "focalUpdateError": "Impossible de mettre à jour le point focal.",
-    "focalHint": "Cliquer sur l’image pour placer le point focal."
+    "focalHint": "Cliquer sur l’image pour placer le point focal.",
+    "loadMore": "Charger la suite"
   },
   "collectionList": {
     "tableLabel": "Contenus",

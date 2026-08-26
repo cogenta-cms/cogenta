@@ -38,6 +38,7 @@ import {
   createHealthRouter,
   createImportRouter,
   createMarketplaceRouter,
+  createMcpConnectionsRouter,
   createMediaRouter,
   createMenuRouter,
   createMfaRecommendationSource,
@@ -80,6 +81,7 @@ import {
   type ImportRouter,
   type InvitedUserEvent,
   type MarketplaceRouter,
+  type McpConnectionsRouter,
   type MediaImageProcessor,
   type MediaRouter,
   type MenuItemHealth,
@@ -201,6 +203,7 @@ import {
   parseJsonImport,
   undoImport,
 } from '@cogenta/import'
+import { createMcpConnectionStore, ensureMcpConnectionTables } from '@cogenta/mcp'
 import {
   createObservabilityRuntime,
   type ObservabilityRuntime,
@@ -634,6 +637,15 @@ interface Site {
   readonly providersRouter?: ProvidersRouter
   /** `/api/agent-skills` — L22 task 1bis: named instruction text an agent loads into its context. Same optionality as `agentsRouter`. */
   readonly agentSkillsRouter?: AgentSkillsRouter
+  /**
+   * `/api/mcp-connections` — fiche 58 tasks 2/3: external MCP servers this
+   * site's own agents may consume. Unlike `agentsRouter`/`providersRouter`/
+   * `agentSkillsRouter` above, this one is **not** gated on
+   * `agentsRuntimeConfig` — the registry (add/test/expose-tools) is useful
+   * on its own, and `assembleSite` always builds the underlying store (see
+   * `mcpConnections` near the top of this function).
+   */
+  readonly mcpConnectionsRouter?: McpConnectionsRouter
   /**
    * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
    *
@@ -1495,6 +1507,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
   const mediaStore = createDatabaseMediaStore({ db })
 
+  // Fiche 58 tasks 2/3/4 — the external MCP connection registry. Table and
+  // store exist unconditionally (an admin can wire up a connection and
+  // check its tools regardless of whether `agentsRuntimeConfig` is set,
+  // same posture as `apiKeysRouter`), but the connections only ever become
+  // real `ToolDefinition`s an agent can call when `agentsRuntime` itself is
+  // built below — see `mcpConnections` passed into `buildAgentRuntime`.
+  await ensureMcpConnectionTables(db)
+  const mcpConnections = createMcpConnectionStore(db, { signingKey: options.signingKey })
+
   // L22 task 1/1bis: the real agent runtime, built here — the one place
   // `service` (this site's real `ContentService`) and `mediaStore` are both
   // already in scope, exactly the way `content.*`/`media.*` contract-C
@@ -1508,6 +1529,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       : await buildAgentRuntime({
           dataDir: options.agentsRuntimeConfig.dataDir,
           projectRoot: options.agentsRuntimeConfig.projectRoot,
+          // Fiche 58 task 4 — every enabled connection's checked tools are
+          // merged into this site's real tool registry, wrapped by the same
+          // sandboxed `McpClient` a "test connection" probe uses
+          // (`@cogenta/mcp`'s `buildMcpToolDefinitions`, called inside
+          // `buildAgentRuntime`'s own `buildToolRegistry`).
+          mcpConnections,
           signingKey: options.signingKey,
           site: {
             name: site.name,
@@ -2126,6 +2153,18 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           providersRouter: createProvidersRouter({ providers: agentsRuntime.providerRegistry }),
           agentSkillsRouter: createAgentSkillsRouter({ skills: agentsRuntime.skillRegistry }),
         }),
+    mcpConnectionsRouter: createMcpConnectionsRouter({
+      connections: mcpConnections,
+      logger,
+      // Fiche 58 task 4 — a connection created/tested/toggled/exposed here
+      // takes effect on this runtime's very next tool lookup, no restart
+      // (see `AgentRuntimeAssembly.refreshMcpTools`'s own comment). A no-op
+      // when `agentsRuntimeConfig` was never given (no agent runtime to
+      // refresh) — the registry itself still works standalone either way.
+      onMutated: async () => {
+        await agentsRuntime?.refreshMcpTools()
+      },
+    }),
     ...(options.sitePlans === undefined
       ? {}
       : { sitePlanRouter: createSitePlanRouter(options.sitePlans) }),
@@ -2212,6 +2251,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     tickTrashPurge,
     tickChannelNotifications: () => channelDispatcher.flushDue(),
     dispose: async () => {
+      // Fiche 58 task 4 — kills every spawned MCP server process and
+      // removes every sandbox working directory before the database (and
+      // everything else) goes away. A no-op when no connection was wired.
+      // `.catch()` matches this same function's own posture just below
+      // (`site.dispose().catch(...)` at the call site) — a failure tearing
+      // down one resource must never skip closing the rest.
+      await agentsRuntime?.mcpDispose().catch((error: unknown) => {
+        logger.error('mcp dispose failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
       await scheduledPublishQueue.close()
       await db.close()
     },
@@ -4032,6 +4082,19 @@ export function createRequestListener(
         const body = req.method === 'GET' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
         writeRestResponse(res, await site.agentSkillsRouter.handle(request, context.actor))
+        return
+      }
+
+      // Fiche 58 tasks 2/3 — "MCP Clients". `mcpConnectionsRouter` is built
+      // unconditionally (see `assembleSite`), so this branch is always live
+      // once a site has a database, unlike the three above it.
+      if (
+        url.pathname.startsWith('/api/mcp-connections') &&
+        site.mcpConnectionsRouter !== undefined
+      ) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.mcpConnectionsRouter.handle(request, context.actor))
         return
       }
 

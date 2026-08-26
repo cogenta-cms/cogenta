@@ -2829,7 +2829,37 @@
       "listing": "Listings"
     },
     "detailHeading": "Selected block",
-    "detailEmpty": "Select a block in the preview or in the list to edit its fields."
+    "detailEmpty": "Select a block in the preview or in the list to edit its fields.",
+    "variant": {
+      "heading": "Appearance",
+      "default": "Theme default",
+      "backgroundLabel": "Background",
+      "background": {
+        "default": "Theme default",
+        "muted": "Muted",
+        "image": "Image"
+      },
+      "spacingLabel": "Spacing",
+      "spacing": {
+        "default": "Theme default",
+        "compact": "Compact",
+        "comfortable": "Comfortable",
+        "spacious": "Spacious"
+      },
+      "alignLabel": "Alignment",
+      "align": {
+        "default": "Theme default",
+        "start": "Start",
+        "center": "Center",
+        "end": "End"
+      },
+      "widthLabel": "Width",
+      "width": {
+        "default": "Theme default",
+        "contained": "Contained",
+        "full": "Full-bleed"
+      }
+    }
   },
   "assist": {
     "title": "Writing assistant",

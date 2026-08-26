@@ -2831,7 +2831,37 @@
       "listing": "Listes"
     },
     "detailHeading": "Bloc sélectionné",
-    "detailEmpty": "Sélectionnez un bloc dans l'aperçu ou dans la liste pour modifier ses champs."
+    "detailEmpty": "Sélectionnez un bloc dans l'aperçu ou dans la liste pour modifier ses champs.",
+    "variant": {
+      "heading": "Apparence",
+      "default": "Réglage du thème",
+      "backgroundLabel": "Fond",
+      "background": {
+        "default": "Réglage du thème",
+        "muted": "Atténué",
+        "image": "Image"
+      },
+      "spacingLabel": "Espacement",
+      "spacing": {
+        "default": "Réglage du thème",
+        "compact": "Compact",
+        "comfortable": "Confortable",
+        "spacious": "Aéré"
+      },
+      "alignLabel": "Alignement",
+      "align": {
+        "default": "Réglage du thème",
+        "start": "Début",
+        "center": "Centré",
+        "end": "Fin"
+      },
+      "widthLabel": "Largeur",
+      "width": {
+        "default": "Réglage du thème",
+        "contained": "Contenue",
+        "full": "Pleine largeur"
+      }
+    }
   },
   "assist": {
     "title": "Assistant de rédaction",

@@ -962,6 +962,20 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
   }[] = []
+  // Fiche 45's "Prompt Settings" screen — empty by default, like a fresh
+  // site whose store the CLI has not seeded yet; a test that wants a
+  // non-empty screen creates one through the same POST route the real
+  // admin uses.
+  const mockPromptTemplates: {
+    id: string
+    name: string
+    description: string
+    category: string
+    template: string
+    builtin: boolean
+    createdAt: string
+    updatedAt: string
+  }[] = []
 
   // Site settings (fiche 23) — the registry's own defaults, hand-mirrored
   // here rather than imported (this file imports nothing but `vitest`, on
@@ -4014,6 +4028,88 @@ export function installMockFetch(
           return json(200, { data: { id: skillId, removed: true } })
         }
         return json(404, { error: { code: 'AGENT_SKILL_UNKNOWN', message: 'No such skill.' } })
+      }
+
+      if (url.includes('/api/prompt-templates')) {
+        // Real router: any signed-in actor may read, only `admin` may write.
+        const templateMatch = /\/api\/prompt-templates\/([^/?]+)/u.exec(url)
+        if (templateMatch === null) {
+          if (method === 'GET') return json(200, { data: mockPromptTemplates })
+          if (method === 'POST') {
+            if (!user.roles.includes('admin')) {
+              return json(403, {
+                error: {
+                  code: 'FORBIDDEN',
+                  message: 'Only the admin role may manage prompt templates.',
+                },
+              })
+            }
+            const body = JSON.parse(String(init?.body ?? '{}')) as {
+              name?: string
+              description?: string
+              category?: string
+              template?: string
+            }
+            const created = {
+              id: `template-${mockPromptTemplates.length + 1}`,
+              name: body.name ?? '',
+              description: body.description ?? '',
+              category: body.category ?? '',
+              template: body.template ?? '',
+              builtin: false,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+            }
+            mockPromptTemplates.push(created)
+            return json(201, { data: created })
+          }
+        }
+        const [, templateId] = templateMatch ?? []
+        const index = mockPromptTemplates.findIndex((template) => template.id === templateId)
+        if (method === 'GET' && index >= 0) {
+          return json(200, { data: mockPromptTemplates[index] })
+        }
+        if (method === 'PATCH' && index >= 0) {
+          if (!user.roles.includes('admin')) {
+            return json(403, {
+              error: {
+                code: 'FORBIDDEN',
+                message: 'Only the admin role may manage prompt templates.',
+              },
+            })
+          }
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            name?: string
+            description?: string
+            category?: string
+            template?: string
+          }
+          const existing = mockPromptTemplates[index] as (typeof mockPromptTemplates)[number]
+          const updated = {
+            ...existing,
+            ...(body.name === undefined ? {} : { name: body.name }),
+            ...(body.description === undefined ? {} : { description: body.description }),
+            ...(body.category === undefined ? {} : { category: body.category }),
+            ...(body.template === undefined ? {} : { template: body.template }),
+          }
+          mockPromptTemplates[index] = updated
+          return json(200, { data: updated })
+        }
+        if (method === 'DELETE' && index >= 0) {
+          if (!user.roles.includes('admin')) {
+            return json(403, {
+              error: {
+                code: 'FORBIDDEN',
+                message: 'Only the admin role may manage prompt templates.',
+              },
+            })
+          }
+          mockPromptTemplates.splice(index, 1)
+          return json(200, { data: { id: templateId, removed: true } })
+        }
+        return json(404, {
+          error: { code: 'PROMPT_TEMPLATE_UNKNOWN', message: 'No such prompt template.' },
+        })
       }
 
       if (url.includes('/api/providers')) {

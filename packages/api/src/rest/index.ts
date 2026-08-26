@@ -140,6 +140,13 @@ export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
 export type { PatternRouter, PatternRouterOptions } from './pattern-router.js'
 export { createPatternRouter } from './pattern-router.js'
 export type {
+  PromptTemplateRegistryLike,
+  PromptTemplateSummary,
+  PromptTemplatesRouter,
+  PromptTemplatesRouterOptions,
+} from './prompt-templates-router.js'
+export { createPromptTemplatesRouter } from './prompt-templates-router.js'
+export type {
   ProviderCatalogEntrySummary,
   ProviderRegistryLike,
   ProviderSummary,

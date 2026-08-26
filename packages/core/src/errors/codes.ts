@@ -565,6 +565,18 @@ export const ERROR_CODES = [
   'ROLE_PERMISSION_INVALID',
   'ROLE_PERMISSION_EXPORT_INVALID',
 
+  // Prompt Settings — fiche 45's shared template library every `assist.*`
+  // tool's instruction text reads from, with a fallback to its own
+  // hard-coded string when a site was never migrated.
+  'PROMPT_TEMPLATE_UNKNOWN',
+  'PROMPT_TEMPLATE_DUPLICATE',
+  'PROMPT_TEMPLATE_BUILTIN_UNDELETABLE',
+  'PROMPT_TEMPLATE_PLACEHOLDER_UNRESOLVED',
+  // A malformed create/update body on `/api/prompt-templates` — kept
+  // distinct from `PROMPT_TEMPLATE_UNKNOWN` (an id that does not exist) so
+  // the two map to different HTTP statuses (400 vs 404).
+  'PROMPT_TEMPLATE_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

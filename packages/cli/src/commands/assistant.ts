@@ -14,6 +14,7 @@ import {
   type ImageProviderClient,
   ingestReferenceDocument,
   MAX_DOCUMENT_BYTES,
+  type PromptTemplateStore,
   type ProviderClient,
   REFERENCE_DOCUMENT_COLLECTION,
   type ReferenceDocumentRecord,
@@ -124,6 +125,8 @@ export interface BuildAssistantOptions {
   /** Backs the `assistant.indexedCollections` per-collection toggle and identifies the site for reference-document rows. */
   readonly settings: SiteSettingsStore
   readonly siteId: string
+  /** Fiche 45 — shared with `buildAgentRuntime`'s own instance over the same on-disk directory. Absent means every `assist.*` tool keeps its hard-coded instruction text, unchanged (R2/fiche 45 §4). */
+  readonly promptTemplates?: PromptTemplateStore
 }
 
 /** The one site setting this task adds — a record of collection name → included, absent meaning included (opt-out, so an existing site's behaviour before this task does not change). */
@@ -286,6 +289,7 @@ export async function buildAssistant(options: BuildAssistantOptions): Promise<As
     ...(search === undefined ? {} : { search }),
     ...(store === undefined || embeddings === undefined ? {} : { vectors: { store, embeddings } }),
     ...(usage === undefined ? {} : { usage }),
+    ...(options.promptTemplates === undefined ? {} : { promptTemplates: options.promptTemplates }),
   })
 
   const summary = toolset.available

@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { resolveInstruction } from '../prompts/render.js'
+import type { PromptTemplateStore } from '../prompts/types.js'
 import type { EmbeddingProvider } from '../rag/embeddings/types.js'
 import type { VectorStore } from '../rag/vector/types.js'
 import { defineTool } from '../tools/define.js'
@@ -48,8 +50,12 @@ const ClassifyOutput = z.object({
 })
 export type ClassificationResult = z.infer<typeof ClassifyOutput>
 
+const CLASSIFY_REPLY_FORMAT =
+  'Reply with a JSON object: {"labels": [{"label": "…", "confidence": 0.0}]}.'
+
 export function createClassifyTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<ClassifyInput, ClassificationResult> {
   const ModelLabels = z.object({
     labels: z
@@ -68,6 +74,19 @@ export function createClassifyTool(
     reversible: false,
     cost: 'low',
     async execute(input, ctx) {
+      const maxLabels = String(input.maxLabels ?? 3)
+      const taxonomy = input.taxonomy.join(', ')
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'classify',
+        fallback: () =>
+          [
+            `Classify the content in the DATA block using at most ${maxLabels} categories.`,
+            `The only allowed categories are: ${taxonomy}.`,
+            CLASSIFY_REPLY_FORMAT,
+          ].join(' '),
+        vars: { maxLabels, taxonomy, replyFormat: CLASSIFY_REPLY_FORMAT },
+      })
       const result = await runtime.completeJson(
         {
           agent: {
@@ -81,11 +100,7 @@ export function createClassifyTool(
             ],
           },
           tool: 'assist.classify',
-          instruction: [
-            `Classify the content in the DATA block using at most ${input.maxLabels ?? 3} categories.`,
-            `The only allowed categories are: ${input.taxonomy.join(', ')}.`,
-            'Reply with a JSON object: {"labels": [{"label": "…", "confidence": 0.0}]}.',
-          ].join(' '),
+          instruction,
           data: [{ source: 'entry body', content: input.text }],
           signal: ctx.signal,
         },
@@ -223,8 +238,12 @@ const ModerateOutput = z.object({
 })
 export type ModerationVerdict = z.infer<typeof ModerateOutput>
 
+const MODERATE_REPLY_FORMAT =
+  'Reply with a JSON object: {"flagged": true|false, "severity": "none"|"low"|"medium"|"high", "categories": ["…"], "reason": "…"}.'
+
 export function createModerateTool(
   runtime: AssistRuntime,
+  promptTemplates?: PromptTemplateStore,
 ): ToolDefinition<ModerateInput, ModerationVerdict> {
   const ModelVerdict = z.object({
     flagged: z.boolean(),
@@ -244,6 +263,16 @@ export function createModerateTool(
     reversible: false,
     cost: 'low',
     async execute(input, ctx) {
+      const instruction = await resolveInstruction({
+        store: promptTemplates,
+        id: 'moderate',
+        fallback: () =>
+          [
+            'Assess the content in the DATA block for a human reviewer.',
+            MODERATE_REPLY_FORMAT,
+          ].join(' '),
+        vars: { replyFormat: MODERATE_REPLY_FORMAT },
+      })
       const verdict = await runtime.completeJson(
         {
           agent: {
@@ -257,10 +286,7 @@ export function createModerateTool(
             ],
           },
           tool: 'assist.moderate',
-          instruction: [
-            'Assess the content in the DATA block for a human reviewer.',
-            'Reply with a JSON object: {"flagged": true|false, "severity": "none"|"low"|"medium"|"high", "categories": ["…"], "reason": "…"}.',
-          ].join(' '),
+          instruction,
           data: [
             {
               source: input.origin ?? 'submitted content',

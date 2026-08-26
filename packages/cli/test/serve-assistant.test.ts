@@ -1,4 +1,5 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CollectionDefinition } from '@cogenta/schema'
@@ -591,5 +592,160 @@ describe('cogenta serve — assistant traceability on save (fiche 30 task 5)', (
     )
     expect(assisted?.diff?.['_assistApplied']).toEqual([{ field: 'title', tool: 'assist.rewrite' }])
     expect(plain?.diff?.['_assistApplied']).toBeUndefined()
+  })
+})
+
+/**
+ * Fiche 45 — the fiche's central promise, proven end to end rather than
+ * assumed from unit tests: editing a prompt template through the real admin
+ * route, against a real running `cogenta serve`, really does change what the
+ * next `assist.*` call sends the model — no restart. This is the one seam
+ * unit tests cannot cover, because `buildAssistant` and `buildAgentRuntime`
+ * construct two *separate* `PromptTemplateStore` instances over the same
+ * directory (`agent-runtime.ts`'s own comment explains why that is safe);
+ * only a real server exercises both at once, in the same process, the way
+ * `cogenta serve` actually runs.
+ */
+interface AnthropicScriptedResponse {
+  readonly content: readonly { readonly type: 'text'; readonly text: string }[]
+  readonly stop_reason: 'end_turn'
+  readonly usage: { readonly input_tokens: number; readonly output_tokens: number }
+}
+
+interface FakeAnthropic {
+  readonly url: string
+  readonly requests: readonly { readonly system?: string }[]
+  close(): Promise<void>
+}
+
+/** A minimal, real HTTP server answering Anthropic's Messages API shape — same technique `serve-agents.test.ts` uses. */
+async function startFakeAnthropic(
+  responses: readonly AnthropicScriptedResponse[],
+): Promise<FakeAnthropic> {
+  let index = 0
+  const requests: { readonly system?: string }[] = []
+  const server: Server = createServer((req, res) => {
+    const chunks: Buffer[] = []
+    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    req.on('end', () => {
+      requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as { system?: string })
+      const response = responses[index]
+      index += 1
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(response))
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('fake Anthropic has no port')
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  }
+}
+
+/** Same fixture as `project()` above, plus an `llm` section pointing at a local fake vendor — what `buildAssistant`'s `textProvider()` reads from `cogenta.config.mjs`. */
+async function projectWithLlm(llmBaseUrl: string): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'cogenta-prompt-settings-e2e-'))
+  await writeFile(
+    join(root, 'cogenta.config.mjs'),
+    `export default {
+  site: { name: 'Test site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+  vector: { path: ${JSON.stringify(join(root, 'vectors'))} },
+  llm: { provider: 'anthropic', model: 'claude-test', baseUrl: ${JSON.stringify(llmBaseUrl)} },
+}
+`,
+    'utf8',
+  )
+  await writeFile(
+    join(root, 'cogenta.schema.mjs'),
+    `export default ${JSON.stringify(COLLECTIONS, null, 2)}\n`,
+    'utf8',
+  )
+  return root
+}
+
+describe('cogenta serve — editing a prompt template changes assist.* behaviour live (fiche 45)', () => {
+  const promptServers: AbortController[] = []
+  const promptFakes: FakeAnthropic[] = []
+
+  afterEach(async () => {
+    for (const controller of promptServers.splice(0)) controller.abort()
+    for (const fake of promptFakes.splice(0)) await fake.close()
+  })
+
+  it('a PATCH to /api/prompt-templates/rewrite changes the instruction the next assist.rewrite call sends, no restart', async () => {
+    const fake = await startFakeAnthropic([
+      {
+        content: [{ type: 'text', text: 'A rewritten sentence.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ])
+    promptFakes.push(fake)
+
+    const root = await projectWithLlm(fake.url)
+    // COGENTA_LLM_API_KEY is the only piece `textProvider()` needs beyond
+    // the config file (`packages/core/src/config/env.ts`'s `llm.apiKey`
+    // mapping) — set here rather than on the real `process.env`, which
+    // would leak between test files sharing a worker.
+    const server = await startServer(root, {
+      registry: promptServers,
+      env: { COGENTA_LLM_API_KEY: 'sk-ant-test-key-3' },
+    })
+    // `admin` alone is not enough to call `/api/assistant/run`: the
+    // assistant's own gate (`assertMayUseAssistant`) checks `update` on a
+    // real collection via `PermissionLayer`, which does not treat `admin`
+    // as an implicit bypass — the same reason every other test in this file
+    // that both manages a setting and calls the assistant carries both
+    // roles.
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin', 'editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    // The builtin "Rewrite" template really is there under the id the
+    // migrated tool resolves by (`seeds.ts`: `slugify('Rewrite')`).
+    const before = await fetch(`${server.base}/api/prompt-templates/rewrite`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(before.status).toBe(200)
+    const beforeBody = (await before.json()) as { data: { template: string; builtin: boolean } }
+    expect(beforeBody.data.builtin).toBe(true)
+    expect(beforeBody.data.template).toContain('Rewrite the passage in the DATA block.')
+
+    const EDITED_MARKER = 'REWRITE-EDITED-BY-ADMIN'
+    const edited = await fetch(`${server.base}/api/prompt-templates/rewrite`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        template: `${EDITED_MARKER} {{goalLine}} {{localeLine}}`,
+      }),
+    })
+    expect(edited.status).toBe(200)
+
+    const run = await fetch(`${server.base}/api/assistant/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ tool: 'assist.rewrite', input: { text: 'a sentence to rewrite' } }),
+    })
+    expect(run.status).toBe(200)
+    const runBody = (await run.json()) as { data: { suggestions: readonly string[] } }
+    expect(runBody.data.suggestions).toEqual(['A rewritten sentence.'])
+
+    // The proof: the real request the fake vendor received — built by
+    // `buildAssistant`'s own `PromptTemplateStore` instance, over the same
+    // on-disk directory `agent-runtime.ts`'s admin-facing instance just
+    // wrote to — carries the edited text, not the original hard-coded one.
+    expect(fake.requests).toHaveLength(1)
+    const system = fake.requests[0]?.system ?? ''
+    expect(system).toContain(EDITED_MARKER)
+    expect(system).not.toContain('Rewrite the passage in the DATA block.')
   })
 })

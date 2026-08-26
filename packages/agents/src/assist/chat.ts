@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import type { DataItem } from '../identity/context.js'
+import { resolveInstruction } from '../prompts/render.js'
+import type { PromptTemplateStore } from '../prompts/types.js'
 import type { SemanticSearch } from '../rag/semantic/search.js'
 import { defineTool } from '../tools/define.js'
 import type { ToolDefinition } from '../tools/types.js'
@@ -84,6 +86,7 @@ const ModelAnswer = z.object({
 export interface ContentChatOptions {
   readonly runtime: AssistRuntime
   readonly search: SemanticSearch
+  readonly promptTemplates?: PromptTemplateStore
 }
 
 export function createContentChatTool(
@@ -129,6 +132,20 @@ export function createContentChatTool(
         content: passage.excerpt,
       }))
 
+      const replyFormat =
+        'Reply with a JSON object: {"answer": "…", "usedSources": [<1-based passage numbers you actually used>]}.'
+      const instruction = await resolveInstruction({
+        store: options.promptTemplates,
+        id: 'content-chat',
+        fallback: () =>
+          [
+            `Answer this question: ${input.question}`,
+            `Answer in ${input.locale}.`,
+            replyFormat,
+          ].join(' '),
+        vars: { question: input.question, locale: input.locale, replyFormat },
+      })
+
       const result = await options.runtime.completeJson(
         {
           agent: {
@@ -143,11 +160,7 @@ export function createContentChatTool(
             ],
           },
           tool: 'assist.chat',
-          instruction: [
-            `Answer this question: ${input.question}`,
-            `Answer in ${input.locale}.`,
-            'Reply with a JSON object: {"answer": "…", "usedSources": [<1-based passage numbers you actually used>]}.',
-          ].join(' '),
+          instruction,
           data,
           signal: ctx.signal,
         },

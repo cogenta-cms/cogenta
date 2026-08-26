@@ -1010,11 +1010,9 @@ champ optionnel est mineur ; changer le sens d'un statut ou la forme du fil est 
 
 ## Contrat G — Formulaires
 
-> **Acté (ADR-0026, amendement rédigé en ADR-0031, en attente d'insertion humaine dans
-> `docs/03-decisions.md`), non figé.** Ce contrat repose sur l'**ADR-0026**, actée dans
-> `docs/03-decisions.md` ; son renoncement initial sur le champ `file` et les champs
-> conditionnels est levé par l'**ADR-0031** (texte rédigé, remis à l'humain — voir
-> `docs/plans/47-formulaires-et-soumissions-premium.md` §8). La fiche 16 est son premier
+> **Acté (ADR-0026, amendée par ADR-0031), non figé.** Ce contrat repose sur l'**ADR-0026**,
+> actée dans `docs/03-decisions.md` ; son renoncement initial sur le champ `file` et les
+> champs conditionnels est levé par l'**ADR-0031**. La fiche 16 est son premier
 > consommateur, la fiche 47 le second.
 
 ### Pourquoi un contrat séparé et pas une extension du contrat A
@@ -1047,8 +1045,8 @@ Ni `FormDefinition` ni `FormSubmission` ne porte `status` de contenu, `version`,
 
 Dix types, fermés : `text`, `longText`, `email`, `phone`, `number`, `date`,
 `choiceSingle`, `choiceMulti`, `consent`, **`file`** (fiche 47 tâche 3 — réouverture du
-renoncement de l'ADR-0026, tracée en **ADR-0031**, rédigée et en attente d'insertion
-humaine). Un champ `file` restreint sa catégorie acceptée
+renoncement de l'ADR-0026, tracée en **ADR-0031**). Un champ `file` restreint sa catégorie
+acceptée
 (`image`/`pdf`/`document`/`text`, sniffée sur les octets réels, jamais sur le nom de
 fichier ni le `Content-Type` déclaré) et sa taille maximale, plafonnée dans tous les cas
 par un maximum matériel non configurable.
@@ -1109,8 +1107,7 @@ notification.
 
 ### Versionnement
 
-`forms@1.1` (ADR-0026 amendement rédigé en ADR-0031, en attente d'insertion humaine, non
-figé) — passé de `1.0` par la fiche 47 :
+`forms@1.1` (ADR-0026 amendée par ADR-0031, non figé) — passé de `1.0` par la fiche 47 :
 champ `file`, `showIf`, `steps`, `notifyChannels`, `captcha`, notes d'opérateur, tous
 additifs, aucune forme existante changée de sens. Ajouter un type de champ ou un statut
 de soumission reste

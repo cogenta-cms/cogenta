@@ -142,7 +142,10 @@ l'écosystème. Les adaptateurs Astro couvrent nativement les trois profils de d
 
 ## ADR-0009 — Contenu hybride : champs typés + blocs sémantiques
 
-**Statut** : Acté
+**Statut** : Acté. **Élargie par ADR-0030** (2026-08-26) sur le seul point « le
+vocabulaire doit rester petit, une dizaine de blocs, pas cinquante » — la règle absolue
+(donnée sémantique uniquement, jamais de HTML/CSS) et le mécanisme de repli restent
+inchangés et non rediscutés. Voir ADR-0030 pour le texte complet du renoncement.
 
 **Décision** — Un type de contenu possède des champs typés, plus une zone de blocs
 optionnelle. Le noyau définit un **vocabulaire fermé de blocs sémantiques** que tout
@@ -1143,7 +1146,7 @@ Concrètement : un commentaire porte l'identité de sa cible (`collection`, `ent
 
 ## ADR-0026 — Les formulaires vivent dans un contrat G séparé ; route dédiée avant bloc
 
-**Statut** : Acté
+**Statut** : Acté — renoncement (champ fichier, champs conditionnels) amendé par ADR-0031.
 
 **Contexte** — La fiche 16 constate qu'un site Cogenta publié n'a aujourd'hui aucun moyen d'être contacté. Les briques existent séparément (`@cogenta/channels` sait notifier par e-mail/Slack/Discord/webhook signé ; le contrat A sait modéliser des données structurées) mais rien ne les relie. Trois questions se posent : où vit la définition d'un formulaire, comment il arrive sur une page alors que le contrat B est figé, et si les soumissions sont stockées.
 
@@ -1179,3 +1182,206 @@ Concrètement : un commentaire porte l'identité de sa cible (`collection`, `ent
 **Renoncement assumé** — `reviewState` reste à quatre valeurs fixes, pas un workflow multi-étapes configurable (option (c) écartée pour cette raison précise) ; la permission par propriétaire couvre « ses propres entrées », pas une délégation hiérarchique (un chef d'équipe voyant les entrées de son équipe) — hors périmètre.
 
 **Écarté** — (a) Ajouter `pending` à `ContentStatus` : casse tout `switch` exhaustif, l'argument même qui a fait pencher pour `deletedAt` orthogonal en ADR-0022. (c) Table de workflow séparée : plus flexible mais l'état devient invisible dans une lecture directe d'entrée. (d) Taxonomie « état éditorial » : zéro contrat touché, mais aucune règle de transition ni permission propre — un contributeur pourrait s'auto-approuver.
+
+---
+
+## ADR-0028 — Les permissions de rôle personnalisé vivent en base, en surcouche du fichier de schéma
+
+**Statut** : Acté
+
+**Contexte** — ADR-0010 réserve l'écriture du schéma de contenu au mode développement :
+un fichier versionné en git, jamais modifié en production, pour éviter la dérive de
+configuration entre environnements. Le bloc `permissions` de chaque collection/taxonomie
+suit aujourd'hui cette même règle — un rôle personnalisé n'a donc, par construction,
+aucun pouvoir réel tant qu'un déploiement n'a pas suivi. C'est exactement le problème que
+la fiche 63 remonte : un administrateur doit pouvoir accorder ou retirer un droit sans
+attendre un cycle de déploiement.
+
+**Décision** — Une nouvelle table site-scopée `role_permissions` porte les permissions
+d'un rôle personnalisé, en surcouche du bloc `permissions` déclaré dans le fichier de
+schéma. `PermissionLayer` lit la table en priorité ; si aucune entrée n'existe pour un
+rôle donné, il retombe sur le fichier — jamais l'inverse, pour qu'une régression de
+déploiement ne masque jamais silencieusement un droit retiré en base. Un export vers
+fichier permet de figer l'état courant de la table dans le dépôt quand un site veut
+revenir à une source entièrement versionnée.
+
+**Justification** — Le fichier reste la référence par défaut et le seul mécanisme pour
+tout site qui ne crée aucun rôle personnalisé : rien ne change pour lui. La table n'entre
+en jeu que pour les sites qui utilisent réellement cette fonctionnalité, et uniquement
+pour les *permissions*, jamais pour la structure des collections elle-même (les champs,
+les types, les relations restent sous ADR-0010 sans exception).
+
+**Conséquences** — Nouvelle migration réversible (`role_permissions`, site-scopée). La
+création d'un rôle avec permissions passe par la même validation que
+`defineCollection`/`validateCollectionSet` (déjà utilisée par le flux L19), pour ne pas
+dupliquer une seconde logique de validation. Chaque changement de permission est
+confirmé explicitement et journalisé (audit systématique, même porte que L19).
+`contract-guardian` doit être consulté avant toute fusion touchant ce chemin : le bloc
+`permissions` du contrat A est concerné par construction. `PermissionLayer` gagne
+`ruleFor(action, collection)`/`ruleForTerm(action, taxonomy)`, documentés explicitement
+comme la règle « table avant fichier » exposée pour tout appelant qui doit raisonner sur
+la forme d'une règle avant `can()`/`assert()` — deux appelants (`assertOwnAware` dans
+`content-service.ts`, `holdsRole` dans `review-router.ts`) lisaient encore le fichier
+directement et ont été corrigés pour interroger cette règle effective.
+
+**Renoncement assumé** — La source de vérité des droits d'un site n'est plus purement
+versionnée en git. C'est précisément le risque qu'ADR-0010 nommait pour le schéma de
+contenu ; cette ADR l'accepte, explicitement et uniquement, pour les permissions de rôle
+— parce qu'un changement de droit (accorder, retirer un accès) est une opération, pas une
+décision de structure, et qu'un administrateur légitime doit pouvoir l'appliquer sans
+dépendre d'un déploiement.
+
+**Écarté** — Option (b), réutiliser tel quel le flux proposer/appliquer de L19 (fichier
+versionné, écriture réservée à `cogenta dev`). Cohérente avec ADR-0010 sans exception,
+mais rend tout changement de permission en production dépendant d'un cycle de
+déploiement — inacceptable pour le besoin réel de la fiche 63.
+
+---
+
+## ADR-0030 — Le vocabulaire de blocs s'élargit à dix-sept (`blocks@2.0`) ; ADR-0009 rouverte sur ce seul point
+
+**Statut** : Acté
+
+**Contexte** — ADR-0009 fixait le vocabulaire de blocs comme « une dizaine, pas
+cinquante » et en a fait une conséquence structurelle : chaque bloc ajouté est une dette
+imposée à chaque auteur de thème, pour toujours. Douze blocs ont tenu ce plafond depuis
+`blocks@1.0` (2026-08-13). Fiche 43 (Cogenta Page Builder) documente que le socle
+d'édition visuelle (L16) est solide mais que le vocabulaire lui-même ne couvre pas les
+sections qu'un site marketing/agence réel demande couramment — tableau de tarifs,
+témoignages, accordéon, ligne de chiffres clés, bandeau de logos — et que le mécanisme de
+repli existant (`BlockRegistry.resolveRenderable`, un thème peut ajouter son propre bloc
+s'il déclare un repli) répond seulement au besoin d'un thème isolé, jamais à la demande
+d'un vocabulaire partagé et portable entre thèmes.
+
+**Décision** — Rouvrir ADR-0009, **sur ce seul point** : la taille du vocabulaire. Décidé
+en conversation directe avec l'utilisateur le 2026-08-26, qui a explicitement demandé un
+constructeur de page « ultra complet façon WordPress/Elementor » après un test de L23, et
+a validé les deux RFC ci-dessous sans le délai de sept jours habituel (projet en mode
+développement, encore sans contributeur externe à consulter — voir la dérogation notée
+dans les deux fichiers).
+
+1. **Contrat B monte en `blocks@2.0`** (RFC 0001, `docs/rfc/0001-widen-block-vocabulary.md`) :
+   cinq blocs ajoutés au sommet des douze — `testimonial`, `pricingTable`, `accordion`,
+   `statCounter`, `logoStrip`. Chacun nomme un `fallback` vers le vocabulaire v1
+   (`prose`, `featureGrid`, `mediaFigure`), contrairement aux douze premiers
+   (`fallback: null`, ils *sont* le repli) : un thème construit avant `blocks@2.0` les
+   rend dégradés, jamais perdus.
+2. **Contrat B gagne `variant`** (RFC 0002, `docs/rfc/0002-per-block-visual-variant.md`) :
+   un champ optionnel partagé `{ background?, spacing?, align?, width? }` sur l'enveloppe
+   de tout bloc — jetons sémantiques fermés, jamais une valeur CSS ou une couleur (la
+   règle absolue d'ADR-0009 tient sans changement). Chaque thème résout chaque valeur
+   vers son propre jeton ; absent = rendu inchangé.
+3. **Ce qu'ADR-0009 continue d'interdire, sans exception** : `f.blocks()` reste refusé
+   dans le schéma d'un bloc — l'imbrication est la porte d'entrée d'un constructeur de
+   mise en page en colonnes/sections libres, hors périmètre de cette réouverture (fiche
+   43, sous-chantiers « Bloquants »). La règle absolue (donnée sémantique uniquement,
+   jamais de HTML/CSS/classe) tient elle aussi sans changement — vérifiée par
+   `contract-guardian` sur les cinq nouveaux blocs et sur `variant`.
+
+**Pourquoi une montée majeure, pas mineure malgré une addition pure** — `docs/04-contrats.md`
+classait initialement « ajouter un bloc » comme mineur. Ce n'est pas praticable ici : le
+rendu de chaque thème (`render-block.ts`) est un `switch` exhaustif sur
+`VocabularyBlock`, vérifié `never` à la compilation — un bloc ajouté au vocabulaire est
+donc une rupture de compilation réelle pour tout thème existant, même si aucun contenu
+n'a jamais pu utiliser ces cinq types avant cette version (rien à migrer côté données).
+`docs/04-contrats.md` documente cette reclassification comme la règle pour cette
+catégorie précise de changement, décidée au cas par cas par RFC plutôt que par défaut.
+
+**Conséquences** — `packages/blocks` (`vocabulary.ts`, `variant.ts`, `define-block.ts`,
+`types.ts`), les cinq paquets de thème, `@cogenta/theme-kit` (`resolveBlockForRender`,
+`withBlockVariant`), `@cogenta/cli` (passage optionnel d'un `BlockRegistry` de site),
+`@cogenta/admin` (panneau d'apparence de bloc, et son miroir local du vocabulaire
+`packages/admin/src/blocks/vocabulary.ts`, tenu synchrone par
+`vocabulary-sync.test.ts`). `docs/04-contrats.md` mis à jour. Changesets `major` pour
+`@cogenta/blocks` et les cinq thèmes, `minor` pour `@cogenta/theme-kit` et `@cogenta/cli`
+(wiring additif). `contract-guardian` a revu le changement (verdict : conforme).
+
+**Renoncement assumé** — Le vocabulaire n'est plus « une dizaine » (il en compte
+dix-sept), ce qu'ADR-0009 présentait comme la garantie qui rend praticable la promesse
+« change de thème, le contenu s'adapte ». Le renoncement est jugé acceptable parce que
+le mécanisme même qui rendait cette promesse tenable — le repli déclaré — s'applique
+identiquement aux cinq nouveaux blocs, et parce que les cinq in-house themes
+(`theme-canonical`, `theme-portfolio`, `theme-magazine`, `theme-ecommerce`,
+`theme-entreprise`) les implémentent tous directement avec un rendu distinct par thème,
+jamais un recolorage : la dette « un bloc ajouté coûte à chaque auteur de thème » est
+payée dans ce lot même, pas différée à un futur auteur de thème tiers. Un vocabulaire à
+cinquante resterait refusé — ce lot n'ouvre pas la porte à un ajout non justifié par RFC.
+
+**Écarté** — Attendre le délai de sept jours de discussion publique habituel du
+processus de RFC (`docs/rfc/README.md`) : ce délai suppose des contributeurs externes à
+consulter, qui n'existent pas encore pour ce projet en pre-alpha ; le texte des deux RFC
+reste la justification écrite complète, prêt à être déposé comme vraie issue GitHub si le
+projet s'ouvre un jour à des contributions externes.
+
+---
+
+## ADR-0031 — Le renoncement « pas de champ fichier, pas de champs conditionnels » d'ADR-0026 est levé
+
+**Statut** : Acté
+
+**Contexte** — ADR-0026 renonçait explicitement, pour la première version du contrat G, à
+deux choses : un champ `file` (« pour ne pas ouvrir la surface téléversement/antivirus
+sans besoin prouvé ») et les champs conditionnels (« hors périmètre de cette première
+version »). La fiche 47 (parité avec les constructeurs de formulaires premium — Gravity
+Forms/WPForms) chiffre les deux comme tâches concrètes, avec un besoin désormais prouvé :
+un formulaire de candidature ou de support sans pièce jointe, et un formulaire sans
+logique conditionnelle, sont les deux lacunes les plus citées face à ces outils. La
+décision de rouvrir ces deux points précis a été tranchée en direct avec l'utilisateur le
+2026-08-26, au moment de cadrer la fiche 47 (consignée dans
+`docs/plans/47-formulaires-et-soumissions-premium.md` §8) — cette ADR met cette décision
+dans le registre append-only plutôt que de la laisser vivre seulement dans un document de
+planification, `contract-guardian` ayant à raison signalé qu'un renoncement explicitement
+acté ne devrait pas être renversé par une simple note dans `docs/04-contrats.md`.
+
+**Décision** — Le contrat G monte en **`forms@1.1`**, additif :
+
+1. **Champ `file`** — dixième type de champ. La surface antivirus qu'ADR-0026 redoutait
+   n'est pas ouverte par une analyse de contenu malveillant (aucune n'existe dans ce lot,
+   assumé ci-dessous), mais mitigée par trois garanties structurelles : la catégorie
+   réelle est lue sur les octets (jamais un nom de fichier ni un `Content-Type` déclaré —
+   même discipline que `verifyRealType` du pipeline média, L10 tâche 5), une taille
+   maximale plafonnée matériellement (`FORM_FILE_HARD_MAX_BYTES`, non contournable par la
+   configuration d'un formulaire), et le fichier stocké n'est **jamais servi
+   publiquement** — contrairement à `/_image` pour la médiathèque, aucune route de
+   téléchargement n'existe pour un fichier de formulaire à ce stade (un admin ne peut pas
+   non plus le récupérer aujourd'hui — lacune fonctionnelle assumée, pas un risque de
+   sécurité en soi).
+2. **Champs conditionnels (`showIf`)** — une condition (`field`/`operator`/`value`)
+   évaluée côté serveur contre la soumission brute ; un champ masqué n'est ni requis ni
+   validé, avec ou sans JavaScript.
+3. **Corollaire de sécurité, trouvé et corrigé pendant l'implémentation** — une revue de
+   sécurité dédiée a montré qu'un champ `file` porté à travers un formulaire à étapes
+   (`_accumulated`, fiche 47 tâche 2, elle aussi nouvelle) ne pouvait pas se contenter
+   d'une vérification de forme (`isFormFileValue`) : un client pouvait forger une valeur
+   `{filename, mimeType, size, storageKey}` sans jamais envoyer un octet réel. La valeur
+   portée d'une étape à l'autre est donc **signée** (HMAC, clé dérivée de
+   `COGENTA_AUTH_SIGNING_KEY` — jamais un second secret, même discipline que
+   `commentsIpHashSecret`) et **liée à `formId`+`fieldName`** (une correction de suivi a
+   fermé le rejeu d'un jeton d'un champ vers un autre) ; seul le routeur qui l'a signée
+   peut la faire accepter à l'étape suivante, pour ce champ précis.
+
+**Justification** — Le principe de « ne pas rediscuter une décision actée » protège
+contre un contournement silencieux, pas contre un changement d'avis assumé et tracé.
+ADR-0026 documentait déjà ce renoncement comme une prudence temporaire liée à l'absence
+de besoin prouvé, non comme un refus de principe ; la fiche 47 fournit ce besoin, et
+cette ADR trace formellement le changement plutôt que de le laisser implicite dans le
+code ou dans un simple commentaire de `docs/04-contrats.md`.
+
+**Conséquences** — `packages/forms` gagne `file-field.ts` (sniffing par octets, plafond
+dur, signature/vérification de jeton scopée formulaire+champ) et `conditions.ts`
+(`showIf`) ; `FORM_FIELD_KINDS` passe de neuf à dix valeurs, `FormFieldDefinition` gagne
+trois propriétés optionnelles. Aucune forme existante n'est changée de sens — un
+consommateur `forms@1.0` qui ignore ces champs garde le comportement d'avant.
+`docs/04-contrats.md` § Contrat G est mis à jour en conséquence (`forms@1.1`).
+
+**Renoncement assumé** — Aucun scan antiviral/malware réel n'est ajouté par cette
+décision : la mitigation reste « type réel vérifié par octets + taille plafonnée +
+jamais servi publiquement », pas une analyse de contenu. Un fichier de formulaire accepté
+n'est aujourd'hui récupérable par personne, pas même un admin légitime — capacité de
+téléchargement authentifié hors périmètre de cette fiche, à ouvrir séparément. Le bloc
+`form` du contrat B reste hors périmètre (RFC toujours ouverte, non traitée par cette
+ADR).
+
+**Écarté** — Accepter la valeur `file` portée d'une étape à l'autre sur la seule foi de
+sa forme (`isFormFileValue`) : c'est précisément la faille que la revue de sécurité a
+trouvée et que cette décision ferme par la signature scopée.

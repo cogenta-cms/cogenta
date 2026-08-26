@@ -1,10 +1,9 @@
 import { CogentaError } from '@cogenta/core'
-import {
-  type CollectionDefinition,
-  type ContentAction,
-  type ContentStore,
-  normalisePermissionRule,
-  type ReviewState,
+import type {
+  CollectionDefinition,
+  ContentAction,
+  ContentStore,
+  ReviewState,
 } from '@cogenta/schema'
 import type { SerialisedEntry } from '../content/index.js'
 import { serialiseEntry } from '../content/index.js'
@@ -99,7 +98,10 @@ export function createReviewRouter(options: ReviewRouterOptions): ReviewRouter {
     collection: CollectionDefinition,
     context: AccessContext,
   ): boolean {
-    const roles = normalisePermissionRule(collection.permissions[action]).roles
+    // The effective rule (fiche 63, ADR-0028) — a database override changing
+    // who may `update`/`publish` this collection must move this scope's
+    // membership too, not just `PermissionLayer.can()` itself.
+    const roles = options.permissions.ruleFor(action, collection).roles
     const held = new Set(context.actor.roles)
     held.add('public')
     return roles.some((role) => held.has(role))

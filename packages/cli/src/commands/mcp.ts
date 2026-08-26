@@ -41,7 +41,10 @@ import {
   type CollectionDefinition,
   type ContentStore,
   createContentStore,
+  createRolePermissionOverlay,
+  createRolePermissionStore,
   createSchemaTables,
+  type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
 import { loadSchemaModule } from './serve.js'
@@ -309,8 +312,11 @@ export async function runMcp(options: McpOptions): Promise<number> {
   const projectRoot = loaded.path === null ? (options.cwd ?? process.cwd()) : dirname(loaded.path)
 
   let collections: readonly CollectionDefinition[]
+  let taxonomies: readonly TaxonomyDefinition[]
   try {
-    collections = (await loadSchemaModule(projectRoot)).collections
+    const loadedSchema = await loadSchemaModule(projectRoot)
+    collections = loadedSchema.collections
+    taxonomies = loadedSchema.taxonomies
   } catch (error) {
     return reportFailure(stderr, error)
   }
@@ -323,7 +329,18 @@ export async function runMcp(options: McpOptions): Promise<number> {
 
     const { actor, authenticated } = await resolveMcpActor(options, db)
 
-    const permissions = createPermissionLayer({ collections })
+    // Fiche 63, ADR-0028: `cogenta mcp` builds its own `PermissionLayer`
+    // (never `assembleSite`'s), so it must consult the same override table —
+    // otherwise a permission an admin just revoked in production would stay
+    // granted to any MCP client until the process restarts, exactly the
+    // silent-widening R4 exists to prevent.
+    const rolePermissionOverlay = await createRolePermissionOverlay(
+      createRolePermissionStore({ db, collections, taxonomies }),
+    )
+    const permissions = createPermissionLayer({
+      collections,
+      rolePermissionOverrides: rolePermissionOverlay,
+    })
     const storeFor = storeForFactory(db, collections)
     const contentService = createContentService({ collections, permissions, storeFor })
     const mediaStore = createDatabaseMediaStore({ db })

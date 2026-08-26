@@ -1136,3 +1136,42 @@ prouvé** par un test réel contre ces deux moteurs. À vérifier si Docker
 redevient disponible sur une machine de développement, avant de considérer
 la fiche 58 aussi rigoureusement close que L13/L15/L18 le sont sur ce point
 précis.
+
+## 20. Fiche 63 — permissions de rôle en base (ADR-0028) : Postgres/MySQL/MariaDB non exécutés
+
+**ADR-0028 insérée** dans `docs/03-decisions.md` (2026-08-26, par l'utilisateur,
+formatage corrigé ensuite) : « Les permissions de rôle personnalisé vivent en
+base, en surcouche du fichier de schéma ». Rien à faire de plus sur ce point.
+
+**Postgres/MySQL/MariaDB non exécutés cette session — Docker indisponible**
+(`docker version` échoue : « failed to connect to the docker API »), même
+contrainte que partout ailleurs dans ce fichier :
+`packages/schema/test/integration/role-permission-store.test.ts` (bâti sur
+`role-permission-store.contract.ts`, la même suite que SQLite fait tourner
+en test unitaire — 17/17 verts, plus le contrat de concurrence dédié,
+`role-permission-concurrency.contract.ts`, 1/1 vert sur SQLite) se dégrade
+bruyamment (`describe.skip` nommant `COGENTA_TEST_POSTGRES_URL`/`_MYSQL_URL`/
+`_MARIADB_URL`) plutôt que de mentir en vert. Ce que cette suite doit encore
+prouver réellement : la colonne `own` (un vrai `boolean` sur Postgres, un
+`tinyint` sur MySQL/MariaDB, un `integer` sur SQLite) round-trip correctement
+sur les trois, et surtout — **la vraie question ouverte** — si le
+`delete`-puis-`insert` transactionnel de `set()` (le même choix que
+`redirects.ts`'s `performAdd`, documenté là pour la même raison : `ON
+CONFLICT`/`ON DUPLICATE KEY`/`INSERT OR REPLACE` diffèrent sur les trois
+dialectes) survit à deux connexions réelles et indépendantes qui écrivent au
+même instant le même triplet `(targetType, targetName, action)`, sans jamais
+laisser deux lignes, zéro ligne, ni **remonter une erreur brute du driver**
+plutôt qu'une `CogentaError` nommée. `test/integration/routing.test.ts`
+l'a déjà nommé pour `NotFoundLogStore` : « SQLite's `{ immediate: true }`
+masks that race entirely » — le vert obtenu sur SQLite (verrou fichier à
+écrivain unique) ne prouve donc **rien** sur Postgres/MySQL, dont
+l'isolation par défaut ne sérialise pas deux transactions de la même façon ;
+c'est exactement pourquoi le contrat de concurrence tourne en intégration
+avec deux vraies connexions au même serveur, pas seulement en unitaire.
+
+Contrat A (`CollectionDefinition`/`TaxonomyDefinition`/`CollectionPermissions`,
+`packages/schema/src/types.ts`) **n'est pas modifié** par cette fiche — la
+table `cogenta_role_permissions` vit entièrement hors contrat, comme
+`cogenta_menus`/`cogenta_maintenance` ; `docs/04-contrats.md` § Permissions
+gagne un paragraphe décrivant la priorité table-puis-fichier sans monter de
+version.

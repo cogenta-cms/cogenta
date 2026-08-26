@@ -194,3 +194,120 @@ describe('the role-grants preview in the account dialogs', () => {
     ).toBeDefined()
   })
 })
+
+/**
+ * Fiche 63, ADR-0028 — the write half: a role's grant on a collection or
+ * taxonomy action, overridden straight in the database. `MOCK_SCHEMA`'s
+ * `article` grants `create` to `editor` only in the file — every test below
+ * either widens or reverts exactly that cell, so the assertion is never "a
+ * button did something", it is "the exact permission this fiche exists to
+ * let an admin change actually changed".
+ */
+describe('the write UI', () => {
+  function articleRow(): HTMLElement {
+    const table = within(screen.getByRole('tabpanel', { name: 'Par collection' }))
+    return table.getByText('Articles').closest('tr') as HTMLElement
+  }
+
+  // Column order is contract A's fixed action order: label, read, create,
+  // update, delete, publish — "create" is cell index 2.
+  function articleCreateCell(): HTMLElement {
+    return within(articleRow()).getAllByRole('cell')[2] as HTMLElement
+  }
+
+  function articleCreateEditButton(): HTMLElement {
+    return within(articleCreateCell()).getByRole('button', { name: 'Modifier' })
+  }
+
+  it('widens a permission through the two-step edit-then-confirm flow, and journals it', async () => {
+    render(<App />)
+    await goToRoles()
+
+    fireEvent.click(articleCreateEditButton())
+    const modal = await screen.findByRole('dialog')
+    // The file's own rule is already selected — editor may create articles.
+    expect(within(modal).getByRole('checkbox', { name: 'Éditeur' })).toHaveProperty('checked', true)
+
+    fireEvent.click(within(modal).getByRole('checkbox', { name: 'viewer' }))
+    fireEvent.click(within(modal).getByRole('button', { name: 'Vérifier les changements' }))
+
+    // The confirmation screen names before and after — not just a generic "are you sure".
+    expect(await within(modal).findByText('Avant')).toBeDefined()
+    expect(within(modal).getByText('editor')).toBeDefined()
+    expect(within(modal).getByText('Après')).toBeDefined()
+    expect(within(modal).getByText('editor, viewer')).toBeDefined()
+
+    fireEvent.click(within(modal).getByRole('button', { name: 'Confirmer et enregistrer' }))
+
+    expect(await screen.findByText('Permission mise à jour.')).toBeDefined()
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    // The "create" cell itself, and only it, now shows the widened,
+    // database-sourced rule, marked as an override — the other columns
+    // (read/update/delete/publish) also read "editor" and must not be
+    // confused with this one.
+    expect(within(articleCreateCell()).getByText('editor, viewer')).toBeDefined()
+    expect(within(articleCreateCell()).getByText('Surchargé')).toBeDefined()
+  })
+
+  it('cancelling the edit modal writes nothing', async () => {
+    render(<App />)
+    await goToRoles()
+
+    fireEvent.click(articleCreateEditButton())
+    const modal = await screen.findByRole('dialog')
+    fireEvent.click(within(modal).getByRole('checkbox', { name: 'Administrateur' }))
+    fireEvent.click(within(modal).getByRole('button', { name: 'Annuler' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    // Untouched: still the file's own rule, no "Surchargé" badge anywhere in the row.
+    expect(within(articleRow()).queryByText('Surchargé')).toBeNull()
+  })
+
+  it('reverts an override back to the file, through the same confirmation screen', async () => {
+    render(<App />)
+    await goToRoles()
+
+    // First widen it, exactly as the earlier test does.
+    fireEvent.click(articleCreateEditButton())
+    let modal = await screen.findByRole('dialog')
+    fireEvent.click(within(modal).getByRole('checkbox', { name: 'viewer' }))
+    fireEvent.click(within(modal).getByRole('button', { name: 'Vérifier les changements' }))
+    fireEvent.click(within(modal).getByRole('button', { name: 'Confirmer et enregistrer' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+    // Wait for the overrides list to actually refresh — the badge is the
+    // observable proof the override this modal is about to revert is the
+    // one already saved, not a stale read of the pre-write state.
+    await within(articleCreateCell()).findByText('Surchargé')
+
+    // Now revert it.
+    fireEvent.click(articleCreateEditButton())
+    modal = await screen.findByRole('dialog')
+    fireEvent.click(within(modal).getByRole('button', { name: 'Revenir au fichier' }))
+    expect(await within(modal).findByText('Revenir à cogenta.schema.* ?')).toBeDefined()
+    fireEvent.click(within(modal).getByRole('button', { name: 'Confirmer et enregistrer' }))
+
+    expect(await screen.findByText('Revenu à la règle du fichier.')).toBeDefined()
+
+    await waitFor(() => {
+      expect(within(articleCreateCell()).queryByText('Surchargé')).toBeNull()
+    })
+    expect(within(articleCreateCell()).getByText('editor')).toBeDefined()
+  })
+
+  it('an editor cannot see the write UI at all — the nav link itself is admin-only', async () => {
+    signedInAs(['editor'])
+    window.history.pushState(null, '', '/roles')
+    render(<App />)
+
+    await screen.findByRole('alert')
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull()
+  })
+})

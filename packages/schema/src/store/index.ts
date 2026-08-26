@@ -138,6 +138,26 @@ export type { RedirectTrackingOptions } from './redirect-tracking.js'
 export { withRedirectTracking } from './redirect-tracking.js'
 export type { ReviewTransitionRule } from './review-transitions.js'
 export { nextReviewState, REVIEW_TRANSITION_TABLE } from './review-transitions.js'
+export type {
+  RolePermissionExportFile,
+  RolePermissionExportRow,
+} from './role-permission-export.js'
+export {
+  parseRolePermissionExport,
+  ROLE_PERMISSION_EXPORT_VERSION,
+  serialiseRolePermissionExport,
+} from './role-permission-export.js'
+export type { RolePermissionOverlay, RolePermissionOverrides } from './role-permission-overlay.js'
+export { createRolePermissionOverlay } from './role-permission-overlay.js'
+export type {
+  RolePermissionOverrideRecord,
+  RolePermissionStore,
+  RolePermissionStoreOptions,
+  RolePermissionTargetType,
+  SetRolePermissionInput,
+} from './role-permission-store.js'
+export { createRolePermissionStore } from './role-permission-store.js'
+export { ensureRolePermissionTable, ROLE_PERMISSIONS_TABLE } from './role-permission-tables.js'
 export type { ScheduledPublishEnqueueOptions } from './scheduled-publish-enqueue.js'
 export { withScheduledPublishEnqueue } from './scheduled-publish-enqueue.js'
 export type {

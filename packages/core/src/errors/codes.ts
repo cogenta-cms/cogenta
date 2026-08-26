@@ -558,6 +558,13 @@ export const ERROR_CODES = [
   'PROVIDER_ID_INVALID',
   'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
 
+  // Role permission overrides in the database (fiche 63, ADR-0028): a
+  // production-applicable surcharge over `cogenta.schema.*`'s `permissions`
+  // block, `PermissionLayer` checked before falling back to the file.
+  'ROLE_PERMISSION_TARGET_UNKNOWN',
+  'ROLE_PERMISSION_INVALID',
+  'ROLE_PERMISSION_EXPORT_INVALID',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

@@ -287,6 +287,13 @@ import {
   withScheduledPublishEnqueue,
   withSearchIndexing,
 } from '@cogenta/schema'
+import {
+  canonicalUrl,
+  indexNowKeyFile,
+  llmsTxtSectionsFor,
+  pingIndexNow,
+  renderLlmsTxt,
+} from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
 import type { GraphQLSchema } from 'graphql'
 import { sendInviteMail } from '../invite-mail.js'
@@ -323,6 +330,7 @@ import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-al
 import {
   buildSitemapFiles,
   collectRoutedResources,
+  readSeoOperationalSettings,
   readSeoRenderDefaults,
   renderRobots,
   seoSiteFor,
@@ -348,6 +356,9 @@ import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
+
+/** IndexNow's own key-file path — matches `indexNowKeyFile`'s `path` (`@cogenta/seo`) for any hex key, whether or not it is the one currently configured (fiche 50 task 3). */
+const INDEXNOW_KEY_FILE_PATTERN = /^\/([a-fA-F0-9]{8,128})\.txt$/u
 
 /** The only `Content-Type` values `/_image` will ever put on the wire. */
 const SERVABLE_IMAGE_TYPES: ReadonlySet<string> = new Set([
@@ -2142,6 +2153,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           collectionTitleTemplates: defaults.collectionTitleTemplates,
         }
       },
+      // Fiche 50 task 4 — read fresh, same reasoning as `titleDefaults`: the
+      // Diagnostics screen's robots.txt preview must show the exact document
+      // `/robots.txt` serves, not a stale one from before a custom rule was
+      // saved.
+      robotsCustomRules: async () =>
+        (await readSeoRenderDefaults(siteSettingsStore)).robotsCustomRules,
     }),
     // The review queue (`schema@2.1`, ADR-0027, fiche 37 task 3).
     reviewRouter,
@@ -2738,6 +2755,71 @@ async function recordContentAudit(
       ...(version === undefined ? {} : { version }),
     })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+/**
+ * Pings IndexNow the moment a publish or unpublish response succeeds (fiche
+ * 50 task 3) — off by default (`seo.indexNowEnabled`), a no-op with no key
+ * configured, and a no-op for a collection with no public route (nothing to
+ * tell a crawler about). Deliberately narrower than `recordContentAudit`
+ * above: a plain `content.update` is not a URL changing visibility the way a
+ * publish/unpublish is, and pinging on every keystroke-triggered autosave
+ * would spend the batch IndexNow itself documents as unnecessary.
+ *
+ * Never blocks or fails the response it follows: `pingIndexNow` already
+ * turns a network failure or a non-2xx answer into a logged result rather
+ * than a throw, and the `try`/`catch` here also covers the gateway read and
+ * URL computation around it, so a publish always reaches its caller whether
+ * or not IndexNow could be reached.
+ */
+async function notifyIndexNowOnContentChange(
+  site: Site,
+  actor: AccessContext['actor'],
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+  const segments = pathname
+    .replace(/^\/api\/content\/?/u, '')
+    .split('/')
+    .filter((segment) => segment.length > 0)
+  const [collectionName, id, subAction] = segments
+  if (collectionName === undefined || collectionName === '-') return
+  if (subAction !== 'publish' && subAction !== 'unpublish') return
+
+  try {
+    const operational = await readSeoOperationalSettings(site.siteSettingsStore)
+    if (!operational.indexNowEnabled || operational.indexNowKey === '') return
+
+    const collection = site.collections.find((candidate) => candidate.name === collectionName)
+    if (collection === undefined || collection.routing === undefined) return
+
+    const entryId = id ?? responseId(response)
+    if (entryId === undefined) return
+
+    // The acting editor's own context, not `ANONYMOUS`: they just
+    // published or unpublished this exact entry, so they can always read
+    // it straight back, published or not — an entry just unpublished would
+    // no longer be visible to `ANONYMOUS`, and the URL still needs telling.
+    const entry = await site.gateway.read(collectionName, entryId, { actor })
+    if (entry === null) return
+
+    const seoSite = seoSiteFor(site.site, await readSeoRenderDefaults(site.siteSettingsStore))
+    const url = canonicalUrl(seoSite, { collection, entry })
+    if (url === null) return
+
+    const result = await pingIndexNow({
+      host: new URL(site.site.url).host,
+      key: operational.indexNowKey,
+      urls: [url],
+    })
+    if (result.outcome === 'failed') {
+      logger.warn('IndexNow ping failed', { reason: result.reason, message: result.message })
+    }
+  } catch (error) {
+    logger.warn('IndexNow ping skipped after an unexpected error', { error: String(error) })
+  }
 }
 
 async function recordMediaAudit(
@@ -3693,6 +3775,7 @@ export function createRequestListener(
           response,
           logger,
         )
+        await notifyIndexNowOnContentChange(site, actor, url.pathname, response, logger)
         return
       }
 
@@ -3901,6 +3984,7 @@ export function createRequestListener(
               menus: { menuRouter: site.menuRouter },
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
+              seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             }
             const html =
               definition === null
@@ -3930,6 +4014,7 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           // A failure on a multi-step form only ever comes from the final
           // step's real validation (an intermediate step never calls it —
@@ -4632,12 +4717,65 @@ export function createRequestListener(
           res.writeHead(405, { allow: 'GET' }).end()
           return
         }
+        // Fiche 50 task 4 — an admin's own robots.txt lines, merged in
+        // verbatim by `renderRobots`. Read fresh, same "no restart" contract
+        // as everything else `readSeoRenderDefaults` feeds.
+        const { robotsCustomRules } = await readSeoRenderDefaults(site.siteSettingsStore)
         res.writeHead(200, {
           'content-type': 'text/plain; charset=utf-8',
           'cache-control': 'public, max-age=3600',
         })
-        res.end(renderRobots(seoSiteFor(site.site)))
+        res.end(
+          renderRobots(seoSiteFor(site.site), {
+            ...(robotsCustomRules === '' ? {} : { customRules: robotsCustomRules }),
+          }),
+        )
         return
+      }
+
+      // `llms.txt` (fiche 50 task 5) — off by default (`seo.llmsTxtEnabled`),
+      // reusing `llmsTxtSectionsFor`/`renderLlmsTxt` (`@cogenta/seo`), written
+      // and unit-tested back in L3/L9 but never served by any route until now.
+      if (url.pathname === '/llms.txt') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        const { llmsTxtEnabled } = await readSeoOperationalSettings(site.siteSettingsStore)
+        if (!llmsTxtEnabled) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This site does not serve llms.txt.')
+          return
+        }
+        const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
+        const seoSite = seoSiteFor(site.site, seoDefaults)
+        const resources = await collectRoutedResources(site.collections, site.gateway)
+        res.writeHead(200, {
+          'content-type': 'text/markdown; charset=utf-8',
+          'cache-control': 'public, max-age=600',
+        })
+        res.end(renderLlmsTxt({ site: seoSite, sections: llmsTxtSectionsFor(seoSite, resources) }))
+        return
+      }
+
+      // IndexNow's own ownership-proof key file (fiche 50 task 3) — served
+      // only when IndexNow is on and the requested key is the one currently
+      // configured. A path that merely *looks* like a key file, or a key
+      // that does not match, falls through to the ordinary 404 below rather
+      // than answering a distinct "wrong key" response that would let a
+      // prober learn whether IndexNow is configured at all.
+      {
+        const keyFileMatch = INDEXNOW_KEY_FILE_PATTERN.exec(url.pathname)
+        if (keyFileMatch !== null && req.method === 'GET') {
+          const operational = await readSeoOperationalSettings(site.siteSettingsStore)
+          if (operational.indexNowEnabled && operational.indexNowKey === keyFileMatch[1]) {
+            res.writeHead(200, {
+              'content-type': 'text/plain; charset=utf-8',
+              'cache-control': 'public, max-age=3600',
+            })
+            res.end(indexNowKeyFile(operational.indexNowKey).contents)
+            return
+          }
+        }
       }
 
       if (SITEMAP_PATH.test(url.pathname)) {
@@ -4684,6 +4822,7 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
           context,
         )
@@ -4710,6 +4849,7 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           const html =
             definition === null || !definition.active

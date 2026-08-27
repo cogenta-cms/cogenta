@@ -196,6 +196,38 @@ const collectionTitleTemplates = z.record(z.string(), titleTemplateOrEmpty)
 
 const metaDescriptionOrEmpty = z.string().max(500)
 
+/**
+ * A Google/Bing site-verification token, or empty (fiche 50 task 2). Neither
+ * provider documents a fixed format — Google's runs to roughly 44 base64-ish
+ * characters, Bing's is a GUID — so this only rules out whitespace and quote
+ * characters rather than pinning a shape that would break the moment either
+ * provider changes its own generator. The value is rendered into a
+ * `<meta content="…">` attribute, HTML-escaped there (`escapeHtmlAttribute`)
+ * exactly like every other user-supplied attribute this codebase emits, so
+ * this schema's job is plausibility, not the actual injection guard.
+ */
+const siteVerificationTokenOrEmpty = z
+  .string()
+  .max(255)
+  .regex(/^[^\s<>"']*$/u, {
+    error:
+      'Must be empty, or the verification token as the provider gave it — no spaces or quotes.',
+  })
+
+/**
+ * IndexNow's own key format (fiche 50 task 3) — mirrors `@cogenta/seo`'s
+ * `KEY_PATTERN` (`indexnow.ts`) verbatim. Duplicated rather than imported:
+ * `@cogenta/schema` cannot depend on `@cogenta/seo`, which depends on it the
+ * other way round.
+ */
+const indexNowKeyOrEmpty = z
+  .string()
+  .max(128)
+  .regex(/^$|^[a-fA-F0-9]{8,128}$/u, {
+    error:
+      'Must be empty, or 8 to 128 hexadecimal characters — generate one with crypto.randomUUID().replaceAll("-", "").',
+  })
+
 /** A Twitter/X `@handle` for `twitter:site`, or empty. */
 const twitterHandleOrEmpty = z
   .string()
@@ -786,6 +818,91 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `/api/media/{id}/file` or `/_image?id=…` would answer.
     schema: urlOrPathOrEmpty,
     defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  // Fiche 50 tasks 2-5 — search-engine verification, a hand-written
+  // robots.txt addendum, and the two off-by-default indexing extras
+  // (`indexnow.ts`/`llms-txt.ts`) that were written and unit-tested back in
+  // L3/L9 but never wired to a route or a setting until now.
+  {
+    key: 'seo.googleSiteVerification',
+    group: 'seo',
+    order: 6,
+    uiType: 'string',
+    scope: 'site',
+    // Rendered verbatim into `<meta name="google-site-verification" content="…">`
+    // — no OAuth, no Search Console API call (R1/R7): this is the same
+    // "paste the token Google's own verification page shows you" flow every
+    // other CMS offers next to domain/DNS verification.
+    schema: siteVerificationTokenOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.bingSiteVerification',
+    group: 'seo',
+    order: 7,
+    uiType: 'string',
+    scope: 'site',
+    // Rendered into `<meta name="msvalidate.01" content="…">` — Bing
+    // Webmaster Tools' own meta-tag verification method, same reasoning as
+    // `googleSiteVerification` above.
+    schema: siteVerificationTokenOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.robotsCustomRules',
+    group: 'seo',
+    order: 8,
+    // Bypassed the same way `collectionTitleTemplates` is — `SeoRoute`'s
+    // Diagnostics tab renders this one key with a bespoke textarea that
+    // confirms before saving a rule that would block every crawler
+    // (`Disallow: /`), a piège the fiche names explicitly.
+    uiType: 'text',
+    scope: 'site',
+    // Free-form robots.txt lines, merged after the derived group and before
+    // the `Sitemap:` directive (`renderRobotsTxt`'s own `customRules`
+    // option). Not `assertSingleLine`-checked like a single directive value:
+    // this field is deliberately multi-line.
+    schema: freeText,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.indexNowEnabled',
+    group: 'seo',
+    order: 9,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // Off by default: pinging a third-party endpoint on every publish is
+    // real, deliberate behaviour an admin opts into, the same reasoning
+    // `updates.autoUpdatePolicy` gives for defaulting off.
+    defaultValue: false,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.indexNowKey',
+    group: 'seo',
+    order: 10,
+    uiType: 'string',
+    scope: 'site',
+    schema: indexNowKeyOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.llmsTxtEnabled',
+    group: 'seo',
+    order: 11,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // Off by default, same reasoning as `indexNowEnabled`: `llms.txt` lists
+    // every published title site-wide, which an admin should choose to
+    // expose rather than find already on by an install nobody configured.
+    defaultValue: false,
     writeRoles: ADMIN_ONLY,
   },
 

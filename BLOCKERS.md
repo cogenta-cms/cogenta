@@ -1175,3 +1175,37 @@ table `cogenta_role_permissions` vit entièrement hors contrat, comme
 `cogenta_menus`/`cogenta_maintenance` ; `docs/04-contrats.md` § Permissions
 gagne un paragraphe décrivant la priorité table-puis-fichier sans monter de
 version.
+
+## 21. Fiche 50 — SEO éditoriale avancée : périmètre et ce qui reste ouvert
+
+**Tâche 6 (flux RSS/Atom) explicitement hors périmètre**, sur instruction
+directe : la fiche elle-même la marque « à confirmer » (§8, « gain SEO
+générique plutôt que “premium”, à trancher séparément ») ; `feeds.ts` reste
+écrit, testé unitairement, et non branché — même état qu'avant cette session,
+rien n'y a changé.
+
+**Aucune nouvelle table, aucun nouveau SQL** : les six réglages ajoutés
+(`seo.googleSiteVerification`/`bingSiteVerification`/`robotsCustomRules`/
+`indexNowEnabled`/`indexNowKey`/`llmsTxtEnabled`) passent par la même
+`SiteSettingsStore` générique que `seo.titleTemplate` et consorts depuis la
+fiche 21 — aucun chemin dialecte-spécifique nouveau, donc pas de nouvelle
+case Postgres/MySQL/MariaDB à ouvrir ici : la portabilité de ce magasin est
+déjà prouvée là où il a été construit.
+
+**IndexNow jamais pingé contre le vrai `api.indexnow.org`** : les tests
+(`packages/cli/test/serve-seo-advanced.test.ts`) interceptent
+`globalThis.fetch` pour ce seul hôte plutôt que de faire un vrai appel
+réseau sortant pendant la suite — cohérent avec la conception du module
+lui-même (`pingIndexNow` ne doit jamais faire échouer une publication sur un
+tiers indisponible), mais cela veut dire que le format exact de la réponse
+IndexNow réelle (200 vs 202, corps vide ou non) n'a jamais été observé en
+conditions réelles. `pingIndexNow` traite déjà tout ce qui n'est pas `ok`
+comme un échec journalisé, jamais une exception, donc le risque résiduel est
+faible.
+
+**Vérification Search Console/Bing jamais essayée avec un vrai jeton** : la
+balise `<meta>` est rendue et échappée, testée unitairement et en bout en
+bout (`serve-seo-advanced.test.ts`), mais aucune session Search
+Console/Webmaster Tools réelle n'a confirmé qu'un jeton collé depuis ces
+écrans est effectivement accepté — cette dernière étape appartient à
+l'humain qui possède le compte.

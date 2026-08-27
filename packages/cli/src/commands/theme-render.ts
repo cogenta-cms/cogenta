@@ -37,7 +37,7 @@ import {
 } from '@cogenta/theme-kit'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
 import type { SeoRenderDefaults } from './seo.js'
-import { alternatesForEntry, renderSeoHead, seoSiteFor } from './seo.js'
+import { alternatesForEntry, renderSeoHead, seoSiteFor, siteVerificationMetaTags } from './seo.js'
 import { minifyCss } from './theme-css.js'
 import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-registry.js'
 
@@ -611,6 +611,14 @@ export interface PageChromeOptions {
   readonly branding?: () => Promise<BrandingSettings>
   /** Same live read `ThemeRenderOptions.activeTheme` documents — absent renders with `DEFAULT_THEME_NAME`. */
   readonly activeTheme?: () => Promise<string | null>
+  /**
+   * Same live read `ThemeRenderOptions.seo` documents (fiche 21 task 3) —
+   * only ever used here for `siteVerificationMetaTags` (fiche 50 task 2), so
+   * `/search` and `/forms/{name}` carry the same Search Console/Webmaster
+   * verification tags every entry page does. Absent renders neither tag,
+   * the pre-fiche-50 behaviour.
+   */
+  readonly seo?: () => Promise<SeoRenderDefaults>
 }
 
 /**
@@ -672,6 +680,9 @@ export async function renderPageChrome(
     footerNav,
     brandingHtml,
   })
+  const verificationTags = siteVerificationMetaTags(
+    options.seo === undefined ? null : await options.seo(),
+  )
 
   return `<!doctype html>
 <html lang="${escapeAttribute(options.locale)}" dir="auto">
@@ -681,7 +692,7 @@ export async function renderPageChrome(
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/png" href="${DEFAULT_LOGO_PATH}">
 ${options.headHtml}
-${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
+${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
@@ -1117,11 +1128,19 @@ async function renderEntryPage(
 
   // `head` already carries a real `<title>` (`renderSeoHead`, above) — no
   // second one is written into the template below.
-  const head = renderSeoHead(seoSite, resource, {
-    ...(alternates.length === 0 ? {} : { alternates }),
-    ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
-    ...(seoSettings === null ? {} : { seo: seoSettings }),
-  })
+  const head = [
+    renderSeoHead(seoSite, resource, {
+      ...(alternates.length === 0 ? {} : { alternates }),
+      ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
+      ...(seoSettings === null ? {} : { seo: seoSettings }),
+    }),
+    // Search Console/Webmaster Tools verification (fiche 50 task 2) — the
+    // same site-wide tags on every page, not just the home page: neither
+    // provider documents which page it fetches to check ownership.
+    siteVerificationMetaTags(seoSettings),
+  ]
+    .filter((part) => part !== '')
+    .join('\n')
 
   // Precaution 1 of 3 (fiche 35 task 6): only ever rendered for an actor
   // this request's own `resolveActor` actually authenticated — the flag

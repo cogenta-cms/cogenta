@@ -1,4 +1,5 @@
 import { CogentaError, type DriverRegistry, isCogentaError } from '@cogenta/core'
+import { applyProductsImport, exportProductsCsv, previewProductsImport } from '../catalog/csv.js'
 import type { CatalogStore } from '../catalog/store.js'
 import { COUPON_KINDS, type CouponKind, type CouponStore } from '../coupon/store.js'
 import type { Customer, CustomerStore } from '../customer/store.js'
@@ -206,6 +207,70 @@ function readOptionalBool(body: Record<string, unknown>, key: string): boolean |
   return typeof value === 'boolean' ? value : undefined
 }
 
+/**
+ * Reads a field that is legitimately nullable — a threshold, a compare-at
+ * price, a dimension — and tells "absent" (leave the current value alone)
+ * from "explicitly null" (clear it) from "a real value" (set it), the same
+ * three-way distinction `CatalogStore.updateVariant` itself already needs
+ * (its own `input.x === undefined ? current.x : input.x` guards).
+ */
+function optionalField<T>(
+  body: Record<string, unknown>,
+  key: string,
+  parse: (value: unknown) => T,
+): Partial<Record<string, T>> {
+  if (!(key in body)) return {}
+  return { [key]: parse(body[key]) }
+}
+
+function nullableInt(value: unknown): number | null {
+  if (value === null) return null
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  throw new CogentaError({
+    code: 'COMMERCE_QUANTITY_INVALID',
+    message: 'This field must be a whole number, or null to clear it.',
+    hint: 'Send an integer, or null.',
+  })
+}
+
+function nullableContentRef(value: unknown): { collection: string; entryId: string } | null {
+  if (value === null) return null
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).collection === 'string' &&
+    typeof (value as Record<string, unknown>).entryId === 'string'
+  ) {
+    const record = value as Record<string, unknown>
+    return { collection: record.collection as string, entryId: record.entryId as string }
+  }
+  throw new CogentaError({
+    code: 'COMMERCE_PRODUCT_INVALID',
+    message: '"contentRef" must be { collection, entryId }, or null to unlink.',
+    hint: 'Send { "collection": "…", "entryId": "…" }, or null.',
+  })
+}
+
+function nullableIsoString(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value === 'string' && value.trim() !== '') return value
+  throw new CogentaError({
+    code: 'COMMERCE_PRODUCT_INVALID',
+    message: 'This field must be an ISO date string, or null to clear it.',
+    hint: 'Send a date such as "2026-09-01T00:00:00.000Z", or null.',
+  })
+}
+
+/** A query-string integer, or `undefined` for anything that is not a positive whole number. */
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+/** Same cap `@cogenta/api`'s redirect router uses for its own CSV import/export (fiche 51 task 6). */
+const MAX_CSV_ROWS = 5000
+
 function readInt(body: Record<string, unknown>, key: string): number {
   const value = body[key]
   if (typeof value !== 'number' || !Number.isInteger(value)) {
@@ -311,16 +376,31 @@ export function createCommerceAdminRouter(
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
             const query = request.query ?? {}
+            // One row over the requested page: `hasMore` is then simply
+            // "did the extra row show up", never a second `count(*)` query
+            // (fiche 51 task 2 — the same technique `media-client.ts`'s
+            // cursor pagination already uses, adapted to this offset-based
+            // list rather than inventing a cursor for it).
+            const requestedLimit = parsePositiveInt(query.limit) ?? 25
+            const offset = parsePositiveInt(query.offset) ?? 0
+            const sort =
+              query.sort === 'title' || query.sort === 'handle' ? query.sort : 'createdAt'
+            const direction = query.direction === 'asc' ? 'asc' : 'desc'
+
+            const page = await options.catalog.listProducts({
+              ...(query.status === 'active' || query.status === 'archived'
+                ? { status: query.status }
+                : {}),
+              ...(query.q === undefined || query.q === '' ? {} : { search: query.q }),
+              sort,
+              direction,
+              limit: requestedLimit + 1,
+              offset,
+            })
+            const hasMore = page.length > requestedLimit
             return {
               status: 200,
-              body: {
-                products: await options.catalog.listProducts({
-                  ...(query.status === 'active' || query.status === 'archived'
-                    ? { status: query.status }
-                    : {}),
-                  ...(query.q === undefined ? {} : { search: query.q }),
-                }),
-              },
+              body: { products: hasMore ? page.slice(0, requestedLimit) : page, hasMore },
             }
           }
           if (method === 'POST') {
@@ -336,6 +416,64 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // The catalogue's CSV export (fiche 51 task 6) — checked ahead of the
+        // generic `/products/:id` route below, the same way `export`/`import`
+        // are ordered ahead of `:id` on `@cogenta/api`'s redirect router.
+        if (segments[0] === 'products' && segments[1] === 'export' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const products = await options.catalog.listProducts({ limit: MAX_CSV_ROWS })
+            const variantsByProduct = new Map(
+              await Promise.all(
+                products.map(
+                  async (product) =>
+                    [product.id, await options.catalog.listVariants(product.id)] as const,
+                ),
+              ),
+            )
+            return {
+              status: 200,
+              body: {
+                csv: exportProductsCsv(products, variantsByProduct),
+                filename: 'products.csv',
+              },
+            }
+          }
+        }
+
+        if (segments[0] === 'products' && segments[1] === 'import' && segments.length === 2) {
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const csv = readString(body, 'csv')
+            const apply = body.apply === true
+            return {
+              status: 200,
+              body: apply
+                ? await applyProductsImport(csv, options.catalog, MAX_CSV_ROWS)
+                : await previewProductsImport(csv, options.catalog, MAX_CSV_ROWS),
+            }
+          }
+        }
+
+        // The reverse of `contentRef` — what the content editor's own
+        // cross-link (fiche 51 task 1) asks to find "is there a commercial
+        // record for the entry I am looking at right now".
+        if (segments[0] === 'products' && segments[1] === 'by-content' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const collection = request.query?.collection
+            const entryId = request.query?.entryId
+            if (collection === undefined || entryId === undefined) {
+              return { status: 200, body: { product: null } }
+            }
+            return {
+              status: 200,
+              body: { product: await options.catalog.readProductByContentRef(collection, entryId) },
+            }
+          }
+        }
+
         if (segments[0] === 'products' && segments.length === 2) {
           const id = segments[1] ?? ''
           if (method === 'GET') {
@@ -344,7 +482,11 @@ export function createCommerceAdminRouter(
             if (product === null) return notFound('product')
             return {
               status: 200,
-              body: { product, variants: await options.catalog.listVariants(id) },
+              body: {
+                product,
+                variants: await options.catalog.listVariants(id),
+                terms: await options.catalog.listProductTerms(id),
+              },
             }
           }
           if (method === 'PATCH') {
@@ -358,6 +500,10 @@ export function createCommerceAdminRouter(
                 ...(body.status === 'active' || body.status === 'archived'
                   ? { status: body.status }
                   : {}),
+                // Fiche 51 task 1: `null` unlinks, an object links, absence
+                // leaves it alone — the same three-way distinction the
+                // nullable variant fields above already need.
+                ...optionalField(body, 'contentRef', nullableContentRef),
               }),
             }
           }
@@ -368,7 +514,53 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // A product's classification against a taxonomy the site declares
+        // (fiche 51 task 3, ADR-0022). Governed by `commerce.catalog.write`
+        // — the same permission as every other catalogue edit — rather than
+        // contract A's `canTerm`: categorising a product is catalogue work,
+        // and reusing contract A's term permission here would couple this
+        // router to a second, unrelated permission layer for one field.
+        if (segments[0] === 'products' && segments[2] === 'terms' && segments.length === 3) {
+          if (method === 'PUT') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const taxonomy = readString(body, 'taxonomy')
+            const termIds = Array.isArray(body.termIds)
+              ? body.termIds.filter((value): value is string => typeof value === 'string')
+              : []
+            return {
+              status: 200,
+              body: {
+                terms: await options.catalog.setProductTerms(segments[1] ?? '', taxonomy, termIds),
+              },
+            }
+          }
+        }
+
         // ---- variants -----------------------------------------------------
+        // Checked ahead of the generic `/variants/:id` route below, the same
+        // ordering discipline as `products/export` above.
+        if (segments[0] === 'variants' && segments[1] === 'low-stock' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: { variants: await options.catalog.listLowStock() } }
+          }
+        }
+
+        if (
+          segments[0] === 'variants' &&
+          segments[2] === 'stock-movements' &&
+          segments.length === 3
+        ) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return {
+              status: 200,
+              body: { movements: await options.catalog.listStockMovements(segments[1] ?? '') },
+            }
+          }
+        }
+
         if (segments[0] === 'products' && segments[2] === 'variants' && segments.length === 3) {
           if (method === 'POST') {
             permissions.assert('commerce.catalog.write', actor)
@@ -382,6 +574,18 @@ export function createCommerceAdminRouter(
                 priceMinor: readInt(body, 'priceMinor'),
                 currency: readString(body, 'currency'),
                 ...(typeof body.onHand === 'number' ? { onHand: body.onHand } : {}),
+                ...(typeof body.allowBackorder === 'boolean'
+                  ? { allowBackorder: body.allowBackorder }
+                  : {}),
+                ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+                ...(typeof body.taxCategory === 'string' ? { taxCategory: body.taxCategory } : {}),
+                ...optionalField(body, 'lowStockThreshold', nullableInt),
+                ...optionalField(body, 'compareAtPriceMinor', nullableInt),
+                ...optionalField(body, 'saleStartsAt', nullableIsoString),
+                ...optionalField(body, 'saleEndsAt', nullableIsoString),
+                ...optionalField(body, 'widthMm', nullableInt),
+                ...optionalField(body, 'heightMm', nullableInt),
+                ...optionalField(body, 'depthMm', nullableInt),
               }),
             }
           }
@@ -401,6 +605,16 @@ export function createCommerceAdminRouter(
                 ...(typeof body.allowBackorder === 'boolean'
                   ? { allowBackorder: body.allowBackorder }
                   : {}),
+                ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+                ...(typeof body.taxCategory === 'string' ? { taxCategory: body.taxCategory } : {}),
+                ...(typeof body.position === 'number' ? { position: body.position } : {}),
+                ...optionalField(body, 'lowStockThreshold', nullableInt),
+                ...optionalField(body, 'compareAtPriceMinor', nullableInt),
+                ...optionalField(body, 'saleStartsAt', nullableIsoString),
+                ...optionalField(body, 'saleEndsAt', nullableIsoString),
+                ...optionalField(body, 'widthMm', nullableInt),
+                ...optionalField(body, 'heightMm', nullableInt),
+                ...optionalField(body, 'depthMm', nullableInt),
               }),
             }
           }

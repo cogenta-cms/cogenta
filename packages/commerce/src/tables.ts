@@ -45,6 +45,17 @@ export const TABLES = {
   // Fiche 53 task 5: which billing period a renewal notice was already sent
   // for, so a repeated run never sends the same notice twice.
   subscriptionRenewalNotices: 'cogenta_commerce_subscription_renewal_notices',
+  /** A product's link to a term of a taxonomy the *site* declares (ADR-0022,
+   * fiche 51 task 3) — not a foreign key for the same reason `content_ref` on
+   * `products` is not one: the term table is named after a taxonomy this
+   * package cannot know. A join row rather than a column on `products` because
+   * a product may carry more than one term, the same "many" a `f.taxonomy`
+   * field defaults to on a collection. */
+  productTerms: 'cogenta_commerce_product_terms',
+  /** Append-only. Every write that moves `on_hand` — a sale, a restock, a
+   * stock take — leaves one row here and never edits or removes an earlier
+   * one; the row is the audit trail, not a cache of the current count. */
+  stockMovements: 'cogenta_commerce_stock_movements',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -549,7 +560,80 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
     await db.query(statement).catch(() => undefined)
   }
 
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.productTerms, d)} (
+      id ${t64} not null primary key,
+      product_id ${t64} not null,
+      -- Names a taxonomy the *site* declares (ADR-0022) and a term inside it —
+      -- neither is a foreign key here, for the same reason content_ref is not
+      -- one on products: the term table belongs to a schema this package
+      -- cannot know.
+      taxonomy ${t64} not null,
+      term_id ${t64} not null,
+      created_at ${t64} not null
+    )`)
+
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.stockMovements, d)} (
+      id ${t64} not null primary key,
+      variant_id ${t64} not null,
+      -- Positive for stock added, negative for stock taken. Never rewritten:
+      -- a mistake is corrected by a further movement, never by editing this
+      -- row (fiche 51 task 4's "append-only, jamais modifiable").
+      delta ${int} not null,
+      -- The absolute count this movement left the variant at — read back
+      -- without summing the whole history for a variant that has moved many
+      -- times.
+      balance_after ${int} not null,
+      reason ${t64} not null,
+      actor_id ${t64},
+      -- Names what caused the movement (an order id, most often), when there
+      -- is one. Free-form on purpose: a movement caused by a stock take has
+      -- no such thing.
+      reference_id ${t64},
+      note ${t1024},
+      created_at ${t64} not null
+    )`)
+
   await ensureIndexes(db)
+  await ensureColumns(db)
+}
+
+/**
+ * Columns added after this package's first release, on tables that already
+ * existed (fiche 51 tasks 4 and 5) — same pattern as `menu-tables.ts`'s own
+ * `location` column: `create table if not exists` above is a no-op on a
+ * database that already has `variants`, so the column is added here instead,
+ * and a failure is swallowed because the only realistic cause on a table this
+ * function has already run against is "the column is already there".
+ */
+async function ensureColumns(db: DatabaseHandle): Promise<void> {
+  const d = db.dialect
+  const variants = identifier(TABLES.variants, d)
+  const int = integerColumn()
+
+  const statements: SqlFragment[] = [
+    // Task 4: a variant with no threshold set (the default, and every
+    // variant created before this column existed) is never "low stock" —
+    // absence means "not watched", not "watched at zero".
+    sql`alter table ${variants} add column ${identifier('low_stock_threshold', d)} ${int}`,
+    // Task 5: the "was" price shown struck through, and the window during
+    // which it applies. All three null together means "no promotion" — the
+    // state every variant is already in.
+    sql`alter table ${variants} add column ${identifier('compare_at_price_minor', d)} ${int}`,
+    sql`alter table ${variants} add column ${identifier('sale_starts_at', d)} ${textColumn(d, 64)}`,
+    sql`alter table ${variants} add column ${identifier('sale_ends_at', d)} ${textColumn(d, 64)}`,
+    // Task 5: physical dimensions, in millimetres — integers for the same
+    // reason weight_grams already is (no decimal column means the same thing
+    // on all three dialects, ADR-0006).
+    sql`alter table ${variants} add column ${identifier('width_mm', d)} ${int}`,
+    sql`alter table ${variants} add column ${identifier('height_mm', d)} ${int}`,
+    sql`alter table ${variants} add column ${identifier('depth_mm', d)} ${int}`,
+  ]
+
+  for (const statement of statements) {
+    await db.query(statement).catch(() => undefined)
+  }
 }
 
 /**
@@ -576,6 +660,8 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
     ['cogenta_commerce_dunning_next_retry', TABLES.subscriptionDunning, 'next_retry_at'],
     ['cogenta_commerce_order_emails_order', TABLES.orderEmails, 'order_id'],
     ['cogenta_commerce_credit_notes_order', TABLES.creditNotes, 'order_id'],
+    ['cogenta_commerce_product_terms_product', TABLES.productTerms, 'product_id'],
+    ['cogenta_commerce_stock_movements_variant', TABLES.stockMovements, 'variant_id'],
   ]
 
   for (const [name, table, column] of wanted) {
@@ -591,5 +677,20 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
       // and a genuinely broken schema fails loudly on the next real query
       // rather than here.
     }
+  }
+
+  // A product cannot carry the same term twice — the write side (`setProductTerms`)
+  // already guarantees this by replacing the whole set, but the constraint is
+  // what actually protects the data on a caller this package does not control.
+  const productTermsUnique = identifier('cogenta_commerce_product_terms_unique', d)
+  const productTermsTable = identifier(TABLES.productTerms, d)
+  try {
+    await db.query(
+      d === 'mysql'
+        ? sql`create unique index ${productTermsUnique} on ${productTermsTable} (${identifier('product_id', d)}, ${identifier('taxonomy', d)}, ${identifier('term_id', d)})`
+        : sql`create unique index if not exists ${productTermsUnique} on ${productTermsTable} (${identifier('product_id', d)}, ${identifier('taxonomy', d)}, ${identifier('term_id', d)})`,
+    )
+  } catch {
+    // Already there.
   }
 }

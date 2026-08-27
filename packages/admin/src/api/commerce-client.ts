@@ -41,8 +41,39 @@ export interface Variant {
   readonly weightGrams: number
   readonly taxCategory: string
   readonly position: number
+  /** `null` means "not watched" — fiche 51 task 4. */
+  readonly lowStockThreshold: number | null
+  /** The "was" price, shown struck through. `null` means no promotion (fiche 51 task 5). */
+  readonly compareAtPriceMinor: number | null
+  readonly saleStartsAt: string | null
+  readonly saleEndsAt: string | null
+  readonly widthMm: number | null
+  readonly heightMm: number | null
+  readonly depthMm: number | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+/** A product's classification against a taxonomy the site declares (ADR-0022, fiche 51 task 3). */
+export interface ProductTerm {
+  readonly taxonomy: string
+  readonly termId: string
+}
+
+export const STOCK_MOVEMENT_REASONS = ['sale', 'restock', 'stock_take', 'manual'] as const
+export type StockMovementReason = (typeof STOCK_MOVEMENT_REASONS)[number]
+
+/** One row of a variant's append-only stock history (fiche 51 task 4). */
+export interface StockMovement {
+  readonly id: string
+  readonly variantId: string
+  readonly delta: number
+  readonly balanceAfter: number
+  readonly reason: StockMovementReason
+  readonly actorId: string | null
+  readonly referenceId: string | null
+  readonly note: string | null
+  readonly createdAt: string
 }
 
 export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
@@ -298,13 +329,29 @@ export interface CustomerDetail {
   readonly subscriptions: readonly Subscription[]
 }
 
+export type ProductSort = 'createdAt' | 'title' | 'handle'
+export type SortDirection = 'asc' | 'desc'
+
+export interface ListProductsFilter {
+  readonly status?: ProductStatus
+  readonly q?: string
+  readonly limit?: number
+  readonly offset?: number
+  readonly sort?: ProductSort
+  readonly direction?: SortDirection
+}
+
 export function listProducts(
   token: string,
-  filter: { readonly status?: ProductStatus; readonly q?: string } = {},
-): Promise<{ readonly products: readonly Product[] }> {
+  filter: ListProductsFilter = {},
+): Promise<{ readonly products: readonly Product[]; readonly hasMore: boolean }> {
   const params = new URLSearchParams()
   if (filter.status !== undefined) params.set('status', filter.status)
   if (filter.q !== undefined && filter.q !== '') params.set('q', filter.q)
+  if (filter.limit !== undefined) params.set('limit', String(filter.limit))
+  if (filter.offset !== undefined) params.set('offset', String(filter.offset))
+  if (filter.sort !== undefined) params.set('sort', filter.sort)
+  if (filter.direction !== undefined) params.set('direction', filter.direction)
   const query = params.toString()
   return requestBody(`/api/commerce/products${query === '' ? '' : `?${query}`}`, {
     headers: authHeader(token),
@@ -314,9 +361,104 @@ export function listProducts(
 export function readProduct(
   token: string,
   id: string,
-): Promise<{ readonly product: Product; readonly variants: readonly Variant[] }> {
+): Promise<{
+  readonly product: Product
+  readonly variants: readonly Variant[]
+  readonly terms: readonly ProductTerm[]
+}> {
   return requestBody(`/api/commerce/products/${encodeURIComponent(id)}`, {
     headers: authHeader(token),
+  })
+}
+
+/** The reverse of `contentRef` — what the content editor's own cross-link (fiche 51 task 1) asks. */
+export function findProductByContent(
+  token: string,
+  collection: string,
+  entryId: string,
+): Promise<{ readonly product: Product | null }> {
+  const params = new URLSearchParams({ collection, entryId })
+  return requestBody(`/api/commerce/products/by-content?${params.toString()}`, {
+    headers: authHeader(token),
+  })
+}
+
+/** Replaces everything a product carries in `taxonomy` with `termIds` (fiche 51 task 3). */
+export function setProductTerms(
+  token: string,
+  productId: string,
+  taxonomy: string,
+  termIds: readonly string[],
+): Promise<{ readonly terms: readonly ProductTerm[] }> {
+  return requestBody(`/api/commerce/products/${encodeURIComponent(productId)}/terms`, {
+    method: 'PUT',
+    headers: authHeader(token),
+    body: JSON.stringify({ taxonomy, termIds }),
+  })
+}
+
+export function listLowStockVariants(
+  token: string,
+): Promise<{ readonly variants: readonly Variant[] }> {
+  return requestBody('/api/commerce/variants/low-stock', { headers: authHeader(token) })
+}
+
+export function listStockMovements(
+  token: string,
+  variantId: string,
+): Promise<{ readonly movements: readonly StockMovement[] }> {
+  return requestBody(`/api/commerce/variants/${encodeURIComponent(variantId)}/stock-movements`, {
+    headers: authHeader(token),
+  })
+}
+
+export function exportProductsCsv(
+  token: string,
+): Promise<{ readonly csv: string; readonly filename: string }> {
+  return requestBody('/api/commerce/products/export', { headers: authHeader(token) })
+}
+
+export interface ProductImportIssue {
+  readonly line: number
+  readonly detail: string
+}
+
+export type ProductImportOutcomeKind = 'create' | 'update' | 'duplicate'
+
+export interface ProductImportRowOutcome {
+  readonly line: number
+  readonly handle: string
+  readonly sku: string
+  readonly outcome: ProductImportOutcomeKind
+  readonly detail?: string
+}
+
+export interface ProductImportPreview {
+  readonly rows: readonly ProductImportRowOutcome[]
+  readonly issues: readonly ProductImportIssue[]
+  readonly summary: Readonly<Record<string, number>>
+}
+
+export interface ProductImportResult {
+  readonly created: number
+  readonly updated: number
+  readonly skipped: number
+  readonly failed: readonly ProductImportIssue[]
+}
+
+export function previewProductsImport(token: string, csv: string): Promise<ProductImportPreview> {
+  return requestBody('/api/commerce/products/import', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ csv }),
+  })
+}
+
+export function applyProductsImport(token: string, csv: string): Promise<ProductImportResult> {
+  return requestBody('/api/commerce/products/import', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ csv, apply: true }),
   })
 }
 
@@ -334,7 +476,13 @@ export function createProduct(
 export function updateProduct(
   token: string,
   id: string,
-  changes: { readonly handle?: string; readonly title?: string; readonly status?: ProductStatus },
+  changes: {
+    readonly handle?: string
+    readonly title?: string
+    readonly status?: ProductStatus
+    /** `null` unlinks, an object links, omitted leaves it alone (fiche 51 task 1). */
+    readonly contentRef?: { readonly collection: string; readonly entryId: string } | null
+  },
 ): Promise<Product> {
   return requestBody(`/api/commerce/products/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -350,6 +498,20 @@ export async function archiveProduct(token: string, id: string): Promise<void> {
   })
 }
 
+/** The optional fields tasks 4-5 added — nullable everywhere, `undefined` left out of the request entirely rather than sent as `null` (which would *clear* an existing value on an update). */
+export interface VariantExtraFields {
+  readonly allowBackorder?: boolean
+  readonly weightGrams?: number
+  readonly taxCategory?: string
+  readonly lowStockThreshold?: number | null
+  readonly compareAtPriceMinor?: number | null
+  readonly saleStartsAt?: string | null
+  readonly saleEndsAt?: string | null
+  readonly widthMm?: number | null
+  readonly heightMm?: number | null
+  readonly depthMm?: number | null
+}
+
 export function createVariant(
   token: string,
   productId: string,
@@ -359,7 +521,7 @@ export function createVariant(
     readonly priceMinor: number
     readonly currency: string
     readonly onHand?: number
-  },
+  } & VariantExtraFields,
 ): Promise<Variant> {
   return requestBody(`/api/commerce/products/${encodeURIComponent(productId)}/variants`, {
     method: 'POST',
@@ -375,8 +537,7 @@ export function updateVariant(
     readonly sku?: string
     readonly title?: string
     readonly priceMinor?: number
-    readonly allowBackorder?: boolean
-  },
+  } & VariantExtraFields,
 ): Promise<Variant> {
   return requestBody(`/api/commerce/variants/${encodeURIComponent(id)}`, {
     method: 'PATCH',

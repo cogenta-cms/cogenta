@@ -29,6 +29,14 @@ export type {
 export { CART_STATUSES, CART_TTL_MS, couponRefusal, createCartStore } from './cart/store.js'
 export type { Totals, TotalsInput, TotalsLine, TotalsLineInput } from './cart/totals.js'
 export { computeTotals } from './cart/totals.js'
+export type {
+  ProductImportIssue,
+  ProductImportOutcomeKind,
+  ProductImportPreview,
+  ProductImportResult,
+  ProductImportRowOutcome,
+} from './catalog/csv.js'
+export { applyProductsImport, exportProductsCsv, previewProductsImport } from './catalog/csv.js'
 export type { CatalogStore, ProductListOptions, StockOutcome } from './catalog/store.js'
 export { createCatalogStore } from './catalog/store.js'
 export type {
@@ -37,13 +45,17 @@ export type {
   CreateVariantInput,
   Product,
   ProductStatus,
+  ProductTerm,
+  StockMovement,
+  StockMovementOptions,
+  StockMovementReason,
   StockRequest,
   StockShortfall,
   UpdateProductInput,
   UpdateVariantInput,
   Variant,
 } from './catalog/types.js'
-export { PRODUCT_STATUSES } from './catalog/types.js'
+export { isOnSale, PRODUCT_STATUSES, STOCK_MOVEMENT_REASONS } from './catalog/types.js'
 export type {
   Coupon,
   CouponCheck,

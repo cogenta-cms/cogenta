@@ -869,7 +869,9 @@ partir du schéma déclaré par le site, donc le lien est vérifié en code appl
 
 ```
 Product       handle unique, titre de repli, statut (active | archived), contentRef
-Variant       sku unique, prix, devise, stock, backorder autorisé, poids, catégorie fiscale
+Variant       sku unique, prix, devise, stock, backorder autorisé, poids, catégorie fiscale,
+              seuil de stock bas, prix barré + fenêtre de promo, dimensions (mm) — tous
+              facultatifs, nuls par défaut
 Customer      email unique, nom, lien optionnel vers un compte @cogenta/auth
 Cart          persistant, une devise, lignes, zone de livraison, méthode, coupon
 Order         référence unique, lignes copiées, statut, historique append-only,
@@ -884,6 +886,12 @@ CreditNote    un par remboursement (jamais par commande), sa propre série
               séquentielle (fiche 52)
 Subscription  intervalle, prix convenu, cycles idempotents par période, statut
               active | past_due | paused | cancelled (fiche 53)
+ProductTerm   produit × taxonomie × terme (ADR-0022) — jamais une clé étrangère vers la
+              table de termes, pour la même raison que contentRef : cette table appartient
+              à un schéma que le contrat E ne connaît pas
+StockMovement append-only — delta, solde résultant, raison (sale | restock | stock_take |
+              manual), acteur et référence facultatifs ; jamais modifié après écriture,
+              une seule ligne par écriture de stock (setStock/restock/takeStock)
 ```
 
 Aucun de ces objets ne porte `status` de contenu, `version`, `translationOf` ni
@@ -941,6 +949,12 @@ commerce.payment.settle  commerce.order.refund     commerce.invoice.issue
 `commerce.payment.settle` (l'argent entre) et `commerce.order.refund` (l'argent sort)
 sont séparées à dessein : le remboursement est la seule action qui sort des fonds de
 l'entreprise sans contresignature.
+
+**Décision tranchée (fiche 51 tâche 3)** : classer un produit contre une taxonomie du
+site (ADR-0022) est gouverné par `commerce.catalog.write`, pas par `canTerm` du contrat
+A. Catégoriser un produit est un geste de catalogue au même titre que son prix ou son
+stock ; réutiliser `canTerm` aurait couplé ce routeur à une seconde couche de permissions
+sans rapport, pour un seul champ.
 
 ### Driver de paiement
 

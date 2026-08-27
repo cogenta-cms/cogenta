@@ -1,9 +1,15 @@
 # 51 — Cogenta Commerce : catalogue
 
-> **État** : socle solide (concurrence de stock prouvée par test réel + contre-test
-> naïf), mais le store supporte déjà recherche/filtre/pagination que l'écran
-> n'expose pas. Aucune image, catégorie, dimension ou prix barré côté modèle.
-> **Fichiers** : `packages/commerce/src/catalog/{store,types}.ts`,
+> **État** : **FAIT — les 6 tâches.** `contentRef` branché des deux côtés (produit →
+> contenu et contenu → produit, cross-link dans l'éditeur d'entrée) ; recherche/tri/
+> pagination exposés en bout en bout (store → routeur → écran) ; classification par
+> taxonomie (`commerce.catalog.write`, décision tranchée — voir § 7) ; seuil de stock
+> bas + historique de mouvement append-only ; prix barré/promo + dimensions ; import/
+> export CSV avec correspondance de colonnes par nom et prévisualisation obligatoire.
+> Tests réels : SQLite (212 tests `@cogenta/commerce`, 18 tests e2e `@cogenta/cli`,
+> 10 tests écran admin) ; Postgres/MySQL/MariaDB écrits dans la même suite de contrat
+> mais non exécutés cette session (Docker indisponible).
+> **Fichiers** : `packages/commerce/src/catalog/{store,types,csv}.ts`,
 > `packages/admin/src/routes/commerce-products.tsx`, `packages/commerce/src/admin/router.ts`
 > **Effort** : 6–7 jours
 > **ADR requise** : non — extensions additives du contrat E (acté, non figé)
@@ -83,5 +89,12 @@ permission gouvernante est `commerce.catalog.write` ou `canTerm` (recommandation
 
 ## 7. Décisions à trancher
 
-Permission gouvernant la catégorisation produit (`commerce.catalog.write` vs
-`canTerm`) — tâche 3, avant de coder.
+**Tranchée** : permission gouvernant la catégorisation produit →
+**`commerce.catalog.write`**, pas `canTerm`. Catégoriser un produit est un geste de
+catalogue au même titre que son prix ou son stock ; réutiliser `canTerm` du contrat A
+aurait couplé le routeur commerce à une seconde couche de permissions sans rapport,
+pour un seul champ — et `commerce.catalog.write` est déjà la permission de tout le
+reste de l'édition catalogue (prix, stock, taxe, livraison). Le lien produit↔terme
+passe par une nouvelle table de jointure (`cogenta_commerce_product_terms`), jamais
+une clé étrangère vers la table de termes d'une taxonomie — même raisonnement que
+`contentRef`, documenté dans `docs/04-contrats.md` § Contrat E.

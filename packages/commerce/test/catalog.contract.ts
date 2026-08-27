@@ -27,7 +27,12 @@ export function runCatalogContract(label: string, open: () => Promise<CatalogFix
         db = fixture.db
         await ensureCommerceTables(db)
       }
-      for (const table of [TABLES.variants, TABLES.products]) {
+      for (const table of [
+        TABLES.stockMovements,
+        TABLES.productTerms,
+        TABLES.variants,
+        TABLES.products,
+      ]) {
         await db.query({ parts: [`delete from ${quote(table, db.dialect)}`], values: [] })
       }
       store = createCatalogStore(db)
@@ -190,6 +195,176 @@ export function runCatalogContract(label: string, open: () => Promise<CatalogFix
       expect((await store.listProducts({ search: 'FELT' })).map((p) => p.handle)).toEqual([
         'felt-hat',
       ])
+    })
+
+    // fiche 51 task 2: sortable, on top of the search/limit/offset the store
+    // already supported.
+    it('sorts products by title or handle, ascending or descending', async () => {
+      await store.createProduct({ handle: 'zebra', title: 'Zebra print' })
+      await store.createProduct({ handle: 'apple', title: 'Apple crate' })
+
+      expect(
+        (await store.listProducts({ sort: 'title', direction: 'asc' })).map((p) => p.handle),
+      ).toEqual(['apple', 'zebra'])
+      expect(
+        (await store.listProducts({ sort: 'handle', direction: 'desc' })).map((p) => p.handle),
+      ).toEqual(['zebra', 'apple'])
+    })
+
+    it('pages through products with limit and offset', async () => {
+      await store.createProduct({ handle: 'p1', title: 'P1' })
+      await store.createProduct({ handle: 'p2', title: 'P2' })
+      await store.createProduct({ handle: 'p3', title: 'P3' })
+
+      const firstPage = await store.listProducts({ sort: 'handle', direction: 'asc', limit: 2 })
+      expect(firstPage.map((p) => p.handle)).toEqual(['p1', 'p2'])
+
+      const secondPage = await store.listProducts({
+        sort: 'handle',
+        direction: 'asc',
+        limit: 2,
+        offset: 2,
+      })
+      expect(secondPage.map((p) => p.handle)).toEqual(['p3'])
+    })
+
+    // fiche 51 task 5: promo and dimensions round-trip through create/update.
+    it('carries a compare-at price, a sale window and dimensions on a variant', async () => {
+      const variant = await seedVariant(store, 4)
+      const updated = await store.updateVariant(variant.id, {
+        compareAtPriceMinor: 3999,
+        saleStartsAt: '2026-01-01T00:00:00.000Z',
+        saleEndsAt: '2026-01-31T23:59:59.000Z',
+        widthMm: 100,
+        heightMm: 50,
+        depthMm: 20,
+      })
+      expect(updated.compareAtPriceMinor).toBe(3999)
+      expect(updated.saleStartsAt).toBe('2026-01-01T00:00:00.000Z')
+      expect(updated.saleEndsAt).toBe('2026-01-31T23:59:59.000Z')
+      expect(updated.widthMm).toBe(100)
+      expect(updated.heightMm).toBe(50)
+      expect(updated.depthMm).toBe(20)
+
+      // Clearing a dimension explicitly (null) really clears it, distinct
+      // from leaving it out (undefined), which must leave it untouched.
+      const cleared = await store.updateVariant(variant.id, { compareAtPriceMinor: null })
+      expect(cleared.compareAtPriceMinor).toBeNull()
+      expect(cleared.widthMm).toBe(100)
+    })
+
+    it('refuses a negative dimension', async () => {
+      const variant = await seedVariant(store, 1)
+      await expect(store.updateVariant(variant.id, { widthMm: -5 })).rejects.toThrowError(
+        /whole, non-negative number/u,
+      )
+    })
+
+    // fiche 51 task 4: a threshold, and the list it feeds.
+    it('lists only variants at or below their own low-stock threshold', async () => {
+      const watched = await seedVariant(store, 3, 'WATCHED')
+      await store.updateVariant(watched.id, { lowStockThreshold: 5 })
+      // No threshold set — never "low stock", however little is on the shelf.
+      await seedVariant(store, 1, 'UNWATCHED')
+      const healthy = await seedVariant(store, 50, 'HEALTHY')
+      await store.updateVariant(healthy.id, { lowStockThreshold: 5 })
+
+      const low = await store.listLowStock()
+      expect(low.map((v) => v.sku)).toEqual(['WATCHED'])
+    })
+
+    // fiche 51 task 4: every stock-moving method leaves a row, and never
+    // rewrites an earlier one. A hand-ticked clock, not the real one: two
+    // calls in the same test can otherwise land on the same millisecond
+    // (SQLite's `created_at` is text, and the id tie-break is not a promise
+    // this test wants to depend on), which would make "most recent first"
+    // flaky rather than actually wrong.
+    it('records a stock movement for a sale, a restock and a stock take', async () => {
+      let tick = 1_700_000_000_000
+      const clocked = createCatalogStore(db, () => (tick += 1))
+      const variant = await seedVariant(clocked, 10, 'MOVES')
+
+      await clocked.takeStock([{ variantId: variant.id, quantity: 3 }])
+      await clocked.restock([{ variantId: variant.id, quantity: 1 }])
+      await clocked.setStock(variant.id, 20)
+
+      const history = await clocked.listStockMovements(variant.id)
+      expect(history).toHaveLength(3)
+      // Most recent first.
+      expect(history.map((m) => m.reason)).toEqual(['stock_take', 'restock', 'sale'])
+      expect(history.map((m) => m.delta)).toEqual([12, 1, -3])
+      expect(history.map((m) => m.balanceAfter)).toEqual([20, 8, 7])
+    })
+
+    it('never records a movement for a sale that a shortfall rolled back', async () => {
+      const variant = await seedVariant(store, 1, 'SHORT')
+      const outcome = await store.takeStock([{ variantId: variant.id, quantity: 5 }])
+      expect(outcome.kind).toBe('short')
+      expect(await store.listStockMovements(variant.id)).toHaveLength(0)
+    })
+
+    it('keeps every earlier stock movement byte-for-byte after later ones are written', async () => {
+      let tick = 1_700_000_000_000
+      const clocked = createCatalogStore(db, () => (tick += 1))
+      const variant = await seedVariant(clocked, 100, 'HISTORY')
+      await clocked.takeStock([{ variantId: variant.id, quantity: 1 }])
+      const [firstRecorded] = await clocked.listStockMovements(variant.id)
+
+      await clocked.takeStock([{ variantId: variant.id, quantity: 1 }])
+      await clocked.restock([{ variantId: variant.id, quantity: 5 }])
+      await clocked.setStock(variant.id, 50)
+
+      const after = await clocked.listStockMovements(variant.id)
+      const same = after.find((movement) => movement.id === firstRecorded?.id)
+      // No update/delete exists on this store for a movement — this asserts
+      // the row a caller cannot even try to touch is still exactly what it
+      // was the moment it was written.
+      expect(same).toEqual(firstRecorded)
+    })
+
+    // fiche 51 task 3: a product's classification, kept apart from any one
+    // taxonomy's own term table (this package never owns one).
+    it('classifies a product against a taxonomy, replacing the whole set on the next call', async () => {
+      const product = await store.createProduct({ handle: 'jacket', title: 'Jacket' })
+
+      const first = await store.setProductTerms(product.id, 'category', ['t-outerwear', 't-new'])
+      expect(first.map((term) => term.termId).sort()).toEqual(['t-new', 't-outerwear'])
+      expect(await store.listProductTerms(product.id)).toEqual(first)
+
+      // Replaces, does not append.
+      const second = await store.setProductTerms(product.id, 'category', ['t-outerwear'])
+      expect(second.map((term) => term.termId)).toEqual(['t-outerwear'])
+    })
+
+    it('keeps two taxonomies on the same product independent', async () => {
+      const product = await store.createProduct({ handle: 'mug', title: 'Mug' })
+      await store.setProductTerms(product.id, 'category', ['t-kitchen'])
+      await store.setProductTerms(product.id, 'brand', ['t-acme'])
+
+      const terms = await store.listProductTerms(product.id)
+      expect(terms.map((t) => `${t.taxonomy}:${t.termId}`).sort()).toEqual([
+        'brand:t-acme',
+        'category:t-kitchen',
+      ])
+
+      // Replacing "category" must not disturb "brand".
+      await store.setProductTerms(product.id, 'category', [])
+      const after = await store.listProductTerms(product.id)
+      expect(after).toEqual([{ taxonomy: 'brand', termId: 't-acme' }])
+    })
+
+    // fiche 51 task 1: the reverse of `contentRef`, for the content editor's
+    // own cross-link back to the commercial record.
+    it('finds a product by the content entry it is linked to', async () => {
+      await store.createProduct({
+        handle: 'linked',
+        title: 'Linked',
+        contentRef: { collection: 'product', entryId: 'entry-42' },
+      })
+
+      const found = await store.readProductByContentRef('product', 'entry-42')
+      expect(found?.handle).toBe('linked')
+      expect(await store.readProductByContentRef('product', 'no-such-entry')).toBeNull()
     })
   })
 }

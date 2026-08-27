@@ -1654,7 +1654,7 @@ export function installMockFetch(
     handle: string
     title: string
     status: 'active' | 'archived'
-    contentRef: null
+    contentRef: { collection: string; entryId: string } | null
     createdAt: string
     updatedAt: string
   }
@@ -1670,8 +1670,31 @@ export function installMockFetch(
     weightGrams: number
     taxCategory: string
     position: number
+    lowStockThreshold: number | null
+    compareAtPriceMinor: number | null
+    saleStartsAt: string | null
+    saleEndsAt: string | null
+    widthMm: number | null
+    heightMm: number | null
+    depthMm: number | null
     createdAt: string
     updatedAt: string
+  }
+  interface MockProductTerm {
+    productId: string
+    taxonomy: string
+    termId: string
+  }
+  interface MockStockMovement {
+    id: string
+    variantId: string
+    delta: number
+    balanceAfter: number
+    reason: 'sale' | 'restock' | 'stock_take' | 'manual'
+    actorId: string | null
+    referenceId: string | null
+    note: string | null
+    createdAt: string
   }
   interface MockCoupon {
     code: string
@@ -1713,8 +1736,11 @@ export function installMockFetch(
   }
   let mockProductCounter = 0
   let mockVariantCounter = 0
+  let mockStockMovementCounter = 0
   const mockProducts: MockProduct[] = []
   const mockVariants: MockVariant[] = []
+  const mockProductTerms: MockProductTerm[] = []
+  const mockStockMovements: MockStockMovement[] = []
   const mockCoupons: MockCoupon[] = []
   let mockTaxRuleCounter = 0
   const mockTaxRules = [...(options.commerceTaxRules ?? [])]
@@ -5868,11 +5894,184 @@ export function installMockFetch(
           }
         }
 
-        // products
+        // products (fiche 51: search/sort/pagination, contentRef, terms, CSV)
+        if (segments[0] === 'products' && segments[1] === 'export' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const header =
+              'handle,title,status,sku,variant,price,currency,onhand,allowbackorder,weightgrams,taxcategory,lowstockthreshold,compareprice,salestartsat,saleendsat,widthmm,heightmm,depthmm'
+            const rows = mockProducts.flatMap((product) =>
+              mockVariants
+                .filter((variant) => variant.productId === product.id)
+                .map((variant) =>
+                  [
+                    product.handle,
+                    product.title,
+                    product.status,
+                    variant.sku,
+                    variant.title,
+                    (variant.priceMinor / 100).toFixed(2),
+                    variant.currency,
+                    String(variant.onHand),
+                    String(variant.allowBackorder),
+                    String(variant.weightGrams),
+                    variant.taxCategory,
+                    variant.lowStockThreshold === null ? '' : String(variant.lowStockThreshold),
+                    variant.compareAtPriceMinor === null
+                      ? ''
+                      : (variant.compareAtPriceMinor / 100).toFixed(2),
+                    variant.saleStartsAt ?? '',
+                    variant.saleEndsAt ?? '',
+                    variant.widthMm === null ? '' : String(variant.widthMm),
+                    variant.heightMm === null ? '' : String(variant.heightMm),
+                    variant.depthMm === null ? '' : String(variant.depthMm),
+                  ].join(','),
+                ),
+            )
+            return json(200, { csv: [header, ...rows].join('\r\n'), filename: 'products.csv' })
+          }
+        }
+        if (segments[0] === 'products' && segments[1] === 'import' && segments.length === 2) {
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const csv: string = typeof body.csv === 'string' ? body.csv : ''
+            const apply = body.apply === true
+            const lines = csv.split(/\r?\n/u).filter((line) => line.trim() !== '')
+            const header = (lines[0] ?? '').split(',').map((cell) => cell.trim().toLowerCase())
+            const index = (name: string): number => header.indexOf(name)
+            const rows = lines.slice(1).map((line, offset) => {
+              const cells = line.split(',')
+              const cell = (name: string): string => (cells[index(name)] ?? '').trim()
+              const sku = cell('sku')
+              const existing = mockVariants.find((candidate) => candidate.sku === sku)
+              return {
+                line: offset + 2,
+                handle: cell('handle'),
+                sku,
+                title: cell('title'),
+                priceMinor: Math.round(Number(cell('price')) * 100),
+                currency: cell('currency') || 'EUR',
+                onHand: cell('onhand') === '' ? 0 : Number(cell('onhand')),
+                outcome: existing === undefined ? ('create' as const) : ('update' as const),
+              }
+            })
+            if (!apply) {
+              return json(200, {
+                rows: rows.map((row) => ({
+                  line: row.line,
+                  handle: row.handle,
+                  sku: row.sku,
+                  outcome: row.outcome,
+                })),
+                issues: [],
+                summary: {
+                  create: rows.filter((r) => r.outcome === 'create').length,
+                  update: rows.filter((r) => r.outcome === 'update').length,
+                  duplicate: 0,
+                  invalid: 0,
+                },
+              })
+            }
+            let created = 0
+            let updated = 0
+            for (const row of rows) {
+              let product = mockProducts.find((candidate) => candidate.handle === row.handle)
+              if (product === undefined) {
+                mockProductCounter += 1
+                product = {
+                  id: `product-${mockProductCounter}`,
+                  handle: row.handle,
+                  title: row.title,
+                  status: 'active',
+                  contentRef: null,
+                  createdAt: '2026-03-01T00:00:00.000Z',
+                  updatedAt: '2026-03-01T00:00:00.000Z',
+                }
+                mockProducts.push(product)
+              }
+              const existing = mockVariants.find((candidate) => candidate.sku === row.sku)
+              if (existing === undefined) {
+                mockVariantCounter += 1
+                mockVariants.push({
+                  id: `variant-${mockVariantCounter}`,
+                  productId: product.id,
+                  sku: row.sku,
+                  title: row.title,
+                  priceMinor: row.priceMinor,
+                  currency: row.currency,
+                  onHand: row.onHand,
+                  allowBackorder: false,
+                  weightGrams: 0,
+                  taxCategory: 'standard',
+                  position: 0,
+                  lowStockThreshold: null,
+                  compareAtPriceMinor: null,
+                  saleStartsAt: null,
+                  saleEndsAt: null,
+                  widthMm: null,
+                  heightMm: null,
+                  depthMm: null,
+                  createdAt: '2026-03-01T00:00:00.000Z',
+                  updatedAt: '2026-03-01T00:00:00.000Z',
+                })
+                created += 1
+              } else {
+                existing.priceMinor = row.priceMinor
+                existing.onHand = row.onHand
+                updated += 1
+              }
+            }
+            return json(200, { created, updated, skipped: 0, failed: [] })
+          }
+        }
+        if (segments[0] === 'products' && segments[1] === 'by-content' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const collection = parsed.searchParams.get('collection')
+            const entryId = parsed.searchParams.get('entryId')
+            const found =
+              mockProducts.find(
+                (candidate) =>
+                  candidate.contentRef?.collection === collection &&
+                  candidate.contentRef.entryId === entryId,
+              ) ?? null
+            return json(200, { product: found })
+          }
+        }
         if (segments[0] === 'products' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
-          return json(200, { products: mockProducts })
+          const q = parsed.searchParams.get('q')
+          const status = parsed.searchParams.get('status')
+          const sort = parsed.searchParams.get('sort') ?? 'createdAt'
+          const direction = parsed.searchParams.get('direction') ?? 'desc'
+          const limit = Number(parsed.searchParams.get('limit') ?? '25')
+          const offset = Number(parsed.searchParams.get('offset') ?? '0')
+          let filtered = mockProducts.filter((product) => {
+            if (status !== null && product.status !== status) return false
+            if (q !== null && q !== '') {
+              const needle = q.toLowerCase()
+              if (
+                !product.title.toLowerCase().includes(needle) &&
+                !product.handle.toLowerCase().includes(needle)
+              ) {
+                return false
+              }
+            }
+            return true
+          })
+          filtered = [...filtered].sort((a, b) => {
+            const left = sort === 'title' ? a.title : sort === 'handle' ? a.handle : a.createdAt
+            const right = sort === 'title' ? b.title : sort === 'handle' ? b.handle : b.createdAt
+            const compared = left < right ? -1 : left > right ? 1 : 0
+            return direction === 'asc' ? compared : -compared
+          })
+          const page = filtered.slice(offset, offset + limit + 1)
+          const hasMore = page.length > limit
+          return json(200, { products: hasMore ? page.slice(0, limit) : page, hasMore })
         }
         if (segments[0] === 'products' && segments.length === 1 && method === 'POST') {
           const refused = commerceRefused('commerce.catalog.write')
@@ -5890,6 +6089,29 @@ export function installMockFetch(
           mockProducts.push(product)
           return json(201, product)
         }
+        if (segments[0] === 'products' && segments[2] === 'terms' && segments.length === 3) {
+          if (method === 'PUT') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const productId = segments[1] ?? ''
+            const taxonomy = String(body.taxonomy)
+            const termIds = Array.isArray(body.termIds) ? (body.termIds as string[]) : []
+            for (let i = mockProductTerms.length - 1; i >= 0; i -= 1) {
+              const entry = mockProductTerms[i]
+              if (
+                entry !== undefined &&
+                entry.productId === productId &&
+                entry.taxonomy === taxonomy
+              ) {
+                mockProductTerms.splice(i, 1)
+              }
+            }
+            for (const termId of termIds) mockProductTerms.push({ productId, taxonomy, termId })
+            return json(200, {
+              terms: mockProductTerms.filter((entry) => entry.productId === productId),
+            })
+          }
+        }
         if (segments[0] === 'products' && segments.length === 2 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
@@ -5905,6 +6127,7 @@ export function installMockFetch(
           return json(200, {
             product,
             variants: mockVariants.filter((variant) => variant.productId === product.id),
+            terms: mockProductTerms.filter((entry) => entry.productId === product.id),
           })
         }
         if (segments[0] === 'products' && segments.length === 2 && method === 'PATCH') {
@@ -5922,6 +6145,12 @@ export function installMockFetch(
           if (typeof body.title === 'string') product.title = body.title
           if (typeof body.handle === 'string') product.handle = body.handle
           if (body.status === 'active' || body.status === 'archived') product.status = body.status
+          if ('contentRef' in body) {
+            product.contentRef =
+              body.contentRef === null
+                ? null
+                : (body.contentRef as { collection: string; entryId: string })
+          }
           return json(200, product)
         }
         if (segments[0] === 'products' && segments.length === 2 && method === 'DELETE') {
@@ -5933,6 +6162,34 @@ export function installMockFetch(
         }
 
         // variants
+        if (segments[0] === 'variants' && segments[1] === 'low-stock' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, {
+              variants: mockVariants.filter(
+                (variant) =>
+                  variant.lowStockThreshold !== null && variant.onHand <= variant.lowStockThreshold,
+              ),
+            })
+          }
+        }
+        if (
+          segments[0] === 'variants' &&
+          segments[2] === 'stock-movements' &&
+          segments.length === 3
+        ) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, {
+              movements: mockStockMovements
+                .filter((movement) => movement.variantId === segments[1])
+                .slice()
+                .reverse(),
+            })
+          }
+        }
         if (segments[0] === 'products' && segments[2] === 'variants' && method === 'POST') {
           const refused = commerceRefused('commerce.catalog.write')
           if (refused !== null) return refused
@@ -5945,10 +6202,19 @@ export function installMockFetch(
             priceMinor: Number(body.priceMinor),
             currency: String(body.currency),
             onHand: typeof body.onHand === 'number' ? body.onHand : 0,
-            allowBackorder: false,
-            weightGrams: 0,
-            taxCategory: 'standard',
+            allowBackorder: typeof body.allowBackorder === 'boolean' ? body.allowBackorder : false,
+            weightGrams: typeof body.weightGrams === 'number' ? body.weightGrams : 0,
+            taxCategory: typeof body.taxCategory === 'string' ? body.taxCategory : 'standard',
             position: 0,
+            lowStockThreshold:
+              typeof body.lowStockThreshold === 'number' ? body.lowStockThreshold : null,
+            compareAtPriceMinor:
+              typeof body.compareAtPriceMinor === 'number' ? body.compareAtPriceMinor : null,
+            saleStartsAt: typeof body.saleStartsAt === 'string' ? body.saleStartsAt : null,
+            saleEndsAt: typeof body.saleEndsAt === 'string' ? body.saleEndsAt : null,
+            widthMm: typeof body.widthMm === 'number' ? body.widthMm : null,
+            heightMm: typeof body.heightMm === 'number' ? body.heightMm : null,
+            depthMm: typeof body.depthMm === 'number' ? body.depthMm : null,
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
           }
@@ -5971,6 +6237,29 @@ export function installMockFetch(
           if (typeof body.sku === 'string') variant.sku = body.sku
           if (typeof body.title === 'string') variant.title = body.title
           if (typeof body.allowBackorder === 'boolean') variant.allowBackorder = body.allowBackorder
+          if (typeof body.weightGrams === 'number') variant.weightGrams = body.weightGrams
+          if (typeof body.taxCategory === 'string') variant.taxCategory = body.taxCategory
+          if ('lowStockThreshold' in body) {
+            variant.lowStockThreshold =
+              typeof body.lowStockThreshold === 'number' ? body.lowStockThreshold : null
+          }
+          if ('compareAtPriceMinor' in body) {
+            variant.compareAtPriceMinor =
+              typeof body.compareAtPriceMinor === 'number' ? body.compareAtPriceMinor : null
+          }
+          if ('saleStartsAt' in body) {
+            variant.saleStartsAt = typeof body.saleStartsAt === 'string' ? body.saleStartsAt : null
+          }
+          if ('saleEndsAt' in body) {
+            variant.saleEndsAt = typeof body.saleEndsAt === 'string' ? body.saleEndsAt : null
+          }
+          if ('widthMm' in body)
+            variant.widthMm = typeof body.widthMm === 'number' ? body.widthMm : null
+          if ('heightMm' in body) {
+            variant.heightMm = typeof body.heightMm === 'number' ? body.heightMm : null
+          }
+          if ('depthMm' in body)
+            variant.depthMm = typeof body.depthMm === 'number' ? body.depthMm : null
           return json(200, variant)
         }
         if (segments[0] === 'variants' && segments.length === 2 && method === 'DELETE') {
@@ -5992,7 +6281,23 @@ export function installMockFetch(
               },
             })
           }
-          variant.onHand = Number(body.onHand)
+          const onHand = Number(body.onHand)
+          const delta = onHand - variant.onHand
+          variant.onHand = onHand
+          if (delta !== 0) {
+            mockStockMovementCounter += 1
+            mockStockMovements.push({
+              id: `movement-${mockStockMovementCounter}`,
+              variantId: variant.id,
+              delta,
+              balanceAfter: onHand,
+              reason: 'stock_take',
+              actorId: null,
+              referenceId: null,
+              note: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+            })
+          }
           return json(200, variant)
         }
 

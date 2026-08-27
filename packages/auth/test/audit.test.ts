@@ -75,6 +75,30 @@ describe('AuditLog', () => {
     expect((await audit.list({ collection: 'page' })).length).toBe(1)
   })
 
+  it('the `before` cursor (fiche 67 task 1) excludes the named position and everything newer', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const audit = createAuditLog(db, () => clock)
+
+    const first = await audit.record({ actorId: 'user-1', actorRoles: [], action: 'first' })
+    clock += 1_000
+    const second = await audit.record({ actorId: 'user-1', actorRoles: [], action: 'second' })
+    clock += 1_000
+    await audit.record({ actorId: 'user-1', actorRoles: [], action: 'third' })
+
+    // Positioned at "second"'s own (at, id): only "first" is strictly older.
+    const before = await audit.list({ before: { at: second.at, id: second.id } })
+    expect(before.map((e) => e.action)).toEqual(['first'])
+
+    // Positioned at "first"'s own (at, id) — the earliest entry: nothing is older.
+    const beforeEarliest = await audit.list({ before: { at: first.at, id: first.id } })
+    expect(beforeEarliest).toEqual([])
+
+    // Positioned well after everything: every entry qualifies.
+    const beforeLatest = await audit.list({ before: { at: '9999-01-01T00:00:00.000Z', id: 'zzz' } })
+    expect(beforeLatest.map((e) => e.action)).toEqual(['third', 'second', 'first'])
+  })
+
   it('verify() passes on an untouched chain', async () => {
     const db = await testDb()
     const audit = createAuditLog(db)

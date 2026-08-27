@@ -144,6 +144,38 @@ describe('rotating an API key (fiche 20 task 2)', () => {
   })
 })
 
+describe('pagination (fiche 67 task 5)', () => {
+  it('loads a further page of keys on demand, rather than all of them at once', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // The seed already has one key ("CI pipeline") — thirty more push the
+    // total past the screen's page size (25), so a second page exists.
+    for (let index = 0; index < 30; index += 1) {
+      await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${VALID_TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ name: `Extra key ${index}`, scope: ['viewer'] }),
+      })
+    }
+
+    await goToApiKeys()
+    await screen.findByText('CI pipeline')
+
+    // Still on the first page: the most recently created key is not shown yet.
+    expect(screen.queryByText('Extra key 29')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Charger plus' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Extra key 29')).toBeDefined()
+    })
+  })
+})
+
 describe('the API key list, for accessibility', () => {
   it('has no serious accessibility violation', async () => {
     const { container } = render(<App />)

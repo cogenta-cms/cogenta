@@ -62,12 +62,23 @@ export function runScheduledTaskNow(token: string, name: string): Promise<Schedu
   })
 }
 
+export interface QueueListOptions {
+  readonly status?: QueueJobStatus
+  /** Fiche 67 task 3 — how wide a window the "File" screen fetches before paging it client-side. */
+  readonly limit?: number
+}
+
 export function listScheduledTaskQueue(
   token: string,
-  status?: QueueJobStatus,
+  options: QueueListOptions = {},
 ): Promise<{ readonly jobs: readonly QueueJob[] }> {
-  const query = status === undefined ? '' : `?status=${encodeURIComponent(status)}`
-  return request(`/api/scheduled-tasks/queue${query}`, { headers: authHeader(token) })
+  const params = new URLSearchParams()
+  if (options.status !== undefined) params.set('status', options.status)
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return request(`/api/scheduled-tasks/queue${query === '' ? '' : `?${query}`}`, {
+    headers: authHeader(token),
+  })
 }
 
 export function retryScheduledTaskJob(

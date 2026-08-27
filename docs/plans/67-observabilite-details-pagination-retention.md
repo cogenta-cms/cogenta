@@ -1,10 +1,21 @@
 # 67 — Observabilité : détails de requêtes, pagination transverse, rétention
 
-> **État** : rétention actuelle = un ring buffer **en mémoire process** (500
-> traces/500 logs), jamais persisté, remis à zéro à chaque redémarrage — pas une
-> politique en jours. Aucun composant de pagination réutilisable n'existe nulle
-> part dans l'admin ; deux motifs ad hoc coexistent. Cette fiche construit la
-> fondation pagination consommée par 46, 47, 61, 62.
+> **État (mise à jour)** : Tâches 1-3 **faites**. `packages/admin/src/ui/pagination.tsx`
+> existe (les deux variantes, curseur et pages), consommé par `users.tsx`/`media.tsx`
+> (fait plus tôt), puis par `audit.tsx` (curseur — `AuditFilter` gagne `before`,
+> `GET /api/audit` gagne `page: {hasMore, nextCursor}` et `?after=`),
+> `observability.tsx` (pages, **côté client** — le ring buffer est déjà borné à 500
+> entrées, une seule requête suffit), `scheduled.tsx`'s section « File » (pages, côté
+> client sur une fenêtre élargie via le nouveau `?limit=` de `GET /api/scheduled-tasks/queue`,
+> jusqu'à 500 — pas de changement au contrat `QueueDriver`, les deux implémentations
+> respectaient déjà `ListJobsOptions.limit`), `form-submissions.tsx` (curseur — l'API
+> `GET /api/forms/submissions` supportait déjà `limit`/`cursor`, seul l'écran ne les
+> demandait jamais) et `api-keys.tsx` (curseur — `ApiKeyStore.list` gagne
+> `{limit?, offset?}`, absent des deux = tout, non paginé, comme avant). **Tâche 5
+> (rétention persistée) reste non faite** : la rétention est toujours un ring buffer
+> **en mémoire process** (500 traces/500 logs), jamais persisté, remis à zéro à chaque
+> redémarrage — pas une politique en jours. Détail de requête enrichi (tâche 7) : non
+> fait.
 > **Fichiers** : `packages/observability/src/{request-tracing,recent-store}.ts`,
 > `packages/admin/src/routes/observability.tsx`, nouveau
 > `packages/admin/src/ui/pagination.tsx`

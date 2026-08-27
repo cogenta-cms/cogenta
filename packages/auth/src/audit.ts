@@ -99,6 +99,17 @@ export interface AuditFilter {
   /** Task 4: narrows to one origin. See `classifyAuditActor`. */
   readonly actorKind?: AuditActorKind
   readonly limit?: number
+  /**
+   * Cursor pagination (fiche 67 task 1): strictly older than this
+   * `(at, id)` position in the `order by at desc, id desc` listing — the
+   * exact position the previous page's last row sat at. Same shape as the
+   * chain-verification checkpoint (`AuditChainPoint`) on purpose, but this
+   * is a *listing* cursor, never confused with a verified chain position:
+   * an unknown or stale `before` (the row it named was pruned since) simply
+   * yields an earlier page, the same "not a security boundary" behaviour
+   * `users-router.ts`'s cursor already documents.
+   */
+  readonly before?: { readonly at: string; readonly id: string }
 }
 
 /**
@@ -341,6 +352,11 @@ export function createAuditLog(db: DatabaseHandle, now: () => number = Date.now)
       if (filter.since !== undefined) conditions.push(sql`at >= ${filter.since}`)
       if (filter.until !== undefined) conditions.push(sql`at <= ${filter.until}`)
       if (filter.actorKind !== undefined) conditions.push(actorKindCondition(filter.actorKind))
+      if (filter.before !== undefined) {
+        conditions.push(
+          sql`(at < ${filter.before.at} or (at = ${filter.before.at} and id < ${filter.before.id}))`,
+        )
+      }
 
       const where = conditions.reduce((left, right) => sql`${left} and ${right}`)
       const result = await db.query<AuditRow>(sql`

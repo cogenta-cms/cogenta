@@ -113,6 +113,36 @@ describe('ApiKeyStore', () => {
     expect(listed.find((k) => k.name === 'first')?.revokedAt).not.toBeUndefined()
   })
 
+  it('pages the list with limit/offset, newest first, when asked (fiche 67 task 5)', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const keys = createApiKeyStore(db, () => clock)
+
+    for (let index = 0; index < 5; index += 1) {
+      await keys.create({ name: `key-${index}`, scope: ['viewer'], createdBy: null })
+      clock += 1_000
+    }
+
+    const firstPage = await keys.list({ limit: 2 })
+    expect(firstPage.map((k) => k.name)).toEqual(['key-4', 'key-3'])
+
+    const secondPage = await keys.list({ limit: 2, offset: 2 })
+    expect(secondPage.map((k) => k.name)).toEqual(['key-2', 'key-1'])
+
+    const lastPage = await keys.list({ limit: 2, offset: 4 })
+    expect(lastPage.map((k) => k.name)).toEqual(['key-0'])
+  })
+
+  it('still returns every key, unpaginated, when limit/offset are both omitted', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    for (let index = 0; index < 3; index += 1) {
+      await keys.create({ name: `key-${index}`, scope: ['viewer'], createdBy: null })
+    }
+
+    expect((await keys.list()).length).toBe(3)
+  })
+
   it('issues a different key every time, even for identical input', async () => {
     const db = await testDb()
     const keys = createApiKeyStore(db)

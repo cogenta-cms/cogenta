@@ -1,5 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  newId,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
 import { TABLES } from './tables.js'
 import type {
   ApiKey,
@@ -114,11 +121,22 @@ export interface RotateApiKeyOptions {
   readonly graceMs: number
 }
 
+/**
+ * Fiche 67 task 5. Both omitted (the historical call shape, `mcp.tsx`'s
+ * picker among others) still returns every key, unpaginated, byte for byte —
+ * this is additive, not a breaking change to an existing publishable
+ * interface.
+ */
+export interface ListApiKeysOptions {
+  readonly limit?: number
+  readonly offset?: number
+}
+
 export interface ApiKeyStore {
   /** Mints a key and returns the raw secret once. It is never stored or returned again. */
   create(input: CreateApiKeyInput): Promise<IssuedApiKey>
-  /** Never the raw key or its hash — a prefix is all a list ever shows. */
-  list(): Promise<readonly ApiKey[]>
+  /** Never the raw key or its hash — a prefix is all a list ever shows. Newest first; `limit`/`offset` page it (fiche 67 task 5), both absent means "every key". */
+  list(options?: ListApiKeysOptions): Promise<readonly ApiKey[]>
   getById(id: string): Promise<ApiKey | null>
   revoke(id: string): Promise<void>
   /**
@@ -205,8 +223,12 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
   return {
     create,
 
-    list: async () => {
-      const result = await db.query<ApiKeyRow>(sql`select * from ${table} order by created_at desc`)
+    list: async (options) => {
+      let statement = sql`select * from ${table} order by created_at desc, id desc`
+      if (options?.limit !== undefined) {
+        statement = sql`${statement} limit ${sqlLimit(options.limit)} offset ${sqlLimit(options.offset ?? 0)}`
+      }
+      const result = await db.query<ApiKeyRow>(statement)
       return result.rows.map(fromRow)
     },
 

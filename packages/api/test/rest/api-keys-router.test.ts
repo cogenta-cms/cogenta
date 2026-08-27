@@ -544,6 +544,56 @@ describe('usage and hygiene (fiche 20 task 4)', () => {
   })
 })
 
+describe('pagination (fiche 67 task 5)', () => {
+  it("returns every key, unpaginated, when limit/offset are both omitted — mcp.tsx's picker relies on this", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await router().handle(
+        request('POST', '/api/api-keys', { name: `key-${index}`, scope: ['viewer'] }),
+        admin,
+      )
+      clock += 1_000
+    }
+
+    const listed = await router().handle(request('GET', '/api/api-keys'), admin)
+    expect(dataOf<readonly unknown[]>(listed)).toHaveLength(5)
+    expect((listed.body as { page?: { hasMore: boolean } }).page?.hasMore).toBe(false)
+  })
+
+  it('pages with limit/offset, newest first, and reports hasMore correctly', async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await router().handle(
+        request('POST', '/api/api-keys', { name: `key-${index}`, scope: ['viewer'] }),
+        admin,
+      )
+      clock += 1_000
+    }
+
+    const firstPage = await router().handle(
+      { method: 'GET', path: '/api/api-keys', query: { limit: '2' } },
+      admin,
+    )
+    const firstNames = dataOf<readonly { name: string }[]>(firstPage).map((k) => k.name)
+    expect(firstNames).toEqual(['key-4', 'key-3'])
+    expect((firstPage.body as { page: { hasMore: boolean } }).page.hasMore).toBe(true)
+
+    const lastPage = await router().handle(
+      { method: 'GET', path: '/api/api-keys', query: { limit: '2', offset: '4' } },
+      admin,
+    )
+    const lastNames = dataOf<readonly { name: string }[]>(lastPage).map((k) => k.name)
+    expect(lastNames).toEqual(['key-0'])
+    expect((lastPage.body as { page: { hasMore: boolean } }).page.hasMore).toBe(false)
+  })
+
+  it('rejects a limit past the ceiling', async () => {
+    const response = await router().handle(
+      { method: 'GET', path: '/api/api-keys', query: { limit: '10000' } },
+      admin,
+    )
+    expect(response.status).toBe(400)
+  })
+})
+
 describe('security: the raw key is never returned outside creation and rotation', () => {
   it('list, and every field on it, never carries "key"', async () => {
     const created = dataOf<{ key: string }>(

@@ -1,4 +1,4 @@
-import { authHeader, request } from './http.js'
+import { authHeader, request, requestBody } from './http.js'
 
 /**
  * `/api/api-keys` — machine-to-machine bearer credentials, L13 task 8;
@@ -41,8 +41,38 @@ export interface RotatedApiKey {
   readonly previous: AdminApiKey
 }
 
+/**
+ * Kept returning every key, unpaginated, byte for byte — `mcp.tsx`'s picker
+ * relies on the full list. `listApiKeysPage` below is the one the "Clés
+ * API" screen itself uses for real pagination (fiche 67 task 5).
+ */
 export function listApiKeys(token: string): Promise<readonly AdminApiKey[]> {
   return request('/api/api-keys', { headers: authHeader(token) })
+}
+
+export interface ListApiKeysOptions {
+  readonly limit?: number
+  readonly offset?: number
+}
+
+export interface ApiKeysPage {
+  readonly keys: readonly AdminApiKey[]
+  readonly hasMore: boolean
+}
+
+export async function listApiKeysPage(
+  token: string,
+  options: ListApiKeysOptions = {},
+): Promise<ApiKeysPage> {
+  const params = new URLSearchParams()
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.offset !== undefined) params.set('offset', String(options.offset))
+  const query = params.toString()
+  const response = await requestBody<{
+    data: readonly AdminApiKey[]
+    page: { hasMore: boolean }
+  }>(`/api/api-keys${query === '' ? '' : `?${query}`}`, { headers: authHeader(token) })
+  return { keys: response.data, hasMore: response.page.hasMore }
 }
 
 export interface CreateApiKeyInput {

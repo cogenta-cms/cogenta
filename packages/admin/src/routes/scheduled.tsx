@@ -12,7 +12,16 @@ import {
   type SchedulerMode,
 } from '../api/scheduled-tasks-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '../ui/index.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Modal,
+  Notice,
+  Pagination,
+} from '../ui/index.js'
 
 /**
  * "Tâches planifiées" — fiche 28 task 2.
@@ -21,7 +30,14 @@ import { Button, Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '..
  * `QueueDriver`, the same shape as `HealthRoute`/`ToolsRoute` (fiche 24).
  * "Exécuter maintenant" on a `destructive` task (the trash sweep) asks for
  * confirmation first — the fiche's own named pitfall.
+ *
+ * The "File" section (fiche 67 task 3) pages client-side over a wider fetch
+ * (`QUEUE_FETCH_LIMIT`) rather than a driver-level offset — see
+ * `scheduled-tasks-router.ts`'s comment on `MAX_QUEUE_LIST_LIMIT` for why.
  */
+
+const QUEUE_FETCH_LIMIT = 500
+const QUEUE_PAGE_SIZE = 25
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms} ms`
@@ -41,6 +57,7 @@ export function ScheduledRoute(): JSX.Element | null {
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<ScheduledTaskState | null>(null)
+  const [queuePage, setQueuePage] = useState(0)
   const [lastResult, setLastResult] = useState<{
     readonly name: string
     readonly summary: string | null
@@ -60,11 +77,12 @@ export function ScheduledRoute(): JSX.Element | null {
     try {
       const [{ mode: schedulerMode, tasks: list }, { jobs: queued }] = await Promise.all([
         listScheduledTasks(token),
-        listScheduledTaskQueue(token),
+        listScheduledTaskQueue(token, { limit: QUEUE_FETCH_LIMIT }),
       ])
       setMode(schedulerMode)
       setTasks(list)
       setJobs(queued)
+      setQueuePage(0)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('scheduled.loadError'))
     }
@@ -112,6 +130,19 @@ export function ScheduledRoute(): JSX.Element | null {
 
   const failedJobs = jobs.filter((job) => job.status === 'failed')
   const activeJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running')
+  // One window over "what needs attention" — active first (what is running
+  // right now), failed after (what needs a retry) — same order the two
+  // separate lists below have always rendered in, just windowed together.
+  const queueJobs = [...activeJobs, ...failedJobs]
+  const queuePageCount = Math.max(1, Math.ceil(queueJobs.length / QUEUE_PAGE_SIZE))
+  const visibleQueueJobs = queueJobs.slice(
+    queuePage * QUEUE_PAGE_SIZE,
+    (queuePage + 1) * QUEUE_PAGE_SIZE,
+  )
+  const visibleActiveJobs = visibleQueueJobs.filter(
+    (job) => job.status === 'pending' || job.status === 'running',
+  )
+  const visibleFailedJobs = visibleQueueJobs.filter((job) => job.status === 'failed')
 
   return (
     <section aria-labelledby="scheduled-heading" className="flex flex-col gap-6">
@@ -211,27 +242,42 @@ export function ScheduledRoute(): JSX.Element | null {
             <h2 id="scheduled-queue-heading">{t('scheduled.queueHeading')}</h2>
           </CardTitle>
         </CardHeader>
-        <CardBody>
+        <CardBody className="flex flex-col gap-3">
           {jobs.length === 0 ? (
             <p className="m-0 text-sm text-muted-foreground">{t('scheduled.queueEmpty')}</p>
           ) : (
-            <ul className="m-0 flex flex-col gap-1 pl-0 list-none text-sm">
-              {activeJobs.map((job) => (
-                <li key={job.id}>
-                  {job.id} — {t(`scheduled.jobStatus.${job.status}`)}
-                </li>
-              ))}
-              {failedJobs.map((job) => (
-                <li key={job.id} className="flex items-center gap-2">
-                  <span>
-                    {job.id} — {t('scheduled.jobStatus.failed')}
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={() => void retryJob(job.id)}>
-                    {t('scheduled.retryButton')}
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="m-0 flex flex-col gap-1 pl-0 list-none text-sm">
+                {visibleActiveJobs.map((job) => (
+                  <li key={job.id}>
+                    {job.id} — {t(`scheduled.jobStatus.${job.status}`)}
+                  </li>
+                ))}
+                {visibleFailedJobs.map((job) => (
+                  <li key={job.id} className="flex items-center gap-2">
+                    <span>
+                      {job.id} — {t('scheduled.jobStatus.failed')}
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={() => void retryJob(job.id)}>
+                      {t('scheduled.retryButton')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <Pagination
+                variant="pages"
+                page={queuePage}
+                pageCount={queuePageCount}
+                onPageChange={setQueuePage}
+                previousLabel={t('scheduled.previousPage')}
+                nextLabel={t('scheduled.nextPage')}
+                pageInfo={t('scheduled.queuePageInfo', {
+                  from: queueJobs.length === 0 ? 0 : queuePage * QUEUE_PAGE_SIZE + 1,
+                  to: Math.min(queueJobs.length, (queuePage + 1) * QUEUE_PAGE_SIZE),
+                  total: queueJobs.length,
+                })}
+              />
+            </>
           )}
         </CardBody>
       </Card>

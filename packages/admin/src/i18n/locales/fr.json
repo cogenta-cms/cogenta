@@ -1286,6 +1286,7 @@
     "markError": "La soumission n'a pas pu être mise à jour.",
     "gdprSearchError": "La recherche n'a pas pu être effectuée.",
     "gdprEraseError": "L'effacement n'a pas pu être effectué.",
+    "loadMore": "Charger plus",
     "filterForm": "Formulaire",
     "allForms": "Tous les formulaires",
     "filterStatus": "Statut",
@@ -1399,7 +1400,8 @@
     },
     "integrityOk": "Chaîne intacte lors de la dernière vérification.",
     "integrityBroken": "La vérification planifiée a trouvé la chaîne rompue à l'entrée {{entryId}}. Considérez comme non fiable toute entrée à partir de ce point.",
-    "retentionUnbounded": "Aucune purge n'est configurée pour ce journal : il conserve toutes les entrées et croît sans limite."
+    "retentionUnbounded": "Aucune purge n'est configurée pour ce journal : il conserve toutes les entrées et croît sans limite.",
+    "loadMore": "Charger plus"
   },
   "analytics": {
     "heading": "Statistiques",
@@ -2109,6 +2111,7 @@
     "adminOnly": "Réservé au rôle « admin » : cette page crée et révoque des identifiants machine.",
     "intro": "Une clé authentifie un script ou une intégration comme un acteur machine, limité exactement aux rôles que vous lui accordez — jamais plus.",
     "tableLabel": "Liste des clés API",
+    "loadMore": "Charger plus",
     "newButton": "Nouvelle clé API",
     "newHeading": "Créer une clé API",
     "newDescription": "La clé est générée par le serveur et affichée une seule fois.",
@@ -3298,7 +3301,10 @@
     "logsEmpty": "Aucune ligne de journal enregistrée pour l'instant.",
     "logsTime": "Heure",
     "logsLevel": "Niveau",
-    "logsMessage": "Message"
+    "logsMessage": "Message",
+    "previousPage": "Précédent",
+    "nextPage": "Suivant",
+    "pageInfo": "{{from}}–{{to}} sur {{total}}"
   },
   "tools": {
     "heading": "Outils",
@@ -3366,6 +3372,9 @@
       "cancelled": "Annulé"
     },
     "retryButton": "Relancer",
+    "previousPage": "Précédent",
+    "nextPage": "Suivant",
+    "queuePageInfo": "{{from}}–{{to}} sur {{total}}",
     "contentHeading": "Contenu programmé",
     "contentBody": "La liste des entrées en attente de publication se trouve sur le tableau de bord.",
     "contentLink": "Aller au tableau de bord",

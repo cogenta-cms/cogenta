@@ -103,6 +103,26 @@ describe('scheduled tasks', () => {
     expect(await screen.findByText('5 purged')).toBeDefined()
   })
 
+  it('paginates the queue client-side once there are more jobs than one page holds (fiche 67 task 3)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    const scheduledTasksQueue = Array.from({ length: 30 }, (_, index) => ({
+      id: `job-${index}`,
+      status: 'pending' as const,
+    }))
+    installMockFetch({ roles: ['admin'], scheduledTasksQueue })
+
+    render(<App />)
+    await goToScheduled()
+
+    await screen.findByText(/job-0/)
+    expect(screen.queryByText(/job-29/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Suivant' }))
+
+    await screen.findByText(/job-29/)
+  })
+
   it('shows an empty queue as empty, and a failed job as retryable', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)

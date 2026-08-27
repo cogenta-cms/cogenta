@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
   Notice,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -25,6 +26,17 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+
+/**
+ * Both tables page **client-side** over the snapshot `readObservability`
+ * already returns whole — fiche 67 task 4. Unlike the audit log, this data
+ * is not a growing table with a server-side cursor to walk: it is
+ * `@cogenta/observability`'s in-memory ring buffer, hard-capped at 500
+ * traces and 500 logs (`recent-store.ts`'s `DEFAULT_TRACE_CAPACITY`/
+ * `DEFAULT_LOG_CAPACITY`) and gone on the next restart. A second round trip
+ * per page would buy nothing a client-side slice does not already have.
+ */
+const PAGE_SIZE = 25
 
 /**
  * "Exploitation" > Observabilité (fiche L22 task 5). Point 3's own wording —
@@ -50,6 +62,8 @@ export function ObservabilityRoute(): JSX.Element {
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
   const [snapshot, setSnapshot] = useState<ObservabilitySnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tracesPage, setTracesPage] = useState(0)
+  const [logsPage, setLogsPage] = useState(0)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -61,6 +75,12 @@ export function ObservabilityRoute(): JSX.Element {
       setSettings(allSettings.filter((setting) => setting.group === 'observability'))
       setSnapshot(observability)
       setError(null)
+      // A fresh snapshot can be shorter than before (the ring buffer keeps
+      // growing while this screen sits open) — landing on a page number that
+      // no longer exists would just show an empty table, so every reload
+      // starts back at the newest entries.
+      setTracesPage(0)
+      setLogsPage(0)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('observability.loadError'))
     }
@@ -142,12 +162,25 @@ export function ObservabilityRoute(): JSX.Element {
               <h2 id="observability-traces-heading">{t('observability.tracesHeading')}</h2>
             </CardTitle>
           </CardHeader>
-          <CardBody>
+          <CardBody className="flex flex-col gap-3">
             <TracesTable
-              traces={snapshot.traces}
+              traces={snapshot.traces.slice(tracesPage * PAGE_SIZE, (tracesPage + 1) * PAGE_SIZE)}
               formatDateTime={formatDateTime}
               emptyLabel={t('observability.tracesEmpty')}
               t={t}
+            />
+            <Pagination
+              variant="pages"
+              page={tracesPage}
+              pageCount={Math.max(1, Math.ceil(snapshot.traces.length / PAGE_SIZE))}
+              onPageChange={setTracesPage}
+              previousLabel={t('observability.previousPage')}
+              nextLabel={t('observability.nextPage')}
+              pageInfo={t('observability.pageInfo', {
+                from: snapshot.traces.length === 0 ? 0 : tracesPage * PAGE_SIZE + 1,
+                to: Math.min(snapshot.traces.length, (tracesPage + 1) * PAGE_SIZE),
+                total: snapshot.traces.length,
+              })}
             />
           </CardBody>
         </Card>
@@ -160,12 +193,25 @@ export function ObservabilityRoute(): JSX.Element {
               <h2 id="observability-logs-heading">{t('observability.logsHeading')}</h2>
             </CardTitle>
           </CardHeader>
-          <CardBody>
+          <CardBody className="flex flex-col gap-3">
             <LogsTable
-              logs={snapshot.logs}
+              logs={snapshot.logs.slice(logsPage * PAGE_SIZE, (logsPage + 1) * PAGE_SIZE)}
               formatDateTime={formatDateTime}
               emptyLabel={t('observability.logsEmpty')}
               t={t}
+            />
+            <Pagination
+              variant="pages"
+              page={logsPage}
+              pageCount={Math.max(1, Math.ceil(snapshot.logs.length / PAGE_SIZE))}
+              onPageChange={setLogsPage}
+              previousLabel={t('observability.previousPage')}
+              nextLabel={t('observability.nextPage')}
+              pageInfo={t('observability.pageInfo', {
+                from: snapshot.logs.length === 0 ? 0 : logsPage * PAGE_SIZE + 1,
+                to: Math.min(snapshot.logs.length, (logsPage + 1) * PAGE_SIZE),
+                total: snapshot.logs.length,
+              })}
             />
           </CardBody>
         </Card>

@@ -907,6 +907,8 @@
     "locationError": "L'emplacement n'a pas pu être enregistré.",
     "problemsTitle": "{{count}} lien(s) mort(s) dans ce menu",
     "problemsBody": "Un ou plusieurs éléments pointent vers un contenu non publié. Corrigez l'élément ou publiez la cible avant qu'un visiteur ne trouve le lien mort.",
+    "localeCoverageTitle": "Cet emplacement ne s'affichera pas partout",
+    "localeCoverageBody": "Aucun menu n'est assigné à cet emplacement pour : {{locales}}. Les pages servies dans ces langues n'auront aucune navigation à cet endroit tant qu'un menu ne leur est pas assigné — dupliquez ce menu vers ces langues, ou assignez-leur un menu existant.",
     "previewTitle": "Aperçu (tel qu'un visiteur le verrait)",
     "previewEmpty": "Rien ne s'afficherait publiquement pour l'instant.",
     "duplicateTo": "Dupliquer vers la langue",

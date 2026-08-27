@@ -908,6 +908,8 @@
     "locationError": "The location could not be saved.",
     "problemsTitle": "{{count}} broken link(s) in this menu",
     "problemsBody": "One or more items point at content that is not published. Fix the item or publish the target before a visitor finds the dead link.",
+    "localeCoverageTitle": "This location won't show up everywhere",
+    "localeCoverageBody": "No menu is assigned to this location for: {{locales}}. Pages served in those languages will have no navigation there until a menu is assigned — duplicate this menu into those languages, or assign them an existing menu.",
     "previewTitle": "Preview (as a visitor would see it)",
     "previewEmpty": "Nothing here would render publicly yet.",
     "duplicateTo": "Duplicate to locale",

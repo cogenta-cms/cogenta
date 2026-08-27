@@ -1077,7 +1077,20 @@
     "noIssues": "Aucun trouvé.",
     "anomaliesHeading": "Anomalies",
     "noAnomalies": "Rien d'anormal.",
-    "viewEntry": "Ouvrir"
+    "viewEntry": "Ouvrir",
+    "verificationHeading": "Vérification des moteurs de recherche",
+    "verificationDescription": "Vérification par balise meta uniquement — aucune connexion, aucun appel API. Collez le jeton affiché par la page de vérification propre à chaque fournisseur.",
+    "indexNowHeading": "IndexNow",
+    "indexNowDescription": "Avertit Bing, Yandex et Seznam dès qu'une page est publiée ou dépubliée, sans attendre leur prochaine exploration.",
+    "indexNowKeyLabel": "Clé",
+    "indexNowGenerateKey": "Générer une clé",
+    "indexNowKeyFileHint": "Servi automatiquement à {{url}}",
+    "openSitemap": "Ouvrir sitemap.xml",
+    "openRobots": "Ouvrir robots.txt",
+    "robotsCustomRulesLabel": "Règles personnalisées",
+    "robotsCustomRulesHelp": "Fusionné dans le robots.txt ci-dessus, après les règles affichées et avant la ligne Sitemap. Une directive par ligne, en syntaxe robots.txt réelle.",
+    "robotsDisallowAllConfirm": "Cela inclut « Disallow: / », qui bloque tous les robots pour tout le site. Enregistrer quand même ?",
+    "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /"
   },
   "opsSettings": {
     "heading": "Sécurité & webhooks",
@@ -1977,6 +1990,22 @@
         "defaultSocialImageUrl": {
           "label": "Image sociale par défaut",
           "help": "Un chemin ou une URL absolue, utilisée comme image Open Graph/Twitter Card uniquement quand une page n'a pas la sienne."
+        },
+        "googleSiteVerification": {
+          "label": "Vérification de site Google",
+          "help": "Le jeton de la méthode de vérification par balise HTML de Search Console, ex. « abc123… ». Rendu en balise <meta name=\"google-site-verification\"> sur chaque page."
+        },
+        "bingSiteVerification": {
+          "label": "Vérification de site Bing",
+          "help": "Le jeton de la méthode de vérification par balise meta de Bing Webmaster Tools. Rendu en balise <meta name=\"msvalidate.01\"> sur chaque page."
+        },
+        "indexNowEnabled": {
+          "label": "Avertir IndexNow à la publication/dépublication",
+          "help": "Désactivé par défaut : à activer une fois la clé ci-dessous renseignée."
+        },
+        "llmsTxtEnabled": {
+          "label": "Servir llms.txt",
+          "help": "Liste chaque page publiée, groupée par collection, pour un modèle qui n'a qu'une requête à dépenser. Désactivé par défaut."
         }
       },
       "observability": {

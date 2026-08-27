@@ -1255,6 +1255,50 @@ export function installMockFetch(
       scope: 'site',
       value: '',
     },
+    // Fiche 50 tasks 2-5 — mirrors the six settings added to
+    // packages/schema/src/store/site-settings-registry.ts's `seo` group.
+    'seo.googleSiteVerification': {
+      group: 'seo',
+      order: 6,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.bingSiteVerification': {
+      group: 'seo',
+      order: 7,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.robotsCustomRules': {
+      group: 'seo',
+      order: 8,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+    'seo.indexNowEnabled': {
+      group: 'seo',
+      order: 9,
+      uiType: 'boolean',
+      scope: 'site',
+      value: false,
+    },
+    'seo.indexNowKey': {
+      group: 'seo',
+      order: 10,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.llmsTxtEnabled': {
+      group: 'seo',
+      order: 11,
+      uiType: 'boolean',
+      scope: 'site',
+      value: false,
+    },
     // Observability (fiche L22 task 5) — mirrors
     // packages/schema/src/store/site-settings-registry.ts's `observability` group.
     'observability.enabled': {

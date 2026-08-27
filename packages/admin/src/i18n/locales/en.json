@@ -1078,7 +1078,20 @@
     "noIssues": "None found.",
     "anomaliesHeading": "Anomalies",
     "noAnomalies": "Nothing looks wrong.",
-    "viewEntry": "Open"
+    "viewEntry": "Open",
+    "verificationHeading": "Search engine verification",
+    "verificationDescription": "Meta-tag verification only — no sign-in, no API call. Paste the token each provider's own verification page shows you.",
+    "indexNowHeading": "IndexNow",
+    "indexNowDescription": "Pings Bing, Yandex and Seznam the moment a page is published or unpublished, so they do not have to wait for their next crawl.",
+    "indexNowKeyLabel": "Key",
+    "indexNowGenerateKey": "Generate a key",
+    "indexNowKeyFileHint": "Served automatically at {{url}}",
+    "openSitemap": "Open sitemap.xml",
+    "openRobots": "Open robots.txt",
+    "robotsCustomRulesLabel": "Custom rules",
+    "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /",
+    "robotsCustomRulesHelp": "Merged into the robots.txt above, after the rules shown and before the Sitemap line. One directive per line, in real robots.txt syntax.",
+    "robotsDisallowAllConfirm": "This includes \"Disallow: /\", which blocks every crawler from the whole site. Save anyway?"
   },
   "opsSettings": {
     "heading": "Security & webhooks",
@@ -1978,6 +1991,22 @@
         "defaultSocialImageUrl": {
           "label": "Default social image",
           "help": "A path or an absolute URL, used as the Open Graph/Twitter Card image only when a page has none of its own."
+        },
+        "googleSiteVerification": {
+          "label": "Google site verification",
+          "help": "The token from Search Console's HTML tag verification method, e.g. \"abc123…\". Rendered as a <meta name=\"google-site-verification\"> tag on every page."
+        },
+        "bingSiteVerification": {
+          "label": "Bing site verification",
+          "help": "The token from Bing Webmaster Tools' meta tag verification method. Rendered as a <meta name=\"msvalidate.01\"> tag on every page."
+        },
+        "indexNowEnabled": {
+          "label": "Ping IndexNow on publish/unpublish",
+          "help": "Off by default: enable only once a key is set below."
+        },
+        "llmsTxtEnabled": {
+          "label": "Serve llms.txt",
+          "help": "Lists every published page, grouped by collection, for a model that has one request to spend. Off by default."
         }
       },
       "observability": {

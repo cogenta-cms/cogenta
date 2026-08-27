@@ -38,6 +38,11 @@ function siteSetting(key: string, value: unknown): SiteSetting {
   }
 }
 
+/** Fiche 50 tasks 3 and 5 — `seo.indexNowEnabled`/`seo.llmsTxtEnabled` are booleans, not strings. */
+function booleanSetting(key: string, value: boolean): SiteSetting {
+  return { ...siteSetting(key, value), uiType: 'boolean' }
+}
+
 describe('GeneralTab', () => {
   it('lists every collection passed in with a title-template field of its own', () => {
     render(
@@ -92,6 +97,96 @@ describe('GeneralTab', () => {
         "Aucune collection n'a encore de route publique, donc aucune ne peut être listée ici.",
       ),
     ).toBeDefined()
+  })
+})
+
+describe('GeneralTab — search-engine verification and indexing extras (fiche 50)', () => {
+  it('saves a Google verification token and a Bing verification token independently', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(
+      <GeneralTab
+        settings={[
+          siteSetting('seo.googleSiteVerification', ''),
+          siteSetting('seo.bingSiteVerification', ''),
+        ]}
+        collections={[]}
+        templates={{}}
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.blur(screen.getByLabelText('Vérification de site Google'), {
+      target: { value: 'abc123' },
+    })
+    expect(onSave).toHaveBeenCalledWith('seo.googleSiteVerification', 'abc123')
+
+    fireEvent.blur(screen.getByLabelText('Vérification de site Bing'), {
+      target: { value: 'XYZ-789' },
+    })
+    expect(onSave).toHaveBeenCalledWith('seo.bingSiteVerification', 'XYZ-789')
+  })
+
+  it('turns IndexNow on and saves a hand-typed key', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(
+      <GeneralTab
+        settings={[
+          booleanSetting('seo.indexNowEnabled', false),
+          siteSetting('seo.indexNowKey', ''),
+        ]}
+        collections={[]}
+        templates={{}}
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.click(screen.getByLabelText('Avertir IndexNow à la publication/dépublication'))
+    expect(onSave).toHaveBeenCalledWith('seo.indexNowEnabled', true)
+
+    const key = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
+    fireEvent.blur(screen.getByLabelText('Clé'), { target: { value: key } })
+    expect(onSave).toHaveBeenCalledWith('seo.indexNowKey', key)
+
+    // The key-file hint only shows once a key is actually on screen — after
+    // `saveKey`'s own `await onSave(...)` resolves, not synchronously with
+    // the blur event.
+    expect(await screen.findByText(new RegExp(`${key}\\.txt`))).toBeDefined()
+  })
+
+  it('generates a random hexadecimal key and saves it immediately', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(
+      <GeneralTab
+        settings={[siteSetting('seo.indexNowKey', '')]}
+        collections={[]}
+        templates={{}}
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Générer une clé' }))
+
+    await screen.findByText(/\.txt/)
+    expect(onSave).toHaveBeenCalledTimes(1)
+    const [key, value] = onSave.mock.calls[0] as [string, unknown]
+    expect(key).toBe('seo.indexNowKey')
+    expect(typeof value).toBe('string')
+    expect(value as string).toMatch(/^[a-f0-9]{32}$/)
+  })
+
+  it('saves the llms.txt toggle', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(
+      <GeneralTab
+        settings={[booleanSetting('seo.llmsTxtEnabled', false)]}
+        collections={[]}
+        templates={{}}
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.click(screen.getByLabelText('Servir llms.txt'))
+    expect(onSave).toHaveBeenCalledWith('seo.llmsTxtEnabled', true)
   })
 })
 

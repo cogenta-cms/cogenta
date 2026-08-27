@@ -225,3 +225,60 @@ describe('Diagnostic — read-only reports (fiche 13 task 2)', () => {
     expect(link.getAttribute('href')).toBe('/collections/page/entry-1')
   })
 })
+
+describe('Diagnostic — direct links to the real sitemap/robots.txt (fiche 50 task 1)', () => {
+  it('links straight to the URLs this same server actually serves', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToDiagnostics()
+
+    const sitemapLink = await screen.findByRole('link', { name: 'Ouvrir sitemap.xml' })
+    expect(sitemapLink.getAttribute('href')).toMatch(/\/sitemap\.xml$/)
+    expect(sitemapLink.getAttribute('target')).toBe('_blank')
+
+    const robotsLink = screen.getByRole('link', { name: 'Ouvrir robots.txt' })
+    expect(robotsLink.getAttribute('href')).toMatch(/\/robots\.txt$/)
+    expect(robotsLink.getAttribute('target')).toBe('_blank')
+  })
+})
+
+describe('Diagnostic — robots.txt custom rules editor (fiche 50 task 4)', () => {
+  it('saves a scoped rule through the real settings API, no confirmation needed', async () => {
+    signedIn(['admin'])
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    render(<App />)
+    await goToDiagnostics()
+
+    const editor = await screen.findByLabelText('Règles personnalisées')
+    fireEvent.blur(editor, { target: { value: 'User-agent: GPTBot\nDisallow: /private' } })
+
+    expect(await screen.findByText('Enregistré.')).toBeDefined()
+    expect(confirmSpy).not.toHaveBeenCalled()
+  })
+
+  it('asks for confirmation before saving a rule that blocks every crawler, and honours Cancel', async () => {
+    signedIn(['admin'])
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<App />)
+    await goToDiagnostics()
+
+    const editor = await screen.findByLabelText('Règles personnalisées')
+    fireEvent.blur(editor, { target: { value: 'User-agent: *\nDisallow: /' } })
+
+    // Cancelled: nothing was saved.
+    expect(window.confirm).toHaveBeenCalledOnce()
+    expect(screen.queryByText('Enregistré.')).toBeNull()
+  })
+
+  it('saves the disallow-all rule once the confirmation is accepted', async () => {
+    signedIn(['admin'])
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<App />)
+    await goToDiagnostics()
+
+    const editor = await screen.findByLabelText('Règles personnalisées')
+    fireEvent.blur(editor, { target: { value: 'User-agent: *\nDisallow: /' } })
+
+    expect(await screen.findByText('Enregistré.')).toBeDefined()
+  })
+})

@@ -278,6 +278,85 @@ describe('invoices, once a site fills in billing', () => {
     expect(Buffer.from(bytes.slice(0, 5)).toString('ascii')).toBe('%PDF-')
     expect(Buffer.from(bytes.slice(-6)).toString('ascii').trim()).toBe('%%EOF')
   })
+
+  it('previews a real PDF for an order that has never been invoiced (fiche 54 task 2), and never issues one', async () => {
+    const invoices = createInvoiceStore(db, {
+      orders: shop.orders,
+      seller: { address: ['Acme SARL', '1 rue du Commerce, Paris'], footer: 'VAT FR00000000000' },
+    })
+    const router = createCommerceAdminRouter({
+      catalog: shop.catalog,
+      orders: shop.orders,
+      customers: shop.customers,
+      payments: shop.payments,
+      coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
+      invoices,
+      permissions: createCommercePermissions(),
+    })
+    const orderId = await seedPaidOrder()
+
+    const preview = await router.handle(
+      { method: 'GET', path: `/api/commerce/orders/${orderId}/invoice/preview` },
+      ADMIN,
+    )
+    expect(preview.status).toBe(200)
+    const bytes = preview.body as Uint8Array
+    expect(Buffer.from(bytes.slice(0, 5)).toString('ascii')).toBe('%PDF-')
+
+    // Nothing was issued: the metadata route still answers not-found.
+    const read = await router.handle(
+      { method: 'GET', path: `/api/commerce/orders/${orderId}/invoice` },
+      ADMIN,
+    )
+    expect(read.status).toBe(404)
+  })
+
+  it('lets a viewer preview an invoice — commerce.read only, no write happens', async () => {
+    const invoices = createInvoiceStore(db, {
+      orders: shop.orders,
+      seller: { address: ['Acme SARL'] },
+    })
+    const router = createCommerceAdminRouter({
+      catalog: shop.catalog,
+      orders: shop.orders,
+      customers: shop.customers,
+      payments: shop.payments,
+      coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
+      invoices,
+      permissions: createCommercePermissions(),
+    })
+    const orderId = await seedPaidOrder()
+
+    const preview = await router.handle(
+      { method: 'GET', path: `/api/commerce/orders/${orderId}/invoice/preview` },
+      VIEWER,
+    )
+    expect(preview.status).toBe(200)
+  })
+
+  it('answers 404 for the preview when the router was built without a seller', async () => {
+    const router = createCommerceAdminRouter({
+      catalog: shop.catalog,
+      orders: shop.orders,
+      customers: shop.customers,
+      payments: shop.payments,
+      coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
+      permissions: createCommercePermissions(),
+    })
+    const orderId = await seedPaidOrder()
+
+    const preview = await router.handle(
+      { method: 'GET', path: `/api/commerce/orders/${orderId}/invoice/preview` },
+      ADMIN,
+    )
+    expect(preview.status).toBe(404)
+  })
 })
 
 describe('subscriptions', () => {

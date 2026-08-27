@@ -468,6 +468,67 @@ describe('resolveConfig — payment (contract E, fiche 34 task 3)', () => {
 
     expect(config.payment.manualInstructions).toBe('IBAN FR76…, reference: order number')
   })
+
+  it('accepts "paypal" as a named driver, defaults its credentials to undefined', () => {
+    const config = resolveConfig({ ...minimal, payment: { driver: 'paypal' } }, noEnv)
+
+    expect(config.payment.driver).toBe('paypal')
+    expect(config.payment.paypalClientId).toBeUndefined()
+    expect(config.payment.paypalClientSecret).toBeUndefined()
+    expect(config.payment.paypalWebhookId).toBeUndefined()
+  })
+
+  it('refuses a PayPal client id, client secret, or webhook id written in the config file', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, payment: { paypalClientId: 'AeA-client-id' } }, noEnv),
+    ).toThrowError(/payment\.paypalClientId/)
+    expect(() =>
+      resolveConfig({ ...minimal, payment: { paypalClientSecret: 'EL-client-secret' } }, noEnv),
+    ).toThrowError(/payment\.paypalClientSecret/)
+    expect(() =>
+      resolveConfig(
+        { ...minimal, payment: { paypalWebhookId: '8PT597110X687430LKGECATA' } },
+        noEnv,
+      ),
+    ).toThrowError(/payment\.paypalWebhookId/)
+  })
+
+  it('points the user at the environment variables for a leaked PayPal credential', () => {
+    try {
+      resolveConfig({ ...minimal, payment: { paypalClientSecret: 'EL-client-secret' } }, noEnv)
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(CogentaError)
+      expect((error as CogentaError).code).toBe('CONFIG_SECRET_IN_FILE')
+      expect((error as CogentaError).hint).toContain('COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET')
+    }
+  })
+
+  it('takes the PayPal client id, client secret and webhook id from the environment', () => {
+    const config = resolveConfig(minimal, {
+      COGENTA_PAYMENT_PAYPAL_CLIENT_ID: 'client-id-from-env',
+      COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET: 'client-secret-from-env',
+      COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID: 'webhook-id-from-env',
+    })
+
+    expect(config.payment.paypalClientId).toBe('client-id-from-env')
+    expect(config.payment.paypalClientSecret).toBe('client-secret-from-env')
+    expect(config.payment.paypalWebhookId).toBe('webhook-id-from-env')
+  })
+
+  it('never echoes the PayPal client secret back in the error', () => {
+    try {
+      resolveConfig(
+        { ...minimal, payment: { paypalClientSecret: 'super-secret-paypal-value' } },
+        noEnv,
+      )
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(JSON.stringify((error as CogentaError).toJSON())).not.toContain(
+        'super-secret-paypal-value',
+      )
+    }
+  })
 })
 
 describe('resolveConfig — observability (fiche L22 task 5)', () => {

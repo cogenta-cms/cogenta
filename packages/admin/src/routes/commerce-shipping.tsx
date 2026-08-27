@@ -33,7 +33,7 @@ import {
   TableRow,
 } from '../ui/index.js'
 
-const SHIPPING_KINDS: readonly ShippingKind[] = ['flat', 'by_weight', 'free']
+const SHIPPING_KINDS: readonly ShippingKind[] = ['flat', 'by_weight', 'free', 'pickup']
 
 /**
  * Shipping — fiche 34 task 2. Zones and methods on `@cogenta/commerce`'s
@@ -95,7 +95,10 @@ export function CommerceShippingRoute(): JSX.Element {
     event.preventDefault()
     if (token === null) return
     setActionError(null)
-    const amountMinor = kind === 'free' ? 0 : majorTextToMinor(amount, currency)
+    // Pickup costs the shop nothing to fulfil, the same as `free` — see
+    // `storedRate` in `@cogenta/commerce`'s `shipping/store.ts`.
+    const amountMinor =
+      kind === 'free' || kind === 'pickup' ? 0 : majorTextToMinor(amount, currency)
     if (amountMinor === null) {
       setActionError(t('commerceShipping.amountInvalid'))
       return
@@ -225,7 +228,7 @@ export function CommerceShippingRoute(): JSX.Element {
                   <TableCell>{describeZone(method)}</TableCell>
                   <TableCell>{t(`commerceShipping.kind.${method.kind}`)}</TableCell>
                   <TableCell>
-                    {method.kind === 'free'
+                    {method.kind === 'free' || method.kind === 'pickup'
                       ? t('commerceShipping.free')
                       : minorToMajorText(method.amountMinor, method.currency)}
                     {method.freeOverMinor !== null &&
@@ -407,7 +410,7 @@ export function CommerceShippingRoute(): JSX.Element {
                 />
               )}
             </Field>
-            {kind !== 'free' && (
+            {kind !== 'free' && kind !== 'pickup' && (
               <Field label={t('commerceShipping.amountColumn')}>
                 {(control) => (
                   <Input

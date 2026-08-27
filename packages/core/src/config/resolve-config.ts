@@ -228,6 +228,9 @@ export function resolveConfig(
       manualInstructions: config.payment.manualInstructions,
       stripeSecretKey: secrets.paymentStripeSecretKey,
       stripeWebhookSecret: secrets.paymentStripeWebhookSecret,
+      paypalClientId: secrets.paymentPaypalClientId,
+      paypalClientSecret: secrets.paymentPaypalClientSecret,
+      paypalWebhookId: secrets.paymentPaypalWebhookId,
     }),
     observability: Object.freeze({
       serviceName: config.observability.serviceName,

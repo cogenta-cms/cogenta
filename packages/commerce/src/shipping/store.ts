@@ -7,12 +7,16 @@ import type { TaxZone } from '../tax/store.js'
 /**
  * How a stored rate is computed.
  *
- * Three kinds, chosen because they are the three every small shop actually
- * uses. A fourth ("by number of items", "by volume") waits for a real second
+ * Four kinds. The first three are the ones every small shop actually uses; a
+ * fifth ("by number of items", "by volume") still waits for a real second
  * user — the project forbids abstracting before three real uses, and this is
  * exactly the sort of table that grows a rule engine nobody asked for.
+ * `pickup` (fiche 54 task 1) is not that kind of abstraction: it needs no new
+ * field and no new branch in `storedRate` beyond the one line the existing
+ * `free` case already has, because "the customer collects it" and "shipping
+ * is free" cost the shop the same nothing.
  */
-export const SHIPPING_KINDS = ['flat', 'by_weight', 'free'] as const
+export const SHIPPING_KINDS = ['flat', 'by_weight', 'free', 'pickup'] as const
 export type ShippingKind = (typeof SHIPPING_KINDS)[number]
 
 export interface ShippingMethod {
@@ -136,7 +140,10 @@ function serves(method: ShippingMethod, zone: TaxZone | null): boolean {
 /** The stored rate. Never negative, and free over a threshold when set. */
 export function storedRate(method: ShippingMethod, basis: ShipmentBasis): number {
   if (method.freeOverMinor !== null && basis.subtotalMinor >= method.freeOverMinor) return 0
-  if (method.kind === 'free') return 0
+  // Nothing ships: the customer collects the order themselves, so there is no
+  // carriage to price — the same zero `free` already returns, for the same
+  // reason a courier is never involved.
+  if (method.kind === 'free' || method.kind === 'pickup') return 0
   if (method.kind === 'flat') return method.amountMinor
 
   // Rounded up to the next whole kilogram, the way a carrier's price list

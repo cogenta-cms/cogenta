@@ -1672,6 +1672,13 @@ export function installMockFetch(
       configured: false,
       selected: undefined,
     },
+    {
+      name: 'paypal',
+      tier: 'optimal',
+      settlesOffline: false,
+      configured: false,
+      selected: undefined,
+    },
   ]
   const mockPaymentTestMode = options.commercePaymentTestMode ?? true
   const mockPaymentWebhookUrl =
@@ -5967,6 +5974,20 @@ export function installMockFetch(
           subscription.status = 'cancelled'
           subscription.cancelledAt = '2026-03-02T00:00:00.000Z'
           return json(200, subscription)
+        }
+
+        // The preview route (fiche 54 task 2) never depends on a seller being
+        // configured or on an invoice existing — it renders straight from an
+        // order, real or, for this mock, any id at all.
+        if (segments[0] === 'orders' && segments[2] === 'invoice' && segments[3] === 'preview') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return new Response(
+            new Blob(['%PDF-1.4 fake preview bytes'], { type: 'application/pdf' }),
+            {
+              status: 200,
+            },
+          )
         }
 
         // invoices — this mock has no seller configured, so an order is never

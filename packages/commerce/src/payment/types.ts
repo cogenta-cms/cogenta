@@ -134,6 +134,12 @@ export interface PaymentConfig extends DriverChoice {
   readonly apiBaseUrl?: string
   /** Shown to the shopper by the offline driver. Free text, per site. */
   readonly transferInstructions?: string
+  /** PayPal's REST app client id. Paired with `clientSecret` for the OAuth2 client-credentials call. */
+  readonly clientId?: string
+  /** PayPal's REST app client secret. Absent on any site that has not configured one. */
+  readonly clientSecret?: string
+  /** The webhook id PayPal shows for a configured webhook endpoint, used to verify inbound signatures. */
+  readonly webhookId?: string
 }
 
 export type PaymentDriver = Driver<PaymentGateway, PaymentConfig>

@@ -430,6 +430,23 @@ export async function fetchInvoicePdf(token: string, orderId: string): Promise<B
   return response.blob()
 }
 
+/**
+ * A real preview PDF for an order, whether or not it has ever been invoiced
+ * — fiche 54 task 2. Never issues anything: see `InvoiceStore.preview`'s own
+ * comment in `@cogenta/commerce` for why a preview must never claim a real
+ * invoice number.
+ */
+export async function fetchInvoicePreviewPdf(token: string, orderId: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE}/api/commerce/orders/${encodeURIComponent(orderId)}/invoice/preview`,
+    { headers: authHeader(token) },
+  )
+  if (!response.ok) {
+    throw new ApiError('COMMERCE_ORDER_NOT_FOUND', 'This order does not exist.', undefined)
+  }
+  return response.blob()
+}
+
 // ---- permissions --------------------------------------------------------------
 
 /** Contract E's own permission vocabulary, and which roles this site actually grants each one — fiche 19's permission matrix. */
@@ -511,7 +528,7 @@ export function simulateTax(
 
 // ---- shipping (fiche 34 task 2) ---------------------------------------------
 
-export type ShippingKind = 'flat' | 'by_weight' | 'free'
+export type ShippingKind = 'flat' | 'by_weight' | 'free' | 'pickup'
 
 export interface ShippingMethod {
   readonly id: string

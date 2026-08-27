@@ -155,6 +155,36 @@ describe('the form submissions screen', () => {
     })
   })
 
+  it('loads a further page of submissions on demand, rather than all of them at once (fiche 67 task 2)', async () => {
+    const bulkSubmissions = Array.from({ length: 60 }, (_, index) => ({
+      id: `sub-bulk-${index}`,
+      formId: 'form-1',
+      formName: 'Contact us',
+      values: { email: `visitor-${index}@example.com` },
+      consents: [],
+      status: 'new' as const,
+      ipHash: `hash-${index}`,
+      referrer: null,
+      userAgent: null,
+      submittedAt: new Date(2026, 2, 1, 10, index).toISOString(),
+    }))
+    signedIn(['admin'], { forms: [CONTACT_FORM], formSubmissions: bulkSubmissions })
+    render(<App />)
+    await goToSubmissions()
+
+    // Each row's selection checkbox carries the submission id in its
+    // accessible name — a unique, stable identifier the collapsed row
+    // shows, unlike the form name/status columns which repeat.
+    await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-0' })
+    expect(
+      screen.queryByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-59' }),
+    ).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Charger plus' }))
+
+    await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-59' })
+  })
+
   it('finds a submission by e-mail through the GDPR search, and erases it on request', async () => {
     signedIn(['admin'], {
       forms: [CONTACT_FORM],

@@ -146,6 +146,40 @@ describe('GET /api/scheduled-tasks/queue', () => {
     expect(body.data.jobs).toHaveLength(0)
   })
 
+  it('widens the window past the driver default with an explicit limit (fiche 67 task 3)', async () => {
+    // The `demo` job from `beforeEach` plus fifty-nine more — past the
+    // driver's own default of 50 rows — proving `?limit=` really reaches
+    // `QueueDriver.list`, not just gets parsed and dropped. Rows exist the
+    // moment they are enqueued, so processing them is not needed for a
+    // plain count.
+    const queue = createDatabaseQueue({ db })
+    for (let index = 0; index < 59; index += 1) {
+      await queue.enqueue({ name: 'bulk' })
+    }
+
+    const wideRouter = createScheduledTasksRouter({ registry, queue, mode: 'internal' })
+    const defaultResponse = await wideRouter.handle(
+      { method: 'GET', path: '/api/scheduled-tasks/queue', query: {} },
+      ADMIN,
+    )
+    const wideResponse = await wideRouter.handle(
+      { method: 'GET', path: '/api/scheduled-tasks/queue?limit=100', query: {} },
+      ADMIN,
+    )
+    const defaultCount = (defaultResponse.body as { data: { jobs: unknown[] } }).data.jobs.length
+    const wideCount = (wideResponse.body as { data: { jobs: unknown[] } }).data.jobs.length
+    expect(defaultCount).toBeLessThanOrEqual(50)
+    expect(wideCount).toBeGreaterThan(defaultCount)
+  })
+
+  it('rejects a limit past the ceiling', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/scheduled-tasks/queue?limit=1000', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
   it('answers an empty list when no queue was configured', async () => {
     const noQueueRouter = createScheduledTasksRouter({ registry, mode: 'internal' })
     const response = await noQueueRouter.handle(

@@ -8,7 +8,7 @@
  * roles, and the hash-chained audit log L4's agents will write to as well.
  */
 
-export type { ApiKeyStore, RotateApiKeyOptions } from './api-keys.js'
+export type { ApiKeyStore, ListApiKeysOptions, RotateApiKeyOptions } from './api-keys.js'
 export {
   createApiKeyStore,
   DEFAULT_RATE_LIMIT_PER_MINUTE,

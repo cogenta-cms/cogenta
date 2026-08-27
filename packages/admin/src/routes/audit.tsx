@@ -9,7 +9,7 @@ import {
   exportAuditLog,
   getAuditEntryDetail,
   getAuditIntegrityStatus,
-  listAuditEntries,
+  listAuditEntriesPage,
   runAuditIntegrityCheck,
 } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
@@ -21,6 +21,7 @@ import {
   Input,
   Modal,
   Notice,
+  Pagination,
   Select,
   Table,
   TableBody,
@@ -34,6 +35,7 @@ import {
 import { DiffView } from '../versions/diff-view.js'
 
 const ACTOR_KINDS: readonly AuditActorKind[] = ['human', 'agent', 'api_key', 'system']
+const PAGE_SIZE = 50
 
 function isoStartOfDay(daysAgo: number): string {
   const date = new Date()
@@ -66,6 +68,9 @@ export function AuditRoute(): JSX.Element {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const [integrity, setIntegrity] = useState<AuditIntegrityStatus | null>(null)
   const [integrityChecking, setIntegrityChecking] = useState(false)
@@ -87,21 +92,48 @@ export function AuditRoute(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      const found = await listAuditEntries(token, {
+      const page = await listAuditEntriesPage(token, {
         ...(actorId === '' ? {} : { actorId }),
         ...(action === '' ? {} : { action }),
         ...(collection === '' ? {} : { collection }),
         ...(since === '' ? {} : { since }),
         ...(until === '' ? {} : { until }),
         ...(actorKind === '' ? {} : { actorKind }),
+        limit: PAGE_SIZE,
       })
-      setEntries(found)
+      setEntries(page.entries)
+      setHasMore(page.hasMore)
+      setNextCursor(page.nextCursor)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('audit.loadError'))
     } finally {
       setLoading(false)
     }
   }, [token, isAdmin, actorId, action, collection, since, until, actorKind, t])
+
+  async function loadMore(): Promise<void> {
+    if (token === null || nextCursor === null) return
+    setLoadingMore(true)
+    try {
+      const page = await listAuditEntriesPage(token, {
+        ...(actorId === '' ? {} : { actorId }),
+        ...(action === '' ? {} : { action }),
+        ...(collection === '' ? {} : { collection }),
+        ...(since === '' ? {} : { since }),
+        ...(until === '' ? {} : { until }),
+        ...(actorKind === '' ? {} : { actorKind }),
+        limit: PAGE_SIZE,
+        after: nextCursor,
+      })
+      setEntries((current) => [...current, ...page.entries])
+      setHasMore(page.hasMore)
+      setNextCursor(page.nextCursor)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('audit.loadError'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const loadIntegrity = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -395,6 +427,17 @@ export function AuditRoute(): JSX.Element {
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {!loading && (
+        <Pagination
+          variant="cursor"
+          hasMore={hasMore}
+          loading={loadingMore}
+          onLoadMore={() => void loadMore()}
+          loadMoreLabel={t('audit.loadMore')}
+          loadingLabel={t('common.loading')}
+        />
       )}
 
       <RetentionNotice />

@@ -732,6 +732,14 @@ export function installMockFetch(
       readonly brokenEntryId: string | null
       readonly brokenMessage: string | null
     }
+    /**
+     * Overrides `GET /api/audit`'s two-entry default fixture (fiche 67
+     * task 1) — for a test that needs to exercise real cursor pagination.
+     * Each entry needs at least `id`/`at`; the mock paginates them exactly
+     * the way `audit-router.ts` does (`limit`, `after` decoded as
+     * `at id` base64url, newest first).
+     */
+    readonly auditEntries?: readonly Readonly<Record<string, unknown>>[]
     /** Fiche 21 task 1: what `GET /api/audit/{id}` answers with, for any id. */
     readonly auditDetail?: {
       readonly entry: Readonly<Record<string, unknown>>
@@ -2465,9 +2473,22 @@ export function installMockFetch(
 
         if (rawId === undefined && method === 'GET') {
           if (!isAdmin) return forbidden
-          return json(200, {
-            data: apiKeys.map((key) => ({ ...key, usage: { last7Days: 0, last30Days: 3 } })),
-          })
+          const withUsage = apiKeys.map((key) => ({
+            ...key,
+            usage: { last7Days: 0, last30Days: 3 },
+          }))
+          // Fiche 67 task 5: real `limit`/`offset`, same "absent means every
+          // key" contract `parseApiKeysLimit` documents server-side —
+          // `mcp.tsx`'s picker (`listApiKeys`) never sends either and keeps
+          // getting the full array, byte for byte.
+          const parsedUrl = new URL(url, 'http://localhost')
+          const limitRaw = parsedUrl.searchParams.get('limit')
+          const pageLimit = limitRaw === null ? undefined : Number(limitRaw)
+          const offset = Number(parsedUrl.searchParams.get('offset') ?? '0')
+          const page =
+            pageLimit === undefined ? withUsage : withUsage.slice(offset, offset + pageLimit)
+          const hasMore = pageLimit !== undefined && offset + pageLimit < withUsage.length
+          return json(200, { data: page, page: { hasMore } })
         }
 
         if (rawId === undefined && method === 'POST') {
@@ -3297,7 +3318,9 @@ export function installMockFetch(
         })
       }
 
-      if (url.endsWith('/api/scheduled-tasks/queue') && method === 'GET') {
+      // `.split('?')[0]` because fiche 67 task 3's screen now always sends
+      // `?limit=`, which `.endsWith` alone would never match.
+      if (url.split('?')[0]?.endsWith('/api/scheduled-tasks/queue') && method === 'GET') {
         if (!user.roles.includes('admin')) {
           return json(403, {
             error: { code: 'FORBIDDEN', message: 'Only the admin role may read the job queue.' },
@@ -3481,8 +3504,9 @@ export function installMockFetch(
             },
           })
         }
-        return json(200, {
-          data: [
+        const allEntries =
+          options.auditEntries ??
+          ([
             {
               id: 'audit-1',
               at: '2026-03-01T00:00:00.000Z',
@@ -3512,8 +3536,45 @@ export function installMockFetch(
               hash: 'def',
               previousHash: 'abc',
             },
-          ],
+          ] as readonly Readonly<Record<string, unknown>>[])
+
+        // Fiche 67 task 1 — real `limit`/`after` pagination, newest first,
+        // mirroring `audit-router.ts`: `after` decodes to the previous
+        // page's last `(at, id)`, and everything at or after it is dropped.
+        const parsedAuditUrl = new URL(url, 'http://localhost')
+        const sorted = [...allEntries].sort((a, b) => {
+          const atCompare = String(b['at']).localeCompare(String(a['at']))
+          return atCompare !== 0 ? atCompare : String(b['id']).localeCompare(String(a['id']))
         })
+        const afterRaw = parsedAuditUrl.searchParams.get('after')
+        let startIndex = 0
+        if (afterRaw !== null) {
+          const decoded = Buffer.from(afterRaw, 'base64url').toString('utf8')
+          const separator = decoded.indexOf(' ')
+          const cursor =
+            separator === -1
+              ? null
+              : { at: decoded.slice(0, separator), id: decoded.slice(separator + 1) }
+          const foundIndex =
+            cursor === null
+              ? -1
+              : sorted.findIndex((entry) => entry['at'] === cursor.at && entry['id'] === cursor.id)
+          if (foundIndex !== -1) startIndex = foundIndex + 1
+        }
+        const limitRaw = parsedAuditUrl.searchParams.get('limit')
+        const pageLimit = limitRaw === null ? 50 : Number(limitRaw)
+        const page = sorted.slice(startIndex, startIndex + pageLimit)
+        const hasMore = startIndex + pageLimit < sorted.length
+        const lastOfPage = page[page.length - 1]
+        const nextCursor =
+          hasMore && lastOfPage !== undefined
+            ? Buffer.from(
+                `${String(lastOfPage['at'])} ${String(lastOfPage['id'])}`,
+                'utf8',
+              ).toString('base64url')
+            : null
+
+        return json(200, { data: page, page: { hasMore, nextCursor } })
       }
 
       if (url.includes('/api/site-plans')) {
@@ -7006,7 +7067,20 @@ export function installMockFetch(
                 (formId === null || s.formId === formId) &&
                 (status === null || s.status === status),
             )
-            return json(200, { data: filtered, nextCursor: null })
+            // Fiche 67 task 2: the screen now sends real `limit`/`cursor` —
+            // same opaque "id of the previous page's last item" mock
+            // convention `media.tsx`'s fixture already established just
+            // above. Absent `limit` still returns everything in one page,
+            // byte for byte what this mock always did before this fiche.
+            const limitRaw = parsed.searchParams.get('limit')
+            const pageLimit = limitRaw === null ? undefined : Number(limitRaw)
+            const cursor = parsed.searchParams.get('cursor')
+            const startIndex = cursor === null ? 0 : filtered.findIndex((s) => s.id === cursor) + 1
+            const pageSize = pageLimit ?? filtered.length
+            const items = filtered.slice(startIndex, startIndex + pageSize)
+            const hasMore = startIndex + pageSize < filtered.length
+            const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null
+            return json(200, { data: items, nextCursor })
           }
           if (rest.length === 1 && rest[0] === 'unread-count' && method === 'GET') {
             return json(200, {

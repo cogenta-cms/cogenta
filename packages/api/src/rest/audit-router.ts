@@ -76,6 +76,14 @@ export interface AuditRouter {
 const DEFAULT_BASE_PATH = '/api/audit'
 /** Bounded so an admin cannot ask this route to hold a million rows in memory at once. */
 const MAX_EXPORT_ENTRIES = 10_000
+/**
+ * Fiche 67 task 1: what `GET /api/audit` (the screen, not `/export`) answers
+ * with when the caller sends no `limit` — the same page size discipline
+ * `users-router.ts`'s `DEFAULT_PAGE_SIZE` follows. `parseLimit`'s existing
+ * ceiling of 200 is untouched; only the *default* when nothing is asked for
+ * changes, from "200, unpaginated" to "50, paginated".
+ */
+const DEFAULT_LIST_LIMIT = 50
 
 function requireAdmin(actor: Actor): void {
   if (actor.roles.includes('admin')) return
@@ -150,6 +158,27 @@ function parseAuditQuery(query: RestRequest['query']): ParsedAuditQuery {
     ...(since === undefined ? {} : { since }),
     ...(until === undefined ? {} : { until }),
     ...(actorKind === undefined ? {} : { actorKind }),
+  }
+}
+
+/**
+ * Opaque cursor for `GET /api/audit`'s pagination (fiche 67 task 1) — same
+ * "not secret, just not a row id" reasoning and base64url-of-two-fields shape
+ * as `users-router.ts`'s `encodeUsersCursor`/`decodeUsersCursor`, over the
+ * `(at, id)` pair `AuditLog.list`'s `before` filter already expects.
+ */
+function encodeAuditCursor(at: string, id: string): string {
+  return Buffer.from(`${at} ${id}`, 'utf8').toString('base64url')
+}
+
+function decodeAuditCursor(raw: string): { readonly at: string; readonly id: string } | null {
+  try {
+    const decoded = Buffer.from(raw, 'base64url').toString('utf8')
+    const separator = decoded.indexOf(' ')
+    if (separator === -1) return null
+    return { at: decoded.slice(0, separator), id: decoded.slice(separator + 1) }
+  } catch {
+    return null
   }
 }
 
@@ -317,9 +346,26 @@ export function createAuditRouter(options: AuditRouterOptions): AuditRouter {
         if (action === undefined) {
           if (method !== 'GET') return methodNotAllowed(['GET'])
           const filter = parseAuditQuery(request.query)
-          const limit = parseLimit(request.query, 200)
-          const entries = await audit.list({ ...filter, ...(limit === undefined ? {} : { limit }) })
-          return jsonResponse(200, { data: entries })
+          const pageSize = parseLimit(request.query, 200) ?? DEFAULT_LIST_LIMIT
+          const afterRaw = single(request.query, 'after')
+          const before =
+            afterRaw === undefined ? undefined : (decodeAuditCursor(afterRaw) ?? undefined)
+
+          // One extra row tells us whether a further page exists without a
+          // separate count query — the same trick a `limit+1` fetch always
+          // buys, sliced back off before the entries are ever handed out.
+          const fetched = await audit.list({
+            ...filter,
+            ...(before === undefined ? {} : { before }),
+            limit: pageSize + 1,
+          })
+          const hasMore = fetched.length > pageSize
+          const entries = hasMore ? fetched.slice(0, pageSize) : fetched
+          const last = entries[entries.length - 1]
+          const nextCursor =
+            hasMore && last !== undefined ? encodeAuditCursor(last.at, last.id) : null
+
+          return jsonResponse(200, { data: entries, page: { hasMore, nextCursor } })
         }
 
         if (action === 'verify') {

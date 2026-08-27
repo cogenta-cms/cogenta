@@ -2,6 +2,7 @@ import type { ApiKeyUsage, AuthStore } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import { single } from './query.js'
 
 /**
  * `/api/api-keys` — L13 task 8, machine-to-machine bearer credentials; expiry
@@ -252,6 +253,40 @@ function keyNotFound(): CogentaError {
   })
 }
 
+/**
+ * Fiche 67 task 5 — `?limit=` is opt-in, same reasoning as `parseQueueLimit`
+ * in `scheduled-tasks-router.ts`: absent means "every key" (`mcp.tsx`'s
+ * picker relies on exactly that, byte for byte), present means the
+ * "Clés API" screen's own paginated fetch.
+ */
+const MAX_API_KEYS_LIST_LIMIT = 200
+
+function parseApiKeysLimit(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_API_KEYS_LIST_LIMIT) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: `"limit" must be a whole number between 1 and ${MAX_API_KEYS_LIST_LIMIT}.`,
+      hint: `Ask for between 1 and ${MAX_API_KEYS_LIST_LIMIT} keys.`,
+    })
+  }
+  return parsed
+}
+
+function parseApiKeysOffset(value: string | undefined): number {
+  if (value === undefined) return 0
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: '"offset" must be a non-negative whole number.',
+      hint: 'Pass the number of keys already loaded.',
+    })
+  }
+  return parsed
+}
+
 export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRouter {
   const { auth } = options
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
@@ -285,14 +320,25 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
   ): Promise<RestResponse> {
     if (method === 'GET') {
       requireAdmin(actor, 'list API keys')
-      const keys = await auth.apiKeys.list()
+      const limit = parseApiKeysLimit(single(request.query, 'limit'))
+      const offset = parseApiKeysOffset(single(request.query, 'offset'))
+
+      // One extra row past `limit` tells us whether a further page exists,
+      // the same trick `audit-router.ts`'s cursor pagination uses — sliced
+      // back off before the keys are ever handed out.
+      const fetched = await auth.apiKeys.list(
+        limit === undefined ? {} : { limit: limit + 1, offset },
+      )
+      const hasMore = limit !== undefined && fetched.length > limit
+      const keys = hasMore ? fetched.slice(0, limit) : fetched
+
       const data = await Promise.all(
         keys.map(async (key) => ({
           ...publicKey(key),
           usage: publicUsage(await auth.apiKeys.usage(key.id)),
         })),
       )
-      return jsonResponse(200, { data })
+      return jsonResponse(200, { data, page: { hasMore } })
     }
 
     if (method === 'POST') {

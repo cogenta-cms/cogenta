@@ -26,6 +26,7 @@ import {
   Field,
   Input,
   Notice,
+  Pagination,
   Select,
   Table,
   TableBody,
@@ -45,9 +46,16 @@ import {
  * at what one page loaded — `downloadSubmissionsCsv`), and the GDPR minimum
  * from task 7 of fiche 16 — a search (and erasure) by e-mail address across
  * every submission, for a data subject's export/deletion request.
+ *
+ * Fiche 67 task 2 — `GET /api/forms/submissions` already answered with a
+ * `nextCursor` (`listSubmissions`'s own `ListSubmissionsResult`); this
+ * screen just never asked for more than the first 200-row page. It now
+ * fetches `PAGE_SIZE` at a time and walks the cursor with the shared
+ * `Pagination` component, same "load more" shape `users.tsx` established.
  */
 
 const STATUSES: readonly FormSubmissionStatus[] = ['new', 'read', 'archived', 'spam']
+const PAGE_SIZE = 50
 
 function valueText(value: string | readonly string[] | FormFileValue): string {
   if (typeof value === 'string') return value
@@ -84,32 +92,57 @@ export function FormSubmissionsRoute(): JSX.Element {
   >({})
   const [noteDrafts, setNoteDrafts] = useState<Readonly<Record<string, string>>>({})
   const [exporting, setExporting] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const baseFilter = useMemo(
+    () => ({
+      ...(formId === '' ? {} : { formId }),
+      ...(statusFilter === '' ? {} : { status: statusFilter }),
+      ...(queryFilter === '' ? {} : { query: queryFilter }),
+      ...(fromFilter === '' ? {} : { from: new Date(fromFilter).toISOString() }),
+      ...(toFilter === '' ? {} : { to: new Date(toFilter).toISOString() }),
+    }),
+    [formId, statusFilter, queryFilter, fromFilter, toFilter],
+  )
 
   const load = useCallback(async () => {
     if (token === null) return
     try {
       const [formList, page] = await Promise.all([
         listForms(token),
-        listSubmissions(token, {
-          ...(formId === '' ? {} : { formId }),
-          ...(statusFilter === '' ? {} : { status: statusFilter }),
-          ...(queryFilter === '' ? {} : { query: queryFilter }),
-          ...(fromFilter === '' ? {} : { from: new Date(fromFilter).toISOString() }),
-          ...(toFilter === '' ? {} : { to: new Date(toFilter).toISOString() }),
-          limit: 200,
-        }),
+        listSubmissions(token, { ...baseFilter, limit: PAGE_SIZE }),
       ])
       setForms(formList)
       setSubmissions(page.items)
+      setNextCursor(page.nextCursor)
       setSelected(new Set())
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('formSubmissions.loadError'))
     }
-  }, [token, formId, statusFilter, queryFilter, fromFilter, toFilter, t])
+  }, [token, baseFilter, t])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  async function loadMore(): Promise<void> {
+    if (token === null || nextCursor === null) return
+    setLoadingMore(true)
+    try {
+      const page = await listSubmissions(token, {
+        ...baseFilter,
+        limit: PAGE_SIZE,
+        cursor: nextCursor,
+      })
+      setSubmissions((current) => [...(current ?? []), ...page.items])
+      setNextCursor(page.nextCursor)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('formSubmissions.loadError'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   if (!isAdmin) {
     return (
@@ -541,6 +574,17 @@ export function FormSubmissionsRoute(): JSX.Element {
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {submissions !== null && (
+        <Pagination
+          variant="cursor"
+          hasMore={nextCursor !== null}
+          loading={loadingMore}
+          onLoadMore={() => void loadMore()}
+          loadMoreLabel={t('formSubmissions.loadMore')}
+          loadingLabel={t('common.loading')}
+        />
       )}
 
       <section aria-labelledby="gdpr-heading" className="rounded-md border border-border p-4">

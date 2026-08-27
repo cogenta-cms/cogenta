@@ -91,6 +91,82 @@ describe('GET /api/audit', () => {
   })
 })
 
+describe('GET /api/audit — pagination (fiche 67 task 1)', () => {
+  it('says hasMore/nextCursor false/null once every entry fits on one page', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { limit: '10' } },
+      ADMIN,
+    )
+    const body = response.body as {
+      data: unknown[]
+      page: { hasMore: boolean; nextCursor: string | null }
+    }
+    expect(body.data.length).toBe(3)
+    expect(body.page.hasMore).toBe(false)
+    expect(body.page.nextCursor).toBeNull()
+  })
+
+  it('says hasMore/nextCursor true/non-null when a further page exists', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { limit: '2' } },
+      ADMIN,
+    )
+    const body = response.body as { data: unknown[]; page: { hasMore: boolean } }
+    expect(body.data.length).toBe(2)
+    expect(body.page.hasMore).toBe(true)
+  })
+
+  it('walks the whole log via the cursor without skipping or repeating an entry', async () => {
+    const firstPage = (
+      await router.handle({ method: 'GET', path: '/api/audit', query: { limit: '2' } }, ADMIN)
+    ).body as { data: { id: string }[]; page: { hasMore: boolean; nextCursor: string | null } }
+    expect(firstPage.page.hasMore).toBe(true)
+    expect(firstPage.page.nextCursor).not.toBeNull()
+
+    const secondPage = (
+      await router.handle(
+        {
+          method: 'GET',
+          path: '/api/audit',
+          query: { limit: '2', after: firstPage.page.nextCursor as string },
+        },
+        ADMIN,
+      )
+    ).body as { data: { id: string }[]; page: { hasMore: boolean; nextCursor: string | null } }
+    expect(secondPage.page.hasMore).toBe(false)
+    expect(secondPage.page.nextCursor).toBeNull()
+    expect(secondPage.data.length).toBe(1)
+
+    const allIds = [...firstPage.data, ...secondPage.data].map((entry) => entry.id)
+    expect(new Set(allIds).size).toBe(3)
+  })
+
+  it('falls back to the first page for a malformed cursor, rather than erroring', async () => {
+    // No space in the decoded payload — `decodeAuditCursor` cannot split it
+    // into `(at, id)`, so it returns `null` and the filter is dropped
+    // entirely, same as no cursor at all.
+    const malformed = Buffer.from('no-space-here', 'utf8').toString('base64url')
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { after: malformed } },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: unknown[] }).data.length).toBe(3)
+  })
+
+  it('returns an empty page for a stale but well-formed cursor (its row long pruned)', async () => {
+    // Well-formed and decodable, but names a time before every real entry —
+    // a legitimate boundary, just one nothing is newer than "before".
+    const stale = Buffer.from('1999-01-01T00:00:00.000Z stale-id', 'utf8').toString('base64url')
+    const response = await router.handle(
+      { method: 'GET', path: '/api/audit', query: { after: stale } },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: unknown[] }).data.length).toBe(0)
+  })
+})
+
 describe('GET /api/audit/verify', () => {
   it('reports the chain intact', async () => {
     const response = await router.handle(

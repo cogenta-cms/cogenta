@@ -47,7 +47,9 @@ export { PRODUCT_STATUSES } from './catalog/types.js'
 export type {
   Coupon,
   CouponCheck,
+  CouponCheckContext,
   CouponKind,
+  CouponMetrics,
   CouponStore,
   CreateCouponInput,
 } from './coupon/store.js'
@@ -132,19 +134,31 @@ export type {
   ShippingStoreOptions,
 } from './shipping/store.js'
 export { createShippingStore, SHIPPING_KINDS, storedRate } from './shipping/store.js'
+export { createEmailRenewalNotifier } from './subscription/renewal-notifier.js'
 export type {
   BillingRunResult,
+  ChangePlanOptions,
+  ChangePlanResult,
   CreateSubscriptionInput,
+  DunningRunResult,
+  DunningState,
   IntervalUnit,
+  RenewalNoticeInput,
+  RenewalNotifier,
+  SendRenewalNoticesResult,
   Subscription,
   SubscriptionCycle,
+  SubscriptionMetrics,
   SubscriptionStatus,
   SubscriptionStore,
   SubscriptionStoreDependencies,
+  SubscriptionStoreOptions,
 } from './subscription/store.js'
 export {
   advancePeriod,
   createSubscriptionStore,
+  DEFAULT_DUNNING_SCHEDULE_DAYS,
+  DEFAULT_RENEWAL_NOTICE_DAYS,
   INTERVAL_UNITS,
   SUBSCRIPTION_STATUSES,
 } from './subscription/store.js'

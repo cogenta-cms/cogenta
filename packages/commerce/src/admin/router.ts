@@ -8,7 +8,11 @@ import { ORDER_STATUSES, type OrderStatus } from '../order/types.js'
 import type { PaymentStore } from '../payment/store.js'
 import type { PaymentConfig, PaymentGateway } from '../payment/types.js'
 import { SHIPPING_KINDS, type ShippingKind, type ShippingStore } from '../shipping/store.js'
-import type { SubscriptionStore } from '../subscription/store.js'
+import {
+  SUBSCRIPTION_STATUSES,
+  type SubscriptionStatus,
+  type SubscriptionStore,
+} from '../subscription/store.js'
 import { type TaxStore, taxFor } from '../tax/store.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
 import { COMMERCE_ANONYMOUS, COMMERCE_PERMISSIONS } from './permissions.js'
@@ -107,6 +111,8 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_QUANTITY_INVALID: 400,
   COMMERCE_COUPON_INVALID: 400,
   COMMERCE_COUPON_EXHAUSTED: 409,
+  COMMERCE_COUPON_CUSTOMER_EXHAUSTED: 409,
+  COMMERCE_COUPON_NOT_APPLICABLE: 400,
   COMMERCE_TAX_RULE_INVALID: 400,
   COMMERCE_SHIPPING_UNAVAILABLE: 400,
   COMMERCE_SUBSCRIPTION_INVALID: 400,
@@ -525,8 +531,27 @@ export function createCommerceAdminRouter(
                 ...(typeof body.maxRedemptions === 'number'
                   ? { maxRedemptions: body.maxRedemptions }
                   : {}),
+                ...(typeof body.maxRedemptionsPerCustomer === 'number'
+                  ? { maxRedemptionsPerCustomer: body.maxRedemptionsPerCustomer }
+                  : {}),
+                ...(Array.isArray(body.restrictedProductIds)
+                  ? {
+                      restrictedProductIds: body.restrictedProductIds.filter(
+                        (id: unknown): id is string => typeof id === 'string',
+                      ),
+                    }
+                  : {}),
               }),
             }
+          }
+        }
+
+        // Read before the generic /coupons/{code}/deactivate route below —
+        // "metrics" is not a coupon code, but the two paths share a shape.
+        if (segments[0] === 'coupons' && segments[1] === 'metrics' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: await options.coupons.metrics() }
           }
         }
 
@@ -558,10 +583,61 @@ export function createCommerceAdminRouter(
               status: 200,
               body: {
                 subscriptions: await options.subscriptions.list(
-                  status === 'active' || status === 'paused' || status === 'cancelled'
-                    ? { status }
+                  (SUBSCRIPTION_STATUSES as readonly string[]).includes(status ?? '')
+                    ? { status: status as SubscriptionStatus }
                     : {},
                 ),
+              },
+            }
+          }
+        }
+
+        // Read before the generic /subscriptions/{id} route below — "metrics"
+        // is not a subscription id, but the two paths share a shape.
+        if (segments[0] === 'subscriptions' && segments[1] === 'metrics' && segments.length === 2) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: await options.subscriptions.metrics() }
+          }
+        }
+
+        // A subscription's own billing history (`cycles`) and open dunning
+        // cycle, if any — fiche 53 tasks 1 and 3: pause/resume/cancel were
+        // already routed below, but nothing surfaced either of these.
+        if (segments[0] === 'subscriptions' && segments.length === 2) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const id = segments[1] ?? ''
+            const subscription = await options.subscriptions.read(id)
+            if (subscription === null) return notFound('subscription')
+            return {
+              status: 200,
+              body: {
+                subscription,
+                cycles: await options.subscriptions.cycles(id),
+                dunning: await options.subscriptions.dunning(id),
               },
             }
           }
@@ -595,6 +671,41 @@ export function createCommerceAdminRouter(
                   ? await subscriptions.resume(id)
                   : await subscriptions.cancel(id)
             return { status: 200, body: updated }
+          }
+        }
+
+        if (
+          segments[0] === 'subscriptions' &&
+          segments[2] === 'change-plan' &&
+          segments.length === 3
+        ) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.order.write', actor)
+            const body = readObject(request.body)
+            const quantity = readOptionalInt(body, 'quantity')
+            const prorate = readOptionalBool(body, 'prorate')
+            return {
+              status: 200,
+              body: await options.subscriptions.changePlan(
+                segments[1] ?? '',
+                readString(body, 'variantId'),
+                {
+                  ...(quantity === undefined ? {} : { quantity }),
+                  ...(prorate === undefined ? {} : { prorate }),
+                },
+              ),
+            }
           }
         }
 
@@ -836,6 +947,7 @@ const NOT_FOUND_CODES: Readonly<Record<string, string>> = {
   product: 'COMMERCE_PRODUCT_NOT_FOUND',
   order: 'COMMERCE_ORDER_NOT_FOUND',
   invoice: 'COMMERCE_INVOICE_NOT_FOUND',
+  subscription: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
 }
 
 function notFound(what: string): CommerceResponse {

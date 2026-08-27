@@ -406,6 +406,10 @@ export const ERROR_CODES = [
   'COMMERCE_COUPON_NOT_FOUND',
   'COMMERCE_COUPON_INVALID',
   'COMMERCE_COUPON_EXHAUSTED',
+  // Fiche 53 task 2: a per-customer cap, distinct from the global one above,
+  // and a coupon restricted to products none of which are in the basket.
+  'COMMERCE_COUPON_CUSTOMER_EXHAUSTED',
+  'COMMERCE_COUPON_NOT_APPLICABLE',
 
   // Commerce — invoices (L15 task 8)
   'COMMERCE_INVOICE_NOT_FOUND',

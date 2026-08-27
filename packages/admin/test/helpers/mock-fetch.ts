@@ -1639,6 +1639,8 @@ export function installMockFetch(
     endsAt: string | null
     maxRedemptions: number | null
     redemptions: number
+    maxRedemptionsPerCustomer: number | null
+    restrictedProductIds: string[]
     active: boolean
     createdAt: string
   }
@@ -1647,7 +1649,7 @@ export function installMockFetch(
     customerId: string
     variantId: string
     quantity: number
-    status: 'active' | 'paused' | 'cancelled'
+    status: 'active' | 'past_due' | 'paused' | 'cancelled'
     intervalUnit: 'day' | 'week' | 'month' | 'year'
     intervalCount: number
     priceMinor: number
@@ -1655,6 +1657,15 @@ export function installMockFetch(
     nextBillingAt: string
     createdAt: string
     cancelledAt: string | null
+  }
+  interface MockSubscriptionCycle {
+    id: string
+    subscriptionId: string
+    periodStart: string
+    periodEnd: string
+    orderId: string | null
+    status: 'billed' | 'skipped_out_of_stock' | 'failed'
+    createdAt: string
   }
   let mockProductCounter = 0
   let mockVariantCounter = 0
@@ -1703,6 +1714,7 @@ export function installMockFetch(
       cancelledAt: null,
     },
   ]
+  const mockSubscriptionCycles: MockSubscriptionCycle[] = []
   const mockOrders = [
     {
       id: 'order-1',
@@ -5969,6 +5981,16 @@ export function installMockFetch(
         }
 
         // coupons
+        if (segments[0] === 'coupons' && segments[1] === 'metrics' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            activeCoupons: mockCoupons.filter((c) => c.active).length,
+            totalRedemptions: mockCoupons.reduce((sum, c) => sum + c.redemptions, 0),
+            discountGivenMinor: [],
+            revenueMinor: [],
+          })
+        }
         if (segments[0] === 'coupons' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
@@ -5987,6 +6009,13 @@ export function installMockFetch(
             endsAt: typeof body.endsAt === 'string' ? body.endsAt : null,
             maxRedemptions: typeof body.maxRedemptions === 'number' ? body.maxRedemptions : null,
             redemptions: 0,
+            maxRedemptionsPerCustomer:
+              typeof body.maxRedemptionsPerCustomer === 'number'
+                ? body.maxRedemptionsPerCustomer
+                : null,
+            restrictedProductIds: Array.isArray(body.restrictedProductIds)
+              ? (body.restrictedProductIds as string[])
+              : [],
             active: true,
             createdAt: '2026-03-01T00:00:00.000Z',
           }
@@ -6002,6 +6031,18 @@ export function installMockFetch(
         }
 
         // subscriptions
+        if (segments[0] === 'subscriptions' && segments[1] === 'metrics' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            active: mockSubscriptions.filter((s) => s.status === 'active').length,
+            pastDue: mockSubscriptions.filter((s) => s.status === 'past_due').length,
+            paused: mockSubscriptions.filter((s) => s.status === 'paused').length,
+            cancelled: mockSubscriptions.filter((s) => s.status === 'cancelled').length,
+            mrrMinor: [],
+            churnRate: 0,
+          })
+        }
         if (segments[0] === 'subscriptions' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
@@ -6012,6 +6053,53 @@ export function installMockFetch(
                 ? mockSubscriptions
                 : mockSubscriptions.filter((s) => s.status === status),
           })
+        }
+        if (segments[0] === 'subscriptions' && segments.length === 2 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          const cycles: MockSubscriptionCycle[] = mockSubscriptionCycles.filter(
+            (c) => c.subscriptionId === subscription.id,
+          )
+          return json(200, { subscription, cycles, dunning: null })
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'pause' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.status = 'paused'
+          return json(200, subscription)
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'resume' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.status = 'active'
+          return json(200, subscription)
         }
         if (segments[0] === 'subscriptions' && segments[2] === 'cancel' && method === 'POST') {
           const refused = commerceRefused('commerce.order.write')
@@ -6028,6 +6116,21 @@ export function installMockFetch(
           subscription.status = 'cancelled'
           subscription.cancelledAt = '2026-03-02T00:00:00.000Z'
           return json(200, subscription)
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'change-plan' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.variantId = String(body.variantId)
+          return json(200, { subscription, prorationMinor: 0, prorationOrderId: null })
         }
 
         // invoices — this mock has no seller configured, so an order is never

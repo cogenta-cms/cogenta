@@ -112,11 +112,23 @@ export interface Coupon {
   readonly endsAt: string | null
   readonly maxRedemptions: number | null
   readonly redemptions: number
+  readonly maxRedemptionsPerCustomer: number | null
+  readonly restrictedProductIds: readonly string[]
   readonly active: boolean
   readonly createdAt: string
 }
 
-export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
+export interface CouponMetrics {
+  readonly activeCoupons: number
+  readonly totalRedemptions: number
+  readonly discountGivenMinor: readonly {
+    readonly currency: string
+    readonly amountMinor: number
+  }[]
+  readonly revenueMinor: readonly { readonly currency: string; readonly amountMinor: number }[]
+}
+
+export type SubscriptionStatus = 'active' | 'past_due' | 'paused' | 'cancelled'
 export type IntervalUnit = 'day' | 'week' | 'month' | 'year'
 
 export interface Subscription {
@@ -132,6 +144,38 @@ export interface Subscription {
   readonly nextBillingAt: string
   readonly createdAt: string
   readonly cancelledAt: string | null
+}
+
+export interface SubscriptionCycle {
+  readonly id: string
+  readonly subscriptionId: string
+  readonly periodStart: string
+  readonly periodEnd: string
+  readonly orderId: string | null
+  readonly status: 'billed' | 'skipped_out_of_stock' | 'failed'
+  readonly createdAt: string
+}
+
+export interface SubscriptionDunning {
+  readonly subscriptionId: string
+  readonly orderId: string
+  readonly periodKey: string
+  readonly failureCount: number
+  readonly firstFailedAt: string
+  readonly nextRetryAt: string | null
+  readonly lastReason: string | null
+  readonly suspendedAt: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface SubscriptionMetrics {
+  readonly active: number
+  readonly pastDue: number
+  readonly paused: number
+  readonly cancelled: number
+  readonly mrrMinor: readonly { readonly currency: string; readonly amountMinor: number }[]
+  readonly churnRate: number
 }
 
 export interface InvoiceDocument {
@@ -363,6 +407,8 @@ export function createCoupon(
     readonly startsAt?: string
     readonly endsAt?: string
     readonly maxRedemptions?: number
+    readonly maxRedemptionsPerCustomer?: number
+    readonly restrictedProductIds?: readonly string[]
   },
 ): Promise<Coupon> {
   return requestBody('/api/commerce/coupons', {
@@ -379,6 +425,10 @@ export async function deactivateCoupon(token: string, code: string): Promise<voi
   })
 }
 
+export function getCouponMetrics(token: string): Promise<CouponMetrics> {
+  return requestBody('/api/commerce/coupons/metrics', { headers: authHeader(token) })
+}
+
 // ---- subscriptions ----------------------------------------------------------
 
 export function listSubscriptions(
@@ -389,11 +439,58 @@ export function listSubscriptions(
   return requestBody(`/api/commerce/subscriptions${query}`, { headers: authHeader(token) })
 }
 
+export function readSubscription(
+  token: string,
+  id: string,
+): Promise<{
+  readonly subscription: Subscription
+  readonly cycles: readonly SubscriptionCycle[]
+  readonly dunning: SubscriptionDunning | null
+}> {
+  return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}`, {
+    headers: authHeader(token),
+  })
+}
+
+export function pauseSubscription(token: string, id: string): Promise<Subscription> {
+  return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/pause`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+export function resumeSubscription(token: string, id: string): Promise<Subscription> {
+  return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/resume`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
 export function cancelSubscription(token: string, id: string): Promise<Subscription> {
   return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',
     headers: authHeader(token),
   })
+}
+
+export function changeSubscriptionPlan(
+  token: string,
+  id: string,
+  input: { readonly variantId: string; readonly quantity?: number; readonly prorate?: boolean },
+): Promise<{
+  readonly subscription: Subscription
+  readonly prorationMinor: number
+  readonly prorationOrderId: string | null
+}> {
+  return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/change-plan`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+export function getSubscriptionMetrics(token: string): Promise<SubscriptionMetrics> {
+  return requestBody('/api/commerce/subscriptions/metrics', { headers: authHeader(token) })
 }
 
 // ---- invoices ---------------------------------------------------------------

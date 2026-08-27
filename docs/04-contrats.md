@@ -874,9 +874,12 @@ Customer      email unique, nom, lien optionnel vers un compte @cogenta/auth
 Cart          persistant, une devise, lignes, zone de livraison, méthode, coupon
 Order         référence unique, lignes copiées, statut, historique append-only
 Coupon        percentage | fixed | free_shipping, fenêtre, compteur de redemptions
+              global + compteur par client (fiche 53), restriction optionnelle à
+              une liste de produits
 Payment       driver, identifiant externe, statut, montant ; Refund lié
 Invoice       numéro séquentiel par série, snapshot figé du document
-Subscription  intervalle, prix convenu, cycles idempotents par période
+Subscription  intervalle, prix convenu, cycles idempotents par période, statut
+              active | past_due | paused | cancelled (fiche 53)
 ```
 
 Aucun de ces objets ne porte `status` de contenu, `version`, `translationOf` ni
@@ -909,6 +912,16 @@ cancelled, refunded : états finaux, rien n'en sort
 `pending → shipped` est refusé volontairement : expédier avant paiement est une décision
 qu'un humain prend explicitement, en marquant d'abord la commande payée, pour que la
 raison soit tracée plutôt que sous-entendue.
+
+### Relance d'impayé (fiche 53)
+
+Un abonnement dont le paiement de renouvellement échoue passe en `past_due` — jamais
+directement `paused`. `runBilling` ne le refacture plus tant que ce cycle est ouvert.
+Une relance à J+1/J+3/J+7 après le premier échec (calendrier par défaut, configurable)
+retente le paiement de la même commande ; la troisième relance échouée suspend
+l'abonnement (`paused`), jamais la première. Rejouer la relance sur une échéance déjà
+tentée ne double jamais la tentative — le même principe d'idempotence par clé de
+période que `billOne`, appliqué à la relance.
 
 ### Permissions
 

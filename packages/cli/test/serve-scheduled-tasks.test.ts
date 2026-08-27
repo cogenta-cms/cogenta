@@ -73,10 +73,14 @@ const TASK_NAMES = [
   'channel-notifications',
   'analytics-purge',
   'updates-auto-check',
+  // Fiche 52 task 2 — always registered: `runServe` always builds a real
+  // (degraded) `FileEmailTransport`, so the commerce order-email retry
+  // queue always exists, whether or not the site sells anything yet.
+  'commerce-order-emails',
 ].sort()
 
 describe('cogenta serve — /api/scheduled-tasks', () => {
-  it('lists the eight registered recurring jobs, not a 404', async () => {
+  it('lists the nine registered recurring jobs, not a 404', async () => {
     const root = await project()
     // Slow every tick way down: this test only cares that the route exists
     // and answers with real registrations, not that a sweep actually fires

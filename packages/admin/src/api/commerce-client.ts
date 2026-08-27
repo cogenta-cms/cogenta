@@ -61,6 +61,16 @@ export interface OrderLine {
   readonly position: number
 }
 
+/** A real postal address (fiche 52 task 1) — never `shippingCountry`/`shippingRegion` alone. */
+export interface ShippingAddress {
+  readonly line1: string
+  readonly line2?: string | null
+  readonly city: string
+  readonly postalCode: string
+  readonly recipient?: string | null
+  readonly phone?: string | null
+}
+
 export interface Order {
   readonly id: string
   readonly reference: string
@@ -74,6 +84,16 @@ export interface Order {
   readonly taxMinor: number
   readonly totalMinor: number
   readonly couponCode: string | null
+  readonly shippingAddressLine1: string | null
+  readonly shippingAddressLine2: string | null
+  readonly shippingCity: string | null
+  readonly shippingPostalCode: string | null
+  readonly shippingRecipient: string | null
+  readonly shippingPhone: string | null
+  readonly trackingCarrier: string | null
+  readonly trackingNumber: string | null
+  readonly trackingUrl: string | null
+  readonly shippedAt: string | null
   readonly placedAt: string
   readonly updatedAt: string
   readonly lines: readonly OrderLine[]
@@ -87,6 +107,8 @@ export type OrderEventKind =
   | 'payment_failed'
   | 'refunded'
   | 'invoiced'
+  | 'address_updated'
+  | 'tracking_added'
   | 'note'
 
 export interface OrderEvent {
@@ -179,6 +201,57 @@ export interface Payment {
   readonly instructions: string | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export interface RefundRecord {
+  readonly id: string
+  readonly paymentId: string
+  readonly orderId: string
+  readonly status: string
+  readonly amountMinor: number
+  readonly currency: string
+  readonly reason: string | null
+  readonly createdAt: string
+}
+
+export interface CreditNote {
+  readonly id: string
+  readonly orderId: string
+  readonly refundId: string
+  readonly number: string
+  readonly issuedAt: string
+  readonly currency: string
+  readonly amountMinor: number
+  readonly reason: string | null
+}
+
+export interface OrderEmailRecord {
+  readonly id: string
+  readonly orderId: string
+  readonly kind: 'confirmation' | 'shipment'
+  readonly toEmail: string
+  readonly status: 'pending' | 'sent' | 'failed'
+  readonly attempts: number
+  readonly lastError: string | null
+  readonly createdAt: string
+  readonly sentAt: string | null
+}
+
+export interface Customer {
+  readonly id: string
+  readonly email: string
+  readonly name: string | null
+  readonly userId: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface CustomerDetail {
+  readonly customer: Customer
+  readonly orders: readonly Order[]
+  readonly totalSpentMinor: number
+  readonly currency: string | null
+  readonly subscriptions: readonly Subscription[]
 }
 
 export function listProducts(
@@ -284,19 +357,157 @@ export async function deleteVariant(token: string, id: string): Promise<void> {
   })
 }
 
-/** `q` finds an order by a substring of its reference or its customer email (fiche 36 task 4). */
+// ---- customers ----------------------------------------------------------------
+
+/** Fiche 52 task 3 — the list route already existed server-side; nothing in the admin ever called it. */
+export function listCustomers(
+  token: string,
+  search: string,
+): Promise<{ readonly customers: readonly Customer[] }> {
+  const query = search.trim() === '' ? '' : `?q=${encodeURIComponent(search.trim())}`
+  return requestBody(`/api/commerce/customers${query}`, { headers: authHeader(token) })
+}
+
+export function readCustomer(token: string, id: string): Promise<CustomerDetail> {
+  return requestBody(`/api/commerce/customers/${encodeURIComponent(id)}`, {
+    headers: authHeader(token),
+  })
+}
+
+/** GDPR export (fiche 52 task 3) — the customer's own record plus their orders and subscriptions. */
+export function exportCustomer(token: string, id: string): Promise<CustomerDetail> {
+  return requestBody(`/api/commerce/customers/${encodeURIComponent(id)}/export`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+/** GDPR erasure of the customer record (fiche 52 task 3) — see `CustomerStore.anonymize`'s own comment on scope. */
+export function anonymizeCustomer(token: string, id: string): Promise<Customer> {
+  return requestBody(`/api/commerce/customers/${encodeURIComponent(id)}/anonymize`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+/**
+ * `q` finds an order by a substring of its reference or its customer email
+ * (fiche 36 task 4). `from`/`to` are an inclusive placed-at date range —
+ * ISO 8601 date strings, e.g. `2026-08-01` — the advanced filters of fiche
+ * 52 task 7.
+ */
 export function listOrders(
   token: string,
   status?: OrderStatus,
   q?: string,
+  range?: { readonly from?: string; readonly to?: string },
 ): Promise<{ readonly orders: readonly Order[] }> {
   const params = new URLSearchParams()
   if (status !== undefined) params.set('status', status)
   if (q !== undefined && q.trim() !== '') params.set('q', q)
+  if (range?.from !== undefined && range.from !== '') params.set('from', range.from)
+  if (range?.to !== undefined && range.to !== '') params.set('to', range.to)
   const query = params.toString()
   return requestBody(`/api/commerce/orders${query === '' ? '' : `?${query}`}`, {
     headers: authHeader(token),
   })
+}
+
+/** A shopkeeper-entered order (fiche 52 task 5) — a phone order, a trade-show sale, a correction. */
+export type PlaceOrderOutcome =
+  | { readonly kind: 'placed'; readonly order: Order }
+  | { readonly kind: 'out_of_stock'; readonly shortfalls: readonly unknown[] }
+  | { readonly kind: 'coupon_refused'; readonly reason: string }
+  | { readonly kind: 'empty' }
+
+export function createManualOrder(
+  token: string,
+  input: {
+    readonly email: string
+    readonly customerName?: string
+    readonly currency: string
+    readonly lines: readonly { readonly variantId: string; readonly quantity: number }[]
+    readonly shippingAddress?: ShippingAddress
+  },
+): Promise<PlaceOrderOutcome> {
+  return requestBody('/api/commerce/orders', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+/**
+ * Corrects the e-mail/address before payment (fiche 52 task 5,
+ * "modification pré-paiement") — the server locks this once the order is no
+ * longer `pending` (`COMMERCE_ORDER_LOCKED`).
+ */
+export function updateOrder(
+  token: string,
+  id: string,
+  patch: { readonly email?: string; readonly shippingAddress?: ShippingAddress | null },
+): Promise<Order> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
+  })
+}
+
+/** Shipment tracking (fiche 52 task 4) — moves a `paid` order to `shipped`. */
+export function setOrderTracking(
+  token: string,
+  id: string,
+  tracking: { readonly carrier: string; readonly number: string; readonly url?: string },
+): Promise<Order> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(id)}/tracking`, {
+    method: 'PUT',
+    headers: authHeader(token),
+    body: JSON.stringify(tracking),
+  })
+}
+
+/** The transactional e-mail log for an order (fiche 52 task 2) — the "journal visible sur la commande". */
+export function listOrderEmails(
+  token: string,
+  orderId: string,
+): Promise<{ readonly emails: readonly OrderEmailRecord[] }> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(orderId)}/emails`, {
+    headers: authHeader(token),
+  })
+}
+
+export function listCreditNotes(
+  token: string,
+  orderId: string,
+): Promise<{ readonly creditNotes: readonly CreditNote[] }> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(orderId)}/credit-notes`, {
+    headers: authHeader(token),
+  })
+}
+
+/**
+ * The accounting export (fiche 52 task 7) — plain CSV text, not JSON, so
+ * this uses `fetch` directly the same way `fetchInvoicePdf` reads bytes
+ * rather than running the response through `response.json()`.
+ */
+export async function exportOrdersCsv(
+  token: string,
+  filter: { readonly status?: OrderStatus; readonly from?: string; readonly to?: string } = {},
+): Promise<string> {
+  const params = new URLSearchParams()
+  if (filter.status !== undefined) params.set('status', filter.status)
+  if (filter.from !== undefined && filter.from !== '') params.set('from', filter.from)
+  if (filter.to !== undefined && filter.to !== '') params.set('to', filter.to)
+  const query = params.toString()
+  const response = await fetch(
+    `${API_BASE}/api/commerce/orders/export.csv${query === '' ? '' : `?${query}`}`,
+    { headers: authHeader(token) },
+  )
+  if (!response.ok) {
+    throw new ApiError('INTERNAL', 'The export could not be generated.', undefined)
+  }
+  return response.text()
 }
 
 export function readOrder(
@@ -333,16 +544,33 @@ export function settlePayment(token: string, paymentId: string, note?: string): 
   })
 }
 
+/**
+ * A partial (or full) refund. `reason` is required by the server (fiche 52
+ * task 6, "motif obligatoire") — passing none is a caller bug, not something
+ * this function should paper over with an empty string. A credit note is
+ * issued automatically alongside the refund when the shop has billing
+ * configured; `null` when it does not.
+ */
+/** Every refund issued against a payment — what a "remaining refundable" figure is computed from. */
+export function listRefunds(
+  token: string,
+  paymentId: string,
+): Promise<{ readonly refunds: readonly RefundRecord[] }> {
+  return requestBody(`/api/commerce/payments/${encodeURIComponent(paymentId)}/refunds`, {
+    headers: authHeader(token),
+  })
+}
+
 export function refundPayment(
   token: string,
   paymentId: string,
   amountMinor: number,
-  reason?: string,
-): Promise<Payment> {
+  reason: string,
+): Promise<{ readonly refund: RefundRecord; readonly creditNote: CreditNote | null }> {
   return requestBody(`/api/commerce/payments/${encodeURIComponent(paymentId)}/refund`, {
     method: 'POST',
     headers: authHeader(token),
-    body: JSON.stringify(reason === undefined ? { amountMinor } : { amountMinor, reason }),
+    body: JSON.stringify({ amountMinor, reason }),
   })
 }
 

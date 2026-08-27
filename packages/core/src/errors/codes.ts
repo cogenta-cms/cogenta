@@ -416,6 +416,13 @@ export const ERROR_CODES = [
   'COMMERCE_SUBSCRIPTION_NOT_FOUND',
   'COMMERCE_SUBSCRIPTION_INVALID',
 
+  // Commerce — customers, order edits, shipment tracking, credit notes
+  // (fiche 52: commandes et clients)
+  'COMMERCE_CUSTOMER_NOT_FOUND',
+  'COMMERCE_ORDER_LOCKED',
+  'COMMERCE_TRACKING_INVALID',
+  'COMMERCE_CREDIT_NOTE_NOT_FOUND',
+
   // Agents — vector store driver (L18 task 1/5)
   'VECTOR_DIMENSION_MISMATCH',
   'VECTOR_STORE_FAILED',

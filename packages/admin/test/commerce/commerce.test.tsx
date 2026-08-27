@@ -146,4 +146,40 @@ describe('the order list and detail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Marquer Payée' }))
     await screen.findByText(/Statut modifié/u)
   })
+
+  it('ships an order with tracking, then refunds it partially with a mandatory reason (fiche 52)', async () => {
+    render(<App />)
+    await goToOrders()
+    fireEvent.click(screen.getByRole('link', { name: 'ORD-0001' }))
+    await screen.findByRole('button', { name: 'Marquer reçu' })
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer reçu' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Marquer reçu' })).toBeNull()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer Payée' }))
+    await screen.findByText('Payée', { exact: false })
+
+    // Shipment tracking (task 4): the form appears once the order is paid,
+    // and submitting it both records the tracking and ships the order.
+    const trackingForm = (
+      await screen.findByRole('heading', { name: 'Suivi de l’expédition' })
+    ).closest('section') as HTMLElement
+    fireEvent.change(within(trackingForm).getByLabelText('Transporteur'), {
+      target: { value: 'DHL' },
+    })
+    fireEvent.change(within(trackingForm).getByLabelText('Numéro de suivi'), {
+      target: { value: 'DHL123456' },
+    })
+    fireEvent.click(within(trackingForm).getByRole('button', { name: 'Expédier, avec suivi' }))
+    await screen.findByText('Expédiée', { exact: false })
+
+    // Partial refund (task 6): the amount defaults to what remains, and a
+    // reason is mandatory — the button is only enabled with one filled in.
+    fireEvent.click(screen.getByRole('button', { name: 'Rembourser' }))
+    const reasonInput = await screen.findByLabelText('Motif (obligatoire)')
+    fireEvent.change(reasonInput, { target: { value: 'Un article manquant dans le colis.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le remboursement' }))
+
+    await screen.findByText(/refunded so far|remboursé/u)
+  })
 })

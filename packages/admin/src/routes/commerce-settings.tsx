@@ -1,9 +1,11 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { fetchInvoicePreviewPdf } from '../api/commerce-client.js'
+import { ApiError } from '../api/http.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
-import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Field, Input, Notice } from '../ui/index.js'
 
 const GENERAL_KEYS = [
   'commerce.currency',
@@ -40,6 +42,9 @@ export function CommerceSettingsRoute(): JSX.Element {
 
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [previewOrderId, setPreviewOrderId] = useState('')
+  const [previewing, setPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!isAdmin) return
@@ -60,6 +65,34 @@ export function CommerceSettingsRoute(): JSX.Element {
     if (token === null) return
     await writeSetting(token, key, value)
     await load()
+  }
+
+  /**
+   * A real preview, not a mock — `GET .../invoice/preview` renders the same
+   * `documentFor`/`pdfDocumentFor`/`renderInvoicePdf` chain a real, issued
+   * invoice does, on the order's live data, and never claims a real invoice
+   * number in doing so (`InvoiceStore.preview`'s own comment in
+   * `@cogenta/commerce`). Opened in a new tab rather than downloaded: a
+   * preview is looked at, not filed.
+   */
+  async function previewInvoice(): Promise<void> {
+    if (token === null || previewOrderId.trim() === '') return
+    setPreviewing(true)
+    setPreviewError(null)
+    try {
+      const blob = await fetchInvoicePreviewPdf(token, previewOrderId.trim())
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener')
+      // The object URL only needs to outlive the tab's own load of it; a
+      // short delay is simpler and just as safe as tracking that load.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (caught) {
+      setPreviewError(
+        caught instanceof ApiError ? caught.message : t('commerceSettings.invoicePreviewError'),
+      )
+    } finally {
+      setPreviewing(false)
+    }
   }
 
   function byKey(keys: readonly string[]): readonly SiteSetting[] {
@@ -157,9 +190,42 @@ export function CommerceSettingsRoute(): JSX.Element {
               <Notice tone="warning" live="off">
                 <p className="m-0 text-sm">{t('commerceSettings.seriesWarning')}</p>
               </Notice>
-              <p className="m-0 text-sm text-muted-foreground">
-                {t('commerceSettings.invoicePreviewHint')}
-              </p>
+
+              <div className="flex flex-col gap-2 border-t border-border pt-4">
+                <h3 className="m-0 text-sm font-semibold">
+                  {t('commerceSettings.invoicePreviewHeading')}
+                </h3>
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t('commerceSettings.invoicePreviewHint')}
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label={t('commerceSettings.invoicePreviewOrderId')} className="min-w-64">
+                    {(control) => (
+                      <Input
+                        {...control}
+                        value={previewOrderId}
+                        onChange={(event) => setPreviewOrderId(event.target.value)}
+                        placeholder={t('commerceSettings.invoicePreviewOrderIdPlaceholder')}
+                      />
+                    )}
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={previewing || previewOrderId.trim() === ''}
+                    onClick={() => void previewInvoice()}
+                  >
+                    {previewing
+                      ? t('commerceSettings.invoicePreviewing')
+                      : t('commerceSettings.invoicePreviewButton')}
+                  </Button>
+                </div>
+                {previewError !== null && (
+                  <Notice tone="danger" live="assertive">
+                    <p className="m-0">{previewError}</p>
+                  </Notice>
+                )}
+              </div>
             </CardBody>
           </Card>
         </>

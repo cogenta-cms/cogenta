@@ -2655,7 +2655,8 @@
     "kind": {
       "flat": "Flat rate",
       "by_weight": "By weight",
-      "free": "Free"
+      "free": "Free",
+      "pickup": "Local pickup"
     },
     "simulatorHeading": "Simulator",
     "simWeight": "Weight (g)",
@@ -2674,8 +2675,11 @@
     "testModeOnHint": "No real money moves. Switch payment.testMode off in the server configuration when you are ready to take real payments.",
     "testModeOff": "Live mode",
     "testModeOffHint": "This shop takes real payments.",
+    "providersHeading": "Payment providers",
+    "providersHint": "Every provider below implements the same driver interface — adding another one takes no change to this screen.",
     "driver": {
       "stripe": "Stripe",
+      "paypal": "PayPal",
       "manual": "Bank transfer"
     },
     "active": "Active",
@@ -2707,7 +2711,13 @@
     "invoiceHeading": "Invoice template",
     "invoiceHint": "Seller identity (legal name, address, tax id) stays in the server configuration — these are the parts a shop owner changes without redeploying.",
     "seriesWarning": "Changing the series prefix mid-fiscal-year is an accounting problem: the sequential number itself never resets, but a new prefix reads as a different series to an auditor. Confirm with your accountant before changing it after the year has started.",
-    "invoicePreviewHint": "To preview a real invoice, open an order that already has one and use its own \"Download invoice\" button."
+    "invoicePreviewHeading": "Preview an invoice",
+    "invoicePreviewHint": "Renders a real invoice PDF for any existing order, using its live data — nothing is saved and no invoice number is ever claimed, so this is safe to try as many times as needed.",
+    "invoicePreviewOrderId": "Order ID",
+    "invoicePreviewOrderIdPlaceholder": "e.g. 8f3e2c1a-…",
+    "invoicePreviewButton": "Preview invoice",
+    "invoicePreviewing": "Rendering…",
+    "invoicePreviewError": "Could not render a preview for this order."
   },
   "commerceOrderDetail": {
     "back": "← Back to orders",

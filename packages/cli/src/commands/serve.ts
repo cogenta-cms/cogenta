@@ -1868,12 +1868,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     coupons: commerceCoupons,
   })
   // Contract E's payment gateway (fiche 34 task 3) — the same registry
-  // pattern as cache/queue/storage (R1): Stripe is `optimal` and answers only
-  // with a real key that Stripe itself accepts, bank transfer is `degraded`
-  // and always answers, so a shop is sellable before anyone configures
-  // Stripe. `select()` never throws here (`payment.driver` defaults to
-  // `'auto'`, and the degraded driver always resolves), unlike database or
-  // storage where a named-but-unreachable driver is fatal on purpose.
+  // pattern as cache/queue/storage (R1): Stripe and PayPal are both `optimal`
+  // and answer only with real credentials the gateway itself accepts, bank
+  // transfer is `degraded` and always answers, so a shop is sellable before
+  // anyone configures either. `select()` never throws here (`payment.driver`
+  // defaults to `'auto'`, and the degraded driver always resolves), unlike
+  // database or storage where a named-but-unreachable driver is fatal on
+  // purpose.
   const paymentConfig: PaymentConfig = {
     driver: options.payment?.driver ?? 'auto',
     ...(options.payment?.stripeSecretKey === undefined
@@ -1882,6 +1883,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.payment?.stripeWebhookSecret === undefined
       ? {}
       : { webhookSecret: options.payment.stripeWebhookSecret }),
+    ...(options.payment?.paypalClientId === undefined
+      ? {}
+      : { clientId: options.payment.paypalClientId }),
+    ...(options.payment?.paypalClientSecret === undefined
+      ? {}
+      : { clientSecret: options.payment.paypalClientSecret }),
+    ...(options.payment?.paypalWebhookId === undefined
+      ? {}
+      : { webhookId: options.payment.paypalWebhookId }),
     ...(options.payment?.manualInstructions === undefined
       ? {}
       : { transferInstructions: options.payment.manualInstructions }),

@@ -113,71 +113,105 @@ export function CommercePaymentRoute(): JSX.Element {
             </p>
           </Notice>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {drivers.map((driver) => (
-              <Card key={driver.name} aria-labelledby={`commerce-payment-${driver.name}-heading`}>
-                <CardHeader>
-                  <CardTitle>
-                    <h2
-                      id={`commerce-payment-${driver.name}-heading`}
-                      className="flex items-center gap-2"
+          {/*
+           * A list of registered providers, not a fixed pair of cards — the
+           * point being made visually, not just structurally: `drivers` comes
+           * straight from `GET /payment/drivers`, which itself just echoes
+           * `registry.list()` (`@cogenta/commerce`'s `PaymentRegistry`). A
+           * third driver registered there (PayPal, alongside Stripe and bank
+           * transfer) appears here with no change to this component, the way
+           * a WooCommerce install lists "Payment providers" as an open-ended
+           * roster rather than a hard-coded left/right pair.
+           */}
+          <Card aria-labelledby="commerce-payment-providers-heading">
+            <CardHeader>
+              <CardTitle>
+                <h2 id="commerce-payment-providers-heading">
+                  {t('commercePayment.providersHeading')}
+                </h2>
+              </CardTitle>
+              <p className="m-0 text-sm text-muted-foreground">
+                {t('commercePayment.providersHint')}
+              </p>
+            </CardHeader>
+            <CardBody className="p-0">
+              {drivers.length === 0 ? (
+                <p className="m-0 p-4 text-sm text-muted-foreground">
+                  {t('commercePayment.empty')}
+                </p>
+              ) : (
+                <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
+                  {drivers.map((driver) => (
+                    <li
+                      key={driver.name}
+                      aria-labelledby={`commerce-payment-${driver.name}-heading`}
+                      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      {t(`commercePayment.driver.${driver.name}`, { defaultValue: driver.name })}
-                      {driver.selected === true && (
-                        <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                          {t('commercePayment.active')}
-                        </span>
-                      )}
-                    </h2>
-                  </CardTitle>
-                </CardHeader>
-                <CardBody className="flex flex-col gap-2 text-sm">
-                  <p className="m-0">
-                    {t('commercePayment.tier', {
-                      tier: t(`commercePayment.tierName.${driver.tier}`),
-                    })}
-                  </p>
-                  <p className="m-0">
-                    {driver.configured
-                      ? t('commercePayment.keyPresent')
-                      : t('commercePayment.keyAbsent')}
-                  </p>
-                  <p className="m-0 text-muted-foreground">
-                    {driver.settlesOffline
-                      ? t('commercePayment.settlesOffline')
-                      : t('commercePayment.settlesOnline')}
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={testing === driver.name}
-                    onClick={() => void runTest(driver.name)}
-                  >
-                    {testing === driver.name
-                      ? t('commercePayment.testing')
-                      : t('commercePayment.testConnection')}
-                  </Button>
-                  {results[driver.name] !== undefined && (
-                    <p
-                      role="status"
-                      className={
-                        results[driver.name]?.ok
-                          ? 'm-0 text-success'
-                          : 'm-0 font-medium text-destructive'
-                      }
-                    >
-                      {results[driver.name]?.ok
-                        ? t('commercePayment.testOk')
-                        : (results[driver.name]?.message ?? t('commercePayment.testFailed'))}
-                    </p>
-                  )}
-                </CardBody>
-              </Card>
-            ))}
-            {drivers.length === 0 && (
-              <p className="text-sm text-muted-foreground">{t('commercePayment.empty')}</p>
-            )}
-          </div>
+                      <div className="flex flex-col gap-1">
+                        <h3
+                          id={`commerce-payment-${driver.name}-heading`}
+                          className="m-0 flex flex-wrap items-center gap-2 text-base font-semibold"
+                        >
+                          {t(`commercePayment.driver.${driver.name}`, {
+                            defaultValue: driver.name,
+                          })}
+                          {driver.selected === true && (
+                            <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                              {t('commercePayment.active')}
+                            </span>
+                          )}
+                          <span
+                            className={
+                              driver.configured
+                                ? 'rounded bg-success-surface px-2 py-0.5 text-xs font-medium text-success'
+                                : 'rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
+                            }
+                          >
+                            {driver.configured
+                              ? t('commercePayment.keyPresent')
+                              : t('commercePayment.keyAbsent')}
+                          </span>
+                        </h3>
+                        <p className="m-0 text-sm text-muted-foreground">
+                          {t('commercePayment.tier', {
+                            tier: t(`commercePayment.tierName.${driver.tier}`),
+                          })}
+                          {' — '}
+                          {driver.settlesOffline
+                            ? t('commercePayment.settlesOffline')
+                            : t('commercePayment.settlesOnline')}
+                        </p>
+                        {results[driver.name] !== undefined && (
+                          <p
+                            role="status"
+                            className={
+                              results[driver.name]?.ok
+                                ? 'm-0 text-sm text-success'
+                                : 'm-0 text-sm font-medium text-destructive'
+                            }
+                          >
+                            {results[driver.name]?.ok
+                              ? t('commercePayment.testOk')
+                              : (results[driver.name]?.message ?? t('commercePayment.testFailed'))}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={testing === driver.name}
+                        onClick={() => void runTest(driver.name)}
+                      >
+                        {testing === driver.name
+                          ? t('commercePayment.testing')
+                          : t('commercePayment.testConnection')}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
 
           <Card aria-labelledby="commerce-payment-webhook-heading">
             <CardHeader>

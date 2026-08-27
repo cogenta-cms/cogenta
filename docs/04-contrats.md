@@ -941,10 +941,12 @@ l'entreprise sans contresignature.
 ### Driver de paiement
 
 Interface plus au moins deux implémentations, comme cache, queue et storage (R1) :
-Stripe en `optimal`, virement bancaire en `degraded`. Le driver dégradé n'est pas un
+Stripe et PayPal en `optimal`, virement bancaire en `degraded` — la preuve concrète que
+l'interface est un vrai registre ouvert et pas une paire figée, PayPal ayant été ajouté
+sans toucher `PaymentGateway`/`PaymentDriver` ni Stripe. Le driver dégradé n'est pas un
 bouchon — beaucoup d'entreprises ne sont payées que par virement ; la différence est
-*qui confirme que l'argent est arrivé*. R2 : sans clé Stripe, la boutique fonctionne de
-bout en bout.
+*qui confirme que l'argent est arrivé*. R2 : sans clé Stripe ni identifiants PayPal, la
+boutique fonctionne de bout en bout.
 
 ### Facture
 

@@ -470,6 +470,25 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // A real preview PDF for an order that may never be invoiced (fiche
+        // 54 task 2) — same shape and same `application/pdf` handling as the
+        // route above, checked first for the same reason: both start with
+        // the same three segments. `commerce.read`, not
+        // `commerce.invoice.issue`, because nothing here claims a number or
+        // writes a row (see `InvoiceStore.preview`'s own comment).
+        if (
+          segments[0] === 'orders' &&
+          segments[2] === 'invoice' &&
+          segments[3] === 'preview' &&
+          segments.length === 4
+        ) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.invoices === undefined) return notFound('invoice')
+            return { status: 200, body: await options.invoices.preview(segments[1] ?? '') }
+          }
+        }
+
         if (segments[0] === 'orders' && segments[2] === 'invoice' && segments.length === 3) {
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)

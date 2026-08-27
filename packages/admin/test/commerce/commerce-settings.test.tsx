@@ -63,6 +63,61 @@ describe('the commerce settings screen', () => {
     expect((prefix as HTMLInputElement).value).toBe('AC')
   })
 
+  it('previews a real invoice PDF for an order id, opened in a new tab — fiche 54 task 2', async () => {
+    signedInAs(['admin'])
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:mock-invoice-preview')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+
+    render(<App />)
+    await goToCommerceSettings()
+
+    const orderIdField = await screen.findByLabelText('Identifiant de commande')
+    fireEvent.change(orderIdField, { target: { value: 'order-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser la facture' }))
+
+    await vi.waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+    })
+    expect(openSpy).toHaveBeenCalledWith('blob:mock-invoice-preview', '_blank', 'noopener')
+
+    openSpy.mockRestore()
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+  })
+
+  it('shows an error rather than a silent failure when the preview cannot be rendered', async () => {
+    signedInAs(['admin'])
+    // Nothing this screen's own mock route refuses in the harness, so the
+    // failure is forced at the transport level — the other real way
+    // `previewInvoice` can end without a PDF (a network error, a 500 from a
+    // misconfigured seller — anything `fetchInvoicePreviewPdf` turns into a
+    // non-ok response).
+    const realFetch = window.fetch
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/invoice/preview')) {
+        return Promise.resolve(new Response(null, { status: 500 }))
+      }
+      return realFetch(input, init)
+    })
+
+    render(<App />)
+    await goToCommerceSettings()
+
+    const orderIdField = await screen.findByLabelText('Identifiant de commande')
+    fireEvent.change(orderIdField, { target: { value: 'order-missing' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser la facture' }))
+
+    // `fetchInvoicePreviewPdf` turns a non-ok response into a typed
+    // `ApiError`, and the screen shows that error's own message rather than
+    // its generic fallback — the same discipline the payment screen's own
+    // failure test proves for `testPaymentConnection`.
+    await screen.findByText('This order does not exist.')
+  })
+
   it('refuses a write from a role with no admin permission, at the API', async () => {
     signedInAs(['viewer'])
     render(<App />)

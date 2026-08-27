@@ -222,6 +222,70 @@ describe('shipping methods and the simulator', () => {
     expect(response.status).toBe(204)
     expect(await shop.shipping.listMethods()).toHaveLength(0)
   })
+
+  it('offers local pickup in the simulator at zero cost (fiche 54 task 1)', async () => {
+    await router.handle(
+      {
+        method: 'POST',
+        path: '/api/commerce/shipping/methods',
+        body: { label: 'Pickup in store', currency: 'EUR', kind: 'pickup' },
+      },
+      ADMIN,
+    )
+
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/commerce/shipping/simulate',
+        body: { currency: 'EUR', subtotalMinor: 4200 },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect(
+      (response.body as { quotes: readonly { label: string; amountMinor: number }[] }).quotes,
+    ).toEqual([expect.objectContaining({ label: 'Pickup in store', amountMinor: 0 })])
+  })
+
+  it("a pickup method's real cart price matches exactly what the simulator showed — the same code, not a second implementation", async () => {
+    const pickup = await shop.shipping.createMethod({
+      label: 'Pickup in store',
+      currency: 'EUR',
+      kind: 'pickup',
+    })
+
+    const product = await shop.catalog.createProduct({ handle: 'p-pickup', title: 'Pickup item' })
+    const variant = await shop.catalog.createVariant({
+      productId: product.id,
+      sku: 'PICKUP-1',
+      title: 'Pickup item',
+      priceMinor: 4200,
+      currency: 'EUR',
+      onHand: 5,
+    })
+
+    const cart = await shop.carts.open({ currency: 'EUR', sessionKey: 'pickup-cart' })
+    await shop.carts.addLine(cart.id, variant.id, 1)
+    await shop.carts.setShippingMethod(cart.id, pickup.id)
+    const priced = await shop.carts.price(cart.id)
+
+    expect(priced.totals.shippingMinor).toBe(0)
+
+    const simulated = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/commerce/shipping/simulate',
+        body: { currency: 'EUR', subtotalMinor: priced.totals.subtotalMinor },
+      },
+      ADMIN,
+    )
+    const quotes = (
+      simulated.body as { quotes: readonly { methodId: string; amountMinor: number }[] }
+    ).quotes
+    expect(quotes.find((quote) => quote.methodId === pickup.id)?.amountMinor).toBe(
+      priced.totals.shippingMinor,
+    )
+  })
 })
 
 describe('shipping simulator with a carrier — the fallback is real, not a decoration', () => {
@@ -328,15 +392,16 @@ describe('payment drivers status', () => {
       testMode: boolean
     }
     const names = body.drivers.map((driver) => driver.name).sort()
-    expect(names).toEqual(['manual', 'stripe'])
+    expect(names).toEqual(['manual', 'paypal', 'stripe'])
     // manual needs no key at all, and is therefore always "configured".
     expect(body.drivers.find((driver) => driver.name === 'manual')?.configured).toBe(true)
     // No secret ever named or present anywhere in the response.
     expect(JSON.stringify(body)).not.toContain('secretKey')
+    expect(JSON.stringify(body)).not.toContain('clientSecret')
     expect(body.testMode).toBe(true)
   })
 
-  it('reports Stripe as not configured when no key is present', async () => {
+  it('reports Stripe and PayPal as not configured when no credentials are present', async () => {
     router = routerWithPayment({})
     const response = await router.handle(
       { method: 'GET', path: '/api/commerce/payment/drivers' },
@@ -344,6 +409,7 @@ describe('payment drivers status', () => {
     )
     const body = response.body as { drivers: readonly { name: string; configured: boolean }[] }
     expect(body.drivers.find((driver) => driver.name === 'stripe')?.configured).toBe(false)
+    expect(body.drivers.find((driver) => driver.name === 'paypal')?.configured).toBe(false)
   })
 
   it('a viewer may read driver status; only commerce.read is required, no write happens', async () => {

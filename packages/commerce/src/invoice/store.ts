@@ -96,6 +96,21 @@ export interface InvoiceStore {
   list(options?: { readonly series?: string; readonly limit?: number }): Promise<readonly Invoice[]>
   /** The PDF for an invoice. Regenerated from the snapshot, byte-identical. */
   pdf(id: string): Promise<Uint8Array>
+  /**
+   * A real invoice PDF for an order that has not been (and may never be)
+   * issued — fiche 54 task 2. Built from the exact same `documentFor`/
+   * `pdfDocumentFor`/`renderInvoicePdf` chain `issue()`+`pdf()` use, so a
+   * preview is never a second, drifting implementation of what an invoice
+   * looks like. What makes it a preview and not a side effect: no row is
+   * written, no order event is recorded, and above all no number is claimed
+   * from `claimNumber` — a real invoice number is gapless and never reused,
+   * so spending one on a screen a shop owner might reload ten times while
+   * tuning the template would corrupt the one thing this file exists to
+   * protect. `"PREVIEW"` in the number field is not a placeholder chosen for
+   * looks: it is what stops the output from ever being mistaken for a real,
+   * legally-numbered document.
+   */
+  preview(orderId: string): Promise<Uint8Array>
 }
 
 interface InvoiceRow {
@@ -327,6 +342,20 @@ export function createInvoiceStore(
         })
       }
       return renderInvoicePdf(pdfDocumentFor(invoice.document))
+    },
+
+    preview: async (orderId) => {
+      const order = await dependencies.orders.read(orderId)
+      if (order === null) {
+        throw new CogentaError({
+          code: 'COMMERCE_ORDER_NOT_FOUND',
+          message: 'This order does not exist.',
+          hint: 'Check the order reference.',
+        })
+      }
+
+      const document = documentFor(order, 'PREVIEW', new Date(now()).toISOString(), [])
+      return renderInvoicePdf(pdfDocumentFor(document))
     },
   }
 }

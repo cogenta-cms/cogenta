@@ -141,6 +141,41 @@ describe('the commerce payment screen', () => {
     })
   })
 
+  it('lists a third, independently registered provider — the screen is an open-ended roster, not a fixed pair', async () => {
+    signedInAs(['admin'], {
+      commercePaymentDrivers: [
+        {
+          name: 'stripe',
+          tier: 'optimal',
+          settlesOffline: false,
+          configured: false,
+          selected: undefined,
+        },
+        {
+          name: 'paypal',
+          tier: 'optimal',
+          settlesOffline: false,
+          configured: true,
+          selected: true,
+        },
+        {
+          name: 'manual',
+          tier: 'degraded',
+          settlesOffline: true,
+          configured: true,
+          selected: undefined,
+        },
+      ],
+    })
+    render(<App />)
+    await goToPayment()
+
+    expect(await screen.findByRole('heading', { name: /^PayPal/u, level: 3 })).toBeDefined()
+    // Three rows, three "Tester la connexion" buttons — nothing about the
+    // markup is specific to a pair of gateways.
+    expect(screen.getAllByRole('button', { name: 'Tester la connexion' })).toHaveLength(3)
+  })
+
   it('refuses the screen to a non-admin', async () => {
     signedInAs(['editor'])
     window.history.pushState(null, '', '/commerce/payment')

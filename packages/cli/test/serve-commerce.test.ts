@@ -603,10 +603,11 @@ describe('the shop, end to end', () => {
       testMode: boolean
       webhookUrl: string | null
     }
-    expect(body.drivers.map((d) => d.name).sort()).toEqual(['manual', 'stripe'])
+    expect(body.drivers.map((d) => d.name).sort()).toEqual(['manual', 'paypal', 'stripe'])
     expect(body.drivers.find((d) => d.name === 'manual')?.configured).toBe(true)
-    // No Stripe key was configured on this test site.
+    // No Stripe key nor PayPal credentials were configured on this test site.
     expect(body.drivers.find((d) => d.name === 'stripe')?.configured).toBe(false)
+    expect(body.drivers.find((d) => d.name === 'paypal')?.configured).toBe(false)
     // Test mode is on by default — "le mode test doit être criant".
     expect(body.testMode).toBe(true)
     expect(body.webhookUrl).toContain('/api/commerce/payments/webhook')

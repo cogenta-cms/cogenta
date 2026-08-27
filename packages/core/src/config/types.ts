@@ -9,8 +9,8 @@ export const EMBEDDINGS_PROVIDERS = ['local', 'openai'] as const
 export const IMAGE_GENERATION_PROVIDERS = ['openai', 'stability'] as const
 /** Where embeddings are kept (L18 tasks 1/5). `auto` lets the registry choose, optimal first. */
 export const VECTOR_DRIVERS = ['auto', 'pgvector', 'file', 'memory'] as const
-/** Contract E's payment gateway (fiche 34 task 3). `auto` prefers Stripe when a key is configured, falling back to bank transfer (R1). */
-export const PAYMENT_DRIVERS = ['auto', 'stripe', 'manual'] as const
+/** Contract E's payment gateway (fiche 34 task 3). `auto` prefers Stripe or PayPal, whichever has real credentials configured, falling back to bank transfer (R1). */
+export const PAYMENT_DRIVERS = ['auto', 'stripe', 'paypal', 'manual'] as const
 
 export type DatabaseDriverName = (typeof DATABASE_DRIVERS)[number]
 export type CacheDriverName = (typeof CACHE_DRIVERS)[number]
@@ -206,14 +206,17 @@ export interface CogentaConfigInput {
   /**
    * Which payment gateway a shop uses (contract E, fiche 34 task 3).
    *
-   * There is no `secretKey` or `webhookSecret` field here, on purpose (rule
-   * R7): Stripe's credentials come from `COGENTA_PAYMENT_STRIPE_SECRET_KEY`
-   * and `COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET` only, and the admin payment
-   * screen shows their *presence*, never their value. `testMode` is a
-   * declared intent an operator sets deliberately — it does not infer test
-   * vs. live from the shape of the key, so a shop that switches Stripe modes
-   * without updating this flag gets a loud, visible mismatch rather than a
-   * silent one.
+   * There is no `secretKey`, `webhookSecret`, `clientId`, `clientSecret` or
+   * `webhookId` field here, on purpose (rule R7): Stripe's credentials come
+   * from `COGENTA_PAYMENT_STRIPE_SECRET_KEY` and
+   * `COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET` only, PayPal's from
+   * `COGENTA_PAYMENT_PAYPAL_CLIENT_ID`, `COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET`
+   * and `COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID`, and the admin payment screen
+   * shows their *presence*, never their value. `testMode` is a declared
+   * intent an operator sets deliberately — it does not infer test vs. live
+   * from the shape of a key, so a shop that switches gateway modes without
+   * updating this flag gets a loud, visible mismatch rather than a silent
+   * one.
    */
   readonly payment?: {
     readonly driver?: PaymentDriverName
@@ -381,6 +384,12 @@ export interface CogentaConfig {
     readonly stripeSecretKey: string | undefined
     /** `undefined` until `COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET` is set. */
     readonly stripeWebhookSecret: string | undefined
+    /** `undefined` until `COGENTA_PAYMENT_PAYPAL_CLIENT_ID` is set. Never round-tripped to any admin response — only its presence is. */
+    readonly paypalClientId: string | undefined
+    /** `undefined` until `COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET` is set. */
+    readonly paypalClientSecret: string | undefined
+    /** `undefined` until `COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID` is set. */
+    readonly paypalWebhookId: string | undefined
   }
 }
 

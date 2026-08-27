@@ -13,6 +13,9 @@ export const SECRET_KEYS: ReadonlyMap<string, string> = new Map([
   ['webhooks.secret', 'COGENTA_WEBHOOK_SECRET'],
   ['payment.stripeSecretKey', 'COGENTA_PAYMENT_STRIPE_SECRET_KEY'],
   ['payment.stripeWebhookSecret', 'COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET'],
+  ['payment.paypalClientId', 'COGENTA_PAYMENT_PAYPAL_CLIENT_ID'],
+  ['payment.paypalClientSecret', 'COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET'],
+  ['payment.paypalWebhookId', 'COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID'],
   ['observability.otlpHeaders', 'COGENTA_OTLP_HEADERS or OTEL_EXPORTER_OTLP_HEADERS'],
 ])
 
@@ -244,6 +247,12 @@ export interface EnvironmentSecrets {
   readonly paymentStripeSecretKey: string | undefined
   /** The signing secret Stripe shows when a webhook endpoint is created. */
   readonly paymentStripeWebhookSecret: string | undefined
+  /** PayPal's REST app client id (contract E). Never in the config file. */
+  readonly paymentPaypalClientId: string | undefined
+  /** PayPal's REST app client secret. */
+  readonly paymentPaypalClientSecret: string | undefined
+  /** The webhook id PayPal shows for a configured webhook endpoint. */
+  readonly paymentPaypalWebhookId: string | undefined
   /**
    * Headers sent with every OTLP export — most often a bearer token the
    * backend (Grafana Cloud, Datadog, …) issued. `undefined` means "no
@@ -263,6 +272,9 @@ export function readSecrets(env: Environment): EnvironmentSecrets {
     webhookSecret: read(env, 'COGENTA_WEBHOOK_SECRET'),
     paymentStripeSecretKey: read(env, 'COGENTA_PAYMENT_STRIPE_SECRET_KEY'),
     paymentStripeWebhookSecret: read(env, 'COGENTA_PAYMENT_STRIPE_WEBHOOK_SECRET'),
+    paymentPaypalClientId: read(env, 'COGENTA_PAYMENT_PAYPAL_CLIENT_ID'),
+    paymentPaypalClientSecret: read(env, 'COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET'),
+    paymentPaypalWebhookId: read(env, 'COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID'),
     otlpHeaders: (() => {
       const raw = read(env, 'COGENTA_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_HEADERS')
       return raw === undefined ? undefined : parseHeaderList(raw)

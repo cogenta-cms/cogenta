@@ -2654,7 +2654,8 @@
     "kind": {
       "flat": "Forfait",
       "by_weight": "Par poids",
-      "free": "Gratuit"
+      "free": "Gratuit",
+      "pickup": "Retrait en magasin"
     },
     "simulatorHeading": "Simulateur",
     "simWeight": "Poids (g)",
@@ -2673,8 +2674,11 @@
     "testModeOnHint": "Aucun argent réel ne circule. Désactivez payment.testMode dans la configuration du serveur quand vous êtes prêt à encaisser réellement.",
     "testModeOff": "Mode production",
     "testModeOffHint": "Cette boutique encaisse de l'argent réel.",
+    "providersHeading": "Moyens de paiement",
+    "providersHint": "Chaque moyen ci-dessous implémente la même interface de pilote — en ajouter un autre ne change rien à cet écran.",
     "driver": {
       "stripe": "Stripe",
+      "paypal": "PayPal",
       "manual": "Virement bancaire"
     },
     "active": "Actif",
@@ -2706,7 +2710,13 @@
     "invoiceHeading": "Modèle de facture",
     "invoiceHint": "L'identité du vendeur (nom légal, adresse, numéro de TVA) reste dans la configuration du serveur — ce sont ici les mentions qu'un commerçant change sans redéployer.",
     "seriesWarning": "Changer le préfixe de série en cours d'exercice comptable pose un problème comptable : le numéro séquentiel lui-même ne repart jamais à zéro, mais un nouveau préfixe se lit comme une série différente pour un auditeur. Confirmez avec votre comptable avant de le changer une fois l'exercice commencé.",
-    "invoicePreviewHint": "Pour prévisualiser une vraie facture, ouvrez une commande qui en a déjà une et utilisez son propre bouton « Télécharger la facture »."
+    "invoicePreviewHeading": "Prévisualiser une facture",
+    "invoicePreviewHint": "Génère un vrai PDF de facture pour n'importe quelle commande existante, à partir de ses données réelles — rien n'est enregistré et aucun numéro de facture n'est jamais réclamé, donc c'est sans risque à essayer autant de fois que nécessaire.",
+    "invoicePreviewOrderId": "Identifiant de commande",
+    "invoicePreviewOrderIdPlaceholder": "ex. 8f3e2c1a-…",
+    "invoicePreviewButton": "Prévisualiser la facture",
+    "invoicePreviewing": "Génération…",
+    "invoicePreviewError": "Impossible de générer un aperçu pour cette commande."
   },
   "commerceOrderDetail": {
     "back": "← Retour aux commandes",

@@ -265,7 +265,8 @@
       "ops": "Operations",
       "settings": "Settings",
       "help": "Help"
-    }
+    },
+    "commerceCustomers": "Customers"
   },
   "breadcrumb": {
     "newEntry": "New",
@@ -2477,7 +2478,11 @@
       "delivered": "Delivered",
       "cancelled": "Cancelled",
       "refunded": "Refunded"
-    }
+    },
+    "newOrder": "New order",
+    "exportCsv": "Export CSV",
+    "fromDate": "From",
+    "toDate": "To"
   },
   "commerceCoupons": {
     "heading": "Coupons",
@@ -2763,6 +2768,42 @@
       "refunded": "Refunded",
       "invoiced": "Invoiced",
       "note": "Note"
+    },
+    "addressTitle": "Delivery address",
+    "addressNone": "No delivery address on file.",
+    "addressEdit": "Edit address",
+    "addressSave": "Save address",
+    "addressRecipient": "Recipient",
+    "addressLine1": "Address line 1",
+    "addressLine2": "Address line 2",
+    "addressCity": "City",
+    "addressPostalCode": "Postal code",
+    "addressPhone": "Phone",
+    "addressError": "Could not save this address.",
+    "refundedSoFar": "refunded {{amount}} so far",
+    "refundAmount": "Amount",
+    "refundReason": "Reason (required)",
+    "refundReasonRequired": "A reason is required for a refund.",
+    "refundConfirm": "Confirm refund",
+    "creditNotesIssued": "{{count}} credit note issued",
+    "creditNotesIssued_other": "{{count}} credit notes issued",
+    "trackingTitle": "Shipment tracking",
+    "trackingCarrier": "Carrier",
+    "trackingNumber": "Tracking number",
+    "trackingUrl": "Tracking URL",
+    "trackingShip": "Ship, with tracking",
+    "trackingSave": "Save tracking",
+    "trackingError": "Could not save the tracking information.",
+    "emailsTitle": "Order e-mails",
+    "noEmails": "No e-mail sent for this order yet.",
+    "emailKind": {
+      "confirmation": "Confirmation",
+      "shipment": "Shipment notice"
+    },
+    "emailStatus": {
+      "pending": "Queued",
+      "sent": "Sent",
+      "failed": "Failed"
     }
   },
   "profile": {
@@ -3571,5 +3612,48 @@
         "note": "An honest model, not yet fully on screen: revoking a single capability after the fact has the logic for it server-side, but no screen in this build exposes it yet — today, deactivating or uninstalling is the lever available."
       }
     }
+  },
+  "commerceManualOrder": {
+    "heading": "New order",
+    "email": "Customer e-mail",
+    "customerName": "Customer name",
+    "currency": "Currency",
+    "lines": "Lines",
+    "variantId": "Variant ID",
+    "quantity": "Quantity",
+    "addLine": "Add a line",
+    "removeLine": "Remove",
+    "create": "Create order",
+    "createError": "Could not create this order.",
+    "outOfStock": "Not enough stock for this order.",
+    "couponRefused": "The discount code could not be applied.",
+    "empty": "Add at least one line."
+  },
+  "commerceCustomers": {
+    "heading": "Customers",
+    "tableLabel": "Customers",
+    "nameColumn": "Name",
+    "emailColumn": "E-mail",
+    "ordersColumn": "Orders",
+    "spentColumn": "Total spent",
+    "empty": "No customer yet.",
+    "search": "Search",
+    "loadError": "Could not load customers."
+  },
+  "commerceCustomerDetail": {
+    "back": "← Back to customers",
+    "heading": "Customer",
+    "notFound": "This customer does not exist.",
+    "loadError": "Could not load this customer.",
+    "ordersTitle": "Orders",
+    "totalSpent": "Total spent",
+    "subscriptionsTitle": "Subscriptions",
+    "noSubscriptions": "No subscription.",
+    "exportButton": "Export (GDPR)",
+    "exportError": "Could not export this customer.",
+    "anonymizeButton": "Anonymise",
+    "anonymizeConfirm": "This erases the customer’s email and name. Their orders keep their own copy. This cannot be undone.",
+    "anonymizeError": "Could not anonymise this customer.",
+    "anonymized": "This customer record has been anonymised."
   }
 }

@@ -25,6 +25,7 @@ export const TABLES = {
   orders: 'cogenta_commerce_orders',
   orderLines: 'cogenta_commerce_order_lines',
   orderEvents: 'cogenta_commerce_order_events',
+  orderEmails: 'cogenta_commerce_order_emails',
   payments: 'cogenta_commerce_payments',
   refunds: 'cogenta_commerce_refunds',
   taxRules: 'cogenta_commerce_tax_rules',
@@ -36,6 +37,7 @@ export const TABLES = {
   couponCustomerRedemptions: 'cogenta_commerce_coupon_customer_redemptions',
   invoices: 'cogenta_commerce_invoices',
   invoiceSequences: 'cogenta_commerce_invoice_sequences',
+  creditNotes: 'cogenta_commerce_credit_notes',
   subscriptions: 'cogenta_commerce_subscriptions',
   subscriptionCycles: 'cogenta_commerce_subscription_cycles',
   // Fiche 53 task 3: one open dunning cycle per subscription.
@@ -188,6 +190,24 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       shipping_region ${t64},
       shipping_method_id ${t64},
       shipping_method_label ${t255},
+      -- Structured delivery address (fiche 52 task 1) — the constat that
+      -- opened this fiche: shipping_country/shipping_region alone (above)
+      -- were the tax/rate *zone*, never a real address a courier can print on
+      -- a label. All six nullable: an order placed before this address ever
+      -- existed, or one nobody ever filled in, still reads back fine.
+      shipping_address_line1 ${t255},
+      shipping_address_line2 ${t255},
+      shipping_city ${t255},
+      shipping_postal_code ${t64},
+      shipping_recipient ${t255},
+      shipping_phone ${t64},
+      -- Shipment tracking (fiche 52 task 4). Set together, by setTracking(),
+      -- once goods actually leave — never guessed from the status alone,
+      -- because "shipped" and "we know how" are two different facts.
+      tracking_carrier ${t64},
+      tracking_number ${t255},
+      tracking_url ${t1024},
+      shipped_at ${t64},
       placed_at ${t64} not null,
       updated_at ${t64} not null,
       -- Set when a subscription cycle produced this order, null otherwise.
@@ -223,6 +243,24 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       to_status ${t64},
       actor_id ${t64},
       note ${t1024}
+    )`)
+
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.orderEmails, d)} (
+      id ${t64} not null primary key,
+      order_id ${t64} not null,
+      -- 'confirmation' | 'shipment' (order/notify.ts's OrderEmailKind) — a
+      -- closed vocabulary kept as free text, the same choice this whole
+      -- package makes for every other status/kind column.
+      kind ${t64} not null,
+      to_email ${t255} not null,
+      -- 'pending' | 'sent' | 'failed' — 'failed' is retried by flushDue()
+      -- until MAX_ATTEMPTS, never resurrected after.
+      status ${t64} not null,
+      attempts ${int} not null,
+      last_error ${t1024},
+      created_at ${t64} not null,
+      sent_at ${t64}
     )`)
 
   await db.query(sql`
@@ -388,6 +426,24 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
     )`)
 
   await db.query(sql`
+    create table if not exists ${identifier(TABLES.creditNotes, d)} (
+      id ${t64} not null primary key,
+      order_id ${t64} not null,
+      -- One credit note per refund, never per order: an order can be
+      -- refunded in several instalments, and each one gets its own
+      -- sequential, never-reused number (fiche 52 task 6).
+      refund_id ${t64} not null unique,
+      series ${t64} not null,
+      seq ${int} not null,
+      number ${t64} not null unique,
+      issued_at ${t64} not null,
+      currency ${t8} not null,
+      amount_minor ${int} not null,
+      reason ${t1024},
+      document text not null
+    )`)
+
+  await db.query(sql`
     create table if not exists ${identifier(TABLES.subscriptions, d)} (
       id ${t64} not null primary key,
       customer_id ${t64} not null,
@@ -465,6 +521,34 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       primary key (subscription_id, period_key)
     )`)
 
+  // Columns added to `orders` after it first shipped (fiche 52 tasks 1 and
+  // 4). The `create table` above already declares them, which covers a fresh
+  // install; a site whose `cogenta_commerce_orders` predates this fiche needs
+  // them added in place. Same idiom as `menu-tables.ts`'s `location` column
+  // and `theme-store.ts`'s `active_theme`: `alter table … add column`,
+  // failure swallowed unconditionally. On a table this function already
+  // created, the only realistic failure is "column already exists" — nothing
+  // destructive is attempted, and every added column is nullable, so no
+  // existing row is affected either way. This is deliberately outside
+  // contract A's up/down migration engine (see this file's own header
+  // comment) — there is no "down" for an additive, nullable column.
+  const ordersTable = identifier(TABLES.orders, d)
+  const orderColumnStatements: readonly SqlFragment[] = [
+    sql`alter table ${ordersTable} add column shipping_address_line1 ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_address_line2 ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_city ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_postal_code ${t64}`,
+    sql`alter table ${ordersTable} add column shipping_recipient ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_phone ${t64}`,
+    sql`alter table ${ordersTable} add column tracking_carrier ${t64}`,
+    sql`alter table ${ordersTable} add column tracking_number ${t255}`,
+    sql`alter table ${ordersTable} add column tracking_url ${t1024}`,
+    sql`alter table ${ordersTable} add column shipped_at ${t64}`,
+  ]
+  for (const statement of orderColumnStatements) {
+    await db.query(statement).catch(() => undefined)
+  }
+
   await ensureIndexes(db)
 }
 
@@ -490,6 +574,8 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
     ['cogenta_commerce_cycles_subscription', TABLES.subscriptionCycles, 'subscription_id'],
     ['cogenta_commerce_coupon_restrictions_code', TABLES.couponRestrictions, 'code'],
     ['cogenta_commerce_dunning_next_retry', TABLES.subscriptionDunning, 'next_retry_at'],
+    ['cogenta_commerce_order_emails_order', TABLES.orderEmails, 'order_id'],
+    ['cogenta_commerce_credit_notes_order', TABLES.creditNotes, 'order_id'],
   ]
 
   for (const [name, table, column] of wanted) {

@@ -61,8 +61,16 @@ export {
 } from './coupon/store.js'
 export type { Customer, CustomerStore } from './customer/store.js'
 export { createCustomerStore, normaliseEmail } from './customer/store.js'
+export type {
+  CreditNote,
+  CreditNoteStore,
+  CreditNoteStoreDependencies,
+  IssueCreditNoteInput,
+} from './invoice/credit-note.js'
+export { createCreditNoteStore } from './invoice/credit-note.js'
 export type { PdfInvoiceDocument, PdfLine } from './invoice/pdf.js'
 export { renderInvoicePdf } from './invoice/pdf.js'
+export { claimSequenceNumber, formatSequenceNumber } from './invoice/sequence.js'
 export type {
   Invoice,
   InvoiceDocument,
@@ -83,15 +91,41 @@ export {
   minorUnitExponent,
   normaliseCurrency,
 } from './money.js'
+export type { OrderExportRow } from './order/csv.js'
+export { ordersToCsv } from './order/csv.js'
+export type {
+  OrderEmailKind,
+  OrderEmailQueue,
+  OrderEmailQueueDependencies,
+  OrderEmailRecord,
+  OrderEmailStatus,
+} from './order/notify.js'
+export {
+  buildConfirmationMessage,
+  buildShipmentMessage,
+  createOrderEmailQueue,
+  MAX_ATTEMPTS as ORDER_EMAIL_MAX_ATTEMPTS,
+  ORDER_EMAIL_KINDS,
+} from './order/notify.js'
 export type {
   OrderListOptions,
   OrderStore,
   OrderStoreDependencies,
+  PlaceManualOrderInput,
+  PlaceManualOrderLineInput,
   PlaceOrderInput,
   PlaceOrderOutcome,
 } from './order/store.js'
 export { createOrderStore, referenceFrom } from './order/store.js'
-export type { Order, OrderEvent, OrderEventKind, OrderLine, OrderStatus } from './order/types.js'
+export type {
+  Order,
+  OrderEvent,
+  OrderEventKind,
+  OrderLine,
+  OrderStatus,
+  OrderTracking,
+  ShippingAddress,
+} from './order/types.js'
 export {
   assertTransition,
   canTransition,

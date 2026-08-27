@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createLogger, createSqliteHandle } from '@cogenta/core'
@@ -96,7 +96,10 @@ async function seedPaidOrder(root: string): Promise<string> {
 
 const activeServers: AbortController[] = []
 
-async function startServer(root: string): Promise<{ base: string; stop: () => Promise<void> }> {
+async function startServer(
+  root: string,
+  extra: { readonly commerceEmailTickMs?: number } = {},
+): Promise<{ base: string; stop: () => Promise<void> }> {
   const controller = new AbortController()
   activeServers.push(controller)
 
@@ -114,6 +117,9 @@ async function startServer(root: string): Promise<{ base: string; stop: () => Pr
     port: 0,
     signal: controller.signal,
     onListening: (a) => resolveAddress(a),
+    ...(extra.commerceEmailTickMs === undefined
+      ? {}
+      : { commerceEmailTickMs: extra.commerceEmailTickMs }),
   })
 
   const bound = await Promise.race([
@@ -135,6 +141,29 @@ async function startServer(root: string): Promise<{ base: string; stop: () => Pr
 afterEach(() => {
   for (const controller of activeServers.splice(0)) controller.abort()
 })
+
+/**
+ * Polls the real `FileEmailTransport` directory until at least `count`
+ * messages have landed, or gives up — the retry queue's tick is real and
+ * asynchronous (`commerceEmailTickMs`), so this is the same "wait for a real
+ * side effect" idiom the trash/forms-purge tick tests already use, just over
+ * the filesystem instead of a store read.
+ */
+async function waitForMail(directory: string, count: number): Promise<readonly string[]> {
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const files = await readdir(directory).catch(() => [])
+    if (files.length >= count) {
+      return Promise.all(files.map((file) => readFile(join(directory, file), 'utf8')))
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `Expected at least ${String(count)} e-mail(s) in ${directory}, found ${String(files.length)}.`,
+      )
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30))
+  }
+}
 
 async function signIn(root: string, base: string, roles: readonly string[]): Promise<string> {
   const { createSqliteHandle } = await import('@cogenta/core')
@@ -696,5 +725,115 @@ describe('the shop, end to end', () => {
     expect(
       rereadBody.data.find((setting) => setting.key === 'commerce.invoiceSeriesPrefix')?.value,
     ).toBe('AC')
+  })
+
+  /**
+   * Fiche 52's own acceptance criterion, verbatim: "commande → confirmation
+   * e-mail → expédition → notification." Everything up to here in this file
+   * proves the router; this is the one test that proves the whole thing runs
+   * for real inside `cogenta serve` — a manual order placed through
+   * `/api/commerce/orders`, a confirmation e-mail actually written by the
+   * real `FileEmailTransport` `runServe` always builds (R1/R2 — no test seam
+   * needed, every site gets one), tracking attached, and a second, distinct
+   * e-mail for the shipment. `commerceEmailTickMs` is turned down to a few
+   * milliseconds — the same seam `scheduledPublishTickMs` and its siblings
+   * already establish — so the test does not wait sixty real seconds for the
+   * retry queue's default cadence.
+   */
+  it('a real order → a real confirmation e-mail → shipped → a real shipment e-mail', async () => {
+    const root = await project()
+    const server = await startServer(root, { commerceEmailTickMs: 20 })
+    const token = await signIn(root, server.base, ['admin'])
+    const authHeaders = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+
+    const createProduct = await fetch(`${server.base}/api/commerce/products`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ handle: 'candle', title: 'Candle' }),
+    })
+    const product = (await createProduct.json()) as { id: string }
+    const createVariant = await fetch(
+      `${server.base}/api/commerce/products/${product.id}/variants`,
+      {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          sku: 'CANDLE-1',
+          title: 'Candle',
+          priceMinor: 1200,
+          currency: 'EUR',
+          onHand: 10,
+        }),
+      },
+    )
+    const variant = (await createVariant.json()) as { id: string }
+
+    // A shopkeeper-typed order (fiche 52 task 5) — no cart, no checkout.
+    const placed = await fetch(`${server.base}/api/commerce/orders`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        email: 'phone-order@example.com',
+        currency: 'EUR',
+        lines: [{ variantId: variant.id, quantity: 2 }],
+        shippingAddress: { line1: '10 Downing Street', city: 'London', postalCode: 'SW1A 2AA' },
+      }),
+    })
+    expect(placed.status).toBe(201)
+    const placedBody = (await placed.json()) as { kind: string; order: { id: string } }
+    expect(placedBody.kind).toBe('placed')
+    const orderId = placedBody.order.id
+
+    const mailDir = join(root, '.cogenta', 'mail')
+    const confirmation = await waitForMail(mailDir, 1)
+    expect(confirmation).toHaveLength(1)
+    expect(confirmation[0]).toContain(`To: phone-order@example.com`)
+    expect(confirmation[0]).toContain('Order confirmation')
+    expect(confirmation[0]).toContain('Candle')
+
+    // Pay it, then ship it with tracking — the second e-mail is fired by
+    // `setTracking`'s own paid→shipped transition, through the real router.
+    const settle = await fetch(`${server.base}/api/commerce/orders/${orderId}/status`, {
+      method: 'PUT',
+      headers: authHeaders,
+      body: JSON.stringify({ status: 'paid' }),
+    })
+    expect(settle.status).toBe(200)
+
+    const tracking = await fetch(`${server.base}/api/commerce/orders/${orderId}/tracking`, {
+      method: 'PUT',
+      headers: authHeaders,
+      body: JSON.stringify({ carrier: 'Royal Mail', number: 'RM998877' }),
+    })
+    expect(tracking.status).toBe(200)
+    expect((await tracking.json()) as { status: string }).toMatchObject({ status: 'shipped' })
+
+    const both = await waitForMail(mailDir, 2)
+    expect(both).toHaveLength(2)
+    const shipment = both.find((message) => message.includes('has shipped'))
+    expect(shipment).toBeDefined()
+    expect(shipment).toContain('Royal Mail')
+    expect(shipment).toContain('RM998877')
+
+    // The e-mail log the admin screen reads is the same journal.
+    const emails = await fetch(`${server.base}/api/commerce/orders/${orderId}/emails`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const emailsBody = (await emails.json()) as { emails: readonly { status: string }[] }
+    expect(emailsBody.emails).toHaveLength(2)
+    expect(emailsBody.emails.every((e) => e.status === 'sent')).toBe(true)
+
+    // And the order's own history names both e-mails — "journal visible sur
+    // la commande".
+    const detail = await fetch(`${server.base}/api/commerce/orders/${orderId}`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const detailBody = (await detail.json()) as { history: readonly { note: string | null }[] }
+    expect(detailBody.history.some((event) => event.note?.includes('Confirmation') ?? false)).toBe(
+      true,
+    )
+    expect(
+      detailBody.history.some((event) => event.note?.includes('Shipment notification') ?? false),
+    ).toBe(true)
   })
 })

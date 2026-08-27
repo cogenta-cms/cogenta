@@ -872,12 +872,16 @@ Product       handle unique, titre de repli, statut (active | archived), content
 Variant       sku unique, prix, devise, stock, backorder autorisé, poids, catégorie fiscale
 Customer      email unique, nom, lien optionnel vers un compte @cogenta/auth
 Cart          persistant, une devise, lignes, zone de livraison, méthode, coupon
-Order         référence unique, lignes copiées, statut, historique append-only
+Order         référence unique, lignes copiées, statut, historique append-only,
+              adresse de livraison structurée (facultative), suivi d'expédition
+              (transporteur, numéro, URL, facultatif — fiche 52)
 Coupon        percentage | fixed | free_shipping, fenêtre, compteur de redemptions
               global + compteur par client (fiche 53), restriction optionnelle à
               une liste de produits
 Payment       driver, identifiant externe, statut, montant ; Refund lié
 Invoice       numéro séquentiel par série, snapshot figé du document
+CreditNote    un par remboursement (jamais par commande), sa propre série
+              séquentielle (fiche 52)
 Subscription  intervalle, prix convenu, cycles idempotents par période, statut
               active | past_due | paused | cancelled (fiche 53)
 ```
@@ -956,11 +960,17 @@ un compare-and-set dans la transaction qui écrit la facture, donc une facture a
 brûle pas de numéro. Le document est un snapshot figé à l'émission ; le PDF s'en
 regénère à l'identique, sans horloge ni aléa.
 
+Un avoir (fiche 52 task 6) partage le même compare-and-set, dans sa propre série
+(`CN-2026`, distincte de la série `2026` d'une facture) : un par remboursement, jamais
+par commande, puisqu'une commande peut être remboursée en plusieurs fois.
+
 ### Versionnement
 
 `commerce@1.0` (ADR-0024, non figé — voir le bandeau en tête de section). Ajouter un
 champ optionnel ou un statut de paiement est mineur ; modifier le sens d'un statut de
-commande ou la représentation d'un montant est majeur.
+commande ou la représentation d'un montant est majeur. L'adresse de livraison
+structurée, le suivi d'expédition, et l'avoir (fiche 52) sont des ajouts de ce type —
+mineurs.
 
 ---
 

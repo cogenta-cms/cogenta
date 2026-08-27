@@ -264,7 +264,8 @@
       "ops": "Exploitation",
       "settings": "Réglages",
       "help": "Aide"
-    }
+    },
+    "commerceCustomers": "Clients"
   },
   "breadcrumb": {
     "newEntry": "Nouveau",
@@ -2476,7 +2477,11 @@
       "delivered": "Livrée",
       "cancelled": "Annulée",
       "refunded": "Remboursée"
-    }
+    },
+    "newOrder": "Nouvelle commande",
+    "exportCsv": "Exporter en CSV",
+    "fromDate": "Du",
+    "toDate": "Au"
   },
   "commerceCoupons": {
     "heading": "Coupons",
@@ -2762,6 +2767,42 @@
       "refunded": "Remboursée",
       "invoiced": "Facturée",
       "note": "Note"
+    },
+    "addressTitle": "Adresse de livraison",
+    "addressNone": "Aucune adresse de livraison enregistrée.",
+    "addressEdit": "Modifier l'adresse",
+    "addressSave": "Enregistrer l'adresse",
+    "addressRecipient": "Destinataire",
+    "addressLine1": "Adresse (ligne 1)",
+    "addressLine2": "Adresse (ligne 2)",
+    "addressCity": "Ville",
+    "addressPostalCode": "Code postal",
+    "addressPhone": "Téléphone",
+    "addressError": "Impossible d'enregistrer cette adresse.",
+    "refundedSoFar": "déjà remboursé {{amount}}",
+    "refundAmount": "Montant",
+    "refundReason": "Motif (obligatoire)",
+    "refundReasonRequired": "Un motif est obligatoire pour un remboursement.",
+    "refundConfirm": "Confirmer le remboursement",
+    "creditNotesIssued": "{{count}} avoir émis",
+    "creditNotesIssued_other": "{{count}} avoirs émis",
+    "trackingTitle": "Suivi de l’expédition",
+    "trackingCarrier": "Transporteur",
+    "trackingNumber": "Numéro de suivi",
+    "trackingUrl": "URL de suivi",
+    "trackingShip": "Expédier, avec suivi",
+    "trackingSave": "Enregistrer le suivi",
+    "trackingError": "Impossible d'enregistrer les informations de suivi.",
+    "emailsTitle": "E-mails de la commande",
+    "noEmails": "Aucun e-mail envoyé pour cette commande pour l'instant.",
+    "emailKind": {
+      "confirmation": "Confirmation",
+      "shipment": "Avis d'expédition"
+    },
+    "emailStatus": {
+      "pending": "En attente",
+      "sent": "Envoyé",
+      "failed": "Échoué"
     }
   },
   "profile": {
@@ -3570,5 +3611,48 @@
         "note": "Modèle honnête, pas encore entièrement à l'écran : révoquer une seule capacité après coup a sa logique côté serveur, mais aucun écran de ce build ne l'expose encore — aujourd'hui, désactiver ou désinstaller est le levier disponible."
       }
     }
+  },
+  "commerceManualOrder": {
+    "heading": "Nouvelle commande",
+    "email": "E-mail du client",
+    "customerName": "Nom du client",
+    "currency": "Devise",
+    "lines": "Lignes",
+    "variantId": "ID de la variante",
+    "quantity": "Quantité",
+    "addLine": "Ajouter une ligne",
+    "removeLine": "Retirer",
+    "create": "Créer la commande",
+    "createError": "Impossible de créer cette commande.",
+    "outOfStock": "Stock insuffisant pour cette commande.",
+    "couponRefused": "Le code de réduction n'a pas pu être appliqué.",
+    "empty": "Ajoutez au moins une ligne."
+  },
+  "commerceCustomers": {
+    "heading": "Clients",
+    "tableLabel": "Clients",
+    "nameColumn": "Nom",
+    "emailColumn": "E-mail",
+    "ordersColumn": "Commandes",
+    "spentColumn": "Total dépensé",
+    "empty": "Aucun client pour le moment.",
+    "search": "Rechercher",
+    "loadError": "Impossible de charger les clients."
+  },
+  "commerceCustomerDetail": {
+    "back": "← Retour aux clients",
+    "heading": "Client",
+    "notFound": "Ce client n'existe pas.",
+    "loadError": "Impossible de charger ce client.",
+    "ordersTitle": "Commandes",
+    "totalSpent": "Total dépensé",
+    "subscriptionsTitle": "Abonnements",
+    "noSubscriptions": "Aucun abonnement.",
+    "exportButton": "Exporter (RGPD)",
+    "exportError": "Impossible d'exporter ce client.",
+    "anonymizeButton": "Anonymiser",
+    "anonymizeConfirm": "Ceci efface l’e-mail et le nom du client. Ses commandes gardent leur propre copie. Cette action est irréversible.",
+    "anonymizeError": "Impossible d'anonymiser ce client.",
+    "anonymized": "La fiche de ce client a été anonymisée."
   }
 }

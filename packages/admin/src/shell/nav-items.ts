@@ -209,6 +209,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     badge: 'commerceOrdersPending',
   },
   {
+    to: '/commerce/customers',
+    labelKey: 'nav.commerceCustomers',
+    group: 'commerce',
+    visibleWhen: { kind: 'commerceActiveOrAdmin' },
+  },
+  {
     to: '/commerce/coupons',
     labelKey: 'nav.commerceCoupons',
     group: 'commerce',

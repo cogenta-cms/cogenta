@@ -1780,6 +1780,16 @@ export function installMockFetch(
       taxMinor: 0,
       totalMinor: 5000,
       couponCode: null,
+      shippingAddressLine1: null as string | null,
+      shippingAddressLine2: null as string | null,
+      shippingCity: null as string | null,
+      shippingPostalCode: null as string | null,
+      shippingRecipient: null as string | null,
+      shippingPhone: null as string | null,
+      trackingCarrier: null as string | null,
+      trackingNumber: null as string | null,
+      trackingUrl: null as string | null,
+      shippedAt: null as string | null,
       placedAt: '2026-03-01T00:00:00.000Z',
       updatedAt: '2026-03-01T00:00:00.000Z',
       lines: [
@@ -1820,6 +1830,41 @@ export function installMockFetch(
       amountMinor: 5000,
       currency: 'EUR',
       instructions: 'Bank transfer to IBAN …',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    },
+  ]
+  // Fiche 52 — refunds, credit notes and the transactional e-mail log, all
+  // empty by default: nothing has been refunded or shipped on the seeded
+  // fixture order until a test does it.
+  const mockRefunds: {
+    id: string
+    paymentId: string
+    orderId: string
+    status: string
+    amountMinor: number
+    currency: string
+    reason: string | null
+    createdAt: string
+  }[] = []
+  let mockRefundCounter = 0
+  const mockOrderEmails: {
+    id: string
+    orderId: string
+    kind: string
+    toEmail: string
+    status: string
+    attempts: number
+    lastError: string | null
+    createdAt: string
+    sentAt: string | null
+  }[] = []
+  const mockCustomers = [
+    {
+      id: 'customer-1',
+      email: 'shopper@example.com',
+      name: 'Shopper One' as string | null,
+      userId: null as string | null,
       createdAt: '2026-03-01T00:00:00.000Z',
       updatedAt: '2026-03-01T00:00:00.000Z',
     },
@@ -5952,13 +5997,102 @@ export function installMockFetch(
         }
 
         // orders
+        // Checked before the length-1/length-2 routes below, same reasoning
+        // as the real router: "export.csv" is not an order id.
+        if (segments[0] === 'orders' && segments[1] === 'export.csv' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const rows = mockOrders.map((order) => [
+            order.reference,
+            order.placedAt,
+            order.status,
+            order.email,
+            order.currency,
+            String(order.subtotalMinor),
+            String(order.discountMinor),
+            String(order.shippingMinor),
+            String(order.taxMinor),
+            String(order.totalMinor),
+            '',
+          ])
+          const csv = [
+            'reference,placed_at,status,email,currency,subtotal_minor,discount_minor,shipping_minor,tax_minor,total_minor,invoice_number',
+            ...rows.map((row) => row.join(',')),
+          ].join('\r\n')
+          return new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })
+        }
         if (segments[0] === 'orders' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
           const status = parsed.searchParams.get('status')
-          return json(200, {
-            orders: status === null ? mockOrders : mockOrders.filter((o) => o.status === status),
-          })
+          const from = parsed.searchParams.get('from')
+          const to = parsed.searchParams.get('to')
+          let list = status === null ? mockOrders : mockOrders.filter((o) => o.status === status)
+          if (from !== null) list = list.filter((o) => o.placedAt >= from)
+          if (to !== null) list = list.filter((o) => o.placedAt <= to)
+          return json(200, { orders: list })
+        }
+        // A shopkeeper-entered order (fiche 52 task 5). The mock keeps this
+        // deliberately simple: it always succeeds and always finds the
+        // seeded variant, since the real placement logic is proven against a
+        // real database in `@cogenta/commerce`'s own tests, not re-proven here.
+        if (segments[0] === 'orders' && segments.length === 1 && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const id = `order-manual-${mockOrders.length + 1}`
+          const lines = Array.isArray(body.lines) ? body.lines : []
+          const totalMinor = lines.reduce(
+            (sum: number, line: { quantity?: unknown }) =>
+              sum + (typeof line.quantity === 'number' ? line.quantity : 1) * 4500,
+            0,
+          )
+          const address =
+            body.shippingAddress !== null && typeof body.shippingAddress === 'object'
+              ? (body.shippingAddress as Record<string, unknown>)
+              : null
+          const order = {
+            id,
+            reference: `ORD-MANUAL-${mockOrders.length + 1}`,
+            customerId: null,
+            email: typeof body.email === 'string' ? body.email : 'unknown@example.com',
+            status: 'pending' as string,
+            currency: typeof body.currency === 'string' ? body.currency : 'EUR',
+            subtotalMinor: totalMinor,
+            discountMinor: 0,
+            shippingMinor: 0,
+            taxMinor: 0,
+            totalMinor,
+            couponCode: null,
+            shippingAddressLine1: address !== null ? (address.line1 as string) : null,
+            shippingAddressLine2: null,
+            shippingCity: address !== null ? (address.city as string) : null,
+            shippingPostalCode: address !== null ? (address.postalCode as string) : null,
+            shippingRecipient: null,
+            shippingPhone: null,
+            trackingCarrier: null as string | null,
+            trackingNumber: null as string | null,
+            trackingUrl: null as string | null,
+            shippedAt: null as string | null,
+            placedAt: '2026-03-03T00:00:00.000Z',
+            updatedAt: '2026-03-03T00:00:00.000Z',
+            lines: lines.map(
+              (line: { variantId?: unknown; quantity?: unknown }, index: number) => ({
+                id: `manual-line-${index}`,
+                variantId: typeof line.variantId === 'string' ? line.variantId : 'unknown',
+                sku: 'MANUAL',
+                title: 'Manual line',
+                quantity: typeof line.quantity === 'number' ? line.quantity : 1,
+                unitPriceMinor: 4500,
+                subtotalMinor: 4500,
+                discountMinor: 0,
+                taxMinor: 0,
+                totalMinor: 4500,
+                position: index,
+              }),
+            ),
+          }
+          mockOrders.push(order)
+          return json(201, { kind: 'placed', order })
         }
         if (segments[0] === 'orders' && segments.length === 2 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
@@ -5974,6 +6108,38 @@ export function installMockFetch(
             history: mockOrderHistory.filter((event) => event.orderId === order.id),
             payments: mockPayments.filter((payment) => payment.orderId === order.id),
           })
+        }
+        if (segments[0] === 'orders' && segments.length === 2 && method === 'PATCH') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          if (order.status !== 'pending') {
+            return json(409, {
+              error: {
+                code: 'COMMERCE_ORDER_LOCKED',
+                message: 'This order can no longer be edited.',
+              },
+            })
+          }
+          if (typeof body.email === 'string') order.email = body.email
+          const address =
+            body.shippingAddress !== null && typeof body.shippingAddress === 'object'
+              ? (body.shippingAddress as Record<string, unknown>)
+              : null
+          if (address !== null) {
+            order.shippingAddressLine1 = (address.line1 as string) ?? null
+            order.shippingAddressLine2 = (address.line2 as string) ?? null
+            order.shippingCity = (address.city as string) ?? null
+            order.shippingPostalCode = (address.postalCode as string) ?? null
+            order.shippingRecipient = (address.recipient as string) ?? null
+            order.shippingPhone = (address.phone as string) ?? null
+          }
+          return json(200, order)
         }
         if (segments[0] === 'orders' && segments[2] === 'status' && method === 'PUT') {
           const refused = commerceRefused('commerce.order.write')
@@ -5998,6 +6164,57 @@ export function installMockFetch(
           })
           return json(200, order)
         }
+        if (segments[0] === 'orders' && segments[2] === 'tracking' && method === 'PUT') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          order.trackingCarrier = typeof body.carrier === 'string' ? body.carrier : null
+          order.trackingNumber = typeof body.number === 'string' ? body.number : null
+          order.trackingUrl = typeof body.url === 'string' ? body.url : null
+          if (order.status === 'paid') {
+            order.status = 'shipped'
+            order.shippedAt = '2026-03-04T00:00:00.000Z'
+            mockOrderHistory.push({
+              id: `event-${mockOrderHistory.length + 1}`,
+              orderId: order.id,
+              at: '2026-03-04T00:00:00.000Z',
+              kind: 'status_changed',
+              fromStatus: 'paid',
+              toStatus: 'shipped',
+              actorId: user.id,
+              note: 'Shipped, tracking attached.',
+            })
+            mockOrderEmails.push({
+              id: `email-${mockOrderEmails.length + 1}`,
+              orderId: order.id,
+              kind: 'shipment',
+              toEmail: order.email,
+              status: 'sent',
+              attempts: 1,
+              lastError: null,
+              createdAt: '2026-03-04T00:00:00.000Z',
+              sentAt: '2026-03-04T00:00:00.000Z',
+            })
+          }
+          return json(200, order)
+        }
+        if (segments[0] === 'orders' && segments[2] === 'emails' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            emails: mockOrderEmails.filter((email) => email.orderId === segments[1]),
+          })
+        }
+        if (segments[0] === 'orders' && segments[2] === 'credit-notes' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, { creditNotes: [] })
+        }
 
         // payments
         if (segments[0] === 'payments' && segments[2] === 'settle' && method === 'POST') {
@@ -6015,6 +6232,13 @@ export function installMockFetch(
           payment.status = 'paid'
           return json(200, payment)
         }
+        if (segments[0] === 'payments' && segments[2] === 'refunds' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            refunds: mockRefunds.filter((refund) => refund.paymentId === segments[1]),
+          })
+        }
         if (segments[0] === 'payments' && segments[2] === 'refund' && method === 'POST') {
           const refused = commerceRefused('commerce.order.refund')
           if (refused !== null) return refused
@@ -6027,8 +6251,109 @@ export function installMockFetch(
               },
             })
           }
-          payment.status = 'refunded'
-          return json(200, payment)
+          // "Motif obligatoire" (fiche 52 task 6) — the mock enforces the
+          // same requirement the real router does.
+          if (typeof body.reason !== 'string' || body.reason.trim() === '') {
+            return json(400, {
+              error: {
+                code: 'COMMERCE_AMOUNT_INVALID',
+                message: '"reason" is required and must be a non-empty string.',
+              },
+            })
+          }
+          const amountMinor = typeof body.amountMinor === 'number' ? body.amountMinor : 0
+          mockRefundCounter += 1
+          const refund = {
+            id: `refund-${mockRefundCounter}`,
+            paymentId: payment.id,
+            orderId: payment.orderId,
+            status: 'succeeded',
+            amountMinor,
+            currency: payment.currency,
+            reason: body.reason,
+            createdAt: '2026-03-05T00:00:00.000Z',
+          }
+          mockRefunds.push(refund)
+          const refunded = mockRefunds
+            .filter((r) => r.paymentId === payment.id)
+            .reduce((sum, r) => sum + r.amountMinor, 0)
+          payment.status = refunded >= payment.amountMinor ? 'refunded' : 'partially_refunded'
+          return json(200, { refund, creditNote: null })
+        }
+
+        // customers
+        if (segments[0] === 'customers' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const q = parsed.searchParams.get('q')?.toLowerCase()
+          const list =
+            q === undefined || q === ''
+              ? mockCustomers
+              : mockCustomers.filter(
+                  (c) =>
+                    c.email.toLowerCase().includes(q) || (c.name ?? '').toLowerCase().includes(q),
+                )
+          return json(200, { customers: list })
+        }
+        if (segments[0] === 'customers' && segments.length === 2 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const customer = mockCustomers.find((c) => c.id === segments[1])
+          if (customer === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+                message: 'This customer does not exist.',
+              },
+            })
+          }
+          const orders = mockOrders.filter((o) => o.customerId === customer.id)
+          const totalSpentMinor = orders
+            .filter((o) => o.status !== 'cancelled' && o.status !== 'refunded')
+            .reduce((sum, o) => sum + o.totalMinor, 0)
+          return json(200, {
+            customer,
+            orders,
+            totalSpentMinor,
+            currency: orders[0]?.currency ?? null,
+            subscriptions: mockSubscriptions.filter((s) => s.customerId === customer.id),
+          })
+        }
+        if (segments[0] === 'customers' && segments[2] === 'export' && method === 'POST') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const customer = mockCustomers.find((c) => c.id === segments[1])
+          if (customer === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+                message: 'This customer does not exist.',
+              },
+            })
+          }
+          return json(200, {
+            customer,
+            orders: mockOrders.filter((o) => o.customerId === customer.id),
+            totalSpentMinor: 0,
+            currency: null,
+            subscriptions: [],
+          })
+        }
+        if (segments[0] === 'customers' && segments[2] === 'anonymize' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const customer = mockCustomers.find((c) => c.id === segments[1])
+          if (customer === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+                message: 'This customer does not exist.',
+              },
+            })
+          }
+          customer.email = `anon-${customer.id}@deleted.invalid`
+          customer.name = null
+          return json(200, customer)
         }
 
         // coupons

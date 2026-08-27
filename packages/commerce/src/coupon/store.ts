@@ -35,6 +35,10 @@ export interface Coupon {
   /** Null is unlimited. Zero is exhausted — never a synonym for unlimited. */
   readonly maxRedemptions: number | null
   readonly redemptions: number
+  /** Null is unlimited. Per customer, on top of (never instead of) `maxRedemptions`. */
+  readonly maxRedemptionsPerCustomer: number | null
+  /** Commerce product ids this coupon applies to. Empty means unrestricted — every product qualifies. */
+  readonly restrictedProductIds: readonly string[]
   readonly active: boolean
   readonly createdAt: string
 }
@@ -48,6 +52,9 @@ export interface CreateCouponInput {
   readonly startsAt?: string | null
   readonly endsAt?: string | null
   readonly maxRedemptions?: number | null
+  readonly maxRedemptionsPerCustomer?: number | null
+  /** Commerce product ids to restrict this coupon to. Omitted or empty means unrestricted. */
+  readonly restrictedProductIds?: readonly string[]
   readonly active?: boolean
 }
 
@@ -67,22 +74,53 @@ export type CouponCheck =
   | { readonly kind: 'exhausted' }
   | { readonly kind: 'below_minimum'; readonly minSubtotalMinor: number }
   | { readonly kind: 'wrong_currency'; readonly currency: string }
+  /** Fiche 53 task 2: this customer already used it `maxRedemptionsPerCustomer` times. */
+  | { readonly kind: 'customer_exhausted'; readonly maxRedemptionsPerCustomer: number }
+  /** Fiche 53 task 2: restricted to products, none of which are in this basket. */
+  | { readonly kind: 'not_applicable'; readonly restrictedProductIds: readonly string[] }
+
+/** What `check()` needs to know about the basket beyond its subtotal and currency. */
+export interface CouponCheckContext {
+  readonly customerId?: string | null
+  /** Commerce product ids in the basket — checked against `restrictedProductIds`. */
+  readonly productIds?: readonly string[]
+}
 
 export interface CouponStore {
   create(input: CreateCouponInput): Promise<Coupon>
   read(code: string): Promise<Coupon | null>
   deactivate(code: string): Promise<void>
   list(): Promise<readonly Coupon[]>
-  /** Checks without consuming. Safe to call on every cart recalculation. */
-  check(code: string, subtotalMinor: number, currency: string): Promise<CouponCheck>
+  /**
+   * Checks without consuming. Safe to call on every cart recalculation.
+   *
+   * The per-customer and product-restriction checks here are informational,
+   * exactly like the global `exhausted` check already was: a clear message
+   * now, not authoritative. `redeem()` is what actually enforces both,
+   * atomically, so a race between two checks and one redemption can never
+   * hand out more than the limits allow.
+   */
+  check(
+    code: string,
+    subtotalMinor: number,
+    currency: string,
+    context?: CouponCheckContext,
+  ): Promise<CouponCheck>
   /**
    * Consumes one redemption for an order, atomically.
    *
-   * The count is claimed with `update … set redemptions = redemptions + 1
-   * where code = ? and (max_redemptions is null or redemptions < max)`, and
-   * `rowsAffected` decides. Two shoppers spending the last redemption of a
+   * The global count is claimed with `update … set redemptions = redemptions
+   * + 1 where code = ? and (max_redemptions is null or redemptions < max)`,
+   * and `rowsAffected` decides. Two shoppers spending the last redemption of a
    * one-shot code at the same instant get one success and one refusal, not two
    * discounts — the same guard shape as stock, for the same reason.
+   *
+   * When the coupon also has `maxRedemptionsPerCustomer`, the per-customer
+   * counter (`cogenta_commerce_coupon_customer_redemptions`) is claimed the
+   * same way, inside the same transaction: exceeding it throws internally and
+   * unwinds the whole transaction, including the global counter claimed a
+   * moment before — a customer who loses the per-customer race must not
+   * silently burn a global redemption they were refused.
    */
   redeem(
     code: string,
@@ -92,6 +130,24 @@ export interface CouponStore {
   ): Promise<boolean>
   /** Gives a redemption back when an order is cancelled before payment. */
   release(orderId: string, tx?: SqlExecutor): Promise<void>
+  /** Aggregate figures for the coupons screen (fiche 53 task 6) — read-only, no new data. */
+  metrics(): Promise<CouponMetrics>
+}
+
+/**
+ * Usage, revenue and discount given, across every coupon — aggregation only,
+ * over `couponRedemptions`/`orders`, never a second ledger.
+ */
+export interface CouponMetrics {
+  readonly activeCoupons: number
+  readonly totalRedemptions: number
+  /** Sum of `orders.discount_minor` for orders that redeemed a coupon, grouped by currency. */
+  readonly discountGivenMinor: readonly {
+    readonly currency: string
+    readonly amountMinor: number
+  }[]
+  /** Sum of `orders.total_minor` for orders that redeemed a coupon, grouped by currency. */
+  readonly revenueMinor: readonly { readonly currency: string; readonly amountMinor: number }[]
 }
 
 interface CouponRow {
@@ -104,11 +160,13 @@ interface CouponRow {
   ends_at: unknown
   max_redemptions: unknown
   redemptions: unknown
+  max_redemptions_per_customer: unknown
   active: unknown
   created_at: unknown
 }
 
-function decode(row: CouponRow): Coupon {
+/** `restrictedProductIds` is filled in separately (`hydrate`) — a coupon row alone never carries it. */
+function decode(row: CouponRow): Omit<Coupon, 'restrictedProductIds'> {
   return {
     code: toText(row.code, 'coupon.code'),
     kind: toText(row.kind, 'coupon.kind') as CouponKind,
@@ -119,6 +177,10 @@ function decode(row: CouponRow): Coupon {
     endsAt: toNullableText(row.ends_at),
     maxRedemptions: toNullableInt(row.max_redemptions, 'coupon.max_redemptions'),
     redemptions: toInt(row.redemptions, 'coupon.redemptions'),
+    maxRedemptionsPerCustomer: toNullableInt(
+      row.max_redemptions_per_customer,
+      'coupon.max_redemptions_per_customer',
+    ),
     active: toBool(row.active),
     createdAt: toText(row.created_at, 'coupon.created_at'),
   }
@@ -133,13 +195,39 @@ export function createCouponStore(db: DatabaseHandle, now: () => number = Date.n
   const d = db.dialect
   const table = identifier(TABLES.coupons, d)
   const redemptions = identifier(TABLES.couponRedemptions, d)
+  const restrictions = identifier(TABLES.couponRestrictions, d)
+  const customerRedemptions = identifier(TABLES.couponCustomerRedemptions, d)
+  const orders = identifier(TABLES.orders, d)
+
+  async function restrictedProductIdsFor(code: string): Promise<readonly string[]> {
+    const result = await db.query<{ product_id: unknown }>(
+      sql`select product_id from ${restrictions} where code = ${code} order by created_at asc`,
+    )
+    return result.rows.map((row) => toText(row.product_id, 'coupon_restriction.product_id'))
+  }
+
+  async function hydrate(row: CouponRow): Promise<Coupon> {
+    const coupon = decode(row)
+    return { ...coupon, restrictedProductIds: await restrictedProductIdsFor(coupon.code) }
+  }
 
   async function read(code: string): Promise<Coupon | null> {
     const result = await db.query<CouponRow>(
       sql`select * from ${table} where code = ${normaliseCode(code)}`,
     )
     const row = result.rows[0]
-    return row === undefined ? null : decode(row)
+    return row === undefined ? null : await hydrate(row)
+  }
+
+  /** The coupon's own per-customer cap, read on the executor `redeem()` is running against — never a second, possibly-stale copy. */
+  async function capFor(executor: SqlExecutor, normalisedCode: string): Promise<number | null> {
+    const result = await executor.query<{ max_redemptions_per_customer: unknown }>(
+      sql`select max_redemptions_per_customer from ${table} where code = ${normalisedCode}`,
+    )
+    const row = result.rows[0]
+    return row === undefined
+      ? null
+      : toNullableInt(row.max_redemptions_per_customer, 'coupon.max_redemptions_per_customer')
   }
 
   return {
@@ -179,16 +267,33 @@ export function createCouponStore(db: DatabaseHandle, now: () => number = Date.n
           hint: 'Deactivate the existing one, or choose another code.',
         })
       }
+      if (
+        input.maxRedemptionsPerCustomer !== undefined &&
+        input.maxRedemptionsPerCustomer !== null &&
+        (!Number.isInteger(input.maxRedemptionsPerCustomer) || input.maxRedemptionsPerCustomer < 1)
+      ) {
+        throw new CogentaError({
+          code: 'COMMERCE_COUPON_INVALID',
+          message: `A per-customer usage limit must be a whole number of at least 1, got ${String(input.maxRedemptionsPerCustomer)}.`,
+          hint: 'Leave it unset for no per-customer limit.',
+        })
+      }
 
       await db.query(sql`
         insert into ${table} (code, kind, value, currency, min_subtotal_minor, starts_at, ends_at,
-                              max_redemptions, redemptions, active, created_at)
+                              max_redemptions, redemptions, max_redemptions_per_customer, active, created_at)
         values (${code}, ${input.kind}, ${input.value ?? 0},
                 ${input.currency === undefined || input.currency === null ? null : assertCurrency(input.currency)},
                 ${assertMinor(input.minSubtotalMinor ?? 0, 'A coupon minimum')},
                 ${input.startsAt ?? null}, ${input.endsAt ?? null},
-                ${input.maxRedemptions ?? null}, ${0},
+                ${input.maxRedemptions ?? null}, ${0}, ${input.maxRedemptionsPerCustomer ?? null},
                 ${fromBool(input.active ?? true, d)}, ${new Date(now()).toISOString()})`)
+
+      for (const productId of input.restrictedProductIds ?? []) {
+        await db.query(sql`
+          insert into ${restrictions} (id, code, product_id, created_at)
+          values (${newId(now)}, ${code}, ${productId}, ${new Date(now()).toISOString()})`)
+      }
 
       const created = await read(code)
       if (created === null) {
@@ -211,10 +316,10 @@ export function createCouponStore(db: DatabaseHandle, now: () => number = Date.n
 
     list: async () => {
       const result = await db.query<CouponRow>(sql`select * from ${table} order by created_at desc`)
-      return result.rows.map(decode)
+      return Promise.all(result.rows.map(hydrate))
     },
 
-    check: async (code, subtotalMinor, currency) => {
+    check: async (code, subtotalMinor, currency, context) => {
       const coupon = await read(code)
       if (coupon === null) return { kind: 'unknown' }
       if (!coupon.active) return { kind: 'inactive' }
@@ -235,6 +340,31 @@ export function createCouponStore(db: DatabaseHandle, now: () => number = Date.n
       if (coupon.currency !== null && coupon.currency !== currency) {
         return { kind: 'wrong_currency', currency: coupon.currency }
       }
+      if (
+        coupon.restrictedProductIds.length > 0 &&
+        !(context?.productIds ?? []).some((id) => coupon.restrictedProductIds.includes(id))
+      ) {
+        return { kind: 'not_applicable', restrictedProductIds: coupon.restrictedProductIds }
+      }
+      if (
+        coupon.maxRedemptionsPerCustomer !== null &&
+        context?.customerId !== undefined &&
+        context.customerId !== null
+      ) {
+        const used = await db.query<{ count: unknown }>(
+          sql`select count from ${customerRedemptions} where code = ${coupon.code} and customer_id = ${context.customerId}`,
+        )
+        const count =
+          used.rows[0] === undefined
+            ? 0
+            : toInt(used.rows[0].count, 'coupon_customer_redemption.count')
+        if (count >= coupon.maxRedemptionsPerCustomer) {
+          return {
+            kind: 'customer_exhausted',
+            maxRedemptionsPerCustomer: coupon.maxRedemptionsPerCustomer,
+          }
+        }
+      }
       return { kind: 'ok', coupon }
     },
 
@@ -249,35 +379,121 @@ export function createCouponStore(db: DatabaseHandle, now: () => number = Date.n
             and (max_redemptions is null or redemptions < max_redemptions)`)
         if (claimed.rowsAffected === 0) return false
 
+        // The per-customer cap, claimed with the same guarded-`UPDATE` shape
+        // as the global counter above — atomic per row on all three dialects,
+        // never a `count(*)` race. `insert` claims the customer's first
+        // redemption; a unique-key collision on the retry means a row
+        // already exists, so the guarded `UPDATE` claims the next one.
+        if (customerId !== null) {
+          const cap = await capFor(executor, normalised)
+          if (cap !== null) {
+            const at = new Date(now()).toISOString()
+            const inserted = await executor
+              .query(sql`
+                insert into ${customerRedemptions} (code, customer_id, count, created_at, updated_at)
+                values (${normalised}, ${customerId}, ${1}, ${at}, ${at})`)
+              .then(() => true)
+              .catch(() => false)
+
+            if (!inserted) {
+              const bumped = await executor.query(sql`
+                update ${customerRedemptions} set count = count + 1, updated_at = ${at}
+                where code = ${normalised} and customer_id = ${customerId} and count < ${cap}`)
+              if (bumped.rowsAffected === 0) {
+                // The customer's own cap is exhausted. Throwing here unwinds
+                // the whole transaction, including the global counter claimed
+                // a moment ago — a customer refused on their own limit must
+                // never silently burn a global redemption meant for someone
+                // else.
+                throw new CustomerCapExceeded()
+              }
+            } else if (cap < 1) {
+              // A cap below 1 was already refused at creation, but a first
+              // insert always "succeeds" at count = 1 — undo it rather than
+              // leave a redemption on record for a limit of zero.
+              await executor.query(
+                sql`delete from ${customerRedemptions} where code = ${normalised} and customer_id = ${customerId}`,
+              )
+              throw new CustomerCapExceeded()
+            }
+          }
+        }
+
         await executor.query(sql`
           insert into ${redemptions} (id, code, order_id, customer_id, at)
           values (${newId(now)}, ${normalised}, ${orderId}, ${customerId}, ${new Date(now()).toISOString()})`)
         return true
       }
 
-      return tx === undefined ? db.transaction(run, { immediate: true }) : run(tx)
+      try {
+        return tx === undefined ? await db.transaction(run, { immediate: true }) : await run(tx)
+      } catch (error) {
+        if (error instanceof CustomerCapExceeded) return false
+        throw error
+      }
     },
 
     release: async (orderId, tx) => {
       const run = async (executor: SqlExecutor): Promise<void> => {
-        const found = await executor.query<{ code: unknown }>(
-          sql`select code from ${redemptions} where order_id = ${orderId}`,
+        const found = await executor.query<{ code: unknown; customer_id: unknown }>(
+          sql`select code, customer_id from ${redemptions} where order_id = ${orderId}`,
         )
         const row = found.rows[0]
         if (row === undefined) return
 
         const code = toText(row.code, 'coupon_redemption.code')
+        const customerId = toNullableText(row.customer_id)
         await executor.query(sql`delete from ${redemptions} where order_id = ${orderId}`)
         // `redemptions > 0` guards against ever writing a negative count, which
         // would silently hand out extra redemptions of a one-shot code.
         await executor.query(
           sql`update ${table} set redemptions = redemptions - 1 where code = ${code} and redemptions > 0`,
         )
+        if (customerId !== null) {
+          await executor.query(sql`
+            update ${customerRedemptions} set count = count - 1, updated_at = ${new Date(now()).toISOString()}
+            where code = ${code} and customer_id = ${customerId} and count > 0`)
+        }
       }
 
       if (tx === undefined) await db.transaction(run, { immediate: true })
       else await run(tx)
     },
+
+    metrics: async () => {
+      const active = await db.query<{ n: unknown }>(
+        sql`select count(*) as n from ${table} where active = ${fromBool(true, d)}`,
+      )
+      const total = await db.query<{ n: unknown }>(sql`select count(*) as n from ${redemptions}`)
+      const sums = await db.query<{ currency: unknown; discount: unknown; revenue: unknown }>(sql`
+        select o.currency as currency,
+               sum(o.discount_minor) as discount,
+               sum(o.total_minor) as revenue
+        from ${orders} o
+        inner join ${redemptions} r on r.order_id = o.id
+        group by o.currency`)
+
+      return {
+        activeCoupons: toInt(active.rows[0]?.n ?? 0, 'coupon_metrics.active'),
+        totalRedemptions: toInt(total.rows[0]?.n ?? 0, 'coupon_metrics.total'),
+        discountGivenMinor: sums.rows.map((row) => ({
+          currency: toText(row.currency, 'coupon_metrics.currency'),
+          amountMinor: toInt(row.discount, 'coupon_metrics.discount'),
+        })),
+        revenueMinor: sums.rows.map((row) => ({
+          currency: toText(row.currency, 'coupon_metrics.currency'),
+          amountMinor: toInt(row.revenue, 'coupon_metrics.revenue'),
+        })),
+      }
+    },
+  }
+}
+
+/** Internal. Unwinds a redemption transaction when a customer's own cap is exhausted. */
+class CustomerCapExceeded extends Error {
+  constructor() {
+    super('This customer has already used this coupon the maximum number of times.')
+    this.name = 'CustomerCapExceeded'
   }
 }
 

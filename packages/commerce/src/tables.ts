@@ -31,10 +31,18 @@ export const TABLES = {
   shippingMethods: 'cogenta_commerce_shipping_methods',
   coupons: 'cogenta_commerce_coupons',
   couponRedemptions: 'cogenta_commerce_coupon_redemptions',
+  // Fiche 53 task 2: a coupon's own restriction and per-customer counters.
+  couponRestrictions: 'cogenta_commerce_coupon_restrictions',
+  couponCustomerRedemptions: 'cogenta_commerce_coupon_customer_redemptions',
   invoices: 'cogenta_commerce_invoices',
   invoiceSequences: 'cogenta_commerce_invoice_sequences',
   subscriptions: 'cogenta_commerce_subscriptions',
   subscriptionCycles: 'cogenta_commerce_subscription_cycles',
+  // Fiche 53 task 3: one open dunning cycle per subscription.
+  subscriptionDunning: 'cogenta_commerce_subscription_dunning',
+  // Fiche 53 task 5: which billing period a renewal notice was already sent
+  // for, so a repeated run never sends the same notice twice.
+  subscriptionRenewalNotices: 'cogenta_commerce_subscription_renewal_notices',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -299,9 +307,26 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       -- Null means unlimited. Zero means exhausted, not unlimited.
       max_redemptions ${int},
       redemptions ${int} not null,
+      -- Fiche 53 task 2. Null means no per-customer cap. Enforced against
+      -- ${identifier(TABLES.couponCustomerRedemptions, d)}, never against this
+      -- column's own value — it only ever records the *limit*, never a count.
+      max_redemptions_per_customer ${int},
       active ${bool} not null,
       created_at ${t64} not null
     )`)
+
+  // A database whose `coupons` table predates the per-customer cap: `create
+  // table if not exists` above is a no-op for it, so the column is added the
+  // same way every other in-place table growth in this codebase is
+  // (`menu-tables.ts`'s `location` column). Failure means the column already
+  // exists — the only realistic cause once this function has already run
+  // against this table — so it is swallowed exactly like the index
+  // statements below.
+  await db
+    .query(
+      sql`alter table ${identifier(TABLES.coupons, d)} add column ${identifier('max_redemptions_per_customer', d)} ${int}`,
+    )
+    .catch(() => undefined)
 
   await db.query(sql`
     create table if not exists ${identifier(TABLES.couponRedemptions, d)} (
@@ -310,6 +335,33 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       order_id ${t64} not null unique,
       customer_id ${t64},
       at ${t64} not null
+    )`)
+
+  // One row per product a coupon is restricted to. No rows at all means
+  // unrestricted — the common case, and the reason this is a join table
+  // rather than a nullable column on `coupons` (a coupon can name several
+  // products, and a nullable single column could only ever name one).
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.couponRestrictions, d)} (
+      id ${t64} not null primary key,
+      code ${t64} not null,
+      product_id ${t64} not null,
+      created_at ${t64} not null
+    )`)
+
+  // The atomic per-customer counter `redeem()` claims against (fiche 53 task
+  // 2). Deliberately not a `count(*)` over `couponRedemptions` at redemption
+  // time — a guarded single-row `UPDATE` is what stays atomic on Postgres,
+  // MySQL/MariaDB and SQLite alike (the same reasoning as the stock guard in
+  // `catalog/store.ts`), and an aggregate query is not a single row.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.couponCustomerRedemptions, d)} (
+      code ${t64} not null,
+      customer_id ${t64} not null,
+      count ${int} not null,
+      created_at ${t64} not null,
+      updated_at ${t64} not null,
+      primary key (code, customer_id)
     )`)
 
   await db.query(sql`
@@ -374,6 +426,45 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       created_at ${t64} not null
     )`)
 
+  // Fiche 53 task 3: at most one open dunning cycle per subscription — the
+  // primary key is the whole guard against tracking two at once. `period_key`
+  // is carried, not reinvented: it is the exact value `billOne` already
+  // claimed for the order this cycle is trying to collect, so this table
+  // never becomes a second source of truth about which period is which.
+  // `next_retry_at` doubles as the compare-and-set field `runDunning` claims
+  // against (same shape as `SCHEDULED_TASK_CLAIMS_TABLE` in
+  // `@cogenta/schema`): null means either "claimed and being processed right
+  // now" (transient) or "exhausted" (terminal, `suspended_at` tells the two
+  // apart) — and either way the due-query (`next_retry_at <= now`) simply
+  // never matches null, so a claimed-but-not-yet-resolved row can never be
+  // picked up twice.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.subscriptionDunning, d)} (
+      subscription_id ${t64} not null primary key,
+      order_id ${t64} not null,
+      period_key ${t255} not null,
+      failure_count ${int} not null,
+      first_failed_at ${t64} not null,
+      next_retry_at ${t64},
+      last_reason ${t1024},
+      suspended_at ${t64},
+      created_at ${t64} not null,
+      updated_at ${t64} not null
+    )`)
+
+  // Fiche 53 task 5: one row per (subscription, upcoming period) once a
+  // renewal notice has actually been sent for it — the insert itself is the
+  // claim (a duplicate insert hits the primary key and is swallowed by
+  // `sendRenewalNotices`), so a rerun never notifies a subscriber twice for
+  // the same renewal.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.subscriptionRenewalNotices, d)} (
+      subscription_id ${t64} not null,
+      period_key ${t255} not null,
+      sent_at ${t64} not null,
+      primary key (subscription_id, period_key)
+    )`)
+
   await ensureIndexes(db)
 }
 
@@ -397,6 +488,8 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
     ['cogenta_commerce_payments_order', TABLES.payments, 'order_id'],
     ['cogenta_commerce_refunds_payment', TABLES.refunds, 'payment_id'],
     ['cogenta_commerce_cycles_subscription', TABLES.subscriptionCycles, 'subscription_id'],
+    ['cogenta_commerce_coupon_restrictions_code', TABLES.couponRestrictions, 'code'],
+    ['cogenta_commerce_dunning_next_retry', TABLES.subscriptionDunning, 'next_retry_at'],
   ]
 
   for (const [name, table, column] of wanted) {

@@ -340,10 +340,19 @@ export function createCartStore(
       // second is the one that is authoritative, because a coupon can expire
       // or run out between the two.
       const priced = await priceOf(cart)
+      const productIds: string[] = []
+      for (const line of cart.lines) {
+        const variant = await dependencies.catalog.readVariant(line.variantId)
+        if (variant !== null) productIds.push(variant.productId)
+      }
       const check = await dependencies.coupons.check(
         code,
         priced.totals.subtotalMinor,
         cart.currency,
+        {
+          customerId: cart.customerId,
+          productIds,
+        },
       )
       if (check.kind !== 'ok') {
         throw couponRefusal(check)
@@ -393,6 +402,7 @@ export function createCartStore(
     const priceChanges: { variantId: string; wasMinor: number; nowMinor: number }[] = []
     const missingVariantIds: string[] = []
     const categories = new Set<string>()
+    const productIds: string[] = []
 
     for (const line of cart.lines) {
       const variant = await dependencies.catalog.readVariant(line.variantId)
@@ -408,6 +418,7 @@ export function createCartStore(
         })
       }
       categories.add(variant.taxCategory)
+      productIds.push(variant.productId)
       lines.push({
         variantId: variant.id,
         sku: variant.sku,
@@ -444,7 +455,15 @@ export function createCartStore(
     // have expired, been exhausted or been deactivated since it was applied.
     let coupon = null
     if (cart.couponCode !== null) {
-      const check = await dependencies.coupons.check(cart.couponCode, subtotalMinor, cart.currency)
+      const check = await dependencies.coupons.check(
+        cart.couponCode,
+        subtotalMinor,
+        cart.currency,
+        {
+          customerId: cart.customerId,
+          productIds,
+        },
+      )
       if (check.kind === 'ok') coupon = check.coupon
     }
 
@@ -507,6 +526,18 @@ export function couponRefusal(
         code: 'COMMERCE_CURRENCY_MISMATCH',
         message: `This discount code only applies to baskets in ${check.currency}.`,
         hint: 'Use a code issued for this currency.',
+      })
+    case 'customer_exhausted':
+      return new CogentaError({
+        code: 'COMMERCE_COUPON_CUSTOMER_EXHAUSTED',
+        message: 'You have already used this discount code the maximum number of times.',
+        hint: `It may be used at most ${String(check.maxRedemptionsPerCustomer)} time(s) per customer.`,
+      })
+    case 'not_applicable':
+      return new CogentaError({
+        code: 'COMMERCE_COUPON_NOT_APPLICABLE',
+        message: 'This discount code does not apply to anything in the basket.',
+        hint: 'Add one of the products it applies to, or remove the code.',
       })
   }
 }

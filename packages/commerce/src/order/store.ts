@@ -280,10 +280,16 @@ export function createOrderStore(
       // one is the one that decides, because a coupon can expire or be
       // exhausted between adding it and paying.
       if (cart.couponCode !== null) {
+        const productIds: string[] = []
+        for (const line of cart.lines) {
+          const variant = await dependencies.catalog.readVariant(line.variantId)
+          if (variant !== null) productIds.push(variant.productId)
+        }
         const check = await dependencies.coupons.check(
           cart.couponCode,
           totals.subtotalMinor,
           cart.currency,
+          { customerId: customer.id, productIds },
         )
         if (check.kind !== 'ok') {
           return { kind: 'coupon_refused', reason: couponRefusal(check).message }

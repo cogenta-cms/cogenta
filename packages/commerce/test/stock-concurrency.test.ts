@@ -137,6 +137,38 @@ describe('two shoppers, one unit left', () => {
     expect(leftAfter?.onHand).toBe(basket.kind === 'taken' ? 3 : 5)
   })
 
+  // fiche 51 task 4: the new alert threshold rides on the same guarded
+  // UPDATE — this proves it observes the real, race-safe count rather than a
+  // value cached before the concurrent sale.
+  it('reports low stock correctly after twenty buyers race the last five units', async () => {
+    fixture = await testFileDb()
+    second = await createSqliteHandle({ url: fixture.path })
+
+    const seller = createCatalogStore(fixture.db)
+    const product = await seller.createProduct({ handle: 'watched', title: 'Watched' })
+    const variant = await seller.createVariant({
+      productId: product.id,
+      sku: 'WATCHED-1',
+      title: 'Watched',
+      priceMinor: 1000,
+      currency: 'EUR',
+      onHand: 5,
+      lowStockThreshold: 2,
+    })
+
+    const buyers = Array.from({ length: 20 }, (_unused, index) =>
+      createCatalogStore(index % 2 === 0 ? (fixture as FileDb).db : (second as DatabaseHandle)),
+    )
+    await Promise.all(
+      buyers.map(async (buyer) => buyer.takeStock([{ variantId: variant.id, quantity: 1 }])),
+    )
+
+    // All five sold: on_hand is 0, at or below the threshold of 2.
+    const low = await seller.listLowStock()
+    expect(low.map((v) => v.id)).toContain(variant.id)
+    expect((await seller.readVariant(variant.id))?.onHand).toBe(0)
+  })
+
   it('the naive read-then-write it replaces really does oversell', async () => {
     fixture = await testFileDb()
     second = await createSqliteHandle({ url: fixture.path })

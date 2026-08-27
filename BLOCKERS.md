@@ -1175,3 +1175,40 @@ table `cogenta_role_permissions` vit entièrement hors contrat, comme
 `cogenta_menus`/`cogenta_maintenance` ; `docs/04-contrats.md` § Permissions
 gagne un paragraphe décrivant la priorité table-puis-fichier sans monter de
 version.
+
+## 21. Fiche 51 (catalogue commerce) — Postgres/MySQL/MariaDB non exécutés cette session
+
+Les 6 tâches de `docs/plans/51-commerce-catalogue.md` sont faites : `contentRef`
+branché des deux côtés (produit → contenu et contenu → produit), recherche/tri/
+pagination exposés jusqu'à l'écran, classification produit par taxonomie
+(`commerce.catalog.write`, décision tranchée et tracée dans la fiche et dans
+`docs/04-contrats.md` § Contrat E), seuil de stock bas + historique de mouvement
+append-only (`cogenta_commerce_stock_movements`), prix barré/promo + dimensions sur
+`variants`, import/export CSV avec correspondance de colonnes par nom et
+prévisualisation obligatoire avant toute écriture.
+
+**Postgres/MySQL/MariaDB non exécutés cette session — Docker indisponible**, même
+contrainte que partout ailleurs dans ce fichier. Les nouveaux cas
+(`stock_movements` append-only, `product_terms`, tri/pagination, les nouvelles
+colonnes nullable de `variants`) sont ajoutés dans `packages/commerce/test/
+catalog.contract.ts`, la même suite de contrat que `packages/commerce/test/
+integration/catalog.test.ts` fait déjà tourner contre les trois serveurs réels —
+donc déjà câblés pour s'exécuter dessus dès que `pnpm services:up` est disponible,
+sans travail supplémentaire. Vérifié sur SQLite uniquement : 212/212 tests
+`@cogenta/commerce` (dont l'extension du test de concurrence à deux connexions
+fichier réelles pour le seuil de stock bas), 18/18 tests e2e `@cogenta/cli` contre
+un vrai serveur HTTP, 10/10 tests d'écran admin contre l'application réelle
+(recherche, tri, pagination, actions groupées avec prévisualisation, lien de
+contenu créé/dissocié, catégorisation, alerte stock bas, import/export CSV).
+
+**Un `pnpm -F @cogenta/admin test` complet** (les ~4000 tests de tout l'admin) a
+montré 6 échecs répartis sur 4 fichiers jamais touchés fonctionnellement par cette
+fiche (`trash.test.tsx`, `entry-edit-workflow.test.tsx`,
+`notices/notice-board.test.tsx`, `entry-edit.test.tsx`) — trois relances isolées de
+`trash.test.tsx` seul ont échoué sur un test **différent à chaque fois** (« lists
+what was deleted… », puis « opens the design system modal… », puis « purges for
+good once the modal is confirmed »), et `entry-edit.test.tsx` est passé 21/21 en
+isolation stricte : la même famille de flaky d'environnement déjà documentée
+plusieurs fois dans ce fichier et dans l'historique du projet (contention CPU/
+mémoire sous parallélisme complet sur une machine partagée), pas une régression de
+cette fiche — aucun des quatre fichiers ne référence même le mot « commerce ».

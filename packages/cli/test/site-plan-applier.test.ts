@@ -58,6 +58,7 @@ function draft(collections: readonly CollectionDefinition[]) {
     skins: [],
     demoContent: [{ collection: 'dish', values: { title: 'Velouté de courge' } }],
     violations: [],
+    structuralGaps: [],
     warnings: [],
   }
 }

@@ -253,7 +253,7 @@
     "settings": "Paramètres",
     "opsSettings": "Sécurité & webhooks",
     "updates": "Mises à jour",
-    "createSite": "Créer un site",
+    "createSite": "Générer le site",
     "marketplace": "Marketplace",
     "health": "Santé",
     "tools": "Outils",
@@ -3419,7 +3419,7 @@
     "noClient": "Sans client"
   },
   "sitePlan": {
-    "heading": "Créer un site",
+    "heading": "Générer le site",
     "intro": "Téléversez un cahier des charges et un agent propose un modèle de contenu, des pages, des gabarits et du contenu de départ. Rien n'est appliqué tant que vous n'avez pas jugé chaque élément.",
     "adminOnly": "Réservé au rôle « admin » : un plan de site change la structure du site.",
     "noProvider": "Aucun fournisseur LLM n'est configuré : un nouveau document ne peut pas être analysé ici. Les plans proposés ailleurs restent consultables et applicables. Tout le reste de cette administration fonctionne sans fournisseur.",
@@ -3950,7 +3950,7 @@
           "step1": "Ouvrez « Assistant » : sans fournisseur configuré, l'écran explique comment en ajouter un.",
           "step2": "Une fois configuré, utilisez les outils d'assistance directement depuis l'éditeur d'une entrée (réécrire, traduire, résumer…).",
           "step3": "Passez par « Agents » pour voir la configuration déclarée d'un agent du site.",
-          "step4": "Utilisez « Créer un site » pour proposer un modèle de contenu et des gabarits à partir d'un document — chaque proposition attend une validation explicite, jamais une application automatique."
+          "step4": "Utilisez « Générer le site » pour proposer un modèle de contenu et des gabarits à partir d'un document — chaque proposition attend une validation explicite, jamais une application automatique."
         }
       },
       "accounts": {

@@ -44,6 +44,7 @@ function draft(id: string, createdAt: string): SitePlanDraft {
     skins: [],
     demoContent: [],
     violations: [],
+    structuralGaps: [],
     warnings: [],
   }
 }

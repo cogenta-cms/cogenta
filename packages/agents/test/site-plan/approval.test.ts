@@ -96,6 +96,7 @@ function draft(): SitePlanDraft {
       { collection: 'dish', values: { title: 'Poulet fermier' } },
     ],
     violations: [],
+    structuralGaps: [],
     warnings: [],
   }
 }
@@ -116,6 +117,7 @@ describe('presenting a plan for review', () => {
       'brief',
       'contentModel',
       'pages',
+      'structuralGaps',
       'skin',
       'demoContent',
     ])
@@ -254,5 +256,65 @@ describe('resolving what the human actually approved', () => {
     expect(approved.skin).toBeUndefined()
     expect(approved.demoContent).toEqual([])
     expect(approved.locales).toEqual([])
+  })
+})
+
+describe('suggested standing pages (fiche 60 task 5)', () => {
+  function draftWithGap(): SitePlanDraft {
+    return {
+      ...draft(),
+      structuralGaps: [
+        {
+          id: 'privacy',
+          topic: 'privacy',
+          title: 'Privacy policy',
+          slug: 'privacy-policy',
+          reason: 'Expected wherever the site collects any personal data.',
+        },
+      ],
+    }
+  }
+
+  it('is its own section, judged item by item like everything else', () => {
+    const section = summarisePlan(draftWithGap()).find((s) => s.id === 'structuralGaps')
+
+    expect(section?.mode).toBe('each')
+    expect(section?.items).toEqual([
+      {
+        id: 'structuralGaps:privacy',
+        section: 'structuralGaps',
+        title: 'Privacy policy (/privacy-policy)',
+        detail: 'Expected wherever the site collects any personal data.',
+      },
+    ])
+  })
+
+  it('joins the approved pages when accepted', () => {
+    const decisions: PlanDecisions = {
+      ...Object.fromEntries(
+        summarisePlan(draftWithGap()).flatMap((s) => s.items.map((i) => [i.id, 'rejected'])),
+      ),
+      'structuralGaps:privacy': 'accepted',
+    }
+
+    const approved = resolveApprovedPlan(draftWithGap(), decisions)
+
+    expect(approved.pages).toEqual([
+      {
+        title: 'Privacy policy',
+        slug: 'privacy-policy',
+        purpose: 'Expected wherever the site collects any personal data.',
+      },
+    ])
+  })
+
+  it('is simply absent from the approved plan when rejected', () => {
+    const decisions = Object.fromEntries(
+      summarisePlan(draftWithGap()).flatMap((s) => s.items.map((i) => [i.id, 'rejected'])),
+    ) as PlanDecisions
+
+    const approved = resolveApprovedPlan(draftWithGap(), decisions)
+
+    expect(approved.pages).toEqual([])
   })
 })

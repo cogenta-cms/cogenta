@@ -7,6 +7,7 @@ import type { ChatRequest } from '../../src/providers/types.js'
 import { resolveApprovedPlan, summarisePlan } from '../../src/site-plan/approval.js'
 import { createMemorySitePlanStore } from '../../src/site-plan/draft-store.js'
 import { proposeSitePlan } from '../../src/site-plan/propose-plan.js'
+import { EMPTY_EXISTING_SITE, type ExistingSiteSnapshot } from '../../src/site-plan/site-context.js'
 import { scriptedClient } from './fake-client.js'
 
 /**
@@ -214,5 +215,133 @@ describe('the whole pipeline, from an uploaded document to an approved plan', ()
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.stage).toBe('brief')
+  })
+})
+
+describe('a plan proposed on a site that already exists (fiche 60)', () => {
+  const existingSite: ExistingSiteSnapshot = {
+    ...EMPTY_EXISTING_SITE,
+    collections: [
+      {
+        name: 'dish',
+        labels: { singular: 'Plat', plural: 'Plats' },
+        fields: [{ name: 'title', kind: 'text' }],
+        routed: true,
+        entryCount: 40,
+        publishedCount: 40,
+      },
+    ],
+  }
+
+  // The model proposes "dish" again (the site already has it), "testimonial"
+  // (genuinely new), and a "Contact" page — legal/privacy are still gaps.
+  const EVOLVED_MODEL_JSON = JSON.stringify({
+    collections: [
+      {
+        name: 'dish',
+        labels: { singular: 'Plat', plural: 'Plats' },
+        fields: { title: { kind: 'text', required: true } },
+        permissions: { read: ['public'] },
+        rationale: 'The menu, again.',
+      },
+      {
+        name: 'testimonial',
+        labels: { singular: 'Testimonial', plural: 'Testimonials' },
+        fields: { quote: { kind: 'text', required: true } },
+        permissions: { read: ['public'] },
+        rationale: 'Reviews the brief asks for.',
+      },
+    ],
+    pages: [{ title: 'Contact', slug: 'contact', purpose: 'Reach us.' }],
+  })
+
+  function evolvedPlanner() {
+    return scriptedClient([
+      (request: ChatRequest) => {
+        const prompt = request.messages.at(-1)?.content ?? ''
+        if (prompt.includes('visual design tokens')) {
+          const label =
+            Object.keys(SKIN_ACCENTS).find((name) => prompt.includes(name)) ?? 'Warm and editorial'
+          return JSON.stringify({
+            ...TOKENS,
+            color: { ...TOKENS.color, accent: SKIN_ACCENTS[label] ?? '#1d4ed8' },
+          })
+        }
+        if (prompt.includes('demonstration content')) return DEMO_JSON
+        if (prompt.includes('content model of a Cogenta CMS site')) return EVOLVED_MODEL_JSON
+        return BRIEF_JSON
+      },
+    ])
+  }
+
+  it('does not duplicate a collection the site already has, and reports it', async () => {
+    const document = await load('restaurant-brief.md')
+    const { client } = evolvedPlanner()
+
+    const result = await proposeSitePlan({
+      client,
+      model: 'm',
+      documents: [document],
+      skinCount: 2,
+      existingSite,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.draft.contentModel.collections.map((c) => c.definition.name)).toEqual([
+      'testimonial',
+    ])
+    expect(result.draft.warnings.join(' ')).toContain('A collection named "dish" was not proposed')
+  })
+
+  it('suggests only the standing pages still missing, given what the plan and the site already cover', async () => {
+    const document = await load('restaurant-brief.md')
+    const { client } = evolvedPlanner()
+
+    const result = await proposeSitePlan({
+      client,
+      model: 'm',
+      documents: [document],
+      skinCount: 2,
+      existingSite,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // "Contact" is in the proposed pages already; "dish" is not a gap topic.
+    expect(result.draft.structuralGaps.map((gap) => gap.topic).sort()).toEqual(['legal', 'privacy'])
+  })
+
+  it('behaves exactly as before this fiche when no existing site is supplied', async () => {
+    const document = await load('restaurant-brief.md')
+    const a = planner()
+    const b = planner()
+
+    const withoutExisting = await proposeSitePlan({
+      client: a.client,
+      model: 'm',
+      documents: [document],
+      idFactory: () => 'draft-1',
+      now: () => new Date('2026-08-16T09:00:00Z'),
+    })
+    const withEmptyExisting = await proposeSitePlan({
+      client: b.client,
+      model: 'm',
+      documents: [document],
+      idFactory: () => 'draft-1',
+      now: () => new Date('2026-08-16T09:00:00Z'),
+      existingSite: EMPTY_EXISTING_SITE,
+    })
+
+    expect(withoutExisting.ok).toBe(true)
+    expect(withEmptyExisting.ok).toBe(true)
+    if (!withoutExisting.ok || !withEmptyExisting.ok) return
+    expect(withoutExisting.draft.contentModel).toEqual(withEmptyExisting.draft.contentModel)
+    expect(withoutExisting.draft.pages).toEqual(withEmptyExisting.draft.pages)
+    // Task 5's gap suggestions stay silent on the installer's own path —
+    // they compare against a site that already exists, and a fresh install
+    // never has one.
+    expect(withoutExisting.draft.structuralGaps).toEqual([])
+    expect(withEmptyExisting.draft.structuralGaps).toEqual([])
   })
 })

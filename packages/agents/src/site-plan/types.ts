@@ -2,6 +2,7 @@ import type { SkinTokens } from '@cogenta/render'
 import type { CollectionDefinition } from '@cogenta/schema'
 import type { DocumentFormat } from '../documents/extract-text.js'
 import type { DetectedConstraint } from './constraints.js'
+import type { StructuralGapSuggestion } from './structural-gaps.js'
 
 /**
  * The shapes L19's four agents pass between each other.
@@ -91,6 +92,12 @@ export interface SitePlanDraft {
   readonly demoContent: readonly DemoEntry[]
   /** What was removed or flagged because it contradicted an explicit constraint. */
   readonly violations: readonly ConstraintViolation[]
+  /**
+   * Usual pages this plan, and the site it would join, still lack —
+   * contact, a legal notice, a privacy policy (fiche 60 task 5). Its own
+   * reviewable section, never applied on its own (R6).
+   */
+  readonly structuralGaps: readonly StructuralGapSuggestion[]
   readonly warnings: readonly string[]
 }
 

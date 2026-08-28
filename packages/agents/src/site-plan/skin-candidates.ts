@@ -1,5 +1,10 @@
 import type { ProviderClient } from '../providers/types.js'
 import { generateSkin } from '../skin/generate.js'
+import {
+  type ExistingSiteSnapshot,
+  isExistingSiteEmpty,
+  renderExistingSiteForPrompt,
+} from './site-context.js'
 import type { SkinCandidate } from './types.js'
 
 /**
@@ -77,6 +82,12 @@ export interface GenerateSkinCandidatesOptions {
   readonly count?: number
   /** Passed to each candidate's own validation loop. */
   readonly maxAttemptsPerCandidate?: number
+  /**
+   * Fiche 60 task 3 — the site these candidates would style, when one
+   * already exists. Threaded to every `generateSkin` call as tagged,
+   * escaped data (R8), never folded into `description`.
+   */
+  readonly existingSite?: ExistingSiteSnapshot
 }
 
 export interface SkinCandidateFailure {
@@ -108,6 +119,12 @@ export async function generateSkinCandidates(
   options: GenerateSkinCandidatesOptions,
 ): Promise<GenerateSkinCandidatesResult> {
   const directions = SKIN_DIRECTIONS.slice(0, clampCount(options.count))
+  const hasExistingSite =
+    options.existingSite !== undefined && !isExistingSiteEmpty(options.existingSite)
+  const context =
+    hasExistingSite && options.existingSite !== undefined
+      ? [{ source: 'current site', content: renderExistingSiteForPrompt(options.existingSite) }]
+      : undefined
 
   // Run in parallel: the installer's whole promise is measured in seconds,
   // and five sequential three-attempt loops is a minute of staring at a
@@ -122,6 +139,7 @@ export async function generateSkinCandidates(
         ...(options.maxAttemptsPerCandidate === undefined
           ? {}
           : { maxAttempts: options.maxAttemptsPerCandidate }),
+        ...(context === undefined ? {} : { context }),
       })
       return { direction, result }
     }),

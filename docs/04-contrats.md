@@ -577,12 +577,22 @@ defineAgent({
 
 ## Contrat D — Thème
 
-> **Figé en `theme@1.1` le 2026-08-13.** Ajouter une entrée à `ctx` est mineur ; en
+> **Figé en `theme@1.2` le 2026-08-28.** Ajouter une entrée à `ctx` est mineur ; en
 > modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
 > manques trouvés en écrivant les consommateurs du contrat, qui rendaient toute vidéo
 > irrécupérable et laissaient deux types centraux à l'interprétation de chaque thème.
+>
+> `1.2` (fiche 48) ajoute au manifeste `description?: string` et `author?: string`, tous
+> deux optionnels — un thème écrit avant cette version, ou un thème tiers qui choisit de
+> ne déclarer ni l'un ni l'autre, continue de valider sans changement. C'est ce que la
+> galerie « Apparence » de l'admin affiche désormais sur chaque carte, à côté du
+> `version` qui existait déjà dans le manifeste mais n'était ni lu ni affiché nulle
+> part : c'est ce `version`-là (celui du contrat de thème) qui s'affiche, jamais le
+> `version` du `package.json` npm — deux numéros distincts qui ne coïncident pas
+> nécessairement (`@cogenta/theme-canonical` est en `0.2.1` côté npm et `1.1.0` côté
+> manifeste au moment d'écrire ceci).
 
 ### Structure minimale
 
@@ -606,6 +616,8 @@ mon-theme/
 defineTheme({
   name: 'canonical',
   version: '1.0.0',
+  description: 'The reference theme: all blocks, zero client JavaScript.',  // optionnel (theme@1.2)
+  author: 'Cogenta',                                                       // optionnel (theme@1.2)
   engine: '^1.0.0',            // version du contrat de thème
   blocks: '^1.0.0',            // version du vocabulaire supportée
   implements: ['hero', 'prose', /* … */],

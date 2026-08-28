@@ -525,6 +525,9 @@ export function installMockFetch(
         readonly name: string
         readonly label: string
         readonly description: string
+        /** Omit to simulate an older server predating fiche 48's manifest fields — the gallery card must degrade, not crash. */
+        readonly version?: string
+        readonly author?: string | null
       }[]
       /**
        * Simulates a server process running code from before this field
@@ -1441,6 +1444,8 @@ export function installMockFetch(
       name: '@cogenta/theme-canonical',
       label: 'Canonical',
       description: 'The reference theme: all twelve blocks, zero client JavaScript.',
+      version: '1.1.0',
+      author: 'Cogenta',
     },
   ]
   function themeEffectiveTokens(): Record<string, unknown> {

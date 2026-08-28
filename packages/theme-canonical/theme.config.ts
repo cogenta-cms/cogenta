@@ -23,6 +23,9 @@ export default defineTheme({
   // change to how it renders the twelve it already implemented — nothing a
   // site authored before this stops rendering identically.
   version: '1.1.0',
+  description:
+    'The reference theme: all seventeen blocks, zero client JavaScript, a neutral, accessible default.',
+  author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
   implements: [

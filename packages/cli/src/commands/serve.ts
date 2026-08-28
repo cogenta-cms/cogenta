@@ -4496,7 +4496,7 @@ export function createRequestListener(
         }
         const body = (await readBody(req)) as { theme?: unknown } | undefined
         const themeName = typeof body?.theme === 'string' ? body.theme : ''
-        if (!availableThemes().some((candidate) => candidate.name === themeName)) {
+        if (!(await availableThemes()).some((candidate) => candidate.name === themeName)) {
           jsonError(
             res,
             404,

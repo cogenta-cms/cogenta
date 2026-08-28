@@ -24,6 +24,10 @@ export interface AvailableTheme {
   readonly name: string
   readonly label: string
   readonly description: string
+  /** The theme contract's own version (`ThemeManifest.version`), distinct from the npm package version — fiche 48. */
+  readonly version: string
+  /** Who publishes the theme, or `null` when it does not declare one. */
+  readonly author: string | null
 }
 
 export interface GallerySkin {

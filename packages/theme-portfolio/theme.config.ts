@@ -18,6 +18,9 @@ import { defineTheme } from '@cogenta/theme-kit'
 export default defineTheme({
   name: 'portfolio',
   version: '1.1.0',
+  description:
+    'An ultra-modern creative-portfolio theme: brutalist-meets-editorial display type, an electric accent, zero client JavaScript.',
+  author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
   implements: [

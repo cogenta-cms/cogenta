@@ -12,6 +12,9 @@ import { defineTheme } from '@cogenta/theme-kit'
 export default defineTheme({
   name: 'magazine',
   version: '1.1.0',
+  description:
+    'An editorial magazine theme: print-inspired typography, a lead-story listing grid, zero client JavaScript.',
+  author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
   implements: [

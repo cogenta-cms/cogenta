@@ -49,12 +49,16 @@ export interface SetThemeOverridesInputLike {
   readonly updatedBy?: string | null
 }
 
-/** One entry of the theme picker (fiche L23) — a package name and what an admin sees for it. */
+/** One entry of the theme picker (fiche L23, fields extended fiche 48) — a package name and what an admin sees for it. */
 export interface AvailableThemeLike {
   /** The package name a site's `activeTheme` overlay names, e.g. `@cogenta/theme-portfolio`. */
   readonly name: string
   readonly label: string
   readonly description: string
+  /** `ThemeManifest.version` (contract D) — the theme contract's own version, distinct from the npm package version. */
+  readonly version: string
+  /** `ThemeManifest.author`, or `null` for a theme that does not declare one. */
+  readonly author: string | null
 }
 
 export interface ThemeStoreLike {

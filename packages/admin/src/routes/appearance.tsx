@@ -227,6 +227,12 @@ export function AppearanceRoute(): JSX.Element {
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
 
+  // Two-screen navigation (fiche 48): the gallery (theme metadata and
+  // switching) and the personalization screen (tokens, CSS, identity, skin
+  // gallery, AI) — previously one dense, continuous screen. Local UI state
+  // only, never a route: there is nothing here a reload should have to
+  // reconstruct, and it keeps the "Retour" action trivial.
+  const [view, setView] = useState<'gallery' | 'customize'>('gallery')
   const [theme, setTheme] = useState<ThemeState | null>(null)
   const [overrideDraft, setOverrideDraft] = useState<TokenOverrides>({})
   const [additionalCss, setAdditionalCss] = useState('')
@@ -417,391 +423,456 @@ export function AppearanceRoute(): JSX.Element {
 
       {theme !== null && (
         <>
-          <Notice tone="info">
-            <p>
-              {Object.keys(overrideDraft).length === 0 && additionalCss === ''
-                ? t('appearance.provenanceFileOnly')
-                : t('appearance.provenanceOverridden')}
-            </p>
-          </Notice>
-
-          <Card aria-labelledby="appearance-theme-heading">
-            <CardHeader>
-              <CardTitle>
-                <h2 id="appearance-theme-heading">{t('appearance.themeHeading')}</h2>
-              </CardTitle>
-            </CardHeader>
-            <CardBody className="flex flex-col gap-3">
-              <p className="m-0 text-sm text-muted-foreground">
-                {t('appearance.themeDescription')}
-              </p>
-              {switchThemeError !== null && (
-                <Notice tone="danger" live="assertive">
-                  <p>{switchThemeError}</p>
-                </Notice>
-              )}
-              <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
-                {(theme.availableThemes ?? []).map((candidate) => {
-                  const active =
-                    theme.overrides.activeTheme === candidate.name ||
-                    (theme.overrides.activeTheme === null &&
-                      candidate.name === '@cogenta/theme-canonical')
-                  return (
-                    <li
-                      key={candidate.name}
-                      className={`flex flex-col gap-2 rounded-md border p-3 ${
-                        active ? 'border-primary bg-accent/40' : 'border-border'
-                      }`}
-                    >
-                      {token !== null && (
-                        <ThemeGalleryPreview
-                          token={token}
-                          themeName={candidate.name}
-                          label={candidate.label}
-                        />
-                      )}
-                      <span className="flex items-center justify-between gap-2">
-                        <strong className="text-sm text-foreground">{candidate.label}</strong>
-                        {active && (
-                          <span className="text-xs font-medium text-primary">
-                            {t('appearance.themeActive')}
+          {view === 'gallery' && (
+            <Card aria-labelledby="appearance-theme-heading">
+              <CardHeader>
+                <CardTitle>
+                  <h2 id="appearance-theme-heading">{t('appearance.themeHeading')}</h2>
+                </CardTitle>
+              </CardHeader>
+              <CardBody className="flex flex-col gap-3">
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t('appearance.themeDescription')}
+                </p>
+                {switchThemeError !== null && (
+                  <Notice tone="danger" live="assertive">
+                    <p>{switchThemeError}</p>
+                  </Notice>
+                )}
+                <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
+                  {(theme.availableThemes ?? []).map((candidate) => {
+                    const active =
+                      theme.overrides.activeTheme === candidate.name ||
+                      (theme.overrides.activeTheme === null &&
+                        candidate.name === '@cogenta/theme-canonical')
+                    // `version`/`author` (fiche 48) are read from the theme's
+                    // own manifest and always present on a current server —
+                    // still guarded here the same way `availableThemes`
+                    // itself already tolerates an older server's response
+                    // shape (the version-mismatch test right below this
+                    // file's changes), rather than crashing the whole card.
+                    const version = typeof candidate.version === 'string' ? candidate.version : null
+                    const author =
+                      typeof candidate.author === 'string' && candidate.author !== ''
+                        ? candidate.author
+                        : null
+                    return (
+                      <li
+                        key={candidate.name}
+                        className={`flex flex-col gap-2 rounded-md border p-3 ${
+                          active ? 'border-primary bg-accent/40' : 'border-border'
+                        }`}
+                      >
+                        {token !== null && (
+                          <ThemeGalleryPreview
+                            token={token}
+                            themeName={candidate.name}
+                            label={candidate.label}
+                          />
+                        )}
+                        <span className="flex items-center justify-between gap-2">
+                          <strong className="text-sm text-foreground">{candidate.label}</strong>
+                          {active && (
+                            <span className="text-xs font-medium text-primary">
+                              {t('appearance.themeActive')}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {candidate.description}
+                        </span>
+                        {(version !== null || author !== null) && (
+                          <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                            {version !== null && (
+                              <span>{t('appearance.themeVersionLabel', { version })}</span>
+                            )}
+                            {version !== null && author !== null && (
+                              <span aria-hidden="true">·</span>
+                            )}
+                            {author !== null && (
+                              <span>{t('appearance.themeAuthorLabel', { author })}</span>
+                            )}
                           </span>
                         )}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{candidate.description}</span>
-                      <Button
-                        type="button"
-                        variant={active ? 'secondary' : 'primary'}
-                        size="sm"
-                        disabled={active || switchingTheme !== null}
-                        onClick={() => void switchTheme(candidate.name)}
-                      >
-                        {switchingTheme === candidate.name
-                          ? t('appearance.themeSwitching')
-                          : t('appearance.themeSelectAction')}
-                      </Button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </CardBody>
-          </Card>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="flex flex-col gap-4">
-              {TOKEN_GROUPS.map((group) => (
-                <Card key={group} aria-labelledby={`appearance-group-${group}`}>
-                  <CardHeader>
-                    <CardTitle>
-                      <h2 id={`appearance-group-${group}`}>{t(`appearance.group.${group}`)}</h2>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {TOKEN_SPECS.filter((spec) => spec.group === group).map((spec) => (
-                      <TokenField
-                        key={`${spec.group}.${spec.name}`}
-                        spec={spec}
-                        value={valueAt(effectiveTokens, spec.group, spec.name)}
-                        onChange={(value) => setToken(spec.group, spec.name, value)}
-                      />
-                    ))}
-                  </CardBody>
-                </Card>
-              ))}
-
-              {contrastWarnings.length > 0 && (
-                <Notice tone="warning" live="polite">
-                  <p className="m-0 font-medium">{t('appearance.contrastWarningHeading')}</p>
-                  <ul className="m-0 mt-1 list-disc pl-5">
-                    {contrastWarnings.map((warning) => (
-                      <li key={`${warning.foreground}-${warning.background}`}>
-                        {t('appearance.contrastWarningLine', {
-                          foreground: warning.foreground,
-                          background: warning.background,
-                          ratio: warning.ratio.toFixed(2),
-                          required: warning.required.toFixed(1),
-                        })}
-                      </li>
-                    ))}
-                  </ul>
-                </Notice>
-              )}
-
-              <Card aria-labelledby="appearance-css-heading">
-                <CardHeader>
-                  <CardTitle>
-                    <h2 id="appearance-css-heading">{t('appearance.additionalCssHeading')}</h2>
-                  </CardTitle>
-                </CardHeader>
-                <CardBody className="flex flex-col gap-2">
-                  <Field label={t('appearance.additionalCssLabel')}>
-                    {(control) => (
-                      <textarea
-                        {...control}
-                        rows={6}
-                        className="w-full appearance-none rounded-md border border-input bg-card px-3 py-2 font-mono text-sm text-card-foreground shadow-card"
-                        value={additionalCss}
-                        onChange={(event) => {
-                          setAdditionalCss(event.target.value)
-                          setSaved(false)
-                        }}
-                      />
-                    )}
-                  </Field>
-                  <p className="m-0 text-xs text-muted-foreground">
-                    {t('appearance.additionalCssNote')}
-                  </p>
-                </CardBody>
-              </Card>
-
-              <Card aria-labelledby="appearance-identity-heading">
-                <CardHeader>
-                  <CardTitle>
-                    <h2 id="appearance-identity-heading">{t('appearance.identityHeading')}</h2>
-                  </CardTitle>
-                </CardHeader>
-                <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="appearance-logo">{t('appearance.logoLabel')}</Label>
-                    <MediaPicker
-                      id="appearance-logo"
-                      token={token ?? ''}
-                      accept={['image']}
-                      many={false}
-                      value={
-                        theme.overrides.logoMediaId === null ? [] : [theme.overrides.logoMediaId]
-                      }
-                      onChange={(ids) =>
-                        void (
-                          token !== null &&
-                          saveThemeOverrides(token, { logoMediaId: ids[0] ?? null }).then(load)
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="appearance-logo-dark">{t('appearance.logoDarkLabel')}</Label>
-                    <MediaPicker
-                      id="appearance-logo-dark"
-                      token={token ?? ''}
-                      accept={['image']}
-                      many={false}
-                      value={
-                        theme.overrides.logoDarkMediaId === null
-                          ? []
-                          : [theme.overrides.logoDarkMediaId]
-                      }
-                      onChange={(ids) =>
-                        void (
-                          token !== null &&
-                          saveThemeOverrides(token, { logoDarkMediaId: ids[0] ?? null }).then(load)
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="appearance-favicon">{t('appearance.faviconLabel')}</Label>
-                    <MediaPicker
-                      id="appearance-favicon"
-                      token={token ?? ''}
-                      accept={['image']}
-                      many={false}
-                      value={
-                        theme.overrides.faviconMediaId === null
-                          ? []
-                          : [theme.overrides.faviconMediaId]
-                      }
-                      onChange={(ids) =>
-                        void (
-                          token !== null &&
-                          saveThemeOverrides(token, { faviconMediaId: ids[0] ?? null }).then(load)
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="appearance-share-image">
-                      {t('appearance.shareImageLabel')}
-                    </Label>
-                    <MediaPicker
-                      id="appearance-share-image"
-                      token={token ?? ''}
-                      accept={['image']}
-                      many={false}
-                      value={
-                        theme.overrides.shareImageMediaId === null
-                          ? []
-                          : [theme.overrides.shareImageMediaId]
-                      }
-                      onChange={(ids) =>
-                        void (
-                          token !== null &&
-                          saveThemeOverrides(token, { shareImageMediaId: ids[0] ?? null }).then(
-                            load,
-                          )
-                        )
-                      }
-                    />
-                  </div>
-                </CardBody>
-              </Card>
-
-              <Card aria-labelledby="appearance-gallery-heading">
-                <CardHeader>
-                  <CardTitle>
-                    <h2 id="appearance-gallery-heading">{t('appearance.galleryHeading')}</h2>
-                  </CardTitle>
-                </CardHeader>
-                <CardBody className="flex flex-col gap-2">
-                  {theme.skins.length === 0 ? (
-                    <p className="m-0 text-sm text-muted-foreground">
-                      {t('appearance.galleryEmpty')}
-                    </p>
-                  ) : (
-                    <ul className="m-0 flex flex-col gap-2 p-0">
-                      {theme.skins.map((skin) => (
-                        <li
-                          key={skin.id}
-                          className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
-                        >
-                          <span className="flex items-center gap-2">
-                            {skin.tokens !== null && (
-                              <span
-                                aria-hidden="true"
-                                className="size-8 shrink-0 rounded border border-input"
-                                style={{
-                                  background: String(
-                                    (skin.tokens['color'] as Record<string, unknown> | undefined)?.[
-                                      'accent'
-                                    ] ?? 'transparent',
-                                  ),
-                                }}
-                              />
-                            )}
-                            {skin.displayName}
-                          </span>
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant={active ? 'secondary' : 'primary'}
                             size="sm"
-                            onClick={() => void applySkin(skin)}
+                            disabled={active || switchingTheme !== null}
+                            onClick={() => void switchTheme(candidate.name)}
                           >
-                            {t('appearance.applyAction')}
+                            {switchingTheme === candidate.name
+                              ? t('appearance.themeSwitching')
+                              : t('appearance.themeSelectAction')}
                           </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardBody>
-              </Card>
-
-              {theme.aiAvailable && (
-                <Card aria-labelledby="appearance-ai-heading">
-                  <CardHeader>
-                    <CardTitle>
-                      <h2 id="appearance-ai-heading">{t('appearance.aiHeading')}</h2>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardBody className="flex flex-col gap-2">
-                    <Field label={t('appearance.aiDescriptionLabel')}>
-                      {(control) => (
-                        <Input
-                          {...control}
-                          type="text"
-                          value={description}
-                          onChange={(event) => setDescription(event.target.value)}
-                          placeholder={t('appearance.aiDescriptionPlaceholder')}
-                        />
-                      )}
-                    </Field>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={generating || description.trim() === ''}
-                      onClick={() => void generate()}
-                    >
-                      {generating ? t('appearance.aiGenerating') : t('appearance.aiGenerateAction')}
-                    </Button>
-                    {generateError !== null && (
-                      <Notice tone="danger" live="assertive">
-                        <p>{generateError}</p>
-                      </Notice>
-                    )}
-                    {candidates !== null && (
-                      <ul className="m-0 flex flex-col gap-2 p-0">
-                        {candidates.map((candidate) => (
-                          <li
-                            key={candidate.id}
-                            className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
-                          >
-                            <span>
-                              <strong>{candidate.label}</strong>
-                              <br />
-                              <span className="text-xs text-muted-foreground">
-                                {candidate.rationale}
-                              </span>
-                            </span>
+                          {active && (
                             <Button
                               type="button"
-                              variant="secondary"
+                              variant="primary"
                               size="sm"
-                              onClick={() => applyCandidate(candidate)}
+                              onClick={() => setView('customize')}
                             >
-                              {t('appearance.chooseAction')}
+                              {t('appearance.themePersonalizeAction')}
                             </Button>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CardBody>
+            </Card>
+          )}
+
+          {view === 'customize' && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button type="button" variant="ghost" onClick={() => setView('gallery')}>
+                  {t('appearance.customizeBackAction')}
+                </Button>
+                <h2 className="m-0 text-lg leading-6 font-semibold text-foreground">
+                  {t('appearance.customizeHeading')}
+                </h2>
+              </div>
+
+              <Notice tone="info">
+                <p>
+                  {Object.keys(overrideDraft).length === 0 && additionalCss === ''
+                    ? t('appearance.provenanceFileOnly')
+                    : t('appearance.provenanceOverridden')}
+                </p>
+              </Notice>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="flex flex-col gap-4">
+                  {TOKEN_GROUPS.map((group) => (
+                    <Card key={group} aria-labelledby={`appearance-group-${group}`}>
+                      <CardHeader>
+                        <CardTitle>
+                          <h2 id={`appearance-group-${group}`}>{t(`appearance.group.${group}`)}</h2>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {TOKEN_SPECS.filter((spec) => spec.group === group).map((spec) => (
+                          <TokenField
+                            key={`${spec.group}.${spec.name}`}
+                            spec={spec}
+                            value={valueAt(effectiveTokens, spec.group, spec.name)}
+                            onChange={(value) => setToken(spec.group, spec.name, value)}
+                          />
+                        ))}
+                      </CardBody>
+                    </Card>
+                  ))}
+
+                  {contrastWarnings.length > 0 && (
+                    <Notice tone="warning" live="polite">
+                      <p className="m-0 font-medium">{t('appearance.contrastWarningHeading')}</p>
+                      <ul className="m-0 mt-1 list-disc pl-5">
+                        {contrastWarnings.map((warning) => (
+                          <li key={`${warning.foreground}-${warning.background}`}>
+                            {t('appearance.contrastWarningLine', {
+                              foreground: warning.foreground,
+                              background: warning.background,
+                              ratio: warning.ratio.toFixed(2),
+                              required: warning.required.toFixed(1),
+                            })}
                           </li>
                         ))}
                       </ul>
+                    </Notice>
+                  )}
+
+                  <Card aria-labelledby="appearance-css-heading">
+                    <CardHeader>
+                      <CardTitle>
+                        <h2 id="appearance-css-heading">{t('appearance.additionalCssHeading')}</h2>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardBody className="flex flex-col gap-2">
+                      <Field label={t('appearance.additionalCssLabel')}>
+                        {(control) => (
+                          <textarea
+                            {...control}
+                            rows={6}
+                            className="w-full appearance-none rounded-md border border-input bg-card px-3 py-2 font-mono text-sm text-card-foreground shadow-card"
+                            value={additionalCss}
+                            onChange={(event) => {
+                              setAdditionalCss(event.target.value)
+                              setSaved(false)
+                            }}
+                          />
+                        )}
+                      </Field>
+                      <p className="m-0 text-xs text-muted-foreground">
+                        {t('appearance.additionalCssNote')}
+                      </p>
+                    </CardBody>
+                  </Card>
+
+                  <Card aria-labelledby="appearance-identity-heading">
+                    <CardHeader>
+                      <CardTitle>
+                        <h2 id="appearance-identity-heading">{t('appearance.identityHeading')}</h2>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="appearance-logo">{t('appearance.logoLabel')}</Label>
+                        <MediaPicker
+                          id="appearance-logo"
+                          token={token ?? ''}
+                          accept={['image']}
+                          many={false}
+                          value={
+                            theme.overrides.logoMediaId === null
+                              ? []
+                              : [theme.overrides.logoMediaId]
+                          }
+                          onChange={(ids) =>
+                            void (
+                              token !== null &&
+                              saveThemeOverrides(token, { logoMediaId: ids[0] ?? null }).then(load)
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="appearance-logo-dark">
+                          {t('appearance.logoDarkLabel')}
+                        </Label>
+                        <MediaPicker
+                          id="appearance-logo-dark"
+                          token={token ?? ''}
+                          accept={['image']}
+                          many={false}
+                          value={
+                            theme.overrides.logoDarkMediaId === null
+                              ? []
+                              : [theme.overrides.logoDarkMediaId]
+                          }
+                          onChange={(ids) =>
+                            void (
+                              token !== null &&
+                              saveThemeOverrides(token, { logoDarkMediaId: ids[0] ?? null }).then(
+                                load,
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="appearance-favicon">{t('appearance.faviconLabel')}</Label>
+                        <MediaPicker
+                          id="appearance-favicon"
+                          token={token ?? ''}
+                          accept={['image']}
+                          many={false}
+                          value={
+                            theme.overrides.faviconMediaId === null
+                              ? []
+                              : [theme.overrides.faviconMediaId]
+                          }
+                          onChange={(ids) =>
+                            void (
+                              token !== null &&
+                              saveThemeOverrides(token, { faviconMediaId: ids[0] ?? null }).then(
+                                load,
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="appearance-share-image">
+                          {t('appearance.shareImageLabel')}
+                        </Label>
+                        <MediaPicker
+                          id="appearance-share-image"
+                          token={token ?? ''}
+                          accept={['image']}
+                          many={false}
+                          value={
+                            theme.overrides.shareImageMediaId === null
+                              ? []
+                              : [theme.overrides.shareImageMediaId]
+                          }
+                          onChange={(ids) =>
+                            void (
+                              token !== null &&
+                              saveThemeOverrides(token, { shareImageMediaId: ids[0] ?? null }).then(
+                                load,
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                    </CardBody>
+                  </Card>
+
+                  <Card aria-labelledby="appearance-gallery-heading">
+                    <CardHeader>
+                      <CardTitle>
+                        <h2 id="appearance-gallery-heading">{t('appearance.galleryHeading')}</h2>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardBody className="flex flex-col gap-2">
+                      {theme.skins.length === 0 ? (
+                        <p className="m-0 text-sm text-muted-foreground">
+                          {t('appearance.galleryEmpty')}
+                        </p>
+                      ) : (
+                        <ul className="m-0 flex flex-col gap-2 p-0">
+                          {theme.skins.map((skin) => (
+                            <li
+                              key={skin.id}
+                              className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
+                            >
+                              <span className="flex items-center gap-2">
+                                {skin.tokens !== null && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="size-8 shrink-0 rounded border border-input"
+                                    style={{
+                                      background: String(
+                                        (
+                                          skin.tokens['color'] as
+                                            | Record<string, unknown>
+                                            | undefined
+                                        )?.['accent'] ?? 'transparent',
+                                      ),
+                                    }}
+                                  />
+                                )}
+                                {skin.displayName}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => void applySkin(skin)}
+                              >
+                                {t('appearance.applyAction')}
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardBody>
+                  </Card>
+
+                  {theme.aiAvailable && (
+                    <Card aria-labelledby="appearance-ai-heading">
+                      <CardHeader>
+                        <CardTitle>
+                          <h2 id="appearance-ai-heading">{t('appearance.aiHeading')}</h2>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardBody className="flex flex-col gap-2">
+                        <Field label={t('appearance.aiDescriptionLabel')}>
+                          {(control) => (
+                            <Input
+                              {...control}
+                              type="text"
+                              value={description}
+                              onChange={(event) => setDescription(event.target.value)}
+                              placeholder={t('appearance.aiDescriptionPlaceholder')}
+                            />
+                          )}
+                        </Field>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={generating || description.trim() === ''}
+                          onClick={() => void generate()}
+                        >
+                          {generating
+                            ? t('appearance.aiGenerating')
+                            : t('appearance.aiGenerateAction')}
+                        </Button>
+                        {generateError !== null && (
+                          <Notice tone="danger" live="assertive">
+                            <p>{generateError}</p>
+                          </Notice>
+                        )}
+                        {candidates !== null && (
+                          <ul className="m-0 flex flex-col gap-2 p-0">
+                            {candidates.map((candidate) => (
+                              <li
+                                key={candidate.id}
+                                className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
+                              >
+                                <span>
+                                  <strong>{candidate.label}</strong>
+                                  <br />
+                                  <span className="text-xs text-muted-foreground">
+                                    {candidate.rationale}
+                                  </span>
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => applyCandidate(candidate)}
+                                >
+                                  {t('appearance.chooseAction')}
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </CardBody>
+                    </Card>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" onClick={() => void save()} disabled={saving}>
+                      {saving ? t('appearance.saving') : t('appearance.saveAction')}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => void reset()}>
+                      {t('appearance.resetAction')}
+                    </Button>
+                    {theme.exportAvailable && (
+                      <Button type="button" variant="secondary" onClick={() => void exportToFile()}>
+                        {t('appearance.exportAction')}
+                      </Button>
                     )}
-                  </CardBody>
-                </Card>
-              )}
+                    {saved && (
+                      <span className="text-sm text-muted-foreground">{t('appearance.saved')}</span>
+                    )}
+                  </div>
+                  {saveError !== null && (
+                    <Notice tone="danger" live="assertive">
+                      <p>{saveError}</p>
+                    </Notice>
+                  )}
+                </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" onClick={() => void save()} disabled={saving}>
-                  {saving ? t('appearance.saving') : t('appearance.saveAction')}
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => void reset()}>
-                  {t('appearance.resetAction')}
-                </Button>
-                {theme.exportAvailable && (
-                  <Button type="button" variant="secondary" onClick={() => void exportToFile()}>
-                    {t('appearance.exportAction')}
-                  </Button>
-                )}
-                {saved && (
-                  <span className="text-sm text-muted-foreground">{t('appearance.saved')}</span>
-                )}
+                <div className="flex flex-col gap-2">
+                  <h2 className="m-0 text-sm font-semibold text-foreground">
+                    {t('appearance.previewHeading')}
+                  </h2>
+                  {previewError !== null && (
+                    <Notice tone="danger" live="assertive">
+                      <p>{previewError}</p>
+                    </Notice>
+                  )}
+                  <div className="overflow-hidden rounded-lg border border-border bg-muted">
+                    <iframe
+                      ref={iframe}
+                      title={t('appearance.previewHeading')}
+                      srcDoc={previewHtml ?? ''}
+                      className="h-[70vh] w-full border-0 bg-white"
+                    />
+                    {previewHtml === null && (
+                      <p className="sr-only">{t('appearance.previewLoading')}</p>
+                    )}
+                  </div>
+                </div>
               </div>
-              {saveError !== null && (
-                <Notice tone="danger" live="assertive">
-                  <p>{saveError}</p>
-                </Notice>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h2 className="m-0 text-sm font-semibold text-foreground">
-                {t('appearance.previewHeading')}
-              </h2>
-              {previewError !== null && (
-                <Notice tone="danger" live="assertive">
-                  <p>{previewError}</p>
-                </Notice>
-              )}
-              <div className="overflow-hidden rounded-lg border border-border bg-muted">
-                <iframe
-                  ref={iframe}
-                  title={t('appearance.previewHeading')}
-                  srcDoc={previewHtml ?? ''}
-                  className="h-[70vh] w-full border-0 bg-white"
-                />
-                {previewHtml === null && (
-                  <p className="sr-only">{t('appearance.previewLoading')}</p>
-                )}
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </>
       )}
     </section>

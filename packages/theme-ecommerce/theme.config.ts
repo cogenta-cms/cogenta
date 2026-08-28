@@ -15,6 +15,9 @@ import { defineTheme } from '@cogenta/render'
 export default defineTheme({
   name: 'ecommerce',
   version: '1.1.0',
+  description:
+    'A confident, product-grid-native storefront: shoppable cards, a bold CTA accent, zero client JavaScript.',
+  author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
   implements: [

@@ -53,7 +53,13 @@ function emptyOverrides(): ThemeOverridesLike {
 }
 
 const AVAILABLE_THEMES = [
-  { name: '@cogenta/theme-canonical', label: 'Canonical', description: 'The reference theme.' },
+  {
+    name: '@cogenta/theme-canonical',
+    label: 'Canonical',
+    description: 'The reference theme.',
+    version: '1.1.0',
+    author: 'Cogenta',
+  },
 ]
 
 function memoryStore(initial: ThemeOverridesLike = emptyOverrides()): ThemeStoreLike & {

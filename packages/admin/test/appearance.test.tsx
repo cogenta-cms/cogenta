@@ -4,12 +4,19 @@ import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 /**
- * "Apparence" (fiche 14): the screen the fiche names as one of the CMS's
- * remaining blank spots. Every assertion here checks a real round trip
- * through the mocked `/api/theme` surface, the same discipline
- * `seo.test.tsx`/`settings.test.tsx` already follow — never a snapshot of
- * markup alone. Strings asserted are French: the test harness's default
- * locale, same as every other route test in this suite.
+ * "Apparence" (fiche 14, gallery/personalize split fiche 48): the screen the
+ * fiche names as one of the CMS's remaining blank spots. Every assertion
+ * here checks a real round trip through the mocked `/api/theme` surface, the
+ * same discipline `seo.test.tsx`/`settings.test.tsx` already follow — never
+ * a snapshot of markup alone. Strings asserted are French: the test
+ * harness's default locale, same as every other route test in this suite.
+ *
+ * Fiche 48 splits what used to be one continuous screen into a gallery
+ * (theme metadata, switching) and a personalization screen (tokens, CSS,
+ * identity, skin gallery, AI) reached through a "Personnaliser" button on
+ * the active theme's card. `personalize()` below is what every test that
+ * exercises the personalization controls now has to call first — those
+ * controls are no longer visible on arrival.
  */
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
@@ -30,6 +37,13 @@ async function goToAppearance(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(screen.getByRole('link', { name: 'Apparence' }))
   await screen.findByRole('heading', { name: 'Apparence', level: 1 })
+}
+
+/** Enters the personalization screen from the gallery, via the active card's "Personnaliser" action (fiche 48). */
+async function personalize(activeLabel = 'Canonical'): Promise<void> {
+  const activeCard = (await screen.findByText(activeLabel)).closest('li') as HTMLElement
+  fireEvent.click(within(activeCard).getByRole('button', { name: 'Personnaliser' }))
+  await screen.findByRole('heading', { name: 'Personnaliser', level: 2 })
 }
 
 const CLINICAL_TOKENS = {
@@ -64,10 +78,25 @@ describe('the appearance screen', () => {
     expect(await screen.findByRole('alert')).toBeDefined()
   })
 
+  it('lands on the theme gallery first, with no personalization control visible', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+
+    await screen.findByRole('heading', { name: 'Thème du site' })
+    // Nothing the old single screen used to show immediately is here yet —
+    // the fiche's own acceptance criterion ("la galerie ne montre plus les
+    // contrôles de personnalisation").
+    expect(screen.queryByDisplayValue('#1d4ed8')).toBeNull()
+    expect(screen.queryByText('CSS additionnel')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Enregistrer' })).toBeNull()
+  })
+
   it('shows the file tokens and says every value comes from the file before any change', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     expect(
       await screen.findByText(
@@ -81,6 +110,7 @@ describe('the appearance screen', () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     expect(screen.queryByText('Générer un thème')).toBeNull()
   })
@@ -99,6 +129,7 @@ describe('the appearance screen', () => {
     })
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     const description = await screen.findByPlaceholderText('Sobre, chaleureux, plutôt papier')
     fireEvent.change(description, { target: { value: 'warm, editorial, paper-like' } })
@@ -117,6 +148,7 @@ describe('the appearance screen', () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     const accentInput = await screen.findByDisplayValue('#1d4ed8')
     fireEvent.change(accentInput, { target: { value: '#7c3aed' } })
@@ -131,6 +163,7 @@ describe('the appearance screen', () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     const fgInput = await screen.findByDisplayValue('#16181d')
     fireEvent.change(fgInput, { target: { value: '#fefefe' } })
@@ -154,6 +187,7 @@ describe('the appearance screen', () => {
     })
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     await screen.findByText('Clean and clinical')
     fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }))
@@ -171,6 +205,7 @@ describe('the appearance screen', () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     expect(screen.queryByRole('button', { name: 'Exporter vers theme.tokens.json' })).toBeNull()
   })
@@ -179,10 +214,73 @@ describe('the appearance screen', () => {
     signedIn(['admin'], { exportAvailable: true })
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     expect(
       await screen.findByRole('button', { name: 'Exporter vers theme.tokens.json' }),
     ).toBeDefined()
+  })
+})
+
+describe('the appearance screen — gallery/personalize navigation (fiche 48)', () => {
+  it('goes from the gallery to personalization and back, preserving the edit made in between', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    const accentInput = await screen.findByDisplayValue('#1d4ed8')
+    fireEvent.change(accentInput, { target: { value: '#7c3aed' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    await screen.findByRole('heading', { name: 'Thème du site' })
+    // Back on the gallery: the personalization controls are gone again.
+    expect(screen.queryByDisplayValue('#7c3aed')).toBeNull()
+
+    await personalize()
+    // The unsaved edit survived the round trip — this is in-page navigation,
+    // never a reload, so component state is untouched.
+    expect(await screen.findByDisplayValue('#7c3aed')).toBeDefined()
+  })
+
+  it('shows version and author on every gallery card, from the theme manifest', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+          version: '1.1.0',
+          author: 'Cogenta',
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const canonicalCard = (await screen.findByText('Canonical')).closest('li') as HTMLElement
+    expect(within(canonicalCard).getByText('Version 1.1.0')).toBeDefined()
+    expect(within(canonicalCard).getByText('Par Cogenta')).toBeDefined()
+  })
+
+  it('renders a card cleanly when a theme declares no author (a third-party theme, fiche 48)', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+          version: '1.1.0',
+          author: null,
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const canonicalCard = (await screen.findByText('Canonical')).closest('li') as HTMLElement
+    expect(within(canonicalCard).getByText('Version 1.1.0')).toBeDefined()
+    expect(within(canonicalCard).queryByText(/^Par /)).toBeNull()
   })
 })
 
@@ -216,6 +314,12 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
       name: 'Sélectionner',
     })
     expect((selectButton as HTMLButtonElement).disabled).toBe(true)
+    // Only the active card gets a way into personalization (fiche 48) —
+    // colours apply to whichever theme is active, so there is exactly one
+    // meaningful destination, never a "Personnaliser" per inactive theme.
+    expect(
+      within(canonicalCard as HTMLElement).getByRole('button', { name: 'Personnaliser' }),
+    ).toBeDefined()
   })
 
   it('lists every installed theme and switches to the one an admin picks', async () => {
@@ -245,7 +349,10 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
       expect(within(refreshedCard).queryByText('Actif')).not.toBeNull()
     })
     // Switching theme never touches the skin's own provenance notice — a
-    // layout switch is not a colour override.
+    // layout switch is not a colour override. The notice now lives in the
+    // personalization screen (fiche 48), reached through the newly-active
+    // card's "Personnaliser" action.
+    await personalize('Portfolio')
     expect(
       screen.getByText(
         "Chaque valeur affichée ici vient de theme.tokens.json — rien n'a encore été surchargé.",

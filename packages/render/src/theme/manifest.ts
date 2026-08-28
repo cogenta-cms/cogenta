@@ -24,6 +24,19 @@ export interface ThemeManifest {
   /** Path to the default skin, relative to the theme root. */
   readonly tokens: string
   readonly a11y?: { readonly verified: string } | undefined
+  /**
+   * A short, human-readable summary of the theme — what the appearance
+   * gallery shows next to its name (fiche 48). Optional: a manifest written
+   * before `theme@1.2` still validates, and the gallery falls back to
+   * whatever label the theme registry has for it.
+   */
+  readonly description?: string | undefined
+  /**
+   * Who publishes the theme, shown alongside `version` in the gallery.
+   * Optional for the same reason as `description` — a third-party theme
+   * that predates this field, or simply omits one, still installs.
+   */
+  readonly author?: string | undefined
 }
 
 const SEMVER_RANGE = /^[\^~]?\d+\.\d+(\.\d+)?(-[0-9A-Za-z.-]+)?$/u
@@ -39,6 +52,10 @@ const manifestSchema = z.object({
   runtime: z.enum(['static', 'server', 'edge']),
   tokens: z.string().min(1),
   a11y: z.object({ verified: z.string().min(1) }).optional(),
+  // theme@1.2 (fiche 48): both optional, so a manifest written before this
+  // field existed keeps validating unchanged.
+  description: z.string().min(1).optional(),
+  author: z.string().min(1).optional(),
 })
 
 export type ThemeManifestInput = z.input<typeof manifestSchema>
@@ -60,8 +77,14 @@ export function parseThemeManifest(input: unknown, source?: string): ThemeManife
     })
   }
 
-  // `exactOptionalPropertyTypes` makes `a11y: undefined` and an absent `a11y`
-  // two different types, so the key is only set when there is something in it.
-  const { a11y, ...rest } = result.data
-  return a11y === undefined ? rest : { ...rest, a11y }
+  // `exactOptionalPropertyTypes` makes `a11y: undefined` (or `description`/
+  // `author`: undefined) and the key being genuinely absent two different
+  // types, so each is only set on the result when there is something in it.
+  const { a11y, description, author, ...rest } = result.data
+  return {
+    ...rest,
+    ...(a11y === undefined ? {} : { a11y }),
+    ...(description === undefined ? {} : { description }),
+    ...(author === undefined ? {} : { author }),
+  }
 }

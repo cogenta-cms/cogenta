@@ -200,6 +200,69 @@ describe('cogenta serve — robots.txt custom rules (fiche 50 task 4)', () => {
   })
 })
 
+describe('cogenta serve — SEO feature grid gates (fiche 70 task 3)', () => {
+  it('hides the custom robots.txt rule once seo.robotsCustomRulesEnabled is turned off, keeping the saved text', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      await writeSetting(root, 'seo.robotsCustomRules', 'User-agent: GPTBot\nDisallow: /')
+      const enabled = await (await fetch(`${server.base}/robots.txt`)).text()
+      expect(enabled).toContain('GPTBot')
+
+      await writeSetting(root, 'seo.robotsCustomRulesEnabled', false)
+      const disabled = await (await fetch(`${server.base}/robots.txt`)).text()
+      expect(disabled).not.toContain('GPTBot')
+
+      // The saved text is untouched — the gate hides its effect, it never
+      // erases the setting `seo.robotsCustomRules` still holds.
+      await writeSetting(root, 'seo.robotsCustomRulesEnabled', true)
+      const restored = await (await fetch(`${server.base}/robots.txt`)).text()
+      expect(restored).toContain('GPTBot')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('hides both search-engine verification meta tags once seo.searchVerificationEnabled is turned off', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const editor = await signIn(root, server.base, ['editor'])
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers: authed(editor),
+          body: JSON.stringify({ values: { title: 'Hello world', slug: 'hello-world' } }),
+        })
+      ).json()) as { data: { id: string } }
+      await fetch(`${server.base}/api/content/page/${created.data.id}/publish`, {
+        method: 'POST',
+        headers: authed(editor),
+      })
+
+      await writeSettings(root, {
+        'seo.googleSiteVerification': 'abc123',
+        'seo.bingSiteVerification': 'XYZ-789',
+      })
+      const enabled = await (await fetch(`${server.base}/hello-world`)).text()
+      expect(enabled).toContain('google-site-verification')
+
+      await writeSetting(root, 'seo.searchVerificationEnabled', false)
+      const disabled = await (await fetch(`${server.base}/hello-world`)).text()
+      expect(disabled).not.toContain('google-site-verification')
+      expect(disabled).not.toContain('msvalidate.01')
+
+      // Same tokens, restored the moment the gate is switched back on — no
+      // re-entry needed.
+      await writeSetting(root, 'seo.searchVerificationEnabled', true)
+      const restored = await (await fetch(`${server.base}/hello-world`)).text()
+      expect(restored).toContain('<meta name="google-site-verification" content="abc123" />')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
 describe('cogenta serve — llms.txt (fiche 50 task 5)', () => {
   it('404s until seo.llmsTxtEnabled is on, then lists published entries by collection', async () => {
     const root = await project()

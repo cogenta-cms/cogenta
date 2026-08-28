@@ -238,5 +238,9 @@ export function resolveConfig(
       otlpHeaders:
         secrets.otlpHeaders === undefined ? undefined : Object.freeze({ ...secrets.otlpHeaders }),
     }),
+    searchConsole: Object.freeze({
+      clientId: secrets.searchConsoleClientId,
+      clientSecret: secrets.searchConsoleClientSecret,
+    }),
   })
 }

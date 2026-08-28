@@ -611,3 +611,51 @@ describe('resolveConfig — observability (fiche L22 task 5)', () => {
     expect(config.observability.otlpEndpoint).toBe('https://cogenta-wins.example.com')
   })
 })
+
+describe('search console (fiche 70 task 4, ADR-0032)', () => {
+  it('defaults the client id and secret to undefined — the connector is unreachable without them', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    expect(config.searchConsole.clientId).toBeUndefined()
+    expect(config.searchConsole.clientSecret).toBeUndefined()
+  })
+
+  it('takes the OAuth client id and secret from the environment', () => {
+    const config = resolveConfig(minimal, {
+      COGENTA_SEARCH_CONSOLE_CLIENT_ID: 'client-id-from-env',
+      COGENTA_SEARCH_CONSOLE_CLIENT_SECRET: 'client-secret-from-env',
+    })
+
+    expect(config.searchConsole.clientId).toBe('client-id-from-env')
+    expect(config.searchConsole.clientSecret).toBe('client-secret-from-env')
+  })
+
+  it('refuses a client id or secret written in the config file', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, searchConsole: { clientId: 'x' } }, noEnv),
+    ).toThrowError(/searchConsole\.clientId/)
+    expect(() =>
+      resolveConfig({ ...minimal, searchConsole: { clientSecret: 'x' } }, noEnv),
+    ).toThrowError(/searchConsole\.clientSecret/)
+  })
+
+  it('points the user at the environment variable for a leaked client secret', () => {
+    try {
+      resolveConfig({ ...minimal, searchConsole: { clientSecret: 'leaked' } }, noEnv)
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(error).toBeInstanceOf(CogentaError)
+      expect((error as CogentaError).code).toBe('CONFIG_SECRET_IN_FILE')
+      expect((error as CogentaError).hint).toContain('COGENTA_SEARCH_CONSOLE_CLIENT_SECRET')
+    }
+  })
+
+  it('never echoes the client secret back in the error', () => {
+    try {
+      resolveConfig({ ...minimal, searchConsole: { clientSecret: 'super-secret-value' } }, noEnv)
+      expect.unreachable('should have thrown')
+    } catch (error) {
+      expect(JSON.stringify((error as CogentaError).toJSON())).not.toContain('super-secret-value')
+    }
+  })
+})

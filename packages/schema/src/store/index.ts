@@ -172,6 +172,18 @@ export type { Schema21MigrationOptions } from './schema-2-1-migration.js'
 export { schema21Migration } from './schema-2-1-migration.js'
 export type { Schema2MigrationOptions } from './schema-2-migration.js'
 export { schema2Migration } from './schema-2-migration.js'
+export type {
+  ConnectSearchConsoleInput,
+  SearchConsoleConnectionStore,
+  SearchConsoleConnectionStoreOptions,
+  SearchConsoleConnectionSummary,
+} from './search-console-store.js'
+export { createSearchConsoleConnectionStore } from './search-console-store.js'
+export {
+  ensureSearchConsoleConnectionTable,
+  SEARCH_CONSOLE_CONNECTION_ID,
+  SEARCH_CONSOLE_CONNECTION_TABLE,
+} from './search-console-tables.js'
 export type { SearchIndexingOptions } from './search-indexing.js'
 export { reindexAll, reindexEntry, withSearchIndexing } from './search-indexing.js'
 export type {

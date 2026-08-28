@@ -310,6 +310,18 @@ const paymentSchema = z.strictObject({
   manualInstructions: nonEmpty.optional(),
 })
 
+/**
+ * Google Search Console OAuth (fiche 70 task 4, ADR-0032). No fields at all —
+ * the app's own OAuth client id/secret are both secrets (rule R7) and come
+ * from `COGENTA_SEARCH_CONSOLE_CLIENT_ID`/`COGENTA_SEARCH_CONSOLE_CLIENT_SECRET`
+ * only, refused here by `SECRET_KEYS` (`env.ts`) exactly like `payment`'s own
+ * Stripe/PayPal keys. Everything per-site — whether a site has connected, and
+ * which GSC property it queries — lives in the database
+ * (`@cogenta/schema`'s `search-console-store.ts`), never here: this section
+ * exists only so the *installation* can offer the connector at all.
+ */
+const searchConsoleSchema = z.strictObject({})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -333,6 +345,7 @@ export const configSchema = z.strictObject({
   assistant: assistantSchema.prefault({}),
   payment: paymentSchema.prefault({}),
   observability: observabilitySchema.prefault({}),
+  searchConsole: searchConsoleSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

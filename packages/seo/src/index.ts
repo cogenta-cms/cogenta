@@ -53,6 +53,19 @@ export {
 export type { RobotsGroup, RobotsOptions } from './robots.js'
 export { renderRobotsTxt, robotsRuleDisallowsEverything } from './robots.js'
 export type {
+  SearchAnalyticsQueryOptions,
+  SearchConsoleFetch,
+  SearchConsoleMetricsRow,
+  SearchConsoleOAuthOptions,
+  SearchConsoleTokens,
+} from './search-console.js'
+export {
+  buildAuthorizationUrl,
+  exchangeAuthorizationCode,
+  fetchSearchAnalytics,
+  refreshAccessToken,
+} from './search-console.js'
+export type {
   ChangeFrequency,
   SitemapCollectionOverride,
   SitemapFile,

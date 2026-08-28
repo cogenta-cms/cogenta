@@ -320,24 +320,30 @@
   opacity: 0.55;
 }
 
-/* The flyout itself — hidden until `app-shell.tsx`'s `openFlyoutGroup`
-   state says otherwise (`aria-expanded="true"` on the trigger, or real
-   keyboard focus inside via `:focus-within`, kept as a safety net for a
-   focus path the state might not have caught). Deliberately NOT also
-   driven by a bare `:hover` on `.app-shell__nav-group`: a first version of
-   this design tried that, and it broke in a real browser two different
-   ways plain CSS cannot fix — (1) the flyout sits a real gap to the right
-   of, and is taller than, its trigger row, so a mouse moving diagonally
-   toward an item further down legitimately leaves both boxes mid-transit,
-   and `:hover` gives up at exactly that moment; (2) `:hover` cannot be
-   reset by React at all, so clicking a link inside the flyout to navigate
-   left it visually open over the new page for as long as the pointer
-   happened to still be sitting there. `app-shell.tsx`'s `openFlyout`/
-   `scheduleCloseFlyout` (mouse) and the location-change effect (navigation)
-   are what actually solve both — this rule only has to read their result.
-   Anchored to the row's own top edge, immediately right of the sidebar —
-   WordPress's own placement, and the one that keeps a tall group's flyout
-   from drifting away from the row that opened it. */
+/* The flyout itself — visible if and only if `app-shell.tsx`'s
+   `openFlyoutGroup` state says so (`aria-expanded="true"` on the trigger),
+   and never by any other route. Two earlier, independent bare-CSS ways of
+   showing it were each tried and each broke in a real browser, not merely
+   in theory — a bug report caught both, and neither is coming back:
+   (1) `:hover` on `.app-shell__nav-group` — the flyout sits a real gap to
+   the right of, and is taller than, its trigger row, so a mouse moving
+   diagonally toward an item further down legitimately leaves both boxes
+   mid-transit, and `:hover` gives up at exactly that moment; it also
+   cannot be reset by React at all, so clicking a link to navigate left the
+   panel open over the new page for as long as the pointer had not
+   physically moved yet. (2) `:focus-within` on the same element, kept
+   afterwards as a keyboard fallback — redundant with `onFocus`/`onBlur`
+   already managing `openFlyoutGroup` correctly (`onGroupBlur` only closes
+   once focus has actually left the group's own subtree), and just as
+   unable to be reset: a real mouse click leaves the clicked link focused,
+   and this sidebar never unmounts on navigation, so `:focus-within` kept
+   right on matching that link's now-former flyout with nothing left to
+   ever tell it to stop. `app-shell.tsx`'s `openFlyout`/`scheduleCloseFlyout`
+   (pointer) and its location-change effect, which now also blurs whatever
+   the sidebar still holds focused (navigation), are what this single rule
+   actually depends on. Anchored to the row's own top edge, immediately
+   right of the sidebar — WordPress's own placement, and the one that keeps
+   a tall group's flyout from drifting away from the row that opened it. */
 .app-shell__flyout {
   display: none;
   position: absolute;
@@ -352,7 +358,6 @@
   padding: var(--space-2);
 }
 
-.app-shell__nav-group:focus-within > .app-shell__flyout,
 .app-shell__nav-group-trigger[aria-expanded="true"] + .app-shell__flyout {
   display: block;
 }

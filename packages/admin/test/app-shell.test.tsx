@@ -266,6 +266,29 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
   })
 
+  it('blurs a still-focused flyout link after navigating, so a real click cannot leave the flyout open forever', async () => {
+    // Regression test for a real, reported bug that the test above did not
+    // catch: `fireEvent.click` does not reproduce a real mouse click's
+    // default browser behaviour of focusing the clicked link, so the
+    // sidebar's own `:focus-within` fallback (removed since — see
+    // shell.css) never got exercised by that test. Focusing the link here
+    // by hand is what makes this test take the same path a real click
+    // does.
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    fireEvent.click(contentTrigger)
+
+    const mediaLink = screen.getByRole('link', { name: 'Médiathèque' })
+    mediaLink.focus()
+    fireEvent.click(mediaLink)
+    await screen.findByRole('heading', { name: 'Médiathèque' })
+
+    expect(document.activeElement).not.toBe(mediaLink)
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('renders a group left with exactly one item as a direct link, no disclosure button', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })

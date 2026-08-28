@@ -429,14 +429,29 @@ export function AppShell(): JSX.Element {
   }, [location.pathname])
 
   // Same for an open flyout: clicking a submenu link navigates away, and
-  // the flyout the reader just left should not still cover the new page —
-  // it does not, now that visibility is driven purely by this state (no
-  // more competing `:hover`, which used to keep the panel visually open
-  // regardless of this reset as long as the pointer had not physically
-  // moved yet).
+  // the flyout the reader just left should not still cover the new page.
+  // Two separate things had to give for that to actually hold, both found
+  // by clicking a real link with a real mouse rather than by dispatching a
+  // synthetic click in a test — a synthetic one skips the browser's own
+  // default post-click behaviour and so never reproduced this: (1)
+  // visibility is no longer also driven by a bare CSS `:hover`, which used
+  // to keep the panel open regardless of this reset as long as the pointer
+  // had not physically moved yet; (2) a real click leaves the clicked link
+  // itself focused, and this sidebar never unmounts on navigation (only
+  // the routed page inside it does) — so `:focus-within`, this file's own
+  // fallback for a keyboard user tabbing through a flyout, kept right on
+  // matching the link's now-former flyout forever, with nothing left to
+  // ever ask it to stop. Blurring whatever the sidebar itself still holds
+  // focused is what actually closes that path, without touching focus
+  // anywhere else a navigation might have a legitimate reason to leave it.
   useEffect(() => {
     clearPendingFlyoutClose()
     setOpenFlyoutGroup(null)
+    const active = document.activeElement
+    const sidebar = document.getElementById(SIDEBAR_ID)
+    if (active instanceof HTMLElement && sidebar !== null && sidebar.contains(active)) {
+      active.blur()
+    }
   }, [location.pathname])
 
   // `Escape` closes whichever flyout is open, wherever focus is — the same

@@ -29,6 +29,12 @@ function signedIn(
   installMockFetch({ roles, ...(seoDiagnostics === undefined ? {} : { seoDiagnostics }) })
 }
 
+function signedInWith(options: MockFetchOptions): void {
+  localStorage.clear()
+  localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+  installMockFetch(options)
+}
+
 async function goToSeo(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(screen.getByRole('link', { name: 'SEO' }))
@@ -366,6 +372,141 @@ describe('Diagnostic — internal link assistant (fiche 70 task 2)', () => {
       screen.getByText(
         "Aucune collection n'a encore de route publique, il n'y a donc rien à analyser ici.",
       ),
+    ).toBeDefined()
+  })
+})
+
+describe('Diagnostic — Search Console connector (fiche 70 task 4, ADR-0032)', () => {
+  it('is entirely absent when not configured — no card, no error (R2)', async () => {
+    signedInWith({ roles: ['admin'], searchConsoleStatus: { configured: false } })
+    render(<App />)
+    await goToDiagnostics()
+
+    // Give the section's own fetch a turn to resolve before asserting
+    // absence, or a false negative could just mean "not loaded yet".
+    await screen.findByRole('heading', { name: 'Assistant de maillage interne' })
+    expect(screen.queryByText('Performance réelle (Google Search Console)')).toBeNull()
+  })
+
+  it('offers a Connect button once configured but not yet connected', async () => {
+    signedInWith({
+      roles: ['admin'],
+      searchConsoleStatus: { configured: true, connected: false },
+    })
+    render(<App />)
+    await goToDiagnostics()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Performance réelle (Google Search Console)' }),
+    ).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Connecter Google Search Console' })).toBeDefined()
+  })
+
+  it('sends the browser to the real Google authorization URL on Connect', async () => {
+    signedInWith({
+      roles: ['admin'],
+      searchConsoleStatus: { configured: true, connected: false },
+    })
+    render(<App />)
+    await goToDiagnostics()
+    await screen.findByRole('heading', { name: 'Performance réelle (Google Search Console)' })
+
+    const originalLocation = window.location
+    const assign = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        set href(value: string) {
+          assign(value)
+        },
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connecter Google Search Console' }))
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?mock=1'),
+    )
+
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
+  })
+
+  it('shows real metrics and a Disconnect button once connected', async () => {
+    signedInWith({
+      roles: ['admin'],
+      searchConsoleStatus: {
+        configured: true,
+        connected: true,
+        siteUrl: 'https://example.com/',
+      },
+      searchConsoleMetrics: {
+        rows: [
+          {
+            page: 'https://example.com/hello',
+            clicks: 12,
+            impressions: 300,
+            ctr: 0.04,
+            position: 8.5,
+          },
+        ],
+      },
+    })
+    render(<App />)
+    await goToDiagnostics()
+
+    expect(await screen.findByText('https://example.com/hello')).toBeDefined()
+    expect(screen.getByText('12')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Déconnecter' })).toBeDefined()
+  })
+
+  it('shows the connected banner after a redirect back with ?search_console=connected', async () => {
+    signedInWith({
+      roles: ['admin'],
+      searchConsoleStatus: { configured: true, connected: true, siteUrl: 'https://example.com/' },
+    })
+    // Arriving directly at this URL is exactly what the router's own 302
+    // redirect produces — a nav-link click would overwrite these params
+    // instead of simulating that arrival.
+    window.history.pushState(null, '', '/seo?tab=diagnostics&search_console=connected')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'SEO', level: 1 })
+
+    expect(
+      await screen.findByText(
+        "Connecté — les vraies données de performance s'affichent ci-dessous.",
+      ),
+    ).toBeDefined()
+  })
+
+  it('shows the denied banner after a redirect back with ?search_console=denied', async () => {
+    signedInWith({
+      roles: ['admin'],
+      searchConsoleStatus: { configured: true, connected: false },
+    })
+    window.history.pushState(null, '', '/seo?tab=diagnostics&search_console=denied')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'SEO', level: 1 })
+
+    expect(
+      await screen.findByText(
+        "La connexion n'a pas abouti — réessayez, ou vérifiez que la propriété est bien vérifiée pour ce compte Google.",
+      ),
+    ).toBeDefined()
+  })
+
+  it('disconnects and returns to the Connect state', async () => {
+    signedInWith({
+      roles: ['admin'],
+      searchConsoleStatus: { configured: true, connected: true, siteUrl: 'https://example.com/' },
+    })
+    render(<App />)
+    await goToDiagnostics()
+    await screen.findByRole('button', { name: 'Déconnecter' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Déconnecter' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Connecter Google Search Console' }),
     ).toBeDefined()
   })
 })

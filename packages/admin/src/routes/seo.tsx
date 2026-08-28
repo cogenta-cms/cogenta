@@ -4,6 +4,14 @@ import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
+  disconnectSearchConsole,
+  getSearchConsoleAuthorizeUrl,
+  getSearchConsoleMetrics,
+  getSearchConsoleStatus,
+  type SearchConsoleMetrics,
+  type SearchConsoleStatus,
+} from '../api/search-console-client.js'
+import {
   getSeoDiagnostics,
   getSeoLinkSuggestions,
   type SeoContentRef,
@@ -1194,7 +1202,189 @@ function DiagnosticsTab({
       )}
 
       <LinkAssistantSection collections={collections} />
+      <SearchConsoleSection />
     </div>
+  )
+}
+
+/**
+ * Fiche 70 task 4, ADR-0032 — "Performance réelle": Google Search Console's
+ * clicks/impressions/CTR/position, the one thing the fiche's own research
+ * names as the real gap versus AIOSEO/MonsterInsights/Site Kit.
+ *
+ * **Absent, not empty or erroring, without a connector configured** — the
+ * same contract `GET /api/assistant` already established for the writing
+ * assistant panel (L18): this component returns `null` outright once
+ * `status.configured` comes back `false`, so a site with no
+ * `COGENTA_SEARCH_CONSOLE_CLIENT_ID`/`_CLIENT_SECRET` never sees a broken or
+ * empty card here (R1/R2).
+ *
+ * **Connecting leaves the SPA on purpose.** `window.location.href` to
+ * Google's own consent screen, then back to `?search_console=connected` on
+ * this same tab — there is no in-app modal, because the whole point of
+ * OAuth is that Google's own origin is the one asking for consent.
+ */
+function SearchConsoleSection(): JSX.Element | null {
+  const { t } = useTranslation()
+  const auth = useAuth()
+  const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const [status, setStatus] = useState<SearchConsoleStatus | null>(null)
+  const [metrics, setMetrics] = useState<SearchConsoleMetrics | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadStatus = useCallback(async () => {
+    if (token === null) return
+    setLoading(true)
+    setError(null)
+    try {
+      const found = await getSearchConsoleStatus(token)
+      setStatus(found)
+      if (found.connected) setMetrics(await getSearchConsoleMetrics(token))
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('seo.searchConsoleLoadError'))
+    } finally {
+      setLoading(false)
+    }
+  }, [token, t])
+
+  useEffect(() => {
+    void loadStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
+  // The callback route redirects here with an outcome marker (fiche 70 task
+  // 4) — shown once, then scrubbed from the URL so refreshing the page does
+  // not keep repeating "connected".
+  const outcome = searchParams.get('search_console')
+  useEffect(() => {
+    if (outcome === null) return
+    setSearchParams((params) => {
+      params.delete('search_console')
+      return params
+    })
+  }, [outcome, setSearchParams])
+
+  async function connect(): Promise<void> {
+    if (token === null || connecting) return
+    setConnecting(true)
+    setError(null)
+    try {
+      const { url } = await getSearchConsoleAuthorizeUrl(token)
+      window.location.href = url
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('seo.searchConsoleLoadError'))
+      setConnecting(false)
+    }
+  }
+
+  async function disconnect(): Promise<void> {
+    if (token === null) return
+    setLoading(true)
+    setError(null)
+    try {
+      await disconnectSearchConsole(token)
+      setMetrics(null)
+      await loadStatus()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('seo.searchConsoleLoadError'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (status !== null && !status.configured) return null
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-2">
+        <CardTitle>
+          <h3>{t('seo.searchConsoleHeading')}</h3>
+        </CardTitle>
+        {status?.connected === true && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={loading}
+            onClick={() => void disconnect()}
+          >
+            {t('seo.searchConsoleDisconnect')}
+          </Button>
+        )}
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <p className="text-muted-foreground m-0 text-sm">{t('seo.searchConsoleDescription')}</p>
+
+        {outcome === 'denied' && (
+          <Notice tone="warning" live="assertive">
+            <p>{t('seo.searchConsoleDenied')}</p>
+          </Notice>
+        )}
+        {outcome === 'connected' && (
+          <Notice tone="success" live="polite">
+            <p>{t('seo.searchConsoleConnected')}</p>
+          </Notice>
+        )}
+        {error !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{error}</p>
+          </Notice>
+        )}
+
+        {status === null && loading && <p>{t('common.loading')}</p>}
+
+        {status !== null && !status.connected && (
+          <Button type="button" disabled={connecting} onClick={() => void connect()}>
+            {connecting ? t('seo.searchConsoleConnecting') : t('seo.searchConsoleConnect')}
+          </Button>
+        )}
+
+        {status?.connected === true && (
+          <>
+            <p className="text-muted-foreground m-0 text-sm">
+              {t('seo.searchConsoleConnectedTo', { siteUrl: status.siteUrl ?? '' })}
+            </p>
+            {metrics !== null && (
+              <TableRoot label={t('seo.searchConsoleHeading')}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>{t('seo.searchConsolePageColumn')}</TableHeader>
+                      <TableHeader>{t('seo.searchConsoleClicksColumn')}</TableHeader>
+                      <TableHeader>{t('seo.searchConsoleImpressionsColumn')}</TableHeader>
+                      <TableHeader>{t('seo.searchConsoleCtrColumn')}</TableHeader>
+                      <TableHeader>{t('seo.searchConsolePositionColumn')}</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {metrics.rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-muted-foreground text-sm">
+                          {t('seo.searchConsoleNoRows')}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      metrics.rows.map((row) => (
+                        <TableRow key={row.page}>
+                          <TableCell className="font-mono text-sm">{row.page}</TableCell>
+                          <TableCell>{row.clicks}</TableCell>
+                          <TableCell>{row.impressions}</TableCell>
+                          <TableCell>{(row.ctr * 100).toFixed(1)}%</TableCell>
+                          <TableCell>{row.position.toFixed(1)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableRoot>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
   )
 }
 

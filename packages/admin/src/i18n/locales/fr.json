@@ -1161,7 +1161,22 @@
     "linkAssistantNoSuggestions": "Aucun candidat plausible trouvé pour une entrée de cette collection.",
     "linkAssistantLoadError": "Impossible de calculer les suggestions de liens.",
     "linkAssistantSharedWords_one": "{{count}} mot partagé",
-    "linkAssistantSharedWords_other": "{{count}} mots partagés"
+    "linkAssistantSharedWords_other": "{{count}} mots partagés",
+    "searchConsoleHeading": "Performance réelle (Google Search Console)",
+    "searchConsoleDescription": "Optionnel. Une fois connecté, affiche les vrais clics, impressions, taux de clic et position moyenne depuis Google Search Console — le point que la recherche de cette fiche a identifié comme réellement manquant ici. Lecture seule : rien n'est jamais modifié côté Google.",
+    "searchConsoleConnect": "Connecter Google Search Console",
+    "searchConsoleConnecting": "Redirection vers Google…",
+    "searchConsoleDisconnect": "Déconnecter",
+    "searchConsoleConnected": "Connecté — les vraies données de performance s'affichent ci-dessous.",
+    "searchConsoleDenied": "La connexion n'a pas abouti — réessayez, ou vérifiez que la propriété est bien vérifiée pour ce compte Google.",
+    "searchConsoleConnectedTo": "Connecté à {{siteUrl}} — clics et impressions sur les 28 derniers jours.",
+    "searchConsolePageColumn": "Page",
+    "searchConsoleClicksColumn": "Clics",
+    "searchConsoleImpressionsColumn": "Impressions",
+    "searchConsoleCtrColumn": "CTR",
+    "searchConsolePositionColumn": "Position moy.",
+    "searchConsoleNoRows": "Aucune donnée pour le moment sur cette période.",
+    "searchConsoleLoadError": "Impossible de joindre le connecteur Search Console."
   },
   "opsSettings": {
     "heading": "Sécurité & webhooks",

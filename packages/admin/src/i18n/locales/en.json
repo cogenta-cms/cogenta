@@ -1162,7 +1162,22 @@
     "linkAssistantNoSuggestions": "No plausible candidate found for any entry in this collection.",
     "linkAssistantLoadError": "Could not compute link suggestions.",
     "linkAssistantSharedWords_one": "{{count}} shared word",
-    "linkAssistantSharedWords_other": "{{count}} shared words"
+    "linkAssistantSharedWords_other": "{{count}} shared words",
+    "searchConsoleHeading": "Real performance (Google Search Console)",
+    "searchConsoleDescription": "Optional. Once connected, shows real clicks, impressions, click-through rate and average position from Google Search Console — the one thing this fiche's own research found genuinely missing here. Read-only: nothing is ever changed on the Google side.",
+    "searchConsoleConnect": "Connect Google Search Console",
+    "searchConsoleConnecting": "Redirecting to Google…",
+    "searchConsoleDisconnect": "Disconnect",
+    "searchConsoleConnected": "Connected — real performance data now shows below.",
+    "searchConsoleDenied": "The connection was not completed — try again, or check that the property is verified for this Google account.",
+    "searchConsoleConnectedTo": "Connected to {{siteUrl}} — clicks and impressions over the last 28 days.",
+    "searchConsolePageColumn": "Page",
+    "searchConsoleClicksColumn": "Clicks",
+    "searchConsoleImpressionsColumn": "Impressions",
+    "searchConsoleCtrColumn": "CTR",
+    "searchConsolePositionColumn": "Avg. position",
+    "searchConsoleNoRows": "No data yet for this period.",
+    "searchConsoleLoadError": "Could not reach the Search Console connector."
   },
   "opsSettings": {
     "heading": "Security & webhooks",

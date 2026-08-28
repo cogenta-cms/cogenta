@@ -540,6 +540,26 @@ export function installMockFetch(
         }
       >
     >
+    /** What `GET /api/seo/search-console/status` answers with (fiche 70 task 4) — not configured by default, the same "absent connector" R2 posture as `assistant`. */
+    readonly searchConsoleStatus?: {
+      readonly configured?: boolean
+      readonly connected?: boolean
+      readonly siteUrl?: string
+      readonly connectedAt?: string
+      readonly updatedAt?: string
+    }
+    /** What `GET /api/seo/search-console/metrics` answers with once connected — no rows by default. */
+    readonly searchConsoleMetrics?: {
+      readonly siteUrl?: string
+      readonly windowDays?: number
+      readonly rows?: readonly {
+        readonly page: string
+        readonly clicks: number
+        readonly impressions: number
+        readonly ctr: number
+        readonly position: number
+      }[]
+    }
     /** What `GET /api/theme` answers with (fiche 14) — a fixed, valid file skin, no override, no gallery and no AI by default. */
     readonly theme?: {
       readonly fileTokens?: Record<string, unknown> | null
@@ -898,6 +918,12 @@ export function installMockFetch(
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
+
+  // Search Console connection state (fiche 70 task 4) — mutable across the
+  // test's own requests, the same way `securityAgentEnabled` is just above,
+  // so a test can prove the UI reacts to a real POST /disconnect rather than
+  // only rendering a static fixture.
+  let searchConsoleConnected = options.searchConsoleStatus?.connected ?? false
 
   // L22 task 1: a real, persistent (for the life of one test) agent
   // registry — `security` is the same fixed fixture every existing test
@@ -7402,6 +7428,57 @@ export function installMockFetch(
             suggestionsByEntry: found?.suggestionsByEntry ?? {},
           },
         })
+      }
+
+      // `/api/seo/search-console/*` — fiche 70 task 4, ADR-0032. `status` is
+      // admin-only like the rest of the diagnostics scan; not configured by
+      // default (R2), matching a real install with no OAuth app set.
+      if (url.includes('/api/seo/search-console/status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const found = options.searchConsoleStatus
+        return json(200, {
+          data: {
+            configured: found?.configured ?? false,
+            connected: searchConsoleConnected,
+            ...(!searchConsoleConnected || found?.siteUrl === undefined
+              ? {}
+              : { siteUrl: found.siteUrl }),
+            ...(!searchConsoleConnected || found?.connectedAt === undefined
+              ? {}
+              : { connectedAt: found.connectedAt }),
+            ...(!searchConsoleConnected || found?.updatedAt === undefined
+              ? {}
+              : { updatedAt: found.updatedAt }),
+          },
+        })
+      }
+      if (url.includes('/api/seo/search-console/metrics') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const found = options.searchConsoleMetrics
+        return json(200, {
+          data: {
+            siteUrl: found?.siteUrl ?? 'https://example.com/',
+            windowDays: found?.windowDays ?? 28,
+            rows: found?.rows ?? [],
+          },
+        })
+      }
+      if (url.includes('/api/seo/search-console/authorize') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, { data: { url: 'https://accounts.google.com/o/oauth2/v2/auth?mock=1' } })
+      }
+      if (url.includes('/api/seo/search-console/disconnect') && method === 'POST') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        searchConsoleConnected = false
+        return json(200, { data: { disconnected: true } })
       }
 
       // `/api/admin-theme` (L21 task 2) — the admin's own runtime template.

@@ -58,6 +58,26 @@ describe('editing an existing entry', () => {
     )
   })
 
+  it('shows the server hint, not just the message, when preview fails for a missing signing key (fiche 40 task 1)', async () => {
+    // The exact bug the user reported: `preview-token.ts` already carries a
+    // `hint` telling the operator what to do and where — the admin was
+    // reading only `caught.message` and throwing it away.
+    installMockFetch({ previewSigningKeyMissing: true })
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(
+      'Preview tokens need COGENTA_PREVIEW_SIGNING_KEY to hold at least 32 characters.',
+    )
+    expect(alert.textContent).toContain('openssl rand -hex 32')
+  })
+
   it('reports a nonexistent entry rather than showing a blank form', async () => {
     // Direct navigation to an id the mock server does not have — no list
     // detour needed, since the point is what happens when the URL itself is

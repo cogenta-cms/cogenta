@@ -1,6 +1,6 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import {
   type AdminUser,
   anonymizeUser,
@@ -107,8 +107,8 @@ export function UsersRoute(): JSX.Element {
   const [sortChoice, setSortChoice] = useState<SortChoice>('createdAt:desc')
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [error, setError] = useState<ApiErrorDescription | null>(null)
+  const [actionError, setActionError] = useState<ApiErrorDescription | null>(null)
   const [actionNotice, setActionNotice] = useState<string | null>(null)
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
@@ -134,7 +134,7 @@ export function UsersRoute(): JSX.Element {
 
   const [anonymizing, setAnonymizing] = useState<AdminUser | null>(null)
   const [anonymizeConfirm, setAnonymizeConfirm] = useState('')
-  const [anonymizeError, setAnonymizeError] = useState<string | null>(null)
+  const [anonymizeError, setAnonymizeError] = useState<ApiErrorDescription | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -155,7 +155,7 @@ export function UsersRoute(): JSX.Element {
       setInvitationEmailAvailable(page.invitationEmailAvailable)
       setSelected(new Set())
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('users.loadError'))
+      setError(describeApiError(caught, t('users.loadError')))
     } finally {
       setLoading(false)
     }
@@ -182,7 +182,7 @@ export function UsersRoute(): JSX.Element {
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('users.loadError'))
+      setError(describeApiError(caught, t('users.loadError')))
     } finally {
       setLoadingMore(false)
     }
@@ -243,7 +243,7 @@ export function UsersRoute(): JSX.Element {
     setActionError(null)
     const roles = combineRoles(newRoleSet, newCustomRole)
     if (roles.length === 0) {
-      setActionError(t('users.rolesNone'))
+      setActionError({ message: t('users.rolesNone') })
       return
     }
     try {
@@ -259,7 +259,7 @@ export function UsersRoute(): JSX.Element {
       setNewCustomRole('')
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.createError'))
+      setActionError(describeApiError(caught, t('users.createError')))
     }
   }
 
@@ -269,7 +269,7 @@ export function UsersRoute(): JSX.Element {
     setActionError(null)
     const roles = combineRoles(editRoleSet, editCustomRole)
     if (roles.length === 0) {
-      setActionError(t('users.rolesNone'))
+      setActionError({ message: t('users.rolesNone') })
       return
     }
     try {
@@ -277,7 +277,7 @@ export function UsersRoute(): JSX.Element {
       setEditing(null)
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.updateError'))
+      setActionError(describeApiError(caught, t('users.updateError')))
     }
   }
 
@@ -290,7 +290,7 @@ export function UsersRoute(): JSX.Element {
       })
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.updateError'))
+      setActionError(describeApiError(caught, t('users.updateError')))
     }
   }
 
@@ -302,7 +302,7 @@ export function UsersRoute(): JSX.Element {
     try {
       setSessions(await listUserSessions(token, user.id))
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.sessionsError'))
+      setActionError(describeApiError(caught, t('users.sessionsError')))
     }
   }
 
@@ -313,7 +313,7 @@ export function UsersRoute(): JSX.Element {
       await revokeUserSession(token, sessionsOf.id, sessionId)
       setSessions(await listUserSessions(token, sessionsOf.id))
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.revokeError'))
+      setActionError(describeApiError(caught, t('users.revokeError')))
     }
   }
 
@@ -325,7 +325,7 @@ export function UsersRoute(): JSX.Element {
       setActionNotice(t('users.inviteResent', { email: user.email }))
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.inviteResendError'))
+      setActionError(describeApiError(caught, t('users.inviteResendError')))
     }
   }
 
@@ -337,7 +337,7 @@ export function UsersRoute(): JSX.Element {
       setActionNotice(t('users.inviteCancelled', { email: user.email }))
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.inviteCancelError'))
+      setActionError(describeApiError(caught, t('users.inviteCancelError')))
     }
   }
 
@@ -355,20 +355,20 @@ export function UsersRoute(): JSX.Element {
           : { action, ids: [...selected] }
       const result = await bulkUpdateUsers(token, input)
       if (result.failed.length > 0) {
-        setActionError(
-          t('users.bulkPartialFailure', {
+        setActionError({
+          message: t('users.bulkPartialFailure', {
             succeeded: result.succeeded.length,
             failed: result.failed.length,
             reasons: result.failed.map((f) => f.error).join('; '),
           }),
-        )
+        })
       } else {
         setActionNotice(t('users.bulkSuccess', { count: result.succeeded.length }))
       }
       setBulkRoleModal(false)
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('users.bulkError'))
+      setActionError(describeApiError(caught, t('users.bulkError')))
     } finally {
       setBulkBusy(false)
     }
@@ -385,7 +385,7 @@ export function UsersRoute(): JSX.Element {
       setActionNotice(t('users.anonymizeDone'))
       await load()
     } catch (caught) {
-      setAnonymizeError(caught instanceof ApiError ? caught.message : t('users.anonymizeError'))
+      setAnonymizeError(describeApiError(caught, t('users.anonymizeError')))
     }
   }
 
@@ -445,7 +445,8 @@ export function UsersRoute(): JSX.Element {
 
       {actionError !== null && (
         <Notice tone="danger" live="assertive">
-          <p>{actionError}</p>
+          <p>{actionError.message}</p>
+          {actionError.hint !== undefined && <p>{actionError.hint}</p>}
         </Notice>
       )}
 
@@ -546,7 +547,8 @@ export function UsersRoute(): JSX.Element {
 
       {error !== null && (
         <Notice tone="danger" live="assertive">
-          <p>{error}</p>
+          <p>{error.message}</p>
+          {error.hint !== undefined && <p>{error.hint}</p>}
         </Notice>
       )}
       {loading && <p>{t('common.loading')}</p>}
@@ -837,7 +839,7 @@ export function UsersRoute(): JSX.Element {
             event.preventDefault()
             const combined = combineRoles(bulkRoleSet, bulkCustomRole)
             if (combined.length === 0) {
-              setActionError(t('users.rolesNone'))
+              setActionError({ message: t('users.rolesNone') })
               return
             }
             void runBulk('setRoles', combined)
@@ -899,7 +901,7 @@ export function UsersRoute(): JSX.Element {
           </Notice>
           <Field
             label={t('users.anonymizeConfirmLabel', { email: anonymizing?.email ?? '' })}
-            error={anonymizeError}
+            error={anonymizeError?.message ?? null}
           >
             {(control) => (
               <Input
@@ -912,6 +914,9 @@ export function UsersRoute(): JSX.Element {
               />
             )}
           </Field>
+          {anonymizeError?.hint !== undefined && (
+            <p className="m-0 text-xs leading-5 text-muted-foreground">{anonymizeError.hint}</p>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setAnonymizing(null)}>
               {t('common.cancel')}

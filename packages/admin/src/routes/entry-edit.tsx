@@ -25,6 +25,7 @@ import {
   unpublishEntry,
   updateEntry,
 } from '../api/content-client.js'
+import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import { readUser } from '../api/users-client.js'
 import { AssistantPanel, type AssistField } from '../assist/assistant-panel.js'
 import { ClassifyPanel } from '../assist/classify-panel.js'
@@ -218,10 +219,10 @@ export function EntryEditRoute(): JSX.Element {
   const [translationOf, setTranslationOf] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ApiErrorDescription | null>(null)
   const [saved, setSaved] = useState(false)
   const [previewing, setPreviewing] = useState(false)
-  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<ApiErrorDescription | null>(null)
   /** What the server last confirmed — the thing autosave compares against. */
   const [baseline, setBaseline] = useState<AutosaveSnapshot>(EMPTY_SNAPSHOT)
   /** The `updatedAt` this screen loaded — what a save sends back as `expectedUpdatedAt` (task 7). */
@@ -231,7 +232,7 @@ export function EntryEditRoute(): JSX.Element {
   const [editorMode, setEditorMode] = useState<EditorMode>(storedEditorMode)
   const [status, setStatus] = useState('draft')
   const [statusBusy, setStatusBusy] = useState(false)
-  const [statusError, setStatusError] = useState<string | null>(null)
+  const [statusError, setStatusError] = useState<ApiErrorDescription | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   // Discussion (fiche 15 task 5): a tri-state per-entry override —
@@ -245,7 +246,7 @@ export function EntryEditRoute(): JSX.Element {
   /** The `datetime-local` input's own value — only ever sent on "Programmer". */
   const [scheduleInput, setScheduleInput] = useState('')
   const [duplicating, setDuplicating] = useState(false)
-  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const [duplicateError, setDuplicateError] = useState<ApiErrorDescription | null>(null)
   /** A message per invalid field name (task 3), from client checks or a server refusal that named one. */
   const [errors, setErrors] = useState<Record<string, string>>({})
   /** `createdBy`/`updatedBy` resolved to an email (task 4) — absent means "not resolved yet or not resolvable", in which case the raw id is shown. */
@@ -260,7 +261,7 @@ export function EntryEditRoute(): JSX.Element {
   const [createdBy, setCreatedBy] = useState<string | null>(null)
   const [updatedBy, setUpdatedBy] = useState<string | null>(null)
   const [trashing, setTrashing] = useState(false)
-  const [trashError, setTrashError] = useState<string | null>(null)
+  const [trashError, setTrashError] = useState<ApiErrorDescription | null>(null)
   /**
    * A `CONTENT_STALE_WRITE` refusal (task 7) — the fresh entry the server
    * actually holds, fetched so the editor can see what changed rather than
@@ -275,7 +276,7 @@ export function EntryEditRoute(): JSX.Element {
   const [reviewState, setReviewState] = useState<ReviewState>('none')
   const [assignedReviewer, setAssignedReviewer] = useState<string | null>(null)
   const [workflowBusy, setWorkflowBusy] = useState(false)
-  const [workflowError, setWorkflowError] = useState<string | null>(null)
+  const [workflowError, setWorkflowError] = useState<ApiErrorDescription | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
   /**
    * Whether the assistant has anything to show at all (L20 audit point 16).
@@ -377,7 +378,7 @@ export function EntryEditRoute(): JSX.Element {
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
-          setError(caught instanceof ApiError ? caught.message : t('entryEdit.loadError'))
+          setError(describeApiError(caught, t('entryEdit.loadError')))
         }
       })
       .finally(() => {
@@ -652,7 +653,7 @@ export function EntryEditRoute(): JSX.Element {
         focusFirstError(fieldErrors)
         return false
       }
-      setError(caught instanceof ApiError ? caught.message : t('entryEdit.saveError'))
+      setError(describeApiError(caught, t('entryEdit.saveError')))
       return false
     } finally {
       setSaving(false)
@@ -694,14 +695,14 @@ export function EntryEditRoute(): JSX.Element {
     try {
       const link = await issuePreview(token, name, id)
       if (link.url === null) {
-        setPreviewError(t('entryEdit.previewNoSiteUrl'))
+        setPreviewError({ message: t('entryEdit.previewNoSiteUrl') })
         return
       }
       // The real site, not a simulation inside the admin — the preview
       // button's whole reason to exist (L2-admin.md).
       window.open(link.url, '_blank', 'noopener')
     } catch (caught) {
-      setPreviewError(caught instanceof ApiError ? caught.message : t('entryEdit.previewError'))
+      setPreviewError(describeApiError(caught, t('entryEdit.previewError')))
     } finally {
       setPreviewing(false)
     }
@@ -723,7 +724,7 @@ export function EntryEditRoute(): JSX.Element {
       if (Object.keys(required).length > 0) {
         setErrors(required)
         focusFirstError(required)
-        setStatusError(t('entryEdit.publishValidationError'))
+        setStatusError({ message: t('entryEdit.publishValidationError') })
         return
       }
     }
@@ -743,7 +744,7 @@ export function EntryEditRoute(): JSX.Element {
         t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
       )
     } catch (caught) {
-      setStatusError(caught instanceof ApiError ? caught.message : t('entryEdit.statusError'))
+      setStatusError(describeApiError(caught, t('entryEdit.statusError')))
     } finally {
       setStatusBusy(false)
     }
@@ -761,7 +762,7 @@ export function EntryEditRoute(): JSX.Element {
   async function schedule(): Promise<void> {
     if (token === null || id === undefined) return
     if (scheduleInput === '') {
-      setStatusError(t('entryEdit.scheduleDateRequired'))
+      setStatusError({ message: t('entryEdit.scheduleDateRequired') })
       return
     }
     const iso = new Date(scheduleInput).toISOString()
@@ -777,7 +778,7 @@ export function EntryEditRoute(): JSX.Element {
         t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
       )
     } catch (caught) {
-      setStatusError(caught instanceof ApiError ? caught.message : t('entryEdit.scheduleError'))
+      setStatusError(describeApiError(caught, t('entryEdit.scheduleError')))
     } finally {
       setStatusBusy(false)
     }
@@ -800,9 +801,7 @@ export function EntryEditRoute(): JSX.Element {
       setAssignedReviewer(entry.assignedReviewer)
       setWorkflowMessage(t('entryEdit.workflow.submitted'))
     } catch (caught) {
-      setWorkflowError(
-        caught instanceof ApiError ? caught.message : t('entryEdit.workflow.submitError'),
-      )
+      setWorkflowError(describeApiError(caught, t('entryEdit.workflow.submitError')))
     } finally {
       setWorkflowBusy(false)
     }
@@ -818,9 +817,7 @@ export function EntryEditRoute(): JSX.Element {
       setReviewState(entry.reviewState)
       setWorkflowMessage(t('entryEdit.workflow.approved'))
     } catch (caught) {
-      setWorkflowError(
-        caught instanceof ApiError ? caught.message : t('entryEdit.workflow.approveError'),
-      )
+      setWorkflowError(describeApiError(caught, t('entryEdit.workflow.approveError')))
     } finally {
       setWorkflowBusy(false)
     }
@@ -836,9 +833,7 @@ export function EntryEditRoute(): JSX.Element {
       setReviewState(entry.reviewState)
       setWorkflowMessage(t('entryEdit.workflow.changesRequested'))
     } catch (caught) {
-      setWorkflowError(
-        caught instanceof ApiError ? caught.message : t('entryEdit.workflow.requestChangesError'),
-      )
+      setWorkflowError(describeApiError(caught, t('entryEdit.workflow.requestChangesError')))
     } finally {
       setWorkflowBusy(false)
     }
@@ -859,7 +854,7 @@ export function EntryEditRoute(): JSX.Element {
       setStatusMessage(null)
       navigate(`/collections/${encodeURIComponent(name)}/${encodeURIComponent(copy.id)}`)
     } catch (caught) {
-      setDuplicateError(caught instanceof ApiError ? caught.message : t('entryEdit.duplicateError'))
+      setDuplicateError(describeApiError(caught, t('entryEdit.duplicateError')))
     } finally {
       setDuplicating(false)
     }
@@ -882,7 +877,7 @@ export function EntryEditRoute(): JSX.Element {
         state: { trashed: { collection: name, id, title: titleOf(values, id) } },
       })
     } catch (caught) {
-      setTrashError(caught instanceof ApiError ? caught.message : t('entryEdit.trashError'))
+      setTrashError(describeApiError(caught, t('entryEdit.trashError')))
       setTrashing(false)
     }
   }
@@ -1292,7 +1287,8 @@ export function EntryEditRoute(): JSX.Element {
                 )}
                 {statusError !== null && (
                   <Notice tone="danger" live="assertive">
-                    {statusError}
+                    <p>{statusError.message}</p>
+                    {statusError.hint !== undefined && <p>{statusError.hint}</p>}
                   </Notice>
                 )}
                 {statusMessage !== null && (
@@ -1348,7 +1344,8 @@ export function EntryEditRoute(): JSX.Element {
 
                 {workflowError !== null && (
                   <Notice tone="danger" live="assertive">
-                    {workflowError}
+                    <p>{workflowError.message}</p>
+                    {workflowError.hint !== undefined && <p>{workflowError.hint}</p>}
                   </Notice>
                 )}
                 {workflowMessage !== null && (
@@ -1461,9 +1458,24 @@ export function EntryEditRoute(): JSX.Element {
                     {trashing ? t('entryEdit.trashing') : t('entryEdit.trashButton')}
                   </Button>
                 )}
-                {previewError !== null && <span role="alert">{previewError}</span>}
-                {duplicateError !== null && <span role="alert">{duplicateError}</span>}
-                {trashError !== null && <span role="alert">{trashError}</span>}
+                {previewError !== null && (
+                  <span role="alert">
+                    {previewError.message}
+                    {previewError.hint !== undefined && ` ${previewError.hint}`}
+                  </span>
+                )}
+                {duplicateError !== null && (
+                  <span role="alert">
+                    {duplicateError.message}
+                    {duplicateError.hint !== undefined && ` ${duplicateError.hint}`}
+                  </span>
+                )}
+                {trashError !== null && (
+                  <span role="alert">
+                    {trashError.message}
+                    {trashError.hint !== undefined && ` ${trashError.hint}`}
+                  </span>
+                )}
 
                 {/* Keyboard shortcuts help (task 5) — a native `<details>`:
                     reachable and operable by keyboard with no script of its
@@ -1568,7 +1580,8 @@ export function EntryEditRoute(): JSX.Element {
 
             {error !== null && (
               <p role="alert" className="entry-form__error">
-                {error}
+                {error.message}
+                {error.hint !== undefined && ` ${error.hint}`}
               </p>
             )}
             {saved && <p role="status">{t('entryEdit.saved')}</p>}

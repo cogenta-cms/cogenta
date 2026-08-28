@@ -1,10 +1,18 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createDatabaseRegistry, createLogger, loadConfig } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
+
+/**
+ * The minimum `@cogenta/api`'s `preview-token.ts` enforces
+ * (`PREVIEW_SIGNING_KEY_MINIMUM_LENGTH`) — not imported from there because
+ * `create-cogenta` has no dependency on `@cogenta/api` (R9: not worth adding
+ * one just to read a constant a test can assert against directly).
+ */
+const PREVIEW_SIGNING_KEY_MINIMUM_LENGTH = 32
 
 describe('scaffoldSite', () => {
   const dirs: string[] = []
@@ -64,5 +72,34 @@ describe('scaffoldSite', () => {
 
     const loaded = await loadConfig({ cwd: targetDir })
     expect(loaded.config.llm?.provider).toBe('anthropic')
+  })
+
+  // Fiche 40 task 3: a freshly scaffolded site must never hit
+  // `preview-token.ts`'s `CONFIG_INVALID` on the first "Prévisualiser"
+  // click — `COGENTA_PREVIEW_SIGNING_KEY` has to exist and be long enough,
+  // generated the same way as `COGENTA_AUTH_SIGNING_KEY` right next to it.
+  it('writes a preview signing key of at least 32 characters into .env, alongside the auth key', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+    dirs.push(targetDir)
+
+    await scaffoldSite({
+      targetDir,
+      siteName: 'My Site',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+    })
+
+    const env = await readFile(join(targetDir, '.env'), 'utf8')
+    const authKey = /^COGENTA_AUTH_SIGNING_KEY=(.+)$/mu.exec(env)?.[1]
+    const previewKey = /^COGENTA_PREVIEW_SIGNING_KEY=(.+)$/mu.exec(env)?.[1]
+
+    expect(authKey).toBeDefined()
+    expect(previewKey).toBeDefined()
+    expect(previewKey?.length).toBeGreaterThanOrEqual(PREVIEW_SIGNING_KEY_MINIMUM_LENGTH)
+    // Two independent secrets, never the same value twice over: a leak of
+    // one must not also hand over the other.
+    expect(previewKey).not.toBe(authKey)
   })
 })

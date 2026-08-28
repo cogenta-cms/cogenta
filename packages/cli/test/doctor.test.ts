@@ -127,6 +127,49 @@ describe('doctor — what it warns about', () => {
     await rm(root, { recursive: true, force: true })
   })
 
+  // Fiche 40 task 4: the same failure a first "Prévisualiser" click threw
+  // (`CONFIG_INVALID`, `packages/api/src/access/preview-token.ts`), caught
+  // ahead of time — as a warning, never a blocking problem, since a site that
+  // never previews an unpublished draft is not broken by lacking this key.
+  it('warns that preview links will fail without a preview signing key, without failing the run', async () => {
+    const root = await project('')
+    await writeFile(join(root, 'cogenta.config.mjs'), minimal(root), 'utf8')
+
+    const report = await runDoctor({ cwd: root, env: {} })
+
+    expect(report.notes.join(' ')).toContain('COGENTA_PREVIEW_SIGNING_KEY')
+    expect(report.notes.join(' ')).toContain('openssl rand -hex 32')
+    expect(report.problems).toEqual([])
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('warns when the preview signing key is present but too short', async () => {
+    const root = await project('')
+    await writeFile(join(root, 'cogenta.config.mjs'), minimal(root), 'utf8')
+
+    const report = await runDoctor({
+      cwd: root,
+      env: { COGENTA_PREVIEW_SIGNING_KEY: 'too-short' },
+    })
+
+    expect(report.notes.join(' ')).toContain('COGENTA_PREVIEW_SIGNING_KEY')
+    expect(report.problems).toEqual([])
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('says nothing about the preview signing key once one long enough is set', async () => {
+    const root = await project('')
+    await writeFile(join(root, 'cogenta.config.mjs'), minimal(root), 'utf8')
+
+    const report = await runDoctor({
+      cwd: root,
+      env: { COGENTA_PREVIEW_SIGNING_KEY: 'a'.repeat(32) },
+    })
+
+    expect(report.notes.join(' ')).not.toContain('COGENTA_PREVIEW_SIGNING_KEY')
+    await rm(root, { recursive: true, force: true })
+  })
+
   it('never prints a secret it was given', async () => {
     const root = await project('')
     await writeFile(

@@ -1559,7 +1559,23 @@
     "enabledByDefault": "Enabled by default for new agents",
     "noSkills": "No skills configured.",
     "loadError": "Could not load the skill list.",
-    "saveError": "Could not save this skill."
+    "saveError": "Could not save this skill.",
+    "resources": {
+      "heading": "Reference files",
+      "intro": "Optional files a skill can carry alongside its SKILL.md — references, scripts and assets — the same standard layout a real Claude Code/Codex skill uses. Nothing here is automatically loaded into an agent's context.",
+      "references": "References",
+      "referencesHint": "Documents to consult on demand — style guides, glossaries, specs.",
+      "scripts": "Scripts",
+      "scriptsHint": "Executable utilities the skill's instructions can point to.",
+      "assets": "Assets",
+      "assetsHint": "Templates, images and other files used as-is.",
+      "upload": "Upload a file",
+      "noFiles": "No files yet.",
+      "remove": "Remove",
+      "loadError": "Could not load this skill's reference files.",
+      "uploadError": "Could not upload this file.",
+      "removeError": "Could not remove this file."
+    }
   },
   "promptSettings": {
     "heading": "Prompt Settings",

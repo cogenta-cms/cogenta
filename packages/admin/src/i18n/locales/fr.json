@@ -2051,6 +2051,20 @@
             "patch-minor-major": "Versions correctives, mineures et majeures"
           }
         }
+      },
+      "channels": {
+        "telegramBotName": {
+          "label": "Nom du bot Telegram",
+          "help": "Facultatif, ce n'est pas un secret — affiché dans le guide « Comment faire ? » pour nommer le bot, par ex. « @mon_bot_cogenta »."
+        },
+        "slackBotName": {
+          "label": "Nom du bot Slack",
+          "help": "Facultatif, ce n'est pas un secret — affiché dans le guide « Comment faire ? », par ex. le nom d'affichage de l'app."
+        },
+        "discordBotName": {
+          "label": "Nom du bot Discord",
+          "help": "Facultatif, ce n'est pas un secret — affiché dans le guide « Comment faire ? », par ex. « MonBot#1234 »."
+        }
       }
     }
   },
@@ -2373,7 +2387,21 @@
     "codeExpiry": "Ce code expire à {{time}} et ne peut être utilisé qu'une seule fois.",
     "loadError": "Impossible de charger vos canaux liés.",
     "generateError": "Impossible de générer un code de liaison.",
-    "unlinkError": "Impossible de délier ce canal."
+    "unlinkError": "Impossible de délier ce canal.",
+    "howTo": {
+      "button": "Comment faire ?",
+      "title": "Connecter {{channel}}",
+      "intro": "Ces étapes sont identiques sur Telegram, Slack et Discord.",
+      "close": "Fermer",
+      "operatorHeading": "Une fois, côté opérateur du site",
+      "step0": "Créez un bot sur {{channel}}, renseignez ses identifiants dans des variables d'environnement du serveur, puis démarrez « cogenta channels » dans son propre process, séparé — il ne démarre jamais automatiquement avec « cogenta serve », et aucun code tapé dans une discussion n'est vu tant qu'il ne tourne pas.",
+      "userHeading": "À chaque liaison de compte",
+      "step1": "Cliquez sur « Générer un code de liaison » ci-dessus.",
+      "step2WithName": "Ouvrez une conversation privée avec {{botName}} sur {{channel}}.",
+      "step2WithoutName": "Ouvrez une conversation privée avec le bot de ce site sur {{channel}}.",
+      "step3": "Collez le code tel quel, comme un message normal — pas une commande.",
+      "step4": "Attendez la réponse de confirmation (« ✅ Compte lié. »)."
+    }
   },
   "rolesMatrix": {
     "heading": "Rôles et permissions",

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { expectNoSeriousA11yViolations } from '../helpers/axe.js'
@@ -103,5 +103,75 @@ describe('the Canaux screen', () => {
     await goToChannels()
 
     await expectNoSeriousA11yViolations(container)
+  })
+})
+
+/**
+ * Fiche 59 — the "Comment faire ?" step-by-step guide, and the optional
+ * per-channel bot name that feeds it.
+ */
+describe('the channel "how does this work?" guide', () => {
+  it('shows the operator step and the generic user steps, with no bot name configured', async () => {
+    render(<App />)
+    await goToChannels()
+
+    // Telegram is the first card.
+    const [telegramHowTo] = screen.getAllByRole('button', { name: 'Comment faire ?' })
+    fireEvent.click(telegramHowTo as HTMLElement)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Connecter Telegram' })
+    const dialogScope = within(dialog)
+
+    expect(dialogScope.getByText(/démarrez « cogenta channels »/u)).toBeDefined()
+    expect(
+      dialogScope.getByText('Ouvrez une conversation privée avec le bot de ce site sur Telegram.'),
+    ).toBeDefined()
+    expect(dialogScope.getByText(/Collez le code tel quel/u)).toBeDefined()
+    expect(dialogScope.getByText(/Compte lié/u)).toBeDefined()
+  })
+
+  it('names the configured bot in the guide instead of the generic wording', async () => {
+    signedInAs(['admin'], { siteSettings: { 'channels.slackBotName': '@cogenta-bot' } })
+    render(<App />)
+    await goToChannels()
+
+    const [, slackHowTo] = screen.getAllByRole('button', { name: 'Comment faire ?' })
+    fireEvent.click(slackHowTo as HTMLElement)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Connecter Slack' })
+    expect(
+      within(dialog).getByText('Ouvrez une conversation privée avec @cogenta-bot sur Slack.'),
+    ).toBeDefined()
+  })
+
+  it('lets an admin set the bot name, but never exposes anything token-shaped', async () => {
+    render(<App />)
+    await goToChannels()
+
+    const nameInput = screen.getByLabelText('Nom du bot Telegram') as HTMLInputElement
+    expect(nameInput.disabled).toBe(false)
+    fireEvent.change(nameInput, { target: { value: '@my_cogenta_bot' } })
+    fireEvent.blur(nameInput)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Nom du bot Telegram')).toHaveProperty(
+        'value',
+        '@my_cogenta_bot',
+      )
+    })
+
+    // Nothing on this screen ever names or shows a bot token/credential.
+    expect(screen.queryByText(/BOT_TOKEN/u)).toBeNull()
+    expect(screen.queryByLabelText(/token/iu)).toBeNull()
+  })
+
+  it('disables the bot name field for a non-admin, who still sees the configured value', async () => {
+    signedInAs(['editor'], { siteSettings: { 'channels.discordBotName': 'CogentaBot#1234' } })
+    render(<App />)
+    await goToChannels()
+
+    const nameInput = screen.getByLabelText('Nom du bot Discord') as HTMLInputElement
+    expect(nameInput.disabled).toBe(true)
+    expect(nameInput.value).toBe('CogentaBot#1234')
   })
 })

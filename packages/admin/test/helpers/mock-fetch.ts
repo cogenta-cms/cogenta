@@ -1352,6 +1352,29 @@ export function installMockFetch(
       scope: 'site',
       value: '',
     },
+    // Fiche 59 — mirrors packages/schema/src/store/site-settings-registry.ts's
+    // `channels.*BotName` entries.
+    'channels.telegramBotName': {
+      group: 'channels',
+      order: 0,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'channels.slackBotName': {
+      group: 'channels',
+      order: 1,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'channels.discordBotName': {
+      group: 'channels',
+      order: 2,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
   }
   const siteSettingsWrites = new Map<
     string,

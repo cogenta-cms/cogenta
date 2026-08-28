@@ -2052,6 +2052,20 @@
             "patch-minor-major": "Patch, minor and major releases"
           }
         }
+      },
+      "channels": {
+        "telegramBotName": {
+          "label": "Telegram bot name",
+          "help": "Optional, not a secret — shown in the \"How does this work?\" guide so it can name the bot, e.g. \"@my_cogenta_bot\"."
+        },
+        "slackBotName": {
+          "label": "Slack bot name",
+          "help": "Optional, not a secret — shown in the \"How does this work?\" guide, e.g. the app's display name."
+        },
+        "discordBotName": {
+          "label": "Discord bot name",
+          "help": "Optional, not a secret — shown in the \"How does this work?\" guide, e.g. \"MyBot#1234\"."
+        }
       }
     }
   },
@@ -2374,7 +2388,21 @@
     "codeExpiry": "This code expires at {{time}} and can only be used once.",
     "loadError": "Could not load your linked channels.",
     "generateError": "Could not generate a linking code.",
-    "unlinkError": "Could not unlink this channel."
+    "unlinkError": "Could not unlink this channel.",
+    "howTo": {
+      "button": "How does this work?",
+      "title": "Connecting {{channel}}",
+      "intro": "These steps are the same on Telegram, Slack and Discord.",
+      "close": "Close",
+      "operatorHeading": "Once, by whoever runs this site",
+      "step0": "Create a bot on {{channel}}, set its credentials as environment variables on the server, then start \"cogenta channels\" as its own, separate process — it never starts automatically with \"cogenta serve\", and no code typed into a chat is seen until it is running.",
+      "userHeading": "Every time someone links their account",
+      "step1": "Click \"Generate a linking code\" above.",
+      "step2WithName": "Open a private conversation with {{botName}} on {{channel}}.",
+      "step2WithoutName": "Open a private conversation with this site's bot on {{channel}}.",
+      "step3": "Paste the code as-is, as an ordinary message — not a command.",
+      "step4": "Wait for the confirmation reply (\"Account linked\")."
+    }
   },
   "rolesMatrix": {
     "heading": "Roles & permissions",

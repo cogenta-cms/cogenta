@@ -16,7 +16,7 @@ afterEach(() => {
 })
 
 describe('App, signed in', () => {
-  it('renders the dashboard by default, with the skip link and the Content group open', async () => {
+  it('renders the dashboard by default, with the skip link and every Content entry reachable', async () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Tableau de bord' })).toBeDefined()
@@ -24,11 +24,19 @@ describe('App, signed in', () => {
       screen.getByRole('link', { name: 'Aller au contenu principal' }).getAttribute('href'),
     ).toBe('#main-content')
 
-    // The Content group is open by default (fiche 35 §8) and every one of
-    // its entries is open to an `editor` — the default role this whole file
-    // signs in as.
+    // The sidebar redesign (WordPress-style flyout, fiche 72 revision) keeps
+    // every group's items in the DOM unconditionally — a flyout is a CSS
+    // hover/focus state, never a conditional render — so every entry an
+    // `editor` (the default role this whole file signs in as) is allowed to
+    // see is queryable regardless of which group's flyout is "open". Two of
+    // these (Dashboard, Media) are visible the instant auth resolves, but
+    // "Contenus" also depends on the schema fetch — a second, independently
+    // timed request `waitFor` already exists in this file to cover ("hides
+    // a single entry", below).
     for (const label of ['Tableau de bord', 'Contenus', 'Médiathèque']) {
-      expect(screen.getByRole('link', { name: label })).toBeDefined()
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: label })).toBeDefined()
+      })
     }
   })
 
@@ -138,9 +146,15 @@ describe('App, branding in the topbar (fiche L21 task 8)', () => {
       const { container } = render(<App />)
       await screen.findByRole('heading', { name: 'Tableau de bord' })
 
+      // Waits for the *right* image, not merely *an* image: branding and
+      // the default Cogenta logo can each independently resolve first, and
+      // stopping at whichever `<img>` exists yet — a bug this test itself
+      // used to have — flakes the instant that race lands on the wrong one.
       const brand = await waitFor(() => {
         const found = container.querySelector('.app-shell__brand img')
-        if (found === null) throw new Error('white-label logo not resolved yet')
+        if (found === null || found.getAttribute('src') !== 'blob:mock-white-label-logo') {
+          throw new Error('white-label logo not resolved yet')
+        }
         return found
       })
       expect(brand.getAttribute('src')).toBe('blob:mock-white-label-logo')
@@ -175,17 +189,17 @@ describe('App, sidebar collapsed (icons-only) mode (fiche 72)', () => {
     expect(mediaLink.getAttribute('title')).toBe('Médiathèque')
   })
 
-  it('wraps each group heading in its own element the collapsed-mode CSS can target', async () => {
-    // Regression test for the fiche 72 bug: the group `<summary>` wrote its
-    // label as bare text, so the CSS rule hiding it in collapsed mode
-    // (`.app-shell__nav-group-summary span`) never matched anything, and
-    // the group headings (CONTENU, APPARENCE…) stayed visible in full text
-    // even with the sidebar collapsed.
+  it("wraps each top-level group's label in its own element the collapsed-mode CSS can target", async () => {
+    // Regression test for the original fiche 72 bug (a group heading written
+    // as bare text, so no CSS selector could hide it in collapsed mode)
+    // carried forward to the WordPress-style flyout redesign: every
+    // top-level trigger's own label must live in `.app-shell__nav-group-label`
+    // for `shell.css`'s collapsed-mode rule to have anything to clip.
     const { container } = render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    const summary = container.querySelector('.app-shell__nav-group-summary')
-    expect(summary?.querySelector('span')).not.toBeNull()
+    const trigger = container.querySelector('.app-shell__nav-group-trigger')
+    expect(trigger?.querySelector('.app-shell__nav-group-label')).not.toBeNull()
   })
 
   it('remembers the collapsed state across a remount', async () => {
@@ -205,6 +219,94 @@ describe('App, sidebar collapsed (icons-only) mode (fiche 72)', () => {
   })
 })
 
+describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
+  it('exposes a multi-item group as a disclosure button, collapsed by default', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    expect(contentTrigger.getAttribute('aria-haspopup')).toBe('true')
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('pins the flyout open on click, for a keyboard or touch user a hover cannot reach', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    fireEvent.click(contentTrigger)
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.click(contentTrigger)
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('closes a pinned-open flyout on Escape', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    fireEvent.click(contentTrigger)
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('closes a pinned-open flyout after navigating to one of its own items', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    fireEvent.click(contentTrigger)
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+    await screen.findByRole('heading', { name: 'Médiathèque' })
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('renders a group left with exactly one item as a direct link, no disclosure button', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // "Aide" (help) has a single entry (Documentation) — a one-item flyout
+    // is pure friction, so it skips the button/flyout machinery entirely.
+    expect(screen.queryByRole('button', { name: 'Aide' })).toBeNull()
+    const helpLink = screen.getByRole('link', { name: 'Aide' })
+    expect(helpLink.getAttribute('href')).toBe('/documentation')
+  })
+
+  it("totals a group's own items' badges onto its top-level row, the way WordPress totals onto a parent", async () => {
+    // Every other item in "Exploitation" (ops) carries no badge, so this is
+    // an unambiguous total, not a sum that happens to also work.
+    installMockFetch({ roles: ['admin'], shellStatus: { marketplaceUpdates: 4 } })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // A name match by substring, not exact equality: the badge's own
+    // `role="status"`/`aria-label` (fiche 35 task 3's existing pattern,
+    // reused here) folds its text into the button's own accessible name —
+    // "Exploitation, 4 élément(s)" is the point, not a string to work
+    // around, but this assertion should not depend on its exact wording.
+    await waitFor(() => {
+      const opsTrigger = screen.getByRole('button', { name: /Exploitation/u })
+      expect(opsTrigger.querySelector('.app-shell__badge')?.textContent).toBe('4')
+    })
+  })
+
+  it('marks the group a route belongs to as the current one, even though the group itself has no link of its own', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+    await screen.findByRole('heading', { name: 'Médiathèque' })
+
+    const contentGroup = screen.getByRole('button', { name: 'Contenu' }).closest('li')
+    expect(contentGroup?.getAttribute('data-current')).toBe('true')
+  })
+})
+
 describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
   it('hides a whole section for everyone once an admin turns it off, site-wide', async () => {
     installMockFetch({
@@ -214,7 +316,13 @@ describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    expect(screen.queryByText('Commerce')).toBeNull()
+    // "Boutique" — the commerce group's own rendered label — not the
+    // literal group id "commerce", which is never shown as text anywhere.
+    // `waitFor` for the same `/api/settings` race the next test's own
+    // comment already documents.
+    await waitFor(() => {
+      expect(screen.queryByText('Boutique')).toBeNull()
+    })
   })
 
   it('hides a single entry while leaving the rest of its section alone', async () => {
@@ -244,10 +352,17 @@ describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
     const { container } = render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    const headings = Array.from(container.querySelectorAll('.app-shell__nav-group-summary')).map(
-      (node) => node.textContent,
-    )
-    expect(headings[0]).toBe('Réglages')
+    // Scoped to a top-level group's own label — excludes the sidebar
+    // toggle's identically-classed label and every flyout item's own
+    // (unclassed) label span. The order itself depends on `/api/settings`
+    // (`navigation.sectionOrder`), a fetch independent of the one the
+    // dashboard heading above already waited on.
+    await waitFor(() => {
+      const headings = Array.from(
+        container.querySelectorAll('.app-shell__nav-group .app-shell__nav-group-label'),
+      ).map((node) => node.textContent)
+      expect(headings[0]).toBe('Réglages')
+    })
   })
 
   it('ignores a stale group id the current build no longer declares', async () => {
@@ -260,7 +375,9 @@ describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
 
     // Would have thrown or left the sidebar empty if the unknown token were
     // trusted rather than dropped.
-    expect(screen.queryByText('Commerce')).toBeNull()
+    await waitFor(() => {
+      expect(screen.queryByText('Boutique')).toBeNull()
+    })
     expect(screen.getByRole('link', { name: 'Contenus' })).toBeDefined()
   })
 })

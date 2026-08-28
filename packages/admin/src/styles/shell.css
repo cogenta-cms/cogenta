@@ -17,11 +17,6 @@
   grid-template-columns: 3.5rem 1fr;
 }
 
-.app-shell__sidebar-wrap {
-  grid-area: sidebar;
-  position: relative;
-}
-
 .app-shell__footer {
   grid-area: footer;
   border-top: 1px solid var(--color-border);
@@ -182,69 +177,179 @@
   }
 }
 
+/* No `overflow` here on purpose, and this is load-bearing, not an
+   oversight: a flyout escapes to the right of its own row via
+   `position: absolute` (`left: calc(100% + 0.5rem)`), and CSS clips an
+   absolutely positioned descendant against ANY ancestor whose overflow-x or
+   overflow-y is not `visible` — the two axes are not independent, either
+   one being `auto`/`hidden` silently forces the other to `auto` too (found
+   the hard way: the flyout still measured `display: block` in the DOM,
+   just invisible, clipped by this element's own scrollbar box). The redesign
+   itself is what makes this affordable: eight top-level rows plus the
+   toggle comfortably fit any real viewport height without ever needing to
+   scroll, unlike the ~30-row flat list this replaces.
+
+   `z-index: 1` is the other half of that same fix, and just as
+   load-bearing: a CSS Grid item with `z-index: auto` (`.app-shell__content`,
+   this element, before this line) never establishes its own stacking
+   context, so a positioned *descendant* of one auto-z-index grid item —
+   however high its own `z-index` climbs — still paints underneath a sibling
+   grid item's in-flow content instead of above it (confirmed empirically:
+   the flyout measured `display: block` with the right pixel `rect`, fully
+   opaque, and was still invisible behind the dashboard heading until this
+   element itself got an explicit `z-index`). Giving the sidebar its own
+   stacking context is what lets the flyout's own z-index finally mean
+   anything relative to `.app-shell__content`. */
 .app-shell__sidebar {
+  grid-area: sidebar;
+  position: relative;
+  z-index: 1;
   height: 100%;
   border-right: 1px solid var(--color-border);
   background: var(--card);
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  overflow-x: hidden;
 }
 
-/* Groups (fiche 35 task 1) — a native `<details>` per group, so opening one
-   needs no script at all and a closed group's links stay in the DOM (a
-   screen reader that already knows a route exists can still be told about
-   it; nothing here removes an element from the accessibility tree the way
-   `display: none` would for the summary's own name). */
-.app-shell__nav-group {
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
-}
-
-.app-shell__nav-group:last-of-type {
-  border-bottom: none;
-}
-
-.app-shell__nav-group-summary {
+/* The collapse toggle (fiche 35 task 2, redesigned fiche 72, moved to the
+   top of the list per direct user feedback — see `app-shell.tsx`'s own
+   comment on this button): a full-width row, styled like a nav trigger, so
+   it reads as part of the same list rather than a floating extra. */
+.app-shell__sidebar-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  width: 100%;
+  margin-bottom: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.app-shell__sidebar-toggle:hover,
+.app-shell__sidebar-toggle:focus-visible {
+  color: var(--color-text);
+}
+
+.app-shell__sidebar-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+/* WordPress-style redesign (fiche 72 revision): the sidebar is now one row
+   per top-level group — icon, label, its own aggregated badge — each
+   flying its items out to the right on hover or focus. `position: relative`
+   is what anchors `.app-shell__flyout` below to this exact row rather than
+   the whole list. */
+.app-shell__nav-groups {
   list-style: none;
-  user-select: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.app-shell__nav-group-summary::-webkit-details-marker {
-  display: none;
+.app-shell__nav-group {
+  position: relative;
 }
 
-/* A drawn chevron rather than the UA marker, so it matches the rest of this
-   admin's square, hand-drawn icon set instead of the browser's own bullet. */
-.app-shell__nav-group-summary::before {
-  content: "";
-  width: 0.5em;
-  height: 0.5em;
+.app-shell__nav-group-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.app-shell__nav-group-trigger:hover,
+.app-shell__nav-group-trigger:focus-visible {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Active: a direct link (a one-item group) gets react-router's own `.active`;
+   a group with a flyout has no link of its own to be "active", so its "you
+   are here" cue is `groupContainsPath()`'s `data-current`, set in JS. */
+.app-shell__nav-group-trigger.active,
+.app-shell__nav-group[data-current="true"] > .app-shell__nav-group-trigger {
+  background: var(--accent);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* The "this opens a submenu" mark — a small drawn corner, the same
+   right+bottom-border technique as the rest of this admin's hand-drawn
+   icons, rotated to read as "›" rather than the accordion's old "⌄"/"⌃":
+   nothing here toggles state visually any more, so it never needs a second
+   rotation. */
+.app-shell__nav-group-caret {
+  margin-left: auto;
+  width: 0.4em;
+  height: 0.4em;
+  flex-shrink: 0;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(-45deg);
-  transition: transform 150ms ease;
+  opacity: 0.55;
 }
 
-.app-shell__nav-group[open] > .app-shell__nav-group-summary::before {
-  transform: rotate(45deg);
+/* The flyout itself — hidden until the row is hovered, focused (including a
+   focus that has moved on into the flyout's own links, `:focus-within`), or
+   pinned open by `app-shell.tsx`'s `openFlyoutGroup` state (the keyboard/
+   touch fallback `:hover` alone cannot cover). Anchored to the row's own
+   top edge, immediately right of the sidebar — WordPress's own placement,
+   and the one that keeps a tall group's flyout from drifting away from the
+   row that opened it. */
+.app-shell__flyout {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 0.5rem);
+  z-index: 20;
+  min-width: 14rem;
+  background: var(--card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--space-2);
+}
+
+.app-shell__nav-group:hover > .app-shell__flyout,
+.app-shell__nav-group:focus-within > .app-shell__flyout,
+.app-shell__nav-group-trigger[aria-expanded="true"] + .app-shell__flyout {
+  display: block;
 }
 
 /* The badge a trash/orders/marketplace count renders on its own entry
-   (fiche 35 task 3) — never on more than the one item it describes. */
+   (fiche 35 task 3), and the total of a group's own children on its
+   top-level row — never on more than the one row it describes. */
 .app-shell__badge {
   margin-left: auto;
   min-width: 1.4em;
@@ -257,52 +362,35 @@
   font-weight: 600;
   line-height: 1.4;
   text-align: center;
+  flex-shrink: 0;
+}
+
+/* Only one trailing element needs `margin-left: auto` to reach the row's
+   right edge — when a badge precedes the caret, the caret's own auto margin
+   would otherwise shove it a second time, stranding it away from the badge
+   it is meant to sit right next to. A caret with no badge before it (the
+   common case) keeps its own auto margin from the base rule above. */
+.app-shell__badge + .app-shell__nav-group-caret {
+  margin-left: 0;
 }
 
 .app-shell__sidebar a {
   position: relative;
 }
 
-/* The collapse toggle (fiche 35 task 2, redesigned fiche 72) — a small
-   circular button straddling the sidebar's own right edge, centered
-   vertically, so it stays findable regardless of how tall the nav list
-   grows. Positioned relative to `.app-shell__sidebar-wrap`, not the `<nav>`
-   itself, so it never scrolls away with a long nav list. */
-.app-shell__collapse-toggle {
-  position: absolute;
-  top: 50%;
-  right: -0.875rem;
-  transform: translateY(-50%);
-  z-index: 1;
-  border: 1px solid var(--color-border);
-  background: var(--card);
-  color: var(--color-text-muted);
-  border-radius: 999px;
-  width: 1.75rem;
-  height: 1.75rem;
-  box-shadow: var(--shadow-sm, 0 1px 2px rgb(0 0 0 / 0.08));
-  cursor: pointer;
-}
-
-.app-shell__collapse-toggle:hover {
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
 /* Icons-only sidebar (fiche 35 task 2, redesigned fiche 72): the label
-   stays in the DOM (an accessible name, and the drawer at a narrow
-   viewport reuses the very same markup with labels shown), only visually
-   hidden here — a `title` attribute on the link itself is what a mouse
-   hover reads instead. The nav list itself stays visible: an icon-only
-   mode that also hides the icons defeats its own purpose (fiche 72's
-   found bug — every link, and therefore every icon, used to disappear
-   with the list it lived in). Groups keep their `<details>` structure for
-   accessibility, but the accordion collapse/expand has no visual meaning
-   here — a border between groups (already `border-bottom` on
-   `.app-shell__nav-group`) marks the boundary instead. */
-.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-summary span,
-.app-shell--sidebar-collapsed .app-shell__sidebar a span,
-.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__badge {
+   stays in the DOM (an accessible name, and both the flyout and the drawer
+   reuse the very same row markup with labels shown), only visually hidden
+   here — a `title` attribute on the trigger itself is what a mouse hover
+   reads instead. The caret carries no name of its own (`aria-hidden`), so
+   it is simply dropped rather than clipped. */
+/* Scoped to `.app-shell__sidebar` (not a bare `.app-shell--sidebar-collapsed`
+   descendant selector) so the mobile drawer — a sibling that never collapses
+   — keeps its own full labels regardless of the desktop sidebar's state;
+   `.app-shell__nav-group-label` never appears inside a flyout item, so one
+   plain descendant selector safely covers both the top-level triggers and
+   the toggle button without needing a `>`-chain per case. */
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -314,17 +402,45 @@
   border: 0;
 }
 
-.app-shell--sidebar-collapsed .app-shell__nav-group-summary {
-  padding-left: 0;
-  justify-content: center;
-}
-
-.app-shell--sidebar-collapsed .app-shell__nav-group-summary::before {
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-caret {
   display: none;
 }
 
-.app-shell--sidebar-collapsed .app-shell__sidebar a {
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-trigger,
+.app-shell--sidebar-collapsed .app-shell__sidebar-toggle {
   justify-content: center;
+}
+
+/* The drawer's own accordion (task 2 — a touch surface has no hover, so it
+   keeps the expand-in-place behaviour the sidebar used to have). A drawn
+   chevron, same technique as the flyout's static one, but this one still
+   rotates: it is the only visual cue a closed `<details>` gives that it
+   has more to show. */
+.app-shell__drawer details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.app-shell__drawer details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-shell__drawer details[open] > summary .app-shell__nav-group-caret {
+  transform: rotate(45deg);
+}
+
+.app-shell__nav-subitems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-shell__drawer .app-shell__nav-subitems {
+  padding-left: var(--space-4);
+  margin-top: 2px;
 }
 
 /* The hamburger that opens the mobile drawer — a topbar button, hidden
@@ -424,16 +540,9 @@
   }
 }
 
-.app-shell__sidebar ul,
-.app-shell__drawer ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
+/* Styles every submenu link — both the flyout's and the drawer's own
+   `.app-shell__nav-subitems`, which already declare their own list reset
+   above and rely on this shared rule for the actual link look. */
 .app-shell__sidebar a,
 .app-shell__drawer a {
   display: flex;

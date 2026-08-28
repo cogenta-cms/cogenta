@@ -2,6 +2,7 @@ import {
   type ComponentType,
   type CSSProperties,
   type JSX,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useMemo,
@@ -11,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { fetchMediaBlobUrl } from '../api/media-client.js'
+import type { ShellStatus } from '../api/shell-status-client.js'
 import { AgentChatWidget } from '../assist/agent-chat-widget.js'
 import { useAuth } from '../auth/auth-context.js'
 import { NoticeBoard } from '../notices/notice-board.js'
@@ -74,7 +76,7 @@ import {
   EMPTY_NAV_LAYOUT_OVERRIDES,
   parseNavLayoutOverrides,
 } from './nav-layout.js'
-import { visibleNavGroups } from './nav-visibility.js'
+import { type VisibleNavGroup, visibleNavGroups } from './nav-visibility.js'
 import { chromeStatusOrFallback, useChromeStatus } from './shell-status-context.js'
 import '../styles/shell.css'
 import { ThemeToggle } from './theme-toggle.js'
@@ -138,7 +140,11 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/documentation': DocumentationIcon,
 }
 
-/** Only reached by a future nav entry this map has not caught up with yet. */
+/**
+ * The one icon shown on each top-level row (WordPress-style redesign,
+ * fiche 72 revision) — every group gets a real icon of its own now, not just
+ * a fallback for an item this build has not caught up with yet.
+ */
 const GROUP_ICONS: Record<NavGroupId, ComponentType<IconProps>> = {
   content: CollectionsIcon,
   appearance: EditIcon,
@@ -152,6 +158,26 @@ const GROUP_ICONS: Record<NavGroupId, ComponentType<IconProps>> = {
 
 function iconFor(item: NavItem): ComponentType<IconProps> {
   return NAV_ICONS[item.to] ?? GROUP_ICONS[item.group]
+}
+
+function groupIconFor(group: { readonly id: NavGroupId }): ComponentType<IconProps> {
+  return GROUP_ICONS[group.id]
+}
+
+/** The sum of every item's own badge inside a group — shown once, on the group's own top-level row, the same way WordPress totals a parent's children onto itself ("Plugins 10"). A `null` count (no permission to know) contributes nothing, same as the per-item badge already treats it. */
+function groupBadgeTotal(group: VisibleNavGroup, shellStatus: ShellStatus): number {
+  return group.items.reduce((total, item) => {
+    if (item.badge === undefined) return total
+    const count = shellStatus[item.badge]
+    return count === null ? total : total + count
+  }, 0)
+}
+
+/** Whether the current route belongs to this group — the "you are here" cue on its collapsed top-level row, the same test a breadcrumb would apply. */
+function groupContainsPath(group: VisibleNavGroup, pathname: string): boolean {
+  return group.items.some((item) =>
+    item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(`${item.to}/`),
+  )
 }
 
 function readStoredGroupOpen(): Partial<Record<NavGroupId, boolean>> {
@@ -315,10 +341,20 @@ export function AppShell(): JSX.Element {
     return applyNavLayout(permitted, navLayout)
   }, [roles, collections, taxonomiesPresent, chromeState, navLayout])
 
+  // Only the mobile drawer still opens/closes a group in place (task 2's
+  // accordion, kept there because a touch drawer has no hover) — the sidebar
+  // itself no longer does, see `openFlyoutGroup` below.
   const [groupOpen, setGroupOpen] =
     useState<Partial<Record<NavGroupId, boolean>>>(readStoredGroupOpen)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readStoredSidebarCollapsed)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Which group's flyout is pinned open by a click/tap or by keyboard focus —
+  // independent of `:hover`, which a mouse already drives in pure CSS
+  // (`shell.css`'s `.app-shell__nav-group:hover`). This is what lets a
+  // keyboard or touch user reach a submenu that a mouse would have revealed
+  // just by pointing at it, and what gives that same trigger a real
+  // `aria-expanded` a screen reader can announce.
+  const [openFlyoutGroup, setOpenFlyoutGroup] = useState<NavGroupId | null>(null)
 
   useEffect(() => {
     localStorage.setItem(NAV_GROUPS_STORAGE_KEY, JSON.stringify(groupOpen))
@@ -333,6 +369,38 @@ export function AppShell(): JSX.Element {
   useEffect(() => {
     setDrawerOpen(false)
   }, [location.pathname])
+
+  // Same for a pinned-open flyout: clicking a submenu link navigates away,
+  // and the flyout the reader just left should not still read "expanded"
+  // over the new page.
+  useEffect(() => {
+    setOpenFlyoutGroup(null)
+  }, [location.pathname])
+
+  // `Escape` closes whichever flyout is pinned open, wherever focus is —
+  // the same courtesy the mobile drawer's own focus trap already gives.
+  useEffect(() => {
+    if (openFlyoutGroup === null) return
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') setOpenFlyoutGroup(null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [openFlyoutGroup])
+
+  /**
+   * Closes a group's flyout on blur, but only once focus has actually left
+   * the group's own row-plus-panel — without this check, tabbing from the
+   * trigger button to the first item inside its own flyout would close the
+   * very panel that item lives in before the click/Enter ever reached it.
+   */
+  function onGroupBlur(groupId: NavGroupId) {
+    return (event: ReactFocusEvent<HTMLLIElement>): void => {
+      const next = event.relatedTarget
+      if (next !== null && event.currentTarget.contains(next)) return
+      setOpenFlyoutGroup((current) => (current === groupId ? null : current))
+    }
+  }
 
   // The page itself scrolls (`.app-shell__content` has no height/overflow
   // of its own — see shell.css), so react-router does not reset scroll on
@@ -399,59 +467,185 @@ export function AppShell(): JSX.Element {
     return stored ?? group.openByDefault
   }
 
-  function renderGroupList(): JSX.Element {
+  /** One submenu row — an item's icon, label and own badge. Identical markup inside a sidebar flyout and inside the mobile drawer's inline list; only the `<ul>` around it differs. */
+  function renderNavItemRow(item: NavItem): JSX.Element {
+    const Icon = iconFor(item)
+    const badgeCount = item.badge === undefined ? null : chrome.shellStatus[item.badge]
     return (
-      <>
-        {groups.map((group) => (
-          <details
-            key={group.id}
-            className="app-shell__nav-group"
-            open={isGroupOpen(group)}
-            onToggle={(event) => {
-              // `<details>`'s own `open` state drives this — reading it back
-              // keeps a mouse click, `Space`/`Enter` on the `<summary>`, and
-              // this component's own state in agreement.
-              const nowOpen = (event.currentTarget as HTMLDetailsElement).open
-              setGroupOpen((previous) => ({ ...previous, [group.id]: nowOpen }))
-            }}
-          >
-            <summary className="app-shell__nav-group-summary">
-              <span>{t(group.labelKey)}</span>
-            </summary>
-            <ul>
-              {group.items.map((item, index) => {
-                const Icon = iconFor(item)
-                const badgeCount = item.badge === undefined ? null : chrome.shellStatus[item.badge]
-                return (
-                  <li
-                    key={item.to}
-                    className="reveal"
-                    style={
-                      {
-                        '--reveal-delay': `${Math.min(index, 8) * 30}ms`,
-                      } as CSSProperties & Record<'--reveal-delay', string>
-                    }
-                  >
-                    <NavLink to={item.to} end={item.to === '/'} title={t(item.labelKey)}>
-                      <Icon className="size-4 shrink-0" />
-                      <span>{t(item.labelKey)}</span>
-                      {badgeCount !== null && badgeCount > 0 && (
-                        <span
-                          className="app-shell__badge"
-                          role="status"
-                          aria-label={t('shell.badgeCount', { count: badgeCount })}
-                        >
-                          {badgeCount > 99 ? '99+' : badgeCount}
-                        </span>
-                      )}
-                    </NavLink>
-                  </li>
-                )
-              })}
-            </ul>
-          </details>
-        ))}
-      </>
+      <li key={item.to}>
+        <NavLink to={item.to} end={item.to === '/'} title={t(item.labelKey)}>
+          <Icon className="size-4 shrink-0" />
+          <span>{t(item.labelKey)}</span>
+          {badgeCount !== null && badgeCount > 0 && (
+            <span
+              className="app-shell__badge"
+              role="status"
+              aria-label={t('shell.badgeCount', { count: badgeCount })}
+            >
+              {badgeCount > 99 ? '99+' : badgeCount}
+            </span>
+          )}
+        </NavLink>
+      </li>
+    )
+  }
+
+  /**
+   * The sidebar itself (WordPress-style redesign, fiche 72 revision): one
+   * row per top-level group — icon, label, its own aggregated badge — that
+   * flies its items out to the right on hover or focus, exactly like
+   * WordPress's own admin menu. Collapsing the sidebar hides only the
+   * labels (`shell.css`'s existing visually-hidden technique); the rows and
+   * their flyouts work identically either way, so an icon-only sidebar still
+   * reaches every screen through the same hover.
+   *
+   * A group left with exactly one visible item (`help`, today) skips the
+   * flyout machinery entirely and renders as a single direct link — a
+   * one-item submenu is friction with no benefit, and would have collided
+   * on `/appearance`'s own name in the "Apparence" group besides.
+   */
+  function renderSidebarNav(): JSX.Element {
+    return (
+      <ul className="app-shell__nav-groups">
+        {groups.map((group, index) => {
+          const GroupIcon = groupIconFor(group)
+          const label = t(group.labelKey)
+          const badgeTotal = groupBadgeTotal(group, chrome.shellStatus)
+          const style = {
+            '--reveal-delay': `${Math.min(index, 8) * 30}ms`,
+          } as CSSProperties & Record<'--reveal-delay', string>
+          const badge = badgeTotal > 0 && (
+            <span
+              className="app-shell__badge"
+              role="status"
+              aria-label={t('shell.badgeCount', { count: badgeTotal })}
+            >
+              {badgeTotal > 99 ? '99+' : badgeTotal}
+            </span>
+          )
+
+          if (group.items.length === 1) {
+            const only = group.items[0] as NavItem
+            return (
+              <li key={group.id} className="app-shell__nav-group reveal" style={style}>
+                <NavLink
+                  to={only.to}
+                  end={only.to === '/'}
+                  className="app-shell__nav-group-trigger"
+                  title={label}
+                >
+                  <GroupIcon className="size-[1.125rem] shrink-0" />
+                  <span className="app-shell__nav-group-label">{label}</span>
+                  {badge}
+                </NavLink>
+              </li>
+            )
+          }
+
+          const isOpen = openFlyoutGroup === group.id
+          return (
+            <li
+              key={group.id}
+              className="app-shell__nav-group reveal"
+              style={style}
+              data-current={groupContainsPath(group, location.pathname) ? 'true' : undefined}
+              onMouseLeave={() =>
+                setOpenFlyoutGroup((current) => (current === group.id ? null : current))
+              }
+              onBlur={onGroupBlur(group.id)}
+            >
+              <button
+                type="button"
+                className="app-shell__nav-group-trigger"
+                aria-expanded={isOpen}
+                aria-haspopup="true"
+                title={label}
+                onMouseEnter={() => setOpenFlyoutGroup(group.id)}
+                onFocus={() => setOpenFlyoutGroup(group.id)}
+                onClick={() =>
+                  setOpenFlyoutGroup((current) => (current === group.id ? null : group.id))
+                }
+              >
+                <GroupIcon className="size-[1.125rem] shrink-0" />
+                <span className="app-shell__nav-group-label">{label}</span>
+                {badge}
+                <span className="app-shell__nav-group-caret" aria-hidden="true" />
+              </button>
+              <div className="app-shell__flyout" role="menu" aria-label={label}>
+                <ul className="app-shell__nav-subitems">
+                  {group.items.map((item) => renderNavItemRow(item))}
+                </ul>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    )
+  }
+
+  /**
+   * The mobile drawer's own nav (task 2) — a touch surface has no hover, so
+   * it keeps the accordion this sidebar used to be: tapping a group's row
+   * expands its items in place, remembered per browser exactly as before.
+   */
+  function renderDrawerNav(): JSX.Element {
+    return (
+      <ul className="app-shell__nav-groups">
+        {groups.map((group) => {
+          const GroupIcon = groupIconFor(group)
+          const label = t(group.labelKey)
+          const badgeTotal = groupBadgeTotal(group, chrome.shellStatus)
+          const badge = badgeTotal > 0 && (
+            <span
+              className="app-shell__badge"
+              role="status"
+              aria-label={t('shell.badgeCount', { count: badgeTotal })}
+            >
+              {badgeTotal > 99 ? '99+' : badgeTotal}
+            </span>
+          )
+
+          if (group.items.length === 1) {
+            const only = group.items[0] as NavItem
+            return (
+              <li key={group.id} className="app-shell__nav-group">
+                <NavLink
+                  to={only.to}
+                  end={only.to === '/'}
+                  className="app-shell__nav-group-trigger"
+                  title={label}
+                >
+                  <GroupIcon className="size-[1.125rem] shrink-0" />
+                  <span className="app-shell__nav-group-label">{label}</span>
+                  {badge}
+                </NavLink>
+              </li>
+            )
+          }
+
+          return (
+            <li key={group.id} className="app-shell__nav-group">
+              <details
+                open={isGroupOpen(group)}
+                onToggle={(event) => {
+                  const nowOpen = (event.currentTarget as HTMLDetailsElement).open
+                  setGroupOpen((previous) => ({ ...previous, [group.id]: nowOpen }))
+                }}
+              >
+                <summary className="app-shell__nav-group-trigger">
+                  <GroupIcon className="size-[1.125rem] shrink-0" />
+                  <span className="app-shell__nav-group-label">{label}</span>
+                  {badge}
+                  <span className="app-shell__nav-group-caret" aria-hidden="true" />
+                </summary>
+                <ul className="app-shell__nav-subitems">
+                  {group.items.map((item) => renderNavItemRow(item))}
+                </ul>
+              </details>
+            </li>
+          )
+        })}
+      </ul>
     )
   }
 
@@ -600,26 +794,33 @@ export function AppShell(): JSX.Element {
         </div>
       </header>
 
-      <div className="app-shell__sidebar-wrap">
-        <nav
-          id={SIDEBAR_ID}
-          className="app-shell__sidebar"
-          aria-label={t('shell.nav')}
-          data-collapsed={sidebarCollapsed ? 'true' : undefined}
-        >
-          {renderGroupList()}
-        </nav>
+      <nav
+        id={SIDEBAR_ID}
+        className="app-shell__sidebar"
+        aria-label={t('shell.nav')}
+        data-collapsed={sidebarCollapsed ? 'true' : undefined}
+      >
+        {/* The collapse toggle (fiche 35 task 2, redesigned fiche 72, moved
+            to the top of the list per direct user feedback: floating on the
+            sidebar's vertical center stranded it in empty space below a
+            short nav list — a fixed, always-findable first row does not. */}
         <button
           type="button"
-          className="app-shell__collapse-toggle"
+          className="app-shell__sidebar-toggle"
           aria-pressed={sidebarCollapsed}
           aria-label={t(sidebarCollapsed ? 'shell.expandSidebar' : 'shell.collapseSidebar')}
           title={t(sidebarCollapsed ? 'shell.expandSidebar' : 'shell.collapseSidebar')}
           onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
         >
-          <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
+          <span className="app-shell__sidebar-toggle-icon" aria-hidden="true">
+            {sidebarCollapsed ? '»' : '«'}
+          </span>
+          <span className="app-shell__nav-group-label">
+            {t(sidebarCollapsed ? 'shell.expandSidebar' : 'shell.collapseSidebar')}
+          </span>
         </button>
-      </div>
+        {renderSidebarNav()}
+      </nav>
 
       {drawerOpen && (
         // The drawer's real dismissal is the document-level Escape handler above;
@@ -639,7 +840,7 @@ export function AppShell(): JSX.Element {
           aria-label={t('shell.nav')}
           onKeyDown={onDrawerKeyDown}
         >
-          {renderGroupList()}
+          {renderDrawerNav()}
         </div>
       )}
 

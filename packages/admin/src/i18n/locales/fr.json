@@ -1808,6 +1808,8 @@
     "quickDraftError": "Impossible de créer le brouillon.",
     "quickDraftNoTitleField": "Cette collection n'a aucun champ texte simple pour porter un titre.",
     "customize": "Personnaliser ce tableau de bord",
+    "close": "Fermer",
+    "widgetGrid": "Widgets du tableau de bord",
     "widgetsOnDashboard": "Widgets affichés sur le tableau de bord",
     "availableWidgets": "Widgets disponibles",
     "noWidgetsShown": "Aucun widget affiché — ajoutez-en un ci-dessous.",

@@ -1809,6 +1809,8 @@
     "quickDraftError": "Could not create the draft.",
     "quickDraftNoTitleField": "This collection has no plain-text field to hold a title.",
     "customize": "Customise this dashboard",
+    "close": "Close",
+    "widgetGrid": "Dashboard widgets",
     "widgetsOnDashboard": "Widgets on your dashboard",
     "availableWidgets": "Available widgets",
     "noWidgetsShown": "No widgets are shown — add one below.",

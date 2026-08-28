@@ -2140,6 +2140,7 @@
     "anonymizedNote": "This account was anonymized. There is nothing left to change.",
     "anonymizeAccount": "Anonymize {{email}}",
     "anonymizeHeading": "Anonymize {{email}}",
+    "anonymizeNoHardDelete": "There is no separate way to delete an active or disabled account — its content and its audit trail have to stay attributable. Anonymizing is Cogenta's answer to erasing one.",
     "anonymizeWarning": "This cannot be undone. The account's email, name, avatar and bio are erased; its id and its content stay exactly where they are.",
     "anonymizeIrreversible": "There is no way back from here. Sessions are revoked immediately.",
     "anonymizeConfirmLabel": "Type {{email}} to confirm",

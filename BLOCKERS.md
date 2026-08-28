@@ -1246,3 +1246,47 @@ isolation stricte : la même famille de flaky d'environnement déjà documentée
 plusieurs fois dans ce fichier et dans l'historique du projet (contention CPU/
 mémoire sous parallélisme complet sur une machine partagée), pas une régression de
 cette fiche — aucun des quatre fichiers ne référence même le mot « commerce ».
+
+## 23. Fiche 61 — un test pré-existant échoue : une tentative de connexion
+échouée peut réinscrire l'e-mail d'un compte déjà anonymisé dans le journal
+d'audit
+
+**Trouvé en vérifiant la fiche 61** (journalisation des mutations de compte),
+**non corrigé** : hors périmètre de la fiche (task 1 ne nomme que
+`applyUserChange`/`bulkRoute`/`inviteRoute`), et touche un mécanisme d'une
+fiche différente.
+
+`packages/cli/test/serve-users.test.ts`'s « anonymizes an account
+irreversibly, keeps the audit log and content attribution coherent » (fiche
+17 tâche 5) échoue de façon reproductible, confirmé **avant tout changement
+de cette session** (`git stash` puis relance du test isolé contre `main`,
+même échec à l'identique). La cause n'est ni la fiche 17 ni la fiche 61 :
+`recordAuthAudit` (`packages/cli/src/commands/serve.ts`, ~ligne 3010)
+enregistre l'e-mail tenté verbatim (`diff: { email }`) pour **toute**
+tentative de connexion échouée, un comportement ajouté pendant la passe QA du
+lot L24 (« tentatives de connexion échouées non journalisées » — voir le
+tableau d'état en tête de `CLAUDE.md`). Le test anonymise un compte, tente
+ensuite de se connecter avec son ancien e-mail (qui échoue légitimement,
+401), puis vérifie qu'**aucune** entrée du journal ne contient cet e-mail —
+mais l'entrée `auth.login_failed` que la tentative elle-même vient de
+produire le contient forcément.
+
+**Pourquoi ce n'est pas qu'un test mal écrit** : la garantie que fiche 17
+promet pour l'anonymisation est explicite — « le contenu et le journal
+d'audit doivent rester nommables » via l'identifiant, **jamais l'e-mail
+effacé**. Une tentative de connexion ultérieure (une session périmée dans un
+gestionnaire de mots de passe, un lien d'hameçonnage, une simple faute de
+frappe visant quelqu'un d'autre) sur cette même adresse laisse maintenant une
+trace en clair, indéfiniment (aucune purge planifiée — voir § 12/11.1
+ci-dessus), dans le même journal exportable que consulte un responsable
+conformité. Ce n'est pas une fuite vers l'extérieur, mais cela affaiblit
+la garantie d'effacement que la fiche 17 documente comme sa réponse au RGPD.
+
+**Correctif non tenté ici** : `recordAuthAudit` devrait probablement
+continuer à journaliser la tentative (utile pour la détection de force
+brute), mais sans l'e-mail en clair — soit en l'omettant, soit en le
+hachant/tronquant — ou l'écran d'audit devrait filtrer ce champ à
+l'affichage/export. Nécessite une décision produit (quel niveau de détail
+garder pour la détection d'abus vs. quelle promesse tenir sur
+l'anonymisation), donc laissé à trancher plutôt que corrigé à la volée dans
+cette session.

@@ -2139,6 +2139,7 @@
     "anonymizedNote": "Ce compte a été anonymisé. Il n'y a plus rien à modifier.",
     "anonymizeAccount": "Anonymiser {{email}}",
     "anonymizeHeading": "Anonymiser {{email}}",
+    "anonymizeNoHardDelete": "Il n'existe pas de suppression définitive séparée pour un compte actif ou désactivé — son contenu et son historique d'audit doivent rester attribuables. Anonymiser est la réponse de Cogenta à « supprimer un compte ».",
     "anonymizeWarning": "Cette action est irréversible. L'e-mail, le nom, l'avatar et la bio du compte sont effacés ; son identifiant et son contenu restent exactement où ils sont.",
     "anonymizeIrreversible": "Il n'y a pas de retour en arrière possible. Les sessions sont révoquées immédiatement.",
     "anonymizeConfirmLabel": "Tapez {{email}} pour confirmer",

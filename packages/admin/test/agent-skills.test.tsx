@@ -85,3 +85,62 @@ describe('agent skills', () => {
     await waitFor(() => expect(screen.queryByText('style.md')).toBeNull())
   })
 })
+
+describe('agent skills — the open row has its own URL (fiche 71)', () => {
+  it('writes ?editing=<id> into the URL when opening a skill for edit', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToAgentSkills()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Créer une compétence' }))
+    fireEvent.change(screen.getByLabelText('Contenu SKILL.md'), {
+      target: { value: '---\nname: Style guide\ndescription: House style.\n---\n\nBody.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await screen.findByText('Style guide')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+
+    await waitFor(() => expect(window.location.search).toContain('editing=skill-1'))
+  })
+
+  it('shows the row already open when mounted directly on ?editing=<id>, no click needed', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    const first = render(<App />)
+    await goToAgentSkills()
+    fireEvent.click(screen.getByRole('button', { name: 'Créer une compétence' }))
+    fireEvent.change(screen.getByLabelText('Contenu SKILL.md'), {
+      target: { value: '---\nname: Style guide\ndescription: House style.\n---\n\nBody.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await screen.findByText('Style guide')
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    await waitFor(() => expect(window.location.search).toContain('editing=skill-1'))
+    first.unmount()
+
+    // A fresh mount straight on the edit URL — the edit row must be open on
+    // the very first render, not only after a click.
+    render(<App />)
+    await screen.findByText('Style guide')
+    const editor = (await screen.findByLabelText('Contenu SKILL.md')) as HTMLTextAreaElement
+    expect(editor.value).toContain('Style guide')
+  })
+
+  it('shows a clear message, not a blank row, for an id that no longer exists', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+    window.history.pushState(null, '', '/agent-skills?editing=skill-does-not-exist')
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Compétences' })
+
+    expect(await screen.findByText("Cette compétence n'existe pas ou plus.")).toBeDefined()
+  })
+})

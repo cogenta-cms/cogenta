@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   activateMarketplaceItem,
@@ -87,7 +88,17 @@ export function MarketplaceRoute(): JSX.Element {
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
 
-  const [activeTab, setActiveTab] = useState<MarketplaceTab>('installed')
+  // Fiche 71: derived from `?tab=`, the same pattern `seo.tsx` proved for its
+  // own tabs — previously a plain `useState`, so an F5 or a shared link
+  // always landed back on "Installés", never on whichever tab was open.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab: MarketplaceTab =
+    searchParams.get('tab') === 'discover' ? 'discover' : 'installed'
+  const setActiveTab = (next: MarketplaceTab) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('tab', next)
+    setSearchParams(params)
+  }
 
   const [installedItems, setInstalledItems] = useState<readonly MarketplaceInstalledItem[]>([])
   const [installedLoading, setInstalledLoading] = useState(true)

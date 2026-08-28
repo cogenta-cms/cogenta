@@ -49,6 +49,23 @@ async function goToDiscoverTab(): Promise<void> {
   await screen.findByLabelText('Rechercher')
 }
 
+describe('the marketplace screen — the sub-view has its own URL (fiche 71)', () => {
+  it('writes ?tab=discover into the URL when switching to the "Découvrir" tab', async () => {
+    render(<App />)
+    await goToMarketplace()
+    await goToDiscoverTab()
+
+    expect(window.location.search).toContain('tab=discover')
+  })
+
+  it('shows the "Découvrir" tab straight away when the URL already carries ?tab=discover', async () => {
+    window.history.pushState(null, '', '/marketplace?tab=discover')
+    render(<App />)
+
+    expect(await screen.findByLabelText('Rechercher')).toBeDefined()
+  })
+})
+
 describe('the marketplace catalog', () => {
   it('lists every item with its type, category and install status', async () => {
     render(<App />)

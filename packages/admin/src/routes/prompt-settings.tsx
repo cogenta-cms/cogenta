@@ -1,5 +1,6 @@
-import { Fragment, type JSX, useCallback, useEffect, useState } from 'react'
+import { Fragment, type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   createPromptTemplate,
@@ -54,11 +55,28 @@ export function PromptSettingsRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  // Fiche 71: which row's edit form is open lives in `?editing=`, not a
+  // plain `useState` — an F5 or a shared link used to always collapse back
+  // to the plain list, losing the open row.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const editingId = searchParams.get('editing')
+  const setEditingId = useCallback(
+    (next: string | null) => {
+      const params = new URLSearchParams(searchParams)
+      if (next === null) params.delete('editing')
+      else params.set('editing', next)
+      setSearchParams(params)
+    },
+    [searchParams, setSearchParams],
+  )
 
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [editDraft, setEditDraft] = useState(EMPTY_DRAFT)
+  // Tracks which template id the edit fields were last populated from, so a
+  // background reload (after creating or removing an unrelated template)
+  // never clobbers text the admin is mid-typing in the still-open row.
+  const syncedEditIdRef = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -103,7 +121,28 @@ export function PromptSettingsRoute(): JSX.Element {
       category: template.category,
       template: template.template,
     })
+    syncedEditIdRef.current = template.id
   }
+
+  // Direct-URL case (fiche 71): loading `?editing=<id>` straight — a
+  // bookmark, a shared link, an F5 — with no click through `startEdit` to
+  // populate the draft fields first.
+  useEffect(() => {
+    if (editingId === null) {
+      syncedEditIdRef.current = null
+      return
+    }
+    if (syncedEditIdRef.current === editingId) return
+    const template = templates.find((candidate) => candidate.id === editingId)
+    if (template === undefined) return
+    setEditDraft({
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      template: template.template,
+    })
+    syncedEditIdRef.current = editingId
+  }, [editingId, templates])
 
   async function submitEdit(id: string): Promise<void> {
     if (token === null) return
@@ -225,6 +264,14 @@ export function PromptSettingsRoute(): JSX.Element {
       )}
 
       {loading && <p>{t('common.loading')}</p>}
+
+      {!loading &&
+        editingId !== null &&
+        !templates.some((template) => template.id === editingId) && (
+          <Notice tone="warning" live="polite">
+            <p>{t('promptSettings.editingNotFound')}</p>
+          </Notice>
+        )}
 
       {!loading && (
         <TableRoot label={t('promptSettings.heading')}>

@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/auth-context.js'
 import { RequireAuth } from './auth/require-auth.js'
 import './i18n/index.js'
 import { AdminAppearanceRoute } from './routes/admin-appearance.js'
+import { AgentDetailRoute } from './routes/agent-detail.js'
 import { AgentSkillsRoute } from './routes/agent-skills.js'
 import { AgentsRoute } from './routes/agents.js'
 import { AnalyticsRoute } from './routes/analytics.js'
@@ -24,6 +25,7 @@ import { CommercePaymentRoute } from './routes/commerce-payment.js'
 import { CommerceProductsRoute } from './routes/commerce-products.js'
 import { CommerceSettingsRoute } from './routes/commerce-settings.js'
 import { CommerceShippingRoute } from './routes/commerce-shipping.js'
+import { CommerceSubscriptionDetailRoute } from './routes/commerce-subscription-detail.js'
 import { CommerceSubscriptionsRoute } from './routes/commerce-subscriptions.js'
 import { CommerceTaxRoute } from './routes/commerce-tax.js'
 import { DashboardRoute } from './routes/dashboard.js'
@@ -120,6 +122,10 @@ export function App(): JSX.Element {
                 <Route path="commerce/customers/:id" element={<CommerceCustomerRoute />} />
                 <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
                 <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
+                <Route
+                  path="commerce/subscriptions/:id"
+                  element={<CommerceSubscriptionDetailRoute />}
+                />
                 <Route path="commerce/settings" element={<CommerceSettingsRoute />} />
                 <Route path="commerce/tax" element={<CommerceTaxRoute />} />
                 <Route path="commerce/shipping" element={<CommerceShippingRoute />} />
@@ -144,6 +150,7 @@ export function App(): JSX.Element {
                 <Route path="audit" element={<AuditRoute />} />
                 <Route path="analytics" element={<AnalyticsRoute />} />
                 <Route path="agents" element={<AgentsRoute />} />
+                <Route path="agents/:name" element={<AgentDetailRoute />} />
                 <Route path="providers" element={<ProvidersRoute />} />
                 <Route path="agent-skills" element={<AgentSkillsRoute />} />
                 <Route path="prompt-settings" element={<PromptSettingsRoute />} />

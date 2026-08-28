@@ -71,7 +71,9 @@ describe('agents', () => {
     await goToAgents()
     await screen.findByText('security')
 
-    fireEvent.click(screen.getByRole('button', { name: 'security' }))
+    // Fiche 71: the detail panel is now a real route (`agents/:name`), reached
+    // through a `<Link>`, not a button that swaps state in place.
+    fireEvent.click(screen.getByRole('link', { name: 'security' }))
 
     expect(await screen.findByText(/end_turn/)).toBeDefined()
     // `deps.scan` now also appears in the L21 task 4 permission checklist and
@@ -93,15 +95,16 @@ describe('agents', () => {
     await goToAgents()
     await screen.findByText('security')
 
-    fireEvent.click(screen.getByRole('button', { name: 'security' }))
+    // Fiche 71: the detail panel is now a real route (`agents/:name`), reached
+    // through a `<Link>`, not a button that swaps state in place.
+    fireEvent.click(screen.getByRole('link', { name: 'security' }))
 
     // Model preference.
     expect(await screen.findByText(/claude-sonnet/)).toBeDefined()
     expect(screen.getByText(/local/)).toBeDefined()
 
     // Autonomy default, shown as the UI's three-level label (L22 task 1
-    // item 4): "propose" (contract C) reads as "Co-pilote" — once in the
-    // list row, once in the detail panel below it.
+    // item 4): "propose" (contract C) reads as "Co-pilote".
     expect(screen.getAllByText(/Co-pilote/).length).toBeGreaterThanOrEqual(1)
 
     // Budget: all three metrics, not just tokens/day.
@@ -148,7 +151,8 @@ describe('agents', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Helper' }))
+    // Fiche 71: the row's name is a real `<Link>` into `agents/:name`.
+    fireEvent.click(await screen.findByRole('link', { name: 'Helper' }))
     fireEvent.change(await screen.findByPlaceholderText('Que doit faire cet agent ?'), {
       target: { value: 'summarise recent posts' },
     })
@@ -225,10 +229,78 @@ describe('agents', () => {
     expect(screen.getByDisplayValue('Always cite the source post for every claim.')).toBeDefined()
 
     // Nothing is created until Save is clicked explicitly (R6).
-    expect(screen.queryByRole('button', { name: 'Newsletter Drafter' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Newsletter Drafter' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
-    expect(await screen.findByRole('button', { name: 'Newsletter Drafter' })).toBeDefined()
+    expect(await screen.findByRole('link', { name: 'Newsletter Drafter' })).toBeDefined()
+  })
+})
+
+describe('agent detail — a real route with its own URL (fiche 71)', () => {
+  it('navigates to /agents/<name> when opening an agent from the list', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToAgents()
+    await screen.findByText('security')
+
+    fireEvent.click(screen.getByRole('link', { name: 'security' }))
+
+    expect(await screen.findByRole('heading', { name: /security/, level: 1 })).toBeDefined()
+    expect(window.location.pathname).toBe('/agents/security')
+  })
+
+  it('shows the agent detail straight away when mounted directly on /agents/<name>', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+    window.history.pushState(null, '', '/agents/security')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: /security/, level: 1 })).toBeDefined()
+    expect(await screen.findByText(/end_turn/)).toBeDefined()
+  })
+
+  it('has a real "Retour" link back to the list, never history.back()', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+    window.history.pushState(null, '', '/agents/security')
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /security/, level: 1 })
+
+    const back = screen.getByRole('link', { name: /Retour/ })
+    expect(back.getAttribute('href')).toBe('/agents')
+  })
+
+  it('shows a clear message, not a blank screen, for an agent name that no longer exists', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+    window.history.pushState(null, '', '/agents/does-not-exist')
+
+    render(<App />)
+
+    expect(await screen.findByText("Cet agent n'existe pas ou plus.")).toBeDefined()
+    expect(screen.getByRole('link', { name: /Retour/ })).toBeDefined()
+  })
+
+  it('refuses to show anything to a role below admin, on the detail route directly', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['editor'] })
+    window.history.pushState(null, '', '/agents/security')
+
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      expect.stringContaining('admin'),
+    )
   })
 })

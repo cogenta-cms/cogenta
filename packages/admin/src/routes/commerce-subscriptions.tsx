@@ -1,15 +1,13 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import {
   cancelSubscription,
   getSubscriptionMetrics,
   listSubscriptions,
   pauseSubscription,
-  readSubscription,
   resumeSubscription,
   type Subscription,
-  type SubscriptionCycle,
-  type SubscriptionDunning,
   type SubscriptionMetrics,
   type SubscriptionStatus,
 } from '../api/commerce-client.js'
@@ -19,7 +17,6 @@ import { formatMinor } from '../commerce/money.js'
 import {
   Button,
   Field,
-  Modal,
   Notice,
   Select,
   Table,
@@ -55,12 +52,6 @@ export function CommerceSubscriptionsRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-
-  const [detailId, setDetailId] = useState<string | null>(null)
-  const [detailCycles, setDetailCycles] = useState<readonly SubscriptionCycle[]>([])
-  const [detailDunning, setDetailDunning] = useState<SubscriptionDunning | null>(null)
-  const [detailError, setDetailError] = useState<string | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null || !canRead) return
@@ -124,24 +115,6 @@ export function CommerceSubscriptionsRoute(): JSX.Element {
       setActionError(
         caught instanceof ApiError ? caught.message : t('commerceSubscriptions.cancelError'),
       )
-    }
-  }
-
-  async function openDetail(subscription: Subscription): Promise<void> {
-    if (token === null) return
-    setDetailId(subscription.id)
-    setDetailError(null)
-    setDetailLoading(true)
-    try {
-      const { cycles, dunning } = await readSubscription(token, subscription.id)
-      setDetailCycles(cycles)
-      setDetailDunning(dunning)
-    } catch (caught) {
-      setDetailError(
-        caught instanceof ApiError ? caught.message : t('commerceSubscriptions.detailError'),
-      )
-    } finally {
-      setDetailLoading(false)
     }
   }
 
@@ -249,13 +222,12 @@ export function CommerceSubscriptionsRoute(): JSX.Element {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void openDetail(subscription)}
+                      <Link
+                        to={`/commerce/subscriptions/${encodeURIComponent(subscription.id)}`}
+                        className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm font-medium hover:bg-accent/40"
                       >
                         {t('commerceSubscriptions.viewDetail')}
-                      </Button>
+                      </Link>
                       {(subscription.status === 'active' || subscription.status === 'past_due') && (
                         <Button
                           variant="secondary"
@@ -294,81 +266,6 @@ export function CommerceSubscriptionsRoute(): JSX.Element {
           </Table>
         </TableRoot>
       )}
-
-      <Modal
-        open={detailId !== null}
-        onOpenChange={(open) => {
-          if (!open) setDetailId(null)
-        }}
-        title={t('commerceSubscriptions.detailHeading')}
-        closeLabel={t('commerceSubscriptions.close')}
-      >
-        <div className="flex flex-col gap-4">
-          {detailError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{detailError}</p>
-            </Notice>
-          )}
-          {detailLoading && <p>{t('common.loading')}</p>}
-
-          {!detailLoading && detailError === null && (
-            <>
-              {detailDunning !== null && (
-                <Notice
-                  tone={detailDunning.suspendedAt !== null ? 'danger' : 'warning'}
-                  live="polite"
-                >
-                  <p>
-                    {detailDunning.suspendedAt !== null
-                      ? t('commerceSubscriptions.dunningSuspended', {
-                          count: detailDunning.failureCount,
-                        })
-                      : t('commerceSubscriptions.dunningInProgress', {
-                          count: detailDunning.failureCount,
-                          reason: detailDunning.lastReason ?? '',
-                        })}
-                  </p>
-                </Notice>
-              )}
-
-              <h3 className="m-0 text-sm font-semibold">
-                {t('commerceSubscriptions.billingHistoryHeading')}
-              </h3>
-              <TableRoot label={t('commerceSubscriptions.billingHistoryHeading')}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>{t('commerceSubscriptions.periodColumn')}</TableHeader>
-                      <TableHeader>{t('commerceSubscriptions.cycleStatusColumn')}</TableHeader>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {detailCycles.map((cycle) => (
-                      <TableRow key={cycle.id}>
-                        <TableCell>
-                          {new Date(cycle.periodStart).toLocaleDateString(i18n.language)}
-                        </TableCell>
-                        <TableCell>
-                          {t(`commerceSubscriptions.cycleStatus.${cycle.status}`)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {detailCycles.length === 0 && (
-                      <TableEmpty colSpan={2}>{t('commerceSubscriptions.noHistory')}</TableEmpty>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableRoot>
-            </>
-          )}
-
-          <div className="flex justify-end">
-            <Button variant="secondary" onClick={() => setDetailId(null)}>
-              {t('commerceSubscriptions.close')}
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </section>
   )
 }

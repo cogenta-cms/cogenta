@@ -218,7 +218,7 @@ describe('cogenta serve — Search Console connector, configured (fiche 70 task 
       const realFetch = globalThis.fetch
       vi.stubGlobal(
         'fetch',
-        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
           const href = String(input)
           if (href.startsWith(server.base)) return realFetch(input, init)
           if (href.includes('oauth2.googleapis.com/token')) {

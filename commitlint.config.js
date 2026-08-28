@@ -15,6 +15,7 @@ export default {
         'admin',
         'auth',
         'render',
+        'seo',
         'theme-canonical',
         'theme-portfolio',
         'theme-magazine',

@@ -1190,8 +1190,20 @@ export function EntryEditRoute(): JSX.Element {
             // reuses the same narrow-screen stacking this grid already had —
             // the sidebar still renders in full below the builder, in the
             // same `lg:order-2` position, just never squeezed sideways.
+            //
+            // `admin-wants-full-width` (a user's direct follow-up question,
+            // 2026-08-28: "if the detail panel shows, is the preview still
+            // correct?"). Measured: `.app-shell__content`'s own 72rem
+            // (1152px) cap — applied to every admin screen, shell.css — was
+            // costing the preview more room than the builder's 20rem detail
+            // panel itself. With the panel open, a 1440px "Ordinateur"
+            // preview was rendering at roughly a third of real size. The
+            // marker class lets `.app-shell__content:has(...)` (shell.css)
+            // lift its own cap specifically while the builder canvas is
+            // showing, without this component reaching into its ancestor's
+            // DOM or app-shell.tsx threading a prop down for one screen.
             editorMode === 'visual' && blockZone !== undefined
-              ? 'lg:grid-cols-1'
+              ? 'lg:grid-cols-1 admin-wants-full-width'
               : 'lg:grid-cols-[minmax(0,1fr)_20rem]',
           )}
         >

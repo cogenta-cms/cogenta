@@ -474,6 +474,21 @@
   max-width: 72rem;
 }
 
+/* A screen can opt out of the shared 72rem reading-width cap by including
+   an element carrying this marker class anywhere in its subtree — measured
+   (2026-08-28) to be the single largest constraint on the Page Builder's
+   live preview, bigger than the builder's own 20rem detail panel: with the
+   cap in place, a real desktop preview (1440px, viewports.ts) had well
+   under 500px to render into once the app shell's own sidebar, the
+   builder's block-outline column and an open detail panel were all
+   subtracted, scaling the preview down to roughly a third of real size.
+   `:has()` lets `entry-edit.tsx` request this without either reaching into
+   `app-shell.tsx`'s DOM or `app-shell.tsx` threading a per-route prop down
+   for the sake of one screen. */
+.app-shell__content:has(.admin-wants-full-width) {
+  max-width: none;
+}
+
 /* Off-screen until focused, then pinned to the top: a sighted keyboard user
    tabbing from the address bar sees it appear rather than losing focus into
    nothing. */

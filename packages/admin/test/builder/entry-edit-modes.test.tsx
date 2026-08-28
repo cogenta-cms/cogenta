@@ -64,6 +64,27 @@ describe('choosing between the field form and the visual builder', () => {
     expect(screen.getByRole('list', { name: 'Blocs de la page' })).not.toBeNull()
   })
 
+  it('lets the builder canvas claim the full content width, unlike the plain form (preview-too-small follow-up)', async () => {
+    // The single biggest constraint measured on the builder's live preview
+    // was `.app-shell__content`'s own 72rem cap (shell.css), applied to
+    // every screen — bigger than the builder's own 20rem detail panel. The
+    // marker class is what lets that cap lift specifically while the
+    // builder canvas is showing (`shell.css`'s
+    // `.app-shell__content:has(.admin-wants-full-width)`); jsdom cannot
+    // assert the CSS effect itself, only that the marker is present exactly
+    // when it should be.
+    const { container } = render(<App />)
+    await openFirstArticle()
+    expect(container.querySelector('.admin-wants-full-width')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Composition visuelle' }))
+    await screen.findByTitle('Aperçu de la page')
+    expect(container.querySelector('.admin-wants-full-width')).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Formulaire' }))
+    expect(container.querySelector('.admin-wants-full-width')).toBeNull()
+  })
+
   it('leaves the typed fields reachable in builder mode, and the block zone to the builder alone', async () => {
     render(<App />)
     await openFirstArticle()

@@ -233,6 +233,59 @@ describe('taxonomies and the trash, end to end', () => {
     await server.stop()
   })
 
+  it(
+    'creates a term under a parent from the entry editor’s quick-create, found at the right level ' +
+      'in the taxonomy tree (41-taxonomies)',
+    async () => {
+      const root = await project()
+      const server = await startServer(root)
+      const token = await signIn(root, server.base, ['editor', 'admin'])
+      const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+
+      // "Actualités" already exists and is the category an editor has
+      // selected in the entry editor's taxonomy field.
+      const parentTerm = await fetch(`${server.base}/api/taxonomies/topic`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ slug: 'actualites', labels: { en: 'News' } }),
+      })
+      expect(parentTerm.status).toBe(201)
+      const actualites = ((await parentTerm.json()) as { data: { id: string } }).data
+
+      // The exact request `TaxonomyField`'s quick-create form now sends
+      // (`packages/admin/src/fields/taxonomy-field.tsx`): a `parent` that is
+      // whichever term is currently selected in the field, not omitted as
+      // it used to be — the bug this fiche fixes.
+      const quickCreated = await fetch(`${server.base}/api/taxonomies/topic`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({
+          slug: 'local',
+          labels: { en: 'Local' },
+          parent: actualites.id,
+        }),
+      })
+      expect(quickCreated.status).toBe(201)
+      const local = (
+        (await quickCreated.json()) as { data: { id: string; parent: string; depth: number } }
+      ).data
+      expect(local.parent).toBe(actualites.id)
+      expect(local.depth).toBe(1)
+
+      // Retrieved through the very listing the Taxonomies screen renders:
+      // "Local" shows up right under "Actualités", one level deep — not at
+      // the root, which is what the unfixed shortcut used to produce.
+      const tree = await fetch(`${server.base}/api/taxonomies/topic`, { headers: auth })
+      const treeBody = (await tree.json()) as {
+        data: { id: string; parent: string | null; depth: number }[]
+      }
+      const found = treeBody.data.find((term) => term.id === local.id)
+      expect(found).toMatchObject({ parent: actualites.id, depth: 1 })
+
+      await server.stop()
+    },
+  )
+
   it('refuses a taxonomy write to an actor without the action, over HTTP', async () => {
     const root = await project()
     const server = await startServer(root)

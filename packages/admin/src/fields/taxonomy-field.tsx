@@ -105,6 +105,17 @@ export function TaxonomyField({
   const mayCreate =
     taxonomyDefinition !== undefined && canPerformOnTerms('create', taxonomyDefinition, roles)
 
+  // 41-taxonomies: the quick-create shortcut used to land every term at the
+  // root, because it never sent `parent` even though the server has taken
+  // one since `f.taxonomy` shipped. The fix stays deliberately minimal (see
+  // the plan's known pitfalls — no second tree picker duplicating
+  // `term-form-modal.tsx`): the parent is whichever term is already
+  // selected in this very field at the moment of creation. For a to-many
+  // field that is the most recently picked option; a to-one field never
+  // has more than one to begin with.
+  const parentContext =
+    selected.length > 0 ? byId.get(selected[selected.length - 1] ?? '') : undefined
+
   async function createQuickTerm(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || newLabel.trim() === '') return
@@ -115,6 +126,7 @@ export function TaxonomyField({
       const created = await createTerm(token, taxonomy, {
         slug: slugify(newLabel),
         labels: { [i18n.language]: newLabel.trim() },
+        parent: parentContext?.id ?? null,
       })
       setTerms((current) => [...current, created])
       setNewLabel('')
@@ -183,6 +195,11 @@ export function TaxonomyField({
           onSubmit={(event) => void createQuickTerm(event)}
           aria-label={t('fields.taxonomyQuickCreate')}
         >
+          {parentContext !== undefined && (
+            <p className="field__placeholder">
+              {t('fields.taxonomyCreateUnderParent', { parent: labelOf(parentContext) })}
+            </p>
+          )}
           <input
             type="text"
             aria-label={t('fields.taxonomyNewTermLabel')}

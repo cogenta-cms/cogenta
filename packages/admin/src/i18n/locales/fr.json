@@ -28,6 +28,7 @@
     "taxonomySearch": "Filtrer les termes",
     "taxonomyNoMatch": "Aucun terme ne correspond à ce filtre.",
     "taxonomyQuickCreate": "Ajouter un terme",
+    "taxonomyCreateUnderParent": "Sera créé sous « {{parent}} ».",
     "taxonomyNewTermLabel": "Libellé du nouveau terme",
     "taxonomyCreate": "Ajouter",
     "taxonomyCreateError": "Le terme n'a pas pu être créé.",

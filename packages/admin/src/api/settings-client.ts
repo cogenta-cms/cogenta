@@ -25,6 +25,7 @@ export type SiteSettingGroup =
   | 'assistant'
   | 'updates'
   | 'navigation'
+  | 'channels'
 export type SiteSettingScope = 'site' | 'locale'
 
 export interface SiteSetting {

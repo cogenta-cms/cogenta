@@ -130,6 +130,16 @@ export const SITE_SETTING_GROUPS = [
    * person signing in, and a fresh install pulling the same database.
    */
   'navigation',
+  /**
+   * Fiche 59 — the one non-secret, operator-set fact a channel's step-by-step
+   * guide needs to name the bot by handle instead of "the Cogenta bot": each
+   * channel's bot display name/handle, free text, never a credential. Bot
+   * *tokens* stay environment-only (R7) and never enter this table — this
+   * group exists specifically so a guide can say "open a chat with
+   * @my_cogenta_bot" without ever storing anything a leaked table could turn
+   * into a working credential.
+   */
+  'channels',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -195,6 +205,20 @@ const titleTemplateOrEmpty = z
 const collectionTitleTemplates = z.record(z.string(), titleTemplateOrEmpty)
 
 const metaDescriptionOrEmpty = z.string().max(500)
+
+/**
+ * A channel bot's display name/handle (fiche 59) — free text, deliberately
+ * unconstrained in shape: `@my_bot` (Telegram), an app name (Slack), or
+ * `MyBot#1234` (Discord) are all valid, and this field's only job is
+ * plausibility (no newline, a sane length), never a format check tied to one
+ * platform. Never a credential — see this key's own registry entry.
+ */
+const botNameOrEmpty = z
+  .string()
+  .max(80)
+  .refine((value) => !/[\r\n]/u.test(value), {
+    error: 'A bot name is a single line — remove any line break.',
+  })
 
 /** A Twitter/X `@handle` for `twitter:site`, or empty. */
 const twitterHandleOrEmpty = z
@@ -909,6 +933,45 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     uiType: 'string',
     scope: 'site',
     schema: navTokenList,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Channels (fiche 59) — the operator-entered, non-secret bot handle each
+  // channel's in-admin step-by-step guide names, so a person linking their
+  // account reads "open a chat with @my_cogenta_bot" instead of a generic
+  // placeholder. Free text on purpose (`botNameOrEmpty`, not a `path`/`email`
+  // shape): a Telegram handle, a Slack app name and a Discord tag
+  // (`MyBot#1234`) have three different formats, and this field never
+  // validates against any of them — the real bot credential (the token) is
+  // environment-only (R7) and has no row anywhere in this table.
+  {
+    key: 'channels.telegramBotName',
+    group: 'channels',
+    order: 0,
+    uiType: 'string',
+    scope: 'site',
+    schema: botNameOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'channels.slackBotName',
+    group: 'channels',
+    order: 1,
+    uiType: 'string',
+    scope: 'site',
+    schema: botNameOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'channels.discordBotName',
+    group: 'channels',
+    order: 2,
+    uiType: 'string',
+    scope: 'site',
+    schema: botNameOrEmpty,
     defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },

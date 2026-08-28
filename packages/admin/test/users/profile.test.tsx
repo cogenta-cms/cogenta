@@ -35,34 +35,61 @@ async function goToProfile(): Promise<void> {
 }
 
 describe('my profile — password', () => {
-  it('changes the password when the current one is right', async () => {
+  it('keeps the password fields hidden behind a button until clicked (fiche 40-adjacent)', async () => {
     render(<App />)
     await goToProfile()
 
+    expect(screen.queryByLabelText('Mot de passe actuel')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Changer le mot de passe' })).toBeDefined()
+  })
+
+  it('changes the password when the current one is right, then collapses the form back', async () => {
+    render(<App />)
+    await goToProfile()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
     fireEvent.change(screen.getByLabelText('Mot de passe actuel'), {
       target: { value: 'correct horse battery staple' },
     })
     fireEvent.change(screen.getByLabelText('Nouveau mot de passe'), {
       target: { value: 'a much longer new passphrase' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le changement' }))
 
     expect(await screen.findByText('Mot de passe modifié.')).toBeDefined()
+    // The form closes itself once the change succeeds — nothing left open
+    // for someone glancing at the screen after the fact.
+    expect(screen.queryByLabelText('Mot de passe actuel')).toBeNull()
   })
 
   it('reports the server refusing a wrong current password, without pretending it worked', async () => {
     render(<App />)
     await goToProfile()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
     fireEvent.change(screen.getByLabelText('Mot de passe actuel'), {
       target: { value: 'not it' },
     })
     fireEvent.change(screen.getByLabelText('Nouveau mot de passe'), {
       target: { value: 'a much longer new passphrase' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le changement' }))
 
     expect(await screen.findByText('The current password is not correct.')).toBeDefined()
+    expect(screen.queryByText('Mot de passe modifié.')).toBeNull()
+  })
+
+  it('cancel closes the form without submitting', async () => {
+    render(<App />)
+    await goToProfile()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
+    fireEvent.change(screen.getByLabelText('Mot de passe actuel'), {
+      target: { value: 'correct horse battery staple' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+
+    expect(screen.queryByLabelText('Mot de passe actuel')).toBeNull()
     expect(screen.queryByText('Mot de passe modifié.')).toBeNull()
   })
 })
@@ -319,8 +346,11 @@ describe('my profile — activity', () => {
     await goToProfile()
 
     expect(await screen.findByRole('heading', { name: 'Mon activité' })).toBeDefined()
-    expect(await screen.findByText('user.password_change')).toBeDefined()
-    expect(screen.getByText('auth.login')).toBeDefined()
+    // Human-readable labels, not raw audit action codes (the user flagged
+    // this directly — "content.publish"/"site_setting.update" reading in
+    // full in the activity feed).
+    expect(await screen.findByText('Mot de passe changé')).toBeDefined()
+    expect(screen.getByText('Connexion')).toBeDefined()
   })
 })
 
@@ -339,6 +369,7 @@ describe('my profile — password policy', () => {
     render(<App />)
     await goToProfile()
     await screen.findByText('Un mot de passe doit compter au moins 12 caractères.')
+    fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
 
     fireEvent.change(screen.getByLabelText('Nouveau mot de passe'), { target: { value: 'short' } })
     expect(await screen.findByText('Encore 7 caractère(s) nécessaire(s).')).toBeDefined()

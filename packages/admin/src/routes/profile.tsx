@@ -72,6 +72,11 @@ export function ProfileRoute(): JSX.Element {
   const [newPassword, setNewPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordChanged, setPasswordChanged] = useState(false)
+  // Kept closed by default: the fields were previously always open on the
+  // page, which the user flagged directly — a password form left expanded
+  // is one more thing visible over someone's shoulder for no reason, when
+  // changing a password is a rare action.
+  const [passwordFormOpen, setPasswordFormOpen] = useState(false)
 
   const [enrolment, setEnrolment] = useState<TotpSetup | null>(null)
   const [totpCode, setTotpCode] = useState('')
@@ -227,6 +232,7 @@ export function ProfileRoute(): JSX.Element {
       setPasswordChanged(true)
       setCurrentPassword('')
       setNewPassword('')
+      setPasswordFormOpen(false)
     } catch (caught) {
       setPasswordError(caught instanceof ApiError ? caught.message : t('profile.passwordError'))
     }
@@ -516,69 +522,92 @@ export function ProfileRoute(): JSX.Element {
           </CardTitle>
           <CardDescription>{t('profile.passwordIntro')}</CardDescription>
         </CardHeader>
-        <CardBody>
+        <CardBody className="flex flex-col gap-4">
           {/* Fiche 18 task 3: the policy announced before the form can
               refuse anything — fetched from the same route the server
-              enforces, never a second, hand-copied number. */}
+              enforces, never a second, hand-copied number. Kept visible
+              regardless of whether the form itself is open, so it is the
+              first thing read even before "Changer le mot de passe" is
+              clicked. */}
           {passwordPolicy !== null && (
             <p className="m-0 text-sm text-muted-foreground">
               {t('profile.passwordPolicyAnnounce', { minLength: passwordPolicy.minLength })}
             </p>
           )}
-          <form onSubmit={submitPassword} className="flex flex-col gap-4">
-            <Field label={t('profile.currentPassword')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field
-              label={t('profile.newPassword')}
-              description={t('profile.newPasswordHint')}
-              error={passwordError}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                />
-              )}
-            </Field>
-            {passwordPolicy !== null && newPassword.length > 0 && (
-              <p
-                className={
-                  newPassword.length >= passwordPolicy.minLength
-                    ? 'm-0 text-sm text-success'
-                    : 'm-0 text-sm text-destructive'
-                }
-                role="status"
-              >
-                {newPassword.length >= passwordPolicy.minLength
-                  ? t('profile.passwordStrengthOk')
-                  : t('profile.passwordStrengthShort', {
-                      remaining: passwordPolicy.minLength - newPassword.length,
-                    })}
-              </p>
-            )}
-            {passwordChanged && (
-              <Notice tone="success" live="assertive">
-                <p>{t('profile.passwordChanged')}</p>
-              </Notice>
-            )}
+          {passwordChanged && (
+            <Notice tone="success" live="assertive">
+              <p>{t('profile.passwordChanged')}</p>
+            </Notice>
+          )}
+          {!passwordFormOpen ? (
             <div>
-              <Button type="submit">{t('profile.changePassword')}</Button>
+              <Button type="button" onClick={() => setPasswordFormOpen(true)}>
+                {t('profile.changePassword')}
+              </Button>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={submitPassword} className="flex flex-col gap-4">
+              <Field label={t('profile.currentPassword')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field
+                label={t('profile.newPassword')}
+                description={t('profile.newPasswordHint')}
+                error={passwordError}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                  />
+                )}
+              </Field>
+              {passwordPolicy !== null && newPassword.length > 0 && (
+                <p
+                  className={
+                    newPassword.length >= passwordPolicy.minLength
+                      ? 'm-0 text-sm text-success'
+                      : 'm-0 text-sm text-destructive'
+                  }
+                  role="status"
+                >
+                  {newPassword.length >= passwordPolicy.minLength
+                    ? t('profile.passwordStrengthOk')
+                    : t('profile.passwordStrengthShort', {
+                        remaining: passwordPolicy.minLength - newPassword.length,
+                      })}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button type="submit">{t('profile.confirmChangePassword')}</Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setPasswordFormOpen(false)
+                    setCurrentPassword('')
+                    setNewPassword('')
+                    setPasswordError(null)
+                  }}
+                >
+                  {t('common.cancel')}
+                </Button>
+              </div>
+            </form>
+          )}
         </CardBody>
       </Card>
 
@@ -785,7 +814,9 @@ export function ProfileRoute(): JSX.Element {
             <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
               {activity.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap items-center justify-between gap-3">
-                  <span>{entry.action}</span>
+                  <span>
+                    {t(`audit.actionLabel.${entry.action}`, { defaultValue: entry.action })}
+                  </span>
                   <span className="text-muted-foreground">{entry.at}</span>
                 </li>
               ))}

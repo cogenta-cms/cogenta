@@ -42,7 +42,7 @@ describe('audit log', () => {
     render(<App />)
     await goToAudit()
 
-    expect(await screen.findByText('content.create')).toBeDefined()
+    expect(await screen.findByText('Contenu créé')).toBeDefined()
     expect(screen.getByText('article')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Vérifier maintenant' }))
@@ -57,7 +57,7 @@ describe('audit log', () => {
     render(<App />)
     await goToAudit()
 
-    await screen.findByText('content.create')
+    await screen.findByText('Contenu créé')
     const table = within(screen.getByRole('table'))
     // The fixture's every row is `actorId: 'user-1'`, resolved through
     // `/api/users` the same best-effort way `trash.tsx`/`version-history.tsx`

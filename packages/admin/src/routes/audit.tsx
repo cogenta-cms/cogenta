@@ -413,7 +413,9 @@ export function AuditRoute(): JSX.Element {
                       : (actorNames.get(entry.actorId) ?? entry.actorId)}
                   </TableCell>
                   <TableCell>{entry.actorRoles.join(', ')}</TableCell>
-                  <TableCell>{entry.action}</TableCell>
+                  <TableCell>
+                    {t(`audit.actionLabel.${entry.action}`, { defaultValue: entry.action })}
+                  </TableCell>
                   <TableCell>{entry.collection ?? '—'}</TableCell>
                   <TableCell>{entry.entryId ?? '—'}</TableCell>
                   <TableCell>
@@ -538,7 +540,9 @@ function EntryDetail({ detail }: { readonly detail: AuditEntryDetail }): JSX.Ele
       <Row label={t('audit.detailRoles')}>
         {entry.actorRoles.length === 0 ? '—' : entry.actorRoles.join(', ')}
       </Row>
-      <Row label={t('audit.detailAction')}>{entry.action}</Row>
+      <Row label={t('audit.detailAction')}>
+        {t(`audit.actionLabel.${entry.action}`, { defaultValue: entry.action })}
+      </Row>
       {entry.collection !== null && entry.entryId !== null && (
         <Row label={t('audit.detailEntry')}>
           <Link to={`/collections/${entry.collection}/${entry.entryId}`}>

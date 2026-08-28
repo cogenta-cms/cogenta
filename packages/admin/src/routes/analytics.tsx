@@ -10,7 +10,16 @@ import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { downloadCsv, toCsv } from '../lib/csv.js'
 import { CheckIcon, ClockIcon, DownloadIcon, MediaIcon, TrendIcon, UsersIcon } from '../ui/icons.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label } from '../ui/index.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Pagination,
+} from '../ui/index.js'
 
 const WINDOW_OPTIONS = [7, 30, 90] as const
 type WindowDays = (typeof WINDOW_OPTIONS)[number]
@@ -20,6 +29,16 @@ const CHART_HEIGHT = 200
 const CHART_PADDING_X = 8
 const CHART_PADDING_TOP = 12
 const CHART_PADDING_BOTTOM = 28
+
+/**
+ * How many rows of `topPages`/`topReferrers` the summary is asked for
+ * (fiche 64 task 3) — well above `DEFAULT_SUMMARY_LIMIT` (10) so there is
+ * something to page through, but still bounded (the server refuses a larger
+ * `?limit=` outright, `analytics-router.ts`'s `MAX_SUMMARY_LIMIT`).
+ */
+const SUMMARY_ROW_LIMIT = 50
+/** Rows per page in the top-pages/top-referrers tables — matches the server's un-paginated default, so page 1 looks exactly like the screen did before task 3. */
+const TABLE_PAGE_SIZE = 10
 
 /**
  * The server only returns rows for days that actually had a view
@@ -51,28 +70,56 @@ function fillDailyViews(
 }
 
 /**
- * A hand-built SVG bar chart of daily page views — no charting library
- * (R9: zero new dependency for something this small). Bars rather than a
- * line because the data is a small, discrete number of days, and a bar's
- * height is legible without hovering for a tooltip this static export
- * cannot offer anyway.
- *
- * Redesigned for fiche 22 tâche 8, part 1: a gradient fill, a dashed
- * baseline/midline grid and axis labels for the max and zero — the data
- * this draws was already right (period-over-period, zero-filled days), the
- * only thing missing was making it look like it belongs next to the rest of
- * the Nightops/Atelier admin instead of a bare debug rectangle. The bar
- * count a test asserts against (one `<rect>` per calendar day) is
- * unchanged: the grid lines below are `<line>`s, never `<rect>`s.
+ * Same zero-fill as `fillDailyViews` above, but anchored on a start date and
+ * a fixed point count rather than an end date. Overlaying the previous
+ * period on the same x-axis as the current one (fiche 64 task 2) needs the
+ * two series to have exactly the same number of points *by construction* —
+ * independently zero-filling `[previousSince, since)` with its own end
+ * boundary could land one day short or long depending on where `since`
+ * falls relative to midnight UTC, which would silently misalign the overlay
+ * by a day. Reusing the current period's own point count sidesteps that.
+ */
+function fillDailyViewsForCount(
+  startIso: string,
+  count: number,
+  data: AnalyticsSummary['dailyViews'],
+): AnalyticsSummary['dailyViews'] {
+  const viewsByDay = new Map(data.map((point) => [point.day, point.views]))
+  const start = new Date(`${startIso.slice(0, 10)}T00:00:00Z`)
+  const days: { day: string; views: number }[] = []
+  for (let index = 0; index < count; index += 1) {
+    const day = new Date(start.getTime() + index * 86_400_000).toISOString().slice(0, 10)
+    days.push({ day, views: viewsByDay.get(day) ?? 0 })
+  }
+  return days
+}
+
+/**
+ * A hand-built SVG line chart of daily page views — no charting library
+ * (R9: zero new dependency for something this small, same call as the bar
+ * chart it replaces). Rebuilt for fiche 64 task 1/2/4: a line with an
+ * area-under-the-curve gradient and one point per day (still hoverable via
+ * `<title>`, and still the element a test can count), plus — when the
+ * previous period actually had traffic to compare against — a second,
+ * dashed line for it on the very same axes, next to the `%` badge that was
+ * already the only comparison this screen offered.
  */
 function DailyViewsChart({
   since,
   until,
   data: rawData,
+  previousSince,
+  previousData: rawPreviousData,
+  previousTotalViews,
 }: {
   readonly since: string
   readonly until: string
   readonly data: AnalyticsSummary['dailyViews']
+  /** Start of the previous, equal-length window — `previousData`'s series is anchored here, one point per day, aligned by position with `data`. */
+  readonly previousSince: string
+  readonly previousData: AnalyticsSummary['dailyViews']
+  /** Gates the overlay: a period with zero previous traffic gets no ghost line, the same "new traffic" call `ChangeBadge` already makes for the `%` figure. */
+  readonly previousTotalViews: number
 }): JSX.Element {
   const { t } = useTranslation()
   const gradientId = useId()
@@ -81,92 +128,147 @@ function DailyViewsChart({
     return <p className="text-muted-foreground text-sm">{t('analytics.noData')}</p>
   }
 
-  const max = Math.max(...data.map((point) => point.views), 1)
+  const previous =
+    previousTotalViews > 0
+      ? fillDailyViewsForCount(previousSince, data.length, rawPreviousData)
+      : []
+
+  const max = Math.max(...data.map((point) => point.views), ...previous.map((p) => p.views), 1)
   const plotWidth = CHART_WIDTH - CHART_PADDING_X * 2
   const plotTop = CHART_PADDING_TOP
   const plotBottom = CHART_HEIGHT - CHART_PADDING_BOTTOM
   const plotHeight = plotBottom - plotTop
-  const barGap = 3
-  const barWidth = Math.max(plotWidth / data.length - barGap, 1)
   const showEveryLabel = data.length <= 10
 
+  const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0
+  const xAt = (index: number): number => CHART_PADDING_X + index * stepX
+  const yAt = (views: number): number => plotBottom - (views / max) * plotHeight
+
+  const linePoints = data.map((point, index) => `${xAt(index)},${yAt(point.views)}`)
+  const linePath = linePoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p}`).join(' ')
+  const areaPath = `${linePath} L${xAt(data.length - 1)},${plotBottom} L${xAt(0)},${plotBottom} Z`
+  const previousLinePath = previous
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${xAt(index)},${yAt(point.views)}`)
+    .join(' ')
+
   return (
-    <svg
-      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-      width="100%"
-      height={CHART_HEIGHT}
-      role="img"
-      aria-label={t('analytics.chartLabel')}
-      className="text-primary"
-    >
-      <title>{t('analytics.chartLabel')}</title>
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity={0.95} />
-          <stop offset="100%" stopColor="currentColor" stopOpacity={0.55} />
-        </linearGradient>
-      </defs>
+    <>
+      <svg
+        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+        width="100%"
+        height={CHART_HEIGHT}
+        role="img"
+        aria-label={t('analytics.chartLabel')}
+        className="text-primary"
+      >
+        <title>{t('analytics.chartLabel')}</title>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+          </linearGradient>
+        </defs>
 
-      {/* Baseline and a midline, dashed — a reading aid, never a bar. */}
-      <line
-        x1={CHART_PADDING_X}
-        y1={plotBottom}
-        x2={CHART_WIDTH - CHART_PADDING_X}
-        y2={plotBottom}
-        stroke="currentColor"
-        strokeOpacity={0.25}
-      />
-      <line
-        x1={CHART_PADDING_X}
-        y1={plotTop + plotHeight / 2}
-        x2={CHART_WIDTH - CHART_PADDING_X}
-        y2={plotTop + plotHeight / 2}
-        stroke="currentColor"
-        strokeOpacity={0.12}
-        strokeDasharray="3 3"
-      />
-      <text x={CHART_PADDING_X} y={plotTop - 2} fontSize={9} fill="currentColor" opacity={0.6}>
-        {max}
-      </text>
-      <text x={CHART_PADDING_X} y={plotBottom + 11} fontSize={9} fill="currentColor" opacity={0.6}>
-        0
-      </text>
+        {/* Baseline and a midline, dashed — a reading aid, never a data series. */}
+        <line
+          x1={CHART_PADDING_X}
+          y1={plotBottom}
+          x2={CHART_WIDTH - CHART_PADDING_X}
+          y2={plotBottom}
+          stroke="currentColor"
+          strokeOpacity={0.25}
+        />
+        <line
+          x1={CHART_PADDING_X}
+          y1={plotTop + plotHeight / 2}
+          x2={CHART_WIDTH - CHART_PADDING_X}
+          y2={plotTop + plotHeight / 2}
+          stroke="currentColor"
+          strokeOpacity={0.12}
+          strokeDasharray="3 3"
+        />
+        <text x={CHART_PADDING_X} y={plotTop - 2} fontSize={9} fill="currentColor" opacity={0.6}>
+          {max}
+        </text>
+        <text
+          x={CHART_PADDING_X}
+          y={plotBottom + 11}
+          fontSize={9}
+          fill="currentColor"
+          opacity={0.6}
+        >
+          0
+        </text>
 
-      {data.map((point, index) => {
-        const barHeight = (point.views / max) * plotHeight
-        const x = CHART_PADDING_X + index * (barWidth + barGap)
-        const y = plotBottom - barHeight
-        const showLabel = showEveryLabel || index === 0 || index === data.length - 1
-        return (
-          <g key={point.day} className="transition-opacity hover:opacity-80">
-            <rect
-              x={x}
-              y={y}
-              width={barWidth}
-              height={Math.max(barHeight, 1.5)}
-              rx={Math.min(barWidth / 2, 2)}
-              fill={`url(#${gradientId})`}
-            >
-              <title>
-                {point.day}: {point.views}
-              </title>
-            </rect>
-            {showLabel && (
-              <text
-                x={x + barWidth / 2}
-                y={CHART_HEIGHT - 8}
-                fontSize={8}
-                textAnchor="middle"
+        {previous.length > 0 && (
+          <path
+            d={previousLinePath}
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity={0.4}
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+          >
+            <title>{t('analytics.legendPrevious')}</title>
+          </path>
+        )}
+
+        <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" />
+        <path
+          d={linePath}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+
+        {data.map((point, index) => {
+          const showLabel = showEveryLabel || index === 0 || index === data.length - 1
+          return (
+            <g key={point.day}>
+              <circle
+                cx={xAt(index)}
+                cy={yAt(point.views)}
+                r={2.75}
                 fill="currentColor"
-                opacity={0.55}
+                className="transition-opacity hover:opacity-70"
               >
-                {point.day.slice(5)}
-              </text>
-            )}
-          </g>
-        )
-      })}
-    </svg>
+                <title>
+                  {point.day}: {point.views}
+                </title>
+              </circle>
+              {showLabel && (
+                <text
+                  x={xAt(index)}
+                  y={CHART_HEIGHT - 8}
+                  fontSize={8}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  opacity={0.55}
+                >
+                  {point.day.slice(5)}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+      {previous.length > 0 && (
+        <ul className="m-0 mt-1 flex list-none items-center gap-4 p-0 text-xs text-muted-foreground">
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-primary" />
+            {t('analytics.legendCurrent')}
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="h-0 w-4 border-t-2 border-dashed border-muted-foreground"
+            />
+            {t('analytics.legendPrevious')}
+          </li>
+        </ul>
+      )}
+    </>
   )
 }
 
@@ -198,6 +300,19 @@ function ChangeBadge({
       {rounded}% {t('analytics.changeVsPrevious')}
     </span>
   )
+}
+
+/**
+ * The start of the previous, equal-length window — the same math
+ * `@cogenta/analytics`'s `getSummary` uses server-side
+ * (`previousSinceIso = since - (until - since)`), recomputed here rather
+ * than sent over the wire because the chart only needs it to anchor
+ * `fillDailyViewsForCount`, not as a value shown anywhere.
+ */
+function previousWindowStart(summary: AnalyticsSummary): string {
+  const sinceMs = new Date(summary.since).getTime()
+  const untilMs = new Date(summary.until).getTime()
+  return new Date(sinceMs - (untilMs - sinceMs)).toISOString()
 }
 
 /** Today's date, `YYYY-MM-DD`, for an `<input type="date">` max attribute — never a future range. */
@@ -252,6 +367,10 @@ export function AnalyticsRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  /** Zero-based page within `summary.topPages`/`topReferrers` (task 3) — reset whenever a new summary arrives. */
+  const [topPagesPage, setTopPagesPage] = useState(0)
+  const [topReferrersPage, setTopReferrersPage] = useState(0)
+
   const window: AnalyticsWindow = customRange ?? { days }
 
   useEffect(() => {
@@ -259,9 +378,16 @@ export function AnalyticsRoute(): JSX.Element {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getAnalyticsSummary(token, window)
+    // `SUMMARY_ROW_LIMIT` (50) rather than the server's default of 10 — the
+    // tables below page through the result client-side (task 3), so there
+    // needs to be more than one page's worth to page through.
+    getAnalyticsSummary(token, window, SUMMARY_ROW_LIMIT)
       .then((result) => {
-        if (!cancelled) setSummary(result)
+        if (!cancelled) {
+          setSummary(result)
+          setTopPagesPage(0)
+          setTopReferrersPage(0)
+        }
       })
       .catch((caught) => {
         if (!cancelled) {
@@ -478,6 +604,9 @@ export function AnalyticsRoute(): JSX.Element {
                 since={summary.since}
                 until={summary.until}
                 data={summary.dailyViews}
+                previousSince={previousWindowStart(summary)}
+                previousData={summary.previousDailyViews}
+                previousTotalViews={summary.previousTotalViews}
               />
             </CardBody>
           </Card>
@@ -488,42 +617,62 @@ export function AnalyticsRoute(): JSX.Element {
                 <h2 id="analytics-pages-heading">{t('analytics.pagesHeading')}</h2>
               </CardTitle>
             </CardHeader>
-            <CardBody>
+            <CardBody className="flex flex-col gap-3">
               {summary.topPages.length === 0 ? (
                 <p className="m-0 text-sm text-muted-foreground">{t('analytics.noData')}</p>
               ) : (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('analytics.page')}</th>
-                      <th scope="col" className="text-right">
-                        {t('analytics.views')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.topPages.map((page) => (
-                      <tr key={page.path}>
-                        <td>
-                          {page.editHref !== undefined ? (
-                            <Link
-                              to={page.editHref}
-                              className="text-primary underline-offset-2 hover:underline"
-                            >
-                              {page.title ?? page.path}
-                            </Link>
-                          ) : (
-                            page.path
-                          )}
-                          {page.title !== undefined && (
-                            <span className="text-muted-foreground text-xs"> ({page.path})</span>
-                          )}
-                        </td>
-                        <td className="text-right font-mono">{page.views}</td>
+                <>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr>
+                        <th scope="col">{t('analytics.page')}</th>
+                        <th scope="col" className="text-right">
+                          {t('analytics.views')}
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {summary.topPages
+                        .slice(topPagesPage * TABLE_PAGE_SIZE, (topPagesPage + 1) * TABLE_PAGE_SIZE)
+                        .map((page) => (
+                          <tr key={page.path}>
+                            <td>
+                              {page.editHref !== undefined ? (
+                                <Link
+                                  to={page.editHref}
+                                  className="text-primary underline-offset-2 hover:underline"
+                                >
+                                  {page.title ?? page.path}
+                                </Link>
+                              ) : (
+                                page.path
+                              )}
+                              {page.title !== undefined && (
+                                <span className="text-muted-foreground text-xs">
+                                  {' '}
+                                  ({page.path})
+                                </span>
+                              )}
+                            </td>
+                            <td className="text-right font-mono">{page.views}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  <Pagination
+                    variant="pages"
+                    page={topPagesPage}
+                    pageCount={Math.max(1, Math.ceil(summary.topPages.length / TABLE_PAGE_SIZE))}
+                    onPageChange={setTopPagesPage}
+                    previousLabel={t('analytics.previousPage')}
+                    nextLabel={t('analytics.nextPage')}
+                    pageInfo={t('analytics.pageInfo', {
+                      from: topPagesPage * TABLE_PAGE_SIZE + 1,
+                      to: Math.min(summary.topPages.length, (topPagesPage + 1) * TABLE_PAGE_SIZE),
+                      total: summary.topPages.length,
+                    })}
+                  />
+                </>
               )}
             </CardBody>
           </Card>
@@ -534,28 +683,54 @@ export function AnalyticsRoute(): JSX.Element {
                 <h2 id="analytics-referrers-heading">{t('analytics.referrersHeading')}</h2>
               </CardTitle>
             </CardHeader>
-            <CardBody>
+            <CardBody className="flex flex-col gap-3">
               {summary.topReferrers.length === 0 ? (
                 <p className="m-0 text-sm text-muted-foreground">{t('analytics.noReferrers')}</p>
               ) : (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('analytics.referrer')}</th>
-                      <th scope="col" className="text-right">
-                        {t('analytics.views')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.topReferrers.map((referrer) => (
-                      <tr key={referrer.domain}>
-                        <td>{referrer.domain}</td>
-                        <td className="text-right font-mono">{referrer.views}</td>
+                <>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr>
+                        <th scope="col">{t('analytics.referrer')}</th>
+                        <th scope="col" className="text-right">
+                          {t('analytics.views')}
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {summary.topReferrers
+                        .slice(
+                          topReferrersPage * TABLE_PAGE_SIZE,
+                          (topReferrersPage + 1) * TABLE_PAGE_SIZE,
+                        )
+                        .map((referrer) => (
+                          <tr key={referrer.domain}>
+                            <td>{referrer.domain}</td>
+                            <td className="text-right font-mono">{referrer.views}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  <Pagination
+                    variant="pages"
+                    page={topReferrersPage}
+                    pageCount={Math.max(
+                      1,
+                      Math.ceil(summary.topReferrers.length / TABLE_PAGE_SIZE),
+                    )}
+                    onPageChange={setTopReferrersPage}
+                    previousLabel={t('analytics.previousPage')}
+                    nextLabel={t('analytics.nextPage')}
+                    pageInfo={t('analytics.pageInfo', {
+                      from: topReferrersPage * TABLE_PAGE_SIZE + 1,
+                      to: Math.min(
+                        summary.topReferrers.length,
+                        (topReferrersPage + 1) * TABLE_PAGE_SIZE,
+                      ),
+                      total: summary.topReferrers.length,
+                    })}
+                  />
+                </>
               )}
             </CardBody>
           </Card>

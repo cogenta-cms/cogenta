@@ -87,6 +87,16 @@ export interface AnalyticsSummary {
   readonly previousTotalViews: number
   readonly previousUniqueVisitors: number
   /**
+   * The same day-by-day breakdown as `dailyViews`, but for the previous
+   * period (fiche 64 task 2 — a trend line overlay needs a second series, not
+   * just the single `previousTotalViews` scalar the `%` badge already had).
+   * Dates here fall in `[since - (until - since), since)`, so a reader must
+   * not compare `day` strings against `dailyViews`' own — the two series are
+   * meant to be lined up by their position in the window (day 1 of this
+   * period next to day 1 of the previous one), never by calendar date.
+   */
+  readonly previousDailyViews: readonly DailyViews[]
+  /**
    * `(totalViews - previousTotalViews) / previousTotalViews * 100`, or `null`
    * when there is no previous traffic to compare against — a page with 0
    * views last period and 5 this period has no meaningful percentage, and

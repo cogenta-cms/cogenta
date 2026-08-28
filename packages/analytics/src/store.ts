@@ -178,6 +178,14 @@ export function createAnalyticsStore(
         group by substr(at, 1, 10)
         order by day asc`)
 
+      // Same shape as `dailyResult`, scoped to the previous window — the
+      // second series a trend line overlay needs (fiche 64 task 2).
+      const previousDailyResult = await db.query<{ day: string; n: number }>(sql`
+        select substr(at, 1, 10) as day, count(*) as n from ${events}
+        where at >= ${previousSinceIso} and at < ${sinceIso}
+        group by substr(at, 1, 10)
+        order by day asc`)
+
       const topPages: CountedPath[] = topPagesResult.rows.map((row) => ({
         path: row.path,
         views: Number(row.n),
@@ -191,6 +199,10 @@ export function createAnalyticsStore(
         views: Number(row.n),
       }))
       const dailyViews: DailyViews[] = dailyResult.rows.map((row) => ({
+        day: row.day,
+        views: Number(row.n),
+      }))
+      const previousDailyViews: DailyViews[] = previousDailyResult.rows.map((row) => ({
         day: row.day,
         views: Number(row.n),
       }))
@@ -209,6 +221,7 @@ export function createAnalyticsStore(
         dailyViews,
         previousTotalViews,
         previousUniqueVisitors: Number(previousUniqueResult.rows[0]?.n ?? 0),
+        previousDailyViews,
         viewsChangePercent: changePercent(totalViews, previousTotalViews),
       }
     },

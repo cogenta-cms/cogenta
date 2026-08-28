@@ -687,6 +687,7 @@ export function installMockFetch(
       readonly dailyViews?: readonly { day: string; views: number }[]
       readonly previousTotalViews?: number
       readonly previousUniqueVisitors?: number
+      readonly previousDailyViews?: readonly { day: string; views: number }[]
       readonly viewsChangePercent?: number | null
       readonly retentionDays?: number | null
     }
@@ -3541,6 +3542,7 @@ export function installMockFetch(
             dailyViews: options.analyticsSummary?.dailyViews ?? [],
             previousTotalViews: options.analyticsSummary?.previousTotalViews ?? 0,
             previousUniqueVisitors: options.analyticsSummary?.previousUniqueVisitors ?? 0,
+            previousDailyViews: options.analyticsSummary?.previousDailyViews ?? [],
             viewsChangePercent: options.analyticsSummary?.viewsChangePercent ?? null,
             retentionDays: options.analyticsSummary?.retentionDays ?? 400,
           },

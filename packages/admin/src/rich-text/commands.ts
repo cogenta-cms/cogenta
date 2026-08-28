@@ -28,9 +28,13 @@ function isBlockNode(node: unknown): node is CustomElement {
 
 function isTextBlockNode(
   node: unknown,
-): node is Exclude<CustomElement, { type: 'link' } | { type: 'media' }> {
+): node is Exclude<CustomElement, { type: 'link' } | { type: 'media' } | { type: 'hr' }> {
   return (
-    isBlockNode(node) && !Editor.isEditor(node) && node.type !== 'link' && node.type !== 'media'
+    isBlockNode(node) &&
+    !Editor.isEditor(node) &&
+    node.type !== 'link' &&
+    node.type !== 'media' &&
+    node.type !== 'hr'
   )
 }
 
@@ -149,6 +153,18 @@ export function insertMedia(editor: Editor, mediaId: string, caption?: string): 
   }
   Editor.withoutNormalizing(editor, () => {
     Transforms.insertNodes(editor, media)
+    Transforms.insertNodes(editor, { type: 'paragraph', children: [{ text: '' }] })
+  })
+}
+
+/**
+ * Inserts a thematic break (fiche 42 task 2) — a void `hr` element, the same
+ * shape as `insertMedia`: a trailing empty paragraph so there is somewhere
+ * for the cursor to land and keep typing after it.
+ */
+export function insertThematicBreak(editor: Editor): void {
+  Editor.withoutNormalizing(editor, () => {
+    Transforms.insertNodes(editor, { type: 'hr', children: [{ text: '' }] })
     Transforms.insertNodes(editor, { type: 'paragraph', children: [{ text: '' }] })
   })
 }

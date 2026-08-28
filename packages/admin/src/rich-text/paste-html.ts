@@ -9,18 +9,21 @@ import type { BlockElement, CustomElement, CustomText, Descendant } from './slat
  * Kept, because the vocabulary already has a place for them: `h2`-`h4`
  * headings (`h1` demoted to `h2` — the page's `h1` is the title, never the
  * body, same as the editor's own toolbar), paragraphs, block quotes,
- * bulleted/numbered lists (nesting preserved), `strong`/`em`/`code` marks,
- * external and internal links, `<pre>` (the editor-only code block,
- * L21 task 5's `CodeBlockElement` — see `slate-types.ts`), and an `<img>`
- * that carries `data-media-id` (the source-view HTML export's own shape,
- * `html-export.ts`).
+ * bulleted/numbered lists (nesting preserved),
+ * `strong`/`em`/`code`/`strikethrough` marks (the last since fiche 42 task
+ * 2 — `<s>`, `<strike>` and `<del>` all read as it, since none of them
+ * survives as a distinct mark in this vocabulary), external and internal
+ * links, `<pre>` (the editor-only code block, L21 task 5's `CodeBlockElement`
+ * — see `slate-types.ts`), a thematic break (`<hr>`, fiche 42 task 2), and an
+ * `<img>` that carries `data-media-id` (the source-view HTML export's own
+ * shape, `html-export.ts`).
  *
  * Dropped, because nothing in contract A's `richText` can hold them: a real
  * `table` (still no ADR for it — see `slash-menu.tsx`'s own note), an
  * ordinary pasted `<img>` with no known media id (task 3's own
- * toolbar/drop-zone path is the supported way in), horizontal rules,
- * colours, fonts, alignment, and every `class`/`style` attribute a word
- * processor writes — Word's own `mso-*` properties and Google Docs' inline
+ * toolbar/drop-zone path is the supported way in), colours, fonts,
+ * alignment, and every `class`/`style` attribute a word processor writes —
+ * Word's own `mso-*` properties and Google Docs' inline
  * `font-weight`/`font-style` spans included. Their text content survives;
  * the presentation does not.
  */
@@ -40,9 +43,10 @@ interface InlineMarks {
   readonly strong: boolean
   readonly em: boolean
   readonly code: boolean
+  readonly strikethrough: boolean
 }
 
-const NO_MARKS: InlineMarks = { strong: false, em: false, code: false }
+const NO_MARKS: InlineMarks = { strong: false, em: false, code: false, strikethrough: false }
 
 /** Word's own way of saying "this `<b>` is not actually bold" — a real quirk of its HTML export, not a hypothetical. */
 function impliesNormalWeight(style: string): boolean {
@@ -61,6 +65,11 @@ function impliesMonospace(style: string): boolean {
   return /font-family\s*:\s*[^;]*(?:courier|consolas|monospace|menlo)/i.test(style)
 }
 
+/** `text-decoration: line-through` — the style Google Docs writes for its own strikethrough toolbar button, distinct from the `<s>`/`<strike>`/`<del>` tags. */
+function impliesStrikethrough(style: string): boolean {
+  return /text-decoration(?:-line)?\s*:\s*[^;]*line-through/i.test(style)
+}
+
 function marksOf(element: Element, inherited: InlineMarks): InlineMarks {
   const tag = element.tagName.toLowerCase()
   const style = element.getAttribute('style') ?? ''
@@ -77,7 +86,14 @@ function marksOf(element: Element, inherited: InlineMarks): InlineMarks {
   if (tag === 'code' || tag === 'tt' || tag === 'kbd' || tag === 'samp') code = true
   if (impliesMonospace(style)) code = true
 
-  return { strong, em, code }
+  // `s`/`strike`/`del`: fiche 42 task 2 gives this vocabulary exactly one
+  // strikethrough decorator, so all three collapse onto it rather than
+  // losing two of them.
+  let strikethrough = inherited.strikethrough
+  if (tag === 's' || tag === 'strike' || tag === 'del') strikethrough = true
+  if (impliesStrikethrough(style)) strikethrough = true
+
+  return { strong, em, code, strikethrough }
 }
 
 function leaf(text: string, marks: InlineMarks): CustomText {
@@ -86,6 +102,7 @@ function leaf(text: string, marks: InlineMarks): CustomText {
     ...(marks.strong ? { strong: true as const } : {}),
     ...(marks.em ? { em: true as const } : {}),
     ...(marks.code ? { code: true as const } : {}),
+    ...(marks.strikethrough ? { strikethrough: true as const } : {}),
   }
 }
 
@@ -330,7 +347,13 @@ function blockChildren(root: Element, level: number): CustomElement[] {
       if (block !== null) out.push(block)
       continue
     }
-    if (tag === 'br' || tag === 'hr') continue
+    if (tag === 'br') continue
+    // A thematic break (fiche 42 task 2) — the vocabulary's `hr` node, not
+    // dropped the way it was before this fiche.
+    if (tag === 'hr') {
+      out.push({ type: 'hr', children: [{ text: '' }] })
+      continue
+    }
     // `img` is handled above (dropped unless it carries the source view's own
     // `data-media-id`); `table` has no home in the vocabulary at all yet
     // (see this file's header).

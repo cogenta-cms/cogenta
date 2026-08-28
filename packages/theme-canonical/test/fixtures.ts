@@ -213,6 +213,19 @@ const PROSE_BODY: RichTextDocument = [
     markDefs: [],
   },
   { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The admin, mid-review' },
+  // Fiche 42 task 2: appended rather than interleaved, so every existing
+  // `toContain` assertion elsewhere in this suite still finds its substring
+  // at the position it already expects.
+  { _key: 'hr1', _type: 'hr' },
+  {
+    _key: 'p2',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      { _key: 's11', _type: 'span', text: 'No longer accurate.', marks: ['strikethrough'] },
+    ],
+    markDefs: [],
+  },
 ]
 
 const ACCORDION_ANSWER: RichTextDocument = [

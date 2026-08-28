@@ -84,7 +84,12 @@ export interface RichTextMedia {
   readonly caption?: string
 }
 
-export type RichTextNode = RichTextBlock | RichTextMedia
+export interface RichTextHr {
+  readonly _key: string
+  readonly _type: 'hr'
+}
+
+export type RichTextNode = RichTextBlock | RichTextMedia | RichTextHr
 
 export type RichTextDocument = readonly RichTextNode[]
 

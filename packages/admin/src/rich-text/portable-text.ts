@@ -17,7 +17,7 @@ export type RichTextStyle = (typeof RICH_TEXT_STYLES)[number]
 export const RICH_TEXT_LIST_ITEMS = ['bullet', 'number'] as const
 export type RichTextListItem = (typeof RICH_TEXT_LIST_ITEMS)[number]
 
-export const RICH_TEXT_DECORATORS = ['strong', 'em', 'code'] as const
+export const RICH_TEXT_DECORATORS = ['strong', 'em', 'code', 'strikethrough'] as const
 export type RichTextDecorator = (typeof RICH_TEXT_DECORATORS)[number]
 
 export interface RichTextSpan {
@@ -60,7 +60,13 @@ export interface RichTextMediaNode {
   readonly caption?: string
 }
 
-export type RichTextNode = RichTextBlock | RichTextMediaNode
+/** A thematic break (fiche 42 task 2) — no data beyond its key. */
+export interface RichTextHrNode {
+  readonly _key: string
+  readonly _type: 'hr'
+}
+
+export type RichTextNode = RichTextBlock | RichTextMediaNode | RichTextHrNode
 export type RichTextDocument = readonly RichTextNode[]
 
 let counter = 0

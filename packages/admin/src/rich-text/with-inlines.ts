@@ -1,12 +1,12 @@
 import { type Editor, Transforms } from 'slate'
 import { htmlToSlateFragment } from './paste-html.js'
 
-/** `link` sits inside a line of text, `media` is a fixed chip nothing can type into — Slate treats neither as an ordinary block by default. */
+/** `link` sits inside a line of text, `media` and `hr` (fiche 42 task 2) are fixed elements nothing can type into — Slate treats neither as an ordinary block by default. */
 export function withInlines(editor: Editor): Editor {
   const { isInline, isVoid, insertData } = editor
 
   editor.isInline = (element) => element.type === 'link' || isInline(element)
-  editor.isVoid = (element) => element.type === 'media' || isVoid(element)
+  editor.isVoid = (element) => element.type === 'media' || element.type === 'hr' || isVoid(element)
 
   /**
    * Clean-paste (fiche 04 task 4): with HTML on the clipboard, this is the

@@ -19,7 +19,7 @@ describe('RichTextEditor', () => {
 
     expect(screen.getByRole('toolbar', { name: 'Mise en forme' })).toBeDefined()
     expect(screen.getByText('hello world')).toBeDefined()
-    for (const label of ['Gras', 'Italique', 'Code', 'Titre 2', 'Liste à puces', 'Lien']) {
+    for (const label of ['Gras', 'Italique', 'Code', 'Barré', 'Titre 2', 'Liste à puces', 'Lien']) {
       expect(screen.getByRole('button', { name: label })).toBeDefined()
     }
   })
@@ -27,7 +27,7 @@ describe('RichTextEditor', () => {
   it('disables every toolbar button when the field is disabled', () => {
     render(<RichTextEditor id="body" value={SIMPLE_DOC} disabled onChange={vi.fn()} />)
 
-    for (const label of ['Gras', 'Italique', 'Code', 'Titre 2', 'Liste à puces', 'Lien']) {
+    for (const label of ['Gras', 'Italique', 'Code', 'Barré', 'Titre 2', 'Liste à puces', 'Lien']) {
       expect(screen.getByRole('button', { name: label })).toHaveProperty('disabled', true)
     }
   })
@@ -47,7 +47,7 @@ describe('RichTextEditor', () => {
   it('marks every formatting button aria-pressed=false at rest, none regressed by the icon rewrite', () => {
     render(<RichTextEditor id="body" value={SIMPLE_DOC} onChange={vi.fn()} />)
 
-    for (const label of ['Gras', 'Italique', 'Code', 'Titre 2', 'Liste à puces']) {
+    for (const label of ['Gras', 'Italique', 'Code', 'Barré', 'Titre 2', 'Liste à puces']) {
       expect(screen.getByRole('button', { name: label })).toHaveProperty('ariaPressed', 'false')
     }
   })
@@ -88,6 +88,55 @@ describe('RichTextEditor', () => {
   it('offers a code-block button alongside the other block buttons (L21 task 5)', () => {
     render(<RichTextEditor id="body" value={SIMPLE_DOC} onChange={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Bloc de code' })).toBeDefined()
+  })
+
+  it('offers a horizontal-rule insert button, disabled together with the rest of the toolbar (fiche 42 task 2)', () => {
+    render(<RichTextEditor id="body" value={SIMPLE_DOC} onChange={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Insérer un trait horizontal' })).toHaveProperty(
+      'disabled',
+      false,
+    )
+
+    render(<RichTextEditor id="body-2" value={SIMPLE_DOC} disabled onChange={vi.fn()} />)
+    expect(
+      screen.getAllByRole('button', { name: 'Insérer un trait horizontal' }).at(-1),
+    ).toHaveProperty('disabled', true)
+  })
+})
+
+describe('RichTextEditor — fiche 42 task 2 (strikethrough, thematic break)', () => {
+  it('renders a stored strikethrough span as a real `<s>` in the editing surface', () => {
+    const doc: RichTextDocument = [
+      {
+        _key: 'b1',
+        _type: 'block',
+        style: 'normal',
+        children: [{ _key: 's1', _type: 'span', text: 'old price', marks: ['strikethrough'] }],
+        markDefs: [],
+      },
+    ]
+    render(<RichTextEditor id="body" value={doc} onChange={vi.fn()} />)
+
+    const struck = document.querySelector('.rich-text-editor__surface s')
+    expect(struck?.textContent).toBe('old price')
+  })
+
+  it('renders a stored thematic break as a real, non-editable `<hr>`', () => {
+    const doc: RichTextDocument = [
+      {
+        _key: 'b1',
+        _type: 'block',
+        style: 'normal',
+        children: [{ _key: 's1', _type: 'span', text: 'before', marks: [] }],
+        markDefs: [],
+      },
+      { _key: 'h1', _type: 'hr' },
+    ]
+    render(<RichTextEditor id="body" value={doc} onChange={vi.fn()} />)
+
+    const hr = document.querySelector('.rich-text-editor__surface hr')
+    expect(hr).not.toBeNull()
+    expect(hr?.closest('[contenteditable="false"]')).not.toBeNull()
   })
 })
 

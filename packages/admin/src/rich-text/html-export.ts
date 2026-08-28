@@ -6,10 +6,12 @@ import type { CustomElement, Descendant } from './slate-types.js'
  * The HTML half of the source-view toggle (L21 task 5) — the other
  * direction of `paste-html.ts`'s clean-paste reader, which already turns
  * foreign HTML into this editor's vocabulary. Export builds semantic markup
- * for exactly what the toolbar can produce; import is `htmlToSlateFragment`
- * itself, extended (see `paste-html.ts`) to recognise the two shapes this
- * file's own encoder emits that no ordinary pasted document would ever
- * contain: `<img data-media-id>` and `<pre><code>`.
+ * for exactly what the toolbar can produce (`<s>` for `strikethrough` and a
+ * bare `<hr>` since fiche 42 task 2, alongside the pre-existing marks/blocks);
+ * import is `htmlToSlateFragment` itself, extended (see `paste-html.ts`) to
+ * recognise the two shapes this file's own encoder emits that no ordinary
+ * pasted document would ever contain: `<img data-media-id>` and
+ * `<pre><code>`.
  *
  * Never the stored value: R3 (a block never stores HTML or CSS) is about
  * `richText`'s persisted shape, not this admin-only round trip through a
@@ -40,6 +42,7 @@ function inlineToHtml(children: readonly Descendant[]): string {
         if (child.code === true) html = `<code>${html}</code>`
         if (child.em === true) html = `<em>${html}</em>`
         if (child.strong === true) html = `<strong>${html}</strong>`
+        if (child.strikethrough === true) html = `<s>${html}</s>`
         return html
       }
       if (child.type !== 'link') return ''
@@ -121,6 +124,12 @@ export function slateToHtml(nodes: readonly CustomElement[]): string {
       parts.push(
         `<img data-media-id="${escapeAttr(node.mediaId)}" alt="${escapeAttr(caption)}"${captionAttr}>`,
       )
+      index += 1
+      continue
+    }
+
+    if (node.type === 'hr') {
+      parts.push('<hr>')
       index += 1
       continue
     }

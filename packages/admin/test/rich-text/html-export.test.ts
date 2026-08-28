@@ -38,6 +38,22 @@ describe('slateToHtml', () => {
     )
   })
 
+  it('renders the strikethrough mark as `<s>` (fiche 42 task 2)', () => {
+    const nodes: CustomElement[] = [
+      { type: 'paragraph', children: [{ text: 'old price', strikethrough: true }] },
+    ]
+    expect(slateToHtml(nodes)).toBe('<p><s>old price</s></p>')
+  })
+
+  it('renders a thematic break as a bare `<hr>` (fiche 42 task 2)', () => {
+    const nodes: CustomElement[] = [
+      { type: 'paragraph', children: [{ text: 'before' }] },
+      { type: 'hr', children: [{ text: '' }] },
+      { type: 'paragraph', children: [{ text: 'after' }] },
+    ]
+    expect(slateToHtml(nodes)).toBe('<p>before</p>\n<hr>\n<p>after</p>')
+  })
+
   it('groups consecutive list items into a real nested <ul>/<ol>', () => {
     const nodes: CustomElement[] = [
       { type: 'list-item', listType: 'bullet', level: 1, children: [{ text: 'one' }] },
@@ -111,6 +127,20 @@ describe('htmlToSlate', () => {
     ])
   })
 
+  it('reads `<s>` back into the strikethrough decorator (fiche 42 task 2)', () => {
+    expect(htmlToSlate('<p><s>old price</s></p>')).toEqual([
+      { type: 'paragraph', children: [{ text: 'old price', strikethrough: true }] },
+    ])
+  })
+
+  it('reads a bare `<hr>` back into a thematic break node (fiche 42 task 2)', () => {
+    expect(htmlToSlate('<p>before</p><hr><p>after</p>')).toEqual([
+      { type: 'paragraph', children: [{ text: 'before' }] },
+      { type: 'hr', children: [{ text: '' }] },
+      { type: 'paragraph', children: [{ text: 'after' }] },
+    ])
+  })
+
   it('drops an ordinary <img> with no known media id — the toolbar insert path is the supported way in', () => {
     expect(htmlToSlate('<p>before</p><img src="https://example.com/x.png"><p>after</p>')).toEqual([
       { type: 'paragraph', children: [{ text: 'before' }] },
@@ -149,8 +179,10 @@ describe('round trip', () => {
           { text: 'bold', strong: true },
           { text: ' plain ' },
           { text: 'code', code: true },
+          { text: ' struck', strikethrough: true },
         ],
       },
+      { type: 'hr', children: [{ text: '' }] },
       { type: 'blockquote', children: [{ text: 'a quote' }] },
       { type: 'list-item', listType: 'bullet', level: 1, children: [{ text: 'item one' }] },
       { type: 'list-item', listType: 'bullet', level: 2, children: [{ text: 'nested' }] },

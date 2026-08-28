@@ -47,10 +47,20 @@ describe('rich text — the vocabulary', () => {
 })
 
 describe('rich text — marks', () => {
-  it('accepts the three decorators without a definition', () => {
+  it('accepts the three original decorators without a definition', () => {
     const document = [
       block({
         children: [{ _key: 's1', _type: 'span', text: 'Hi', marks: ['strong', 'em', 'code'] }],
+      }),
+    ]
+
+    expect(richTextDocumentSchema.safeParse(document).success).toBe(true)
+  })
+
+  it('accepts `strikethrough` without a definition (fiche 42 task 2, additive to schema@2.1)', () => {
+    const document = [
+      block({
+        children: [{ _key: 's1', _type: 'span', text: 'Hi', marks: ['strikethrough'] }],
       }),
     ]
 
@@ -111,6 +121,18 @@ describe('rich text — nodes and keys', () => {
 
   it('refuses a node type outside the vocabulary', () => {
     expect(richTextDocumentSchema.safeParse([{ _key: 'x', _type: 'table' }]).success).toBe(false)
+  })
+
+  it('accepts a thematic break node, carrying nothing but its key (fiche 42 task 2)', () => {
+    const document = [block(), { _key: 'h1', _type: 'hr' }]
+
+    expect(richTextDocumentSchema.safeParse(document).success).toBe(true)
+  })
+
+  it('refuses a thematic break carrying an unknown property, which would smuggle in presentation', () => {
+    const document = [{ _key: 'h1', _type: 'hr', width: 'full' }]
+
+    expect(richTextDocumentSchema.safeParse(document).success).toBe(false)
   })
 
   it('refuses HTML in place of a document, per ADR-0013', () => {

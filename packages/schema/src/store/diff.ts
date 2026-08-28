@@ -296,8 +296,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Plain text out of a `text` field (a string, returned as-is) or a `richText`
- * document (contract A: an array of `block`/`media` nodes — `@cogenta/blocks`'s
- * `richTextDocumentSchema`). Returns `null` for anything else, including a
+ * document (contract A: an array of `block`/`media`/`hr` nodes — the last
+ * since fiche 42 task 2 — `@cogenta/blocks`'s `richTextDocumentSchema`).
+ * Returns `null` for anything else, including a
  * shape that merely looks like a document — the piège this file's own
  * comment warns about: "le portable-text est un arbre; comparer
  * `JSON.stringify` produit du bruit", so an unrecognised node refuses rather
@@ -311,6 +312,8 @@ export function extractPlainText(value: unknown): string | null {
   for (const node of value) {
     if (!isRecord(node)) return null
     if (node._type === 'media') continue
+    // A thematic break (fiche 42 task 2) carries no text, same as `media`.
+    if (node._type === 'hr') continue
     if (node._type !== 'block' || !Array.isArray(node.children)) return null
 
     for (const child of node.children) {

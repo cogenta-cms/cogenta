@@ -421,6 +421,9 @@ function richTextRefs(document: RichTextDocument): RichTextAssets {
       media.add(node.id)
       continue
     }
+    // A thematic break (fiche 42 task 2) carries no data beyond its key —
+    // no `markDefs` to walk, unlike a text block.
+    if (node._type === 'hr') continue
     for (const definition of node.markDefs) {
       if (definition._type === 'internalLink') {
         links.push({ collection: definition.collection, id: definition.id })

@@ -6,10 +6,13 @@ import {
   clearSlashQuery,
   insertInternalLink,
   insertMedia,
+  insertThematicBreak,
   isLinkActive,
+  isMarkActive,
   removeLink,
   slashQueryAt,
   toggleBlock,
+  toggleMark,
 } from '../../src/rich-text/commands.js'
 import type { CustomElement } from '../../src/rich-text/slate-types.js'
 import { withInlines } from '../../src/rich-text/with-inlines.js'
@@ -119,6 +122,61 @@ describe('insertMedia', () => {
 
     const media = (editor.children as CustomElement[]).find((node) => node.type === 'media')
     expect(media && 'caption' in media ? media.caption : undefined).toBeUndefined()
+  })
+})
+
+/** Fiche 42 task 2: the mark itself is a plain toggle, exactly like `strong`/`em`/`code` — no new command was needed for it. */
+describe('toggleMark — strikethrough', () => {
+  it('marks the selection strikethrough', () => {
+    const editor = editorWithParagraph('old price')
+
+    toggleMark(editor, 'strikethrough')
+
+    const [node] = editor.children as [CustomElement & { type: 'paragraph' }]
+    expect(node.children).toEqual([{ text: 'old price', strikethrough: true }])
+    expect(isMarkActive(editor, 'strikethrough')).toBe(true)
+  })
+
+  it('toggles back off', () => {
+    const editor = editorWithParagraph('old price')
+    toggleMark(editor, 'strikethrough')
+
+    toggleMark(editor, 'strikethrough')
+
+    expect(isMarkActive(editor, 'strikethrough')).toBe(false)
+  })
+})
+
+describe('insertThematicBreak', () => {
+  it('inserts a void `hr` node followed by an empty paragraph', () => {
+    const editor = withInlines(createEditor())
+    editor.children = [{ type: 'paragraph', children: [{ text: '' }] }]
+    Transforms.select(editor, { path: [0, 0], offset: 0 })
+
+    insertThematicBreak(editor)
+
+    // Slate inserts at the selection point rather than replacing the block
+    // it sits in, exactly like `insertMedia` (see that test above) — the
+    // original empty paragraph stays, followed by the new `hr` and its own
+    // trailing empty paragraph.
+    const types = (editor.children as CustomElement[]).map((node) => node.type)
+    expect(types).toContain('hr')
+    const hrIndex = types.indexOf('hr')
+    expect(types[hrIndex + 1]).toBe('paragraph')
+  })
+
+  it('never reports as the active block kind of a text block next to it — it is an insertion, not a toggle', () => {
+    const editor = withInlines(createEditor())
+    editor.children = [{ type: 'paragraph', children: [{ text: '' }] }]
+    Transforms.select(editor, { path: [0, 0], offset: 0 })
+
+    insertThematicBreak(editor)
+    // The trailing paragraph `insertThematicBreak` itself appends, one past the `hr`.
+    const types = (editor.children as CustomElement[]).map((node) => node.type)
+    const hrIndex = types.indexOf('hr')
+    Transforms.select(editor, { path: [hrIndex + 1, 0], offset: 0 })
+
+    expect(activeBlockKind(editor)).toBe('paragraph')
   })
 })
 

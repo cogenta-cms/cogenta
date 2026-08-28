@@ -152,6 +152,40 @@ describe('htmlToSlateFragment — general behaviour', () => {
     expect(texts).toEqual([{ text: 'Before' }, { text: 'After' }])
   })
 
+  // Fiche 42 task 2: previously dropped outright (see this file's own header,
+  // before this fiche). Now a real vocabulary node, so a pasted `<hr>` — a
+  // real Word/Google Docs export both use for a manually inserted divider —
+  // survives instead of silently vanishing.
+  it('reads a pasted <hr> into a thematic break node, no longer dropping it', () => {
+    const fragment = htmlToSlateFragment('<p>Before</p><hr><p>After</p>')
+    expect(fragment?.map((node) => ('type' in node ? node.type : null))).toEqual([
+      'paragraph',
+      'hr',
+      'paragraph',
+    ])
+  })
+
+  it('reads <s>, <strike> and <del> all as the one strikethrough decorator (fiche 42 task 2)', () => {
+    const fragment = htmlToSlateFragment(
+      '<p><s>a</s></p><p><strike>b</strike></p><p><del>c</del></p>',
+    )
+    const marks = fragment?.map((node) =>
+      'children' in node && 'text' in (node.children[0] ?? {})
+        ? (node.children[0] as { strikethrough?: true }).strikethrough
+        : undefined,
+    )
+    expect(marks).toEqual([true, true, true])
+  })
+
+  it("reads Google Docs' own text-decoration:line-through span as strikethrough", () => {
+    const fragment = htmlToSlateFragment(
+      '<p><span style="text-decoration:line-through;">old price</span></p>',
+    )
+    const [paragraph] = fragment ?? []
+    const run = paragraph !== undefined && 'children' in paragraph ? paragraph.children[0] : null
+    expect(run && 'text' in run ? run.strikethrough : undefined).toBe(true)
+  })
+
   it('returns null for HTML with no usable content, so the caller can fall back to plain text', () => {
     expect(htmlToSlateFragment('<meta charset="utf-8">')).toBeNull()
     expect(htmlToSlateFragment('<img src="x.png">')).toBeNull()

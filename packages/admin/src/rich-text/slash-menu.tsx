@@ -7,6 +7,7 @@ import {
   Heading2Icon,
   Heading3Icon,
   Heading4Icon,
+  HorizontalRuleIcon,
   ImageIcon,
   NumberListIcon,
   QuoteIcon,
@@ -16,11 +17,14 @@ import type { BlockKind } from './commands.js'
 /**
  * The slash command menu (fiche 04 task 5): typing `/` at the start of an
  * empty line opens a filterable list of the insertions this vocabulary
- * actually has — no code block, no table, no horizontal rule, because
- * contract A's `richText` has no node for any of them yet (task 0's ADR,
- * still awaiting the human decision `docs/03-decisions.md` needs).
+ * actually has. Still no table here: it remains a contract B block that no
+ * ADR has authorised (`docs/03-decisions.md` still does not have one — see
+ * `paste-html.ts`'s own note, fiche 42 task 3). The thematic break (fiche 42
+ * task 2) is a real vocabulary node now, so it gets an entry like every
+ * other insertion — unlike the code block, which stays toolbar-only exactly
+ * as it already was before this fiche.
  */
-export type SlashItemKind = 'block' | 'image'
+export type SlashItemKind = 'block' | 'image' | 'hr'
 
 export interface SlashMenuItem {
   readonly id: string
@@ -56,6 +60,7 @@ export const SLASH_ITEMS: readonly SlashMenuItem[] = [
     Icon: NumberListIcon,
   },
   { id: 'image', labelKey: 'richText.insertImageButton', kind: 'image', Icon: ImageIcon },
+  { id: 'hr', labelKey: 'richText.blockHr', kind: 'hr', Icon: HorizontalRuleIcon },
 ]
 
 /** Filters `SLASH_ITEMS` by the query typed after `/` — label or the translated string, accent- and case-insensitive. */

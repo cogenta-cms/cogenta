@@ -4,12 +4,14 @@ import type { CustomElement, CustomText, Descendant } from './slate-types.js'
 /**
  * The Markdown half of the source-view toggle (L21 task 5). Scoped to
  * exactly the vocabulary the editor's toolbar can produce — paragraphs,
- * `h2`-`h4`, block quotes, bulleted/numbered lists, `strong`/`em`/`code`,
- * external and internal links, the media void, and the editor-only code
- * block (`slate-types.ts`'s `CodeBlockElement`) — never a general-purpose
- * CommonMark implementation. No new dependency (R9): a hand-written scanner
- * over this closed grammar is a few hundred lines; a real Markdown parser
- * pulled in for it would be a bigger dependency than the feature.
+ * `h2`-`h4`, block quotes, bulleted/numbered lists,
+ * `strong`/`em`/`code`/`strikethrough` (fiche 42 task 2), external and
+ * internal links, the media void, the thematic break (fiche 42 task 2,
+ * `---`), and the editor-only code block (`slate-types.ts`'s
+ * `CodeBlockElement`) — never a general-purpose CommonMark implementation.
+ * No new dependency (R9): a hand-written scanner over this closed grammar is
+ * a few hundred lines; a real Markdown parser pulled in for it would be a
+ * bigger dependency than the feature.
  *
  * An internal link has no URL to write (contract A stores an entity
  * reference, not an href — `slate-types.ts`'s own comment on `LinkElement`)
@@ -35,6 +37,7 @@ function encodeLeaf(leaf: CustomText): string {
   let body = leaf.code === true ? `\`${leaf.text.replace(/`/g, '\\`')}\`` : escapeMdText(leaf.text)
   if (leaf.strong === true) body = `**${body}**`
   if (leaf.em === true) body = `_${body}_`
+  if (leaf.strikethrough === true) body = `~~${body}~~`
   return body
 }
 
@@ -57,9 +60,9 @@ function encodeInline(children: readonly Descendant[]): string {
     .join('')
 }
 
-/** Guards a paragraph whose first character would otherwise be read back as a block marker (`#`, `>`, a list bullet…) on the way in. */
+/** Guards a paragraph whose first character (or, for a thematic break, whole line) would otherwise be read back as a block marker (`#`, `>`, a list bullet, `---`…) on the way in. */
 function guardLeadingMarker(line: string): string {
-  return /^(#{1,6}\s|>|[-*+]\s|\d+\.\s|```)/.test(line) ? `\\${line}` : line
+  return /^(#{1,6}\s|>|[-*+]\s|\d+\.\s|```|-{3,}$)/.test(line) ? `\\${line}` : line
 }
 
 export function slateToMarkdown(nodes: readonly CustomElement[]): string {
@@ -72,6 +75,12 @@ export function slateToMarkdown(nodes: readonly CustomElement[]): string {
 
     if (node.type === 'media') {
       chunks.push(`![${escapeMdText(node.caption ?? '')}](cogenta-media:${node.mediaId})`)
+      index += 1
+      continue
+    }
+
+    if (node.type === 'hr') {
+      chunks.push('---')
       index += 1
       continue
     }
@@ -131,7 +140,10 @@ function isLeaf(node: Descendant): node is CustomText {
   return 'text' in node
 }
 
-function applyMark(nodes: readonly Descendant[], mark: 'strong' | 'em'): Descendant[] {
+function applyMark(
+  nodes: readonly Descendant[],
+  mark: 'strong' | 'em' | 'strikethrough',
+): Descendant[] {
   return nodes.map((node) => (isLeaf(node) ? { ...node, [mark]: true } : node))
 }
 
@@ -173,12 +185,13 @@ function linkFromHref(label: string, href: string): CustomElement {
 /**
  * A small recursive-descent scan over exactly this file's own inline
  * grammar: backslash escapes, `` `code` `` spans (content taken literally,
- * no nested marks), `**strong**`, `_em_`, and `[label](url)` links. Marks
+ * no nested marks), `**strong**`, `_em_`, `~~strikethrough~~` (fiche 42 task
+ * 2), and `[label](url)` links. Marks
  * combine (`**_a_**` is both bold and italic) since a stored span can carry
  * more than one decorator; a mark opened but never closed reads back as its
  * own literal marker characters rather than swallowing the rest of the text.
  */
-function parseInlineRun(cursor: Cursor, closing: '**' | '_' | null): Descendant[] {
+function parseInlineRun(cursor: Cursor, closing: '**' | '_' | '~~' | null): Descendant[] {
   const nodes: Descendant[] = []
   let buffer = ''
   const flush = (): void => {
@@ -223,6 +236,13 @@ function parseInlineRun(cursor: Cursor, closing: '**' | '_' | null): Descendant[
       continue
     }
 
+    if (cursor.text.startsWith('~~', cursor.pos)) {
+      flush()
+      cursor.pos += 2
+      nodes.push(...applyMark(parseInlineRun(cursor, '~~'), 'strikethrough'))
+      continue
+    }
+
     if (ch === '_') {
       flush()
       cursor.pos += 1
@@ -261,7 +281,9 @@ const HEADING_LINE = /^(#{2,4})\s+(.*)$/
 const IMAGE_LINE = /^!\[([^\]]*)\]\(cogenta-media:([^)]+)\)\s*$/
 const QUOTE_LINE = /^>\s?(.*)$/
 const LIST_LINE = /^(\s*)([-*+]|\d+\.)\s+(.*)$/
-const BLOCK_START = /^(```|(#{2,4})\s|>\s?|(\s*)([-*+]|\d+\.)\s)/
+/** Exactly what `slateToMarkdown` emits for an `hr` node — three hyphens, nothing else. */
+const THEMATIC_BREAK_LINE = /^-{3,}$/
+const BLOCK_START = /^(```|(#{2,4})\s|>\s?|(\s*)([-*+]|\d+\.)\s|-{3,}$)/
 
 export function markdownToSlate(markdown: string): CustomElement[] {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n')
@@ -285,6 +307,12 @@ export function markdownToSlate(markdown: string): CustomElement[] {
       }
       if (!any) nodes.push({ type: 'code-block', children: [{ text: '' }] })
       if (i < lines.length) i += 1
+      continue
+    }
+
+    if (THEMATIC_BREAK_LINE.test(line)) {
+      nodes.push({ type: 'hr', children: [{ text: '' }] })
+      i += 1
       continue
     }
 

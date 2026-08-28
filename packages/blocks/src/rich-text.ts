@@ -63,8 +63,14 @@ const mediaNodeSchema = z.strictObject({
   caption: plainTextSchema.optional(),
 })
 
+/** A thematic break (fiche 42 task 2) — mirrors `@cogenta/schema`'s own `hrNodeSchema`. */
+const hrNodeSchema = z.strictObject({
+  _key: keySchema,
+  _type: z.literal('hr'),
+})
+
 export const richTextDocumentSchema = z.array(
-  z.discriminatedUnion('_type', [textBlockSchema, mediaNodeSchema]),
+  z.discriminatedUnion('_type', [textBlockSchema, mediaNodeSchema, hrNodeSchema]),
 )
 
 export type RichTextDocument = z.infer<typeof richTextDocumentSchema>

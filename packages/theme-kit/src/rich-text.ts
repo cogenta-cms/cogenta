@@ -19,6 +19,10 @@ const KNOWN_MARKS: ReadonlyMap<string, string> = new Map([
   ['strong', 'strong'],
   ['em', 'em'],
   ['code', 'code'],
+  // Fiche 42 task 2 — `<s>` (HTML5's own tag for "no longer accurate", the
+  // closest semantic fit for a strikethrough) rather than `<del>`, which
+  // means an edit-tracking deletion this is not.
+  ['strikethrough', 's'],
 ])
 
 function applyMark(
@@ -148,6 +152,15 @@ export function renderRichText(
           node.caption === undefined ? null : h('figcaption', {}, node.caption),
         ),
       )
+      index += 1
+      continue
+    }
+
+    if (node._type === 'hr') {
+      // Fiche 42 task 2: no data to carry, so no branch of `applyMark`/
+      // `renderSpan` is ever reachable for it — a thematic break is a bare
+      // void element, the same way `media`'s `<figure>` needs no marks.
+      out.push(h('hr', { class: 'cg-prose__rule' }))
       index += 1
       continue
     }

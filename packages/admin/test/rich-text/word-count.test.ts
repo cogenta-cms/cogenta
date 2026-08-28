@@ -38,4 +38,10 @@ describe('countText', () => {
   it('counts a composed character (an accented letter) once, not per UTF-16 unit', () => {
     expect(countText(doc('café')).characters).toBe(4)
   })
+
+  it('ignores a thematic break — it carries no text (fiche 42 task 2)', () => {
+    const document: RichTextDocument = [...doc('before', 'after'), { _key: 'h1', _type: 'hr' }]
+    // "before" (6) + " " (1) + "after" (5) = 12, same as without the `hr` node.
+    expect(countText(document)).toEqual({ words: 2, characters: 12 })
+  })
 })

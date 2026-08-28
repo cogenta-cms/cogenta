@@ -18,6 +18,17 @@
   min-height: calc(100vh - 8rem);
 }
 
+/*
+ * Fiche 42 task 1: outside fullscreen, nothing set a floor on the editing
+ * area's height — it measured exactly one line and grew only with content,
+ * which read as "the editor is broken" on a fresh entry. `16rem` matches the
+ * scale already used for `.rich-text-editor__source-view` (12rem) while
+ * giving the richer `<Editable>` surface a little more room.
+ */
+.rich-text-editor__surface {
+  min-height: 16rem;
+}
+
 .rich-text-editor__surface--drag-over {
   border-color: var(--ring);
   border-style: dashed;
@@ -25,6 +36,16 @@
 
 .rich-text-media img {
   max-width: 12rem;
+}
+
+/* Fiche 42 task 2: the editor-only rendering of a thematic break (`hr` node) — a real `<hr>` so it looks like what it will become on the public page. */
+.rich-text-editor__hr {
+  margin: 0.5rem 0;
+}
+
+.rich-text-editor__hr hr {
+  border: none;
+  border-top: 1px solid var(--border);
 }
 
 /*

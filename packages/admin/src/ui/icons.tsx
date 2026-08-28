@@ -134,6 +134,33 @@ export const SettingsIcon = icon(
   </>,
 )
 
+/**
+ * Drag handle affordance on a dashboard widget card (fiche 39). Purely
+ * decorative (`aria-hidden`, no standalone meaning) — the card itself is the
+ * real drag target, and every reorder it can produce also has a named,
+ * keyboard-operable button in the dashboard settings panel, so nothing is
+ * lost if this glyph is never seen.
+ */
+export const GripIcon = icon(
+  <>
+    <circle cx="7" cy="5.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="13" cy="5.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="7" cy="10" r="1" fill="currentColor" stroke="none" />
+    <circle cx="13" cy="10" r="1" fill="currentColor" stroke="none" />
+    <circle cx="7" cy="14.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="13" cy="14.5" r="1" fill="currentColor" stroke="none" />
+  </>,
+)
+
+/** "Backups" dashboard widget — a stack of disks, distinct from `SettingsIcon`'s gear. */
+export const BackupIcon = icon(
+  <>
+    <ellipse cx="10" cy="5" rx="6.5" ry="2.3" />
+    <path d="M3.5 5v10c0 1.3 2.9 2.3 6.5 2.3s6.5-1 6.5-2.3V5" />
+    <path d="M3.5 10c0 1.3 2.9 2.3 6.5 2.3s6.5-1 6.5-2.3" />
+  </>,
+)
+
 export const SearchIcon = icon(
   <>
     <circle cx="8.6" cy="8.6" r="5.1" />

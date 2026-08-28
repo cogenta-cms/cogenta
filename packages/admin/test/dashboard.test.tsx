@@ -9,6 +9,28 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/**
+ * Fiche 39 tâche 2: the widget list/reorder/visibility controls moved from a
+ * collapsed `<details>` (open in the DOM even collapsed, which is why older
+ * tests below could once query it directly) into a modal opened by a
+ * dedicated settings icon. Every test that drives that panel now opens it
+ * first — the same underlying `prefs` mechanism, only its surface changed.
+ */
+function openDashboardSettings(): void {
+  fireEvent.click(screen.getByRole('button', { name: 'Personnaliser ce tableau de bord' }))
+}
+
+/** A `DataTransfer` good enough for the one format the dashboard's own drag-and-drop uses — the same technique `builder/preview-dom.test.ts` already relies on, since jsdom has no real `DataTransfer`. */
+function fakeDataTransfer(): DataTransfer {
+  const store = new Map<string, string>()
+  return {
+    getData: (format: string) => store.get(format) ?? '',
+    setData: (format: string, data: string) => {
+      store.set(format, data)
+    },
+  } as unknown as DataTransfer
+}
+
 describe('dashboard', () => {
   it('hides site health and recent activity from a role below admin', async () => {
     localStorage.clear()
@@ -142,6 +164,7 @@ describe('dashboard', () => {
 
     const { unmount } = render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
+    openDashboardSettings()
 
     const remove = await screen.findByRole('button', {
       name: 'Retirer Résumé du contenu du tableau de bord',
@@ -162,6 +185,7 @@ describe('dashboard', () => {
 
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
+    openDashboardSettings()
 
     // Not just hidden — genuinely off the dashboard, and offered back from a
     // dedicated "available widgets" list rather than a checkbox that still
@@ -177,7 +201,13 @@ describe('dashboard', () => {
     })
     fireEvent.click(add)
 
-    expect(await screen.findByRole('heading', { name: 'Résumé du contenu' })).toBeDefined()
+    // The settings modal is still open, which marks the background `inert`
+    // for assistive tech (Radix) — `hidden: true` looks past that to confirm
+    // the card really did re-render behind it, the same thing a sighted user
+    // would see the instant they close the panel.
+    expect(
+      await screen.findByRole('heading', { name: 'Résumé du contenu', hidden: true }),
+    ).toBeDefined()
     expect(
       screen.queryByRole('button', { name: 'Ajouter Résumé du contenu au tableau de bord' }),
     ).toBeNull()
@@ -190,6 +220,8 @@ describe('dashboard', () => {
 
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
+    openDashboardSettings()
+    await screen.findByText('Widgets affichés sur le tableau de bord')
 
     function widgetNames(): readonly (string | null)[] {
       // `{ selector: 'span' }` disambiguates from the widget's own `<h2>`
@@ -219,5 +251,124 @@ describe('dashboard', () => {
     const after = widgetNames()
     expect(after[0]).toBe(before[1])
     expect(after[1]).toBe(before[0])
+  })
+
+  it('dragging a card directly on the grid reorders it, without opening the settings panel (fiche 39 tâche 1)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    const { unmount } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // The settings panel is never opened here — dragging the card itself is
+    // the whole point of this task.
+    expect(screen.queryByText('Widgets affichés sur le tableau de bord')).toBeNull()
+
+    function gridHeadings(): readonly (string | null)[] {
+      const grid = screen.getByRole('list', { name: 'Widgets du tableau de bord' })
+      return Array.from(grid.querySelectorAll('li > section > h2')).map((h2) => h2.textContent)
+    }
+
+    const before = gridHeadings()
+    expect(before[0]).toBe('Résumé du contenu')
+    expect(before[1]).toBe('Santé du site')
+
+    const summaryCard = screen
+      .getByRole('heading', { name: 'Résumé du contenu' })
+      .closest('li') as HTMLLIElement
+    const healthCard = screen
+      .getByRole('heading', { name: 'Santé du site' })
+      .closest('li') as HTMLLIElement
+
+    // Drag the health card and drop it before the summary card — the same
+    // `dropBefore`/`reorderWidget`/`saveDashboardPrefs` primitive the
+    // settings panel's own list already used, reached through the card
+    // itself this time.
+    const dataTransfer = fakeDataTransfer()
+    fireEvent.dragStart(healthCard, { dataTransfer })
+    fireEvent.drop(summaryCard, { dataTransfer })
+
+    const after = gridHeadings()
+    expect(after[0]).toBe('Santé du site')
+    expect(after[1]).toBe('Résumé du contenu')
+
+    // Persisted (`localStorage`), the same guarantee the settings panel's
+    // own reorder already has — a reload keeps the new order.
+    unmount()
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    expect(gridHeadings()[0]).toBe('Santé du site')
+  })
+
+  it('a drag gesture starting on a link or button inside a card acts on that control, not a card reorder', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['editor'] })
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const shortcut = await screen.findByRole('link', { name: 'Nouveau : Article' })
+    const dataTransfer = fakeDataTransfer()
+    fireEvent.dragStart(shortcut, { dataTransfer })
+
+    // Nothing was staged for a card drop — the guard in `onDragStart`
+    // recognised the gesture began on a real link and backed off, per the
+    // fiche 39 piège: a card is only a drag target away from its own
+    // interactive controls.
+    expect(dataTransfer.getData('text/dashboard-widget')).toBe('')
+  })
+
+  it('the settings icon is a real, focusable button that opens the widget panel — reachable by keyboard and by mouse (fiche 39 tâche 2)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // Nothing is behind a `<details>` repli any more: the panel does not
+    // exist in the accessibility tree until this button is activated.
+    expect(screen.queryByText('Widgets affichés sur le tableau de bord')).toBeNull()
+
+    const settingsButton = screen.getByRole('button', { name: 'Personnaliser ce tableau de bord' })
+    // A real `<button>`, not a `<div onClick>` — this is what actually makes
+    // it Tab-reachable and Enter/Space-activatable by the platform, rather
+    // than something this test would have to fake.
+    expect(settingsButton.tagName).toBe('BUTTON')
+    expect((settingsButton as HTMLButtonElement).disabled).toBe(false)
+
+    settingsButton.focus()
+    expect(document.activeElement).toBe(settingsButton)
+
+    fireEvent.click(settingsButton)
+    expect(await screen.findByText('Widgets affichés sur le tableau de bord')).toBeDefined()
+  })
+
+  it('the widget picker list shows the same icon as each card, not a bare name (fiche 39 tâche 3)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    openDashboardSettings()
+    await screen.findByText('Widgets affichés sur le tableau de bord')
+
+    const row = screen
+      .getByText('Résumé du contenu', { selector: 'span' })
+      .closest('li') as HTMLLIElement
+    expect(row.querySelector('svg')).not.toBeNull()
+
+    // Remove it, so it shows up in the "available widgets" list too — that
+    // list gets the same treatment, not just the visible one.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retirer Résumé du contenu du tableau de bord' }),
+    )
+    const hiddenRow = screen
+      .getByText('Résumé du contenu', { selector: 'span' })
+      .closest('li') as HTMLLIElement
+    expect(hiddenRow.querySelector('svg')).not.toBeNull()
   })
 })

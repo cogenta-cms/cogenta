@@ -26,17 +26,40 @@ import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
 import {
   AuditIcon,
+  BackupIcon,
   ClockIcon,
   CloseIcon,
+  GripIcon,
   MediaIcon,
   PlusIcon,
   PulseIcon,
+  SettingsIcon,
   TrendIcon,
 } from '../ui/icons.js'
+import { Modal } from '../ui/modal.js'
 
 const DASHBOARD_WINDOW_DAYS = 7
 /** A schedule due within this many hours counts as imminent for the to-do widget. */
 const IMMINENT_HOURS = 48
+
+/**
+ * The same glyph each widget's own `<h2>` already uses, indexed by widget id
+ * (fiche 39 tâche 3) — the settings panel's widget list reuses it rather than
+ * showing a bare name. `summary` and `health` share `PulseIcon` because their
+ * own headings already do; `backups` never had one before this fiche, so it
+ * was given `BackupIcon` in both places at once rather than leaving the list
+ * the only spot with an icon its own card lacks.
+ */
+const WIDGET_ICONS: Record<DashboardWidgetId, (props: { className?: string }) => JSX.Element> = {
+  summary: PulseIcon,
+  health: PulseIcon,
+  activity: AuditIcon,
+  analytics: TrendIcon,
+  scheduled: ClockIcon,
+  todo: ClockIcon,
+  shortcuts: PlusIcon,
+  backups: BackupIcon,
+}
 
 interface ScheduledItem {
   readonly collection: string
@@ -156,6 +179,12 @@ export function DashboardRoute(): JSX.Element {
   const [summaryError, setSummaryError] = useState<string | null>(null)
 
   const [prefs, setPrefs] = useState(() => loadDashboardPrefs())
+  // Fiche 39: the widget list/reorder/visibility panel moved from a
+  // collapsed `<details>` (discovered by accident) to a modal opened by a
+  // dedicated, always-visible icon — the mechanism (`prefs`, `move`,
+  // `toggleHidden`, `dropBefore`, `resetPrefs`) is untouched, only its
+  // surface changed.
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Quick draft (fiche 22 tâche 5).
   const [draftCollection, setDraftCollection] = useState('')
@@ -842,7 +871,11 @@ export function DashboardRoute(): JSX.Element {
         aria-labelledby="dashboard-backups-heading"
         className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-card p-5 text-sm text-muted-foreground"
       >
-        <h2 id="dashboard-backups-heading" className="m-0 text-xs font-semibold uppercase">
+        <h2
+          id="dashboard-backups-heading"
+          className="m-0 flex items-center gap-2 text-xs font-semibold uppercase"
+        >
+          <BackupIcon className="size-4" />
           {t('dashboard.backupsHeading')}
         </h2>
         <p className="m-0">{t('dashboard.backupsBody')}</p>
@@ -864,29 +897,57 @@ export function DashboardRoute(): JSX.Element {
   const visibleWidgetIds = prefs.order.filter((id) => !prefs.hidden.has(id))
   const hiddenWidgetIds = prefs.order.filter((id) => prefs.hidden.has(id))
 
+  /** A `<span>` naming `id`, preceded by the same icon its card's own `<h2>` uses (fiche 39 tâche 3) — a bare row of text alone does not say which widget it is until read. */
+  function widgetLabel(id: DashboardWidgetId): JSX.Element {
+    const Icon = WIDGET_ICONS[id]
+    return (
+      <span className="flex flex-1 items-center gap-2">
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
+        {t(`dashboard.widgetName.${id}`)}
+      </span>
+    )
+  }
+
   return (
     <section aria-labelledby="dashboard-heading" className="flex flex-col gap-8">
-      <div className="reveal border-b-2 border-foreground pb-4">
-        <p className="m-0 font-mono text-xs font-medium tracking-[0.2em] text-primary uppercase">
-          {t('shell.brand')}
-        </p>
-        <h1 id="dashboard-heading" className="m-0 text-3xl leading-tight font-bold">
-          {t('dashboard.heading')}
-        </h1>
+      <div className="reveal flex items-start justify-between gap-4 border-b-2 border-foreground pb-4">
+        <div>
+          <p className="m-0 font-mono text-xs font-medium tracking-[0.2em] text-primary uppercase">
+            {t('shell.brand')}
+          </p>
+          <h1 id="dashboard-heading" className="m-0 text-3xl leading-tight font-bold">
+            {t('dashboard.heading')}
+          </h1>
+        </div>
+        {/* Fiche 39 tâche 2: a dedicated, always-visible icon replaces the
+            collapsed `<details>` that used to be the only way to discover
+            this panel — nothing here is behind a repli anymore. */}
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          aria-label={t('dashboard.customize')}
+          title={t('dashboard.customize')}
+          className="mt-1 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <SettingsIcon className="size-5" />
+        </button>
       </div>
 
-      {/* Fiche 22 tâche 3, redesigned by tâche 8 part 2: order and visibility,
-          per person, per browser (`localStorage`, never a site setting).
-          A widget is either genuinely on the dashboard (reorderable, and
-          removable) or genuinely off it (picked back from a list, never a
-          checkbox pretending a hidden widget is still "there"). Every move
-          here is also a named button — dragging is a shortcut for what the
-          buttons already do, the same rule L16 applies to the block
-          builder's sidebar. */}
-      <details className="reveal rounded-lg border border-border bg-card p-4 text-sm">
-        <summary className="cursor-pointer font-medium">{t('dashboard.customize')}</summary>
-
-        <h3 className="m-0 mt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      {/* Fiche 22 tâche 3, redesigned by tâche 8 part 2 and again by fiche 39:
+          order and visibility, per person, per browser (`localStorage`,
+          never a site setting). A widget is either genuinely on the
+          dashboard (reorderable, and removable) or genuinely off it (picked
+          back from a list, never a checkbox pretending a hidden widget is
+          still "there"). Every move here is also a named button — dragging
+          is a shortcut for what the buttons already do, the same rule L16
+          applies to the block builder's sidebar. */}
+      <Modal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        title={t('dashboard.customize')}
+        closeLabel={t('dashboard.close')}
+      >
+        <h3 className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {t('dashboard.widgetsOnDashboard')}
         </h3>
         <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
@@ -903,7 +964,7 @@ export function DashboardRoute(): JSX.Element {
               }}
               className="flex items-center gap-2 rounded-sm border border-border bg-background px-2.5 py-1.5"
             >
-              <span className="flex-1">{t(`dashboard.widgetName.${id}`)}</span>
+              {widgetLabel(id)}
               <button
                 type="button"
                 onClick={() => move(id, 'up')}
@@ -948,9 +1009,7 @@ export function DashboardRoute(): JSX.Element {
                 key={id}
                 className="flex items-center gap-2 rounded-sm border border-dashed border-border bg-background px-2.5 py-1.5"
               >
-                <span className="flex-1 text-muted-foreground">
-                  {t(`dashboard.widgetName.${id}`)}
-                </span>
+                {widgetLabel(id)}
                 <button
                   type="button"
                   onClick={() => toggleHidden(id)}
@@ -972,15 +1031,48 @@ export function DashboardRoute(): JSX.Element {
         >
           {t('dashboard.resetLayout')}
         </button>
-      </details>
+      </Modal>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {/* An `<ul>`/`<li>` pair, not `<div>`s: an interactive drag target with
+          no semantic role is exactly what `noStaticElementInteractions`
+          exists to catch, and a grid of widget cards genuinely is a list. */}
+      <ul
+        aria-label={t('dashboard.widgetGrid')}
+        className="m-0 grid list-none grid-cols-1 gap-5 p-0 lg:grid-cols-2"
+      >
         {visibleWidgetIds.map((id) => (
-          <div key={id} className={id === 'health' ? 'lg:col-span-2' : undefined}>
+          <li
+            key={id}
+            draggable
+            onDragStart={(event) => {
+              // Fiche 39 tâche 1: the whole card is now the drag target,
+              // reusing `dropBefore`/`reorderWidget`/`saveDashboardPrefs`
+              // unchanged from the settings panel above. A drag gesture that
+              // starts on an actual control inside the card — a link, a
+              // button, or the quick-draft form's own inputs — stays that
+              // control's normal click or text selection instead of being
+              // hijacked into a card reorder.
+              const origin = event.target as HTMLElement
+              if (origin.closest('a, button, input, textarea, select, [contenteditable="true"]')) {
+                event.preventDefault()
+                return
+              }
+              event.dataTransfer.setData('text/dashboard-widget', id)
+              event.dataTransfer.effectAllowed = 'move'
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault()
+              const raw = event.dataTransfer.getData('text/dashboard-widget')
+              if (raw.length > 0) dropBefore(raw as DashboardWidgetId, id)
+            }}
+            className={`relative${id === 'health' ? ' lg:col-span-2' : ''}`}
+          >
+            <GripIcon className="pointer-events-none absolute top-3 right-3 size-4 text-muted-foreground/70" />
             {renderers[id]()}
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   )
 }

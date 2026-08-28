@@ -970,6 +970,9 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
   }[] = []
+  // Fiche 57's reference-folder resources — keyed by skill id, one array per
+  // skill, empty until a test uploads into it.
+  const mockSkillResources: Record<string, { path: string; size: number; updatedAt: string }[]> = {}
   // Fiche 45's "Prompt Settings" screen — empty by default, like a fresh
   // site whose store the CLI has not seeded yet; a test that wants a
   // non-empty screen creates one through the same POST route the real
@@ -2429,7 +2432,15 @@ export function installMockFetch(
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' ? input : input.toString()
       const method = init?.method ?? 'GET'
-      const body = init?.body === undefined ? {} : JSON.parse(init.body as string)
+      // A real `multipart/form-data` upload (fiche 57's resource upload,
+      // `FormData` as the body) is not JSON — parsing it here would throw
+      // before any route-specific handler below ever runs. Every route that
+      // actually expects a `FormData` body reads `init?.body` itself further
+      // down; this shared `body` is only ever consumed by the JSON routes.
+      const body =
+        init?.body === undefined || init.body instanceof FormData
+          ? {}
+          : JSON.parse(init.body as string)
       const auth = (init?.headers as Record<string, string> | undefined)?.authorization
 
       if (url.endsWith('/api/auth/login') && method === 'POST') {
@@ -4164,6 +4175,63 @@ export function installMockFetch(
             error: { code: 'FORBIDDEN', message: 'Only the admin role may manage agent skills.' },
           })
         }
+        const resourceMatch = /\/api\/agent-skills\/([^/?]+)\/resources(?:\/(.+))?$/u.exec(url)
+        if (resourceMatch !== null) {
+          const skillId = resourceMatch[1] as string
+          const resourcePath = resourceMatch[2]
+          if (mockSkillResources[skillId] === undefined) mockSkillResources[skillId] = []
+          const bucket = mockSkillResources[skillId]
+          if (resourcePath === undefined) {
+            if (method === 'GET') return json(200, { data: bucket })
+            if (method === 'POST') {
+              const bodyInit = init?.body
+              let path: string | undefined
+              let size = 0
+              if (bodyInit instanceof FormData) {
+                const rawPath = bodyInit.get('path')
+                path = typeof rawPath === 'string' ? rawPath : undefined
+                const file = bodyInit.get('file')
+                size = file instanceof File ? file.size : 0
+              } else {
+                const parsed = JSON.parse(String(bodyInit ?? '{}')) as {
+                  path?: string
+                  content?: string
+                }
+                path = parsed.path
+                size = parsed.content !== undefined ? parsed.content.length : 0
+              }
+              if (path === undefined || path.trim().length === 0) {
+                return json(400, {
+                  error: {
+                    code: 'AGENT_SKILL_RESOURCE_INVALID',
+                    message: 'A resource upload needs a "path" field.',
+                  },
+                })
+              }
+              const resource = { path, size, updatedAt: '2026-03-01T00:00:00.000Z' }
+              const existingIndex = bucket.findIndex((entry) => entry.path === path)
+              if (existingIndex >= 0) bucket[existingIndex] = resource
+              else bucket.push(resource)
+              return json(201, { data: resource })
+            }
+          } else if (method === 'DELETE') {
+            const index = bucket.findIndex((entry) => entry.path === resourcePath)
+            if (index === -1) {
+              return json(404, {
+                error: {
+                  code: 'AGENT_SKILL_RESOURCE_UNKNOWN',
+                  message: `No resource "${resourcePath}".`,
+                },
+              })
+            }
+            bucket.splice(index, 1)
+            return json(200, { data: { path: resourcePath, removed: true } })
+          }
+          return json(404, {
+            error: { code: 'CONTENT_NOT_FOUND', message: 'No route matches this path.' },
+          })
+        }
+
         const skillMatch = /\/api\/agent-skills\/([^/?]+)/u.exec(url)
         if (skillMatch === null) {
           if (method === 'GET') return json(200, { data: mockAgentSkills })

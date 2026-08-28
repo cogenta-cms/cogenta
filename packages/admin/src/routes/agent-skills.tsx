@@ -1,11 +1,17 @@
 import { type ChangeEvent, Fragment, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  type AgentSkillResourceSummary,
   type AgentSkillSummary,
   createAgentSkill,
   listAgentSkills,
+  listSkillResources,
   removeAgentSkill,
+  removeSkillResource,
+  SKILL_RESOURCE_DIRS,
+  type SkillResourceDir,
   updateAgentSkill,
+  uploadSkillResource,
 } from '../api/agent-skills-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -27,6 +33,19 @@ import {
 } from '../ui/index.js'
 
 const NEW_SKILL_TEMPLATE = '---\nname: \ndescription: \n---\n\n'
+
+function resourcesByDir(
+  resources: readonly AgentSkillResourceSummary[],
+  dir: SkillResourceDir,
+): readonly AgentSkillResourceSummary[] {
+  const prefix = `${dir}/`
+  return resources.filter((resource) => resource.path.startsWith(prefix))
+}
+
+function fileNameOf(path: string): string {
+  const parts = path.split('/')
+  return parts[parts.length - 1] ?? path
+}
 
 /**
  * L22 task 1bis's "Skills" screen: a named instruction text an agent loads
@@ -303,6 +322,9 @@ export function AgentSkillsRoute(): JSX.Element {
                             />
                             {t('agentSkills.enabledByDefault')}
                           </label>
+                          {token !== null && (
+                            <SkillResourcesPanel token={token} skillId={skill.id} />
+                          )}
                           <div className="flex gap-2">
                             <Button
                               size="sm"
@@ -329,5 +351,125 @@ export function AgentSkillsRoute(): JSX.Element {
         </TableRoot>
       )}
     </section>
+  )
+}
+
+/**
+ * "Fichiers de référence" (fiche 57 task 4) — the standard `references/`,
+ * `scripts/`, `assets/` layout `AgentSkillStore` creates at `create()`.
+ * Self-contained: it loads its own list on mount/skill-id-change rather than
+ * sharing state with the parent, since it only ever exists while a single
+ * skill's edit row is expanded.
+ */
+function SkillResourcesPanel({ token, skillId }: { token: string; skillId: string }): JSX.Element {
+  const { t } = useTranslation()
+  const [resources, setResources] = useState<readonly AgentSkillResourceSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setResources(await listSkillResources(token, skillId))
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agentSkills.resources.loadError'))
+    } finally {
+      setLoading(false)
+    }
+  }, [token, skillId, t])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function onUpload(
+    dir: SkillResourceDir,
+    event: ChangeEvent<HTMLInputElement>,
+  ): Promise<void> {
+    const [file] = event.target.files ?? []
+    event.target.value = ''
+    if (file === undefined) return
+    setBusy(`upload-${dir}`)
+    setError(null)
+    try {
+      await uploadSkillResource(token, skillId, dir, file.name, file)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agentSkills.resources.uploadError'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onRemove(path: string): Promise<void> {
+    setBusy(path)
+    setError(null)
+    try {
+      await removeSkillResource(token, skillId, path)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('agentSkills.resources.removeError'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-input p-3">
+      <div>
+        <h3 className="m-0 text-sm font-semibold">{t('agentSkills.resources.heading')}</h3>
+        <p className="m-0 text-xs opacity-80">{t('agentSkills.resources.intro')}</p>
+      </div>
+      {error !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
+      )}
+      {loading ? (
+        <p>{t('common.loading')}</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {SKILL_RESOURCE_DIRS.map((dir) => (
+            <div key={dir} className="flex flex-col gap-2">
+              <div>
+                <h4 className="m-0 text-sm font-medium">{t(`agentSkills.resources.${dir}`)}</h4>
+                <p className="m-0 text-xs opacity-70">{t(`agentSkills.resources.${dir}Hint`)}</p>
+              </div>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                {resourcesByDir(resources, dir).map((resource) => (
+                  <li key={resource.path} className="flex items-center justify-between gap-2">
+                    <span className="truncate">{fileNameOf(resource.path)}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy === resource.path}
+                      onClick={() => void onRemove(resource.path)}
+                    >
+                      {t('agentSkills.resources.remove')}
+                    </Button>
+                  </li>
+                ))}
+                {resourcesByDir(resources, dir).length === 0 && (
+                  <li className="text-xs opacity-70">{t('agentSkills.resources.noFiles')}</li>
+                )}
+              </ul>
+              <div>
+                <label htmlFor={`skill-resource-upload-${skillId}-${dir}`} className="sr-only">
+                  {t('agentSkills.resources.upload')}
+                </label>
+                <input
+                  id={`skill-resource-upload-${skillId}-${dir}`}
+                  type="file"
+                  disabled={busy === `upload-${dir}`}
+                  onChange={(event) => void onUpload(dir, event)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

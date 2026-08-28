@@ -1,11 +1,31 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, join, relative } from 'node:path'
 import { CogentaError } from '@cogenta/core'
 import { parseSkillFile, renderSkillFile } from './frontmatter.js'
 import type { SkillMetadata } from './types.js'
 
 const SKILL_FILE = 'SKILL.md'
 const META_FILE = '.meta.json'
+
+/**
+ * The standard reference-folder layout (fiche 57), matching the real Claude
+ * Code/Anthropic skill convention: sub-folders under a skill's own
+ * directory, all optional, `SKILL.md` the only thing required at the root.
+ * `references/` is documents consulted on demand, `scripts/` executable
+ * utilities, `assets/` templates/images/files used as-is — none of these are
+ * automatically read into an agent's context (see `AgentSkillStore`'s module
+ * doc for why); they exist for a human, or a future `skill.read_resource`
+ * tool, to reach for on purpose.
+ */
+export const SKILL_RESOURCE_DIRS = ['references', 'scripts', 'assets'] as const
+export type SkillResourceDir = (typeof SKILL_RESOURCE_DIRS)[number]
+
+export interface SkillResource {
+  /** Relative to the skill's own directory, e.g. `"references/style-guide.md"`. Forward slashes always, on every OS. */
+  readonly path: string
+  readonly size: number
+  readonly updatedAt: string
+}
 
 /**
  * L22 task 1bis's "Skills" screen — a **different concept** from
@@ -93,6 +113,33 @@ export interface AgentSkillStore {
   update(id: string, patch: AgentSkillPatch): Promise<AgentSkill>
   /** Refuses to remove a builtin (`AGENT_SKILL_BUILTIN_UNDELETABLE`). */
   remove(id: string): Promise<void>
+  /**
+   * Every file under the skill's directory except `SKILL.md`/`.meta.json` —
+   * `references/`, `scripts/`, `assets/`, and (for a skill imported from
+   * outside this store, which never had to follow the standard layout) any
+   * other file that happens to sit there too. Throws `AGENT_SKILL_UNKNOWN`
+   * for an unknown id. A skill created before this fiche, with no
+   * sub-folders yet, returns an empty list — never an error.
+   */
+  listResources(id: string): Promise<readonly SkillResource[]>
+  /**
+   * Writes (or overwrites) a reference file. `relativePath` must start with
+   * one of `SKILL_RESOURCE_DIRS` — anything else, or a path that tries to
+   * escape the skill's own directory, is refused with
+   * `AGENT_SKILL_RESOURCE_INVALID`. Throws `AGENT_SKILL_UNKNOWN` for an
+   * unknown skill id.
+   */
+  addResource(
+    id: string,
+    relativePath: string,
+    content: string | Uint8Array,
+  ): Promise<SkillResource>
+  /**
+   * Throws `AGENT_SKILL_RESOURCE_INVALID` for a path outside the three
+   * standard folders, `AGENT_SKILL_RESOURCE_UNKNOWN` for a path that names
+   * no file, and `AGENT_SKILL_UNKNOWN` for an unknown skill id.
+   */
+  removeResource(id: string, relativePath: string): Promise<void>
 }
 
 function slugify(name: string): string {
@@ -111,6 +158,44 @@ function skillUnknown(id: string): CogentaError {
     message: `No skill with id "${id}".`,
     hint: 'Check the id against `list()`, or create it first.',
   })
+}
+
+function resourcePathInvalid(relativePath: string): CogentaError {
+  return new CogentaError({
+    code: 'AGENT_SKILL_RESOURCE_INVALID',
+    message: `"${relativePath}" is not a valid resource path.`,
+    hint: `A resource path must be "<folder>/<file>" where <folder> is one of: ${SKILL_RESOURCE_DIRS.join(', ')}.`,
+  })
+}
+
+function resourceUnknown(id: string, relativePath: string): CogentaError {
+  return new CogentaError({
+    code: 'AGENT_SKILL_RESOURCE_UNKNOWN',
+    message: `No resource "${relativePath}" on skill "${id}".`,
+    hint: 'Check the path against `listResources()`.',
+  })
+}
+
+/**
+ * Validates and normalises a caller-supplied resource path into the segments
+ * `join()` should use. Refuses anything that is not "<one of the three
+ * standard dirs>/<at least one more segment>" — no bare dir, no `.`/`..`
+ * segment (which is what actually matters: it is what would let a caller
+ * escape the skill's own directory; the standard-dir prefix check on its own
+ * would not catch `references/../../../etc/passwd`).
+ */
+function resourceSegments(relativePath: string): string[] {
+  const normalised = relativePath.replaceAll('\\', '/').trim()
+  const segments = normalised.split('/').filter((segment) => segment.length > 0)
+  const [first, ...rest] = segments
+  if (first === undefined || rest.length === 0) throw resourcePathInvalid(relativePath)
+  if (!(SKILL_RESOURCE_DIRS as readonly string[]).includes(first)) {
+    throw resourcePathInvalid(relativePath)
+  }
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    throw resourcePathInvalid(relativePath)
+  }
+  return segments
 }
 
 interface StoredMeta {
@@ -254,7 +339,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
         })
       }
       const at = now().toISOString()
-      return writeRecord(
+      const created = await writeRecord(
         id,
         { name: input.name, description: input.description },
         input.instructions,
@@ -265,6 +350,15 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
           updatedAt: at,
         },
       )
+      // Standard reference-folder layout (fiche 57 task 1) — created empty,
+      // alongside SKILL.md/.meta.json, so the admin's "Reference files"
+      // section always has somewhere real to upload into.
+      await Promise.all(
+        SKILL_RESOURCE_DIRS.map((resourceDir) =>
+          mkdir(join(dirFor(id), resourceDir), { recursive: true }),
+        ),
+      )
+      return created
     },
 
     async update(id, patch) {
@@ -299,6 +393,58 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
         })
       }
       await rm(dirFor(id), { recursive: true, force: true })
+    },
+
+    async listResources(id) {
+      await ready
+      const existing = await readRecord(id)
+      if (existing === null) throw skillUnknown(id)
+      const skillDir = dirFor(id)
+      const entries = await readdir(skillDir, { withFileTypes: true, recursive: true }).catch(
+        () => [],
+      )
+      const resources: SkillResource[] = []
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        const absolute = join(entry.parentPath, entry.name)
+        const relativePath = relative(skillDir, absolute).replaceAll('\\', '/')
+        if (relativePath === SKILL_FILE || relativePath === META_FILE) continue
+        const info = await stat(absolute)
+        resources.push({ path: relativePath, size: info.size, updatedAt: info.mtime.toISOString() })
+      }
+      return resources.sort((a, b) => a.path.localeCompare(b.path))
+    },
+
+    async addResource(id, relativePath, content) {
+      await ready
+      const existing = await readRecord(id)
+      if (existing === null) throw skillUnknown(id)
+      const segments = resourceSegments(relativePath)
+      const target = join(dirFor(id), ...segments)
+      await mkdir(dirname(target), { recursive: true })
+      if (typeof content === 'string') {
+        await writeFile(target, content, 'utf8')
+      } else {
+        await writeFile(target, content)
+      }
+      const info = await stat(target)
+      return { path: segments.join('/'), size: info.size, updatedAt: info.mtime.toISOString() }
+    },
+
+    async removeResource(id, relativePath) {
+      await ready
+      const existing = await readRecord(id)
+      if (existing === null) throw skillUnknown(id)
+      const segments = resourceSegments(relativePath)
+      const target = join(dirFor(id), ...segments)
+      try {
+        await rm(target)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw resourceUnknown(id, relativePath)
+        }
+        throw error
+      }
     },
   }
 }

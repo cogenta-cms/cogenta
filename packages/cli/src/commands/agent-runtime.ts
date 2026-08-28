@@ -413,6 +413,9 @@ function createSkillRegistryAdapter(store: AgentSkillStore): AgentSkillRegistryL
     create: (input) => store.create(input),
     update: (id, patch) => store.update(id, patch),
     remove: (id) => store.remove(id),
+    listResources: (id) => store.listResources(id),
+    addResource: (id, relativePath, content) => store.addResource(id, relativePath, content),
+    removeResource: (id, relativePath) => store.removeResource(id, relativePath),
   }
 }
 

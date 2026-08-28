@@ -1585,7 +1585,23 @@
     "enabledByDefault": "Activée par défaut pour les nouveaux agents",
     "noSkills": "Aucune compétence configurée.",
     "loadError": "Impossible de charger la liste des compétences.",
-    "saveError": "Impossible d'enregistrer cette compétence."
+    "saveError": "Impossible d'enregistrer cette compétence.",
+    "resources": {
+      "heading": "Fichiers de référence",
+      "intro": "Fichiers optionnels qu'une compétence peut porter à côté de son SKILL.md — références, scripts et gabarits — le même agencement standard qu'une vraie compétence Claude Code/Codex. Rien ici n'est chargé automatiquement dans le contexte d'un agent.",
+      "references": "Références",
+      "referencesHint": "Documents consultés à la demande — guides de style, glossaires, cahiers des charges.",
+      "scripts": "Scripts",
+      "scriptsHint": "Utilitaires exécutables que les instructions de la compétence peuvent référencer.",
+      "assets": "Gabarits",
+      "assetsHint": "Modèles, images et autres fichiers utilisés tels quels.",
+      "upload": "Téléverser un fichier",
+      "noFiles": "Aucun fichier pour l'instant.",
+      "remove": "Retirer",
+      "loadError": "Impossible de charger les fichiers de référence de cette compétence.",
+      "uploadError": "Impossible de téléverser ce fichier.",
+      "removeError": "Impossible de retirer ce fichier."
+    }
   },
   "promptSettings": {
     "heading": "Réglages des prompts",

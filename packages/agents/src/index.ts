@@ -432,11 +432,14 @@ export type {
   AgentSkillPatch,
   AgentSkillStore,
   FileAgentSkillStoreOptions,
+  SkillResource,
+  SkillResourceDir,
 } from './skills/library.js'
 export {
   builtinAgentSkillSeeds,
   createFileAgentSkillStore,
   ensureBuiltinAgentSkills,
+  SKILL_RESOURCE_DIRS,
 } from './skills/library.js'
 export type { Skill, SkillMetadata, SkillStore } from './skills/types.js'
 export type { GenerateSkinOptions, GenerateSkinResult } from './skin/generate.js'

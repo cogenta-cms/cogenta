@@ -227,6 +227,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   AGENT_SKILL_BUILTIN_UNDELETABLE: 409,
   AGENT_REGISTRY_READ_ONLY: 501,
   AGENT_RUNTIME_UNAVAILABLE: 503,
+  // Skill reference folders (fiche 57). An invalid path is the caller's
+  // fault (400); a path that names nothing to remove is a plain 404.
+  AGENT_SKILL_RESOURCE_INVALID: 400,
+  AGENT_SKILL_RESOURCE_UNKNOWN: 404,
   // MCP external connection registry (fiche 58 tasks 2/3) —
   // `mcp-connections-router.ts`. `MCP_CONNECTION_CONFIRMATION_REQUIRED` and
   // `MCP_CONNECTION_TOOL_NOT_DISCOVERED` are 400s, not 403s: the caller

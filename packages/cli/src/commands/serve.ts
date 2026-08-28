@@ -3222,13 +3222,14 @@ async function recordUserAudit(
 }
 
 /**
- * Who minted, rotated or revoked a machine credential, in the same
- * append-only log as every other account action (L13 task 8; rotation added
- * by fiche 20 task 2 — "vérifier que c'est déjà le cas" for create/revoke
- * found it already was, so rotation is the one lifecycle event this fiche
- * actually adds here). The raw key itself never reaches this function —
- * `POST`'s response carries it once, but the audit entry only ever names the
- * key's id, exactly like `recordUserAudit` never logs a password.
+ * Who minted, rotated, revoked, purged or recovered a machine credential, in
+ * the same append-only log as every other account action (L13 task 8;
+ * rotation added by fiche 20 task 2 — "vérifier que c'est déjà le cas" for
+ * create/revoke found it already was, so rotation is the one lifecycle event
+ * that fiche actually added here; purge and recover added by fiche 62 tasks
+ * 2-3). The raw key itself never reaches this function — a `POST`'s response
+ * carries it once, but the audit entry only ever names the key's id, exactly
+ * like `recordUserAudit` never logs a password.
  */
 async function recordApiKeyAudit(
   site: Site,
@@ -3241,7 +3242,7 @@ async function recordApiKeyAudit(
   if (response.status < 200 || response.status >= 300) return
 
   const segments = pathname.split('/').filter((segment) => segment.length > 0)
-  // ['api', 'api-keys', <id?>, <'rotate'?>]
+  // ['api', 'api-keys', <id?>, <'rotate' | 'purge' | 'recover'?>]
   const target = segments[2]
   const sub = segments[3]
 
@@ -3250,9 +3251,13 @@ async function recordApiKeyAudit(
       ? 'apikey.create'
       : method === 'POST' && target !== undefined && sub === 'rotate'
         ? 'apikey.rotate'
-        : method === 'DELETE' && target !== undefined
-          ? 'apikey.revoke'
-          : null
+        : method === 'POST' && target !== undefined && sub === 'recover'
+          ? 'apikey.recover'
+          : method === 'DELETE' && target !== undefined && sub === 'purge'
+            ? 'apikey.purge'
+            : method === 'DELETE' && target !== undefined && sub === undefined
+              ? 'apikey.revoke'
+              : null
   if (action === null) return
 
   const body = response.body as {
@@ -3266,11 +3271,15 @@ async function recordApiKeyAudit(
       : typeof body?.data?.id === 'string'
         ? body.data.id
         : (target ?? null)
-  // For a rotation the diff names what was replaced — the id alone, never
-  // any key material, the same restraint every other field in this
-  // function already keeps.
+  // For a rotation or a recovery the diff names what was replaced — the id
+  // alone, never any key material, the same restraint every other field in
+  // this function already keeps.
   const diff =
-    action === 'apikey.rotate' && target !== undefined ? { rotatedFrom: target } : undefined
+    action === 'apikey.rotate' && target !== undefined
+      ? { rotatedFrom: target }
+      : action === 'apikey.recover' && target !== undefined
+        ? { recoveredFrom: target }
+        : undefined
 
   await site.auth.audit
     .record({

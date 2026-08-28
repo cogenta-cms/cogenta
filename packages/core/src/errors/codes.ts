@@ -162,6 +162,9 @@ export const ERROR_CODES = [
   // rotation, per-key rate limiting).
   'API_KEY_ROTATION_INVALID',
   'API_KEY_RATE_LIMITED',
+  // API keys — purge and mistaken-revocation recovery (fiche 62 tasks 2-3).
+  'API_KEY_PURGE_INVALID',
+  'API_KEY_RECOVERY_INVALID',
 
   // Media
   'MEDIA_NOT_FOUND',

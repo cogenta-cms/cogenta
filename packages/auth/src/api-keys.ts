@@ -49,6 +49,26 @@ const VISIBLE_PREFIX_LENGTH = 12
  */
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600
 
+/**
+ * Fiche 62 task 2: how long a revoked key has to sit before it can be
+ * purged — the same reasoning and the same default as content's own
+ * `DEFAULT_TRASH_RETAIN_DAYS` (`@cogenta/schema`), applied here because a
+ * revoked key is not stored anywhere else: purging too early is the one
+ * mistake `purge()` must never make, since it is a real `DELETE`, not a
+ * second layer of soft state on top of `revoked_at`.
+ */
+export const MIN_PURGE_AFTER_REVOKED_DAYS = 30
+
+/**
+ * Fiche 62 task 3 (decision "(b)", recommended by the fiche): a key revoked
+ * by mistake is not reactivated — `revoked_at` never goes back to `null` —
+ * but a short window after the mistake, `recover()` mints a replacement the
+ * same way `rotate()` does for an active key. Past this window the only way
+ * back is minting a brand new key from scratch, on purpose: the longer a key
+ * has been dead, the less likely "revoked by mistake" is the true story.
+ */
+export const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000
+
 function issueKey(): string {
   return `${KEY_PREFIX}${randomBytes(KEY_BYTES).toString('base64url')}`
 }
@@ -139,6 +159,25 @@ export interface ApiKeyStore {
   list(options?: ListApiKeysOptions): Promise<readonly ApiKey[]>
   getById(id: string): Promise<ApiKey | null>
   revoke(id: string): Promise<void>
+  /**
+   * Fiche 62 task 2: a real, permanent `DELETE` — the row and its usage
+   * history are gone, never just hidden. Refuses anything but a key that is
+   * both revoked and has been for at least `MIN_PURGE_AFTER_REVOKED_DAYS`:
+   * an active key (even one technically past its `expiresAt`) is never
+   * purgeable, and neither is a key revoked too recently — see the piège
+   * connu in fiche 62 §5.
+   */
+  purge(id: string): Promise<void>
+  /**
+   * Fiche 62 task 3, decision (b): recovers from a key revoked by mistake
+   * *without* lifting `revoked_at` — the revoked row stays revoked forever,
+   * exactly as `statusOf` in the admin already assumes. Instead, within
+   * `RECOVERY_WINDOW_MS` of the revocation, this mints a fresh replacement
+   * carrying the same name, scope and quota, the same way `rotate` does for
+   * a live key. Refuses a key that was never revoked (nothing to recover
+   * from — rotate it instead) and a key revoked longer ago than the window.
+   */
+  recover(id: string): Promise<IssuedApiKey>
   /**
    * Resolves a raw bearer token to the key it names, or `null` if it does not
    * exist, is revoked, or has expired. Touches `lastUsedAt` on success, the
@@ -243,6 +282,91 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
       await db.query(
         sql`update ${table} set revoked_at = ${revokedAt} where id = ${id} and revoked_at is null`,
       )
+    },
+
+    purge: async (id) => {
+      const result = await db.query<ApiKeyRow>(sql`select * from ${table} where id = ${id}`)
+      const row = result.rows[0]
+      if (row === undefined) throw keyNotFound()
+
+      if (row.revoked_at === null) {
+        throw new CogentaError({
+          code: 'API_KEY_PURGE_INVALID',
+          message: 'Only a revoked key can be purged.',
+          hint: 'Revoke this key first if it should no longer exist at all.',
+        })
+      }
+      const revokedAgoMs = now() - new Date(row.revoked_at).getTime()
+      const minAgeMs = MIN_PURGE_AFTER_REVOKED_DAYS * 24 * 60 * 60 * 1000
+      if (revokedAgoMs < minAgeMs) {
+        throw new CogentaError({
+          code: 'API_KEY_PURGE_INVALID',
+          message: `A revoked key can only be purged after ${MIN_PURGE_AFTER_REVOKED_DAYS} days.`,
+          hint: 'Wait for the retention window to pass, or leave it revoked — a revoked key can never authenticate again.',
+        })
+      }
+
+      // Its usage history first: nothing references it by foreign key, but a
+      // dangling row for a key id that no longer exists would only ever be
+      // dead weight, never something `usage()` is asked about again.
+      await db.query(sql`delete from ${usageTable} where key_id = ${id}`)
+      await db.query(sql`delete from ${table} where id = ${id}`)
+    },
+
+    recover: async (id) => {
+      const result = await db.query<ApiKeyRow>(sql`select * from ${table} where id = ${id}`)
+      const row = result.rows[0]
+      if (row === undefined) throw keyNotFound()
+
+      if (row.revoked_at === null) {
+        throw new CogentaError({
+          code: 'API_KEY_RECOVERY_INVALID',
+          message: 'Only a revoked key can be recovered — an active key should be rotated instead.',
+          hint: 'Use rotate() for a key that is still active.',
+        })
+      }
+      const revokedAgoMs = now() - new Date(row.revoked_at).getTime()
+      if (revokedAgoMs > RECOVERY_WINDOW_MS) {
+        throw new CogentaError({
+          code: 'API_KEY_RECOVERY_INVALID',
+          message: `This key was revoked more than ${RECOVERY_WINDOW_MS / (60 * 60 * 1000)} hours ago — recovery is only for a very recent, mistaken revocation.`,
+          hint: 'Create a brand new key instead. The revoked key stays revoked either way.',
+        })
+      }
+
+      const scope = JSON.parse(row.scope) as readonly string[]
+      const rateLimitPerMinute = row.rate_limit_per_minute ?? DEFAULT_RATE_LIMIT_PER_MINUTE
+      const currentTime = now()
+
+      // Same duration-preserving policy as rotate(): a replacement for a key
+      // that never expired keeps not expiring, and one that had a fixed
+      // lifetime gets that same duration, restarted from now.
+      const expiresAt =
+        row.expires_at === null
+          ? undefined
+          : new Date(
+              currentTime +
+                Math.max(
+                  new Date(row.expires_at).getTime() - new Date(row.created_at).getTime(),
+                  0,
+                ),
+            ).toISOString()
+
+      const issued = await create({
+        name: row.name,
+        scope,
+        createdBy: row.created_by,
+        rateLimitPerMinute,
+        ...(expiresAt === undefined ? {} : { expiresAt }),
+      })
+
+      // `revoked_at` is deliberately never touched: the row this recovers
+      // from stays revoked forever, exactly as decision (b) in fiche 62 §3
+      // requires. `superseded_by` only records what replaced it, the same
+      // way rotation already links a live key to what came after it.
+      await db.query(sql`update ${table} set superseded_by = ${issued.id} where id = ${id}`)
+
+      return issued
     },
 
     verify: async (rawKey) => {

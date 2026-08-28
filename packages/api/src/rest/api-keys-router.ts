@@ -241,7 +241,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'API key routes are /api/api-keys, /api/api-keys/{id} and /api/api-keys/{id}/rotate.',
+    hint: 'API key routes are /api/api-keys, /api/api-keys/{id}, /api/api-keys/{id}/rotate, /api/api-keys/{id}/purge and /api/api-keys/{id}/recover.',
   })
 }
 
@@ -305,6 +305,12 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         }
         if (segments.length === 2 && segments[1] === 'rotate') {
           return await rotateRoute(request, actor, segments[0] as string, method)
+        }
+        if (segments.length === 2 && segments[1] === 'purge') {
+          return await purgeRoute(actor, segments[0] as string, method)
+        }
+        if (segments.length === 2 && segments[1] === 'recover') {
+          return await recoverRoute(actor, segments[0] as string, method)
         }
         throw noRoute()
       } catch (error) {
@@ -405,5 +411,38 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         previous: publicKey(previous),
       },
     })
+  }
+
+  /**
+   * Fiche 62 task 2: a real `DELETE`, admin-only like every other route
+   * here. `auth.apiKeys.purge` is the only authority on whether this key is
+   * actually eligible (revoked, and revoked long enough ago) — this route
+   * adds nothing beyond the permission check and the 404 for an id that was
+   * never a key at all.
+   */
+  async function purgeRoute(actor: Actor, id: string, method: string): Promise<RestResponse> {
+    if (method !== 'DELETE') return methodNotAllowed(['DELETE'])
+    requireAdmin(actor, 'purge an API key')
+
+    const existing = await auth.apiKeys.getById(id)
+    if (existing === null) throw keyNotFound()
+
+    await auth.apiKeys.purge(id)
+    return { status: 204, body: null, headers: {} }
+  }
+
+  /**
+   * Fiche 62 task 3, decision (b): recovers from a key revoked by mistake by
+   * minting a replacement, exactly like `rotateRoute` above — same response
+   * shape, same one-time raw key — except the revoked key it replaces never
+   * has its `revoked_at` lifted. `auth.apiKeys.recover` is what actually
+   * enforces the recovery window; this route only adds the permission check.
+   */
+  async function recoverRoute(actor: Actor, id: string, method: string): Promise<RestResponse> {
+    if (method !== 'POST') return methodNotAllowed(['POST'])
+    requireAdmin(actor, 'recover a revoked API key')
+
+    const issued = await auth.apiKeys.recover(id)
+    return jsonResponse(201, { data: { ...publicKey(issued), key: issued.key } })
   }
 }

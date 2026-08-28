@@ -2092,6 +2092,23 @@ export function installMockFetch(
       rateLimitPerMinute: 600,
       supersededBy: null,
     },
+    // Fiche 62 task 2: revoked well outside `MIN_PURGE_AFTER_REVOKED_DAYS`
+    // (30 days) of the real wall clock, so the "purge" screen tests do not
+    // need to fake time — this row is eligible for purge the moment the
+    // suite starts.
+    {
+      id: 'key-long-revoked',
+      name: 'Old integration',
+      prefix: 'cogenta_sk_',
+      scope: ['viewer'],
+      createdBy: user.id,
+      createdAt: '2020-01-01T00:00:00.000Z',
+      expiresAt: null,
+      revokedAt: '2020-02-01T00:00:00.000Z',
+      lastUsedAt: null,
+      rateLimitPerMinute: 600,
+      supersededBy: null,
+    },
   ]
 
   // Fiche 58 tasks 2-6 — "MCP Clients". In-memory stand-in for
@@ -2736,11 +2753,12 @@ export function installMockFetch(
       }
 
       // `/api/api-keys/*`. Admin-only, mirroring the real router: the raw
-      // `key` is present only in the `POST` and `POST .../rotate` response
-      // bodies, never in the list — proving the screen never re-displays it
-      // depends on this stub agreeing with
+      // `key` is present only in the `POST`, `POST .../rotate` and
+      // `POST .../recover` response bodies, never in the list — proving the
+      // screen never re-displays it depends on this stub agreeing with
       // `packages/api/test/rest/api-keys-router.test.ts`.
-      const apiKeysMatch = /\/api\/api-keys(?:\/([^/?]+)(?:\/(rotate))?)?(?:\?.*)?$/u.exec(url)
+      const apiKeysMatch =
+        /\/api\/api-keys(?:\/([^/?]+)(?:\/(rotate|purge|recover))?)?(?:\?.*)?$/u.exec(url)
       if (apiKeysMatch !== null && url.includes('/api/api-keys')) {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
@@ -2749,7 +2767,7 @@ export function installMockFetch(
         const forbidden = json(403, {
           error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
         })
-        const [, rawId, rotateSuffix] = apiKeysMatch
+        const [, rawId, actionSuffix] = apiKeysMatch
 
         if (rawId === undefined && method === 'GET') {
           if (!isAdmin) return forbidden
@@ -2801,7 +2819,7 @@ export function installMockFetch(
           })
         }
 
-        if (rawId !== undefined && rotateSuffix === 'rotate' && method === 'POST') {
+        if (rawId !== undefined && actionSuffix === 'rotate' && method === 'POST') {
           if (!isAdmin) return forbidden
           const found = apiKeys.find((candidate) => candidate.id === rawId)
           if (found === undefined) {
@@ -2838,7 +2856,7 @@ export function installMockFetch(
           })
         }
 
-        if (rawId !== undefined && method === 'DELETE') {
+        if (rawId !== undefined && actionSuffix === undefined && method === 'DELETE') {
           if (!isAdmin) return forbidden
           const found = apiKeys.find((candidate) => candidate.id === rawId)
           if (found === undefined) {
@@ -2846,8 +2864,93 @@ export function installMockFetch(
               error: { code: 'API_KEY_NOT_FOUND', message: 'No API key with that id.' },
             })
           }
-          found.revokedAt = '2026-03-06T00:00:00.000Z'
+          // The real wall clock, not a fixed date: fiche 62's recover/purge
+          // eligibility windows are both computed against `Date.now()` on
+          // the admin screen, so a freshly revoked row has to actually be
+          // fresh for "recover within 24h" to be exercisable at all.
+          found.revokedAt = new Date().toISOString()
           return new Response(null, { status: 204 })
+        }
+
+        // Fiche 62 task 2 — a real delete, mirroring
+        // `ApiKeyStore.purge`'s two refusals (never revoked; revoked too
+        // recently).
+        if (rawId !== undefined && actionSuffix === 'purge' && method === 'DELETE') {
+          if (!isAdmin) return forbidden
+          const found = apiKeys.find((candidate) => candidate.id === rawId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'API_KEY_NOT_FOUND', message: 'No API key with that id.' },
+            })
+          }
+          if (found.revokedAt === null) {
+            return json(409, {
+              error: {
+                code: 'API_KEY_PURGE_INVALID',
+                message: 'Only a revoked key can be purged.',
+              },
+            })
+          }
+          const revokedAgoMs = Date.now() - new Date(found.revokedAt).getTime()
+          if (revokedAgoMs < 30 * 24 * 60 * 60 * 1000) {
+            return json(409, {
+              error: {
+                code: 'API_KEY_PURGE_INVALID',
+                message: 'A revoked key can only be purged after 30 days.',
+              },
+            })
+          }
+          apiKeys.splice(apiKeys.indexOf(found), 1)
+          return new Response(null, { status: 204 })
+        }
+
+        // Fiche 62 task 3, decision (b) — mints a replacement without ever
+        // lifting `revokedAt`, mirroring `ApiKeyStore.recover`.
+        if (rawId !== undefined && actionSuffix === 'recover' && method === 'POST') {
+          if (!isAdmin) return forbidden
+          const found = apiKeys.find((candidate) => candidate.id === rawId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'API_KEY_NOT_FOUND', message: 'No API key with that id.' },
+            })
+          }
+          if (found.revokedAt === null) {
+            return json(409, {
+              error: {
+                code: 'API_KEY_RECOVERY_INVALID',
+                message: 'Only a revoked key can be recovered.',
+              },
+            })
+          }
+          const revokedAgoMs = Date.now() - new Date(found.revokedAt).getTime()
+          if (revokedAgoMs > 24 * 60 * 60 * 1000) {
+            return json(409, {
+              error: {
+                code: 'API_KEY_RECOVERY_INVALID',
+                message: 'This key was revoked too long ago to recover.',
+              },
+            })
+          }
+          apiKeyCounter += 1
+          const rawKey = `cogenta_sk_mock-recovered-${apiKeyCounter}-not-a-real-secret`
+          const issued = {
+            id: `key-recovered-${apiKeyCounter}`,
+            name: found.name,
+            prefix: rawKey.slice(0, 12),
+            scope: found.scope,
+            createdBy: user.id,
+            createdAt: '2026-03-08T00:00:00.000Z',
+            expiresAt: found.expiresAt,
+            revokedAt: null,
+            lastUsedAt: null,
+            rateLimitPerMinute: found.rateLimitPerMinute,
+            supersededBy: null,
+          }
+          found.supersededBy = issued.id
+          apiKeys.push(issued)
+          return json(201, {
+            data: { ...issued, key: rawKey, usage: { last7Days: 0, last30Days: 0 } },
+          })
         }
       }
 

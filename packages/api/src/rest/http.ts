@@ -212,6 +212,12 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // this into `Retry-After`/`RateLimit-*` headers, since `errorResponse`
   // deliberately never serialises `details` onto the wire.
   API_KEY_RATE_LIMITED: 429,
+  // Fiche 62: same reasoning as API_KEY_ROTATION_INVALID above — the id
+  // names something real, refused only because of the state it is
+  // currently in (not yet eligible for purge, or revoked outside the
+  // recovery window), so 409 fits better than 404.
+  API_KEY_PURGE_INVALID: 409,
+  API_KEY_RECOVERY_INVALID: 409,
 
   AGENT_UNKNOWN: 404,
   // Pre-existing (L5), never mapped before — a malformed create/update body

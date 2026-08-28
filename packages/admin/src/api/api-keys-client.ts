@@ -113,3 +113,28 @@ export function rotateApiKey(
     body: JSON.stringify({ graceHours }),
   })
 }
+
+/**
+ * Fiche 62 task 2 — a real, permanent delete. The server refuses anything
+ * but a key that is both revoked and has been for long enough; this call
+ * carries no id-side knowledge of that window, it only surfaces whatever the
+ * server decides.
+ */
+export async function purgeApiKey(token: string, id: string): Promise<void> {
+  await request(`/api/api-keys/${encodeURIComponent(id)}/purge`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+/**
+ * Fiche 62 task 3, decision (b) — mints a replacement for a key revoked by
+ * mistake, without ever lifting its `revokedAt`. Same response shape as
+ * `rotateApiKey`: the raw key appears exactly once, here.
+ */
+export function recoverApiKey(token: string, id: string): Promise<CreatedApiKey> {
+  return request(`/api/api-keys/${encodeURIComponent(id)}/recover`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}

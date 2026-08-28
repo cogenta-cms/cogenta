@@ -2484,7 +2484,21 @@
     "loadError": "Could not load the API key list.",
     "createError": "Could not create this API key.",
     "revokeError": "Could not revoke this key.",
-    "rotateError": "Could not rotate this key."
+    "rotateError": "Could not rotate this key.",
+    "recoverKey": "Recover {{name}}",
+    "recoverHeading": "Recover {{name}}",
+    "recoverDescription": "For a key revoked by mistake, very recently.",
+    "recoverWarning": "The revoked key stays revoked forever — this is not a reactivation. A new key is created with the same name, scope and quota.",
+    "recoverButton": "Create a replacement key",
+    "recoveredTitle": "Replacement key created: {{name}}",
+    "recoveredBody": "Here is the new key, replacing the one revoked by mistake. The old one stays revoked.",
+    "recoverError": "Could not recover this key — the recovery window may have passed.",
+    "purgeKey": "Purge {{name}}",
+    "purgeIn": "Purgeable in {{days}} day(s)",
+    "confirmPurgeTitle": "Purge {{name}}?",
+    "confirmPurge": "This revoked key will be permanently deleted from the list, along with its usage history. This action cannot be undone.",
+    "confirmPurgeButton": "Purge the key",
+    "purgeError": "Could not purge this key."
   },
   "mcp": {
     "heading": "MCP Server",

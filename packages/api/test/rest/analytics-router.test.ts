@@ -232,6 +232,49 @@ describe('GET /api/analytics/summary', () => {
     expect(body.data.retentionDays).toBe(400)
   })
 
+  it('honours a ?limit= beyond the store default of 10', async () => {
+    for (let i = 0; i < 15; i += 1) {
+      await store.recordEvent({
+        path: `/page-${i}`,
+        ip: `203.0.113.${20 + i}`,
+        userAgent: 'Mozilla/5.0',
+      })
+    }
+
+    const defaultResponse = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const defaultBody = defaultResponse.body as { data: { topPages: readonly unknown[] } }
+    expect(defaultBody.data.topPages.length).toBe(10)
+
+    const expandedResponse = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: { limit: '20' } },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const expandedBody = expandedResponse.body as { data: { topPages: readonly unknown[] } }
+    // 15 distinct paths from this test, plus the one recorded in the outer
+    // beforeEach — 16 rows, under the requested cap of 20.
+    expect(expandedBody.data.topPages.length).toBe(16)
+  })
+
+  it('rejects a ?limit= outside the allowed range', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: { limit: '0' } },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('carries the previous period, broken down by day, in the response', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/analytics/summary', query: {} },
+      { actor: ADMIN, ip: '203.0.113.9' },
+    )
+    const body = response.body as { data: { previousDailyViews: readonly unknown[] } }
+    expect(Array.isArray(body.data.previousDailyViews)).toBe(true)
+  })
+
   it('reports no retention when the caller wired none in', async () => {
     const response = await router.handle(
       { method: 'GET', path: '/api/analytics/summary', query: {} },

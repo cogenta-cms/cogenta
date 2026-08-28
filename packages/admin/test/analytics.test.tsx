@@ -180,7 +180,7 @@ describe('analytics dashboard', () => {
     )
   })
 
-  it('draws one bar per day of the selected period, not one per data point', async () => {
+  it('draws one point per day of the selected period, not one per data point', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({
@@ -194,10 +194,97 @@ describe('analytics dashboard', () => {
     render(<App />)
     await goToAnalytics()
 
-    const chart = await screen.findByRole('img', { name: 'Diagramme en barres des vues par jour' })
-    // One <rect> per calendar day in the period, zero-filled where the
-    // server sent nothing — not a single bar stretched across the width.
-    expect(chart.querySelectorAll('rect')).toHaveLength(8)
+    const chart = await screen.findByRole('img', { name: 'Courbe des vues par jour' })
+    // One <circle> per calendar day in the period, zero-filled where the
+    // server sent nothing — not a single point stretched across the width,
+    // and a single connected <path> line rather than one shape per day
+    // (fiche 64 task 1 — a trend line, not a bar chart).
+    expect(chart.querySelectorAll('circle')).toHaveLength(8)
+    expect(chart.querySelectorAll('path').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('overlays the previous period as a second, dashed line when it had traffic', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      analyticsSummary: {
+        totalViews: 10,
+        previousTotalViews: 6,
+        dailyViews: [{ day: '2026-03-04', views: 10 }],
+        previousDailyViews: [{ day: '2026-02-25', views: 6 }],
+      },
+    })
+
+    render(<App />)
+    await goToAnalytics()
+
+    await screen.findByRole('img', { name: 'Courbe des vues par jour' })
+    // "Previous period" appears twice on purpose: once as the dashed line's
+    // own hover title inside the SVG, once as the legend below it.
+    expect(screen.getAllByText('Période précédente').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Période actuelle')).toBeDefined()
+  })
+
+  it('shows no overlay or legend when there is no previous traffic to compare against', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      analyticsSummary: {
+        totalViews: 5,
+        previousTotalViews: 0,
+        dailyViews: [{ day: '2026-03-04', views: 5 }],
+      },
+    })
+
+    render(<App />)
+    await goToAnalytics()
+
+    await screen.findByRole('img', { name: 'Courbe des vues par jour' })
+    expect(screen.queryByText('Période précédente')).toBeNull()
+  })
+
+  it('paginates the top-pages table beyond the first 10 rows', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    const topPages = Array.from({ length: 15 }, (_, index) => ({
+      path: `/page-${index}`,
+      views: 15 - index,
+    }))
+    installMockFetch({ roles: ['admin'], analyticsSummary: { totalViews: 1, topPages } })
+
+    render(<App />)
+    await goToAnalytics()
+
+    await screen.findByText('/page-0')
+    expect(screen.queryByText('/page-10')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Suivant' }))
+
+    await screen.findByText('/page-10')
+    expect(screen.queryByText('/page-0')).toBeNull()
+  })
+
+  it('paginates the top-referrers table beyond the first 10 rows', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    const topReferrers = Array.from({ length: 12 }, (_, index) => ({
+      domain: `referrer-${index}.example`,
+      views: 12 - index,
+    }))
+    installMockFetch({ roles: ['admin'], analyticsSummary: { totalViews: 1, topReferrers } })
+
+    render(<App />)
+    await goToAnalytics()
+
+    await screen.findByText('referrer-0.example')
+    expect(screen.queryByText('referrer-11.example')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Suivant' }))
+
+    await screen.findByText('referrer-11.example')
+    expect(screen.queryByText('referrer-0.example')).toBeNull()
   })
 
   it('states what the system does not do', async () => {

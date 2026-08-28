@@ -43,6 +43,11 @@ export interface AnalyticsSummary {
   readonly dailyViews: readonly DailyViews[]
   readonly previousTotalViews: number
   readonly previousUniqueVisitors: number
+  /**
+   * The previous period's own day-by-day breakdown (fiche 64 task 2) — lined
+   * up with `dailyViews` by position in the window, never by `day` string.
+   */
+  readonly previousDailyViews: readonly DailyViews[]
   readonly viewsChangePercent: number | null
   /** The site's configured events retention in days, or `null` if none was wired in (fiche 27 task 3). */
   readonly retentionDays: number | null
@@ -70,12 +75,22 @@ function windowQuery(window: AnalyticsWindow): string {
     : `since=${encodeURIComponent(window.since)}&until=${encodeURIComponent(window.until)}`
 }
 
-/** Admin-only on the server; a non-admin caller gets `ApiError` with a 403. */
+/**
+ * Admin-only on the server; a non-admin caller gets `ApiError` with a 403.
+ *
+ * `limit` raises `topPages`/`topReferrers` beyond the server's own default of
+ * 10 (fiche 64 task 3) — the analytics screen pages through the result
+ * client-side, since the store has no offset-based pagination of its own.
+ */
 export function getAnalyticsSummary(
   token: string,
   window: AnalyticsWindow = { days: 30 },
+  limit?: number,
 ): Promise<AnalyticsSummary> {
-  return request(`/api/analytics/summary?${windowQuery(window)}`, { headers: authHeader(token) })
+  const limitQuery = limit === undefined ? '' : `&limit=${limit}`
+  return request(`/api/analytics/summary?${windowQuery(window)}${limitQuery}`, {
+    headers: authHeader(token),
+  })
 }
 
 /** Views, trend and rank for one page — what the entry-editor sidebar shows (fiche 27 task 2). Admin-only, same as the summary. */

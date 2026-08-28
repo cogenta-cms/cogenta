@@ -499,5 +499,74 @@ export function runMediaContract(
         await dispose?.()
       }
     })
+
+    it('files an asset in a folder, and treats an absent folderId as unclassified (fiche 46)', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const filed = await store.create({
+          kind: 'image',
+          filename: 'filed.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'filed',
+          storageKey: 'media/filed.jpg',
+          folderId: 'folder-a',
+        })
+        const unfiled = await store.create({
+          kind: 'image',
+          filename: 'unfiled.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'unfiled',
+          storageKey: 'media/unfiled.jpg',
+        })
+
+        expect(filed.folderId).toBe('folder-a')
+        expect(unfiled.folderId).toBeNull()
+
+        expect((await store.list({ folderId: 'folder-a' })).items.map((i) => i.id)).toEqual([
+          filed.id,
+        ])
+        expect((await store.list({ folderId: null })).items.map((i) => i.id)).toContain(unfiled.id)
+        expect((await store.list({ folderId: null })).items.map((i) => i.id)).not.toContain(
+          filed.id,
+        )
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('moves an asset between folders via update(), and matches a resolved folderIds set', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const asset = await store.create({
+          kind: 'image',
+          filename: 'movable.jpg',
+          mimeType: 'image/jpeg',
+          size: 1,
+          alt: 'movable',
+          storageKey: 'media/movable.jpg',
+          folderId: 'folder-a',
+        })
+
+        const moved = await store.update(asset.id, { folderId: 'folder-b' })
+        expect(moved.folderId).toBe('folder-b')
+
+        // `folderIds` is how `?includeSubfolders=1` is implemented at the
+        // REST layer: the router resolves a subtree to a set of ids first,
+        // then asks for anything matching any of them.
+        expect(
+          (await store.list({ folderIds: ['folder-b', 'folder-c'] })).items.map((i) => i.id),
+        ).toEqual([moved.id])
+        expect((await store.list({ folderIds: ['folder-c'] })).items).toHaveLength(0)
+
+        const clearedToRoot = await store.update(asset.id, { folderId: null })
+        expect(clearedToRoot.folderId).toBeNull()
+      } finally {
+        await dispose?.()
+      }
+    })
   })
 }

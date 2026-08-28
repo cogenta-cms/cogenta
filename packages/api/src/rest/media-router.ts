@@ -6,6 +6,7 @@ import {
   hasGpsData,
   MEDIA_KINDS,
   type MediaAsset,
+  type MediaFolderStore,
   type MediaKind,
   type MediaSortField,
   type MediaStore,
@@ -116,6 +117,17 @@ export interface MediaRouterOptions {
   readonly store: MediaStore
   readonly storage: StorageDriver
   /**
+   * The folder tree (fiche 46). Absent means the folder-management routes
+   * (`/api/media/folders/*`, `/{id}/move`, `/-/bulk-move`) all answer 404 —
+   * the same "not mounted" degradation `usage` already models. `GET
+   * /api/media?folderId=` still works without it (an exact match on the
+   * `MediaStore` column needs no tree); only `?includeSubfolders=1` needs
+   * this to resolve the subtree, and is ignored (falls back to the exact
+   * match) when it is absent. A real server (`cogenta serve`) always wires
+   * this; only a router built directly for a narrower test omits it.
+   */
+  readonly folders?: MediaFolderStore
+  /**
    * Generates resized/re-encoded variants at upload time (L10 task 5).
    *
    * Absent by default: the pipeline is optional, and an install without it
@@ -207,6 +219,29 @@ const bulkIdsSchema = z.object({
 const bulkTagSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(200),
   tag: z.string().min(1).max(100),
+})
+
+const createFolderSchema = z.object({
+  name: z.string().min(1).max(255),
+  parentId: z.string().min(1).nullable().optional(),
+})
+
+const updateFolderSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  position: z.number().int().min(0).optional(),
+})
+
+const moveFolderSchema = z.object({
+  parentId: z.string().min(1).nullable(),
+})
+
+const moveMediaSchema = z.object({
+  folderId: z.string().min(1).nullable(),
+})
+
+const bulkMoveSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+  folderId: z.string().min(1).nullable(),
 })
 
 function decode<TSchema extends z.ZodType>(schema: TSchema, body: unknown): z.infer<TSchema> {
@@ -467,7 +502,19 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         return bulkTag(request, actor, 'remove')
       }
+      if (second === 'bulk-move') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return bulkMove(request, actor)
+      }
       throw noRoute()
+    }
+
+    // The folder tree (fiche 46) — a `MediaFolder`, not an asset, so its own
+    // prefix rather than overloading `/api/media/{id}` with a second meaning
+    // for what `id` names. Same "reserved segment" convention `-` already
+    // uses for bulk routes above.
+    if (first === 'folders') {
+      return routeFolders(segments.slice(1), method, request, actor)
     }
 
     if (segments.length === 1) {
@@ -492,9 +539,76 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         return replace(id, request, actor)
       }
+      if (sub === 'move') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return moveAsset(id, request, actor)
+      }
     }
 
     throw noRoute()
+  }
+
+  /** `/api/media/folders/*` (fiche 46). 404 whenever `options.folders` was not wired — see its own doc comment. */
+  async function routeFolders(
+    rest: readonly string[],
+    method: string,
+    request: RestRequest,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    const folders = options.folders
+    if (folders === undefined) throw noRoute()
+
+    if (rest.length === 0) {
+      if (method === 'GET') return listFolders(folders, request, actor)
+      if (method === 'POST') return createFolder(folders, request, actor)
+      return methodNotAllowed(['GET', 'POST'])
+    }
+
+    if (rest.length === 1) {
+      const [id] = rest as [string]
+      if (method === 'GET') return readFolder(folders, id, actor)
+      if (method === 'PATCH' || method === 'PUT') return updateFolder(folders, id, request, actor)
+      if (method === 'DELETE') return deleteFolder(folders, id, actor)
+      return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
+    }
+
+    if (rest.length === 2 && rest[1] === 'move') {
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      return moveFolder(folders, rest[0] as string, request, actor)
+    }
+
+    throw noRoute()
+  }
+
+  /**
+   * `?folderId=`/`?includeSubfolders=` on `GET /api/media` (fiche 46).
+   *
+   * `folderId=none` means "unclassified" (`folder_id is null`), a real,
+   * listable state — anything else is taken as a literal folder id.
+   * `includeSubfolders=1` (with a real id, `none` has no subtree) resolves
+   * the whole subtree through `MediaFolderStore.subtreeIds` first, and the
+   * request becomes a `folderIds` match instead of a plain `folderId`
+   * equality — `MediaStore` itself never needs to know what a subtree is
+   * (see `ListMediaOptions.folderIds`'s own doc comment). Without
+   * `options.folders` wired, `includeSubfolders` is silently ignored and the
+   * request degrades to the exact match alone.
+   */
+  async function resolveFolderFilter(
+    request: RestRequest,
+  ): Promise<{ readonly folderId?: string | null; readonly folderIds?: readonly string[] }> {
+    const raw = single(request.query, 'folderId')
+    if (raw === undefined) return {}
+    const folderId = raw === 'none' ? null : raw
+
+    const includeSubfolders = ['1', 'true'].includes(
+      single(request.query, 'includeSubfolders') ?? '',
+    )
+    if (!includeSubfolders || folderId === null || options.folders === undefined) {
+      return { folderId }
+    }
+
+    const ids = await options.folders.subtreeIds(folderId)
+    return { folderIds: ids }
   }
 
   async function list(request: RestRequest, actor: Actor): Promise<RestResponse> {
@@ -522,6 +636,8 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const from = parseDateBound('from', single(request.query, 'from'))
     const to = parseDateBound('to', single(request.query, 'to'))
 
+    const folderFilter = await resolveFolderFilter(request)
+
     const sortRaw = single(request.query, 'sort')
     if (sortRaw !== undefined && !(MEDIA_SORT_FIELDS as readonly string[]).includes(sortRaw)) {
       throw queryError(
@@ -542,6 +658,7 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
       ...(tag === undefined ? {} : { tag }),
       ...(from === undefined ? {} : { from }),
       ...(to === undefined ? {} : { to }),
+      ...folderFilter,
     }
 
     // No dedicated index for media: `q` is a substring match on filename and
@@ -959,6 +1076,154 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     }
 
     return jsonResponse(200, { data: { updated, failed } })
+  }
+
+  // ---------------------------------------------------------------- folders (fiche 46)
+
+  function folderNotFound(id: string): CogentaError {
+    return new CogentaError({
+      code: 'MEDIA_FOLDER_NOT_FOUND',
+      message: `No media folder with id "${id}".`,
+      hint: 'List the folder tree to find a valid id, or the folder may already have been deleted.',
+      details: { id },
+    })
+  }
+
+  /**
+   * `GET /api/media/folders` — the whole tree, flattened depth-first,
+   * `parentId`/`path` intact for the admin to reconstruct nesting and a
+   * breadcrumb client-side. `?parentId=` (empty or `none`) scopes to one
+   * level (the roots); omitted returns everything. A media library's folder
+   * count is small enough that fetching the whole tree once, rather than
+   * paginating it, is the honest simplification here.
+   */
+  async function listFolders(
+    folders: MediaFolderStore,
+    request: RestRequest,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const parentIdRaw = single(request.query, 'parentId')
+    if (parentIdRaw === undefined) {
+      return jsonResponse(200, { data: await folders.list() })
+    }
+    const parentId = parentIdRaw === '' || parentIdRaw === 'none' ? null : parentIdRaw
+    return jsonResponse(200, { data: await folders.list({ parentId }) })
+  }
+
+  async function createFolder(
+    folders: MediaFolderStore,
+    request: RestRequest,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(createFolderSchema, request.body)
+    const created = await folders.create({
+      name: input.name,
+      ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+    })
+    return jsonResponse(201, { data: created })
+  }
+
+  async function readFolder(
+    folders: MediaFolderStore,
+    id: string,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const found = await folders.read(id)
+    if (found === null) throw folderNotFound(id)
+    return jsonResponse(200, { data: found })
+  }
+
+  /** Renames and/or repositions — never reparents, that is `moveFolder`. */
+  async function updateFolder(
+    folders: MediaFolderStore,
+    id: string,
+    request: RestRequest,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(updateFolderSchema, request.body)
+    const updated = await folders.update(id, {
+      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(input.position === undefined ? {} : { position: input.position }),
+    })
+    return jsonResponse(200, { data: updated })
+  }
+
+  /** `DELETE /api/media/folders/{id}` — refuses (`MEDIA_FOLDER_NOT_EMPTY`) while subfolders or assets remain, `contents` included: nothing here treats it as more special than any other folder. */
+  async function deleteFolder(
+    folders: MediaFolderStore,
+    id: string,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const deleted = await folders.delete(id)
+    if (!deleted) throw folderNotFound(id)
+    return jsonResponse(204, null)
+  }
+
+  async function moveFolder(
+    folders: MediaFolderStore,
+    id: string,
+    request: RestRequest,
+    actor: Actor,
+  ): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(moveFolderSchema, request.body)
+    const moved = await folders.move(id, input.parentId)
+    return jsonResponse(200, { data: moved })
+  }
+
+  /** Refuses a destination folder that does not exist — skipped entirely when `options.folders` was never wired, the same graceful absence every other folder-aware branch here applies. */
+  async function assertFolderExists(folderId: string | null): Promise<void> {
+    if (folderId === null || options.folders === undefined) return
+    const found = await options.folders.read(folderId)
+    if (found === null) throw folderNotFound(folderId)
+  }
+
+  /** `POST /api/media/{id}/move` (fiche 46) — files an existing asset in a folder, or clears it back to unclassified with `folderId: null`. */
+  async function moveAsset(id: string, request: RestRequest, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const asset = await store.get(id)
+    if (asset === null) throw notFound(id)
+    const input = decode(moveMediaSchema, request.body)
+    await assertFolderExists(input.folderId)
+    const moved = await store.update(id, { folderId: input.folderId })
+    return jsonResponse(200, { data: moved })
+  }
+
+  /**
+   * `POST /api/media/-/bulk-move` (fiche 46) — same named-failure-report
+   * shape as `bulkDelete`/`bulkTag`. Unlike those, the destination is
+   * validated once before the loop rather than per id: every asset in one
+   * bulk move shares the same target, so a missing folder is one failure to
+   * report, not the same failure repeated once per selected asset.
+   */
+  async function bulkMove(request: RestRequest, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(bulkMoveSchema, request.body)
+    await assertFolderExists(input.folderId)
+
+    const moved: MediaAsset[] = []
+    const failed: { id: string; code: string; message: string }[] = []
+
+    for (const id of input.ids) {
+      try {
+        const asset = await store.get(id)
+        if (asset === null) throw notFound(id)
+        moved.push(await store.update(id, { folderId: input.folderId }))
+      } catch (error) {
+        failed.push({
+          id,
+          code: error instanceof CogentaError ? error.code : 'INTERNAL',
+          message: error instanceof CogentaError ? error.message : 'Could not move this asset.',
+        })
+      }
+    }
+
+    return jsonResponse(200, { data: { moved, failed } })
   }
 }
 

@@ -25,9 +25,13 @@ const ASSET: MediaAsset = {
   storageKey: 'media/m1',
   tags: [],
   contentHash: 'sha256:deadbeef',
+  folderId: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   createdBy: 'user-1',
 }
+
+/** `ASSET` minus `folderId` — what `media.read`/`media.write` actually return (see `media.ts`'s own comment on why). */
+const { folderId: _assetFolderId, ...EXPECTED_TOOL_ASSET } = ASSET
 
 function fakeStore(overrides: Partial<MediaStore> = {}): MediaStore {
   return {
@@ -49,8 +53,17 @@ describe('media.read', () => {
 
     const result = await tool.execute({ id: 'm1' }, CTX)
 
-    expect(result).toEqual(ASSET)
+    expect(result).toEqual(EXPECTED_TOOL_ASSET)
     expect(store.get).toHaveBeenCalledWith('m1')
+  })
+
+  it('never exposes folderId — contract C keeps this tool exactly as figured (fiche 46)', async () => {
+    const store = fakeStore()
+    const tool = createMediaReadTool(store)
+
+    const result = await tool.execute({ id: 'm1' }, CTX)
+
+    expect(Object.hasOwn(result, 'folderId')).toBe(false)
   })
 
   it('throws MEDIA_NOT_FOUND when the store returns null', async () => {

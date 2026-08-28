@@ -3416,6 +3416,8 @@
     },
     "chromeHide": "Masquer les repères",
     "chromeShow": "Afficher les repères",
+    "detailPanelHide": "Masquer le panneau",
+    "detailPanelShow": "Afficher le panneau",
     "previewTitle": "Aperçu de la page",
     "previewLoading": "Rendu en cours…",
     "previewError": "L'aperçu n'a pas pu être rendu.",

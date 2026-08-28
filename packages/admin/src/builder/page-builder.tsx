@@ -109,6 +109,18 @@ export function PageBuilder({
   const [lockedKeys, setLockedKeys] = useState<ReadonlySet<string>>(new Set())
   const [viewport, setViewport] = useState<Viewport>('desktop')
   const [chromeVisible, setChromeVisible] = useState(true)
+  /**
+   * The detail panel (fiche — preview too small): a user asked directly
+   * whether the right column is really necessary. It cannot go away
+   * entirely — it is the only editor a media reference, a list of items or
+   * a rich-text document has (see this file's own header comment) — but it
+   * has no reason to hold width it is not using. Reserved space now tracks
+   * two independent things: whether there is anything to show
+   * (`selectedKeys.size > 0`) and whether the user wants to see it, so a
+   * block can stay selected (highlighted in the outline and the preview)
+   * while its settings panel stays closed and the preview keeps the room.
+   */
+  const [detailPanelOpen, setDetailPanelOpen] = useState(true)
   const [html, setHtml] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -387,6 +399,7 @@ export function PageBuilder({
   const singleSelected = selectedKeys.size === 1 ? ([...selectedKeys][0] ?? null) : null
   const selected = present.find((block) => block.key === singleSelected) ?? null
   const selectedDefinition = selected === null ? undefined : blockDefinition(selected.type)
+  const showDetailPanel = selectedKeys.size > 0 && detailPanelOpen
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the shortcut is a convenience over controls that all exist as real buttons below.
@@ -434,6 +447,17 @@ export function PageBuilder({
           {chromeVisible ? t('builder.chromeHide') : t('builder.chromeShow')}
         </Button>
 
+        {selectedKeys.size > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-pressed={!detailPanelOpen}
+            onClick={() => setDetailPanelOpen((current) => !current)}
+          >
+            {detailPanelOpen ? t('builder.detailPanelHide') : t('builder.detailPanelShow')}
+          </Button>
+        )}
+
         <span role="status" className="text-xs text-muted-foreground">
           {rendering ? t('builder.previewLoading') : ''}
         </span>
@@ -453,14 +477,17 @@ export function PageBuilder({
       <div
         className={cn(
           'grid gap-4',
-          // The detail panel only needs its full 20rem once there is
-          // something to show in it — while it just holds the "select a
-          // block" placeholder, that width is better spent on the preview
-          // itself (real page builders never reserve settings-panel width
-          // for nothing selected).
-          selectedKeys.size > 0
+          // The detail panel costs real width from the preview (a user
+          // flagged this directly — the "Ordinateur" preview simulates a
+          // real 1440px page, scaled down to whatever the panel leaves it,
+          // so every rem given back here is a real, visible gain). It is
+          // never reserved for nothing: closed (nothing selected, or
+          // explicitly hidden via the toolbar toggle) drops the column from
+          // the grid template entirely rather than holding a
+          // placeholder-sized slot.
+          showDetailPanel
             ? 'lg:grid-cols-[16rem_minmax(0,1fr)_20rem]'
-            : 'lg:grid-cols-[16rem_minmax(0,1fr)_14rem]',
+            : 'lg:grid-cols-[16rem_minmax(0,1fr)]',
         )}
       >
         <div className="flex flex-col gap-4">
@@ -535,35 +562,37 @@ export function PageBuilder({
           }}
         />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <h3>{t('builder.detailHeading')}</h3>
-            </CardTitle>
-          </CardHeader>
-          <CardBody>
-            {selectedKeys.size > 1 ? (
-              <p className="text-sm text-muted-foreground">{t('builder.detailMultiple')}</p>
-            ) : selected === null || selectedDefinition === undefined ? (
-              <p className="text-sm text-muted-foreground">{t('builder.detailEmpty')}</p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <BlockForm
-                  idPrefix={`builder-${selected.key}`}
-                  definition={selectedDefinition}
-                  data={selected.data}
-                  disabled={disabled}
-                  onChange={(data) => commit(updateBlockData(present, selected.key, data))}
-                />
-                <BlockVariantControl
-                  variant={selected.data.variant as BlockVariant | undefined}
-                  disabled={disabled}
-                  onChange={(variant) => handleVariantChange(selected.key, selected, variant)}
-                />
-              </div>
-            )}
-          </CardBody>
-        </Card>
+        {showDetailPanel && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h3>{t('builder.detailHeading')}</h3>
+              </CardTitle>
+            </CardHeader>
+            <CardBody>
+              {selectedKeys.size > 1 ? (
+                <p className="text-sm text-muted-foreground">{t('builder.detailMultiple')}</p>
+              ) : selected === null || selectedDefinition === undefined ? (
+                <p className="text-sm text-muted-foreground">{t('builder.detailEmpty')}</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <BlockForm
+                    idPrefix={`builder-${selected.key}`}
+                    definition={selectedDefinition}
+                    data={selected.data}
+                    disabled={disabled}
+                    onChange={(data) => commit(updateBlockData(present, selected.key, data))}
+                  />
+                  <BlockVariantControl
+                    variant={selected.data.variant as BlockVariant | undefined}
+                    disabled={disabled}
+                    onChange={(variant) => handleVariantChange(selected.key, selected, variant)}
+                  />
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
       </div>
     </div>
   )

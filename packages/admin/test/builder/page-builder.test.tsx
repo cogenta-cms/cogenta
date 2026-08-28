@@ -261,6 +261,41 @@ describe('the page builder, driven the way an editor drives it', () => {
   })
 })
 
+describe('detail panel reclaims preview width when it has nothing to show (preview-too-small fix)', () => {
+  it('renders no detail panel and no toggle button while nothing is selected', async () => {
+    render(<Harness />)
+    await screen.findByRole('heading', { name: 'Ajouter un bloc' })
+
+    expect(screen.queryByRole('heading', { name: 'Bloc sélectionné' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /panneau/u })).toBeNull()
+  })
+
+  it('shows the detail panel and a hide toggle once a block is selected', async () => {
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Citation/u }))
+
+    expect(await screen.findByRole('heading', { name: 'Bloc sélectionné' })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Masquer le panneau' })).not.toBeNull()
+  })
+
+  it('hides the panel on request, giving the preview column back, and can reopen it', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: /^Citation/u }))
+    await screen.findByRole('heading', { name: 'Bloc sélectionné' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Masquer le panneau' }))
+    expect(screen.queryByRole('heading', { name: 'Bloc sélectionné' })).toBeNull()
+    // The block itself stays selected (still highlighted in the outline) —
+    // only its settings panel closed, so reopening does not require
+    // reselecting anything.
+    const toggle = screen.getByRole('button', { name: 'Afficher le panneau' })
+
+    fireEvent.click(toggle)
+    expect(await screen.findByRole('heading', { name: 'Bloc sélectionné' })).not.toBeNull()
+  })
+})
+
 describe('what a whole visual session hands back (L16 acceptance)', () => {
   it('only ever emits contract-B blocks — a key, a type, and semantic data', async () => {
     const emitted: (readonly ContentBlock[])[] = []

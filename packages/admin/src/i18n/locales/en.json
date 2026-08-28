@@ -3417,6 +3417,8 @@
     },
     "chromeHide": "Hide editing marks",
     "chromeShow": "Show editing marks",
+    "detailPanelHide": "Hide panel",
+    "detailPanelShow": "Show panel",
     "previewTitle": "Page preview",
     "previewLoading": "Rendering…",
     "previewError": "The preview could not be rendered.",

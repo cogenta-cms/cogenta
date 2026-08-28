@@ -282,3 +282,24 @@ describe('Diagnostic — robots.txt custom rules editor (fiche 50 task 4)', () =
     expect(await screen.findByText('Enregistré.')).toBeDefined()
   })
 })
+
+describe('Diagnostic — internal link assistant (fiche 70 task 2)', () => {
+  it('says so when no collection has a public route yet, rather than an empty selector', async () => {
+    // The shared mock schema (`mock-fetch.ts`) declares no routed collection
+    // at all — the same reason the Sitemap tab's own "no routed collection"
+    // test above exists — so this proves the section renders its honest
+    // empty state instead of an unusable, option-less dropdown.
+    signedIn(['admin'])
+    render(<App />)
+    await goToDiagnostics()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Assistant de maillage interne' }),
+    ).toBeDefined()
+    expect(
+      screen.getByText(
+        "Aucune collection n'a encore de route publique, il n'y a donc rien à analyser ici.",
+      ),
+    ).toBeDefined()
+  })
+})

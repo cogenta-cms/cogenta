@@ -516,6 +516,30 @@ export function installMockFetch(
       }
       readonly anomalies?: readonly { readonly code: string; readonly message: string }[]
     }
+    /** What `GET /api/seo/link-suggestions` answers with (fiche 70 task 2) — no orphans and no suggestions by default. Keyed by requested collection name; a collection with no entry here still gets the empty default rather than a 404. */
+    readonly seoLinkSuggestions?: Readonly<
+      Record<
+        string,
+        {
+          readonly orphans: readonly {
+            readonly collection: string
+            readonly id: string
+            readonly title: string
+          }[]
+          readonly suggestionsByEntry: Readonly<
+            Record<
+              string,
+              readonly {
+                readonly collection: string
+                readonly id: string
+                readonly title: string
+                readonly sharedWordCount: number
+              }[]
+            >
+          >
+        }
+      >
+    >
     /** What `GET /api/theme` answers with (fiche 14) — a fixed, valid file skin, no override, no gallery and no AI by default. */
     readonly theme?: {
       readonly fileTokens?: Record<string, unknown> | null
@@ -7354,6 +7378,28 @@ export function installMockFetch(
               duplicateTitles: [],
             },
             anomalies: diagnostics?.anomalies ?? [],
+          },
+        })
+      }
+
+      // `GET /api/seo/link-suggestions` — fiche 70 task 2, follows `update`
+      // on the named collection (never `admin`, unlike diagnostics above).
+      if (url.includes('/api/seo/link-suggestions') && method === 'GET') {
+        const parsedLinkUrl = new URL(url, 'http://localhost')
+        const collectionName = parsedLinkUrl.searchParams.get('collection') ?? ''
+        if (
+          !user.roles.includes('editor') &&
+          !user.roles.includes('admin') &&
+          collectionName !== ''
+        ) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const found = options.seoLinkSuggestions?.[collectionName]
+        return json(200, {
+          data: {
+            collection: collectionName,
+            orphans: found?.orphans ?? [],
+            suggestionsByEntry: found?.suggestionsByEntry ?? {},
           },
         })
       }

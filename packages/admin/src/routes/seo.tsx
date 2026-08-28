@@ -3,7 +3,13 @@ import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
-import { getSeoDiagnostics, type SeoContentRef, type SeoDiagnostics } from '../api/seo-client.js'
+import {
+  getSeoDiagnostics,
+  getSeoLinkSuggestions,
+  type SeoContentRef,
+  type SeoDiagnostics,
+  type SeoLinkSuggestions,
+} from '../api/seo-client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -249,6 +255,7 @@ export function SeoRoute(): JSX.Element {
             active={tab === 'diagnostics'}
             settings={seoSettings}
             onSave={saveSetting}
+            collections={routedCollections}
           />
         )}
       </div>
@@ -809,11 +816,17 @@ function DiagnosticsTab({
   active,
   settings,
   onSave,
+  collections,
 }: {
   readonly active: boolean
   /** Fiche 50 task 4 — needed only for the robots.txt custom-rules editor below. */
   readonly settings: readonly SiteSetting[]
   readonly onSave: TabSaveHandler
+  /** Fiche 70 task 2 — routed collections, for the link assistant's own selector below. */
+  readonly collections: readonly {
+    readonly name: string
+    readonly labels: { readonly singular: string }
+  }[]
 }): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -1011,7 +1024,177 @@ function DiagnosticsTab({
           </p>
         </>
       )}
+
+      <LinkAssistantSection collections={collections} />
     </div>
+  )
+}
+
+/**
+ * Fiche 70 task 2 — orphaned entries and internal-link candidates, one
+ * routed collection at a time. A separate section from the scan above (own
+ * loading state, own trigger) because `GET /api/seo/link-suggestions` reads
+ * `update` permission on the chosen collection, not `admin` — an editor
+ * without the `admin` role that the rest of this screen requires would
+ * still be able to call it, so this section is built to stand on its own
+ * rather than assume the page-level admin gate around it.
+ */
+function LinkAssistantSection({
+  collections,
+}: {
+  readonly collections: readonly {
+    readonly name: string
+    readonly labels: { readonly singular: string }
+  }[]
+}): JSX.Element | null {
+  const { t } = useTranslation()
+  const auth = useAuth()
+  const token = auth.state.status === 'authenticated' ? auth.state.token : null
+
+  const [collectionName, setCollectionName] = useState<string>(collections[0]?.name ?? '')
+  const [suggestions, setSuggestions] = useState<SeoLinkSuggestions | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    if (token === null || collectionName === '') return
+    setLoading(true)
+    setError(null)
+    try {
+      setSuggestions(await getSeoLinkSuggestions(token, collectionName))
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('seo.linkAssistantLoadError'))
+    } finally {
+      setLoading(false)
+    }
+  }, [token, collectionName, t])
+
+  useEffect(() => {
+    setSuggestions(null)
+  }, [collectionName])
+
+  useEffect(() => {
+    if (collectionName === '' || suggestions !== null) return
+    void load()
+  }, [collectionName, suggestions, load])
+
+  if (collections.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h3>{t('seo.linkAssistantHeading')}</h3>
+          </CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className="text-muted-foreground m-0 text-sm">{t('seo.linkAssistantNoCollections')}</p>
+        </CardBody>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-2">
+        <CardTitle>
+          <h3>{t('seo.linkAssistantHeading')}</h3>
+        </CardTitle>
+        <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>
+          {t('seo.refresh')}
+        </Button>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <p className="text-muted-foreground m-0 text-sm">{t('seo.linkAssistantDescription')}</p>
+
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="link-assistant-collection"
+            className="text-sm font-medium text-foreground"
+          >
+            {t('seo.linkAssistantCollectionLabel')}
+          </label>
+          <Select
+            id="link-assistant-collection"
+            value={collectionName}
+            onChange={(event) => setCollectionName(event.target.value)}
+          >
+            {collections.map((collection) => (
+              <option key={collection.name} value={collection.name}>
+                {collection.labels.singular}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        {error !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{error}</p>
+          </Notice>
+        )}
+        {loading && suggestions === null && <p>{t('common.loading')}</p>}
+
+        {suggestions !== null && (
+          <>
+            <div>
+              <h4 className="m-0 mb-2 text-sm font-semibold">
+                {t('seo.linkAssistantOrphansHeading')}{' '}
+                {suggestions.orphans.length > 0 && `(${suggestions.orphans.length})`}
+              </h4>
+              {suggestions.orphans.length === 0 ? (
+                <p className="text-muted-foreground m-0 text-sm">
+                  {t('seo.linkAssistantNoOrphans')}
+                </p>
+              ) : (
+                <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                  {suggestions.orphans.map((orphan) => (
+                    <li key={orphan.id}>
+                      <EntryLink
+                        entry={orphan}
+                        label={orphan.title === '' ? t('seo.viewEntry') : orphan.title}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <h4 className="m-0 mb-2 text-sm font-semibold">
+                {t('seo.linkAssistantSuggestionsHeading')}
+              </h4>
+              {Object.keys(suggestions.suggestionsByEntry).length === 0 ? (
+                <p className="text-muted-foreground m-0 text-sm">
+                  {t('seo.linkAssistantNoSuggestions')}
+                </p>
+              ) : (
+                <ul className="m-0 flex list-none flex-col gap-3 p-0 text-sm">
+                  {Object.entries(suggestions.suggestionsByEntry).map(([entryId, candidates]) => (
+                    <li key={entryId}>
+                      <EntryLink
+                        entry={{ collection: suggestions.collection, id: entryId }}
+                        label={entryId}
+                      />
+                      <ul className="m-0 flex list-none flex-col gap-1 p-0 pl-3">
+                        {candidates.map((candidate) => (
+                          <li key={candidate.id}>
+                            <EntryLink entry={candidate} label={candidate.title} />
+                            <span className="text-muted-foreground ml-2 text-xs">
+                              {t('seo.linkAssistantSharedWords', {
+                                count: candidate.sharedWordCount,
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </CardBody>
+    </Card>
   )
 }
 

@@ -22,4 +22,5 @@ export {
   createPreviewTokens,
   MAX_PREVIEW_LIFETIME_SECONDS,
   PREVIEW_SIGNING_KEY_ENV,
+  PREVIEW_SIGNING_KEY_MINIMUM_LENGTH,
 } from './preview-token.js'

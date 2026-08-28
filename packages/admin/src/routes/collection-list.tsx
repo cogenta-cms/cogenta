@@ -1,7 +1,6 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import { ApiError } from '../api/client.js'
 import {
   deleteEntry,
   duplicateEntry,
@@ -14,6 +13,7 @@ import {
   unpublishEntry,
   untrashEntry,
 } from '../api/content-client.js'
+import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { listTerms, type Term } from '../api/taxonomy-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -117,7 +117,7 @@ export function CollectionListRoute(): JSX.Element {
   const [hasMore, setHasMore] = useState(false)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ApiErrorDescription | null>(null)
 
   const [prefs, setPrefs] = useState(() => loadTablePrefs(name))
   useEffect(() => setPrefs(loadTablePrefs(name)), [name])
@@ -135,7 +135,7 @@ export function CollectionListRoute(): JSX.Element {
 
   // Row actions (fiche 01 task 2).
   const [rowBusy, setRowBusy] = useState<string | null>(null)
-  const [rowError, setRowError] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<ApiErrorDescription | null>(null)
 
   // Bulk actions (fiche 01 task 3).
   const [bulkRunning, setBulkRunning] = useState<BulkAction | null>(null)
@@ -154,7 +154,7 @@ export function CollectionListRoute(): JSX.Element {
     () => (location.state as TrashedFlashState | null)?.trashed ?? null,
   )
   const [untrashing, setUntrashing] = useState(false)
-  const [untrashError, setUntrashError] = useState<string | null>(null)
+  const [untrashError, setUntrashError] = useState<ApiErrorDescription | null>(null)
 
   useEffect(() => {
     if ((location.state as TrashedFlashState | null)?.trashed === undefined) return
@@ -171,9 +171,7 @@ export function CollectionListRoute(): JSX.Element {
       setTrashedFlash(null)
       await load()
     } catch (caught) {
-      setUntrashError(
-        caught instanceof ApiError ? caught.message : t('collectionList.undoTrashError'),
-      )
+      setUntrashError(describeApiError(caught, t('collectionList.undoTrashError')))
     } finally {
       setUntrashing(false)
     }
@@ -243,7 +241,7 @@ export function CollectionListRoute(): JSX.Element {
       setCounts(page.counts ?? null)
       setSelected(new Set())
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('collectionList.loadError'))
+      setError(describeApiError(caught, t('collectionList.loadError')))
     } finally {
       setLoading(false)
     }
@@ -291,7 +289,7 @@ export function CollectionListRoute(): JSX.Element {
       setHits(results.hits)
     } catch (caught) {
       setHits([])
-      setError(caught instanceof ApiError ? caught.message : t('collectionList.searchError'))
+      setError(describeApiError(caught, t('collectionList.searchError')))
     } finally {
       setSearching(false)
     }
@@ -340,8 +338,16 @@ export function CollectionListRoute(): JSX.Element {
     [collection, roles],
   )
 
+  /**
+   * The one place this screen still shows only `message`, never `hint`: a
+   * bulk-action failure row (`BulkFailure`, below) is one line in a list of
+   * up to as many rows as were selected, and the same underlying cause
+   * usually repeats across most of them — a hint appended `count` times
+   * would be noise, not help. `describeApiError` (fiche 40 task 2) still
+   * does the actual `ApiError` detection; this only takes its `message`.
+   */
   function messageOf(caught: unknown, fallback: string): string {
-    return caught instanceof ApiError ? caught.message : fallback
+    return describeApiError(caught, fallback).message
   }
 
   // -------------------------------------------------------------- row actions (task 2)
@@ -353,12 +359,12 @@ export function CollectionListRoute(): JSX.Element {
     try {
       const preview = await issuePreview(token, collection.name, entry.id)
       if (preview.url === null) {
-        setRowError(t('collectionList.previewNoSiteUrl'))
+        setRowError({ message: t('collectionList.previewNoSiteUrl') })
         return
       }
       window.open(preview.url, '_blank', 'noopener,noreferrer')
     } catch (caught) {
-      setRowError(messageOf(caught, t('collectionList.previewError')))
+      setRowError(describeApiError(caught, t('collectionList.previewError')))
     } finally {
       setRowBusy(null)
     }
@@ -380,7 +386,7 @@ export function CollectionListRoute(): JSX.Element {
       // table, so the only honest thing after an action is to ask it again.
       await load()
     } catch (caught) {
-      setRowError(messageOf(caught, t('collectionList.rowActionError')))
+      setRowError(describeApiError(caught, t('collectionList.rowActionError')))
     } finally {
       setRowBusy(null)
     }
@@ -573,7 +579,8 @@ export function CollectionListRoute(): JSX.Element {
       )}
       {untrashError !== null && (
         <Notice tone="danger" live="assertive">
-          <p>{untrashError}</p>
+          <p>{untrashError.message}</p>
+          {untrashError.hint !== undefined && <p>{untrashError.hint}</p>}
         </Notice>
       )}
 
@@ -873,7 +880,8 @@ export function CollectionListRoute(): JSX.Element {
 
       {error !== null && (
         <Notice tone="danger" live="assertive">
-          <p>{error}</p>
+          <p>{error.message}</p>
+          {error.hint !== undefined && <p>{error.hint}</p>}
         </Notice>
       )}
       {rowError !== null && (
@@ -883,7 +891,8 @@ export function CollectionListRoute(): JSX.Element {
           onDismiss={() => setRowError(null)}
           dismissLabel={t('collectionList.close')}
         >
-          <p>{rowError}</p>
+          <p>{rowError.message}</p>
+          {rowError.hint !== undefined && <p>{rowError.hint}</p>}
         </Notice>
       )}
       {searching && <p>{t('common.loading')}</p>}

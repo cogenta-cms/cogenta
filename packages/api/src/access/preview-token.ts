@@ -18,8 +18,12 @@ export const PREVIEW_SIGNING_KEY_ENV = 'COGENTA_PREVIEW_SIGNING_KEY'
 /**
  * Shortest key accepted. Below this an HMAC key is guessable, and a guessable
  * key turns every draft of the site into public content.
+ *
+ * Exported (fiche 40 task 4) so `cogenta doctor`'s own check compares against
+ * the exact same number this module enforces, rather than a second `32`
+ * copied by hand that could silently drift from it.
  */
-const MINIMUM_KEY_LENGTH = 32
+export const PREVIEW_SIGNING_KEY_MINIMUM_LENGTH = 32
 
 /**
  * Longest lifetime a token may be issued for. A preview link is shared in a
@@ -84,10 +88,10 @@ export function createPreviewTokens(options: PreviewTokenOptions = {}): PreviewT
   const now = options.now ?? Date.now
   const maxLifetime = options.maxLifetimeSeconds ?? MAX_PREVIEW_LIFETIME_SECONDS
 
-  if (signingKey === undefined || signingKey.length < MINIMUM_KEY_LENGTH) {
+  if (signingKey === undefined || signingKey.length < PREVIEW_SIGNING_KEY_MINIMUM_LENGTH) {
     throw new CogentaError({
       code: 'CONFIG_INVALID',
-      message: `Preview tokens need ${PREVIEW_SIGNING_KEY_ENV} to hold at least ${MINIMUM_KEY_LENGTH} characters.`,
+      message: `Preview tokens need ${PREVIEW_SIGNING_KEY_ENV} to hold at least ${PREVIEW_SIGNING_KEY_MINIMUM_LENGTH} characters.`,
       hint: `Set ${PREVIEW_SIGNING_KEY_ENV} in the environment — for example \`openssl rand -hex 32\`. Never put it in a configuration file.`,
     })
   }

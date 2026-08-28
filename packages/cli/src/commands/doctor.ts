@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { PREVIEW_SIGNING_KEY_ENV, PREVIEW_SIGNING_KEY_MINIMUM_LENGTH } from '@cogenta/api'
 import {
   type CogentaConfig,
   createCacheRegistry,
@@ -162,6 +163,25 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
   if (config.storage.driver !== 's3' && env['COGENTA_STORAGE_SIGNING_KEY'] === undefined) {
     notes.push(
       'COGENTA_STORAGE_SIGNING_KEY is not set, so signed media URLs stop working after a restart.',
+    )
+  }
+
+  // Fiche 40 task 4: a proactive check, not a reactive fix — the same
+  // `CONFIG_INVALID` an editor's first "Prévisualiser" click threw
+  // (`preview-token.ts`) is surfaced here before anyone clicks anything. Only
+  // used if a draft is ever previewed (`withPreview`, `packages/api/src/rest/router.ts`),
+  // so this stays a warning: a site that never uses preview links is not
+  // broken by not having this key, and `doctor` must never fail a site over
+  // an optional feature (AGENTS.md's own instruction — a warning, never a
+  // blocking failure).
+  const previewSigningKey = env[PREVIEW_SIGNING_KEY_ENV]
+  if (
+    previewSigningKey === undefined ||
+    previewSigningKey.length < PREVIEW_SIGNING_KEY_MINIMUM_LENGTH
+  ) {
+    notes.push(
+      `${PREVIEW_SIGNING_KEY_ENV} is missing or shorter than ${PREVIEW_SIGNING_KEY_MINIMUM_LENGTH} characters, so previewing an unpublished draft will fail. ` +
+        `Set it in the environment — for example \`openssl rand -hex 32\`. Never put it in a configuration file.`,
     )
   }
 

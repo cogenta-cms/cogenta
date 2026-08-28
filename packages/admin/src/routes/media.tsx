@@ -1,6 +1,6 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import { listMedia, type MediaAsset } from '../api/media-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaDetail } from '../media/media-detail.js'
@@ -31,7 +31,7 @@ export function MediaRoute(): JSX.Element {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ApiErrorDescription | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -44,7 +44,7 @@ export function MediaRoute(): JSX.Element {
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
+      setError(describeApiError(caught, t('media.loadError')))
     } finally {
       setLoading(false)
     }
@@ -63,7 +63,7 @@ export function MediaRoute(): JSX.Element {
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
+      setError(describeApiError(caught, t('media.loadError')))
     } finally {
       setLoadingMore(false)
     }
@@ -95,7 +95,8 @@ export function MediaRoute(): JSX.Element {
 
       {error !== null && (
         <Notice tone="danger" live="assertive">
-          <p>{error}</p>
+          <p>{error.message}</p>
+          {error.hint !== undefined && <p>{error.hint}</p>}
         </Notice>
       )}
       {loading && <p>{t('common.loading')}</p>}

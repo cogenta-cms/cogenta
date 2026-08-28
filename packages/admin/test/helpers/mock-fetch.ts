@@ -904,6 +904,15 @@ export function installMockFetch(
         readonly fields?: Readonly<Record<string, unknown>>
       }[]
     }
+    /**
+     * Fiche 40 task 1/2: makes `POST /api/content/{collection}/{id}/preview`
+     * answer the way a real server does when `COGENTA_PREVIEW_SIGNING_KEY`
+     * is missing or too short (`packages/api/src/access/preview-token.ts`) —
+     * `CONFIG_INVALID`, with the real `hint` text — instead of minting a
+     * token. Off by default: most tests want the happy path already covered
+     * by the plain `preview` branch below.
+     */
+    readonly previewSigningKeyMissing?: boolean
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -4721,6 +4730,16 @@ export function installMockFetch(
           action === 'preview' &&
           method === 'POST'
         ) {
+          if (options.previewSigningKeyMissing === true) {
+            return json(500, {
+              error: {
+                code: 'CONFIG_INVALID',
+                message:
+                  'Preview tokens need COGENTA_PREVIEW_SIGNING_KEY to hold at least 32 characters.',
+                hint: 'Set COGENTA_PREVIEW_SIGNING_KEY in the environment — for example `openssl rand -hex 32`. Never put it in a configuration file.',
+              },
+            })
+          }
           return json(201, {
             data: {
               token: 'preview-token-1',

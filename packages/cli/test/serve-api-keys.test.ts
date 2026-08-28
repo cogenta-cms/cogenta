@@ -228,6 +228,144 @@ describe('cogenta serve — API key rotation (fiche 20 task 2)', () => {
   })
 })
 
+describe('cogenta serve — recovery from a mistaken revocation (fiche 62 task 3, decision b)', () => {
+  it('mints a replacement that authenticates, while the revoked key never does again', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const original = await createKey(server.base, token, {
+        name: 'CI pipeline',
+        scope: ['viewer'],
+      })
+
+      const revoked = await fetch(`${server.base}/api/api-keys/${original.id}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(revoked.status).toBe(204)
+
+      const recovered = await fetch(`${server.base}/api/api-keys/${original.id}/recover`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(recovered.status).toBe(201)
+      const { data } = (await recovered.json()) as {
+        data: { key: string; name: string; scope: readonly string[] }
+      }
+      expect(data.name).toBe('CI pipeline')
+      expect(data.scope).toEqual(['viewer'])
+
+      const oldStillDead = await readSecretsAs(server.base, original.key)
+      const newWorks = await readSecretsAs(server.base, data.key)
+      expect(oldStillDead.status).toBe(403)
+      expect(newWorks.status).toBe(200)
+
+      const listed = await fetch(`${server.base}/api/api-keys`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data: keys } = (await listed.json()) as {
+        data: readonly { id: string; revokedAt: string | null }[]
+      }
+      // Still shown as revoked — recovery is never a reactivation.
+      expect(keys.find((k) => k.id === original.id)?.revokedAt).not.toBeNull()
+
+      const audit = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data: entries } = (await audit.json()) as { data: readonly { action: string }[] }
+      expect(entries.map((entry) => entry.action)).toContain('apikey.recover')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('refuses to recover a key that is still active', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const original = await createKey(server.base, token, { name: 'x', scope: ['viewer'] })
+
+      const response = await fetch(`${server.base}/api/api-keys/${original.id}/recover`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(409)
+      const { error } = (await response.json()) as { error: { code: string } }
+      expect(error.code).toBe('API_KEY_RECOVERY_INVALID')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
+describe('cogenta serve — purge (fiche 62 task 2)', () => {
+  it('refuses to purge a key that is still active', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const original = await createKey(server.base, token, { name: 'x', scope: ['viewer'] })
+
+      const response = await fetch(`${server.base}/api/api-keys/${original.id}/purge`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(409)
+      const { error } = (await response.json()) as { error: { code: string } }
+      expect(error.code).toBe('API_KEY_PURGE_INVALID')
+
+      // Still listed — never touched by a refused purge.
+      const listed = await fetch(`${server.base}/api/api-keys`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data: keys } = (await listed.json()) as { data: readonly { id: string }[] }
+      expect(keys.some((k) => k.id === original.id)).toBe(true)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('refuses to purge a key revoked only moments ago — the retention window has not passed', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const original = await createKey(server.base, token, { name: 'x', scope: ['viewer'] })
+      await fetch(`${server.base}/api/api-keys/${original.id}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      })
+
+      const response = await fetch(`${server.base}/api/api-keys/${original.id}/purge`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(409)
+      const { error } = (await response.json()) as { error: { code: string } }
+      expect(error.code).toBe('API_KEY_PURGE_INVALID')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('reports a 404 for an id that was never a key', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const response = await fetch(`${server.base}/api/api-keys/nope/purge`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(404)
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
 describe('cogenta serve — per-key request quota, degraded driver (fiche 20 task 3, R1)', () => {
   it('answers 429 with Retry-After once a key exceeds its quota, on a site with no Redis configured at all', async () => {
     const root = await project()

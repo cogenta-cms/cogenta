@@ -2150,7 +2150,21 @@
     "loadError": "Impossible de charger la liste des clés API.",
     "createError": "Impossible de créer cette clé API.",
     "revokeError": "Impossible de révoquer cette clé.",
-    "rotateError": "Impossible de faire tourner cette clé."
+    "rotateError": "Impossible de faire tourner cette clé.",
+    "recoverKey": "Récupérer {{name}}",
+    "recoverHeading": "Récupérer {{name}}",
+    "recoverDescription": "Pour une clé révoquée par erreur, très récemment.",
+    "recoverWarning": "La clé révoquée le reste pour toujours — ce n'est pas une réactivation. Une nouvelle clé est créée avec le même nom, la même portée et le même quota.",
+    "recoverButton": "Créer une clé de remplacement",
+    "recoveredTitle": "Clé de remplacement créée : {{name}}",
+    "recoveredBody": "Voici la nouvelle clé, qui remplace celle révoquée par erreur. L'ancienne reste révoquée.",
+    "recoverError": "Impossible de récupérer cette clé — la fenêtre de récupération est peut-être passée.",
+    "purgeKey": "Purger {{name}}",
+    "purgeIn": "Purgeable dans {{days}} jour(s)",
+    "confirmPurgeTitle": "Purger {{name}} ?",
+    "confirmPurge": "Cette clé révoquée sera supprimée définitivement de la liste, avec son historique d'usage. Cette action est irréversible.",
+    "confirmPurgeButton": "Purger la clé",
+    "purgeError": "Impossible de purger cette clé."
   },
   "mcp": {
     "heading": "Serveur MCP",

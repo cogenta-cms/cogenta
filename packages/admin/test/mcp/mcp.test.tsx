@@ -51,7 +51,11 @@ describe('the MCP key list', () => {
 
     const rows = within(await screen.findByRole('table'))
     expect(rows.getByText('CI pipeline')).toBeDefined()
-    expect(rows.getByText('viewer')).toBeDefined()
+    // Both seeded keys are scoped to "viewer" (fiche 62 added a second,
+    // already-revoked key shared with `api-keys.test.tsx`'s purge tests),
+    // so this is no longer unique to a single row — scope to the row.
+    const ciPipelineRow = screen.getByText('CI pipeline').closest('tr') as HTMLElement
+    expect(within(ciPipelineRow).getByText('viewer')).toBeDefined()
     expect(rows.queryByText(/cogenta_sk_mock/u)).toBeNull()
   })
 
@@ -174,7 +178,10 @@ describe('revoking an MCP key', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Révoquer la clé' }))
 
     await waitFor(() => {
-      expect(within(screen.getByRole('table')).getByText('Révoquée')).toBeDefined()
+      // A second, already-revoked seed key (fiche 62) also reads "Révoquée"
+      // now — scope to the row this test actually revoked.
+      const ciPipelineRow = screen.getByText('CI pipeline').closest('tr') as HTMLElement
+      expect(within(ciPipelineRow).getByText('Révoquée')).toBeDefined()
     })
   })
 })

@@ -33,6 +33,17 @@ function table(): HTMLElement {
   return screen.getByRole('table')
 }
 
+/**
+ * Fiche 62: the seed now includes a second, already-revoked key ("Old
+ * integration") so the purge screen has something to purge without faking
+ * time — which means "Révoquée" is no longer unique in the table the moment
+ * a second key is revoked. Row-scoped queries are what keep these tests
+ * asserting the right key's status rather than "a" status.
+ */
+function rowFor(name: string): HTMLElement {
+  return screen.getByText(name).closest('tr') as HTMLElement
+}
+
 describe('the API key list', () => {
   it('shows every key by name, prefix and scope, never the raw key', async () => {
     render(<App />)
@@ -40,7 +51,10 @@ describe('the API key list', () => {
 
     const rows = within(await screen.findByRole('table'))
     expect(rows.getByText('CI pipeline')).toBeDefined()
-    expect(rows.getByText('viewer')).toBeDefined()
+    // Both seeded keys are scoped to "viewer" (fiche 62 added a second,
+    // already-revoked key for the purge tests), so this is no longer unique
+    // to a single row — assert it appears on the row that matters.
+    expect(within(rowFor('CI pipeline')).getByText('viewer')).toBeDefined()
     expect(rows.queryByText(/cogenta_sk_mock/u)).toBeNull()
   })
 
@@ -107,7 +121,7 @@ describe('revoking an API key', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Révoquer la clé' }))
 
     await waitFor(() => {
-      expect(within(table()).getByText('Révoquée')).toBeDefined()
+      expect(within(rowFor('CI pipeline')).getByText('Révoquée')).toBeDefined()
     })
   })
 
@@ -141,6 +155,79 @@ describe('rotating an API key (fiche 20 task 2)', () => {
     await waitFor(() => {
       expect(within(table()).getByText('En sursis')).toBeDefined()
     })
+  })
+})
+
+describe('recovering a revoked key (fiche 62 task 3, decision b)', () => {
+  it('mints a replacement without lifting the original out of "Révoquée"', async () => {
+    render(<App />)
+    await goToApiKeys()
+    await screen.findByText('CI pipeline')
+
+    // Revoked by the mock just now, so it is inside the 24h recovery window.
+    fireEvent.click(screen.getByRole('button', { name: 'Révoquer CI pipeline' }))
+    const revokeDialog = await screen.findByRole('dialog', { name: 'Révoquer CI pipeline ?' })
+    fireEvent.click(within(revokeDialog).getByRole('button', { name: 'Révoquer la clé' }))
+    await waitFor(() => {
+      expect(within(rowFor('CI pipeline')).getByText('Révoquée')).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Récupérer CI pipeline' }))
+    const recoverDialog = await screen.findByRole('dialog', { name: 'Récupérer CI pipeline' })
+    fireEvent.click(
+      within(recoverDialog).getByRole('button', { name: 'Créer une clé de remplacement' }),
+    )
+
+    expect(await screen.findByText(/^cogenta_sk_mock-recovered/u)).toBeDefined()
+    await waitFor(() => {
+      // Two rows now share the name "CI pipeline" — the original, still
+      // revoked, and the fresh replacement. The original (listed first,
+      // matching insertion order) is what must still read "Révoquée" —
+      // recover is never a reactivation.
+      const rows = screen.getAllByText('CI pipeline').map((el) => el.closest('tr') as HTMLElement)
+      expect(rows).toHaveLength(2)
+      expect(within(rows[0] as HTMLElement).getByText('Révoquée')).toBeDefined()
+    })
+  })
+
+  it('does not offer recovery for a key revoked long ago', async () => {
+    render(<App />)
+    await goToApiKeys()
+    await screen.findByText('Old integration')
+
+    expect(screen.queryByRole('button', { name: 'Récupérer Old integration' })).toBeNull()
+  })
+})
+
+describe('purging a long-revoked key (fiche 62 task 2)', () => {
+  it('removes it from the list after confirmation', async () => {
+    render(<App />)
+    await goToApiKeys()
+    await screen.findByText('Old integration')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Purger Old integration' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Purger Old integration ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Purger la clé' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Old integration')).toBeNull()
+    })
+  })
+
+  it('offers no purge button yet for a key revoked moments ago, only a countdown', async () => {
+    render(<App />)
+    await goToApiKeys()
+    await screen.findByText('CI pipeline')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Révoquer CI pipeline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Révoquer CI pipeline ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Révoquer la clé' }))
+    await waitFor(() => {
+      expect(within(rowFor('CI pipeline')).getByText('Révoquée')).toBeDefined()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Purger CI pipeline' })).toBeNull()
+    expect(within(rowFor('CI pipeline')).getByText('Purgeable dans 30 jour(s)')).toBeDefined()
   })
 })
 

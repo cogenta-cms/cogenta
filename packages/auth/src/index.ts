@@ -13,6 +13,8 @@ export {
   createApiKeyStore,
   DEFAULT_RATE_LIMIT_PER_MINUTE,
   looksLikeApiKey,
+  MIN_PURGE_AFTER_REVOKED_DAYS,
+  RECOVERY_WINDOW_MS,
 } from './api-keys.js'
 export type {
   AuditChainPoint,

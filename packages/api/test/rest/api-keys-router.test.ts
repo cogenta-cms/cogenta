@@ -500,6 +500,196 @@ describe('rotation (fiche 20 task 2)', () => {
   })
 })
 
+describe('purge (fiche 62 task 2)', () => {
+  async function createAndRevoke(): Promise<string> {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    await router().handle(request('DELETE', `/api/api-keys/${created.id}`), admin)
+    return created.id
+  }
+
+  it('refuses to purge an active key', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    const response = await router().handle(
+      request('DELETE', `/api/api-keys/${created.id}/purge`),
+      admin,
+    )
+    expect(response.status).toBe(409)
+    expect(errorCodeOf(response)).toBe('API_KEY_PURGE_INVALID')
+  })
+
+  it('refuses to purge a key revoked too recently', async () => {
+    const id = await createAndRevoke()
+    const response = await router().handle(request('DELETE', `/api/api-keys/${id}/purge`), admin)
+    expect(response.status).toBe(409)
+    expect(errorCodeOf(response)).toBe('API_KEY_PURGE_INVALID')
+
+    // Never purged — still listed, still revoked.
+    const listed = dataOf<readonly { id: string }[]>(
+      await router().handle(request('GET', '/api/api-keys'), admin),
+    )
+    expect(listed.some((k) => k.id === id)).toBe(true)
+  })
+
+  it('purges a key revoked at least 30 days ago, removing it from the list', async () => {
+    const id = await createAndRevoke()
+    clock += 30 * 24 * 60 * 60 * 1000
+
+    const response = await router().handle(request('DELETE', `/api/api-keys/${id}/purge`), admin)
+    expect(response.status).toBe(204)
+
+    const listed = dataOf<readonly { id: string }[]>(
+      await router().handle(request('GET', '/api/api-keys'), admin),
+    )
+    expect(listed.some((k) => k.id === id)).toBe(false)
+  })
+
+  it('reports a 404 for an id that was never a key', async () => {
+    const response = await router().handle(request('DELETE', '/api/api-keys/nope/purge'), admin)
+    expect(response.status).toBe(404)
+    expect(errorCodeOf(response)).toBe('API_KEY_NOT_FOUND')
+  })
+
+  it('refuses a non-admin purging a key', async () => {
+    const id = await createAndRevoke()
+    clock += 30 * 24 * 60 * 60 * 1000
+    const response = await router().handle(
+      request('DELETE', `/api/api-keys/${id}/purge`),
+      actorFor('e-1', ['editor']),
+    )
+    expect(response.status).toBe(403)
+  })
+})
+
+describe('recovery from a mistaken revocation (fiche 62 task 3, decision b)', () => {
+  it('mints a replacement without lifting the original out of revoked', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'CI pipeline', scope: ['editor'] }),
+        admin,
+      ),
+    )
+    await router().handle(request('DELETE', `/api/api-keys/${created.id}`), admin)
+
+    const recovered = await router().handle(
+      request('POST', `/api/api-keys/${created.id}/recover`),
+      admin,
+    )
+    expect(recovered.status).toBe(201)
+    const data = dataOf<{ id: string; name: string; scope: readonly string[]; key: string }>(
+      recovered,
+    )
+    expect(data.name).toBe('CI pipeline')
+    expect(data.scope).toEqual(['editor'])
+    expect(data.key).toMatch(/^cogenta_sk_/)
+
+    const listed = dataOf<readonly { id: string; revokedAt: string | null }[]>(
+      await router().handle(request('GET', '/api/api-keys'), admin),
+    )
+    const original = listed.find((k) => k.id === created.id)
+    // Still revoked — recovery is never a reactivation.
+    expect(original?.revokedAt).not.toBeNull()
+  })
+
+  it('lets the replacement authenticate, unlike the key it replaces', async () => {
+    const created = dataOf<{ id: string; key: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    await router().handle(request('DELETE', `/api/api-keys/${created.id}`), admin)
+
+    const recovered = dataOf<{ key: string }>(
+      await router().handle(request('POST', `/api/api-keys/${created.id}/recover`), admin),
+    )
+
+    const oldActor = await resolveActor(auth, { authorization: `Bearer ${created.key}` })
+    expect(oldActor).toEqual(ANONYMOUS)
+
+    const newActor = await resolveActor(auth, { authorization: `Bearer ${recovered.key}` })
+    expect(newActor.roles).toEqual(['viewer'])
+  })
+
+  it('refuses to recover a key that was never revoked', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    const response = await router().handle(
+      request('POST', `/api/api-keys/${created.id}/recover`),
+      admin,
+    )
+    expect(response.status).toBe(409)
+    expect(errorCodeOf(response)).toBe('API_KEY_RECOVERY_INVALID')
+  })
+
+  it('refuses to recover a key revoked more than 24 hours ago', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    await router().handle(request('DELETE', `/api/api-keys/${created.id}`), admin)
+    clock += 24 * 60 * 60 * 1000 + 1
+
+    const response = await router().handle(
+      request('POST', `/api/api-keys/${created.id}/recover`),
+      admin,
+    )
+    expect(response.status).toBe(409)
+    expect(errorCodeOf(response)).toBe('API_KEY_RECOVERY_INVALID')
+  })
+
+  it('reports a 404 for an id that was never a key', async () => {
+    const response = await router().handle(request('POST', '/api/api-keys/nope/recover'), admin)
+    expect(response.status).toBe(404)
+    expect(errorCodeOf(response)).toBe('API_KEY_NOT_FOUND')
+  })
+
+  it('refuses a non-admin recovering a key', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    await router().handle(request('DELETE', `/api/api-keys/${created.id}`), admin)
+    const response = await router().handle(
+      request('POST', `/api/api-keys/${created.id}/recover`),
+      actorFor('e-1', ['editor']),
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('never includes the old key material in a recovery response', async () => {
+    const created = dataOf<{ id: string; key: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+    await router().handle(request('DELETE', `/api/api-keys/${created.id}`), admin)
+    const recovered = await router().handle(
+      request('POST', `/api/api-keys/${created.id}/recover`),
+      admin,
+    )
+    expect(JSON.stringify(recovered.body)).not.toContain(created.key)
+  })
+})
+
 describe('usage and hygiene (fiche 20 task 4)', () => {
   it('reports zero usage for a key that was never used', async () => {
     await router().handle(request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }), admin)

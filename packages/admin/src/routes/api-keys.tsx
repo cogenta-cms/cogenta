@@ -5,7 +5,9 @@ import {
   type CreatedApiKey,
   createApiKey,
   listApiKeys,
+  purgeApiKey,
   type RotatedApiKey,
+  recoverApiKey,
   revokeApiKey,
   rotateApiKey,
 } from '../api/api-keys-client.js'
@@ -57,6 +59,15 @@ const GRACE_CHOICES = [1, 24, 24 * 7] as const
 type GraceHours = (typeof GRACE_CHOICES)[number]
 const UNUSED_WARNING_DAYS = 90
 const DAY_MS = 24 * 60 * 60 * 1000
+/**
+ * Fiche 62 tasks 2-3 — mirrors `MIN_PURGE_AFTER_REVOKED_DAYS`/
+ * `RECOVERY_WINDOW_MS` in `@cogenta/auth`'s `api-keys.ts`, by hand: this
+ * package has no dependency on that one (REST only), so these are only ever
+ * used to decide which button this screen *offers* — the server is the one
+ * and only authority on whether an action actually succeeds.
+ */
+const MIN_PURGE_AFTER_REVOKED_DAYS = 30
+const RECOVERY_WINDOW_HOURS = 24
 
 function expiryFieldsFor(choice: ExpiryChoice): { expiresAt?: string; neverExpires?: boolean } {
   if (choice === 'never') return { neverExpires: true }
@@ -91,6 +102,20 @@ function daysUntil(iso: string): number {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS)
 }
 
+/** `null` while not (yet) eligible; `0` once a revoked key can be purged. */
+function purgeEligibleInDays(key: AdminApiKey): number | null {
+  if (key.revokedAt === null) return null
+  const revokedDaysAgo = (Date.now() - new Date(key.revokedAt).getTime()) / DAY_MS
+  return Math.max(Math.ceil(MIN_PURGE_AFTER_REVOKED_DAYS - revokedDaysAgo), 0)
+}
+
+/** Fiche 62 task 3, decision (b): only within the recovery window, and only for a revoked key. */
+function canRecover(key: AdminApiKey): boolean {
+  if (key.revokedAt === null) return false
+  const revokedHoursAgo = (Date.now() - new Date(key.revokedAt).getTime()) / (60 * 60 * 1000)
+  return revokedHoursAgo <= RECOVERY_WINDOW_HOURS
+}
+
 export function ApiKeysRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -119,6 +144,10 @@ export function ApiKeysRoute(): JSX.Element {
   const [rotating, setRotating] = useState<AdminApiKey | null>(null)
   const [graceHours, setGraceHours] = useState<GraceHours>(24)
   const [rotated, setRotated] = useState<RotatedApiKey | null>(null)
+
+  const [purging, setPurging] = useState<AdminApiKey | null>(null)
+  const [recovering, setRecovering] = useState<AdminApiKey | null>(null)
+  const [recovered, setRecovered] = useState<CreatedApiKey | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -192,6 +221,31 @@ export function ApiKeysRoute(): JSX.Element {
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.rotateError'))
+    }
+  }
+
+  async function confirmPurge(): Promise<void> {
+    if (token === null || purging === null) return
+    setActionError(null)
+    try {
+      await purgeApiKey(token, purging.id)
+      setPurging(null)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.purgeError'))
+    }
+  }
+
+  async function confirmRecover(): Promise<void> {
+    if (token === null || recovering === null) return
+    setActionError(null)
+    try {
+      const result = await recoverApiKey(token, recovering.id)
+      setRecovered(result)
+      setRecovering(null)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.recoverError'))
     }
   }
 
@@ -270,6 +324,20 @@ export function ApiKeysRoute(): JSX.Element {
         </Notice>
       )}
 
+      {recovered !== null && (
+        <Notice
+          tone="success"
+          live="assertive"
+          title={t('apiKeys.recoveredTitle', { name: recovered.name })}
+          onDismiss={() => setRecovered(null)}
+          dismissLabel={t('apiKeys.createdDismiss')}
+        >
+          <p>{t('apiKeys.recoveredBody')}</p>
+          <p className="font-mono text-sm break-all">{recovered.key}</p>
+          <p className="mt-2 font-semibold">{t('apiKeys.createdWarning')}</p>
+        </Notice>
+      )}
+
       {actionError !== null && (
         <Notice tone="danger" live="assertive">
           <p>{actionError}</p>
@@ -336,7 +404,7 @@ export function ApiKeysRoute(): JSX.Element {
                     </TableCell>
                     <TableCell>{statusOf(key)}</TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="secondary"
                           size="sm"
@@ -353,6 +421,21 @@ export function ApiKeysRoute(): JSX.Element {
                         >
                           {t('apiKeys.revokeKey', { name: key.name })}
                         </Button>
+                        {key.revokedAt !== null && canRecover(key) && (
+                          <Button variant="secondary" size="sm" onClick={() => setRecovering(key)}>
+                            {t('apiKeys.recoverKey', { name: key.name })}
+                          </Button>
+                        )}
+                        {key.revokedAt !== null &&
+                          (purgeEligibleInDays(key) === 0 ? (
+                            <Button variant="destructive" size="sm" onClick={() => setPurging(key)}>
+                              {t('apiKeys.purgeKey', { name: key.name })}
+                            </Button>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {t('apiKeys.purgeIn', { days: purgeEligibleInDays(key) })}
+                            </p>
+                          ))}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -483,6 +566,47 @@ export function ApiKeysRoute(): JSX.Element {
         }
       >
         <p>{t('apiKeys.confirmRevoke')}</p>
+      </Modal>
+
+      <Modal
+        open={recovering !== null}
+        onOpenChange={(open) => {
+          if (!open) setRecovering(null)
+        }}
+        title={t('apiKeys.recoverHeading', { name: recovering?.name ?? '' })}
+        description={t('apiKeys.recoverDescription')}
+        closeLabel={t('apiKeys.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRecovering(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void confirmRecover()}>{t('apiKeys.recoverButton')}</Button>
+          </>
+        }
+      >
+        <p>{t('apiKeys.recoverWarning')}</p>
+      </Modal>
+
+      <Modal
+        open={purging !== null}
+        onOpenChange={(open) => {
+          if (!open) setPurging(null)
+        }}
+        title={t('apiKeys.confirmPurgeTitle', { name: purging?.name ?? '' })}
+        closeLabel={t('apiKeys.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPurging(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmPurge()}>
+              {t('apiKeys.confirmPurgeButton')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('apiKeys.confirmPurge')}</p>
       </Modal>
     </section>
   )

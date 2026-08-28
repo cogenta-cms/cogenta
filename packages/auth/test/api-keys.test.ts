@@ -1,6 +1,11 @@
 import { sql } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
-import { createApiKeyStore, looksLikeApiKey } from '../src/api-keys.js'
+import {
+  createApiKeyStore,
+  looksLikeApiKey,
+  MIN_PURGE_AFTER_REVOKED_DAYS,
+  RECOVERY_WINDOW_MS,
+} from '../src/api-keys.js'
 import { testDb } from './helpers/db.js'
 
 describe('ApiKeyStore', () => {
@@ -142,6 +147,141 @@ describe('ApiKeyStore', () => {
     const keys = createApiKeyStore(db)
     const issued = await keys.create({ name: 'CI script', scope: ['viewer'], createdBy: 'admin-1' })
     expect(issued.createdBy).toBe('admin-1')
+  })
+})
+
+describe('ApiKeyStore.purge (fiche 62 task 2)', () => {
+  it('refuses to purge a key that is still active', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+
+    await expect(keys.purge(issued.id)).rejects.toMatchObject({ code: 'API_KEY_PURGE_INVALID' })
+    expect(await keys.getById(issued.id)).not.toBeNull()
+  })
+
+  it('refuses to purge a key revoked less than MIN_PURGE_AFTER_REVOKED_DAYS ago', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const keys = createApiKeyStore(db, () => clock)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+    await keys.revoke(issued.id)
+
+    clock += (MIN_PURGE_AFTER_REVOKED_DAYS - 1) * 24 * 60 * 60 * 1000
+    await expect(keys.purge(issued.id)).rejects.toMatchObject({ code: 'API_KEY_PURGE_INVALID' })
+    expect(await keys.getById(issued.id)).not.toBeNull()
+  })
+
+  it('purges a key revoked at least MIN_PURGE_AFTER_REVOKED_DAYS ago, row and usage history included', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const keys = createApiKeyStore(db, () => clock)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+    await keys.verify(issued.key) // leaves a usage row behind
+    await keys.revoke(issued.id)
+
+    clock += MIN_PURGE_AFTER_REVOKED_DAYS * 24 * 60 * 60 * 1000
+    await keys.purge(issued.id)
+
+    expect(await keys.getById(issued.id)).toBeNull()
+    const usageRows = await db.query<{ count: number }>(
+      sql`select count(*) as count from cogenta_api_key_usage where key_id = ${issued.id}`,
+    )
+    expect(Number(usageRows.rows[0]?.count)).toBe(0)
+  })
+
+  it('throws API_KEY_NOT_FOUND for an id that was never a key', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    await expect(keys.purge('nope')).rejects.toMatchObject({ code: 'API_KEY_NOT_FOUND' })
+  })
+})
+
+describe('ApiKeyStore.recover (fiche 62 task 3, decision b)', () => {
+  it('refuses to recover a key that was never revoked', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+
+    await expect(keys.recover(issued.id)).rejects.toMatchObject({
+      code: 'API_KEY_RECOVERY_INVALID',
+    })
+  })
+
+  it('refuses to recover a key revoked more than RECOVERY_WINDOW_MS ago', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const keys = createApiKeyStore(db, () => clock)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+    await keys.revoke(issued.id)
+
+    clock += RECOVERY_WINDOW_MS + 1
+    await expect(keys.recover(issued.id)).rejects.toMatchObject({
+      code: 'API_KEY_RECOVERY_INVALID',
+    })
+  })
+
+  it('mints a replacement carrying the same name, scope and quota, within the window', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const keys = createApiKeyStore(db, () => clock)
+    const issued = await keys.create({
+      name: 'CI pipeline',
+      scope: ['editor', 'viewer'],
+      createdBy: null,
+      rateLimitPerMinute: 42,
+    })
+    await keys.revoke(issued.id)
+
+    clock += RECOVERY_WINDOW_MS - 1
+    const recovered = await keys.recover(issued.id)
+
+    expect(recovered.name).toBe('CI pipeline')
+    expect(recovered.scope).toEqual(['editor', 'viewer'])
+    expect(recovered.rateLimitPerMinute).toBe(42)
+    expect(recovered.key).not.toBe(issued.key)
+  })
+
+  it('never lifts revokedAt on the key it recovers from', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+    await keys.revoke(issued.id)
+
+    await keys.recover(issued.id)
+
+    const original = await keys.getById(issued.id)
+    expect(original?.revokedAt).not.toBeUndefined()
+  })
+
+  it('lets the replacement authenticate where the original no longer can', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+    await keys.revoke(issued.id)
+
+    const recovered = await keys.recover(issued.id)
+
+    expect(await keys.verify(issued.key)).toBeNull()
+    expect(await keys.verify(recovered.key)).not.toBeNull()
+  })
+
+  it('links the revoked key to its replacement via supersededBy', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+    await keys.revoke(issued.id)
+
+    const recovered = await keys.recover(issued.id)
+
+    const original = await keys.getById(issued.id)
+    expect(original?.supersededBy).toBe(recovered.id)
+  })
+
+  it('throws API_KEY_NOT_FOUND for an id that was never a key', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    await expect(keys.recover('nope')).rejects.toMatchObject({ code: 'API_KEY_NOT_FOUND' })
   })
 })
 

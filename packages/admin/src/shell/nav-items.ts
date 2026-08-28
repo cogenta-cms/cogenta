@@ -401,6 +401,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    // Fiche 66 — split out of "Sécurité & webhooks" into its own screen,
+    // where its own nav entry actually names what it is. No badge yet: a
+    // badge needs its own `ShellStatus` field (`NavBadgeKey` is kept
+    // identical to that type on purpose), and adding one is server-side work
+    // this fiche's own scope note ("extraction mécanique, aucune nouvelle
+    // logique") rules out — left for a future fiche.
+    to: '/updates',
+    labelKey: 'nav.updates',
+    group: 'ops',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     to: '/health',
     labelKey: 'nav.health',
     group: 'ops',

@@ -140,14 +140,31 @@ function agentDisabled(name: string): CogentaError {
  * guarantee `packages/cli/test/serve-assistant.test.ts` already proves for
  * `assist.*`, extended here to the agent runtime.
  */
+/**
+ * Fiche 55 task 2 — `model.model` is an explicit model id, distinct from the
+ * provider name `resolveProvider` already picked a client by. A
+ * `ProviderClient` is a plain object (`{ name, model, chat }`, see every
+ * `providers/*.ts` adapter); overriding `model` this way changes nothing
+ * about `chat`'s closure over its own config (the vendor URL, the API key)
+ * — only the `model` field `runAgentLoop` reads off the client onto every
+ * `ChatRequest`. Absent or blank means "use whatever the provider config
+ * says", the behaviour every agent had before this field existed.
+ */
+function withModelOverride(client: ProviderClient, model: string | undefined): ProviderClient {
+  if (model === undefined || model.trim().length === 0) return client
+  return { ...client, model: model.trim() }
+}
+
 function resolveProvider(
   agentName: string,
-  model: { readonly preferred: string; readonly fallback?: string },
+  model: { readonly preferred: string; readonly fallback?: string; readonly model?: string },
   providers: AgentProviderRegistryLike,
 ): ProviderClient {
-  if (providers.has(model.preferred)) return providers.get(model.preferred)
+  if (providers.has(model.preferred)) {
+    return withModelOverride(providers.get(model.preferred), model.model)
+  }
   if (model.fallback !== undefined && providers.has(model.fallback)) {
-    return providers.get(model.fallback)
+    return withModelOverride(providers.get(model.fallback), model.model)
   }
   throw new CogentaError({
     code: 'AGENT_NO_PROVIDER',

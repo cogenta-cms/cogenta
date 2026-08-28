@@ -47,6 +47,8 @@ export interface AgentWriteInput {
     readonly role: string
     readonly objectives: readonly string[]
     readonly style?: string
+    /** Fiche 55 task 1 — extra standing instructions, distinct from `style`. Additive, optional. */
+    readonly systemPrompt?: string
   }
   readonly model?: unknown
   readonly tools?: readonly string[]
@@ -81,6 +83,7 @@ export interface AgentRegistryLike {
     readonly role: string
     readonly objectives: readonly string[]
     readonly style?: string
+    readonly systemPrompt?: string
   }>
 }
 
@@ -264,6 +267,13 @@ function requireCreateFields(body: AgentWriteInput): void {
       code: 'AGENT_DEFINITION_INVALID',
       message: 'A new agent needs "identity": { "role": "…", "objectives": […] }.',
       hint: 'Objectives may be an empty array, but role must be non-empty text.',
+    })
+  }
+  if (body.identity.systemPrompt !== undefined && typeof body.identity.systemPrompt !== 'string') {
+    throw new CogentaError({
+      code: 'AGENT_DEFINITION_INVALID',
+      message: '"identity.systemPrompt", when present, must be text.',
+      hint: 'Omit it, or send a non-empty string.',
     })
   }
   const model = body.model as { readonly preferred?: unknown } | undefined

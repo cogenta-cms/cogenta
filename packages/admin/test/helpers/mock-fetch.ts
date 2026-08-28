@@ -406,6 +406,22 @@ export function installMockFetch(
     }
     /** `POST /api/assistant/run`'s answer, keyed by tool name — what each test's scripted provider "said". */
     readonly assistantRun?: Readonly<Record<string, unknown>>
+    /**
+     * Seeds `GET /api/providers` (and so the agent-creation form's provider
+     * picker, fiche 55 task 3) with configured providers — empty by default,
+     * same as a real site with none, which is exactly what
+     * `providers.test.tsx`'s own tests need. A test that needs to save a new
+     * agent (which now requires picking a configured, enabled provider)
+     * seeds one here rather than every test paying for it.
+     */
+    readonly providers?: readonly {
+      readonly provider: string
+      readonly enabled: boolean
+      readonly model: string
+      readonly baseUrl?: string
+      readonly maskedKey: string
+      readonly updatedAt: string
+    }[]
     /** What `GET /api/notices` answers with. Empty by default: most screens have nothing to recommend. */
     readonly notices?: readonly {
       id: string
@@ -908,7 +924,8 @@ export function installMockFetch(
     baseUrl?: string
     maskedKey: string
     updatedAt: string
-  }[] = []
+  }[] =
+    options.providers === undefined ? [] : options.providers.map((provider) => ({ ...provider }))
   // Mirrors `@cogenta/agents`' `KNOWN_PROVIDER_CATALOG` (fiche 56) closely
   // enough for the admin's catalog-driven form — this file imports nothing
   // but `vitest`, so it hand-copies the shape rather than the real data.

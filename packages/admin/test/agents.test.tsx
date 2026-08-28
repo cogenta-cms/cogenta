@@ -126,7 +126,18 @@ describe('agents', () => {
   it('creates a new agent and runs it, showing the result', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
-    installMockFetch({ roles: ['admin'] })
+    installMockFetch({
+      roles: ['admin'],
+      providers: [
+        {
+          provider: 'anthropic',
+          enabled: true,
+          model: 'claude-sonnet-5',
+          maskedKey: '••••abcd',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+    })
 
     render(<App />)
     await goToAgents()
@@ -144,5 +155,80 @@ describe('agents', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Exécuter' }))
 
     expect(await screen.findByText(/Mock result for: summarise recent posts/)).toBeDefined()
+  })
+
+  // Fiche 55 task 3: creating still requires just a name and a provider —
+  // the rest (role, objectives, style, system prompt, tools, autonomy) is
+  // now collectible in the same form, but never required.
+  it('the create form disables Save until a name and an enabled provider are both present', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] }) // no providers configured
+
+    render(<App />)
+    await goToAgents()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Créer un agent' }))
+    expect(await screen.findByText(/Aucun fournisseur n'est encore activé/)).toBeDefined()
+    fireEvent.change(screen.getByPlaceholderText('ex. Rédacteur de newsletter'), {
+      target: { value: 'Helper' },
+    })
+
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', true)
+  })
+
+  // Fiche 55 task 1/3: creation grows into role/objectives/style/system
+  // prompt, either hand-written or generated (R6: reviewed, never applied
+  // automatically) — and the generated draft appears in the same fields the
+  // human can still edit before Save.
+  it('generates a draft identity from a brief, reviewed before saving, never applied automatically', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      providers: [
+        {
+          provider: 'anthropic',
+          enabled: true,
+          model: 'claude-sonnet-5',
+          maskedKey: '••••abcd',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+      assistantRun: {
+        'assist.generate_agent_identity': {
+          role: 'an agent that drafts newsletter summaries',
+          objectives: ['Summarise the week’s published posts.', 'Never invent a fact.'],
+          style: 'Warm and concise.',
+          systemPrompt: 'Always cite the source post for every claim.',
+          applied: false,
+        },
+      },
+    })
+
+    render(<App />)
+    await goToAgents()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Créer un agent' }))
+    fireEvent.change(screen.getByPlaceholderText('ex. Rédacteur de newsletter'), {
+      target: { value: 'Newsletter Drafter' },
+    })
+    fireEvent.change(screen.getByPlaceholderText(/Surveiller les nouvelles commandes/), {
+      target: { value: 'Résume les articles publiés cette semaine pour une newsletter.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
+
+    expect(
+      await screen.findByDisplayValue('an agent that drafts newsletter summaries'),
+    ).toBeDefined()
+    expect(screen.getByDisplayValue('Warm and concise.')).toBeDefined()
+    expect(screen.getByDisplayValue('Always cite the source post for every claim.')).toBeDefined()
+
+    // Nothing is created until Save is clicked explicitly (R6).
+    expect(screen.queryByRole('button', { name: 'Newsletter Drafter' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByRole('button', { name: 'Newsletter Drafter' })).toBeDefined()
   })
 })

@@ -27,6 +27,8 @@ export interface StoredAgentIdentity {
   readonly role: string
   readonly objectives: readonly string[]
   readonly style?: string
+  /** Fiche 55 task 1 — extra standing instructions, distinct from `style`. See `identity/markdown.ts`. */
+  readonly systemPrompt?: string
 }
 
 /** The full, persisted shape of one agent — `AgentDeclaration` plus the fields only the store (not contract C) needs to track. */
@@ -298,6 +300,7 @@ export function createFileAgentDeclarationStore(
         role: parsed.role,
         objectives: parsed.objectives,
         ...(parsed.style === undefined ? {} : { style: parsed.style }),
+        ...(parsed.systemPrompt === undefined ? {} : { systemPrompt: parsed.systemPrompt }),
       }
     },
   }

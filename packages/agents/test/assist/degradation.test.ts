@@ -61,6 +61,7 @@ describe('what exists, given what is configured', () => {
         'assist.moderate',
         'assist.faq_draft',
         'assist.schema_org_draft',
+        'assist.generate_agent_identity',
       ],
     },
     {
@@ -109,7 +110,7 @@ describe('what exists, given what is configured', () => {
   })
 
   it('offers everything at once when everything is configured', () => {
-    expect(fullyConfigured().tools).toHaveLength(15)
+    expect(fullyConfigured().tools).toHaveLength(16)
   })
 })
 

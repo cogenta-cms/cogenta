@@ -1094,7 +1094,39 @@
     "robotsCustomRulesLabel": "Règles personnalisées",
     "robotsCustomRulesHelp": "Fusionné dans le robots.txt ci-dessus, après les règles affichées et avant la ligne Sitemap. Une directive par ligne, en syntaxe robots.txt réelle.",
     "robotsDisallowAllConfirm": "Cela inclut « Disallow: / », qui bloque tous les robots pour tout le site. Enregistrer quand même ?",
-    "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /"
+    "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /",
+    "focusKeywordLabel": "Mot-clé principal",
+    "focusKeywordPlaceholder": "ex. « guide de voyage »",
+    "focusKeywordHint": "Optionnel. Alimente les vérifications liées au mot-clé dans le score de contenu ci-dessous — laissez vide pour ne voir que les vérifications structurelles.",
+    "contentScoreHeading": "Score de contenu",
+    "contentScoreNoKeywordHint": "Renseignez un mot-clé principal ci-dessus pour vérifier aussi son usage dans le titre, la description, la première phrase et la densité.",
+    "scoreLevel": {
+      "red": "À améliorer",
+      "orange": "Correct",
+      "green": "Bon"
+    },
+    "contentCheckPassed": "(réussi)",
+    "contentCheckFailed": "(à améliorer)",
+    "contentCheck": {
+      "keywordInTitle": "Le mot-clé principal apparaît dans le titre.",
+      "keywordInDescription": "Le mot-clé principal apparaît dans la meta description.",
+      "keywordInFirstSentence": "Le mot-clé principal apparaît dans la première phrase.",
+      "keywordDensity": "Le mot-clé principal est utilisé à une densité saine (0,5 %–2,5 % du texte).",
+      "sentenceLength": "Aucune phrase ne dépasse 20 mots.",
+      "subheadings": "Le contenu utilise des sous-titres.",
+      "contentLength": "Le contenu fait au moins 300 mots."
+    },
+    "linkAssistantHeading": "Assistant de maillage interne",
+    "linkAssistantDescription": "Entrées orphelines (aucune autre entrée publiée n'y renvoie) et, pour les entrées qui partagent des mots de titre, des candidats plausibles de lien interne — calculé à partir des liens déjà présents dans votre contenu, jamais une recommandation de l'IA.",
+    "linkAssistantCollectionLabel": "Collection",
+    "linkAssistantNoCollections": "Aucune collection n'a encore de route publique, il n'y a donc rien à analyser ici.",
+    "linkAssistantOrphansHeading": "Entrées orphelines",
+    "linkAssistantNoOrphans": "Aucune trouvée — chaque entrée publiée a au moins un lien entrant.",
+    "linkAssistantSuggestionsHeading": "Liens internes suggérés",
+    "linkAssistantNoSuggestions": "Aucun candidat plausible trouvé pour une entrée de cette collection.",
+    "linkAssistantLoadError": "Impossible de calculer les suggestions de liens.",
+    "linkAssistantSharedWords_one": "{{count}} mot partagé",
+    "linkAssistantSharedWords_other": "{{count}} mots partagés"
   },
   "opsSettings": {
     "heading": "Sécurité & webhooks",

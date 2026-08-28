@@ -1,12 +1,15 @@
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import type { CollectionDefinition, ContentEntry } from '@cogenta/schema'
 import {
+  analyseInternalLinks,
   buildMetaTags,
   isIndexable,
   isPublished,
   isSeoNoindexed,
+  type LinkSuggestion,
   type MetadataOptions,
   type MetaTag,
+  type OrphanEntry,
   renderRobotsTxt,
   robotsRuleDisallowsEverything,
   type SeoImage,
@@ -16,25 +19,37 @@ import {
 import type { ContentGateway } from '../graphql/gateway.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
 import { ANONYMOUS } from '../types.js'
-import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import {
+  errorResponse,
+  jsonResponse,
+  queryError,
+  type RestRequest,
+  type RestResponse,
+} from './http.js'
 
 /**
  * `/api/seo` — fiche 13 (SEO éditorial): the admin's only door onto what
  * `@cogenta/seo` actually computes.
  *
- * Two routes, and the pitfall the fiche names ("un aperçu réimplémenté côté
- * admin ment") is why there are only two: neither one re-derives a title, a
- * description or a robots decision. Both call the exact same
+ * Three routes, and the pitfall the fiche names ("un aperçu réimplémenté côté
+ * admin ment") is why the first two are only two: neither one re-derives a
+ * title, a description or a robots decision. Both call the exact same
  * `buildMetaTags`/`isIndexable` the public render path calls — `preview` on
  * one entry with the editor's unsaved SEO fields overlaid, `diagnostics`
  * across every routed collection's *stored* published entries.
  *
- *   POST /api/seo/preview       { collection, id, overrides? } → the real head, for one edit in progress
- *   GET  /api/seo/diagnostics   site-wide: sitemap size, robots.txt, and the anomalies a client would otherwise find first
+ *   POST /api/seo/preview            { collection, id, overrides? } → the real head, for one edit in progress
+ *   GET  /api/seo/diagnostics        site-wide: sitemap size, robots.txt, and the anomalies a client would otherwise find first
+ *   GET  /api/seo/link-suggestions   ?collection=… → orphaned entries and internal-link candidates (fiche 70 task 2)
  *
  * `preview` is gated by `update` on the named collection (an editor previews
  * what they may write); `diagnostics` is `admin`-only, matching the site-wide
  * screens elsewhere in this package (`redirect-router.ts`, `ops-status-router.ts`).
+ * `link-suggestions` follows `preview`'s own gate — `update` on the *named*
+ * collection, never `admin` — because the fiche is explicit that an editor
+ * must be able to run it on whatever they may already write, not only an
+ * administrator; see this route's own handler for why the graph it builds
+ * still spans every routed collection regardless of which one was asked for.
  */
 
 export interface SeoRouterOptions {
@@ -107,7 +122,9 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'The SEO routes are POST /api/seo/preview and GET /api/seo/diagnostics.',
+    hint:
+      'The SEO routes are POST /api/seo/preview, GET /api/seo/diagnostics and ' +
+      'GET /api/seo/link-suggestions.',
   })
 }
 
@@ -200,10 +217,26 @@ export interface SeoDiagnostics {
   readonly anomalies: readonly SeoAnomaly[]
 }
 
+/**
+ * `GET /api/seo/link-suggestions` response body (fiche 70 task 2).
+ *
+ * `orphans` and `suggestionsByEntry` are both already scoped to the one
+ * requested collection — see `linkSuggestions`'s own comment for why the
+ * *graph* underneath is built from every routed collection regardless, and
+ * only the report is filtered down.
+ */
+export interface SeoLinkSuggestions {
+  readonly collection: string
+  readonly orphans: readonly OrphanEntry[]
+  /** Keyed by entry id (already scoped to `collection` above, so the collection half of `LinkAssistantReport`'s own `"collection/id"` key would be redundant here). */
+  readonly suggestionsByEntry: Readonly<Record<string, readonly LinkSuggestion[]>>
+}
+
 export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const previewPath = `${basePath}/preview`
   const diagnosticsPath = `${basePath}/diagnostics`
+  const linkSuggestionsPath = `${basePath}/link-suggestions`
   const byName = new Map(options.collections.map((collection) => [collection.name, collection]))
   const maxScan = options.maxScanPerCollection ?? DEFAULT_MAX_SCAN
   const allowIndexing = options.allowIndexing ?? true
@@ -532,6 +565,64 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
     return jsonResponse(200, { data })
   }
 
+  /**
+   * `GET /api/seo/link-suggestions?collection=…` (fiche 70 task 2).
+   *
+   * Gated by `update` on the *requested* collection, the same door
+   * `preview` uses — never `admin` — so an editor can run this on whatever
+   * they may already write.
+   *
+   * The scan itself still walks **every** routed collection, not only the
+   * one asked for: `analyseInternalLinks`'s own module comment explains why
+   * — an entry linked only from a different collection's page (a homepage
+   * block, say) must not be misreported as orphaned just because nothing in
+   * its *own* collection happens to link it. Only the *report* returned to
+   * the caller is filtered down to the requested collection; the graph
+   * underneath is never narrowed, or the answer would lie. Each collection
+   * is scanned under `ANONYMOUS` — the same "what would a crawler see"
+   * read `scanCollection` already does for the sitemap — because a link
+   * assistant answers a question about published, public content, not
+   * about what this particular caller can see; a collection this actor
+   * cannot read is simply skipped by `scanCollection`'s own `FORBIDDEN`
+   * handling, exactly as it already is for the sitemap.
+   */
+  async function linkSuggestions(
+    request: RestRequest,
+    context: AccessContext,
+  ): Promise<RestResponse> {
+    const raw = request.query.collection
+    const collectionName = Array.isArray(raw) ? raw[0] : raw
+    if (typeof collectionName !== 'string' || collectionName.length === 0) {
+      throw queryError(
+        'collection',
+        'is required',
+        'Send GET /api/seo/link-suggestions?collection=article.',
+      )
+    }
+
+    const collection = collectionOf(collectionName)
+    options.permissions.assert('update', collection, context)
+
+    const allResources: SeoResource[] = []
+    for (const routed of options.collections) {
+      const { resources } = await scanCollection(routed)
+      allResources.push(...resources)
+    }
+
+    const report = analyseInternalLinks(allResources)
+
+    const orphans = report.orphans.filter((orphan) => orphan.collection === collectionName)
+    const suggestionsByEntry: Record<string, readonly LinkSuggestion[]> = {}
+    for (const resource of allResources) {
+      if (resource.collection.name !== collectionName) continue
+      const found = report.suggestionsByEntry.get(`${collectionName}/${resource.entry.id}`)
+      if (found !== undefined) suggestionsByEntry[resource.entry.id] = found
+    }
+
+    const data: SeoLinkSuggestions = { collection: collectionName, orphans, suggestionsByEntry }
+    return jsonResponse(200, { data })
+  }
+
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
       try {
@@ -545,6 +636,10 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
         if (path === diagnosticsPath) {
           if (method !== 'GET') return methodNotAllowed(['GET'])
           return await diagnostics(context)
+        }
+        if (path === linkSuggestionsPath) {
+          if (method !== 'GET') return methodNotAllowed(['GET'])
+          return await linkSuggestions(request, context)
         }
         throw noRoute()
       } catch (error) {

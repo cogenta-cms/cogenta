@@ -62,11 +62,23 @@ export interface SeoRenderDefaults {
   readonly twitterHandle: string
   readonly defaultSocialImageUrl: string
   readonly sitemapCollectionSettings: Readonly<Record<string, SitemapCollectionOverride>>
-  /** Fiche 50 task 2 — rendered into `<meta name="google-site-verification">` by `siteVerificationMetaTags` below. Empty means the tag is omitted entirely. */
+  /**
+   * Fiche 50 task 2 — rendered into `<meta name="google-site-verification">`
+   * by `siteVerificationMetaTags` below. Empty means the tag is omitted
+   * entirely. Already forced to `''` by `readSeoRenderDefaults` when the
+   * fiche 70 task 3 gate (`seo.searchVerificationEnabled`) is off — every
+   * consumer of this field sees the gated value, never the raw setting, so
+   * there is exactly one place this decision is made.
+   */
   readonly googleSiteVerification: string
-  /** Same shape, rendered into `<meta name="msvalidate.01">` — Bing Webmaster Tools' own meta-tag verification. */
+  /** Same shape, rendered into `<meta name="msvalidate.01">` — Bing Webmaster Tools' own meta-tag verification. Same gating as `googleSiteVerification`. */
   readonly bingSiteVerification: string
-  /** Fiche 50 task 4 — an admin's own robots.txt lines, merged in by `renderRobots` below. */
+  /**
+   * Fiche 50 task 4 — an admin's own robots.txt lines, merged in by
+   * `renderRobots` below. Already forced to `''` by `readSeoRenderDefaults`
+   * when `seo.robotsCustomRulesEnabled` (fiche 70 task 3) is off — the saved
+   * text is never lost, only its effect on the served document.
+   */
   readonly robotsCustomRules: string
 }
 
@@ -199,6 +211,8 @@ export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<S
     googleSiteVerification,
     bingSiteVerification,
     robotsCustomRules,
+    searchVerificationEnabled,
+    robotsCustomRulesEnabled,
   ] = await Promise.all([
     store.get('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE),
     store.get('seo.collectionTitleTemplates', SITE_SETTINGS_SITE_SCOPE),
@@ -209,7 +223,20 @@ export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<S
     store.get('seo.googleSiteVerification', SITE_SETTINGS_SITE_SCOPE),
     store.get('seo.bingSiteVerification', SITE_SETTINGS_SITE_SCOPE),
     store.get('seo.robotsCustomRules', SITE_SETTINGS_SITE_SCOPE),
+    // Fiche 70 task 3's own two gates. Read here, applied below, so every
+    // consumer of `SeoRenderDefaults` — `theme-render.ts`, `serve.ts`'s
+    // `/robots.txt` route, `SeoDiagnostics` — sees the gated value without
+    // having to know the gate exists (single source of truth, no duplicate
+    // check anywhere downstream).
+    store.get('seo.searchVerificationEnabled', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.robotsCustomRulesEnabled', SITE_SETTINGS_SITE_SCOPE),
   ])
+
+  // Both gates default to `true` (the registry's own default) — an install
+  // that has never touched this setting keeps behaving exactly as it did
+  // before this fiche.
+  const verificationEnabled = searchVerificationEnabled?.value !== false
+  const customRulesEnabled = robotsCustomRulesEnabled?.value !== false
 
   return {
     titleTemplate: stringSetting(titleTemplate?.value, EMPTY_SEO_DEFAULTS.titleTemplate),
@@ -229,18 +256,15 @@ export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<S
     sitemapCollectionSettings: toSitemapOverrides(
       recordSetting(sitemapCollectionSettings?.value, {}),
     ),
-    googleSiteVerification: stringSetting(
-      googleSiteVerification?.value,
-      EMPTY_SEO_DEFAULTS.googleSiteVerification,
-    ),
-    bingSiteVerification: stringSetting(
-      bingSiteVerification?.value,
-      EMPTY_SEO_DEFAULTS.bingSiteVerification,
-    ),
-    robotsCustomRules: stringSetting(
-      robotsCustomRules?.value,
-      EMPTY_SEO_DEFAULTS.robotsCustomRules,
-    ),
+    googleSiteVerification: verificationEnabled
+      ? stringSetting(googleSiteVerification?.value, EMPTY_SEO_DEFAULTS.googleSiteVerification)
+      : '',
+    bingSiteVerification: verificationEnabled
+      ? stringSetting(bingSiteVerification?.value, EMPTY_SEO_DEFAULTS.bingSiteVerification)
+      : '',
+    robotsCustomRules: customRulesEnabled
+      ? stringSetting(robotsCustomRules?.value, EMPTY_SEO_DEFAULTS.robotsCustomRules)
+      : '',
   }
 }
 

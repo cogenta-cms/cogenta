@@ -86,3 +86,36 @@ export interface SeoDiagnostics {
 export function getSeoDiagnostics(token: string): Promise<SeoDiagnostics> {
   return request<SeoDiagnostics>('/api/seo/diagnostics', { headers: authHeader(token) })
 }
+
+/**
+ * `GET /api/seo/link-suggestions` (fiche 70 task 2) — the internal-link
+ * assistant's own report, scoped to one collection.
+ */
+export interface SeoLinkSuggestion {
+  readonly collection: string
+  readonly id: string
+  readonly title: string
+  readonly sharedWordCount: number
+}
+
+export interface SeoOrphanEntry {
+  readonly collection: string
+  readonly id: string
+  readonly title: string
+}
+
+export interface SeoLinkSuggestions {
+  readonly collection: string
+  readonly orphans: readonly SeoOrphanEntry[]
+  readonly suggestionsByEntry: Readonly<Record<string, readonly SeoLinkSuggestion[]>>
+}
+
+export function getSeoLinkSuggestions(
+  token: string,
+  collection: string,
+): Promise<SeoLinkSuggestions> {
+  return request<SeoLinkSuggestions>(
+    `/api/seo/link-suggestions?collection=${encodeURIComponent(collection)}`,
+    { headers: authHeader(token) },
+  )
+}

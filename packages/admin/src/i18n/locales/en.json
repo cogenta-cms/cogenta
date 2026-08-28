@@ -1095,7 +1095,39 @@
     "robotsCustomRulesLabel": "Custom rules",
     "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /",
     "robotsCustomRulesHelp": "Merged into the robots.txt above, after the rules shown and before the Sitemap line. One directive per line, in real robots.txt syntax.",
-    "robotsDisallowAllConfirm": "This includes \"Disallow: /\", which blocks every crawler from the whole site. Save anyway?"
+    "robotsDisallowAllConfirm": "This includes \"Disallow: /\", which blocks every crawler from the whole site. Save anyway?",
+    "focusKeywordLabel": "Focus keyword",
+    "focusKeywordPlaceholder": "e.g. \"travel guide\"",
+    "focusKeywordHint": "Optional. Drives the keyword checks in the content score below — leave empty to see only the structural checks.",
+    "contentScoreHeading": "Content score",
+    "contentScoreNoKeywordHint": "Set a focus keyword above to also check its use in the title, description, first sentence and density.",
+    "scoreLevel": {
+      "red": "Needs work",
+      "orange": "Fair",
+      "green": "Good"
+    },
+    "contentCheckPassed": "(passed)",
+    "contentCheckFailed": "(needs work)",
+    "contentCheck": {
+      "keywordInTitle": "The focus keyword appears in the title.",
+      "keywordInDescription": "The focus keyword appears in the meta description.",
+      "keywordInFirstSentence": "The focus keyword appears in the first sentence.",
+      "keywordDensity": "The focus keyword is used at a healthy density (0.5%–2.5% of the text).",
+      "sentenceLength": "No sentence is longer than 20 words.",
+      "subheadings": "The content uses subheadings.",
+      "contentLength": "The content is at least 300 words long."
+    },
+    "linkAssistantHeading": "Internal link assistant",
+    "linkAssistantDescription": "Orphaned entries (no other published entry links to them) and, for entries that share title words, plausible internal-link candidates — computed from the links already in your content, never an AI recommendation.",
+    "linkAssistantCollectionLabel": "Collection",
+    "linkAssistantNoCollections": "No collection has a public route yet, so there is nothing to scan here.",
+    "linkAssistantOrphansHeading": "Orphaned entries",
+    "linkAssistantNoOrphans": "None found — every published entry has at least one inbound link.",
+    "linkAssistantSuggestionsHeading": "Suggested internal links",
+    "linkAssistantNoSuggestions": "No plausible candidate found for any entry in this collection.",
+    "linkAssistantLoadError": "Could not compute link suggestions.",
+    "linkAssistantSharedWords_one": "{{count}} shared word",
+    "linkAssistantSharedWords_other": "{{count}} shared words"
   },
   "opsSettings": {
     "heading": "Security & webhooks",

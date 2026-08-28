@@ -58,6 +58,31 @@ const SEO_COLLECTION: CollectionSummary = {
   ],
 }
 
+/** Fiche 70 task 1 — the focus keyword field plus a `richText` body, the two new inputs the content score reads. */
+const SCORE_COLLECTION: CollectionSummary = {
+  name: 'page',
+  labels: { singular: 'Page', plural: 'Pages' },
+  permissions: {},
+  fields: [
+    field('title', 'text'),
+    field('seoTitle', 'text'),
+    field('seoDescription', 'text'),
+    field('seoFocusKeyword', 'text'),
+    field('body', 'richText'),
+  ],
+}
+
+function shortBody(): unknown {
+  return [
+    {
+      _key: 'b1',
+      _type: 'block',
+      style: 'normal',
+      children: [{ _key: 's1', _type: 'span', text: 'A short body.', marks: [] }],
+    },
+  ]
+}
+
 const NO_PROVIDER = { available: false, tools: [] }
 
 afterEach(() => {
@@ -307,5 +332,115 @@ describe('R2 — the panel works without any AI provider, and hides the AI short
     fireEvent.click(await screen.findByText('A proposed title'))
 
     expect(onChange).toHaveBeenCalledWith('seoTitle', 'A proposed title')
+  })
+})
+
+describe('fiche 70 task 1 — real-time content score', () => {
+  it('renders nothing when the collection declares neither a focus keyword field nor a richText field', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(NO_PROVIDER)),
+    )
+    render(
+      <SeoPanel
+        token="t"
+        collection={SEO_COLLECTION}
+        entryId={null}
+        status="draft"
+        values={{ seoTitle: 'Hello' }}
+        entryText=""
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByText('Score de contenu')).toBeNull()
+  })
+
+  it('shows the focus keyword field and calls onChange with the typed value', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(NO_PROVIDER)),
+    )
+    const onChange = vi.fn()
+    render(
+      <SeoPanel
+        token="t"
+        collection={SCORE_COLLECTION}
+        entryId={null}
+        status="draft"
+        values={{}}
+        entryText=""
+        bodyValue={shortBody()}
+        onChange={onChange}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Mot-clé principal'), {
+      target: { value: 'guide de voyage' },
+    })
+    expect(onChange).toHaveBeenCalledWith('seoFocusKeyword', 'guide de voyage')
+  })
+
+  it('updates the score live, with no network call, as the editor types', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(NO_PROVIDER)),
+    )
+    const { rerender } = render(
+      <SeoPanel
+        token="t"
+        collection={SCORE_COLLECTION}
+        entryId={null}
+        status="draft"
+        values={{ title: 'Sans rapport' }}
+        entryText=""
+        bodyValue={shortBody()}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Score de contenu')).toBeDefined()
+    // A short body with no focus keyword: content length fails (too short),
+    // and no fetch was ever made for this — the score is arithmetic, not a
+    // round trip.
+    expect(screen.getByText('Le contenu fait au moins 300 mots.')).toBeDefined()
+
+    rerender(
+      <SeoPanel
+        token="t"
+        collection={SCORE_COLLECTION}
+        entryId={null}
+        status="draft"
+        values={{ title: 'Sans rapport', seoFocusKeyword: 'guide' }}
+        entryText=""
+        bodyValue={shortBody()}
+        onChange={vi.fn()}
+      />,
+    )
+
+    // Re-rendered with a focus keyword now set — the checklist grows to
+    // include the keyword checks, still with no fetch involved.
+    expect(screen.getByText(/Le mot-clé principal apparaît dans le titre\./u)).toBeDefined()
+  })
+
+  it('hints that setting a focus keyword unlocks more checks, until one is set', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(NO_PROVIDER)),
+    )
+    render(
+      <SeoPanel
+        token="t"
+        collection={SCORE_COLLECTION}
+        entryId={null}
+        status="draft"
+        values={{}}
+        entryText=""
+        bodyValue={shortBody()}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/Renseignez un mot-clé principal ci-dessus/u)).toBeDefined()
   })
 })

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { SiteSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
+import { formatDate, formatDateTime, formatTimeOnly } from '../lib/format.js'
 import { cn } from '../ui/cn.js'
 import { Field, Input, Select } from '../ui/index.js'
 
@@ -14,13 +15,17 @@ import { Field, Input, Select } from '../ui/index.js'
  * the small, closed set of `uiType`s the registry declares — so a new
  * registry entry with an existing `uiType` needs no change to this file at
  * all, only a translation for its label under
- * `settings.field.<key>.label`/`.help` (falling back to the raw key when
- * even that is missing, never to a blank or a crash). A `select` option's
- * own label follows the same convention one level deeper,
- * `settings.field.<key>.options.<value>`, falling back to the registry's own
- * (English) `option.label` — the registry lives in `@cogenta/schema`, which
- * has no i18n of its own, so an option nobody has translated yet still shows
- * something instead of a blank row.
+ * `<translationNamespace>.field.<key>.label`/`.help` (falling back to the raw
+ * key when even that is missing, never to a blank or a crash) —
+ * `translationNamespace` defaults to `'settings'`, the "Réglages" screen's own
+ * namespace; `appearance.tsx` passes `'appearance'` for the "Marque" card it
+ * renders (fiche 68 task 5), so a label lives under the screen that actually
+ * shows it rather than under the screen "Marque" moved away from. A `select`
+ * option's own label follows the same convention one level deeper,
+ * `<translationNamespace>.field.<key>.options.<value>`, falling back to the
+ * registry's own (English) `option.label` — the registry lives in
+ * `@cogenta/schema`, which has no i18n of its own, so an option nobody has
+ * translated yet still shows something instead of a blank row.
  *
  * Each field saves itself: text-like fields on blur (so a partial edit is
  * never sent mid-keystroke), boolean/select-like fields immediately on
@@ -36,11 +41,30 @@ const TEXTAREA_CLASSES =
 
 const DATE_TIME_STYLES = ['full', 'long', 'medium', 'short'] as const
 
+/**
+ * Every IANA zone name this runtime knows (fiche 68 task 1) — computed once,
+ * not per render: `Intl.supportedValuesOf` is a real enumeration, not a free
+ * call, and the list is static for the life of the process. `try/catch`
+ * guards a runtime old enough to lack the method entirely (it shipped in all
+ * evergreen browsers and Node 18+, but this is rendered admin-side, in
+ * whatever browser an operator happens to have) — an empty list degrades to
+ * "only the unset option", never a crash.
+ */
+const TIME_ZONE_NAMES: readonly string[] = (() => {
+  try {
+    return Intl.supportedValuesOf('timeZone')
+  } catch {
+    return []
+  }
+})()
+
 export interface SiteSettingsFieldProps {
   readonly setting: SiteSetting
   /** Disabled entirely for a non-admin — this screen still shows the value, just never lets it be edited. */
   readonly canEdit: boolean
   readonly onSave: (value: unknown) => Promise<void>
+  /** i18n namespace this field's label/help live under. Defaults to `'settings'`. */
+  readonly translationNamespace?: string
 }
 
 interface UseSiteSettingFieldResult {
@@ -57,6 +81,7 @@ function useSiteSettingField(
   setting: SiteSetting,
   canEdit: boolean,
   onSave: (value: unknown) => Promise<void>,
+  translationNamespace: string,
 ): UseSiteSettingFieldResult {
   const { t } = useTranslation()
   const [value, setValue] = useState(setting.value)
@@ -71,8 +96,10 @@ function useSiteSettingField(
     setValue(setting.value)
   }, [setting.value])
 
-  const label = t(`settings.field.${setting.key}.label`, { defaultValue: setting.key })
-  const help = t(`settings.field.${setting.key}.help`, { defaultValue: '' })
+  const label = t(`${translationNamespace}.field.${setting.key}.label`, {
+    defaultValue: setting.key,
+  })
+  const help = t(`${translationNamespace}.field.${setting.key}.help`, { defaultValue: '' })
   const provenance = canEdit ? t('settings.provenanceEditable') : t('settings.provenanceReadOnly')
   const description = [help, provenance].filter((part) => part !== '').join(' — ')
 
@@ -187,12 +214,14 @@ export function SiteSettingsField({
   setting,
   canEdit,
   onSave,
+  translationNamespace = 'settings',
 }: SiteSettingsFieldProps): JSX.Element {
   const { t } = useTranslation()
   const { value, saving, saved, error, commit, label, description } = useSiteSettingField(
     setting,
     canEdit,
     onSave,
+    translationNamespace,
   )
   const fieldId = `site-setting-${setting.key}`
 
@@ -227,6 +256,21 @@ export function SiteSettingsField({
   }
 
   if (setting.uiType === 'dateStyle' || setting.uiType === 'timeStyle') {
+    // Fiche 68 task 2 — every option carries its own live example, computed
+    // fresh on each render (a fresh `Date.now()`, never a value cached at
+    // mount), so comparing "Long" against "Court" never requires actually
+    // selecting each one first. `dateStyle` formats a date, `timeStyle` a
+    // time — the two never share a preview because they format different
+    // things, even though both drive the very same `<select>` shape.
+    const now = new Date().toISOString()
+    const exampleFor = (style: (typeof DATE_TIME_STYLES)[number]): string =>
+      setting.uiType === 'dateStyle'
+        ? formatDate(now, { dateStyle: style })
+        : formatTimeOnly(now, { timeStyle: style })
+    const currentExample =
+      typeof value === 'string' && (DATE_TIME_STYLES as readonly string[]).includes(value)
+        ? exampleFor(value as (typeof DATE_TIME_STYLES)[number])
+        : null
     return (
       <div className="flex flex-col gap-1">
         <Field label={label} description={description} error={error}>
@@ -239,12 +283,57 @@ export function SiteSettingsField({
             >
               {DATE_TIME_STYLES.map((style) => (
                 <option key={style} value={style}>
-                  {t(`settings.dateTimeStyle.${style}`)}
+                  {t(`settings.dateTimeStyle.${style}`)} — {exampleFor(style)}
                 </option>
               ))}
             </Select>
           )}
         </Field>
+        {currentExample !== null && (
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t('settings.dateTimeExampleLabel', { example: currentExample })}
+          </p>
+        )}
+        {error === null && <FieldStatus saving={saving} saved={saved} />}
+      </div>
+    )
+  }
+
+  if (setting.uiType === 'timeZone') {
+    // Fiche 68 task 1 — a real `<select>` over every IANA zone name this
+    // runtime knows, so an invalid name simply cannot be typed (the fiche's
+    // own acceptance test), plus the current time in whichever zone is
+    // selected, so a change is legible before it is ever saved — the piège
+    // fiche 23 already named: a silent mismatch here mis-schedules a
+    // publication.
+    const zone = typeof value === 'string' ? value : ''
+    const preview = formatDateTime(new Date().toISOString(), {
+      dateStyle: 'full',
+      timeStyle: 'medium',
+      ...(zone === '' ? {} : { timeZone: zone }),
+    })
+    return (
+      <div className="flex flex-col gap-1">
+        <Field label={label} description={description} error={error}>
+          {(control) => (
+            <Select
+              {...control}
+              disabled={!canEdit || saving}
+              value={zone}
+              onChange={(event) => void commit(event.target.value)}
+            >
+              <option value="">{t('settings.timeZoneUnset')}</option>
+              {TIME_ZONE_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <p className="text-xs leading-5 text-muted-foreground">
+          {t('settings.timeZonePreview', { time: preview })}
+        </p>
         {error === null && <FieldStatus saving={saving} saved={saved} />}
       </div>
     )
@@ -334,8 +423,8 @@ export function SiteSettingsField({
     )
   }
 
-  // 'string' | 'email' | 'path' | 'timeZone': a single-line text input,
-  // typed only for the browser's own hinting (`type="email"`).
+  // 'string' | 'email' | 'path': a single-line text input, typed only for
+  // the browser's own hinting (`type="email"`).
   const inputType = setting.uiType === 'email' ? 'email' : 'text'
   return (
     <div className="flex flex-col gap-1">

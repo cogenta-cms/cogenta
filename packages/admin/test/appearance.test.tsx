@@ -380,6 +380,38 @@ describe('the appearance screen — the sub-view has its own URL (fiche 71)', ()
   })
 })
 
+describe('the appearance screen — "Marque" card (fiche 68 task 5, moved from Réglages)', () => {
+  it('toggles Cogenta credit, on by default, and writes the change', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+
+    const toggle = (await screen.findByLabelText('Afficher la marque Cogenta')) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+
+    fireEvent.click(toggle)
+    await waitFor(() => {
+      expect(toggle.checked).toBe(false)
+    })
+  })
+
+  it('offers a media picker for the white-label logo, unconditionally of the toggle', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+
+    await screen.findByText('Logo personnalisé')
+    // Scoped to the "Marque" card — the "Identité" card right above it also
+    // has four unset media pickers of its own, each showing the very same
+    // "Choisir…" label.
+    const brandingCard = screen.getByRole('region', { name: 'Marque' })
+    expect(within(brandingCard).getByRole('button', { name: 'Choisir…' })).toBeDefined()
+    expect(
+      screen.getByText(/ne prend effet qu'une fois « Afficher la marque Cogenta » désactivé/),
+    ).toBeDefined()
+  })
+})
+
 describe('the appearance screen — theme gallery preview (fiche L24 task 5)', () => {
   it('shows a real visual preview for every installed theme, not a placeholder', async () => {
     signedIn(['admin'], {

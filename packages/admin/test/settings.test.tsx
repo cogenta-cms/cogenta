@@ -189,33 +189,86 @@ describe('the site settings screen', () => {
   })
 })
 
-describe('the site settings screen — Branding tab (fiche L21 task 8)', () => {
-  it('toggles Cogenta credit, on by default, and writes the change', async () => {
+describe('the site settings screen — time zone select and live examples (fiche 68 tasks 1-2)', () => {
+  it('renders the time zone field as a select, never a free-text input', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToSettings()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Marque' }))
-    const toggle = (await screen.findByLabelText('Afficher la marque Cogenta')) as HTMLInputElement
-    expect(toggle.checked).toBe(true)
+    const field = await screen.findByLabelText('Fuseau horaire')
+    expect(field.tagName).toBe('SELECT')
+  })
 
-    fireEvent.click(toggle)
+  it('only offers real IANA zone names, plus an explicit unset option — never a free string', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    const field = (await screen.findByLabelText('Fuseau horaire')) as HTMLSelectElement
+    const optionValues = Array.from(field.options).map((option) => option.value)
+    expect(optionValues).toContain('')
+    expect(optionValues).toContain('Europe/Paris')
+    // Every non-empty option is a real IANA zone name this runtime resolves —
+    // an invalid one would throw inside `Intl.DateTimeFormat`.
+    for (const value of optionValues) {
+      if (value === '') continue
+      expect(() => new Intl.DateTimeFormat(undefined, { timeZone: value })).not.toThrow()
+    }
+  })
+
+  it('shows the current time in the selected zone, updating with the selection, before saving', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    const field = (await screen.findByLabelText('Fuseau horaire')) as HTMLSelectElement
+    const before = await screen.findByText(/Heure actuelle dans ce fuseau/)
+    const beforeText = before.textContent
+
+    fireEvent.change(field, { target: { value: 'Pacific/Kiritimati' } })
+
     await waitFor(() => {
-      expect(toggle.checked).toBe(false)
+      const after = screen.getByText(/Heure actuelle dans ce fuseau/)
+      // Kiritimati (UTC+14) and the field's previous zone cannot show the
+      // same wall-clock time at the same instant — a real recomputation,
+      // not a static string left over from the unset default.
+      expect(after.textContent).not.toBe(beforeText)
     })
   })
 
-  it('offers a media picker for the white-label logo, unconditionally of the toggle', async () => {
+  it('shows a live example next to each date-format option, and updates it on selection change', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToSettings()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Marque' }))
-    await screen.findByText('Logo personnalisé')
-    expect(screen.getByRole('button', { name: 'Choisir…' })).toBeDefined()
-    expect(
-      screen.getByText(/ne prend effet qu'une fois « Afficher la marque Cogenta » désactivé/),
-    ).toBeDefined()
+    const field = (await screen.findByLabelText('Format de date')) as HTMLSelectElement
+    const optionTexts = Array.from(field.options).map((option) => option.textContent ?? '')
+    // Every option carries its own live example rather than the bare label.
+    for (const text of optionTexts) {
+      expect(text).toMatch(/ — /)
+    }
+
+    fireEvent.change(field, { target: { value: 'short' } })
+    await waitFor(() => {
+      // The date field's own example switches to the short (DD/MM/YYYY)
+      // shape — asserted by format rather than by scoping the query to one
+      // field's DOM subtree, since the time field right below renders its
+      // own "Exemple : " text at the very same moment.
+      const examples = screen.getAllByText(/Exemple : /)
+      expect(
+        examples.some((node) => /Exemple : \d{2}\/\d{2}\/\d{4}/.test(node.textContent ?? '')),
+      ).toBe(true)
+    })
+  })
+})
+
+describe('the site settings screen — no more Branding tab (fiche 68 task 5)', () => {
+  it('moved "Marque" to the Apparence screen — the tab is gone', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    expect(screen.queryByRole('tab', { name: 'Marque' })).toBeNull()
   })
 })
 

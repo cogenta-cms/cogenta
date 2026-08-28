@@ -14,6 +14,7 @@ import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
+import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import {
   applyGallerySkin,
   clearThemeOverrides,
@@ -28,6 +29,7 @@ import {
 } from '../api/theme-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
+import { SiteSettingsField } from '../settings/site-settings-field.js'
 import {
   Button,
   Card,
@@ -119,6 +121,76 @@ function computeContrastWarnings(
 }
 
 const PREVIEW_DEBOUNCE_MS = 300
+
+/**
+ * "Marque" (fiche 68 task 5) — moved here from the "Réglages" screen's own
+ * tab (fiche L21 task 8), on the reasoning that whether the site credits
+ * Cogenta and what logo replaces that credit is a question about how the
+ * site *looks*, the same family as everything else on this screen, not a
+ * site-wide editorial default like a tagline or a comment policy.
+ *
+ * **No data migration** — same registry, same `GET|PATCH /api/settings`
+ * route, same `branding.*` keys the old tab already read and wrote. Moving
+ * the UI never touches a stored value, so a site that had already turned
+ * Cogenta's credit off keeps that choice exactly as it was.
+ *
+ * Its own `listSettings`/`writeSetting` round trip, deliberately not folded
+ * into `AppearanceRoute`'s own `theme`/`load` state — `branding.*` lives in
+ * the site-settings store, not the theme-overrides one this screen is
+ * otherwise entirely about, and mixing the two would make one `load()`
+ * respond to two unrelated failure modes.
+ */
+function BrandingCard({ token }: { readonly token: string }): JSX.Element {
+  const { t } = useTranslation()
+  const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const data = await listSettings()
+      setSettings(data.filter((setting) => setting.group === 'branding'))
+      setLoadError(null)
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : t('appearance.brandingLoadError'))
+    }
+  }, [t])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function save(key: string, value: unknown): Promise<void> {
+    await writeSetting(token, key, value)
+    await load()
+  }
+
+  return (
+    <Card aria-labelledby="appearance-branding-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="appearance-branding-heading">{t('appearance.brandingHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        {loadError !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{loadError}</p>
+          </Notice>
+        )}
+        {(settings ?? []).map((setting) => (
+          <SiteSettingsField
+            key={setting.key}
+            setting={setting}
+            canEdit
+            translationNamespace="appearance"
+            onSave={(value) => save(setting.key, value)}
+          />
+        ))}
+        <p className="m-0 text-xs text-muted-foreground">{t('appearance.brandingNote')}</p>
+      </CardBody>
+    </Card>
+  )
+}
 
 function TokenField({
   spec,
@@ -719,6 +791,8 @@ export function AppearanceRoute(): JSX.Element {
                       </div>
                     </CardBody>
                   </Card>
+
+                  <BrandingCard token={token ?? ''} />
 
                   <Card aria-labelledby="appearance-gallery-heading">
                     <CardHeader>

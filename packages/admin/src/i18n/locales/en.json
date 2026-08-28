@@ -2008,6 +2008,21 @@
         "sm": "Small",
         "md": "Medium"
       }
+    },
+    "brandingHeading": "Branding",
+    "brandingNote": "The custom logo only takes effect once \"Show Cogenta branding\" is turned off — it stays saved either way, so switching branding back on never loses it.",
+    "brandingLoadError": "Could not load the branding settings.",
+    "field": {
+      "branding": {
+        "showCogentaBranding": {
+          "label": "Show Cogenta branding",
+          "help": "Credits Cogenta in the public site's footer and in this admin's own header."
+        },
+        "customLogoMediaId": {
+          "label": "Custom logo",
+          "help": "Shown instead of the Cogenta logo once branding is turned off above."
+        }
+      }
     }
   },
   "adminAppearance": {
@@ -2053,7 +2068,6 @@
       "discussion": "Discussion",
       "media": "Media",
       "privacy": "Privacy",
-      "branding": "Branding",
       "navigation": "Navigation",
       "advanced": "Advanced"
     },
@@ -2063,6 +2077,9 @@
       "medium": "Medium",
       "short": "Short"
     },
+    "dateTimeExampleLabel": "Example: {{example}}",
+    "timeZoneUnset": "Unset (browser's own zone)",
+    "timeZonePreview": "Current time in this zone: {{time}}",
     "taglineLocaleLabel": "Tagline language",
     "defaultLocaleHeading": "Default site language",
     "notFoundPathLabel": "404 page",
@@ -2072,7 +2089,6 @@
     "mediaFormatsValue": "WebP, at a fixed set of widths — built into the image pipeline, not editable here.",
     "discussionNote": "These are the site-wide defaults. A collection or a single entry can still turn comments off, or require moderation, from that collection's settings or the entry editor.",
     "noCookieByDefault": "Cogenta sets no cookie of its own. Turn this on only if this site adds one (an embed, an analytics script) — a banner nobody needs is worse than none.",
-    "brandingNote": "The custom logo only takes effect once \"Show Cogenta branding\" is turned off — it stays saved either way, so switching branding back on never loses it.",
     "navigationNote": "Reorder or hide sidebar sections and entries for everyone on this site — for example, hide \"Shop\" on a site that never sells anything. This never changes what an account is actually allowed to do: hiding an entry here only hides it, it does not revoke the permission behind it.",
     "advancedLink": "Security, webhooks and infrastructure (read-only)",
     "advancedNote": "Everything there comes from cogenta.config.mjs. Edit the file and restart the server to change it.",
@@ -2213,16 +2229,6 @@
         "invoiceLanguage": {
           "label": "Invoice language",
           "help": "A short language code, e.g. \"en\" or \"fr\"."
-        }
-      },
-      "branding": {
-        "showCogentaBranding": {
-          "label": "Show Cogenta branding",
-          "help": "Credits Cogenta in the public site's footer and in this admin's own header."
-        },
-        "customLogoMediaId": {
-          "label": "Custom logo",
-          "help": "Shown instead of the Cogenta logo once branding is turned off above."
         }
       },
       "seo": {

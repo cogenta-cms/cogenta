@@ -65,8 +65,14 @@ export const post = defineCollection({
   fields: {
     title: f.text({ required: true, max: 200 }),
     slug: f.slug({ from: 'title', unique: true }),
-    excerpt: f.text({ max: 300, multiline: true }),
+    // `body` before `excerpt` (fiche 44 task 1): the editor reads and writes
+    // the excerpt *from* the body, so the form now shows them in that same
+    // order — the excerpt field used to render first, above the text it
+    // summarises. Purely a blueprint ordering choice, not contract A: field
+    // declaration order has no meaning to `@cogenta/schema` beyond "the order
+    // `EntryForm` renders them in".
     body: f.richText({ required: true }),
+    excerpt: f.text({ max: 300, multiline: true }),
     coverImage: f.media({ accept: ['image'] }),
     category: f.relation({ to: 'category', onDelete: 'setNull' }),
     tags: f.relation({ to: 'tag', many: true, onDelete: 'cascade' }),

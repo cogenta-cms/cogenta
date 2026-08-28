@@ -171,6 +171,16 @@ describe('scaffoldSite — blog blueprint', () => {
     }
   })
 
+  // Fiche 44 task 1: `EntryForm` renders fields in the order a collection
+  // declares them (no reordering logic of its own) — the excerpt showing up
+  // after the body it summarises is entirely this declaration order,
+  // guarded here against a future edit accidentally putting it back before.
+  it('declares excerpt after body, so the admin form renders the excerpt below the text it summarises', () => {
+    expect(Object.keys(post.fields).indexOf('body')).toBeLessThan(
+      Object.keys(post.fields).indexOf('excerpt'),
+    )
+  })
+
   it('resolves /blog/:slug, /blog/category/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(BLOG_COLLECTIONS, '/blog/welcome-to-cogenta')).toEqual({
       collection: 'post',

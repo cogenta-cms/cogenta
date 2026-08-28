@@ -35,3 +35,18 @@ export function wordCount(text: string): number {
 export function readingTimeMinutes(words: number, wordsPerMinute = 200): number {
   return Math.max(1, Math.ceil(words / wordsPerMinute))
 }
+
+/**
+ * Fiche 44 task 2 — the excerpt's auto-fill default: `text`, cut to fit
+ * `maxLength`, never mid-word. Cutting at the last space keeps a half-typed
+ * word from appearing truncated in a field an author never touched; a text
+ * with no space before the limit (one very long "word") falls back to a hard
+ * cut rather than returning nothing.
+ */
+export function truncateAtWordBoundary(text: string, maxLength: number): string {
+  const trimmed = text.trim()
+  if (trimmed.length <= maxLength) return trimmed
+  const sliced = trimmed.slice(0, maxLength)
+  const lastSpace = sliced.lastIndexOf(' ')
+  return (lastSpace > 0 ? sliced.slice(0, lastSpace) : sliced).trim()
+}

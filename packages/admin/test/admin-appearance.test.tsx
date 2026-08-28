@@ -86,12 +86,17 @@ describe("the admin's own appearance screen", () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => expect(screen.getByText('Enregistré.')).toBeDefined())
+    // Back to the gallery — fiche 71 put the view in `?view=`, so a reload
+    // now lands on whichever view was showing (proven by this file's own
+    // "?view=customize" tests below); returning here first is what makes
+    // this specific assertion (the gallery's "Actif" badge) meaningful.
+    fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    await screen.findByRole('heading', { name: 'Nightops', level: 3 })
     first.unmount()
 
     // A fresh mount re-fetches `/api/admin-theme` — the choice must have
     // actually been persisted server-side, not merely held in local state.
-    // (The URL is already `/admin-appearance` from the click above, and the
-    // session token is still in `localStorage`, so this mount lands
+    // (The session token is still in `localStorage`, so this mount lands
     // straight on the screen rather than the dashboard.)
     render(<App />)
     await screen.findByRole('heading', { name: "Apparence de l'admin", level: 1 })
@@ -182,6 +187,25 @@ describe("the admin's own appearance screen", () => {
     // Editing now targets Nightops again, not the abandoned Atelier switch.
     const preview = within(document.body).getAllByText('Nightops')
     expect(preview.length).toBeGreaterThan(0)
+  })
+
+  it('writes ?view=customize into the URL when opening the personalisation view (fiche 71)', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAdminAppearance()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Personnaliser' }))
+    await screen.findByLabelText('Couleur primaire')
+
+    expect(window.location.search).toContain('view=customize')
+  })
+
+  it('shows the personalisation view straight away when the URL already carries ?view=customize (fiche 71)', async () => {
+    signedIn(['admin'])
+    window.history.pushState(null, '', '/admin-appearance?view=customize')
+    render(<App />)
+
+    expect(await screen.findByLabelText('Couleur primaire')).toBeDefined()
   })
 
   it('is a distinct screen from the public site\'s own "Apparence"', async () => {

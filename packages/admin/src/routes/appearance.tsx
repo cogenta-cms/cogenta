@@ -12,6 +12,7 @@ import {
 } from '@cogenta/render'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   applyGallerySkin,
@@ -229,10 +230,18 @@ export function AppearanceRoute(): JSX.Element {
 
   // Two-screen navigation (fiche 48): the gallery (theme metadata and
   // switching) and the personalization screen (tokens, CSS, identity, skin
-  // gallery, AI) — previously one dense, continuous screen. Local UI state
-  // only, never a route: there is nothing here a reload should have to
-  // reconstruct, and it keeps the "Retour" action trivial.
-  const [view, setView] = useState<'gallery' | 'customize'>('gallery')
+  // gallery, AI) — previously one dense, continuous screen. Fiche 71: this
+  // used to be a plain `useState`, so the URL never changed between the two
+  // views — an F5 or a shared link always landed back on the gallery. Now
+  // derived straight from `?view=`, the same pattern `seo.tsx` proved for its
+  // own tabs, so a reload or a shared link lands on the exact same view.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view') === 'customize' ? 'customize' : 'gallery'
+  const setView = (next: 'gallery' | 'customize') => {
+    const params = new URLSearchParams(searchParams)
+    params.set('view', next)
+    setSearchParams(params)
+  }
   const [theme, setTheme] = useState<ThemeState | null>(null)
   const [overrideDraft, setOverrideDraft] = useState<TokenOverrides>({})
   const [additionalCss, setAdditionalCss] = useState('')

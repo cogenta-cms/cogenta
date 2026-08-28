@@ -1507,6 +1507,8 @@
     "saveError": "Impossible d'enregistrer cet agent.",
     "runError": "Cette exécution n'a pas pu aboutir.",
     "detailHeading": "Agent : {{name}}",
+    "detailBack": "← Retour aux agents",
+    "detailNotFound": "Cet agent n'existe pas ou plus.",
     "createAgent": "Créer un agent",
     "newAgentNamePlaceholder": "ex. Rédacteur de newsletter",
     "newAgentDefaultRole": "Un nouvel agent — modifiez son rôle, ses objectifs et ses outils ci-dessous.",
@@ -1610,6 +1612,7 @@
     "noSkills": "Aucune compétence configurée.",
     "loadError": "Impossible de charger la liste des compétences.",
     "saveError": "Impossible d'enregistrer cette compétence.",
+    "editingNotFound": "Cette compétence n'existe pas ou plus.",
     "resources": {
       "heading": "Fichiers de référence",
       "intro": "Fichiers optionnels qu'une compétence peut porter à côté de son SKILL.md — références, scripts et gabarits — le même agencement standard qu'une vraie compétence Claude Code/Codex. Rien ici n'est chargé automatiquement dans le contexte d'un agent.",
@@ -1640,6 +1643,7 @@
     "builtin": "Intégré",
     "noTemplates": "Aucun modèle de prompt configuré.",
     "loadError": "Impossible de charger la liste des modèles de prompt.",
+    "editingNotFound": "Ce modèle de prompt n'existe pas ou plus.",
     "saveError": "Impossible d'enregistrer ce modèle de prompt."
   },
   "dashboard": {
@@ -2759,6 +2763,11 @@
       "year_one": "{{count}} an",
       "year_other": "{{count}} ans"
     }
+  },
+  "commerceSubscriptionDetail": {
+    "back": "← Retour aux abonnements",
+    "notFound": "Cet abonnement n'existe pas.",
+    "loadError": "Impossible de charger cet abonnement."
   },
   "commerceTax": {
     "heading": "Taxes",

@@ -1508,6 +1508,8 @@
     "saveError": "Could not save this agent.",
     "runError": "This run could not be completed.",
     "detailHeading": "Agent: {{name}}",
+    "detailBack": "← Back to agents",
+    "detailNotFound": "This agent no longer exists.",
     "createAgent": "Create agent",
     "newAgentNamePlaceholder": "e.g. Newsletter Drafter",
     "newAgentDefaultRole": "A new agent — edit its role, objectives and tools below.",
@@ -1611,6 +1613,7 @@
     "noSkills": "No skills configured.",
     "loadError": "Could not load the skill list.",
     "saveError": "Could not save this skill.",
+    "editingNotFound": "This skill no longer exists.",
     "resources": {
       "heading": "Reference files",
       "intro": "Optional files a skill can carry alongside its SKILL.md — references, scripts and assets — the same standard layout a real Claude Code/Codex skill uses. Nothing here is automatically loaded into an agent's context.",
@@ -1641,6 +1644,7 @@
     "builtin": "Builtin",
     "noTemplates": "No prompt templates configured.",
     "loadError": "Could not load the prompt template list.",
+    "editingNotFound": "This prompt template no longer exists.",
     "saveError": "Could not save this prompt template."
   },
   "dashboard": {
@@ -2760,6 +2764,11 @@
       "year_one": "{{count}} year",
       "year_other": "{{count}} years"
     }
+  },
+  "commerceSubscriptionDetail": {
+    "back": "← Back to subscriptions",
+    "notFound": "This subscription does not exist.",
+    "loadError": "Could not load this subscription."
   },
   "commerceTax": {
     "heading": "Tax",

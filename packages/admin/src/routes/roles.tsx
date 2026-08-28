@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { getCommercePermissions } from '../api/commerce-client.js'
 import {
@@ -71,7 +72,17 @@ export function RolesRoute(): JSX.Element {
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
 
-  const [tab, setTab] = useState<'byCollection' | 'byRole'>('byCollection')
+  // Fiche 71: derived from `?tab=`, the same pattern `seo.tsx` proved for its
+  // own tabs — previously a plain `useState`, so an F5 or a shared link
+  // always landed back on "byCollection", never on whichever tab was open.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab: 'byCollection' | 'byRole' =
+    searchParams.get('tab') === 'byRole' ? 'byRole' : 'byCollection'
+  const setTab = (next: 'byCollection' | 'byRole') => {
+    const params = new URLSearchParams(searchParams)
+    params.set('tab', next)
+    setSearchParams(params)
+  }
   const [roleUsage, setRoleUsage] = useState<Readonly<Record<string, number>> | null>(null)
   const [commerce, setCommerce] = useState<{
     readonly permissions: readonly string[]

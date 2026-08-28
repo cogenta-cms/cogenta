@@ -100,3 +100,64 @@ describe('subscriptions', () => {
     expect(await screen.findByText(/allowed to do that/u)).toBeDefined()
   })
 })
+
+describe('subscription detail — a real route with its own URL (fiche 71)', () => {
+  it('navigates to /commerce/subscriptions/<id> when opening "Détails"', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('link', { name: 'Abonnements' }))
+    await screen.findByRole('heading', { name: 'Abonnements' })
+
+    fireEvent.click(screen.getByRole('link', { name: 'Détails' }))
+
+    expect(await screen.findByText('Historique de facturation')).toBeDefined()
+    expect(window.location.pathname).toBe('/commerce/subscriptions/subscription-1')
+  })
+
+  it('shows the subscription detail straight away when mounted directly on the URL', async () => {
+    window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
+    render(<App />)
+
+    expect(await screen.findByText(/customer-1/)).toBeDefined()
+    expect(screen.getByText('Historique de facturation')).toBeDefined()
+  })
+
+  it('has a real "Retour" link back to the list, never history.back()', async () => {
+    window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
+    render(<App />)
+    await screen.findByText('Historique de facturation')
+
+    const back = screen.getByRole('link', { name: /Retour/ })
+    expect(back.getAttribute('href')).toBe('/commerce/subscriptions')
+  })
+
+  it('shows a clear message, not a blank screen, for a subscription id that no longer exists', async () => {
+    window.history.pushState(null, '', '/commerce/subscriptions/does-not-exist')
+    render(<App />)
+
+    expect(await screen.findByText("Cet abonnement n'existe pas.")).toBeDefined()
+    expect(screen.getByRole('link', { name: /Retour/ })).toBeDefined()
+  })
+
+  it('pauses a subscription from its own detail screen', async () => {
+    window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
+    render(<App />)
+    await screen.findByText('Historique de facturation')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Suspendre' }))
+
+    expect(await screen.findByText(/En pause/)).toBeDefined()
+    // The action buttons follow the new status: "Suspendre" is gone, "Reprendre" is offered instead.
+    expect(screen.queryByRole('button', { name: 'Suspendre' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reprendre' })).toBeDefined()
+  })
+
+  it('refuses to show anything to a signed-out actor, on the detail route directly', async () => {
+    signedInAs([])
+    window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toBeDefined()
+    expect(screen.queryByText('Historique de facturation')).toBeNull()
+  })
+})

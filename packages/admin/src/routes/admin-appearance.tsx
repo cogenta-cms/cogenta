@@ -1,5 +1,6 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import {
   ADMIN_THEME_FONTS,
   type AdminThemeOverrides,
@@ -56,7 +57,16 @@ export function AdminAppearanceRoute(): JSX.Element {
 
   const { state, refresh } = useAdminTheme()
 
-  const [view, setView] = useState<View>('gallery')
+  // Fiche 71: derived from `?view=`, the same pattern `seo.tsx` proved for
+  // its own tabs — previously a plain `useState`, so an F5 or a shared link
+  // always landed back on the gallery, never on whichever view was open.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view: View = searchParams.get('view') === 'customize' ? 'customize' : 'gallery'
+  const setView = (next: View) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('view', next)
+    setSearchParams(params)
+  }
   const [templateId, setTemplateId] = useState<string | null>(null)
   const [overrides, setOverrides] = useState<AdminThemeOverrides>({})
   const [saveError, setSaveError] = useState<string | null>(null)

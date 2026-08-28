@@ -361,6 +361,25 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
   })
 })
 
+describe('the appearance screen — the sub-view has its own URL (fiche 71)', () => {
+  it('writes ?view=customize into the URL when opening the personalization screen', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    expect(window.location.search).toContain('view=customize')
+  })
+
+  it('shows the personalization screen straight away when the URL already carries ?view=customize', async () => {
+    signedIn(['admin'])
+    window.history.pushState(null, '', '/appearance?view=customize')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Personnaliser', level: 2 })).toBeDefined()
+  })
+})
+
 describe('the appearance screen — theme gallery preview (fiche L24 task 5)', () => {
   it('shows a real visual preview for every installed theme, not a placeholder', async () => {
     signedIn(['admin'], {

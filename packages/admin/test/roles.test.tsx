@@ -114,6 +114,21 @@ describe('the permission matrix', () => {
     expect(adminCells[1]?.textContent).toBe('Lire')
   })
 
+  it('writes ?tab=byRole into the URL when switching tabs (fiche 71)', async () => {
+    render(<App />)
+    await goToRoles()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Par rôle' }))
+    await waitFor(() => expect(window.location.search).toContain('tab=byRole'))
+  })
+
+  it('shows the by-role tab straight away when the URL already carries ?tab=byRole (fiche 71)', async () => {
+    window.history.pushState(null, '', '/roles?tab=byRole')
+    render(<App />)
+
+    expect(await screen.findByRole('tab', { name: 'Par rôle', selected: true })).toBeDefined()
+  })
+
   it('renders the commerce permission matrix in its own separate vocabulary', async () => {
     render(<App />)
     await goToRoles()

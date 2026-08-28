@@ -228,6 +228,54 @@ describe('/api/seo/search-console', () => {
       expect(response.headers['location']).toContain('search_console=denied')
       expect(await store.read()).toBeNull()
     })
+
+    it('refuses a second presentation of an otherwise valid, still-fresh state — security review finding', async () => {
+      // One router instance throughout — exactly the real shape: a single
+      // `cogenta serve` process handles both the legitimate callback and
+      // any later replay of a captured `state` against that same running
+      // server.
+      let callCount = 0
+      const fetchImpl = vi.fn(async () => {
+        callCount += 1
+        return jsonResponse({
+          access_token: 'a',
+          refresh_token: callCount === 1 ? 'first-refresh-token' : 'attacker-refresh-token',
+          expires_in: 3600,
+        })
+      }) as unknown as SearchConsoleFetch
+      const r = router({ fetchImpl })
+      const state = await mintedState(r, actor('admin'))
+
+      const first = await r.handle(
+        {
+          method: 'GET',
+          path: '/api/seo/search-console/callback',
+          query: { code: 'first-code', state },
+        },
+        { actor: ANONYMOUS },
+      )
+      expect(first.headers['location']).toContain('search_console=connected')
+      expect(await store.decryptRefreshToken()).toBe('first-refresh-token')
+
+      // A captured copy of the exact same state — from a shared machine's
+      // browser history, or a reverse proxy's access log — replayed by
+      // someone with no Cogenta credential at all, inside the same
+      // ten-minute window. It must not be able to overwrite the connection
+      // a second time.
+      const replay = await r.handle(
+        {
+          method: 'GET',
+          path: '/api/seo/search-console/callback',
+          query: { code: 'attacker-code', state },
+        },
+        { actor: ANONYMOUS },
+      )
+      expect(replay.headers['location']).toContain('search_console=denied')
+      expect(await store.decryptRefreshToken()).toBe('first-refresh-token')
+      // Google's own token endpoint is never even asked to exchange the
+      // replayed code — the replay is refused before any outbound call.
+      expect(callCount).toBe(1)
+    })
   })
 
   describe('GET metrics', () => {

@@ -37,12 +37,18 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
  * happened at `authorize`, which *is* bearer-gated (`admin` only); `state`
  * is an HMAC over a random nonce and an issue time, keyed by
  * `COGENTA_AUTH_SIGNING_KEY` (the same secret this codebase already trusts
- * for session tokens) with a ten-minute freshness window — nobody without
- * that key can mint one, so a `callback` request carrying a valid `state`
- * can only be continuing a flow this server itself started for an admin who
- * had already passed the bearer check. This is the same shape a signed,
- * short-lived cookie would give, without needing session storage this
- * codebase does not otherwise have (rule R1).
+ * for session tokens), with a ten-minute freshness window **and single-use
+ * enforcement** (`createConsumedStateTracker` below) — nobody without that
+ * key can mint a valid `state`, and nobody, including the admin who minted
+ * it, can present the same one twice. That second property is load-bearing,
+ * not decorative: an HMAC and a freshness window alone prove a `state` was
+ * minted by this server, but not that the `callback` request presenting it
+ * is the *first* to do so — a value captured from a shared machine's
+ * browser history or a reverse proxy's access log would otherwise still be
+ * replayable inside its ten-minute window (a real finding from security
+ * review, fixed here). With single-use added, this is the same shape a
+ * signed, short-lived, one-time cookie would give, without needing session
+ * storage this codebase does not otherwise have (rule R1).
  */
 
 export interface SearchConsoleRouterOptions {
@@ -133,9 +139,16 @@ function mintState(signingKey: string): string {
   return `${nonce}.${issuedAt}.${mac}`
 }
 
-function verifyState(signingKey: string, state: string): boolean {
+/**
+ * Checks the HMAC and freshness only — never the sole gate on `callback`
+ * (see `createConsumedStateTracker` just below for why).
+ */
+function verifyStateSignature(
+  signingKey: string,
+  state: string,
+): { readonly nonce: string; readonly issuedAt: number } | null {
   const parts = state.split('.')
-  if (parts.length !== 3) return false
+  if (parts.length !== 3) return null
   const [nonce, issuedAtRaw, mac] = parts as [string, string, string]
   const expectedMac = createHmac('sha256', signingKey)
     .update(`${nonce}.${issuedAtRaw}`)
@@ -143,11 +156,52 @@ function verifyState(signingKey: string, state: string): boolean {
 
   const given = Buffer.from(mac, 'utf8')
   const expected = Buffer.from(expectedMac, 'utf8')
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return false
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null
 
   const issuedAt = Number(issuedAtRaw)
-  if (!Number.isFinite(issuedAt)) return false
-  return Date.now() - issuedAt <= STATE_FRESHNESS_MS
+  if (!Number.isFinite(issuedAt)) return null
+  if (Date.now() - issuedAt > STATE_FRESHNESS_MS) return null
+  return { nonce, issuedAt }
+}
+
+/**
+ * Marks a `state` nonce as spent the first (and only) time it is presented.
+ *
+ * A valid HMAC alone proves a `state` was minted by this server for an
+ * admin who had already passed the bearer check on `authorize` — it does
+ * *not* prove the bearer of the `callback` request is that same admin, or
+ * that the value has not already been seen by somebody else (a shared
+ * machine's browser history, a reverse proxy's access log recording the
+ * full `callback?code=…&state=…` query line). Without single-use
+ * enforcement, anyone who captures a still-fresh `state` within its
+ * ten-minute window can start their own Google OAuth consent with their
+ * own account, replay the captured `state` on the redirect back, and
+ * silently overwrite the legitimate connection with their own refresh
+ * token — a zero-cost integrity/availability attack that needs no Cogenta
+ * credential at all (found in security review). One in-memory `Map`, kept
+ * for the router's own lifetime, is enough — R1 does not require session
+ * storage for this, only that a nonce cannot be spent twice.
+ */
+function createConsumedStateTracker(): {
+  readonly consume: (nonce: string, issuedAt: number) => boolean
+} {
+  const consumed = new Map<string, number>()
+
+  function prune(now: number): void {
+    for (const [nonce, issuedAt] of consumed) {
+      if (now - issuedAt > STATE_FRESHNESS_MS) consumed.delete(nonce)
+    }
+  }
+
+  return {
+    consume(nonce, issuedAt) {
+      const now = Date.now()
+      prune(now)
+      if (consumed.has(nonce)) return false
+      consumed.set(nonce, issuedAt)
+      return true
+    },
+  }
 }
 
 function singleQueryValue(value: string | readonly string[] | undefined): string | undefined {
@@ -171,6 +225,11 @@ export function createSearchConsoleRouter(
   const disconnectPath = `${basePath}/disconnect`
   const adminReturnPath = options.adminReturnPath ?? DEFAULT_ADMIN_RETURN_PATH
   const fetchImpl = options.fetchImpl
+  // One tracker per router instance — a fresh `cogenta serve` process starts
+  // with an empty set, which is correct: no `state` minted by a previous
+  // process can still be within its ten-minute window by the time a new one
+  // is up.
+  const consumedStates = createConsumedStateTracker()
 
   async function status(context: AccessContext): Promise<RestResponse> {
     assertAdmin(context)
@@ -213,11 +272,17 @@ export function createSearchConsoleRouter(
 
     const state = singleQueryValue(request.query.state)
     const code = singleQueryValue(request.query.code)
-    if (state === undefined || !verifyState(options.signingKey, state)) {
+    const verified = state === undefined ? null : verifyStateSignature(options.signingKey, state)
+    // `consume` runs even on the very first check, so a state that passes
+    // signature+freshness only ever succeeds once — a second presentation
+    // of the exact same (still-fresh, still-correctly-signed) value is
+    // refused exactly like a forged one, closing the replay window a bare
+    // HMAC+freshness check leaves open (security review finding).
+    if (verified === null || !consumedStates.consume(verified.nonce, verified.issuedAt)) {
       throw new CogentaError({
         code: 'SEARCH_CONSOLE_STATE_INVALID',
-        message: 'The OAuth callback state is missing, malformed or expired.',
-        hint: 'Start the connection again from the SEO screen — a callback link is only valid for ten minutes.',
+        message: 'The OAuth callback state is missing, malformed, expired or already used.',
+        hint: 'Start the connection again from the SEO screen — a callback link is only valid once, for ten minutes.',
       })
     }
     if (code === undefined) {

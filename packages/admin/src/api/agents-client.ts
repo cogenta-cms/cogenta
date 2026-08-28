@@ -26,6 +26,8 @@ export interface AgentAutonomy {
 export interface AgentModelPreference {
   readonly preferred: string
   readonly fallback?: string
+  /** Fiche 55 task 2 — an explicit model id for this agent, distinct from the provider name `preferred` names. Optional: absent means "use the provider's own configured model". */
+  readonly model?: string
 }
 
 export interface AgentTrigger {
@@ -68,6 +70,8 @@ export interface AgentIdentityFields {
   readonly role: string
   readonly objectives: readonly string[]
   readonly style?: string
+  /** Fiche 55 task 1 — extra standing instructions, distinct from `style`. */
+  readonly systemPrompt?: string
 }
 
 export interface AgentWriteInput {

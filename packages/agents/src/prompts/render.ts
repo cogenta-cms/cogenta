@@ -53,7 +53,7 @@ export async function resolveInstruction(options: ResolveInstructionOptions): Pr
   return options.fallback()
 }
 
-/** Renders a `PromptTemplate` on its own — used outside the `assist.*` tools (e.g. a future consumer resolving `generate_text_block`/`generate_agent_system_prompt` directly by id). */
+/** Renders a `PromptTemplate` on its own — used outside the `assist.*` tools (e.g. a future consumer resolving `generate_text_block` directly by id; `generate_agent_system_prompt` instead goes through `resolveInstruction` above, exactly like every other `assist.*` tool). */
 export function renderTemplate(
   template: PromptTemplate,
   vars: Readonly<Record<string, string>>,

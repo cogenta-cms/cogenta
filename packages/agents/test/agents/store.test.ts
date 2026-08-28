@@ -49,6 +49,31 @@ describe('createFileAgentDeclarationStore', () => {
     expect(identity.style).toBe('Terse.')
   })
 
+  it('round-trips systemPrompt (fiche 55 task 1), distinct from style', async () => {
+    await store.create({
+      ...BASE_INPUT,
+      identity: { ...BASE_INPUT.identity, systemPrompt: 'Always reply in valid JSON.' },
+    })
+    const identity = await store.readIdentity('Test Agent')
+    expect(identity.systemPrompt).toBe('Always reply in valid JSON.')
+    expect(identity.style).toBe('Terse.') // unaffected by adding systemPrompt
+  })
+
+  it('an agent created without systemPrompt reads back with it undefined (backward compat)', async () => {
+    await store.create(BASE_INPUT) // BASE_INPUT declares no systemPrompt
+    const identity = await store.readIdentity('Test Agent')
+    expect(identity.systemPrompt).toBeUndefined()
+  })
+
+  it('update() can add a systemPrompt to an agent that had none', async () => {
+    await store.create(BASE_INPUT)
+    await store.update('Test Agent', {
+      identity: { ...BASE_INPUT.identity, systemPrompt: 'Added later.' },
+    })
+    const identity = await store.readIdentity('Test Agent')
+    expect(identity.systemPrompt).toBe('Added later.')
+  })
+
   it('refuses a duplicate name', async () => {
     await store.create(BASE_INPUT)
     await expect(store.create(BASE_INPUT)).rejects.toMatchObject({ code: 'AGENT_DUPLICATE' })

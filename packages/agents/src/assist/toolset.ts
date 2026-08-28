@@ -6,6 +6,7 @@ import type { EmbeddingProvider } from '../rag/embeddings/types.js'
 import type { SemanticSearch } from '../rag/semantic/search.js'
 import type { VectorStore } from '../rag/vector/types.js'
 import type { ToolCost, ToolDefinition } from '../tools/types.js'
+import { createGenerateAgentIdentityTool } from './agent-identity.js'
 import { createContentChatTool } from './chat.js'
 import { createClassifyTool, createFindDuplicatesTool, createModerateTool } from './classify.js'
 import { createFaqTool, createSchemaOrgTool } from './faq.js'
@@ -104,6 +105,10 @@ const LABELS: Readonly<Record<string, { readonly label: string; readonly needs: 
   'assist.moderate': { label: 'Check for review', needs: [] },
   'assist.faq_draft': { label: 'Draft a FAQ', needs: [] },
   'assist.schema_org_draft': { label: 'Draft structured data', needs: ['type'] },
+  'assist.generate_agent_identity': {
+    label: 'Generate agent identity',
+    needs: ['agentName', 'purpose'],
+  },
 }
 
 export function describeCapabilities(
@@ -156,6 +161,7 @@ export function createAssistToolset(options: AssistToolsetOptions): AssistToolse
           createModerateTool(runtime, promptTemplates) as ToolDefinition,
           createFaqTool(runtime, promptTemplates) as ToolDefinition,
           createSchemaOrgTool(runtime, promptTemplates) as ToolDefinition,
+          createGenerateAgentIdentityTool(runtime, promptTemplates) as ToolDefinition,
         ]),
     ...(options.imageProvider === undefined
       ? []

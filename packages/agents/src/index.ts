@@ -32,6 +32,8 @@ export type {
   AgentModelPreference,
   AgentTrigger,
 } from './agents/types.js'
+export type { GeneratedAgentIdentity } from './assist/agent-identity.js'
+export { createGenerateAgentIdentityTool } from './assist/agent-identity.js'
 export type { ChatSource, ContentChatAnswer, ContentChatOptions } from './assist/chat.js'
 export { createContentChatTool } from './assist/chat.js'
 export type {

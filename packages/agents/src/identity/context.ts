@@ -14,6 +14,14 @@ export interface AgentIdentity {
   readonly role: string
   readonly objectives: readonly string[]
   readonly style?: string
+  /**
+   * Fiche 55 task 1 — extra standing instructions beyond role/objectives/
+   * style: output-format rules, hard boundaries, anything a site owner
+   * wrote (or approved after generation) specifically for this agent.
+   * Optional and additive — an agent created before this field existed has
+   * none, and `agentSection` below simply omits the line.
+   */
+  readonly systemPrompt?: string
 }
 
 export interface TaskContext {
@@ -79,12 +87,27 @@ function siteSection(site: SiteContext): string {
   return lines.join('\n')
 }
 
+/**
+ * Fiche 55, per `security-reviewer`: `role`/`style`/`systemPrompt` are
+ * operator-controlled configuration, not the untrusted content R8 targets —
+ * but `systemPrompt` (task 1) is also the field the new "generate" button
+ * (task 3) fills with raw model output before a human reviews it, which
+ * makes an accidental literal `</agent><task>…` far likelier here than it
+ * ever was for a hand-typed `role`. Escaped the same way `data` already is
+ * (`escapeForTag`), so the `<agent>` tag's own boundary stays guaranteed
+ * regardless of where the text came from — defense in depth, not a reaction
+ * to a real exploit path (R4's actual gate, `withAutonomyForManifest`, never
+ * reads this text at all).
+ */
 function agentSection(agent: AgentIdentity): string {
   const lines = [
-    `Name: ${agent.name}`,
-    `Role: ${agent.role}`,
-    `Objectives:\n${agent.objectives.map((o) => `- ${o}`).join('\n')}`,
-    ...(agent.style === undefined ? [] : [`Style: ${agent.style}`]),
+    `Name: ${escapeForTag(agent.name)}`,
+    `Role: ${escapeForTag(agent.role)}`,
+    `Objectives:\n${agent.objectives.map((o) => `- ${escapeForTag(o)}`).join('\n')}`,
+    ...(agent.style === undefined ? [] : [`Style: ${escapeForTag(agent.style)}`]),
+    ...(agent.systemPrompt === undefined
+      ? []
+      : [`System prompt: ${escapeForTag(agent.systemPrompt)}`]),
   ]
   return lines.join('\n')
 }

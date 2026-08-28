@@ -41,6 +41,16 @@ describe('data that reaches the markup', () => {
     )
   })
 
+  // Fiche 42 task 2: the editor's two new insertions, proved through the
+  // real page-render path — the same guard the fiche's own pitfall list
+  // names ("adding to the editor without adding to the renderer produces
+  // content that vanishes on publish").
+  it('renders the strikethrough mark as `<s>`, and the thematic break as a bare `<hr>`', () => {
+    const html = render('prose')
+    expect(html).toContain('<hr class="cg-prose__rule">')
+    expect(html).toContain('<s>No longer accurate.</s>')
+  })
+
   it('renders an internal link whose target could not be resolved as plain text, never a dead anchor', () => {
     // `ctx.link` returns `'#'` for a target `theme-render.ts` could not
     // fetch — trashed, still a draft, or gone. A real `<a href="#">` would

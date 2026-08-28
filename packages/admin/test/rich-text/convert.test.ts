@@ -136,6 +136,26 @@ describe('portableTextToSlate', () => {
     ])
   })
 
+  it('converts a thematic break node into a void `hr` element (fiche 42 task 2)', () => {
+    const doc: RichTextDocument = [{ _key: 'h1', _type: 'hr' }]
+    expect(portableTextToSlate(doc)).toEqual([{ type: 'hr', children: [{ text: '' }] }])
+  })
+
+  it('converts the strikethrough decorator to a leaf prop (fiche 42 task 2)', () => {
+    const doc: RichTextDocument = [
+      {
+        _key: 'b1',
+        _type: 'block',
+        style: 'normal',
+        children: [{ _key: 's1', _type: 'span', text: 'old', marks: ['strikethrough'] }],
+        markDefs: [],
+      },
+    ]
+    expect(portableTextToSlate(doc)).toEqual([
+      { type: 'paragraph', children: [{ text: 'old', strikethrough: true }] },
+    ])
+  })
+
   it('reconstructs a code block (L21 task 5) when every span is marked with `code` alone', () => {
     const doc: RichTextDocument = [
       {
@@ -229,6 +249,24 @@ describe('slateToPortableText', () => {
     if (node === undefined || node._type !== 'media') throw new Error('expected a media node')
     expect(node.id).toBe('asset-2')
     expect(node.caption).toBeUndefined()
+  })
+
+  it('round-trips a thematic break, carrying nothing but a fresh key (fiche 42 task 2)', () => {
+    const nodes: CustomElement[] = [{ type: 'hr', children: [{ text: '' }] }]
+    const [node] = slateToPortableText(nodes)
+    if (node === undefined || node._type !== 'hr') throw new Error('expected an hr node')
+    expect(node).toEqual({ _key: node._key, _type: 'hr' })
+    expect(portableTextToSlate(slateToPortableText(nodes))).toEqual(nodes)
+  })
+
+  it('round-trips the strikethrough decorator (fiche 42 task 2)', () => {
+    const nodes: CustomElement[] = [
+      { type: 'paragraph', children: [{ text: 'old price', strikethrough: true }] },
+    ]
+    const [block] = slateToPortableText(nodes)
+    if (block === undefined || block._type !== 'block') throw new Error('expected a block node')
+    expect(block.children.map((span) => span.marks)).toEqual([['strikethrough']])
+    expect(portableTextToSlate(slateToPortableText(nodes))).toEqual(nodes)
   })
 
   it('degrades a code block to an existing style/mark combination, never a new node (L21 task 5)', () => {
@@ -331,6 +369,7 @@ describe('contract compliance (@cogenta/blocks, the real validators)', () => {
         children: [
           { text: 'bold ', strong: true },
           { text: 'italic', em: true },
+          { text: ' old price', strikethrough: true },
           {
             type: 'link',
             kind: 'external',
@@ -339,11 +378,16 @@ describe('contract compliance (@cogenta/blocks, the real validators)', () => {
           },
         ],
       },
+      { type: 'hr', children: [{ text: '' }] },
     ]
 
     const document = slateToPortableText(nodes)
     const result = richTextDocumentSchema.safeParse(document)
     expect(result.success).toBe(true)
+
+    // The `hr` node this test appends validates as the real `@cogenta/blocks`
+    // vocabulary, not merely this admin's own idea of it.
+    expect(document.some((node) => node._type === 'hr')).toBe(true)
 
     // The code block's own `<`/`>` characters survive as ordinary text, not
     // parsed as markup — the code-block degradation (`codeBlockSpans`) never

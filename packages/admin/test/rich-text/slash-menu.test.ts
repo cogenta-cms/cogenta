@@ -9,6 +9,7 @@ const LABELS: Readonly<Record<string, string>> = {
   'richText.blockBullet': 'Bulleted list',
   'richText.blockNumber': 'Numbered list',
   'richText.insertImageButton': 'Insert image',
+  'richText.blockHr': 'Horizontal rule',
 }
 
 function translate(key: string): string {
@@ -34,10 +35,15 @@ describe('filterSlashItems', () => {
     expect(filterSlashItems('zzz-nope', translate)).toEqual([])
   })
 
-  it('never offers a table, a code block or a horizontal rule — not in the vocabulary yet', () => {
+  it('never offers a table or a code block — table still has no ADR, code block stays toolbar-only', () => {
     const ids = SLASH_ITEMS.map((item) => item.id)
     expect(ids).not.toContain('table')
     expect(ids).not.toContain('code')
-    expect(ids).not.toContain('hr')
+  })
+
+  it('offers a horizontal rule (fiche 42 task 2), a real vocabulary node now', () => {
+    const results = filterSlashItems('horizontal', translate)
+    expect(results.map((item) => item.id)).toEqual(['hr'])
+    expect(SLASH_ITEMS.find((item) => item.id === 'hr')).toMatchObject({ kind: 'hr' })
   })
 })

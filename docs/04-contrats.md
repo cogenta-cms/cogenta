@@ -14,6 +14,11 @@
 > **Monté en `schema@2.1` le 2026-08-20** (ADR-0027 — workflow éditorial et
 > permission par propriétaire), montée **mineure et strictement additive** : voir
 > « Champs système » et « Permissions » ci-dessous.
+> **Monté en `schema@2.2`** (fiche 42 tâche 2), montée **mineure et strictement
+> additive**, sans ADR dédiée — même traitement qu'un ajout par le bas à la
+> taxonomie ouverte de `tools@1.1` (`document.extract`) : le décorateur
+> `strikethrough` et le nœud `hr` s'ajoutent au « Texte riche » ci-dessous, voir
+> cette section.
 
 ### Définition d'un type
 
@@ -147,7 +152,7 @@ interface Span {
   _key: string
   _type: 'span'
   text: string
-  marks: string[]                 // 'strong' | 'em' | 'code' | ou un markDefs._key
+  marks: string[]                 // 'strong' | 'em' | 'code' | 'strikethrough' | ou un markDefs._key
 }
 
 type MarkDefinition =
@@ -155,11 +160,22 @@ type MarkDefinition =
   | { _key: string, _type: 'internalLink', collection: string, id: string }
 
 /** Nœud non textuel autorisé dans un document. */
-type RichTextNode = TextBlock | { _key: string, _type: 'media', id: string, caption?: string }
+type RichTextNode =
+  | TextBlock
+  | { _key: string, _type: 'media', id: string, caption?: string }
+  | { _key: string, _type: 'hr' }
 ```
 
 `h1` est absent du vocabulaire : le titre de la page est le seul `h1`, et le laisser
 disponible dans le corps casse la hiérarchie d'en-têtes et l'accessibilité.
+
+**`strikethrough` et `hr` (`schema@2.2`, fiche 42 tâche 2)** s'ajoutent par le bas,
+mineurs : `strikethrough` est un quatrième décorateur qui ne réclame aucune
+`markDefs` (comme `strong`/`em`/`code`), rendu `<s>` (jamais `<del>`, qui
+impliquerait une suppression suivie) ; `hr` est un nœud de niveau document, sans
+donnée au-delà de sa clé, rendu `<hr>`. Un document stocké avant cette montée ne
+change pas de forme ; un lecteur resté à `schema@2.1` ne peut simplement pas
+valider un document qui utilise l'un ou l'autre.
 
 Un lien interne référence une **entité**, pas une URL. Déplacer ou renommer la cible ne
 casse pas le lien, et la suppression de la cible est détectable.

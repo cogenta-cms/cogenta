@@ -68,6 +68,12 @@ export type MediaElement = {
   readonly caption?: string
   children: Descendant[]
 }
+/**
+ * Void, like `MediaElement`: a thematic break (fiche 42 task 2) carries no
+ * text and nothing to click into. Mirrors contract A's `hr` node
+ * (`portable-text.ts`'s `RichTextHrNode`) one-to-one — no data beyond its key.
+ */
+export type ThematicBreakElement = { readonly type: 'hr'; children: Descendant[] }
 
 export type BlockElement =
   | ParagraphElement
@@ -76,7 +82,7 @@ export type BlockElement =
   | ListItemElement
   | CodeBlockElement
 export type InlineElement = LinkElement
-export type VoidElement = MediaElement
+export type VoidElement = MediaElement | ThematicBreakElement
 export type CustomElement = BlockElement | InlineElement | VoidElement
 
 export interface CustomText {
@@ -84,6 +90,8 @@ export interface CustomText {
   strong?: true
   em?: true
   code?: true
+  /** Fiche 42 task 2 — mirrors contract A's `strikethrough` decorator. */
+  strikethrough?: true
 }
 
 export type Descendant = CustomElement | CustomText

@@ -10,6 +10,7 @@ import {
   Heading2Icon,
   Heading3Icon,
   Heading4Icon,
+  HorizontalRuleIcon,
   ImageIcon,
   InlineCodeIcon,
   ItalicIcon,
@@ -18,12 +19,14 @@ import {
   ParagraphIcon,
   QuoteIcon,
   RedoIcon,
+  StrikethroughIcon,
   UndoIcon,
 } from '../ui/icons.js'
 import {
   activeBlockKind,
   type BlockKind,
   insertMedia,
+  insertThematicBreak,
   isMarkActive,
   toggleBlock,
   toggleMark,
@@ -42,6 +45,7 @@ const MARK_BUTTONS: readonly {
   { mark: 'strong', labelKey: 'richText.markStrong', Icon: BoldIcon },
   { mark: 'em', labelKey: 'richText.markEm', Icon: ItalicIcon },
   { mark: 'code', labelKey: 'richText.markCode', Icon: InlineCodeIcon },
+  { mark: 'strikethrough', labelKey: 'richText.markStrikethrough', Icon: StrikethroughIcon },
 ]
 
 const BLOCK_BUTTONS: readonly {
@@ -222,6 +226,13 @@ export function RichTextToolbar({
           disabled={formattingDisabled || session === undefined}
           onClick={() => setImageOpen(true)}
           Icon={ImageIcon}
+        />
+        {/* Fiche 42 task 2: an insertion, not a toggle — no `activeBlockKind` state, unlike the block group above. */}
+        <ToolbarButton
+          label={t('richText.insertHrButton')}
+          disabled={formattingDisabled}
+          onClick={() => insertThematicBreak(editor)}
+          Icon={HorizontalRuleIcon}
         />
 
         <ToolbarSeparator />

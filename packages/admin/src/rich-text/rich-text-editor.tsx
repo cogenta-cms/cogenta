@@ -16,7 +16,7 @@ import { MediaThumbnail } from '../media/media-thumbnail.js'
 import '../styles/rich-text.css'
 import { cn } from '../ui/cn.js'
 import { FullscreenExitIcon, FullscreenIcon } from '../ui/icons.js'
-import { clearSlashQuery, slashQueryAt, toggleBlock } from './commands.js'
+import { clearSlashQuery, insertThematicBreak, slashQueryAt, toggleBlock } from './commands.js'
 import { portableTextToSlate, slateToPortableText } from './convert.js'
 import { ImageInsertModal } from './image-picker.js'
 import type { RichTextDocument } from './portable-text.js'
@@ -124,6 +124,17 @@ function renderElement(
           t={t}
         />
       )
+    case 'hr':
+      // Void (`with-inlines.ts`'s `isVoid`): `children` still needs to be
+      // rendered somewhere for Slate's DOM model — the same pattern
+      // `MediaElementView` already uses — even though nothing here is
+      // editable text.
+      return (
+        <div {...attributes} contentEditable={false} className="rich-text-editor__hr">
+          <hr />
+          {children}
+        </div>
+      )
     default:
       return <p {...attributes}>{children}</p>
   }
@@ -134,6 +145,7 @@ function renderLeaf({ attributes, children, leaf }: RenderLeafProps): JSX.Elemen
   if (leaf.strong) content = <strong>{content}</strong>
   if (leaf.em) content = <em>{content}</em>
   if (leaf.code) content = <code>{content}</code>
+  if (leaf.strikethrough) content = <s>{content}</s>
   return <span {...attributes}>{content}</span>
 }
 
@@ -233,6 +245,8 @@ export function RichTextEditor({
     } else if (item.kind === 'image' && session !== undefined) {
       setDroppedFile(null)
       setImageModalOpen(true)
+    } else if (item.kind === 'hr') {
+      insertThematicBreak(editor)
     }
   }
 

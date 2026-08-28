@@ -52,6 +52,10 @@ function nodeToSlate(node: RichTextNode): CustomElement {
     }
   }
 
+  if (node._type === 'hr') {
+    return { type: 'hr', children: [{ text: '' }] }
+  }
+
   if (isWhollyCoded(node)) {
     return { type: 'code-block', children: node.children.map((span) => ({ text: span.text })) }
   }
@@ -84,6 +88,7 @@ function spansToSlate(
       if (mark === 'strong') leaf.strong = true
       else if (mark === 'em') leaf.em = true
       else if (mark === 'code') leaf.code = true
+      else if (mark === 'strikethrough') leaf.strikethrough = true
     }
 
     const linkMarkKey = span.marks.find((mark) => defsByKey.has(mark))
@@ -124,6 +129,10 @@ function blockToPortableText(element: CustomElement): RichTextNode {
       ...(element.caption === undefined ? {} : { caption: element.caption }),
     }
     return node
+  }
+
+  if (element.type === 'hr') {
+    return { _key: freshKey(), _type: 'hr' }
   }
 
   if (element.type === 'code-block') {

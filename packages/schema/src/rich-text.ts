@@ -20,8 +20,18 @@ export const RICH_TEXT_LIST_ITEMS = ['bullet', 'number'] as const
 
 export type RichTextListItem = (typeof RICH_TEXT_LIST_ITEMS)[number]
 
-/** Marks that need no definition. Anything else in `marks` is a `markDefs._key`. */
-export const RICH_TEXT_DECORATORS = ['strong', 'em', 'code'] as const
+/**
+ * Marks that need no definition. Anything else in `marks` is a `markDefs._key`.
+ *
+ * `strikethrough` (fiche 42 task 2) is an additive entry to this open
+ * taxonomy — the same treatment already given to a new `ErrorCode` or to
+ * `document.extract` on contract C's permission taxonomy (`schema@2.1`,
+ * ADR-0027): existing documents never carry it, so nothing already stored
+ * changes shape, and a reader still on `schema@2.1` simply cannot validate a
+ * span that now uses it — the same one-directional compatibility every prior
+ * additive vocabulary entry in this project has accepted.
+ */
+export const RICH_TEXT_DECORATORS = ['strong', 'em', 'code', 'strikethrough'] as const
 
 export type RichTextDecorator = (typeof RICH_TEXT_DECORATORS)[number]
 
@@ -76,7 +86,21 @@ const mediaNodeSchema = z.strictObject({
   caption: z.string().optional(),
 })
 
-export const richTextNodeSchema = z.discriminatedUnion('_type', [textBlockSchema, mediaNodeSchema])
+/**
+ * A thematic break (fiche 42 task 2). Carries no data beyond its key — unlike
+ * `media`, it has nothing to reference — so there is nothing for a future
+ * property to smuggle presentation through.
+ */
+const hrNodeSchema = z.strictObject({
+  _key: keySchema,
+  _type: z.literal('hr'),
+})
+
+export const richTextNodeSchema = z.discriminatedUnion('_type', [
+  textBlockSchema,
+  mediaNodeSchema,
+  hrNodeSchema,
+])
 
 export const richTextDocumentSchema = z.array(richTextNodeSchema).superRefine((nodes, context) => {
   // Two nodes sharing a key silently break every consumer that addresses a
@@ -116,5 +140,6 @@ export type RichTextSpan = z.infer<typeof spanSchema>
 export type RichTextMarkDefinition = z.infer<typeof markDefinitionSchema>
 export type RichTextBlock = z.infer<typeof textBlockSchema>
 export type RichTextMediaNode = z.infer<typeof mediaNodeSchema>
+export type RichTextHrNode = z.infer<typeof hrNodeSchema>
 export type RichTextNode = z.infer<typeof richTextNodeSchema>
 export type RichTextDocument = z.infer<typeof richTextDocumentSchema>

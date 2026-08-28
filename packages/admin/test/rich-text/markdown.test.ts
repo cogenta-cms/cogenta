@@ -35,6 +35,29 @@ describe('slateToMarkdown', () => {
     expect(slateToMarkdown(nodes)).toBe('**bold **_italic __**both**_` code`')
   })
 
+  it('encodes the strikethrough mark (fiche 42 task 2)', () => {
+    const nodes: CustomElement[] = [
+      { type: 'paragraph', children: [{ text: 'old price', strikethrough: true }] },
+    ]
+    expect(slateToMarkdown(nodes)).toBe('~~old price~~')
+  })
+
+  it('encodes a thematic break as `---` (fiche 42 task 2)', () => {
+    const nodes: CustomElement[] = [
+      { type: 'paragraph', children: [{ text: 'before' }] },
+      { type: 'hr', children: [{ text: '' }] },
+      { type: 'paragraph', children: [{ text: 'after' }] },
+    ]
+    expect(slateToMarkdown(nodes)).toBe('before\n\n---\n\nafter')
+  })
+
+  it('escapes a paragraph whose text is literally three hyphens, which would otherwise read back as a thematic break', () => {
+    const nodes: CustomElement[] = [{ type: 'paragraph', children: [{ text: '---' }] }]
+    const markdown = slateToMarkdown(nodes)
+    expect(markdown).toBe('\\---')
+    expect(markdownToSlate(markdown)).toEqual([{ type: 'paragraph', children: [{ text: '---' }] }])
+  })
+
   it('groups consecutive list items of the same run without blank lines between them, indenting by level', () => {
     const nodes: CustomElement[] = [
       { type: 'list-item', listType: 'bullet', level: 1, children: [{ text: 'one' }] },
@@ -166,6 +189,20 @@ describe('markdownToSlate', () => {
     ])
   })
 
+  it('parses `~~text~~` into the strikethrough decorator (fiche 42 task 2)', () => {
+    expect(markdownToSlate('~~old price~~')).toEqual([
+      { type: 'paragraph', children: [{ text: 'old price', strikethrough: true }] },
+    ])
+  })
+
+  it('parses `---` on its own line into a thematic break (fiche 42 task 2)', () => {
+    expect(markdownToSlate('before\n\n---\n\nafter')).toEqual([
+      { type: 'paragraph', children: [{ text: 'before' }] },
+      { type: 'hr', children: [{ text: '' }] },
+      { type: 'paragraph', children: [{ text: 'after' }] },
+    ])
+  })
+
   it('parses an image with the media pseudo-scheme back into a media void', () => {
     const nodes = markdownToSlate('![A caption](cogenta-media:asset-1)')
     expect(nodes).toEqual([
@@ -196,8 +233,10 @@ describe('round trip', () => {
           { text: 'bold ', strong: true },
           { text: 'italic ', em: true },
           { text: 'code', code: true },
+          { text: 'struck', strikethrough: true },
         ],
       },
+      { type: 'hr', children: [{ text: '' }] },
       { type: 'blockquote', children: [{ text: 'a quote' }] },
       { type: 'list-item', listType: 'bullet', level: 1, children: [{ text: 'item one' }] },
       { type: 'list-item', listType: 'bullet', level: 2, children: [{ text: 'nested' }] },

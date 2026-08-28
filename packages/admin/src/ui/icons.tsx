@@ -225,6 +225,24 @@ export const ItalicIcon = icon(<path d="M8.5 3.5h5.5M6 16.5h5.5M12 3.5l-4 13" />
 
 export const InlineCodeIcon = icon(<path d="M7 5.5L2.5 10l4.5 4.5M13 5.5l4.5 4.5-4.5 4.5" />)
 
+/** Fiche 42 task 2 — an "S" shape crossed by the strike line, so it reads as a mark next to `BoldIcon`/`ItalicIcon` rather than as a stray line. */
+export const StrikethroughIcon = icon(
+  <>
+    <path d="M6.2 6.3c0-1.7 1.6-2.8 3.8-2.8s3.7 1 3.9 2.5" />
+    <path d="M6.6 13.7c.2 1.5 1.8 2.6 3.9 2.6 2.2 0 3.7-1 3.7-2.6 0-1-.6-1.7-1.7-2.2" />
+    <path d="M3 10h14" />
+  </>,
+)
+
+/** Fiche 42 task 2 — a rule with marked ends, distinct from a bare divider line. */
+export const HorizontalRuleIcon = icon(
+  <>
+    <circle cx="3.5" cy="10" r="1" fill="currentColor" stroke="none" />
+    <path d="M6.5 10h7" />
+    <circle cx="16.5" cy="10" r="1" fill="currentColor" stroke="none" />
+  </>,
+)
+
 function headingIcon(digit: string) {
   return icon(
     <>

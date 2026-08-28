@@ -1748,6 +1748,8 @@
     "customizeDescription": "These levers override the chosen template's own tokens. Clearing a field returns to the template's own value.",
     "activeLabel": "Active",
     "chooseAction": "Use this template",
+    "customizeAction": "Customise",
+    "backToGalleryAction": "Back to gallery",
     "primaryColorLabel": "Primary colour",
     "backgroundColorLabel": "Background colour",
     "textColorLabel": "Text colour",
@@ -1757,7 +1759,7 @@
     "logoLabel": "Admin logo",
     "resetFieldAction": "Reset to template",
     "saveAction": "Save",
-    "previewNote": "The rest of this admin already reflects your changes — this screen is themed by them too."
+    "previewNote": "The preview above reflects your changes before you save; the rest of this admin only picks them up once saved."
   },
   "settings": {
     "heading": "Site settings",

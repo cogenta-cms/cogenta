@@ -127,4 +127,13 @@ describe('buildAdminThemeCss', () => {
     const css = buildAdminThemeCss(state('atelier'))
     expect(css).toContain('--font-display: "Plex Mono"')
   })
+
+  it('scopes every block to a caller-supplied selector instead of `:root`, for a preview panel (fiche 49)', () => {
+    const scope = '[data-admin-theme-preview="abc"]'
+    const css = buildAdminThemeCss(state('nightops'), scope)
+    expect(css).toContain(`${scope} {`)
+    expect(css).toContain(`${scope}:not([data-theme="light"])`)
+    expect(css).toContain(`${scope}[data-theme="dark"]`)
+    expect(css).not.toContain(':root')
+  })
 })

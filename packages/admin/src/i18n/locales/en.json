@@ -585,6 +585,11 @@
     "openAction": "Open",
     "singleLocaleNote": "This site has only one language; there is nothing to compare."
   },
+  "excerptAssist": {
+    "suggestButton": "Generate the excerpt with AI",
+    "suggesting": "Thinking…",
+    "error": "Could not get a suggestion."
+  },
   "entryEdit": {
     "newHeading": "New: {{label}}",
     "editHeading": "Edit: {{label}}",

@@ -584,6 +584,11 @@
     "openAction": "Ouvrir",
     "singleLocaleNote": "Ce site n'a qu'une seule langue ; il n'y a rien à comparer."
   },
+  "excerptAssist": {
+    "suggestButton": "Générer l'extrait avec l'IA",
+    "suggesting": "Réflexion…",
+    "error": "Impossible d'obtenir une suggestion."
+  },
   "entryEdit": {
     "newHeading": "Nouveau : {{label}}",
     "editHeading": "Modifier : {{label}}",

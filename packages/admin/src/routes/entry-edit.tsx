@@ -1600,6 +1600,7 @@ export function EntryEditRoute(): JSX.Element {
               onBlocksChange={setBlockZone}
               disabled={!canWrite}
               errors={errors}
+              token={token}
               {...(skipFields.size === 0 ? {} : { skipFields })}
             />
 

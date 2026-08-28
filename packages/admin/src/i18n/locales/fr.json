@@ -1778,6 +1778,8 @@
     "customizeDescription": "Ces réglages surchargent les jetons du modèle choisi. Vider un champ revient à la valeur du modèle.",
     "activeLabel": "Actif",
     "chooseAction": "Utiliser ce modèle",
+    "customizeAction": "Personnaliser",
+    "backToGalleryAction": "Retour à la galerie",
     "primaryColorLabel": "Couleur primaire",
     "backgroundColorLabel": "Couleur de fond",
     "textColorLabel": "Couleur du texte",
@@ -1787,7 +1789,7 @@
     "logoLabel": "Logo de l'admin",
     "resetFieldAction": "Revenir au modèle",
     "saveAction": "Enregistrer",
-    "previewNote": "Le reste de cet admin reflète déjà vos changements — cet écran en hérite aussi."
+    "previewNote": "L'aperçu ci-dessus reflète vos changements avant l'enregistrement ; le reste de cet admin ne les applique qu'une fois enregistrés."
   },
   "settings": {
     "heading": "Réglages du site",

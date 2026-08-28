@@ -5,9 +5,12 @@ import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 /**
- * The "Updates" card on the Exploitation screen (L22 task 9) — checking npm,
- * applying an update with a mandatory restore point, and the confirmation
- * dialog a contract-risk warning forces before anything is applied.
+ * "Mises à jour" (L22 task 9) — its own screen, split out of the "Sécurité &
+ * webhooks" screen by fiche 66 (its title had nothing to do with updates).
+ * Checking npm, applying an update with a mandatory restore point, and the
+ * confirmation dialog a contract-risk warning forces before anything is
+ * applied — same behaviour as before the extraction, only reached from its
+ * own nav entry and route now.
  */
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
@@ -22,9 +25,9 @@ function signedInAdmin(options: Parameters<typeof installMockFetch>[0] = {}): vo
   installMockFetch({ roles: ['admin'], ...options })
 }
 
-async function goToOpsSettings(): Promise<void> {
+async function goToUpdates(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Sécurité & webhooks' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Mises à jour' }))
   await screen.findByRole('heading', { name: 'Mises à jour' })
 }
 
@@ -72,11 +75,11 @@ const RISKY_STATUS: UpdateCheckReport = {
   packages: [CORE_RISKY, CLI_UP_TO_DATE],
 }
 
-describe('the Updates card', () => {
+describe('the Updates screen', () => {
   it('shows each package status', async () => {
     signedInAdmin({ updateStatus: AVAILABLE_STATUS })
     render(<App />)
-    await goToOpsSettings()
+    await goToUpdates()
 
     expect(screen.getByText('@cogenta/core')).toBeDefined()
     expect(screen.getByText('0.4.0 → 0.5.0 (minor)', { exact: false })).toBeDefined()
@@ -100,7 +103,7 @@ describe('the Updates card', () => {
       },
     })
     render(<App />)
-    await goToOpsSettings()
+    await goToUpdates()
 
     fireEvent.click(screen.getByRole('button', { name: 'Mettre à jour' }))
 
@@ -118,7 +121,7 @@ describe('the Updates card', () => {
       },
     })
     render(<App />)
-    await goToOpsSettings()
+    await goToUpdates()
 
     fireEvent.click(screen.getByRole('button', { name: 'Mettre à jour' }))
 
@@ -132,14 +135,17 @@ describe('the Updates card', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
-  it('refuses the whole card to a non-admin', async () => {
+  it('refuses the screen to a non-admin', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({ roles: ['editor'] })
-    window.history.pushState(null, '', '/ops-settings')
+    window.history.pushState(null, '', '/updates')
     render(<App />)
 
     expect(await screen.findByRole('alert')).toBeDefined()
-    expect(screen.queryByText('Mises à jour')).toBeNull()
+    // Only the (admin-only) heading is rendered — no package status, no
+    // controls, since the guard returns before ever calling the update API.
+    expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Mettre à jour' })).toBeNull()
   })
 })

@@ -61,6 +61,7 @@ import { TaxonomiesRoute } from './routes/taxonomies.js'
 import { ToolsRoute } from './routes/tools.js'
 import { TranslationsRoute } from './routes/translations.js'
 import { TrashRoute } from './routes/trash.js'
+import { UpdatesRoute } from './routes/updates.js'
 import { UsersRoute } from './routes/users.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { SiteSettingsProvider } from './settings/site-settings-context.js'
@@ -139,6 +140,7 @@ export function App(): JSX.Element {
                 <Route path="search" element={<SearchRoute />} />
                 <Route path="review" element={<ReviewRoute />} />
                 <Route path="ops-settings" element={<OpsSettingsRoute />} />
+                <Route path="updates" element={<UpdatesRoute />} />
                 <Route path="health" element={<HealthRoute />} />
                 <Route path="observability" element={<ObservabilityRoute />} />
                 <Route path="tools" element={<ToolsRoute />} />

@@ -4,16 +4,26 @@ import { ApiError } from '../api/client.js'
 import { fileToBase64, type MediaAsset, mediaKindFor, uploadMedia } from '../api/media-client.js'
 
 /**
- * One upload at a time, with the two fields L2-admin.md calls out
- * explicitly: alt text is required unless the image is marked decorative,
- * and decorative needs a reason a reviewer can read instead of a
- * description — the server enforces the same rule (`MediaStore`), this is
- * just the honest form around it.
+ * One file described and uploaded at a time, but a *batch* can be selected
+ * at once (fiche 46 task 7 — "upload multipart multiple avec progression").
+ *
+ * The accessibility rule L2-admin.md wrote for a single upload — alt text is
+ * required unless the image is marked decorative, and decorative needs a
+ * reason a reviewer can read — does not relax for a batch: a screen reader
+ * cares exactly as much about the third image in a folder as the first.
+ * Rather than inventing an alt text nobody wrote, or letting a batch skip
+ * the requirement, each file in the queue gets the same real form the
+ * single-file flow always did; picking several files just keeps the form
+ * open and advances it automatically once an upload succeeds, showing "file
+ * N of M" as it goes — that progress counter is the whole of what "upload
+ * multiple" adds here, deliberately: nothing about *how* one file is
+ * described changes.
  */
 export function UploadForm({
   token,
   onUploaded,
   initialFile,
+  defaultFolderId,
 }: {
   readonly token: string
   onUploaded(asset: MediaAsset): void
@@ -21,9 +31,17 @@ export function UploadForm({
    * Pre-fills the file input — the rich text editor's drag-and-drop path
    * (fiche 04 task 3) hands over the dropped file this way, so the upload
    * starts already knowing what to upload and the form only has to ask for
-   * the alt text, never a second, separate file choice.
+   * the alt text, never a second, separate file choice. A pre-filled queue
+   * is always exactly this one file — the batch picker is only offered when
+   * nothing was handed over already.
    */
   readonly initialFile?: File
+  /**
+   * The folder every file in this batch is filed into (fiche 46 task 8) —
+   * typically "whichever folder the library is currently showing". `null`
+   * files into nothing (unclassified); absent behaves the same as `null`.
+   */
+  readonly defaultFolderId?: string | null
 }): JSX.Element {
   const { t } = useTranslation()
   const fileId = useId()
@@ -31,7 +49,11 @@ export function UploadForm({
   const decorativeId = useId()
   const justificationId = useId()
 
-  const [file, setFile] = useState<File | null>(initialFile ?? null)
+  const [queue, setQueue] = useState<readonly File[]>(
+    initialFile === undefined ? [] : [initialFile],
+  )
+  const [batchTotal, setBatchTotal] = useState(initialFile === undefined ? 0 : 1)
+  const [batchDone, setBatchDone] = useState(0)
   const [pickingFile, setPickingFile] = useState(initialFile === undefined)
   const [alt, setAlt] = useState('')
   const [decorative, setDecorative] = useState(false)
@@ -39,28 +61,49 @@ export function UploadForm({
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const current = queue[0] ?? null
+
+  function pickFiles(files: FileList | null): void {
+    const picked = files === null ? [] : Array.from(files)
+    setQueue(picked)
+    setBatchTotal(picked.length)
+    setBatchDone(0)
+    setPickingFile(picked.length === 0)
+    setAlt('')
+    setDecorative(false)
+    setJustification('')
+    setError(null)
+  }
+
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
-    if (file === null) return
+    if (current === null) return
     setUploading(true)
     setError(null)
     try {
-      const data = await fileToBase64(file)
+      const data = await fileToBase64(current)
       const asset = await uploadMedia(token, {
-        kind: mediaKindFor(file.type),
-        filename: file.name,
-        mimeType: file.type,
+        kind: mediaKindFor(current.type),
+        filename: current.name,
+        mimeType: current.type,
         data,
         ...(decorative ? {} : { alt }),
         decorative,
         ...(decorative ? { decorativeJustification: justification } : {}),
+        ...(defaultFolderId === undefined ? {} : { folderId: defaultFolderId }),
       })
       onUploaded(asset)
-      setFile(null)
-      setPickingFile(true)
+      const rest = queue.slice(1)
+      setQueue(rest)
+      setBatchDone((done) => done + 1)
       setAlt('')
       setDecorative(false)
       setJustification('')
+      if (rest.length === 0) {
+        setPickingFile(true)
+        setBatchTotal(0)
+        setBatchDone(0)
+      }
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('media.uploadError'))
     } finally {
@@ -76,11 +119,18 @@ export function UploadForm({
           <input
             id={fileId}
             type="file"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            multiple={initialFile === undefined}
+            onChange={(event) => pickFiles(event.target.files)}
           />
         ) : (
           <p className="upload-form__filename">
-            {file?.name}{' '}
+            {current?.name}
+            {batchTotal > 1 && (
+              <span className="upload-form__progress">
+                {' '}
+                {t('media.uploadProgress', { current: batchDone + 1, total: batchTotal })}
+              </span>
+            )}{' '}
             <button type="button" onClick={() => setPickingFile(true)}>
               {t('media.changeFile')}
             </button>
@@ -142,7 +192,7 @@ export function UploadForm({
         </p>
       )}
 
-      <button type="submit" disabled={uploading || file === null}>
+      <button type="submit" disabled={uploading || current === null}>
         {uploading ? t('media.uploading') : t('media.uploadButton')}
       </button>
     </form>

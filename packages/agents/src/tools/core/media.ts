@@ -6,6 +6,28 @@ import type { ToolDefinition } from '../types.js'
 
 const FocalPointSchema = z.object({ x: z.number(), y: z.number() })
 
+/**
+ * `media.read`/`media.write`'s output shape — deliberately **not** the same
+ * type as `@cogenta/core`'s `MediaAsset` any more.
+ *
+ * Fiche 46 added `folderId` to `MediaAsset` (the media library's folder
+ * tree). Contract C (`docs/04-contrats.md`, ADR-0020) treats an existing
+ * tool's signature as figured: growing it — even by an additive field —
+ * needs a governance decision this session cannot make unilaterally (unlike
+ * contract A or D, contract C's own text carries no "additive is minor"
+ * exception for an already-shipped tool). Rather than touch it, `folderId`
+ * is stripped before this shape is built at all, so `media.read`/`.write`'s
+ * wire output is byte-for-byte what it was before this fiche — an agent
+ * asking to move a file between folders needs a new, separate tool, not
+ * this one grown quietly.
+ */
+type MediaToolAsset = Omit<MediaAsset, 'folderId'>
+
+function toToolAsset(asset: MediaAsset): MediaToolAsset {
+  const { folderId: _folderId, ...rest } = asset
+  return rest
+}
+
 const MediaAssetSchema = z.object({
   id: z.string(),
   kind: z.enum(['image', 'video', 'audio', 'file']),
@@ -23,7 +45,7 @@ const MediaAssetSchema = z.object({
   contentHash: z.string(),
   createdAt: z.string(),
   createdBy: z.string().nullable(),
-}) satisfies z.ZodType<MediaAsset>
+}) satisfies z.ZodType<MediaToolAsset>
 
 const ReadInputSchema = z.object({ id: z.string() })
 type ReadInput = z.infer<typeof ReadInputSchema>
@@ -35,7 +57,7 @@ type ReadInput = z.infer<typeof ReadInputSchema>
  * actual gate, enforced by the manifest before the call ever reaches the
  * store.
  */
-export function createMediaReadTool(store: MediaStore): ToolDefinition<ReadInput, MediaAsset> {
+export function createMediaReadTool(store: MediaStore): ToolDefinition<ReadInput, MediaToolAsset> {
   return defineTool({
     name: 'media.read',
     version: '1.0.0',
@@ -55,7 +77,7 @@ export function createMediaReadTool(store: MediaStore): ToolDefinition<ReadInput
           hint: 'Check the id, or list media to find the right one.',
         })
       }
-      return asset
+      return toToolAsset(asset)
     },
   })
 }
@@ -78,7 +100,9 @@ type WriteInput = z.infer<typeof WriteInputSchema>
  * editing an existing asset's accessibility metadata, which is the concrete
  * use case this tool exists for (e.g. an accessibility-review agent).
  */
-export function createMediaWriteTool(store: MediaStore): ToolDefinition<WriteInput, MediaAsset> {
+export function createMediaWriteTool(
+  store: MediaStore,
+): ToolDefinition<WriteInput, MediaToolAsset> {
   return defineTool({
     name: 'media.write',
     version: '1.0.0',
@@ -98,7 +122,7 @@ export function createMediaWriteTool(store: MediaStore): ToolDefinition<WriteInp
           : { decorativeJustification: input.decorativeJustification }),
         ...(input.focal === undefined ? {} : { focal: input.focal }),
       }
-      return store.update(input.id, update)
+      return toToolAsset(await store.update(input.id, update))
     },
   })
 }

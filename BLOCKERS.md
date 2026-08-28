@@ -1290,3 +1290,46 @@ l'affichage/export. Nécessite une décision produit (quel niveau de détail
 garder pour la détection d'abus vs. quelle promesse tenir sur
 l'anonymisation), donc laissé à trancher plutôt que corrigé à la volée dans
 cette session.
+
+## 24. Fiche 46 — Médiathèque : dossiers : Postgres/MySQL/MariaDB non exécutés, une course non protégée en base
+
+**Postgres/MySQL/MariaDB non exécutés cette session — Docker indisponible**
+(`docker version` échoue à joindre le démon), même contrainte que partout
+ailleurs dans ce fichier. `packages/core/test/integration/media-folders.test.ts`
+(suite de contrat `MediaFolderStore`, bâtie sur `folder-store.contract.ts` —
+la même que SQLite fait tourner en test unitaire, 48/48 verts — plus un test
+de concurrence dédié à deux connexions réelles pour `ensureRoot`) se dégrade
+bruyamment (`describe.skip` nommant `COGENTA_TEST_POSTGRES_URL`/`_MYSQL_URL`/
+`_MARIADB_URL`) plutôt que de mentir en vert.
+
+**Une vraie course reste ouverte, non protégée en base, contrairement à
+`ensureRoot`.** `db-dialect-specialist` (appelé pendant cette fiche) a trouvé
+et fait corriger la course sur `ensureRoot` (deux répliques de `cogenta serve`
+démarrant en même temps sur Postgres/MySQL pouvaient créer deux dossiers
+`contents` — corrigé par un id déterministe + un vrai `on conflict`/`on
+duplicate key`, même patron que `NotFoundLogStore.record()`). Il reste un
+**second** point de la même famille, volontairement non corrigé faute de
+budget dans cette fiche : `MediaFolderStore.create()`/`.move()` vérifient
+l'unicité d'un nom parmi ses frères (`assertNameFree`) par un
+select-puis-écrit, sous la même transaction `{ immediate: true }` — une garde
+réelle sur SQLite (verrou fichier), mais **pas** sur Postgres/MySQL, dont
+l'isolation par défaut ne sérialise pas deux transactions concurrentes de la
+même façon (le constat documenté à la section 20 ci-dessus, pour
+`role-permission-store.ts`, s'applique ici à l'identique). Deux créations
+concurrentes du même nom, au même niveau, sur Postgres/MySQL, peuvent en
+principe toutes les deux réussir plutôt que la seconde échouer avec
+`MEDIA_FOLDER_NAME_TAKEN` — un doublon silencieux, jamais une corruption de
+données ni une élévation de privilège. La corriger correctement demande une
+vraie contrainte unique en base plutôt qu'un contrôle applicatif : une
+colonne `parent_id` qui accepte `null` ne peut pas porter un index unique
+`(parent_id, lower(name))` portable sur les trois dialectes sans une
+sentinelle non-`null` pour la racine (le même problème que `taxonomy-store.ts`
+n'a jamais eu besoin de résoudre, puisqu'un slug de taxonomie est unique
+**globalement**, pas par frère) — une migration, pas une ligne. Non fait ici
+faute de temps ; à traiter avant qu'un vrai déploiement multi-répliques
+n'écrive dans ce dossier.
+
+Contrat A/B/C/D **non modifiés** par cette fiche (voir le changeset —
+`packages/agents/src/tools/core/media.ts` retire délibérément `folderId` de
+la sortie de `media.read`/`media.write` pour ne *pas* toucher au contrat C
+déjà figé plutôt que de le faire grandir sans gouvernance).

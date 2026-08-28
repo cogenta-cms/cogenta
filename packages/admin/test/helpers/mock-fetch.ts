@@ -2498,7 +2498,7 @@ export function installMockFetch(
   let entryCommentSettings: Record<string, boolean | null> = {}
 
   let mediaCounter = 0
-  const media: {
+  interface MockMediaAsset {
     id: string
     kind: string
     filename: string
@@ -2510,9 +2510,13 @@ export function installMockFetch(
     decorative: boolean
     decorativeJustification: string | null
     focal: { x: number; y: number } | null
+    tags: string[]
+    contentHash: string
+    folderId: string | null
     createdAt: string
     createdBy: string | null
-  }[] = []
+  }
+  const media: MockMediaAsset[] = []
   for (let i = 0; i < (options.mediaSeedCount ?? 0); i += 1) {
     mediaCounter += 1
     media.push({
@@ -2527,9 +2531,32 @@ export function installMockFetch(
       decorative: false,
       decorativeJustification: null,
       focal: null,
+      tags: [],
+      contentHash: `hash-seed-${mediaCounter}`,
+      folderId: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       createdBy: USER.id,
     })
+  }
+
+  // Media folders (fiche 46), per `installMockFetch()` call — same
+  // materialised-path shape as the real `MediaFolderStore`, kept minimal:
+  // this is a fixture, not a re-implementation of the depth/cycle guards
+  // already proven server-side in `@cogenta/core`'s own contract suite.
+  let folderCounter = 0
+  interface MockMediaFolder {
+    id: string
+    parentId: string | null
+    name: string
+    path: string
+    position: number
+    createdAt: string
+  }
+  const mediaFolders: MockMediaFolder[] = []
+  function mediaFolderPath(parentId: string | null, id: string): string {
+    if (parentId === null) return `/${id}/`
+    const parent = mediaFolders.find((folder) => folder.id === parentId)
+    return `${parent?.path ?? '/'}${id}/`
   }
 
   vi.stubGlobal(
@@ -2538,10 +2565,13 @@ export function installMockFetch(
       const url = typeof input === 'string' ? input : input.toString()
       const method = init?.method ?? 'GET'
       // A real `multipart/form-data` upload (fiche 57's resource upload,
-      // `FormData` as the body) is not JSON — parsing it here would throw
+      // fiche 46's `replaceMedia` — the one media write that has to be
+      // multipart on the wire) is not JSON — parsing it here would throw
       // before any route-specific handler below ever runs. Every route that
       // actually expects a `FormData` body reads `init?.body` itself further
-      // down; this shared `body` is only ever consumed by the JSON routes.
+      // down, the same way the real router treats it as a second,
+      // structurally different transport rather than another JSON shape;
+      // this shared `body` is only ever consumed by the JSON routes.
       const body =
         init?.body === undefined || init.body instanceof FormData
           ? {}
@@ -4802,6 +4832,297 @@ export function installMockFetch(
         })
       }
 
+      // Fiche 46: the folder tree. Checked before the generic `mediaMatch`
+      // below, whose own single-segment capture would otherwise treat
+      // "folders" as an asset id.
+      const mediaFoldersMatch = /\/api\/media\/folders(?:\/([^/?]+))?(?:\/(move))?(?:\?.*)?$/u.exec(
+        url,
+      )
+      if (mediaFoldersMatch !== null) {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        const [, folderId, moveAction] = mediaFoldersMatch
+
+        if (folderId === undefined && method === 'GET') {
+          const parsed = new URL(url, 'http://localhost')
+          const parentIdRaw = parsed.searchParams.has('parentId')
+            ? parsed.searchParams.get('parentId')
+            : undefined
+          const scoped =
+            parentIdRaw === undefined
+              ? mediaFolders
+              : mediaFolders.filter(
+                  (folder) => folder.parentId === (parentIdRaw === '' ? null : parentIdRaw),
+                )
+          return json(200, { data: [...scoped].sort((a, b) => a.position - b.position) })
+        }
+
+        if (folderId === undefined && method === 'POST') {
+          const name = String(body.name ?? '').trim()
+          if (name.length === 0) {
+            return json(400, {
+              error: { code: 'MEDIA_FOLDER_INVALID', message: 'A folder needs a name.' },
+            })
+          }
+          const parentId = (body.parentId ?? null) as string | null
+          const clash = mediaFolders.find(
+            (folder) =>
+              folder.parentId === parentId && folder.name.toLowerCase() === name.toLowerCase(),
+          )
+          if (clash !== undefined) {
+            return json(409, {
+              error: {
+                code: 'MEDIA_FOLDER_NAME_TAKEN',
+                message: `A folder named "${name}" already exists here.`,
+              },
+            })
+          }
+          folderCounter += 1
+          const id = `folder-${folderCounter}`
+          const created: MockMediaFolder = {
+            id,
+            parentId,
+            name,
+            path: mediaFolderPath(parentId, id),
+            position: mediaFolders.filter((folder) => folder.parentId === parentId).length,
+            createdAt: '2026-03-01T00:00:00.000Z',
+          }
+          mediaFolders.push(created)
+          return json(201, { data: created })
+        }
+
+        if (folderId !== undefined && moveAction === undefined && method === 'GET') {
+          const found = mediaFolders.find((folder) => folder.id === folderId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'MEDIA_FOLDER_NOT_FOUND', message: 'No media folder.' },
+            })
+          }
+          return json(200, { data: found })
+        }
+
+        if (
+          folderId !== undefined &&
+          moveAction === undefined &&
+          (method === 'PATCH' || method === 'PUT')
+        ) {
+          const found = mediaFolders.find((folder) => folder.id === folderId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'MEDIA_FOLDER_NOT_FOUND', message: 'No media folder.' },
+            })
+          }
+          if (typeof body.name === 'string') found.name = body.name.trim()
+          if (typeof body.position === 'number') found.position = body.position
+          return json(200, { data: found })
+        }
+
+        if (folderId !== undefined && moveAction === undefined && method === 'DELETE') {
+          const found = mediaFolders.find((folder) => folder.id === folderId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'MEDIA_FOLDER_NOT_FOUND', message: 'No media folder.' },
+            })
+          }
+          const hasChildren = mediaFolders.some((folder) => folder.parentId === folderId)
+          const hasAssets = media.some((item) => item.folderId === folderId)
+          if (hasChildren || hasAssets) {
+            return json(409, {
+              error: {
+                code: 'MEDIA_FOLDER_NOT_EMPTY',
+                message: 'This folder is not empty.',
+              },
+            })
+          }
+          const index = mediaFolders.findIndex((folder) => folder.id === folderId)
+          mediaFolders.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
+
+        if (folderId !== undefined && moveAction === 'move' && method === 'POST') {
+          const found = mediaFolders.find((folder) => folder.id === folderId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'MEDIA_FOLDER_NOT_FOUND', message: 'No media folder.' },
+            })
+          }
+          const parentId = (body.parentId ?? null) as string | null
+          if (parentId === folderId) {
+            return json(400, {
+              error: {
+                code: 'MEDIA_FOLDER_CYCLE',
+                message: 'A folder cannot be moved into itself.',
+              },
+            })
+          }
+          const target = parentId === null ? undefined : mediaFolders.find((f) => f.id === parentId)
+          if (target?.path.startsWith(found.path)) {
+            return json(400, {
+              error: {
+                code: 'MEDIA_FOLDER_CYCLE',
+                message: 'Moving this folder would make it its own ancestor.',
+              },
+            })
+          }
+          const oldPath = found.path
+          found.parentId = parentId
+          found.path = mediaFolderPath(parentId, folderId)
+          for (const other of mediaFolders) {
+            if (other.id !== folderId && other.path.startsWith(oldPath)) {
+              other.path = found.path + other.path.slice(oldPath.length)
+            }
+          }
+          return json(200, { data: found })
+        }
+      }
+
+      const mediaUsageMatch = /\/api\/media\/([^/?]+)\/usage(?:\?.*)?$/u.exec(url)
+      if (mediaUsageMatch !== null && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to view media.' },
+          })
+        }
+        const found = media.find((item) => item.id === mediaUsageMatch[1])
+        if (found === undefined) {
+          return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+        }
+        return json(200, { data: { matches: [], scannedEntries: 0, truncated: false } })
+      }
+
+      const mediaExifMatch = /\/api\/media\/([^/?]+)\/exif(?:\?.*)?$/u.exec(url)
+      if (mediaExifMatch !== null && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to view media.' },
+          })
+        }
+        const found = media.find((item) => item.id === mediaExifMatch[1])
+        if (found === undefined) {
+          return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+        }
+        return json(200, { data: null })
+      }
+
+      const mediaReplaceMatch = /\/api\/media\/([^/?]+)\/replace(?:\?.*)?$/u.exec(url)
+      if (mediaReplaceMatch !== null && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        const found = media.find((item) => item.id === mediaReplaceMatch[1])
+        if (found === undefined) {
+          return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+        }
+        const form = init?.body
+        const file = form instanceof FormData ? form.get('file') : null
+        if (!(file instanceof File)) {
+          return json(400, {
+            error: { code: 'MEDIA_INVALID', message: 'No file part named "file".' },
+          })
+        }
+        found.filename = file.name
+        found.mimeType = file.type || found.mimeType
+        found.size = file.size
+        found.contentHash = `hash-replaced-${mediaCounter + 1}`
+        mediaCounter += 1
+        return json(200, { data: found })
+      }
+
+      const mediaMoveMatch = /\/api\/media\/([^/?]+)\/move(?:\?.*)?$/u.exec(url)
+      if (mediaMoveMatch !== null && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        const found = media.find((item) => item.id === mediaMoveMatch[1])
+        if (found === undefined) {
+          return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+        }
+        const folderId = (body.folderId ?? null) as string | null
+        if (folderId !== null && mediaFolders.every((folder) => folder.id !== folderId)) {
+          return json(404, {
+            error: { code: 'MEDIA_FOLDER_NOT_FOUND', message: 'No media folder.' },
+          })
+        }
+        found.folderId = folderId
+        return json(200, { data: found })
+      }
+
+      const mediaBulkMatch = /\/api\/media\/-\/(bulk-delete|bulk-tag|bulk-untag|bulk-move)$/u.exec(
+        url,
+      )
+      if (mediaBulkMatch !== null && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        const action = mediaBulkMatch[1]
+        const ids = Array.isArray(body.ids) ? (body.ids as string[]) : []
+
+        if (action === 'bulk-delete') {
+          const deleted: string[] = []
+          const failed: { id: string; code: string; message: string }[] = []
+          for (const id of ids) {
+            const index = media.findIndex((item) => item.id === id)
+            if (index === -1) {
+              failed.push({ id, code: 'MEDIA_NOT_FOUND', message: 'No media asset.' })
+              continue
+            }
+            media.splice(index, 1)
+            deleted.push(id)
+          }
+          return json(200, { data: { deleted, failed } })
+        }
+
+        if (action === 'bulk-tag' || action === 'bulk-untag') {
+          const tag = String(body.tag ?? '')
+          const updated: MockMediaAsset[] = []
+          const failed: { id: string; code: string; message: string }[] = []
+          for (const id of ids) {
+            const found = media.find((item) => item.id === id)
+            if (found === undefined) {
+              failed.push({ id, code: 'MEDIA_NOT_FOUND', message: 'No media asset.' })
+              continue
+            }
+            found.tags =
+              action === 'bulk-tag'
+                ? found.tags.includes(tag)
+                  ? found.tags
+                  : [...found.tags, tag]
+                : found.tags.filter((existing) => existing !== tag)
+            updated.push(found)
+          }
+          return json(200, { data: { updated, failed } })
+        }
+
+        // bulk-move
+        const folderId = (body.folderId ?? null) as string | null
+        if (folderId !== null && mediaFolders.every((folder) => folder.id !== folderId)) {
+          return json(404, {
+            error: { code: 'MEDIA_FOLDER_NOT_FOUND', message: 'No media folder.' },
+          })
+        }
+        const moved: MockMediaAsset[] = []
+        const failed: { id: string; code: string; message: string }[] = []
+        for (const id of ids) {
+          const found = media.find((item) => item.id === id)
+          if (found === undefined) {
+            failed.push({ id, code: 'MEDIA_NOT_FOUND', message: 'No media asset.' })
+            continue
+          }
+          found.folderId = folderId
+          moved.push(found)
+        }
+        return json(200, { data: { moved, failed } })
+      }
+
       const mediaMatch = /\/api\/media(?:\/([^/?]+))?(?:\?.*)?$/u.exec(url)
       if (mediaMatch !== null) {
         const [, id] = mediaMatch
@@ -4809,8 +5130,58 @@ export function installMockFetch(
         if (id === undefined && method === 'GET') {
           const parsed = new URL(url, 'http://localhost')
           const kindFilter = parsed.searchParams.get('kind')
-          const filtered =
-            kindFilter === null ? media : media.filter((item) => item.kind === kindFilter)
+          const tagFilter = parsed.searchParams.get('tag')
+          const qFilter = parsed.searchParams.get('q')
+          const folderIdRaw = parsed.searchParams.has('folderId')
+            ? parsed.searchParams.get('folderId')
+            : undefined
+          const includeSubfolders = parsed.searchParams.get('includeSubfolders') === '1'
+          const sortField = parsed.searchParams.get('sort') ?? 'createdAt'
+          const direction = parsed.searchParams.get('direction') ?? 'desc'
+
+          let filtered = media.slice()
+          if (kindFilter !== null) filtered = filtered.filter((item) => item.kind === kindFilter)
+          if (tagFilter !== null) {
+            filtered = filtered.filter((item) => item.tags.includes(tagFilter))
+          }
+          if (qFilter !== null && qFilter.trim() !== '') {
+            const needle = qFilter.trim().toLowerCase()
+            filtered = filtered.filter(
+              (item) =>
+                item.filename.toLowerCase().includes(needle) ||
+                item.alt.toLowerCase().includes(needle),
+            )
+          }
+          if (folderIdRaw !== undefined) {
+            const wanted = folderIdRaw === '' || folderIdRaw === 'none' ? null : folderIdRaw
+            if (wanted === null) {
+              filtered = filtered.filter((item) => item.folderId === null)
+            } else if (includeSubfolders) {
+              const subtree = mediaFolders.find((folder) => folder.id === wanted)
+              const wantedIds = new Set(
+                subtree === undefined
+                  ? [wanted]
+                  : mediaFolders
+                      .filter((folder) => folder.path.startsWith(subtree.path))
+                      .map((folder) => folder.id),
+              )
+              filtered = filtered.filter(
+                (item) => item.folderId !== null && wantedIds.has(item.folderId),
+              )
+            } else {
+              filtered = filtered.filter((item) => item.folderId === wanted)
+            }
+          }
+
+          filtered.sort((a, b) => {
+            const left: string | number =
+              sortField === 'size' ? a.size : sortField === 'filename' ? a.filename : a.createdAt
+            const right: string | number =
+              sortField === 'size' ? b.size : sortField === 'filename' ? b.filename : b.createdAt
+            const cmp = left < right ? -1 : left > right ? 1 : 0
+            return direction === 'asc' ? cmp : -cmp
+          })
+
           // Fiche 67 task 2: `media.tsx` now sends real `limit`/`after`
           // (`nextCursor` from the previous page, the id of its last item —
           // an opaque mock convention, not a claim about the real store's
@@ -4825,7 +5196,10 @@ export function installMockFetch(
           const items = filtered.slice(startIndex, startIndex + pageSize)
           const hasMore = startIndex + pageSize < filtered.length
           const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null
-          return json(200, { data: items, page: { hasMore, nextCursor } })
+          return json(200, {
+            data: items,
+            page: { hasMore, nextCursor, total: filtered.length },
+          })
         }
 
         if (id === undefined && method === 'POST') {
@@ -4849,7 +5223,7 @@ export function installMockFetch(
             })
           }
           mediaCounter += 1
-          const created = {
+          const created: MockMediaAsset = {
             id: `media-${mediaCounter}`,
             kind: body.kind,
             filename: body.filename,
@@ -4861,6 +5235,9 @@ export function installMockFetch(
             decorative,
             decorativeJustification: decorative ? (body.decorativeJustification ?? null) : null,
             focal: body.focal ?? null,
+            tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
+            contentHash: `hash-${mediaCounter}`,
+            folderId: (body.folderId ?? null) as string | null,
             createdAt: '2026-03-01T00:00:00.000Z',
             createdBy: USER.id,
           }
@@ -4897,6 +5274,7 @@ export function installMockFetch(
             found.decorativeJustification = null
           }
           if (body.focal !== undefined) found.focal = body.focal
+          if (Array.isArray(body.tags)) found.tags = body.tags as string[]
           return json(200, { data: found })
         }
 

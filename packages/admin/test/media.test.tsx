@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -30,7 +30,7 @@ describe('media library', () => {
     render(<App />)
     await goToMedia()
 
-    expect(screen.getByText('Aucun média.')).toBeDefined()
+    await screen.findByText('Aucun média.')
 
     fireEvent.change(screen.getByLabelText('Fichier'), { target: { files: [pngFile()] } })
     fireEvent.change(screen.getByLabelText('Texte alternatif', { exact: false }), {
@@ -38,13 +38,22 @@ describe('media library', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Téléverser' }))
 
-    expect(await screen.findByText('cover.png')).toBeDefined()
+    // A button, not just the text: fiche 46's own upload form also shows the
+    // picked filename in its own paragraph the instant a file is chosen —
+    // `findByText('cover.png')` alone can resolve on that transient text
+    // before the asset is actually created. Only the grid tile is a button.
+    expect(await screen.findByRole('button', { name: /cover\.png/ })).toBeDefined()
     expect(screen.queryByText('Aucun média.')).toBeNull()
   })
 
   it('refuses to upload without alt text unless marked decorative', async () => {
     render(<App />)
     await goToMedia()
+
+    // Fiche 46: the screen now also fetches the folder tree on mount, so the
+    // empty state is no longer guaranteed to have rendered synchronously —
+    // wait for it rather than asserting immediately.
+    await screen.findByText('Aucun média.')
 
     fireEvent.change(screen.getByLabelText('Fichier'), { target: { files: [pngFile()] } })
     const altInput = screen.getByLabelText('Texte alternatif', { exact: false }) as HTMLInputElement
@@ -73,7 +82,14 @@ describe('media library', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Téléverser' }))
 
-    expect(await screen.findByText('divider.png')).toBeDefined()
+    // A grid tile (button), not just the text: the upload form shows the
+    // picked filename in its own paragraph the instant a file is chosen,
+    // well before the asset actually exists — asserting on plain text can
+    // resolve on that transient copy and let the test finish while the real
+    // upload is still in flight, which then lands as an orphaned request in
+    // whichever test runs next (fiche 46 found this the hard way: it showed
+    // up as a phantom "divider.png" tile in an unrelated later test).
+    expect(await screen.findByRole('button', { name: /divider\.png/ })).toBeDefined()
   })
 
   it('opens the detail panel, edits alt text, and deletes the asset', async () => {
@@ -85,9 +101,11 @@ describe('media library', () => {
       target: { value: 'Original alt' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Téléverser' }))
-    await screen.findByText('cover.png')
+    // A button, not just the text — see the "uploads a decorative image"
+    // test's own comment above on why that distinction matters here.
+    const tile = await screen.findByRole('button', { name: /cover\.png/ })
 
-    fireEvent.click(screen.getByRole('button', { name: /cover\.png/ }))
+    fireEvent.click(tile)
     await screen.findByRole('heading', { name: 'cover.png' })
 
     const altInputs = screen.getAllByDisplayValue('Original alt')
@@ -99,6 +117,70 @@ describe('media library', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
 
     await waitFor(() => expect(screen.getByText('Aucun média.')).toBeDefined())
+  })
+})
+
+/**
+ * Fiche 46: the folder tree, and the bulk actions fiche 11 built server-side
+ * but this screen never called. End-to-end against the real screen, not
+ * just the router (`media-folder-router.test.ts` already proves the API).
+ */
+describe('media library folders', () => {
+  it('creates a folder, moves an asset into it, and filtering by that folder shows only it', async () => {
+    render(<App />)
+    await goToMedia()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouveau dossier' }))
+    fireEvent.change(screen.getByLabelText('Nom du dossier'), {
+      target: { value: 'Photos' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Enregistrer' })[0] as HTMLElement)
+    const photosFolderLink = await screen.findByRole('button', { name: 'Photos' })
+
+    fireEvent.change(screen.getByLabelText('Fichier'), { target: { files: [pngFile()] } })
+    fireEvent.change(screen.getByLabelText('Texte alternatif', { exact: false }), {
+      target: { value: 'A red bicycle' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Téléverser' }))
+    const tile = await screen.findByRole('button', { name: /cover\.png/ })
+
+    fireEvent.click(tile)
+    await screen.findByRole('heading', { name: 'cover.png' })
+    const folderSelect = screen.getByLabelText('Dossier') as HTMLSelectElement
+    const photosOption = within(folderSelect).getByText('Photos') as HTMLOptionElement
+    fireEvent.change(folderSelect, { target: { value: photosOption.value } })
+
+    // The move is confirmed by the folder select itself resolving.
+    await waitFor(() => expect(folderSelect.value).toBe(photosOption.value))
+    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+
+    fireEvent.click(photosFolderLink)
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /cover\.png/ })).toHaveLength(1)
+    })
+
+    // Two matches once a folder is selected: the sidebar's own entry, and
+    // the breadcrumb's "back to all" link — either takes you back to "all".
+    fireEvent.click(screen.getAllByRole('button', { name: 'Tous les médias' })[0] as HTMLElement)
+    await screen.findByRole('button', { name: /cover\.png/ })
+  })
+
+  it('bulk-deletes every selected asset', async () => {
+    installMockFetch({ mediaSeedCount: 3 })
+    render(<App />)
+    await goToMedia()
+
+    await screen.findAllByRole('button', { name: /seed-\d+\.png/ })
+    const checkboxes = screen.getAllByRole('checkbox', { name: /Sélectionner/ })
+    fireEvent.click(checkboxes[0] as HTMLElement)
+    fireEvent.click(checkboxes[1] as HTMLElement)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer (2)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(1)
+    })
   })
 })
 

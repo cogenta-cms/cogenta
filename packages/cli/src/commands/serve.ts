@@ -184,6 +184,7 @@ import {
   type CogentaConfig,
   CogentaError,
   createCacheRegistry,
+  createDatabaseMediaFolderStore,
   createDatabaseMediaStore,
   createDatabaseQueue,
   createDatabaseRegistry,
@@ -201,6 +202,7 @@ import {
   type Logger,
   type LogLevel,
   loadConfig,
+  type MediaFolderStore,
   type MediaStore,
   type MigrationStatus,
   type RateLimitDriver,
@@ -1640,6 +1642,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
   const mediaStore = createDatabaseMediaStore({ db })
 
+  // Fiche 46: the media library's folder tree. Bootstraps a default
+  // `contents` root once, idempotently — a fresh site gets it on its very
+  // first `cogenta serve`, and an already-provisioned one no-ops here on
+  // every subsequent restart (`ensureRoot` finds the existing row rather
+  // than creating a second one). Nothing here ever files a pre-existing
+  // asset into it: `folder_id` stays `null` (unclassified) for everything
+  // uploaded before this fiche, exactly as `MediaAsset.folderId`'s own doc
+  // comment promises.
+  const mediaFolderStore: MediaFolderStore = createDatabaseMediaFolderStore({ db })
+  await mediaFolderStore.ensureRoot('contents')
+
   // Fiche 58 tasks 2/3/4 — the external MCP connection registry. Table and
   // store exist unconditionally (an admin can wire up a connection and
   // check its tools regardless of whether `agentsRuntimeConfig` is set,
@@ -2086,9 +2099,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     mediaRouter: createMediaRouter({
       store: mediaStore,
       storage,
+      folders: mediaFolderStore,
       ...(options.images === undefined || options.images === null
         ? {}
         : { images: options.images }),
+      // Fiche 46 task 7's own critère ("panneau détail enrichi... usage,
+      // déjà en API") needs this real: `findMediaUsage` (fiche 11 task 3)
+      // was written and tested but never actually wired here, so
+      // `GET /api/media/{id}/usage` always answered "nothing found" on a
+      // real server — a gap fiche 46's own admin work would otherwise have
+      // silently reproduced (an always-empty usage panel next to a real
+      // scan nobody ever asked for). `storeFor`/`collections` are the exact
+      // instances every other reader (REST, GraphQL, theme rendering)
+      // already shares.
+      usage: { collections, storeFor },
       // fiche 23 task 2's "Médias" tab — read fresh on every upload so a
       // changed ceiling applies immediately, no restart needed.
       maxUploadBytes: async () => {
@@ -2925,19 +2949,51 @@ async function recordMediaAudit(
   logger: Logger,
 ): Promise<void> {
   if (response.status < 200 || response.status >= 300) return
-  const [id] = pathname
+  const segments = pathname
     .replace(/^\/api\/media\/?/u, '')
     .split('/')
     .filter((segment) => segment.length > 0)
+  const [first, second] = segments
 
-  const action =
-    method === 'POST'
-      ? 'media.upload'
-      : method === 'PATCH' || method === 'PUT'
-        ? 'media.update'
-        : method === 'DELETE'
-          ? 'media.delete'
+  // Fiche 46: the folder tree and the two "move" routes get their own
+  // action names and, for a folder, the *folder's* id rather than the
+  // literal segment `folders` — the same care `id` already got for a plain
+  // asset write below.
+  let action: string | null
+  let id: string | undefined
+  if (first === 'folders') {
+    id = second
+    action =
+      second === undefined
+        ? method === 'POST'
+          ? 'media_folder.create'
           : null
+        : segments[2] === 'move'
+          ? method === 'POST'
+            ? 'media_folder.move'
+            : null
+          : method === 'PATCH' || method === 'PUT'
+            ? 'media_folder.update'
+            : method === 'DELETE'
+              ? 'media_folder.delete'
+              : null
+  } else if (second === 'move') {
+    id = first
+    action = method === 'POST' ? 'media.move' : null
+  } else if (first === '-' && second === 'bulk-move') {
+    id = undefined
+    action = method === 'POST' ? 'media.bulk_move' : null
+  } else {
+    id = first
+    action =
+      method === 'POST'
+        ? 'media.upload'
+        : method === 'PATCH' || method === 'PUT'
+          ? 'media.update'
+          : method === 'DELETE'
+            ? 'media.delete'
+            : null
+  }
   if (action === null) return
 
   const entryId = id ?? responseId(response)

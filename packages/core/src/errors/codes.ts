@@ -168,6 +168,16 @@ export const ERROR_CODES = [
   'MEDIA_INVALID',
   'MEDIA_TYPE_REJECTED',
 
+  // Media folders (fiche 46) — same materialised-path tree shape as
+  // taxonomies (ADR-0022), a table internal to the media subsystem rather
+  // than a contract A change.
+  'MEDIA_FOLDER_NOT_FOUND',
+  'MEDIA_FOLDER_INVALID',
+  'MEDIA_FOLDER_NAME_TAKEN',
+  'MEDIA_FOLDER_NOT_EMPTY',
+  'MEDIA_FOLDER_CYCLE',
+  'MEDIA_FOLDER_TOO_DEEP',
+
   // Infrastructure
   'CACHE_FAILED',
   'QUEUE_FAILED',

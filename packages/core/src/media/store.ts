@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { type DatabaseHandle, identifier, limit, sql } from '../db/index.js'
 import { CogentaError } from '../errors/index.js'
+import { valueList } from './sql-fragments.js'
 import type {
   CreateMediaInput,
   FocalPoint,
@@ -48,6 +49,7 @@ interface MediaRow {
   storage_key: string
   tags: string | null
   content_hash: string | null
+  folder_id: string | null
   created_at: string
   created_by: string | null
 }
@@ -92,6 +94,7 @@ function rowToAsset(row: MediaRow): MediaAsset {
       row.content_hash === null || row.content_hash === ''
         ? defaultContentHash(row.storage_key)
         : row.content_hash,
+    folderId: row.folder_id,
     createdAt: row.created_at,
     createdBy: row.created_by,
   }
@@ -226,6 +229,24 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       )
       .catch(() => undefined)
 
+    // Fiche 46: same try-not-check pattern as `tags`/`content_hash` above,
+    // added to a table sites may already have. Nothing here backfills a
+    // value — every asset that predates folders keeps `folder_id is null`
+    // (unclassified) forever, which is the whole point (see `MediaAsset`'s
+    // own doc comment): forcing existing media into a default folder would
+    // silently reshuffle a library nobody asked to reorganise.
+    await db
+      .query(
+        sql`alter table ${table} add column ${identifier('folder_id', db.dialect)} varchar(64)`,
+      )
+      .catch(() => undefined)
+    await db
+      .query(
+        sql`create index ${identifier('cogenta_media_folder', db.dialect)}
+            on ${table} (folder_id, id)`,
+      )
+      .catch(() => undefined)
+
     ready = true
   }
 
@@ -234,6 +255,8 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
     readonly tag?: string
     readonly from?: string
     readonly to?: string
+    readonly folderId?: string | null
+    readonly folderIds?: readonly string[]
   }) {
     const kindFilter = listOptions.kind === undefined ? sql`` : sql`and kind = ${listOptions.kind}`
     const tagFilter =
@@ -243,7 +266,21 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
     const fromFilter =
       listOptions.from === undefined ? sql`` : sql`and created_at >= ${listOptions.from}`
     const toFilter = listOptions.to === undefined ? sql`` : sql`and created_at <= ${listOptions.to}`
-    return sql`${kindFilter} ${tagFilter} ${fromFilter} ${toFilter}`
+    // `folderIds` (an already-resolved subtree, from the router's own
+    // `?includeSubfolders=1` handling) wins over the single-`folderId` exact
+    // match when both happen to be set — a caller asking for a subtree never
+    // also wants the plain equality.
+    const folderFilter =
+      listOptions.folderIds !== undefined
+        ? listOptions.folderIds.length === 0
+          ? sql`and 1 = 0`
+          : sql`and folder_id in (${valueList(listOptions.folderIds)})`
+        : listOptions.folderId === undefined
+          ? sql``
+          : listOptions.folderId === null
+            ? sql`and folder_id is null`
+            : sql`and folder_id = ${listOptions.folderId}`
+    return sql`${kindFilter} ${tagFilter} ${fromFilter} ${toFilter} ${folderFilter}`
   }
 
   return {
@@ -259,16 +296,17 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       const createdAt = new Date().toISOString()
       const tags = input.tags ?? []
       const contentHash = input.contentHash ?? defaultContentHash(input.storageKey)
+      const folderId = input.folderId ?? null
 
       await db.query(sql`
         insert into ${table}
           (id, kind, filename, mime_type, size, width, height, alt, decorative,
-           decorative_justification, focal, storage_key, tags, content_hash, created_at, created_by)
+           decorative_justification, focal, storage_key, tags, content_hash, folder_id, created_at, created_by)
         values
           (${id}, ${input.kind}, ${input.filename}, ${input.mimeType}, ${input.size},
            ${input.width ?? null}, ${input.height ?? null}, ${alt}, ${decorative},
            ${justification}, ${input.focal === undefined || input.focal === null ? null : JSON.stringify(input.focal)},
-           ${input.storageKey}, ${serializeTags(tags)}, ${contentHash}, ${createdAt}, ${input.createdBy ?? null})`)
+           ${input.storageKey}, ${serializeTags(tags)}, ${contentHash}, ${folderId}, ${createdAt}, ${input.createdBy ?? null})`)
 
       return {
         id,
@@ -285,6 +323,7 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
         storageKey: input.storageKey,
         tags,
         contentHash,
+        folderId,
         createdAt,
         createdBy: input.createdBy ?? null,
       }
@@ -370,6 +409,7 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
             : JSON.stringify(input.focal)
 
       const tags = input.tags === undefined ? current.tags : serializeTags(input.tags)
+      const folderId = input.folderId === undefined ? current.folder_id : input.folderId
 
       await db.query(sql`
         update ${table}
@@ -377,7 +417,8 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
             decorative = ${decorative},
             decorative_justification = ${justification},
             focal = ${focal},
-            tags = ${tags}
+            tags = ${tags},
+            folder_id = ${folderId}
         where id = ${id}`)
 
       return rowToAsset({
@@ -387,6 +428,7 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
         decorative_justification: justification,
         focal,
         tags,
+        folder_id: folderId,
       })
     },
 

@@ -5302,6 +5302,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
       projectRoot,
       db: selection.instance,
       collections,
+      taxonomies,
       config: loaded.config,
       logger,
       readOnly: options.readOnly ?? false,

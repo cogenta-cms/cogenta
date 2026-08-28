@@ -102,6 +102,7 @@ function draftFile(collections: readonly CollectionDefinition[]) {
       ],
       demoContent: [{ collection: 'dish', values: { title: 'Velouté de courge' } }],
       violations: [],
+      structuralGaps: [],
       warnings: [],
     },
     decisions: {},

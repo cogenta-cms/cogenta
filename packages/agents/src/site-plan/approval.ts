@@ -21,7 +21,14 @@ import type { DemoEntry, ProposedPage, SitePlanDraft } from './types.js'
  * (R6 — "rien n'est jamais appliqué automatiquement").
  */
 
-export const PLAN_SECTIONS = ['brief', 'contentModel', 'pages', 'skin', 'demoContent'] as const
+export const PLAN_SECTIONS = [
+  'brief',
+  'contentModel',
+  'pages',
+  'structuralGaps',
+  'skin',
+  'demoContent',
+] as const
 export type PlanSectionId = (typeof PLAN_SECTIONS)[number]
 
 export type PlanItemDecision = 'accepted' | 'rejected'
@@ -133,6 +140,19 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
         section: 'pages' as const,
         title: `${page.title} (/${page.slug})`,
         detail: page.purpose,
+      })),
+    },
+    {
+      id: 'structuralGaps',
+      title: 'Suggested standing pages',
+      description:
+        'Pages many sites need that this plan does not yet cover. Nothing here is created unless you accept it (fiche 60).',
+      mode: 'each',
+      items: draft.structuralGaps.map((gap) => ({
+        id: `structuralGaps:${gap.id}`,
+        section: 'structuralGaps' as const,
+        title: `${gap.title} (/${gap.slug})`,
+        detail: gap.reason,
       })),
     },
     {
@@ -249,6 +269,12 @@ export function resolveApprovedPlan(
     .map((constraint, index) => ({ constraint, index }))
     .filter(({ index }) => accepted(constraintItemId(index)))
     .map(({ constraint }) => ({ quote: constraint.quote, source: constraint.source }))
+  // Fiche 60 task 5: an accepted suggestion joins the same `pages` a
+  // human already reviews and applies exactly the same way — its own
+  // section only exists so it is judged on its own, not blended in silently.
+  const acceptedGapPages: ProposedPage[] = draft.structuralGaps
+    .filter((gap) => accepted(`structuralGaps:${gap.id}`))
+    .map((gap) => ({ title: gap.title, slug: gap.slug, purpose: gap.reason }))
 
   return {
     draftId: draft.id,
@@ -258,7 +284,7 @@ export function resolveApprovedPlan(
     collections: draft.contentModel.collections
       .filter((collection) => accepted(`contentModel:${collection.definition.name}`))
       .map((collection) => collection.definition),
-    pages: draft.pages.filter((page) => accepted(`pages:${page.slug}`)),
+    pages: [...draft.pages.filter((page) => accepted(`pages:${page.slug}`)), ...acceptedGapPages],
     ...(chosenSkin === undefined ? {} : { skinId: chosenSkin.id, skin: chosenSkin.tokens }),
     demoContent: draft.demoContent.filter((_entry, index) => accepted(`demoContent:${index}`)),
     rejected: items.filter((item) => decisions[item.id] === 'rejected').map((item) => item.id),

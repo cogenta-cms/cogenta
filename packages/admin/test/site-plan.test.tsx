@@ -23,8 +23,8 @@ afterEach(() => {
 
 async function goToSitePlan(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Créer un site' }))
-  await screen.findByRole('heading', { name: 'Créer un site', level: 1 })
+  fireEvent.click(screen.getByRole('link', { name: 'Générer le site' }))
+  await screen.findByRole('heading', { name: 'Générer le site', level: 1 })
 }
 
 function signIn(roles: readonly string[]): void {
@@ -63,7 +63,7 @@ describe('the site plan screen', () => {
 
     render(<App />)
 
-    await screen.findByRole('heading', { name: 'Créer un site', level: 1 }, { timeout: 5000 })
+    await screen.findByRole('heading', { name: 'Générer le site', level: 1 }, { timeout: 5000 })
     expect(window.location.pathname).toBe('/create-site')
   })
 

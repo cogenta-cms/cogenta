@@ -4,7 +4,13 @@ import type { ProviderClient } from '../providers/types.js'
 import { analyseBrief } from './analyse-brief.js'
 import { proposeContentModel } from './content-model.js'
 import { proposeDemoContent } from './demo-content.js'
+import {
+  EMPTY_EXISTING_SITE,
+  type ExistingSiteSnapshot,
+  isExistingSiteEmpty,
+} from './site-context.js'
 import { generateSkinCandidates } from './skin-candidates.js'
+import { detectStructuralGaps } from './structural-gaps.js'
 import type { SitePlanDraft } from './types.js'
 
 /**
@@ -36,6 +42,15 @@ export interface ProposeSitePlanOptions {
   readonly skinCount?: number
   /** Shown to the skin generator as the site's kind — the blueprint label when there is one. */
   readonly blueprintLabel?: string
+  /**
+   * Fiche 60 — the site this plan would join, when there already is one.
+   * Absent, or an empty snapshot, on a fresh install: the installer's own
+   * entry point never builds one, so this fiche leaves it byte-for-byte
+   * unchanged (R2/non-regression is the same guarantee here as everywhere
+   * else — nothing in this pipeline behaves differently just because a
+   * caller chose not to supply site context).
+   */
+  readonly existingSite?: ExistingSiteSnapshot
   readonly now?: () => Date
   readonly idFactory?: () => string
 }
@@ -49,12 +64,14 @@ export async function proposeSitePlan(
 ): Promise<ProposeSitePlanResult> {
   const now = options.now ?? (() => new Date())
   const newDraftId = options.idFactory ?? newId
+  const existingSite = options.existingSite ?? EMPTY_EXISTING_SITE
 
   const analysed = await analyseBrief({
     client: options.client,
     model: options.model,
     documents: options.documents,
     ...(options.siteName === undefined ? {} : { siteName: options.siteName }),
+    ...(options.existingSite === undefined ? {} : { existingSite: options.existingSite }),
   })
   if (!analysed.ok) return { ok: false, stage: 'brief', reason: analysed.reason }
   const brief = analysed.brief
@@ -66,13 +83,19 @@ export async function proposeSitePlan(
   ].join(' ')
 
   const [model, skins] = await Promise.all([
-    proposeContentModel({ client: options.client, model: options.model, brief }),
+    proposeContentModel({
+      client: options.client,
+      model: options.model,
+      brief,
+      ...(options.existingSite === undefined ? {} : { existingSite: options.existingSite }),
+    }),
     generateSkinCandidates({
       client: options.client,
       model: options.model,
       description: skinDescription,
       blueprintLabel: options.blueprintLabel ?? brief.activity,
       ...(options.skinCount === undefined ? {} : { count: options.skinCount }),
+      ...(options.existingSite === undefined ? {} : { existingSite: options.existingSite }),
     }),
   ])
 
@@ -86,10 +109,26 @@ export async function proposeSitePlan(
     contentModel: model.proposal,
   })
 
+  // Fiche 60's own non-regression bar: "l'installeur (site neuf) se comporte
+  // exactement comme avant cette fiche." A fresh install never supplies
+  // `existingSite`, so this pass — which the fiche frames throughout as
+  // comparing the plan against a site that already exists — stays silent
+  // for it, the same "premier jet" gate task 4 uses for its own prompt.
+  const structuralGaps = isExistingSiteEmpty(existingSite)
+    ? []
+    : detectStructuralGaps({
+        proposedPages: model.pages,
+        existingSite,
+        ...(brief.languages[0] === undefined ? {} : { locale: brief.languages[0] }),
+      })
+
   const warnings = [
     ...brief.warnings,
     ...skins.failures.map(
       (failure) => `The "${failure.label}" design was not offered: ${failure.reason}.`,
+    ),
+    ...model.skippedExisting.map(
+      (skipped) => `A collection named "${skipped.name}" was not proposed: ${skipped.reason}.`,
     ),
     ...(demo.ok
       ? demo.rejected.map(
@@ -110,6 +149,7 @@ export async function proposeSitePlan(
       skins: skins.candidates,
       demoContent: demo.ok ? demo.entries : [],
       violations: model.violations,
+      structuralGaps,
       warnings,
     },
   }

@@ -374,6 +374,7 @@ export { CONSTRAINT_KINDS, CONSTRAINT_TOPICS, detectConstraints } from './site-p
 export type {
   ProposeContentModelOptions,
   ProposeContentModelResult,
+  SkippedExistingCollection,
 } from './site-plan/content-model.js'
 export { proposeContentModel } from './site-plan/content-model.js'
 export type {
@@ -400,6 +401,20 @@ export type {
 } from './site-plan/propose-plan.js'
 export { proposeSitePlan } from './site-plan/propose-plan.js'
 export type {
+  DescribeExistingSiteInput,
+  ExistingCollectionField,
+  ExistingCollectionSnapshot,
+  ExistingEntryCounts,
+  ExistingSiteSnapshot,
+  ExistingTaxonomySnapshot,
+} from './site-plan/site-context.js'
+export {
+  describeExistingSite,
+  EMPTY_EXISTING_SITE,
+  isExistingSiteEmpty,
+  renderExistingSiteForPrompt,
+} from './site-plan/site-context.js'
+export type {
   GenerateSkinCandidatesOptions,
   GenerateSkinCandidatesResult,
   SkinCandidateFailure,
@@ -411,6 +426,12 @@ export {
   MIN_SKIN_CANDIDATES,
   SKIN_DIRECTIONS,
 } from './site-plan/skin-candidates.js'
+export type {
+  DetectStructuralGapsInput,
+  StructuralGapSuggestion,
+  StructuralGapTopic,
+} from './site-plan/structural-gaps.js'
+export { detectStructuralGaps, STRUCTURAL_GAP_TOPICS } from './site-plan/structural-gaps.js'
 export type {
   BriefContentType,
   BriefPage,

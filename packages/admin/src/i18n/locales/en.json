@@ -249,7 +249,7 @@
     "profile": "My profile",
     "settings": "Settings",
     "opsSettings": "Security & webhooks",
-    "createSite": "Create a site",
+    "createSite": "Generate the site",
     "marketplace": "Marketplace",
     "health": "Health",
     "tools": "Tools",
@@ -2888,7 +2888,7 @@
     "noClient": "No client"
   },
   "sitePlan": {
-    "heading": "Create a site",
+    "heading": "Generate the site",
     "intro": "Upload a specification and an agent proposes a content model, pages, designs and starter content. Nothing is applied until you have judged every item.",
     "adminOnly": "Restricted to the \"admin\" role: a site plan changes the shape of the site.",
     "noProvider": "No LLM provider is configured, so a new document cannot be analysed here. Plans proposed elsewhere can still be reviewed and applied. Everything else in this admin works without a provider.",
@@ -3397,7 +3397,7 @@
           "step1": "Open “Assistant”: with no provider configured, the screen explains how to add one.",
           "step2": "Once configured, use the assist tools directly from an entry's editor (rewrite, translate, summarise…).",
           "step3": "Check “Agents” to see an agent's full declared configuration.",
-          "step4": "Use “Create a site” to propose a content model and templates from a document — every proposal waits for explicit approval, never an automatic apply."
+          "step4": "Use “Generate the site” to propose a content model and templates from a document — every proposal waits for explicit approval, never an automatic apply."
         }
       },
       "accounts": {

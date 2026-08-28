@@ -6,6 +6,9 @@ import {
   createFileSitePlanStore,
   createGoogleClient,
   createOpenAiClient,
+  describeExistingSite,
+  type ExistingEntryCounts,
+  type ExistingSiteSnapshot,
   extractDocumentText,
   type ProviderClient,
   proposeSitePlan,
@@ -20,8 +23,17 @@ import type {
   SitePlanRouterOptions,
 } from '@cogenta/api'
 import { type CogentaConfig, CogentaError, type DatabaseHandle, type Logger } from '@cogenta/core'
-import { type CollectionDefinition, createContentStore, createSchemaTables } from '@cogenta/schema'
+import {
+  type CollectionDefinition,
+  createContentStore,
+  createSchemaTables,
+  createTaxonomyStore,
+  createThemeStore,
+  ensureThemeTable,
+  type TaxonomyDefinition,
+} from '@cogenta/schema'
 import { findSchemaFile } from './serve.js'
+import { DEFAULT_THEME_NAME } from './theme-registry.js'
 
 /**
  * L19 task 7 — the same document-driven planning the installer offers, on a
@@ -60,7 +72,79 @@ function providerClient(
   return undefined
 }
 
-function createPlanner(client: ProviderClient, model: string, siteName: string): SitePlannerLike {
+/** Fiche 60 task 2's four inputs `describeExistingSite` needs, resolved on this site. */
+export interface ExistingSiteContext {
+  readonly db: DatabaseHandle
+  readonly collections: readonly CollectionDefinition[]
+  readonly taxonomies: readonly TaxonomyDefinition[]
+  readonly defaultLocale: string
+  readonly config: CogentaConfig
+}
+
+/**
+ * Fiche 60 task 2 — detected by config presence alone, never guessed: a
+ * section absent from `CogentaConfig` (R2's own vocabulary — "sans
+ * fournisseur configuré") is simply not listed here, rather than inferred
+ * from some other signal.
+ */
+export function detectActiveIntegrations(config: CogentaConfig): readonly string[] {
+  const active: string[] = []
+  if (config.llm !== undefined) active.push('llm')
+  if (config.imageGeneration !== undefined) active.push('image generation')
+  if (config.billing !== undefined) active.push('billing')
+  if (config.webhooks.endpoints.length > 0) active.push('webhooks')
+  if (config.payment.stripeSecretKey !== undefined) active.push('stripe payments')
+  return active
+}
+
+/**
+ * Fiche 60 task 6 — read fresh on every call, never cached across the
+ * process's lifetime (same discipline `theme-wiring.ts`'s own
+ * `computeEffectiveStyles` documents for the theme overlay): a proposal made
+ * an hour into a running `cogenta serve` has to see the entries and terms
+ * written since boot, not the count at start-up.
+ */
+export async function buildExistingSiteSnapshot(
+  context: ExistingSiteContext,
+): Promise<ExistingSiteSnapshot> {
+  const entryCounts: Record<string, ExistingEntryCounts> = {}
+  for (const collection of context.collections) {
+    const store = createContentStore({
+      db: context.db,
+      collection,
+      defaultLocale: context.defaultLocale,
+    })
+    const counts = await store.count()
+    entryCounts[collection.name] = { total: counts.total, published: counts.published }
+  }
+
+  const termCounts: Record<string, number> = {}
+  for (const taxonomy of context.taxonomies) {
+    const store = createTaxonomyStore({ db: context.db, taxonomy })
+    termCounts[taxonomy.name] = (await store.list()).length
+  }
+
+  // Idempotent (`create table if not exists`) — safe even when
+  // `createThemeWiring` already ran this earlier in the same boot.
+  await ensureThemeTable(context.db)
+  const theme = await createThemeStore({ db: context.db }).get()
+
+  return describeExistingSite({
+    collections: context.collections,
+    taxonomies: context.taxonomies,
+    entryCounts,
+    termCounts,
+    activeTheme: theme.activeTheme ?? DEFAULT_THEME_NAME,
+    integrations: detectActiveIntegrations(context.config),
+  })
+}
+
+function createPlanner(
+  client: ProviderClient,
+  model: string,
+  siteName: string,
+  siteContext: ExistingSiteContext,
+): SitePlannerLike {
   return {
     async propose(input) {
       const documents = input.documents.map((document) =>
@@ -69,11 +153,13 @@ function createPlanner(client: ProviderClient, model: string, siteName: string):
           bytes: Buffer.from(document.contentBase64, 'base64'),
         }),
       )
+      const existingSite = await buildExistingSiteSnapshot(siteContext)
       const result = await proposeSitePlan({
         client,
         model,
         documents,
         siteName: input.siteName ?? siteName,
+        existingSite,
       })
       return result.ok
         ? { ok: true, draft: result.draft }
@@ -256,6 +342,8 @@ export interface SitePlanningOptions {
   readonly projectRoot: string
   readonly db: DatabaseHandle
   readonly collections: readonly CollectionDefinition[]
+  /** Fiche 60 task 2/6 — read into every proposal's `existingSite` snapshot. Absent means none declared. */
+  readonly taxonomies?: readonly TaxonomyDefinition[]
   readonly config: CogentaConfig
   readonly logger: Logger
   /** A read-only instance can propose and review, never apply. */
@@ -317,7 +405,15 @@ export async function createSitePlanning(
     store,
     ...(client === undefined || llm === undefined
       ? {}
-      : { planner: createPlanner(client, llm.model, options.config.site.name) }),
+      : {
+          planner: createPlanner(client, llm.model, options.config.site.name, {
+            db: options.db,
+            collections: options.collections,
+            taxonomies: options.taxonomies ?? [],
+            defaultLocale: options.config.site.defaultLocale,
+            config: options.config,
+          }),
+        }),
     ...(schemaPath === undefined
       ? {}
       : {

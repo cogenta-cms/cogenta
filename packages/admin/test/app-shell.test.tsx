@@ -305,6 +305,78 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     const contentGroup = screen.getByRole('button', { name: 'Contenu' }).closest('li')
     expect(contentGroup?.getAttribute('data-current')).toBe('true')
   })
+
+  it('renders the dashboard as its own row above every group, not filed inside "Contenu"', async () => {
+    // Direct user feedback: nesting the site's own landing page inside a
+    // "Content" submenu read as arbitrary — WordPress pins "Dashboard"
+    // above its own menu categories rather than filing it under one.
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const dashboardLink = screen.getByRole('link', { name: 'Tableau de bord' })
+    expect(dashboardLink.closest('.app-shell__flyout')).toBeNull()
+    expect(dashboardLink.closest('.app-shell__nav-dashboard')).not.toBeNull()
+    // And "Contenu" no longer counts it as one of its own — being on "/"
+    // should never mark the Content group current.
+    const contentGroup = screen.getByRole('button', { name: 'Contenu' }).closest('li')
+    expect(contentGroup?.getAttribute('data-current')).toBeNull()
+  })
+
+  it('names the site appearance entry distinctly from its own group — a real, user-reported name collision', async () => {
+    installMockFetch({ roles: ['admin'] })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // The group's own trigger — "Apparence" — and its "Apparence du site"
+    // item used to share the exact same text ("Apparence" twice), which is
+    // what made the flyout read as if the group linked to itself.
+    expect(screen.getByRole('button', { name: 'Apparence' })).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Apparence du site' })).toBeDefined()
+    expect(screen.getByRole('link', { name: "Apparence de l'admin" })).toBeDefined()
+  })
+
+  it('keeps the flyout open for a beat after the mouse leaves, so moving toward the flyout does not close it first', async () => {
+    // Regression test for a real, reported bug: the flyout sits a real gap
+    // away from its trigger and is taller than the trigger row, so a mouse
+    // moving diagonally toward an item further down legitimately leaves
+    // both boxes for a moment mid-transit. A close with no delay (this
+    // design's first version, driven by a bare CSS `:hover`) closes the
+    // flyout at exactly that moment.
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    const group = contentTrigger.closest('li') as HTMLElement
+    fireEvent.mouseEnter(group)
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.mouseLeave(group)
+    // Still open the instant the mouse leaves — the whole point of the delay.
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
+
+    await waitFor(
+      () => {
+        expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+      },
+      { timeout: 1000 },
+    )
+  })
+
+  it('cancels the pending close if the mouse re-enters before the delay elapses', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
+    const group = contentTrigger.closest('li') as HTMLElement
+    fireEvent.mouseEnter(group)
+    fireEvent.mouseLeave(group)
+    fireEvent.mouseEnter(group)
+
+    // Past the close delay: still open proves the re-entry cancelled it
+    // rather than merely reopening after a flicker.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
+  })
 })
 
 describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {

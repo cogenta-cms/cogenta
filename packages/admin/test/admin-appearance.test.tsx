@@ -213,7 +213,7 @@ describe("the admin's own appearance screen", () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    expect(screen.getByRole('link', { name: 'Apparence' })).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Apparence du site' })).toBeDefined()
     expect(screen.getByRole('link', { name: "Apparence de l'admin" })).toBeDefined()
   })
 })

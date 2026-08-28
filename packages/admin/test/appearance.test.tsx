@@ -35,7 +35,11 @@ function signedIn(roles: readonly string[], theme?: MockFetchOptions['theme']): 
 
 async function goToAppearance(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Apparence' }))
+  // "Apparence du site" — the nav item's own label, disambiguated from its
+  // group's identically-named-until-now "Apparence" (fiche 72 revision 2's
+  // fix for a real user-reported collision). The page's own <h1> keeps the
+  // shorter "Apparence" — a different translation key, untouched.
+  fireEvent.click(screen.getByRole('link', { name: 'Apparence du site' }))
   await screen.findByRole('heading', { name: 'Apparence', level: 1 })
 }
 
@@ -385,6 +389,7 @@ describe('the appearance screen — "Marque" card (fiche 68 task 5, moved from R
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     const toggle = (await screen.findByLabelText('Afficher la marque Cogenta')) as HTMLInputElement
     expect(toggle.checked).toBe(true)
@@ -399,6 +404,7 @@ describe('the appearance screen — "Marque" card (fiche 68 task 5, moved from R
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
+    await personalize()
 
     await screen.findByText('Logo personnalisé')
     // Scoped to the "Marque" card — the "Identité" card right above it also

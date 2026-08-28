@@ -173,10 +173,16 @@ function groupBadgeTotal(group: VisibleNavGroup, shellStatus: ShellStatus): numb
   }, 0)
 }
 
-/** Whether the current route belongs to this group — the "you are here" cue on its collapsed top-level row, the same test a breadcrumb would apply. */
+/**
+ * Whether the current route belongs to this group — the "you are here" cue
+ * on its top-level row, the same test a breadcrumb would apply. The
+ * dashboard (`/`) never counts: it renders as its own row above every
+ * group now, not inside one, so being on it should mark that row current,
+ * never "Contenu" (`app-shell.tsx`'s `dashboardItem`).
+ */
 function groupContainsPath(group: VisibleNavGroup, pathname: string): boolean {
-  return group.items.some((item) =>
-    item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(`${item.to}/`),
+  return group.items.some(
+    (item) => item.to !== '/' && (pathname === item.to || pathname.startsWith(`${item.to}/`)),
   )
 }
 
@@ -341,6 +347,21 @@ export function AppShell(): JSX.Element {
     return applyNavLayout(permitted, navLayout)
   }, [roles, collections, taxonomiesPresent, chromeState, navLayout])
 
+  /**
+   * The dashboard, pulled out of "Contenu" (its declared `nav-items.ts`
+   * group, unchanged — only where it *renders* differs) to sit on its own
+   * above every group, the way WordPress pins "Dashboard" above its own
+   * menu categories rather than filing it under one. Direct user feedback:
+   * nesting the site's own landing page inside a "Content" submenu read as
+   * arbitrary. Still absent entirely if an admin hid the whole "Contenu"
+   * section (`navigation.hiddenSections`) — the same call the old accordion
+   * design already made, not a new one.
+   */
+  const dashboardItem = useMemo(
+    () => groups.flatMap((group) => group.items).find((item) => item.to === '/'),
+    [groups],
+  )
+
   // Only the mobile drawer still opens/closes a group in place (task 2's
   // accordion, kept there because a touch drawer has no hover) — the sidebar
   // itself no longer does, see `openFlyoutGroup` below.
@@ -348,13 +369,50 @@ export function AppShell(): JSX.Element {
     useState<Partial<Record<NavGroupId, boolean>>>(readStoredGroupOpen)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readStoredSidebarCollapsed)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  // Which group's flyout is pinned open by a click/tap or by keyboard focus —
-  // independent of `:hover`, which a mouse already drives in pure CSS
-  // (`shell.css`'s `.app-shell__nav-group:hover`). This is what lets a
-  // keyboard or touch user reach a submenu that a mouse would have revealed
-  // just by pointing at it, and what gives that same trigger a real
-  // `aria-expanded` a screen reader can announce.
+  // Which group's flyout is open — driven entirely from here, in JS, not by
+  // a CSS `:hover` rule (removed from `shell.css`; see the comments on
+  // `openFlyout`/`scheduleCloseFlyout` below for why a pure-CSS `:hover`
+  // flyout does not actually work for this layout). `aria-expanded` on the
+  // trigger reflects this directly, giving a screen reader a real state to
+  // announce regardless of input method.
   const [openFlyoutGroup, setOpenFlyoutGroup] = useState<NavGroupId | null>(null)
+  // A pending close, armed by `scheduleCloseFlyout` and disarmed by
+  // `openFlyout` — see both below.
+  const closeFlyoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearPendingFlyoutClose(): void {
+    if (closeFlyoutTimerRef.current === null) return
+    clearTimeout(closeFlyoutTimerRef.current)
+    closeFlyoutTimerRef.current = null
+  }
+
+  /** Opens immediately (mouse entering the row, keyboard focus landing on it, or a click) and cancels any close already in flight. */
+  function openFlyout(groupId: NavGroupId): void {
+    clearPendingFlyoutClose()
+    setOpenFlyoutGroup(groupId)
+  }
+
+  /**
+   * Closes after a short delay rather than the instant the mouse leaves the
+   * row — found necessary in a real browser, not obvious from the CSS: the
+   * flyout sits a real gap to the right of its trigger and is taller than
+   * the trigger row itself, so a mouse moving diagonally from the trigger
+   * toward an item further down the flyout legitimately leaves *both*
+   * boxes for a moment mid-transit. A plain `:hover`-driven flyout (this
+   * design's first version) closes at exactly that moment — the flyout the
+   * reader was moving toward disappears before the pointer arrives. The
+   * delay is what a mouse-based "hover intent" needs to survive that gap;
+   * real cursor movement covers it in well under 250ms.
+   */
+  function scheduleCloseFlyout(groupId: NavGroupId): void {
+    clearPendingFlyoutClose()
+    closeFlyoutTimerRef.current = setTimeout(() => {
+      closeFlyoutTimerRef.current = null
+      setOpenFlyoutGroup((current) => (current === groupId ? null : current))
+    }, 250)
+  }
+
+  useEffect(() => clearPendingFlyoutClose, [])
 
   useEffect(() => {
     localStorage.setItem(NAV_GROUPS_STORAGE_KEY, JSON.stringify(groupOpen))
@@ -370,19 +428,26 @@ export function AppShell(): JSX.Element {
     setDrawerOpen(false)
   }, [location.pathname])
 
-  // Same for a pinned-open flyout: clicking a submenu link navigates away,
-  // and the flyout the reader just left should not still read "expanded"
-  // over the new page.
+  // Same for an open flyout: clicking a submenu link navigates away, and
+  // the flyout the reader just left should not still cover the new page —
+  // it does not, now that visibility is driven purely by this state (no
+  // more competing `:hover`, which used to keep the panel visually open
+  // regardless of this reset as long as the pointer had not physically
+  // moved yet).
   useEffect(() => {
+    clearPendingFlyoutClose()
     setOpenFlyoutGroup(null)
   }, [location.pathname])
 
-  // `Escape` closes whichever flyout is pinned open, wherever focus is —
-  // the same courtesy the mobile drawer's own focus trap already gives.
+  // `Escape` closes whichever flyout is open, wherever focus is — the same
+  // courtesy the mobile drawer's own focus trap already gives.
   useEffect(() => {
     if (openFlyoutGroup === null) return
     function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') setOpenFlyoutGroup(null)
+      if (event.key === 'Escape') {
+        clearPendingFlyoutClose()
+        setOpenFlyoutGroup(null)
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -398,6 +463,7 @@ export function AppShell(): JSX.Element {
     return (event: ReactFocusEvent<HTMLLIElement>): void => {
       const next = event.relatedTarget
       if (next !== null && event.currentTarget.contains(next)) return
+      clearPendingFlyoutClose()
       setOpenFlyoutGroup((current) => (current === groupId ? null : current))
     }
   }
@@ -490,6 +556,20 @@ export function AppShell(): JSX.Element {
     )
   }
 
+  /** The dashboard's own always-first row — see `dashboardItem` above for why it renders outside any group. Identical in the sidebar and the drawer, so both share it rather than each declaring their own copy. */
+  function renderDashboardRow(item: NavItem, className: string): JSX.Element {
+    const Icon = iconFor(item)
+    const label = t(item.labelKey)
+    return (
+      <li key={item.to} className={className}>
+        <NavLink to={item.to} end className="app-shell__nav-group-trigger" title={label}>
+          <Icon className="size-[1.125rem] shrink-0" />
+          <span className="app-shell__nav-group-label">{label}</span>
+        </NavLink>
+      </li>
+    )
+  }
+
   /**
    * The sidebar itself (WordPress-style redesign, fiche 72 revision): one
    * row per top-level group — icon, label, its own aggregated badge — that
@@ -499,20 +579,26 @@ export function AppShell(): JSX.Element {
    * their flyouts work identically either way, so an icon-only sidebar still
    * reaches every screen through the same hover.
    *
-   * A group left with exactly one visible item (`help`, today) skips the
-   * flyout machinery entirely and renders as a single direct link — a
-   * one-item submenu is friction with no benefit, and would have collided
-   * on `/appearance`'s own name in the "Apparence" group besides.
+   * A group left with exactly one visible item (`help`, today, and every
+   * other group once the dashboard is pulled out of its own — see above)
+   * skips the flyout machinery entirely and renders as a single direct
+   * link — a one-item submenu is friction with no benefit, and would have
+   * collided on `/appearance`'s own name in the "Apparence" group besides
+   * (fixed at the root by renaming that entry "Apparence du site").
    */
   function renderSidebarNav(): JSX.Element {
     return (
       <ul className="app-shell__nav-groups">
+        {dashboardItem !== undefined &&
+          renderDashboardRow(dashboardItem, 'app-shell__nav-dashboard reveal')}
         {groups.map((group, index) => {
+          const items = group.items.filter((item) => item.to !== '/')
+          if (items.length === 0) return null
           const GroupIcon = groupIconFor(group)
           const label = t(group.labelKey)
           const badgeTotal = groupBadgeTotal(group, chrome.shellStatus)
           const style = {
-            '--reveal-delay': `${Math.min(index, 8) * 30}ms`,
+            '--reveal-delay': `${Math.min(index + 1, 8) * 30}ms`,
           } as CSSProperties & Record<'--reveal-delay', string>
           const badge = badgeTotal > 0 && (
             <span
@@ -524,8 +610,8 @@ export function AppShell(): JSX.Element {
             </span>
           )
 
-          if (group.items.length === 1) {
-            const only = group.items[0] as NavItem
+          if (items.length === 1) {
+            const only = items[0] as NavItem
             return (
               <li key={group.id} className="app-shell__nav-group reveal" style={style}>
                 <NavLink
@@ -549,9 +635,8 @@ export function AppShell(): JSX.Element {
               className="app-shell__nav-group reveal"
               style={style}
               data-current={groupContainsPath(group, location.pathname) ? 'true' : undefined}
-              onMouseLeave={() =>
-                setOpenFlyoutGroup((current) => (current === group.id ? null : current))
-              }
+              onMouseEnter={() => openFlyout(group.id)}
+              onMouseLeave={() => scheduleCloseFlyout(group.id)}
               onBlur={onGroupBlur(group.id)}
             >
               <button
@@ -560,11 +645,11 @@ export function AppShell(): JSX.Element {
                 aria-expanded={isOpen}
                 aria-haspopup="true"
                 title={label}
-                onMouseEnter={() => setOpenFlyoutGroup(group.id)}
-                onFocus={() => setOpenFlyoutGroup(group.id)}
-                onClick={() =>
+                onFocus={() => openFlyout(group.id)}
+                onClick={() => {
+                  clearPendingFlyoutClose()
                   setOpenFlyoutGroup((current) => (current === group.id ? null : group.id))
-                }
+                }}
               >
                 <GroupIcon className="size-[1.125rem] shrink-0" />
                 <span className="app-shell__nav-group-label">{label}</span>
@@ -573,7 +658,7 @@ export function AppShell(): JSX.Element {
               </button>
               <div className="app-shell__flyout" role="menu" aria-label={label}>
                 <ul className="app-shell__nav-subitems">
-                  {group.items.map((item) => renderNavItemRow(item))}
+                  {items.map((item) => renderNavItemRow(item))}
                 </ul>
               </div>
             </li>
@@ -591,7 +676,11 @@ export function AppShell(): JSX.Element {
   function renderDrawerNav(): JSX.Element {
     return (
       <ul className="app-shell__nav-groups">
+        {dashboardItem !== undefined &&
+          renderDashboardRow(dashboardItem, 'app-shell__nav-dashboard')}
         {groups.map((group) => {
+          const items = group.items.filter((item) => item.to !== '/')
+          if (items.length === 0) return null
           const GroupIcon = groupIconFor(group)
           const label = t(group.labelKey)
           const badgeTotal = groupBadgeTotal(group, chrome.shellStatus)
@@ -605,8 +694,8 @@ export function AppShell(): JSX.Element {
             </span>
           )
 
-          if (group.items.length === 1) {
-            const only = group.items[0] as NavItem
+          if (items.length === 1) {
+            const only = items[0] as NavItem
             return (
               <li key={group.id} className="app-shell__nav-group">
                 <NavLink
@@ -639,7 +728,7 @@ export function AppShell(): JSX.Element {
                   <span className="app-shell__nav-group-caret" aria-hidden="true" />
                 </summary>
                 <ul className="app-shell__nav-subitems">
-                  {group.items.map((item) => renderNavItemRow(item))}
+                  {items.map((item) => renderNavItemRow(item))}
                 </ul>
               </details>
             </li>

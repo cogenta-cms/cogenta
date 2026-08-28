@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createPermissionLayer } from '../../src/access/index.js'
 import { createContentGateway } from '../../src/graphql/gateway.js'
 import type { RestResponse } from '../../src/rest/http.js'
-import type { SeoDiagnostics, SeoRouter } from '../../src/rest/seo-router.js'
+import type { SeoDiagnostics, SeoLinkSuggestions, SeoRouter } from '../../src/rest/seo-router.js'
 import { createSeoRouter } from '../../src/rest/seo-router.js'
 import type { AccessContext, Actor } from '../../src/types.js'
 import { ANONYMOUS } from '../../src/types.js'
@@ -34,9 +34,26 @@ const ARTICLE: CollectionDefinition = defineCollection({
     seoTitle: f.text({ max: 300 }),
     seoDescription: f.text({ max: 400 }),
     seoNoindex: f.boolean({ default: false }),
+    // fiche 70 task 2 — a rich-text body so a test can place a real
+    // `internalLink` markDef, the exact shape `extractLinks`
+    // (`@cogenta/schema`) already recognises (L14 task 3).
+    body: f.richText(),
   },
   permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
 })
+
+/** A body carrying one `internalLink` markDef pointing at `targetId` in `ARTICLE`. */
+function bodyLinkingTo(targetId: string): unknown {
+  return [
+    {
+      _key: 'b1',
+      _type: 'block',
+      style: 'normal',
+      children: [{ _key: 's1', _type: 'span', text: 'See also', marks: ['m1'] }],
+      markDefs: [{ _key: 'm1', _type: 'internalLink', collection: ARTICLE.name, id: targetId }],
+    },
+  ]
+}
 
 /** No `routing`: excluded from the sitemap for a structural reason, not a permission one. */
 const AUTHOR: CollectionDefinition = defineCollection({
@@ -403,6 +420,81 @@ describe('/api/seo', () => {
 
     it('allows GET only', async () => {
       const response = await ask('POST', '/api/seo/diagnostics', undefined, actor('admin'))
+      expect(response.status).toBe(405)
+      expect(response.headers['allow']).toBe('GET')
+    })
+  })
+
+  describe('GET /api/seo/link-suggestions', () => {
+    const askLinks = (collection: string, context: AccessContext): Promise<RestResponse> =>
+      router.handle(
+        { method: 'GET', path: '/api/seo/link-suggestions', query: { collection } },
+        context,
+      )
+
+    it('follows update on the named collection, never admin', async () => {
+      expect((await askLinks(ARTICLE.name, { actor: ANONYMOUS })).status).toBe(403)
+      // ARTICLE only grants `update` to `editor` — an `admin` with no
+      // `editor` role must be refused too, proving this route really checks
+      // `update`, not a hardcoded `admin` shortcut.
+      expect((await askLinks(ARTICLE.name, actor('admin'))).status).toBe(403)
+      expect((await askLinks(ARTICLE.name, actor('editor'))).status).toBe(200)
+    })
+
+    it('requires a "collection" query parameter', async () => {
+      const response = await router.handle(
+        { method: 'GET', path: '/api/seo/link-suggestions', query: {} },
+        actor('editor'),
+      )
+      expect(response.status).toBe(400)
+    })
+
+    it('reports every published entry with no inbound link as orphaned', async () => {
+      const first = await articleStore.create({ values: { title: 'First', slug: 'first' } })
+      await articleStore.publish(first.id)
+      const second = await articleStore.create({ values: { title: 'Second', slug: 'second' } })
+      await articleStore.publish(second.id)
+
+      const response = await askLinks(ARTICLE.name, actor('editor'))
+      const data = (response.body as { data: SeoLinkSuggestions }).data
+      expect(data.orphans.map((o) => o.id).sort()).toEqual([first.id, second.id].sort())
+    })
+
+    it('removes an entry from the orphan list once a real internalLink points at it', async () => {
+      const target = await articleStore.create({ values: { title: 'Target', slug: 'target' } })
+      await articleStore.publish(target.id)
+      const linker = await articleStore.create({
+        values: { title: 'Linker', slug: 'linker', body: bodyLinkingTo(target.id) },
+      })
+      await articleStore.publish(linker.id)
+
+      const response = await askLinks(ARTICLE.name, actor('editor'))
+      const data = (response.body as { data: SeoLinkSuggestions }).data
+      expect(data.orphans.map((o) => o.id)).not.toContain(target.id)
+      expect(data.orphans.map((o) => o.id)).toContain(linker.id)
+    })
+
+    it('suggests up to five siblings sharing title words, never across collections', async () => {
+      const subject = await articleStore.create({
+        values: { title: 'Guide de voyage en Italie', slug: 'guide-italie' },
+      })
+      await articleStore.publish(subject.id)
+      const sibling = await articleStore.create({
+        values: { title: 'Guide de voyage en Espagne', slug: 'guide-espagne' },
+      })
+      await articleStore.publish(sibling.id)
+
+      const response = await askLinks(ARTICLE.name, actor('editor'))
+      const data = (response.body as { data: SeoLinkSuggestions }).data
+      const suggestions = data.suggestionsByEntry[subject.id]
+      expect(suggestions?.map((s) => s.id)).toEqual([sibling.id])
+    })
+
+    it('allows GET only', async () => {
+      const response = await router.handle(
+        { method: 'POST', path: '/api/seo/link-suggestions', query: { collection: ARTICLE.name } },
+        actor('editor'),
+      )
       expect(response.status).toBe(405)
       expect(response.headers['allow']).toBe('GET')
     })

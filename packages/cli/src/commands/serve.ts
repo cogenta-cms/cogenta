@@ -70,6 +70,7 @@ import {
   createRolePermissionRouter,
   createScheduledPublishFailedSource,
   createScheduledTasksRouter,
+  createSearchConsoleRouter,
   createSearchRouter,
   createSeoRouter,
   createShellStatusRouter,
@@ -115,6 +116,7 @@ import {
   resolveActor,
   roleState,
   type ScheduledTasksRouter,
+  type SearchConsoleRouter,
   type SearchRouter,
   type SeoRouter,
   type ShellStatusRouter,
@@ -260,6 +262,7 @@ import {
   createScheduledPublishFailureStore,
   createScheduledTaskRegistry,
   createSchemaTables,
+  createSearchConsoleConnectionStore,
   createSearchIndex,
   createSiteSettingsStore,
   createTaxonomyStore,
@@ -268,6 +271,7 @@ import {
   ensureMaintenanceTable,
   ensureMenuTables,
   ensurePatternTables,
+  ensureSearchConsoleConnectionTable,
   ensureSiteSettingsTables,
   type MaintenanceStore,
   type MenuStore,
@@ -279,6 +283,7 @@ import {
   registerScheduledPublishing,
   type ScheduledTaskRegistry,
   type SchemaDocument,
+  type SearchConsoleConnectionStore,
   type SearchDriver,
   SITE_SETTINGS_SITE_SCOPE,
   type SiteSettingsStore,
@@ -548,6 +553,14 @@ interface Site {
    * and `opsStatusRouter` above.
    */
   readonly seoRouter: SeoRouter
+  /**
+   * `/api/seo/search-console` — fiche 70 task 4, ADR-0032: the optional,
+   * off-by-default Google Search Console connector. Admin-only except its
+   * own `callback` route, which Google's browser redirect reaches with no
+   * bearer token at all (see the router's own module comment for why that
+   * is still safe).
+   */
+  readonly searchConsoleRouter: SearchConsoleRouter
   /**
    * Self-hosted, cookie-free page-view analytics (`@cogenta/analytics`).
    *
@@ -916,6 +929,17 @@ interface AssembleSiteOptions {
   }
   /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
   readonly sitePlans?: SitePlanRouterOptions
+  /**
+   * Fiche 70 task 4, ADR-0032. Absent means no
+   * `COGENTA_SEARCH_CONSOLE_CLIENT_ID`/`_CLIENT_SECRET` is set — the
+   * connector is then simply not offered (R1/R2: every other SEO feature is
+   * unaffected). The redirect URI is derived from `site.url`, never passed
+   * in, so it can never point somewhere this server does not actually serve.
+   */
+  readonly searchConsole?: {
+    readonly clientId: string
+    readonly clientSecret: string
+  }
   /**
    * `/api/updates` (L22 task 9) — already built by `runServe`, which has the
    * filesystem/network ingredients (`projectRoot`, `env`, npm access) this
@@ -1751,6 +1775,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensurePatternTables(db)
   const patternStore: PatternStore = createPatternStore({ db })
 
+  // Google Search Console's one stored connection (fiche 70 task 4,
+  // ADR-0032) — same one-fixed-table treatment, and the table is always
+  // created regardless of whether an OAuth app is configured, so enabling
+  // the connector later needs no migration.
+  await ensureSearchConsoleConnectionTable(db)
+  const searchConsoleStore: SearchConsoleConnectionStore = createSearchConsoleConnectionStore({
+    db,
+    signingKey: options.signingKey,
+  })
+
   // Editorial site settings (fiche 23, ADR-0025): not schema-declared either
   // — a rédacteur's tagline or homepage choice is not part of the content
   // model — so this gets the same one-fixed-table treatment as menus.
@@ -2203,6 +2237,22 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // saved.
       robotsCustomRules: async () =>
         (await readSeoRenderDefaults(siteSettingsStore)).robotsCustomRules,
+    }),
+    searchConsoleRouter: createSearchConsoleRouter({
+      store: searchConsoleStore,
+      signingKey: options.signingKey,
+      // A URL-prefix property (the form GSC's own UI defaults to) — always
+      // exactly one trailing slash, whatever `site.url` was written as.
+      siteUrl: `${site.url.replace(/\/+$/u, '')}/`,
+      ...(options.searchConsole === undefined
+        ? {}
+        : {
+            oauth: {
+              clientId: options.searchConsole.clientId,
+              clientSecret: options.searchConsole.clientSecret,
+              redirectUri: `${site.url.replace(/\/+$/u, '')}/api/seo/search-console/callback`,
+            },
+          }),
     }),
     // The review queue (`schema@2.1`, ADR-0027, fiche 37 task 3).
     reviewRouter,
@@ -4242,6 +4292,18 @@ export function createRequestListener(
         return
       }
 
+      // The Search Console connector (fiche 70 task 4, ADR-0032) — checked
+      // *before* the generic `/api/seo` prefix below, which would otherwise
+      // swallow it (`startsWith('/api/seo')` matches this path too). Its
+      // `callback` route is the one place on this whole server that a
+      // request with no `Authorization` header is expected and correct —
+      // see the router's own module comment.
+      if (url.pathname.startsWith('/api/seo/search-console')) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.searchConsoleRouter.handle(request, context))
+        return
+      }
+
       // Fiche 13's admin-only door onto `@cogenta/seo`: a live preview of one
       // edit in progress, and the site-wide diagnostic. Both permission
       // checks live in the router itself, exactly like `/api/redirects`.
@@ -5502,6 +5564,19 @@ export async function runServe(options: ServeOptions): Promise<number> {
         (await migrator.status()).some((item) => !item.applied && item.destructive),
     },
     analytics: loaded.config.analytics,
+    // Fiche 70 task 4, ADR-0032 — present only once both the client id and
+    // secret are set. Neither alone is enough to talk to Google, and
+    // `assembleSite` treats "absent" as the single source of truth for
+    // "this connector is not offered" (R1/R2).
+    ...(loaded.config.searchConsole.clientId !== undefined &&
+    loaded.config.searchConsole.clientSecret !== undefined
+      ? {
+          searchConsole: {
+            clientId: loaded.config.searchConsole.clientId,
+            clientSecret: loaded.config.searchConsole.clientSecret,
+          },
+        }
+      : {}),
     sitePlans: await createSitePlanning({
       projectRoot,
       db: selection.instance,

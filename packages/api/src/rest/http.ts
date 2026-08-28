@@ -430,6 +430,22 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   FORM_CAPTCHA_REQUIRED: 400,
   FORM_CAPTCHA_FAILED: 400,
   FORM_STEP_INVALID: 400,
+
+  // Google Search Console connector (fiche 70 task 4, ADR-0032). Same shape
+  // as `THEME_NO_PROVIDER`/`SITE_PLAN_NO_PROVIDER`: nothing is broken, this
+  // installation simply has no OAuth app configured (R1/R2).
+  SEARCH_CONSOLE_NOT_CONFIGURED: 501,
+  // A site that has never completed the OAuth flow — an ordinary 404, the
+  // same shape as `PROVIDER_NOT_CONFIGURED`.
+  SEARCH_CONSOLE_NOT_CONNECTED: 404,
+  // The OAuth callback's `state` parameter did not match the one issued for
+  // this flow — the caller's fault (a stale or forged callback), not a
+  // server fault.
+  SEARCH_CONSOLE_STATE_INVALID: 400,
+  // Google's own token/query endpoints refused a well-formed request —
+  // an upstream failure, the same shape as `PROVIDER_REQUEST_FAILED`.
+  SEARCH_CONSOLE_TOKEN_EXCHANGE_FAILED: 502,
+  SEARCH_CONSOLE_QUERY_FAILED: 502,
 }
 
 export function statusFor(code: ErrorCode): number {

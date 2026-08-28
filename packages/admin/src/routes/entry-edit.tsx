@@ -949,7 +949,17 @@ export function EntryEditRoute(): JSX.Element {
    * the exact same `skipFields` mechanism the visual builder already uses
    * for the block zone it composes itself.
    */
-  const SEO_FIELD_NAMES = ['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex', 'seoCanonical']
+  // `seoFocusKeyword` (fiche 70 task 1) joins the list the same way every
+  // field above it did: an ordinary field a collection either declares or
+  // does not, edited only inside `SeoPanel`, never a contract A change.
+  const SEO_FIELD_NAMES = [
+    'seoTitle',
+    'seoDescription',
+    'seoImage',
+    'seoNoindex',
+    'seoCanonical',
+    'seoFocusKeyword',
+  ]
   const seoFieldNames =
     collection?.fields
       .filter((field) => SEO_FIELD_NAMES.includes(field.name))
@@ -958,6 +968,17 @@ export function EntryEditRoute(): JSX.Element {
     ...(builderZone === null ? [] : [builderZone]),
     ...seoFieldNames,
   ])
+
+  /**
+   * The first `richText` field a collection declares (fiche 70 task 1) —
+   * the same "first declared field of this kind wins" convention
+   * `search/extract.ts`'s own `titleOf` uses for `text` fields, applied here
+   * to the one field kind the content score actually needs structure from.
+   * `undefined` when the collection has none, which is exactly the "no
+   * score to show" case `SeoPanel` already handles for every other missing
+   * conventional field.
+   */
+  const bodyFieldName = collection?.fields.find((field) => field.kind === 'richText')?.name
 
   // Declared before the early returns below, because a hook cannot be
   // conditional. `enabled` is what actually turns it off while the entry is
@@ -1612,6 +1633,7 @@ export function EntryEditRoute(): JSX.Element {
           status={status}
           values={values}
           entryText={entryText}
+          bodyValue={bodyFieldName === undefined ? undefined : values[bodyFieldName]}
           onChange={setFieldValue}
         />
       )}

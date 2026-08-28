@@ -929,6 +929,71 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     defaultValue: false,
     writeRoles: ADMIN_ONLY,
   },
+  // Fiche 70 task 3 — the feature-activation grid's own four gates. Every
+  // one of these defaults to `true`: unlike `indexNowEnabled`/`llmsTxtEnabled`
+  // (which switch on a real effect an install nobody configured should not
+  // get for free), these four gate a feature that is *already* opt-in by
+  // construction — a score/link report nobody asked to see is simply not
+  // rendered, and a verification token/custom robots rule nobody typed has
+  // no content to gate in the first place. Defaulting to `true` is what
+  // keeps an upgrading site's behaviour byte-identical the day this fiche
+  // ships: every admin who had already typed a verification token or a
+  // custom robots.txt rule keeps seeing it applied, with no silent regression.
+  {
+    key: 'seo.contentScoreEnabled',
+    group: 'seo',
+    order: 12,
+    uiType: 'boolean',
+    scope: 'site',
+    // Read only by the admin (`content-analysis.ts`'s `analyseContent` runs
+    // entirely client-side, R2/R9) — this setting merely decides whether the
+    // SEO panel renders the score at all, never a server-side gate.
+    schema: z.boolean(),
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.linkAssistantEnabled',
+    group: 'seo',
+    order: 13,
+    uiType: 'boolean',
+    scope: 'site',
+    // Gates `GET /api/seo/link-suggestions` itself (`seo-router.ts`) —
+    // unlike `contentScoreEnabled`, this one *does* reach the server, since
+    // the underlying scan reads every routed collection's published
+    // entries and is not free to run.
+    schema: z.boolean(),
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.searchVerificationEnabled',
+    group: 'seo',
+    order: 14,
+    uiType: 'boolean',
+    scope: 'site',
+    // Gates whether `seo.googleSiteVerification`/`seo.bingSiteVerification`
+    // are actually rendered into `<meta>` tags (`readSeoRenderDefaults`,
+    // `@cogenta/cli`) — the saved tokens are never erased by turning this
+    // off, exactly the same "data persists, activation gates whether it
+    // applies" shape `robotsCustomRulesEnabled` below uses.
+    schema: z.boolean(),
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.robotsCustomRulesEnabled',
+    group: 'seo',
+    order: 15,
+    uiType: 'boolean',
+    scope: 'site',
+    // Gates whether `seo.robotsCustomRules` is actually merged into the
+    // served `robots.txt` (`readSeoRenderDefaults`) — the saved text stays
+    // in the textarea either way; only whether a crawler ever sees it changes.
+    schema: z.boolean(),
+    defaultValue: true,
+    writeRoles: ADMIN_ONLY,
+  },
 
   // Observability (fiche L22 task 5) — whether the local trace/log
   // collection behind the admin's "Exploitation" screen runs, and how

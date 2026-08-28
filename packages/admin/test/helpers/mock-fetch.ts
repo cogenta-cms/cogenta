@@ -516,6 +516,50 @@ export function installMockFetch(
       }
       readonly anomalies?: readonly { readonly code: string; readonly message: string }[]
     }
+    /** What `GET /api/seo/link-suggestions` answers with (fiche 70 task 2) — no orphans and no suggestions by default. Keyed by requested collection name; a collection with no entry here still gets the empty default rather than a 404. */
+    readonly seoLinkSuggestions?: Readonly<
+      Record<
+        string,
+        {
+          readonly orphans: readonly {
+            readonly collection: string
+            readonly id: string
+            readonly title: string
+          }[]
+          readonly suggestionsByEntry: Readonly<
+            Record<
+              string,
+              readonly {
+                readonly collection: string
+                readonly id: string
+                readonly title: string
+                readonly sharedWordCount: number
+              }[]
+            >
+          >
+        }
+      >
+    >
+    /** What `GET /api/seo/search-console/status` answers with (fiche 70 task 4) — not configured by default, the same "absent connector" R2 posture as `assistant`. */
+    readonly searchConsoleStatus?: {
+      readonly configured?: boolean
+      readonly connected?: boolean
+      readonly siteUrl?: string
+      readonly connectedAt?: string
+      readonly updatedAt?: string
+    }
+    /** What `GET /api/seo/search-console/metrics` answers with once connected — no rows by default. */
+    readonly searchConsoleMetrics?: {
+      readonly siteUrl?: string
+      readonly windowDays?: number
+      readonly rows?: readonly {
+        readonly page: string
+        readonly clicks: number
+        readonly impressions: number
+        readonly ctr: number
+        readonly position: number
+      }[]
+    }
     /** What `GET /api/theme` answers with (fiche 14) — a fixed, valid file skin, no override, no gallery and no AI by default. */
     readonly theme?: {
       readonly fileTokens?: Record<string, unknown> | null
@@ -874,6 +918,12 @@ export function installMockFetch(
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
   let securityAgentEnabled = true
+
+  // Search Console connection state (fiche 70 task 4) — mutable across the
+  // test's own requests, the same way `securityAgentEnabled` is just above,
+  // so a test can prove the UI reacts to a real POST /disconnect rather than
+  // only rendering a static fixture.
+  let searchConsoleConnected = options.searchConsoleStatus?.connected ?? false
 
   // L22 task 1: a real, persistent (for the life of one test) agent
   // registry — `security` is the same fixed fixture every existing test
@@ -7356,6 +7406,79 @@ export function installMockFetch(
             anomalies: diagnostics?.anomalies ?? [],
           },
         })
+      }
+
+      // `GET /api/seo/link-suggestions` — fiche 70 task 2, follows `update`
+      // on the named collection (never `admin`, unlike diagnostics above).
+      if (url.includes('/api/seo/link-suggestions') && method === 'GET') {
+        const parsedLinkUrl = new URL(url, 'http://localhost')
+        const collectionName = parsedLinkUrl.searchParams.get('collection') ?? ''
+        if (
+          !user.roles.includes('editor') &&
+          !user.roles.includes('admin') &&
+          collectionName !== ''
+        ) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const found = options.seoLinkSuggestions?.[collectionName]
+        return json(200, {
+          data: {
+            collection: collectionName,
+            orphans: found?.orphans ?? [],
+            suggestionsByEntry: found?.suggestionsByEntry ?? {},
+          },
+        })
+      }
+
+      // `/api/seo/search-console/*` — fiche 70 task 4, ADR-0032. `status` is
+      // admin-only like the rest of the diagnostics scan; not configured by
+      // default (R2), matching a real install with no OAuth app set.
+      if (url.includes('/api/seo/search-console/status') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const found = options.searchConsoleStatus
+        return json(200, {
+          data: {
+            configured: found?.configured ?? false,
+            connected: searchConsoleConnected,
+            ...(!searchConsoleConnected || found?.siteUrl === undefined
+              ? {}
+              : { siteUrl: found.siteUrl }),
+            ...(!searchConsoleConnected || found?.connectedAt === undefined
+              ? {}
+              : { connectedAt: found.connectedAt }),
+            ...(!searchConsoleConnected || found?.updatedAt === undefined
+              ? {}
+              : { updatedAt: found.updatedAt }),
+          },
+        })
+      }
+      if (url.includes('/api/seo/search-console/metrics') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        const found = options.searchConsoleMetrics
+        return json(200, {
+          data: {
+            siteUrl: found?.siteUrl ?? 'https://example.com/',
+            windowDays: found?.windowDays ?? 28,
+            rows: found?.rows ?? [],
+          },
+        })
+      }
+      if (url.includes('/api/seo/search-console/authorize') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        return json(200, { data: { url: 'https://accounts.google.com/o/oauth2/v2/auth?mock=1' } })
+      }
+      if (url.includes('/api/seo/search-console/disconnect') && method === 'POST') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Access denied.' } })
+        }
+        searchConsoleConnected = false
+        return json(200, { data: { disconnected: true } })
       }
 
       // `/api/admin-theme` (L21 task 2) — the admin's own runtime template.

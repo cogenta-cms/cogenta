@@ -391,6 +391,17 @@ export interface CogentaConfig {
     /** `undefined` until `COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID` is set. */
     readonly paypalWebhookId: string | undefined
   }
+  /**
+   * Google Search Console OAuth (fiche 70 task 4, ADR-0032), always
+   * resolved — never absent (R1/R2: a site with no OAuth app configured
+   * simply offers no connector, the rest of the SEO screen is unaffected).
+   */
+  readonly searchConsole: {
+    /** `undefined` until `COGENTA_SEARCH_CONSOLE_CLIENT_ID` is set — the whole connector is unreachable until then. */
+    readonly clientId: string | undefined
+    /** `undefined` until `COGENTA_SEARCH_CONSOLE_CLIENT_SECRET` is set. Never round-tripped to any admin response. */
+    readonly clientSecret: string | undefined
+  }
 }
 
 /** A read-only view of the process environment. */

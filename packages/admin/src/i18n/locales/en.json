@@ -1006,11 +1006,46 @@
     "pageDescription": "Titles, sitemap, social cards, redirections and diagnostics — everything this site exposes to search engines, in one screen.",
     "settingsLoadError": "Could not load the SEO settings.",
     "tab": {
+      "features": "Features",
       "general": "General",
       "sitemap": "Sitemap",
       "social": "Social",
       "redirects": "Redirects",
       "diagnostics": "Diagnostics"
+    },
+    "featuresHeading": "SEO features",
+    "featuresDescription": "Every SEO sub-feature this site offers, in one place — toggling a card here changes exactly the same setting as the screen it also appears on, never a duplicate.",
+    "feature": {
+      "contentScore": {
+        "title": "Real-time content score",
+        "description": "A live checklist while editing an entry — keyword usage, sentence length, subheadings, content length.",
+        "dependencyHint": "Not applicable — nothing to configure, this card only turns the panel on or off."
+      },
+      "linkAssistant": {
+        "title": "Internal link assistant",
+        "description": "Finds entries with no inbound link, and suggests internal-link candidates by shared title words, on the Diagnostics tab.",
+        "dependencyHint": "No collection has a public route yet, so there is nothing for this to scan."
+      },
+      "searchVerification": {
+        "title": "Search engine verification",
+        "description": "Renders the Google/Bing meta-tag verification tokens saved on the Diagnostics tab.",
+        "dependencyHint": "No verification token has been saved yet on the Diagnostics tab."
+      },
+      "robotsCustomRules": {
+        "title": "Custom robots.txt rules",
+        "description": "Merges the admin-written robots.txt lines saved on the Diagnostics tab into the served document.",
+        "dependencyHint": "No custom robots.txt rule has been saved yet on the Diagnostics tab."
+      },
+      "indexNow": {
+        "title": "IndexNow",
+        "description": "Pings Bing, Yandex and Seznam the moment a page is published or unpublished.",
+        "dependencyHint": "No IndexNow key has been generated yet on the General tab."
+      },
+      "llmsTxt": {
+        "title": "llms.txt",
+        "description": "Publishes a plain-text index of every published title, for AI crawlers.",
+        "dependencyHint": "Not applicable — nothing to configure, this card only turns the route on or off."
+      }
     },
     "collectionTemplatesHeading": "Title templates by content type",
     "collectionTemplatesDescription": "Overrides the general title template above, per collection. Leave empty to use the general template (or no template at all) for that collection.",
@@ -1095,7 +1130,54 @@
     "robotsCustomRulesLabel": "Custom rules",
     "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /",
     "robotsCustomRulesHelp": "Merged into the robots.txt above, after the rules shown and before the Sitemap line. One directive per line, in real robots.txt syntax.",
-    "robotsDisallowAllConfirm": "This includes \"Disallow: /\", which blocks every crawler from the whole site. Save anyway?"
+    "robotsDisallowAllConfirm": "This includes \"Disallow: /\", which blocks every crawler from the whole site. Save anyway?",
+    "focusKeywordLabel": "Focus keyword",
+    "focusKeywordPlaceholder": "e.g. \"travel guide\"",
+    "focusKeywordHint": "Optional. Drives the keyword checks in the content score below — leave empty to see only the structural checks.",
+    "contentScoreHeading": "Content score",
+    "contentScoreNoKeywordHint": "Set a focus keyword above to also check its use in the title, description, first sentence and density.",
+    "scoreLevel": {
+      "red": "Needs work",
+      "orange": "Fair",
+      "green": "Good"
+    },
+    "contentCheckPassed": "(passed)",
+    "contentCheckFailed": "(needs work)",
+    "contentCheck": {
+      "keywordInTitle": "The focus keyword appears in the title.",
+      "keywordInDescription": "The focus keyword appears in the meta description.",
+      "keywordInFirstSentence": "The focus keyword appears in the first sentence.",
+      "keywordDensity": "The focus keyword is used at a healthy density (0.5%–2.5% of the text).",
+      "sentenceLength": "No sentence is longer than 20 words.",
+      "subheadings": "The content uses subheadings.",
+      "contentLength": "The content is at least 300 words long."
+    },
+    "linkAssistantHeading": "Internal link assistant",
+    "linkAssistantDescription": "Orphaned entries (no other published entry links to them) and, for entries that share title words, plausible internal-link candidates — computed from the links already in your content, never an AI recommendation.",
+    "linkAssistantCollectionLabel": "Collection",
+    "linkAssistantNoCollections": "No collection has a public route yet, so there is nothing to scan here.",
+    "linkAssistantOrphansHeading": "Orphaned entries",
+    "linkAssistantNoOrphans": "None found — every published entry has at least one inbound link.",
+    "linkAssistantSuggestionsHeading": "Suggested internal links",
+    "linkAssistantNoSuggestions": "No plausible candidate found for any entry in this collection.",
+    "linkAssistantLoadError": "Could not compute link suggestions.",
+    "linkAssistantSharedWords_one": "{{count}} shared word",
+    "linkAssistantSharedWords_other": "{{count}} shared words",
+    "searchConsoleHeading": "Real performance (Google Search Console)",
+    "searchConsoleDescription": "Optional. Once connected, shows real clicks, impressions, click-through rate and average position from Google Search Console — the one thing this fiche's own research found genuinely missing here. Read-only: nothing is ever changed on the Google side.",
+    "searchConsoleConnect": "Connect Google Search Console",
+    "searchConsoleConnecting": "Redirecting to Google…",
+    "searchConsoleDisconnect": "Disconnect",
+    "searchConsoleConnected": "Connected — real performance data now shows below.",
+    "searchConsoleDenied": "The connection was not completed — try again, or check that the property is verified for this Google account.",
+    "searchConsoleConnectedTo": "Connected to {{siteUrl}} — clicks and impressions over the last 28 days.",
+    "searchConsolePageColumn": "Page",
+    "searchConsoleClicksColumn": "Clicks",
+    "searchConsoleImpressionsColumn": "Impressions",
+    "searchConsoleCtrColumn": "CTR",
+    "searchConsolePositionColumn": "Avg. position",
+    "searchConsoleNoRows": "No data yet for this period.",
+    "searchConsoleLoadError": "Could not reach the Search Console connector."
   },
   "opsSettings": {
     "heading": "Security & webhooks",

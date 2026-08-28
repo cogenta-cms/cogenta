@@ -182,9 +182,19 @@ export type {
   ScheduledTasksRouterOptions,
 } from './scheduled-tasks-router.js'
 export { createScheduledTasksRouter } from './scheduled-tasks-router.js'
+export type {
+  SearchConsoleRouter,
+  SearchConsoleRouterOptions,
+} from './search-console-router.js'
+export { createSearchConsoleRouter } from './search-console-router.js'
 export type { SearchResultHit, SearchRouter, SearchRouterOptions } from './search-router.js'
 export { createSearchRouter } from './search-router.js'
-export type { SeoDiagnostics, SeoRouter, SeoRouterOptions } from './seo-router.js'
+export type {
+  SeoDiagnostics,
+  SeoLinkSuggestions,
+  SeoRouter,
+  SeoRouterOptions,
+} from './seo-router.js'
 export { createSeoRouter } from './seo-router.js'
 export type {
   CommerceCatalogLike,

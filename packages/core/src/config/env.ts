@@ -17,6 +17,8 @@ export const SECRET_KEYS: ReadonlyMap<string, string> = new Map([
   ['payment.paypalClientSecret', 'COGENTA_PAYMENT_PAYPAL_CLIENT_SECRET'],
   ['payment.paypalWebhookId', 'COGENTA_PAYMENT_PAYPAL_WEBHOOK_ID'],
   ['observability.otlpHeaders', 'COGENTA_OTLP_HEADERS or OTEL_EXPORTER_OTLP_HEADERS'],
+  ['searchConsole.clientId', 'COGENTA_SEARCH_CONSOLE_CLIENT_ID'],
+  ['searchConsole.clientSecret', 'COGENTA_SEARCH_CONSOLE_CLIENT_SECRET'],
 ])
 
 /** First variable that is set and not empty. An empty variable means "unset". */
@@ -260,6 +262,10 @@ export interface EnvironmentSecrets {
    * alone is enough for a collector that needs none.
    */
   readonly otlpHeaders: Readonly<Record<string, string>> | undefined
+  /** The installation's Google OAuth app id (fiche 70 task 4, ADR-0032). `undefined` means the Search Console connector is not offered at all — the same "absent, not refused" shape `llmApiKey` already has. */
+  readonly searchConsoleClientId: string | undefined
+  /** The installation's Google OAuth app secret. Never in the config file. */
+  readonly searchConsoleClientSecret: string | undefined
 }
 
 export function readSecrets(env: Environment): EnvironmentSecrets {
@@ -279,6 +285,8 @@ export function readSecrets(env: Environment): EnvironmentSecrets {
       const raw = read(env, 'COGENTA_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_HEADERS')
       return raw === undefined ? undefined : parseHeaderList(raw)
     })(),
+    searchConsoleClientId: read(env, 'COGENTA_SEARCH_CONSOLE_CLIENT_ID'),
+    searchConsoleClientSecret: read(env, 'COGENTA_SEARCH_CONSOLE_CLIENT_SECRET'),
   }
 }
 

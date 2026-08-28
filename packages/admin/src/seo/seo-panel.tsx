@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   type AssistSuggestion,
@@ -10,6 +10,7 @@ import { runSeoPreview, type SeoPreview } from '../api/seo-client.js'
 import { FieldInput } from '../fields/field-input.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } from '../ui/index.js'
+import { analyseContent, type ContentCheckId } from './content-score.js'
 
 /**
  * Fiche 13 (SEO éditorial), Task 1 — the panel `entry-edit.tsx` never had:
@@ -59,9 +60,22 @@ export interface SeoPanelProps {
   readonly values: Readonly<Record<string, unknown>>
   /** Plain text for the "propose a title/description" buttons — the same text the other assist panels use. */
   readonly entryText: string
+  /** Fiche 70 task 1 — the raw value of the collection's first `richText` field, for the content score below. `undefined` when the collection has none. */
+  readonly bodyValue?: unknown
   onChange(name: string, value: unknown): void
   readonly disabled?: boolean
 }
+
+/** In document order — the checklist renders every evaluated check in this fixed sequence, never the order `analyseContent` happened to push them in. */
+const CHECK_ORDER: readonly ContentCheckId[] = [
+  'keywordInTitle',
+  'keywordInDescription',
+  'keywordInFirstSentence',
+  'keywordDensity',
+  'sentenceLength',
+  'subheadings',
+  'contentLength',
+]
 
 function fieldOf(collection: CollectionSummary, name: string): SchemaField | undefined {
   return collection.fields.find((field) => field.name === name)
@@ -83,6 +97,7 @@ export function SeoPanel({
   status,
   values,
   entryText,
+  bodyValue,
   onChange,
   disabled = false,
 }: SeoPanelProps): JSX.Element | null {
@@ -93,13 +108,15 @@ export function SeoPanel({
   const imageField = fieldOf(collection, 'seoImage')
   const noindexField = fieldOf(collection, 'seoNoindex')
   const canonicalField = fieldOf(collection, 'seoCanonical')
+  const focusKeywordField = fieldOf(collection, 'seoFocusKeyword')
 
   const hasAnyField =
     titleField !== undefined ||
     descriptionField !== undefined ||
     imageField !== undefined ||
     noindexField !== undefined ||
-    canonicalField !== undefined
+    canonicalField !== undefined ||
+    focusKeywordField !== undefined
 
   const [expanded, setExpanded] = useState(true)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -165,12 +182,40 @@ export function SeoPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryId, hasAnyField, JSON.stringify(values)])
 
+  /**
+   * Fiche 70 task 1 — recomputed on every render, never debounced and never
+   * an API call: `analyseContent` is a pure, synchronous function, which is
+   * exactly what lets the score "changer en direct pendant la frappe" (the
+   * fiche's own acceptance criterion) rather than trailing the 300ms preview
+   * above. Falls back to the entry's own `title`/`excerpt` fields when no
+   * `seoTitle`/`seoDescription` override has been typed — the same
+   * "what will actually render" question `preview` answers server-side,
+   * approximated here without a round trip.
+   */
+  const contentAnalysis = useMemo(() => {
+    if (focusKeywordField === undefined && bodyValue === undefined) return null
+    const titleForAnalysis =
+      stringValue(values, 'seoTitle') || stringValue(values, 'title') || preview?.title || ''
+    const descriptionForAnalysis =
+      stringValue(values, 'seoDescription') ||
+      stringValue(values, 'excerpt') ||
+      preview?.description
+    return analyseContent({
+      title: titleForAnalysis,
+      ...(descriptionForAnalysis ? { description: descriptionForAnalysis } : {}),
+      focusKeyword: stringValue(values, 'seoFocusKeyword'),
+      body: bodyValue,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKeywordField, bodyValue, JSON.stringify(values), preview?.title, preview?.description])
+
   if (!hasAnyField) return null
 
   const titleValue = stringValue(values, 'seoTitle')
   const descriptionValue = stringValue(values, 'seoDescription')
   const canonicalValue = stringValue(values, 'seoCanonical')
   const noindexValue = values['seoNoindex'] === true
+  const focusKeywordValue = stringValue(values, 'seoFocusKeyword')
 
   async function suggestTitles(): Promise<void> {
     if (suggestingTitle) return
@@ -338,6 +383,20 @@ export function SeoPanel({
             </Notice>
           )}
 
+          {focusKeywordField !== undefined && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="seo-focus-keyword">{t('seo.focusKeywordLabel')}</Label>
+              <Input
+                id="seo-focus-keyword"
+                value={focusKeywordValue}
+                disabled={disabled}
+                placeholder={t('seo.focusKeywordPlaceholder')}
+                onChange={(event) => onChange('seoFocusKeyword', event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">{t('seo.focusKeywordHint')}</p>
+            </div>
+          )}
+
           {imageField !== undefined && (
             <FieldInput
               id="seo-image"
@@ -425,8 +484,81 @@ export function SeoPanel({
               </div>
             )}
           </div>
+
+          {contentAnalysis !== null && (
+            <ContentScoreCard
+              analysis={contentAnalysis}
+              hasFocusKeyword={focusKeywordValue !== ''}
+            />
+          )}
         </CardBody>
       )}
     </Card>
+  )
+}
+
+const SCORE_TONE: Readonly<Record<'red' | 'orange' | 'green', string>> = {
+  red: 'bg-destructive/15 text-destructive',
+  orange: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  green: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+}
+
+/**
+ * Fiche 70 task 1 — TruSEO-style real-time content score, rendered under the
+ * Google preview per the fiche's own placement instruction. Three levels,
+ * never a percentage: the fiche names the piège by name — "un faux
+ * sentiment de précision est pire qu'une absence de score" — so this card
+ * never prints `analysis.passedCount / analysis.totalCount` as a number,
+ * only the closed red/orange/green union `analyseContent` itself returns.
+ */
+function ContentScoreCard({
+  analysis,
+  hasFocusKeyword,
+}: {
+  readonly analysis: ReturnType<typeof analyseContent>
+  readonly hasFocusKeyword: boolean
+}): JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="m-0 text-sm font-semibold text-foreground">
+          {t('seo.contentScoreHeading')}
+        </h3>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${SCORE_TONE[analysis.score]}`}
+        >
+          {t(`seo.scoreLevel.${analysis.score}`)}
+        </span>
+      </div>
+      {!hasFocusKeyword && (
+        <p className="text-xs text-muted-foreground">{t('seo.contentScoreNoKeywordHint')}</p>
+      )}
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {CHECK_ORDER.map((id) => {
+          const check = analysis.checks.find((candidate) => candidate.id === id)
+          if (check === undefined) return null
+          return (
+            <li key={id} className="flex items-start gap-2 text-sm">
+              <span
+                aria-hidden="true"
+                className={
+                  check.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+                }
+              >
+                {check.passed ? '✓' : '✗'}
+              </span>
+              <span className={check.passed ? 'text-foreground' : 'text-foreground'}>
+                {t(`seo.contentCheck.${id}`)}
+                <span className="sr-only">
+                  {check.passed ? t('seo.contentCheckPassed') : t('seo.contentCheckFailed')}
+                </span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

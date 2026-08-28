@@ -595,6 +595,19 @@ export const ERROR_CODES = [
   // the two map to different HTTP statuses (400 vs 404).
   'PROMPT_TEMPLATE_INVALID',
 
+  // Google Search Console connector (fiche 70 task 4, ADR-0032). Same shape
+  // as `AGENT_NO_PROVIDER`/`SITE_PLAN_NO_PROVIDER`: nothing is broken, this
+  // installation simply has no OAuth app configured (R1/R2). `NOT_CONNECTED`
+  // is a plain "no site has gone through the OAuth flow yet" state, distinct
+  // from "the connector isn't offered at all". The three `*_FAILED`/`*_INVALID`
+  // codes describe Google's own token/query endpoints refusing a real request
+  // — an upstream failure the caller cannot fix by retrying identically.
+  'SEARCH_CONSOLE_NOT_CONFIGURED',
+  'SEARCH_CONSOLE_NOT_CONNECTED',
+  'SEARCH_CONSOLE_STATE_INVALID',
+  'SEARCH_CONSOLE_TOKEN_EXCHANGE_FAILED',
+  'SEARCH_CONSOLE_QUERY_FAILED',
+
   // Catch-all, deliberately last and deliberately rare.
   'INTERNAL',
 ] as const

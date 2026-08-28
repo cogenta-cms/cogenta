@@ -16,6 +16,14 @@
  * (rule R5).
  */
 
+export type {
+  ContentAnalysisInput,
+  ContentAnalysisResult,
+  ContentCheck,
+  ContentCheckId,
+  ContentScoreLevel,
+} from './content-analysis.js'
+export { analyseContent } from './content-analysis.js'
 export type { FeedInput, FeedItem, FeedItemsOptions } from './feeds.js'
 export { feedItemsFor, renderAtomFeed, renderRssFeed, toRfc822 } from './feeds.js'
 export type { HreflangAlternate, TranslationFamily } from './hreflang.js'
@@ -26,6 +34,8 @@ export type { IndexNowFetch, IndexNowOptions, IndexNowResult } from './indexnow.
 export { INDEXNOW_MAX_URLS, indexNowKeyFile, pingIndexNow } from './indexnow.js'
 export type { JsonLdObject, JsonLdOptions, JsonLdValue } from './json-ld.js'
 export { buildJsonLd, renderJsonLdScript, schemaTypeFor } from './json-ld.js'
+export type { LinkAssistantReport, LinkSuggestion, OrphanEntry } from './link-assistant.js'
+export { analyseInternalLinks } from './link-assistant.js'
 export type {
   LlmsTxtLink,
   LlmsTxtOptions,
@@ -42,6 +52,19 @@ export {
 } from './metadata.js'
 export type { RobotsGroup, RobotsOptions } from './robots.js'
 export { renderRobotsTxt, robotsRuleDisallowsEverything } from './robots.js'
+export type {
+  SearchAnalyticsQueryOptions,
+  SearchConsoleFetch,
+  SearchConsoleMetricsRow,
+  SearchConsoleOAuthOptions,
+  SearchConsoleTokens,
+} from './search-console.js'
+export {
+  buildAuthorizationUrl,
+  exchangeAuthorizationCode,
+  fetchSearchAnalytics,
+  refreshAccessToken,
+} from './search-console.js'
 export type {
   ChangeFrequency,
   SitemapCollectionOverride,

@@ -4,6 +4,16 @@ import type { BudgetLimits } from '../budget/types.js'
 export interface AgentModelPreference {
   readonly preferred: string
   readonly fallback?: string
+  /**
+   * Fiche 55 task 2 — an explicit model id (e.g. "claude-sonnet-5") this one
+   * agent should use, distinct from `preferred`/`fallback` (which name a
+   * *provider*, not a model). Optional and additive: absent means "use
+   * whatever model the resolved provider is configured with" — the
+   * behaviour every agent had before this field existed. Applied by
+   * `orchestrator.ts`'s `resolveProvider`, which returns a `ProviderClient`
+   * whose `model` is overridden to this value when set.
+   */
+  readonly model?: string
 }
 
 export interface AgentTrigger {

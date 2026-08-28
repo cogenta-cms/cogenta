@@ -130,6 +130,16 @@ export const SITE_SETTING_GROUPS = [
    * person signing in, and a fresh install pulling the same database.
    */
   'navigation',
+  /**
+   * Fiche 59 — the one non-secret, operator-set fact a channel's step-by-step
+   * guide needs to name the bot by handle instead of "the Cogenta bot": each
+   * channel's bot display name/handle, free text, never a credential. Bot
+   * *tokens* stay environment-only (R7) and never enter this table — this
+   * group exists specifically so a guide can say "open a chat with
+   * @my_cogenta_bot" without ever storing anything a leaked table could turn
+   * into a working credential.
+   */
+  'channels',
 ] as const
 
 export type SiteSettingGroup = (typeof SITE_SETTING_GROUPS)[number]
@@ -195,6 +205,52 @@ const titleTemplateOrEmpty = z
 const collectionTitleTemplates = z.record(z.string(), titleTemplateOrEmpty)
 
 const metaDescriptionOrEmpty = z.string().max(500)
+
+/**
+ * A Google/Bing site-verification token, or empty (fiche 50 task 2). Neither
+ * provider documents a fixed format — Google's runs to roughly 44 base64-ish
+ * characters, Bing's is a GUID — so this only rules out whitespace and quote
+ * characters rather than pinning a shape that would break the moment either
+ * provider changes its own generator. The value is rendered into a
+ * `<meta content="…">` attribute, HTML-escaped there (`escapeHtmlAttribute`)
+ * exactly like every other user-supplied attribute this codebase emits, so
+ * this schema's job is plausibility, not the actual injection guard.
+ */
+const siteVerificationTokenOrEmpty = z
+  .string()
+  .max(255)
+  .regex(/^[^\s<>"']*$/u, {
+    error:
+      'Must be empty, or the verification token as the provider gave it — no spaces or quotes.',
+  })
+
+/**
+ * IndexNow's own key format (fiche 50 task 3) — mirrors `@cogenta/seo`'s
+ * `KEY_PATTERN` (`indexnow.ts`) verbatim. Duplicated rather than imported:
+ * `@cogenta/schema` cannot depend on `@cogenta/seo`, which depends on it the
+ * other way round.
+ */
+const indexNowKeyOrEmpty = z
+  .string()
+  .max(128)
+  .regex(/^$|^[a-fA-F0-9]{8,128}$/u, {
+    error:
+      'Must be empty, or 8 to 128 hexadecimal characters — generate one with crypto.randomUUID().replaceAll("-", "").',
+  })
+
+/**
+ * A channel bot's display name/handle (fiche 59) — free text, deliberately
+ * unconstrained in shape: `@my_bot` (Telegram), an app name (Slack), or
+ * `MyBot#1234` (Discord) are all valid, and this field's only job is
+ * plausibility (no newline, a sane length), never a format check tied to one
+ * platform. Never a credential — see this key's own registry entry.
+ */
+const botNameOrEmpty = z
+  .string()
+  .max(80)
+  .refine((value) => !/[\r\n]/u.test(value), {
+    error: 'A bot name is a single line — remove any line break.',
+  })
 
 /** A Twitter/X `@handle` for `twitter:site`, or empty. */
 const twitterHandleOrEmpty = z
@@ -788,6 +844,91 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },
+  // Fiche 50 tasks 2-5 — search-engine verification, a hand-written
+  // robots.txt addendum, and the two off-by-default indexing extras
+  // (`indexnow.ts`/`llms-txt.ts`) that were written and unit-tested back in
+  // L3/L9 but never wired to a route or a setting until now.
+  {
+    key: 'seo.googleSiteVerification',
+    group: 'seo',
+    order: 6,
+    uiType: 'string',
+    scope: 'site',
+    // Rendered verbatim into `<meta name="google-site-verification" content="…">`
+    // — no OAuth, no Search Console API call (R1/R7): this is the same
+    // "paste the token Google's own verification page shows you" flow every
+    // other CMS offers next to domain/DNS verification.
+    schema: siteVerificationTokenOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.bingSiteVerification',
+    group: 'seo',
+    order: 7,
+    uiType: 'string',
+    scope: 'site',
+    // Rendered into `<meta name="msvalidate.01" content="…">` — Bing
+    // Webmaster Tools' own meta-tag verification method, same reasoning as
+    // `googleSiteVerification` above.
+    schema: siteVerificationTokenOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.robotsCustomRules',
+    group: 'seo',
+    order: 8,
+    // Bypassed the same way `collectionTitleTemplates` is — `SeoRoute`'s
+    // Diagnostics tab renders this one key with a bespoke textarea that
+    // confirms before saving a rule that would block every crawler
+    // (`Disallow: /`), a piège the fiche names explicitly.
+    uiType: 'text',
+    scope: 'site',
+    // Free-form robots.txt lines, merged after the derived group and before
+    // the `Sitemap:` directive (`renderRobotsTxt`'s own `customRules`
+    // option). Not `assertSingleLine`-checked like a single directive value:
+    // this field is deliberately multi-line.
+    schema: freeText,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.indexNowEnabled',
+    group: 'seo',
+    order: 9,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // Off by default: pinging a third-party endpoint on every publish is
+    // real, deliberate behaviour an admin opts into, the same reasoning
+    // `updates.autoUpdatePolicy` gives for defaulting off.
+    defaultValue: false,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.indexNowKey',
+    group: 'seo',
+    order: 10,
+    uiType: 'string',
+    scope: 'site',
+    schema: indexNowKeyOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'seo.llmsTxtEnabled',
+    group: 'seo',
+    order: 11,
+    uiType: 'boolean',
+    scope: 'site',
+    schema: z.boolean(),
+    // Off by default, same reasoning as `indexNowEnabled`: `llms.txt` lists
+    // every published title site-wide, which an admin should choose to
+    // expose rather than find already on by an install nobody configured.
+    defaultValue: false,
+    writeRoles: ADMIN_ONLY,
+  },
 
   // Observability (fiche L22 task 5) — whether the local trace/log
   // collection behind the admin's "Exploitation" screen runs, and how
@@ -909,6 +1050,45 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     uiType: 'string',
     scope: 'site',
     schema: navTokenList,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+
+  // Channels (fiche 59) — the operator-entered, non-secret bot handle each
+  // channel's in-admin step-by-step guide names, so a person linking their
+  // account reads "open a chat with @my_cogenta_bot" instead of a generic
+  // placeholder. Free text on purpose (`botNameOrEmpty`, not a `path`/`email`
+  // shape): a Telegram handle, a Slack app name and a Discord tag
+  // (`MyBot#1234`) have three different formats, and this field never
+  // validates against any of them — the real bot credential (the token) is
+  // environment-only (R7) and has no row anywhere in this table.
+  {
+    key: 'channels.telegramBotName',
+    group: 'channels',
+    order: 0,
+    uiType: 'string',
+    scope: 'site',
+    schema: botNameOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'channels.slackBotName',
+    group: 'channels',
+    order: 1,
+    uiType: 'string',
+    scope: 'site',
+    schema: botNameOrEmpty,
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'channels.discordBotName',
+    group: 'channels',
+    order: 2,
+    uiType: 'string',
+    scope: 'site',
+    schema: botNameOrEmpty,
     defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },

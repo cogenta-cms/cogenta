@@ -7,8 +7,8 @@ import {
 } from '../src/commands/theme-registry.js'
 
 describe('theme registry (fiche L23)', () => {
-  it('lists the default theme among what this build can offer', () => {
-    const themes = availableThemes()
+  it('lists the default theme among what this build can offer', async () => {
+    const themes = await availableThemes()
     expect(themes.some((theme) => theme.name === DEFAULT_THEME_NAME)).toBe(true)
     // Every listed name must resolve — a picker that shows an entry
     // `resolveTheme` cannot actually load would let an admin select a theme
@@ -16,6 +16,18 @@ describe('theme registry (fiche L23)', () => {
     for (const theme of themes) {
       expect(BUILTIN_THEMES.some((builtin) => builtin.name === theme.name)).toBe(true)
     }
+  })
+
+  it('reads label from the registry and description/version/author from the loaded manifest (fiche 48)', async () => {
+    const themes = await availableThemes()
+    const canonical = themes.find((theme) => theme.name === DEFAULT_THEME_NAME)
+    expect(canonical).toBeDefined()
+    expect(canonical?.label).toBe('Canonical')
+    // The manifest, not a hardcoded string in this file — theme.config.ts is
+    // what fiche 48 task 2 populated, and this is what task 3 must read.
+    expect(canonical?.description).toContain('reference theme')
+    expect(canonical?.version).toBe('1.1.0')
+    expect(canonical?.author).toBe('Cogenta')
   })
 
   it('resolves the default theme for null, undefined and an unrecognised name alike', async () => {

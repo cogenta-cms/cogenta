@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next'
 import {
   type Coupon,
   type CouponKind,
+  type CouponMetrics,
   createCoupon,
   deactivateCoupon,
+  getCouponMetrics,
   listCoupons,
 } from '../api/commerce-client.js'
 import { ApiError } from '../api/http.js'
@@ -42,6 +44,7 @@ export function CommerceCouponsRoute(): JSX.Element {
   const canRead = roles.length > 0
 
   const [coupons, setCoupons] = useState<readonly Coupon[]>([])
+  const [metrics, setMetrics] = useState<CouponMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -54,6 +57,8 @@ export function CommerceCouponsRoute(): JSX.Element {
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [maxRedemptions, setMaxRedemptions] = useState('')
+  const [maxRedemptionsPerCustomer, setMaxRedemptionsPerCustomer] = useState('')
+  const [restrictedProductIds, setRestrictedProductIds] = useState('')
 
   const load = useCallback(async () => {
     if (token === null || !canRead) return
@@ -62,6 +67,11 @@ export function CommerceCouponsRoute(): JSX.Element {
     try {
       const { coupons: list } = await listCoupons(token)
       setCoupons(list)
+      // Best-effort: a metrics failure must not stop the coupon list itself
+      // from loading, so it is fetched and swallowed separately.
+      await getCouponMetrics(token)
+        .then(setMetrics)
+        .catch(() => setMetrics(null))
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('commerceCoupons.loadError'))
     } finally {
@@ -104,6 +114,17 @@ export function CommerceCouponsRoute(): JSX.Element {
         ...(startsAt === '' ? {} : { startsAt: new Date(startsAt).toISOString() }),
         ...(endsAt === '' ? {} : { endsAt: new Date(endsAt).toISOString() }),
         ...(maxRedemptions === '' ? {} : { maxRedemptions: Number.parseInt(maxRedemptions, 10) }),
+        ...(maxRedemptionsPerCustomer === ''
+          ? {}
+          : { maxRedemptionsPerCustomer: Number.parseInt(maxRedemptionsPerCustomer, 10) }),
+        ...(restrictedProductIds.trim() === ''
+          ? {}
+          : {
+              restrictedProductIds: restrictedProductIds
+                .split(',')
+                .map((id) => id.trim())
+                .filter((id) => id !== ''),
+            }),
       })
       setCreating(false)
       setCode('')
@@ -111,6 +132,8 @@ export function CommerceCouponsRoute(): JSX.Element {
       setStartsAt('')
       setEndsAt('')
       setMaxRedemptions('')
+      setMaxRedemptionsPerCustomer('')
+      setRestrictedProductIds('')
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('commerceCoupons.createError'))
@@ -152,6 +175,19 @@ export function CommerceCouponsRoute(): JSX.Element {
         <Button onClick={() => setCreating(true)}>{t('commerceCoupons.newButton')}</Button>
       </div>
 
+      {metrics !== null && (
+        <dl className="flex flex-wrap gap-6 text-sm">
+          <div>
+            <dt className="text-muted-foreground">{t('commerceCoupons.metricsActive')}</dt>
+            <dd className="m-0 text-lg font-semibold">{metrics.activeCoupons}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{t('commerceCoupons.metricsRedemptions')}</dt>
+            <dd className="m-0 text-lg font-semibold">{metrics.totalRedemptions}</dd>
+          </div>
+        </dl>
+      )}
+
       {actionError !== null && (
         <Notice tone="danger" live="assertive">
           <p>{actionError}</p>
@@ -184,12 +220,30 @@ export function CommerceCouponsRoute(): JSX.Element {
                   <TableCell>{t(`commerceCoupons.kind.${coupon.kind}`)}</TableCell>
                   <TableCell>{describeValue(coupon)}</TableCell>
                   <TableCell>
-                    {coupon.maxRedemptions === null
-                      ? t('commerceCoupons.unlimited', { used: coupon.redemptions })
-                      : t('commerceCoupons.limited', {
-                          used: coupon.redemptions,
-                          max: coupon.maxRedemptions,
-                        })}
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        {coupon.maxRedemptions === null
+                          ? t('commerceCoupons.unlimited', { used: coupon.redemptions })
+                          : t('commerceCoupons.limited', {
+                              used: coupon.redemptions,
+                              max: coupon.maxRedemptions,
+                            })}
+                      </span>
+                      {coupon.maxRedemptionsPerCustomer !== null && (
+                        <span className="text-xs text-muted-foreground">
+                          {t('commerceCoupons.perCustomerLimitLabel', {
+                            max: coupon.maxRedemptionsPerCustomer,
+                          })}
+                        </span>
+                      )}
+                      {(coupon.restrictedProductIds?.length ?? 0) > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {t('commerceCoupons.restrictedLabel', {
+                            count: coupon.restrictedProductIds.length,
+                          })}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {coupon.active ? t('commerceCoupons.active') : t('commerceCoupons.inactive')}
@@ -307,17 +361,45 @@ export function CommerceCouponsRoute(): JSX.Element {
               )}
             </Field>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label={t('commerceCoupons.maxRedemptions')}
+              description={t('commerceCoupons.maxRedemptionsHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  type="number"
+                  min={1}
+                  value={maxRedemptions}
+                  onChange={(event) => setMaxRedemptions(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('commerceCoupons.maxRedemptionsPerCustomer')}
+              description={t('commerceCoupons.maxRedemptionsPerCustomerHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  type="number"
+                  min={1}
+                  value={maxRedemptionsPerCustomer}
+                  onChange={(event) => setMaxRedemptionsPerCustomer(event.target.value)}
+                />
+              )}
+            </Field>
+          </div>
           <Field
-            label={t('commerceCoupons.maxRedemptions')}
-            description={t('commerceCoupons.maxRedemptionsHint')}
+            label={t('commerceCoupons.restrictedProductIds')}
+            description={t('commerceCoupons.restrictedProductIdsHint')}
           >
             {(control) => (
               <Input
                 {...control}
-                type="number"
-                min={1}
-                value={maxRedemptions}
-                onChange={(event) => setMaxRedemptions(event.target.value)}
+                value={restrictedProductIds}
+                onChange={(event) => setRestrictedProductIds(event.target.value)}
               />
             )}
           </Field>

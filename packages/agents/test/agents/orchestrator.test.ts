@@ -304,6 +304,63 @@ describe('createAgentRunner', () => {
     })
   })
 
+  it("fiche 55 task 2: an explicit model.model overrides the provider client's own configured model", async () => {
+    await agents.create({
+      name: 'Cogenta Agent',
+      identity: { role: 'r', objectives: [] },
+      model: { preferred: 'anthropic', model: 'claude-opus-5' },
+      tools: [],
+    })
+    const client = scriptedClient('anthropic', [
+      { content: 'done', toolCalls: [], stopReason: 'end_turn', usage: USAGE },
+    ]) as ProviderClient & { calls: ChatRequest[] }
+    // The client's own configured model is "anthropic-model" (see
+    // `scriptedClient`) — the agent asks for "claude-opus-5" instead.
+    expect(client.model).toBe('anthropic-model')
+
+    const runner = createAgentRunner({
+      agents,
+      skills,
+      tools,
+      providers: { has: (name) => name === 'anthropic', get: () => client },
+      auditLog: memoryAuditLog(),
+      approvalQueue: createMemoryApprovalQueue(),
+      site: SITE,
+      killSwitchFor,
+    })
+
+    await runner.run('Cogenta Agent', { instruction: 'do something' })
+
+    expect(client.calls[0]?.model).toBe('claude-opus-5')
+  })
+
+  it("with no model.model set, the request still uses the client's own configured model (backward compat)", async () => {
+    await agents.create({
+      name: 'Cogenta Agent',
+      identity: { role: 'r', objectives: [] },
+      model: { preferred: 'anthropic' },
+      tools: [],
+    })
+    const client = scriptedClient('anthropic', [
+      { content: 'done', toolCalls: [], stopReason: 'end_turn', usage: USAGE },
+    ]) as ProviderClient & { calls: ChatRequest[] }
+
+    const runner = createAgentRunner({
+      agents,
+      skills,
+      tools,
+      providers: { has: (name) => name === 'anthropic', get: () => client },
+      auditLog: memoryAuditLog(),
+      approvalQueue: createMemoryApprovalQueue(),
+      site: SITE,
+      killSwitchFor,
+    })
+
+    await runner.run('Cogenta Agent', { instruction: 'do something' })
+
+    expect(client.calls[0]?.model).toBe('anthropic-model')
+  })
+
   it('delegates to a named sub-agent via agent.delegate.<slug>, running the sub-agent’s own provider and tools', async () => {
     await agents.create({
       name: 'Helper',

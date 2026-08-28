@@ -45,6 +45,34 @@ describe('the theme manifest', () => {
 
     expect(() => parseThemeManifest(withoutTokens)).toThrowError(/tokens/u)
   })
+
+  // theme@1.2 (fiche 48): `description`/`author` are optional additions —
+  // a manifest written before this version, with neither field, must keep
+  // validating exactly as before (the `valid` fixture above already omits
+  // both, and every test above it already proves that), and a manifest that
+  // does declare them must carry them through untouched.
+  it('validates without the theme@1.2 description/author fields (fiche 48)', () => {
+    const manifest = defineTheme(valid)
+    expect(manifest.description).toBeUndefined()
+    expect(manifest.author).toBeUndefined()
+    expect(Object.hasOwn(manifest, 'description')).toBe(false)
+    expect(Object.hasOwn(manifest, 'author')).toBe(false)
+  })
+
+  it('validates with the theme@1.2 description/author fields, and carries them through (fiche 48)', () => {
+    const manifest = defineTheme({
+      ...valid,
+      description: 'The reference theme.',
+      author: 'Cogenta',
+    })
+    expect(manifest.description).toBe('The reference theme.')
+    expect(manifest.author).toBe('Cogenta')
+  })
+
+  it('refuses an empty description or author rather than storing a blank line in the gallery', () => {
+    expect(() => parseThemeManifest({ ...valid, description: '' })).toThrowError(/description/u)
+    expect(() => parseThemeManifest({ ...valid, author: '' })).toThrowError(/author/u)
+  })
 })
 
 describe('loading the active theme from the configuration', () => {

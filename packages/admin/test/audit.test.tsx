@@ -130,6 +130,39 @@ describe('audit log', () => {
     expect(document.body.textContent).toContain("Journal d'audit")
   })
 
+  it('loads a further page of entries on demand, rather than all of them at once (fiche 67 task 1)', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    // 60 entries — past the screen's 50-entry page size, so a second page
+    // genuinely exists to load.
+    const auditEntries = Array.from({ length: 60 }, (_, index) => ({
+      id: `bulk-${index}`,
+      at: new Date(2026, 0, 1, 0, index).toISOString(),
+      actorId: 'user-1',
+      actorRoles: ['editor'],
+      action: 'content.create',
+      collection: 'article',
+      entryId: `entry-${index}`,
+      diff: null,
+      version: 1,
+      hash: `hash-${index}`,
+      previousHash: null,
+    }))
+    installMockFetch({ roles: ['admin'], auditEntries })
+
+    render(<App />)
+    await goToAudit()
+
+    // Newest first: entry 59 (the last minute) is on the first page, entry 0
+    // (the earliest) is not — until "Charger plus" is clicked.
+    await screen.findByText('entry-59')
+    expect(screen.queryByText('entry-0')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Charger plus' }))
+
+    await screen.findByText('entry-0')
+  })
+
   it('shows the scheduled integrity check status alongside the manual button', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)

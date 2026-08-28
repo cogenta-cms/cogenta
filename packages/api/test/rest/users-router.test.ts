@@ -314,6 +314,34 @@ describe('PATCH /api/users/{id}', () => {
     expect(await auth.sessions.resolve(session.token)).toBeNull()
   })
 
+  it('writes an audit entry naming what changed (fiche 61 task 1)', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const editor = await makeUser('ed@example.com', ['editor'])
+
+    await router().handle(
+      request('PATCH', `/api/users/${editor.id}`, { roles: ['reviewer'], status: 'disabled' }),
+      actorFor(admin.id, ['admin']),
+    )
+
+    const entries = await auth.audit.list({ actorId: admin.id, action: 'user.update' })
+    const entry = entries.find((e) => e.entryId === editor.id)
+    expect(entry).toBeDefined()
+    expect(entry?.diff).toEqual({ roles: ['reviewer'], status: 'disabled' })
+  })
+
+  it('writes no audit entry when the change is refused', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const editor = await makeUser('ed@example.com', ['editor'])
+
+    await router().handle(
+      request('PATCH', `/api/users/${editor.id}`, { status: 'deleted' }),
+      actorFor(admin.id, ['admin']),
+    )
+
+    const entries = await auth.audit.list({ actorId: admin.id, action: 'user.update' })
+    expect(entries.find((e) => e.entryId === editor.id)).toBeUndefined()
+  })
+
   it('refuses a change with nothing in it', async () => {
     const admin = await makeUser('root@example.com', ['admin'])
     const editor = await makeUser('ed@example.com', ['editor'])
@@ -892,6 +920,32 @@ describe('invitations', () => {
       )
       expect(cancel.status).toBe(403)
     })
+
+    it('writes an audit entry when an invitation is resent (fiche 61 task 1)', async () => {
+      const { admin, userId } = await invitedUser()
+
+      const resent = await router({ onInvite: async () => undefined }).handle(
+        request('POST', `/api/users/${userId}/invite`),
+        actorFor(admin.id, ['admin']),
+      )
+      expect(resent.status).toBe(200)
+
+      const entries = await auth.audit.list({ actorId: admin.id, action: 'user.invite_resend' })
+      expect(entries.find((e) => e.entryId === userId)).toBeDefined()
+    })
+
+    it('writes an audit entry when an invitation is cancelled (fiche 61 task 1)', async () => {
+      const { admin, userId } = await invitedUser()
+
+      const cancelled = await router().handle(
+        request('DELETE', `/api/users/${userId}/invite`),
+        actorFor(admin.id, ['admin']),
+      )
+      expect(cancelled.status).toBe(204)
+
+      const entries = await auth.audit.list({ actorId: admin.id, action: 'user.invite_cancel' })
+      expect(entries.find((e) => e.entryId === userId)).toBeDefined()
+    })
   })
 
   it('invalidates the outstanding invitation token when the role changes before acceptance', async () => {
@@ -1073,6 +1127,39 @@ describe('POST /api/users/bulk (fiche 17 task 2)', () => {
       actorFor(admin.id, ['admin']),
     )
     expect(response.status).toBe(400)
+  })
+
+  it('writes one audit entry per account it actually changed (fiche 61 task 1)', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const a = await makeUser('a@example.com', ['editor'])
+    const b = await makeUser('b@example.com', ['editor'])
+
+    const response = await router().handle(
+      request('POST', '/api/users/bulk', { action: 'disable', ids: [a.id, b.id] }),
+      actorFor(admin.id, ['admin']),
+    )
+    expect(response.status).toBe(200)
+
+    const entries = await auth.audit.list({ actorId: admin.id, action: 'user.update' })
+    const entryFor = (id: string) => entries.find((e) => e.entryId === id)
+    expect(entryFor(a.id)?.diff).toEqual({ status: 'disabled' })
+    expect(entryFor(b.id)?.diff).toEqual({ status: 'disabled' })
+  })
+
+  it('does not write an audit entry for an account the bulk action refused', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const a = await makeUser('a@example.com', ['editor'])
+    const secondAdmin = await makeUser('second-admin@example.com', ['admin'])
+    await auth.users.setRoles(admin.id, ['editor'])
+
+    await router().handle(
+      request('POST', '/api/users/bulk', { action: 'disable', ids: [a.id, secondAdmin.id] }),
+      actorFor(secondAdmin.id, ['admin']),
+    )
+
+    const entries = await auth.audit.list({ actorId: secondAdmin.id, action: 'user.update' })
+    expect(entries.find((e) => e.entryId === a.id)).toBeDefined()
+    expect(entries.find((e) => e.entryId === secondAdmin.id)).toBeUndefined()
   })
 })
 

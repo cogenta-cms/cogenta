@@ -214,3 +214,24 @@ qu'il n'a pas importé.
 - Anti-spam : quelles heuristiques par défaut, et quel point d'extension.
 - Rétention des indésirables : purge automatique après N jours (recommandé : 30, comme
   la corbeille).
+
+## 9. Ajout demandé (2026-08-28, retour utilisateur direct) — interrupteur global
+
+Un site vitrine n'a souvent pas besoin de commentaires du tout. Demande explicite :
+un réglage global (`comments.enabled`, site-wide, via `SiteSettingsStore` — même
+mécanisme que les réglages `seo.*`/`channels.*` déjà en place) qui, une fois
+désactivé :
+
+- retire le formulaire de soumission de commentaire du rendu public (thème),
+  jamais seulement masqué en CSS ;
+- retire l'affichage des commentaires déjà existants sur les pages publiques
+  (ils restent en base, rien n'est supprimé — un site peut réactiver plus tard et
+  retrouver son historique) ;
+- retire l'entrée « Commentaires » du menu de l'admin si aucun commentaire
+  n'existe déjà (même logique que `commerceActiveOrAdmin` dans `nav-visibility.ts`
+  — visible si un commentaire existe malgré la désactivation, pour pouvoir les
+  consulter/purger).
+
+À intégrer dans le plan de développement de cette fiche 15 (probablement une tâche
+0bis, juste après le choix de domaine) plutôt que traité comme un lot séparé — le
+réglage n'a de sens qu'une fois le domaine commentaires construit.

@@ -193,37 +193,43 @@ export function RepeaterField({
                 </div>
 
                 <div className="repeater-field__item-fields">
-                  {items.map((itemField) =>
-                    itemField.kind === 'link' ? (
-                      <LinkTargetField
-                        key={itemField.name}
-                        id={`${itemId}-${itemField.name}`}
-                        label={itemField.admin?.label ?? itemField.name}
-                        required={itemField.required}
-                        value={item[itemField.name] as LinkTargetValue}
-                        onChange={(next) => updateAt(index, itemField.name, next)}
-                        disabled={disabled}
-                      />
-                    ) : (
-                      <FieldInput
-                        key={itemField.name}
-                        id={`${itemId}-${itemField.name}`}
-                        field={{
-                          name: itemField.name,
-                          kind: itemField.kind,
-                          required: itemField.required,
-                          localized: itemField.localized,
-                          unique: false,
-                          hasCustomValidation: false,
-                          options: itemField.options,
-                          ...(itemField.admin === undefined ? {} : { admin: itemField.admin }),
-                        }}
-                        value={item[itemField.name] ?? defaultValueFor(itemField.kind)}
-                        onChange={(next) => updateAt(index, itemField.name, next)}
-                        disabled={disabled}
-                      />
-                    ),
-                  )}
+                  {items
+                    .filter(
+                      (itemField) =>
+                        itemField.visibleWhen === undefined ||
+                        itemField.visibleWhen.equals.includes(item[itemField.visibleWhen.field]),
+                    )
+                    .map((itemField) =>
+                      itemField.kind === 'link' ? (
+                        <LinkTargetField
+                          key={itemField.name}
+                          id={`${itemId}-${itemField.name}`}
+                          label={itemField.admin?.label ?? itemField.name}
+                          required={itemField.required}
+                          value={item[itemField.name] as LinkTargetValue}
+                          onChange={(next) => updateAt(index, itemField.name, next)}
+                          disabled={disabled}
+                        />
+                      ) : (
+                        <FieldInput
+                          key={itemField.name}
+                          id={`${itemId}-${itemField.name}`}
+                          field={{
+                            name: itemField.name,
+                            kind: itemField.kind,
+                            required: itemField.required,
+                            localized: itemField.localized,
+                            unique: false,
+                            hasCustomValidation: false,
+                            options: itemField.options,
+                            ...(itemField.admin === undefined ? {} : { admin: itemField.admin }),
+                          }}
+                          value={item[itemField.name] ?? defaultValueFor(itemField.kind)}
+                          onChange={(next) => updateAt(index, itemField.name, next)}
+                          disabled={disabled}
+                        />
+                      ),
+                    )}
                 </div>
               </li>
             )

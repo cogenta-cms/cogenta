@@ -8,6 +8,7 @@ import {
   type MetadataOptions,
   type MetaTag,
   renderRobotsTxt,
+  robotsRuleDisallowsEverything,
   type SeoImage,
   type SeoResource,
   type SeoSite,
@@ -58,6 +59,14 @@ export interface SeoRouterOptions {
   }>
   /** `false` blocks every crawler outright — a staging safeguard, mirrored in the diagnostic as a loud warning. Defaults to `true`. */
   readonly allowIndexing?: boolean
+  /**
+   * An admin's own robots.txt lines (fiche 50 task 4), read fresh like
+   * `titleDefaults` above — the diagnostic's `robots.content` must show the
+   * exact document `/robots.txt` serves, custom rules included, or the
+   * Diagnostics screen would show a robots.txt nobody's crawler ever sees.
+   * Absent contributes nothing, exactly like an admin who never set one.
+   */
+  readonly robotsCustomRules?: () => Promise<string>
   /** Mount point. `/api/seo` by default. */
   readonly basePath?: string
   /** How many entries a diagnostic scan reads per collection before it stops counting. */
@@ -475,13 +484,21 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
       duplicateTitles.push({ title, entries })
     }
 
+    const customRules =
+      options.robotsCustomRules === undefined ? '' : await options.robotsCustomRules()
     const robotsContent = renderRobotsTxt({
       site: options.site,
       sitemaps: ['/sitemap.xml'],
       groups: [{ userAgent: '*', allow: ['/'], disallow: ['/admin', '/api/'] }],
       allowIndexing,
+      ...(customRules === '' ? {} : { customRules }),
     })
-    const disallowsEverything = !allowIndexing
+    // A hand-written `Disallow: /` blocks the whole site exactly like
+    // `allowIndexing: false` does — the admin's confirm-before-save gate on
+    // the custom-rules editor is the primary defence, but the diagnostic
+    // must still name it as loudly as the staging safeguard, since it has
+    // the same effect on every crawler.
+    const disallowsEverything = !allowIndexing || robotsRuleDisallowsEverything(customRules)
 
     const anomalies: SeoAnomaly[] = []
     if (totalUrls === 0 && publishedResources.length > 0) {

@@ -100,7 +100,15 @@ export function activeAdminThemeTemplate(state: AdminThemeState): AdminThemeTemp
   )
 }
 
-export function buildAdminThemeCss(state: AdminThemeState): string {
+/**
+ * `selector` defaults to `:root`, the whole-page override
+ * `admin-theme-context.tsx` applies to `<head>`. `admin-theme-preview.tsx`
+ * (fiche 49 tasks 2-3) passes a scoped attribute selector instead, so the
+ * exact same template/override resolution paints a self-contained preview
+ * panel rather than the running admin around it — the mechanism that keeps
+ * an unsaved edit from ever repainting the page before Save.
+ */
+export function buildAdminThemeCss(state: AdminThemeState, selector = ':root'): string {
   const template = activeAdminThemeTemplate(state)
   if (template === null) return ''
 
@@ -122,16 +130,16 @@ export function buildAdminThemeCss(state: AdminThemeState): string {
   ].join('\n')
 
   return [
-    ':root {',
+    `${selector} {`,
     colorDeclarations(light),
     typeAndRadius,
     '}',
     '@media (prefers-color-scheme: dark) {',
-    '  :root:not([data-theme="light"]) {',
+    `  ${selector}:not([data-theme="light"]) {`,
     colorDeclarations(dark),
     '  }',
     '}',
-    ':root[data-theme="dark"] {',
+    `${selector}[data-theme="dark"] {`,
     colorDeclarations(dark),
     '}',
   ].join('\n')

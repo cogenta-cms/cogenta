@@ -71,7 +71,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
 
   return {
     store: createThemeStore({ db: options.db }),
-    availableThemes: availableThemes(),
+    availableThemes: await availableThemes(),
     loadFileTokens: async () => {
       try {
         return JSON.parse(await readFile(tokensPath, 'utf8')) as Record<string, unknown>

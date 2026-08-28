@@ -577,12 +577,22 @@ defineAgent({
 
 ## Contrat D — Thème
 
-> **Figé en `theme@1.1` le 2026-08-13.** Ajouter une entrée à `ctx` est mineur ; en
+> **Figé en `theme@1.2` le 2026-08-28.** Ajouter une entrée à `ctx` est mineur ; en
 > modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
 > manques trouvés en écrivant les consommateurs du contrat, qui rendaient toute vidéo
 > irrécupérable et laissaient deux types centraux à l'interprétation de chaque thème.
+>
+> `1.2` (fiche 48) ajoute au manifeste `description?: string` et `author?: string`, tous
+> deux optionnels — un thème écrit avant cette version, ou un thème tiers qui choisit de
+> ne déclarer ni l'un ni l'autre, continue de valider sans changement. C'est ce que la
+> galerie « Apparence » de l'admin affiche désormais sur chaque carte, à côté du
+> `version` qui existait déjà dans le manifeste mais n'était ni lu ni affiché nulle
+> part : c'est ce `version`-là (celui du contrat de thème) qui s'affiche, jamais le
+> `version` du `package.json` npm — deux numéros distincts qui ne coïncident pas
+> nécessairement (`@cogenta/theme-canonical` est en `0.2.1` côté npm et `1.1.0` côté
+> manifeste au moment d'écrire ceci).
 
 ### Structure minimale
 
@@ -606,6 +616,8 @@ mon-theme/
 defineTheme({
   name: 'canonical',
   version: '1.0.0',
+  description: 'The reference theme: all blocks, zero client JavaScript.',  // optionnel (theme@1.2)
+  author: 'Cogenta',                                                       // optionnel (theme@1.2)
   engine: '^1.0.0',            // version du contrat de thème
   blocks: '^1.0.0',            // version du vocabulaire supportée
   implements: ['hero', 'prose', /* … */],
@@ -869,14 +881,29 @@ partir du schéma déclaré par le site, donc le lien est vérifié en code appl
 
 ```
 Product       handle unique, titre de repli, statut (active | archived), contentRef
-Variant       sku unique, prix, devise, stock, backorder autorisé, poids, catégorie fiscale
+Variant       sku unique, prix, devise, stock, backorder autorisé, poids, catégorie fiscale,
+              seuil de stock bas, prix barré + fenêtre de promo, dimensions (mm) — tous
+              facultatifs, nuls par défaut
 Customer      email unique, nom, lien optionnel vers un compte @cogenta/auth
 Cart          persistant, une devise, lignes, zone de livraison, méthode, coupon
-Order         référence unique, lignes copiées, statut, historique append-only
+Order         référence unique, lignes copiées, statut, historique append-only,
+              adresse de livraison structurée (facultative), suivi d'expédition
+              (transporteur, numéro, URL, facultatif — fiche 52)
 Coupon        percentage | fixed | free_shipping, fenêtre, compteur de redemptions
+              global + compteur par client (fiche 53), restriction optionnelle à
+              une liste de produits
 Payment       driver, identifiant externe, statut, montant ; Refund lié
 Invoice       numéro séquentiel par série, snapshot figé du document
-Subscription  intervalle, prix convenu, cycles idempotents par période
+CreditNote    un par remboursement (jamais par commande), sa propre série
+              séquentielle (fiche 52)
+Subscription  intervalle, prix convenu, cycles idempotents par période, statut
+              active | past_due | paused | cancelled (fiche 53)
+ProductTerm   produit × taxonomie × terme (ADR-0022) — jamais une clé étrangère vers la
+              table de termes, pour la même raison que contentRef : cette table appartient
+              à un schéma que le contrat E ne connaît pas
+StockMovement append-only — delta, solde résultant, raison (sale | restock | stock_take |
+              manual), acteur et référence facultatifs ; jamais modifié après écriture,
+              une seule ligne par écriture de stock (setStock/restock/takeStock)
 ```
 
 Aucun de ces objets ne porte `status` de contenu, `version`, `translationOf` ni
@@ -910,6 +937,16 @@ cancelled, refunded : états finaux, rien n'en sort
 qu'un humain prend explicitement, en marquant d'abord la commande payée, pour que la
 raison soit tracée plutôt que sous-entendue.
 
+### Relance d'impayé (fiche 53)
+
+Un abonnement dont le paiement de renouvellement échoue passe en `past_due` — jamais
+directement `paused`. `runBilling` ne le refacture plus tant que ce cycle est ouvert.
+Une relance à J+1/J+3/J+7 après le premier échec (calendrier par défaut, configurable)
+retente le paiement de la même commande ; la troisième relance échouée suspend
+l'abonnement (`paused`), jamais la première. Rejouer la relance sur une échéance déjà
+tentée ne double jamais la tentative — le même principe d'idempotence par clé de
+période que `billOne`, appliqué à la relance.
+
 ### Permissions
 
 Le contrat E déclare **son propre vocabulaire**, dans son espace de noms. Les cinq
@@ -925,13 +962,21 @@ commerce.payment.settle  commerce.order.refund     commerce.invoice.issue
 sont séparées à dessein : le remboursement est la seule action qui sort des fonds de
 l'entreprise sans contresignature.
 
+**Décision tranchée (fiche 51 tâche 3)** : classer un produit contre une taxonomie du
+site (ADR-0022) est gouverné par `commerce.catalog.write`, pas par `canTerm` du contrat
+A. Catégoriser un produit est un geste de catalogue au même titre que son prix ou son
+stock ; réutiliser `canTerm` aurait couplé ce routeur à une seconde couche de permissions
+sans rapport, pour un seul champ.
+
 ### Driver de paiement
 
 Interface plus au moins deux implémentations, comme cache, queue et storage (R1) :
-Stripe en `optimal`, virement bancaire en `degraded`. Le driver dégradé n'est pas un
+Stripe et PayPal en `optimal`, virement bancaire en `degraded` — la preuve concrète que
+l'interface est un vrai registre ouvert et pas une paire figée, PayPal ayant été ajouté
+sans toucher `PaymentGateway`/`PaymentDriver` ni Stripe. Le driver dégradé n'est pas un
 bouchon — beaucoup d'entreprises ne sont payées que par virement ; la différence est
-*qui confirme que l'argent est arrivé*. R2 : sans clé Stripe, la boutique fonctionne de
-bout en bout.
+*qui confirme que l'argent est arrivé*. R2 : sans clé Stripe ni identifiants PayPal, la
+boutique fonctionne de bout en bout.
 
 ### Facture
 
@@ -941,11 +986,17 @@ un compare-and-set dans la transaction qui écrit la facture, donc une facture a
 brûle pas de numéro. Le document est un snapshot figé à l'émission ; le PDF s'en
 regénère à l'identique, sans horloge ni aléa.
 
+Un avoir (fiche 52 task 6) partage le même compare-and-set, dans sa propre série
+(`CN-2026`, distincte de la série `2026` d'une facture) : un par remboursement, jamais
+par commande, puisqu'une commande peut être remboursée en plusieurs fois.
+
 ### Versionnement
 
 `commerce@1.0` (ADR-0024, non figé — voir le bandeau en tête de section). Ajouter un
 champ optionnel ou un statut de paiement est mineur ; modifier le sens d'un statut de
-commande ou la représentation d'un montant est majeur.
+commande ou la représentation d'un montant est majeur. L'adresse de livraison
+structurée, le suivi d'expédition, et l'avoir (fiche 52) sont des ajouts de ce type —
+mineurs.
 
 ---
 

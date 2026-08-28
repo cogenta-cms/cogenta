@@ -82,6 +82,15 @@ const DEFAULT_BASE_PATH = '/api/analytics'
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_WINDOW_DAYS = 30
 const MAX_WINDOW_DAYS = 90
+/**
+ * Upper bound on `?limit=` (fiche 64 task 3 — pagination beyond the top 10
+ * needs the summary to actually carry more than 10 rows). Bounded, not
+ * unlimited, for the same reason `MAX_WINDOW_DAYS` is: an admin screen
+ * paginating client-side over a few dozen rows is a reasonable ask, an
+ * unbounded `?limit=100000` turning every summary request into a full table
+ * scan is not.
+ */
+const MAX_SUMMARY_LIMIT = 100
 
 function normalise(path: string): string {
   const trimmed = path.replace(/\/+$/u, '')
@@ -151,6 +160,28 @@ function parseCustomRange(request: RestRequest): { since: Date; until: Date } | 
   return { since, until }
 }
 
+/**
+ * `?limit=` — how many rows each top-N breakdown (`topPages`/`topReferrers`)
+ * carries. Absent means `@cogenta/analytics`'s own default
+ * (`DEFAULT_SUMMARY_LIMIT`, 10); a screen that wants to paginate beyond that
+ * asks for more up front, since the store has no offset-based pagination of
+ * its own (fiche 64 task 3 — the admin paginates client-side over the rows
+ * this returns).
+ */
+function parseSummaryLimit(request: RestRequest): number | undefined {
+  const raw = single(request.query, 'limit')
+  if (raw === undefined) return undefined
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_SUMMARY_LIMIT) {
+    throw queryError(
+      'limit',
+      `is not a whole number between 1 and ${MAX_SUMMARY_LIMIT}`,
+      `Pass a whole number up to ${MAX_SUMMARY_LIMIT}, or omit it for the default of 10.`,
+    )
+  }
+  return parsed
+}
+
 function resolveWindow(request: RestRequest, now: () => number): { since: Date; until: Date } {
   const custom = parseCustomRange(request)
   if (custom !== undefined) return custom
@@ -194,14 +225,20 @@ export function createAnalyticsRouter(options: AnalyticsRouterOptions): Analytic
   ): Promise<RestResponse> {
     requireAdmin(context.actor)
     const { since, until } = resolveWindow(request, now)
+    const limit = parseSummaryLimit(request)
 
-    const result: AnalyticsSummary = await options.store.getSummary({ since, until })
+    const result: AnalyticsSummary = await options.store.getSummary({
+      since,
+      until,
+      ...(limit === undefined ? {} : { limit }),
+    })
 
     // Top pages, enriched with a title and an admin edit link when the
     // caller wired one in (fiche 27 task 1). Resolved one at a time — the
-    // list is capped at `DEFAULT_SUMMARY_LIMIT`, never a hot path — and a
-    // failed or unresolved lookup falls back to the bare path rather than
-    // failing the whole summary over one stale reference.
+    // list is capped at `DEFAULT_SUMMARY_LIMIT` (or `?limit=`, fiche 64 task
+    // 3), never a hot path — and a failed or unresolved lookup falls back to
+    // the bare path rather than failing the whole summary over one stale
+    // reference.
     const resolvePage = options.resolvePage
     const topPages: readonly EnrichedTopPage[] =
       resolvePage === undefined

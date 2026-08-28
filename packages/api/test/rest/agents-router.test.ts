@@ -259,6 +259,51 @@ describe('POST /api/agents (create)', () => {
     expect((response.body as { data: { name: string } }).data.name).toBe('Helper')
   })
 
+  it('fiche 55 task 1: accepts an optional identity.systemPrompt, distinct from role/objectives/style', async () => {
+    const crud = createAgentsRouter({ agents: crudCapableRegistry() })
+    const response = await crud.handle(
+      {
+        method: 'POST',
+        path: '/api/agents',
+        query: {},
+        body: {
+          name: 'Helper With Prompt',
+          identity: {
+            role: 'r',
+            objectives: [],
+            systemPrompt: 'Always reply in valid JSON.',
+          },
+          model: { preferred: 'anthropic' },
+          tools: [],
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(201)
+  })
+
+  it('refuses a non-string identity.systemPrompt', async () => {
+    const crud = createAgentsRouter({ agents: crudCapableRegistry() })
+    const response = await crud.handle(
+      {
+        method: 'POST',
+        path: '/api/agents',
+        query: {},
+        body: {
+          name: 'Bad Prompt',
+          identity: { role: 'r', objectives: [], systemPrompt: 42 },
+          model: { preferred: 'anthropic' },
+          tools: [],
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'AGENT_DEFINITION_INVALID',
+    )
+  })
+
   it('answers AGENT_REGISTRY_READ_ONLY when the registry has no create()', async () => {
     const registry = createAgentRegistry([securityAgent()])
     const readOnly = createAgentsRouter({ agents: registry })

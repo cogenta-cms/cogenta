@@ -32,6 +32,8 @@ export type {
   AgentModelPreference,
   AgentTrigger,
 } from './agents/types.js'
+export type { GeneratedAgentIdentity } from './assist/agent-identity.js'
+export { createGenerateAgentIdentityTool } from './assist/agent-identity.js'
 export type { ChatSource, ContentChatAnswer, ContentChatOptions } from './assist/chat.js'
 export { createContentChatTool } from './assist/chat.js'
 export type {
@@ -432,11 +434,14 @@ export type {
   AgentSkillPatch,
   AgentSkillStore,
   FileAgentSkillStoreOptions,
+  SkillResource,
+  SkillResourceDir,
 } from './skills/library.js'
 export {
   builtinAgentSkillSeeds,
   createFileAgentSkillStore,
   ensureBuiltinAgentSkills,
+  SKILL_RESOURCE_DIRS,
 } from './skills/library.js'
 export type { Skill, SkillMetadata, SkillStore } from './skills/types.js'
 export type { GenerateSkinOptions, GenerateSkinResult } from './skin/generate.js'

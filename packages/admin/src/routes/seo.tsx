@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
@@ -60,6 +61,24 @@ import { RedirectsPanel } from './redirects.js'
 
 const TAB_ORDER = ['general', 'sitemap', 'social', 'redirects', 'diagnostics'] as const
 type TabId = (typeof TAB_ORDER)[number]
+
+/**
+ * `createSeoRouter`'s `reason` (`@cogenta/api`) is prose meant for an API
+ * response, in English, by AGENTS.md's own "code in English" rule — but the
+ * diagnostics tab renders it straight into a French admin screen (found
+ * auditing the SEO screen end to end, 2026-08-26: "This collection declares
+ * no route." sitting in an otherwise fully French table). Only the two
+ * reasons the router actually emits are mapped; an unrecognised future
+ * reason still shows, in whatever language the server sent it, rather than
+ * silently disappearing.
+ */
+function translatedSitemapReason(t: TFunction, reason: string | null): string {
+  if (reason === 'This collection declares no route.') return t('seo.reasonNoRoute')
+  if (reason === 'This collection is not readable by the "public" role.') {
+    return t('seo.reasonNotPublicRole')
+  }
+  return reason ?? '—'
+}
 
 function isTabId(value: string | null): value is TabId {
   return TAB_ORDER.includes(value as TabId)
@@ -225,7 +244,13 @@ export function SeoRoute(): JSX.Element {
         )}
         {tab === 'social' && <SocialTab settings={seoSettings} onSave={saveSetting} />}
         {tab === 'redirects' && <RedirectsPanel />}
-        {tab === 'diagnostics' && <DiagnosticsTab active={tab === 'diagnostics'} />}
+        {tab === 'diagnostics' && (
+          <DiagnosticsTab
+            active={tab === 'diagnostics'}
+            settings={seoSettings}
+            onSave={saveSetting}
+          />
+        )}
       </div>
     </section>
   )
@@ -320,7 +345,169 @@ export function GeneralTab({
           )}
         </CardBody>
       </Card>
+
+      <SearchEngineVerificationCard settings={settings} onSave={onSave} />
+      <IndexingExtrasCard settings={settings} onSave={onSave} />
     </div>
+  )
+}
+
+/**
+ * Fiche 50 task 2 — meta-tag verification for Google Search Console and Bing
+ * Webmaster Tools. Both `SiteSettingsField`-rendered `string` settings: no
+ * bespoke widget needed, since a verification token is exactly a single-line
+ * text value the generic field already knows how to save on blur.
+ */
+function SearchEngineVerificationCard({
+  settings,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
+  const { t } = useTranslation()
+  const google = settings.find((setting) => setting.key === 'seo.googleSiteVerification')
+  const bing = settings.find((setting) => setting.key === 'seo.bingSiteVerification')
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>{t('seo.verificationHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <p className="text-muted-foreground m-0 text-sm">{t('seo.verificationDescription')}</p>
+        {google !== undefined && (
+          <SiteSettingsField
+            setting={google}
+            canEdit
+            onSave={(value) => onSave('seo.googleSiteVerification', value)}
+          />
+        )}
+        {bing !== undefined && (
+          <SiteSettingsField
+            setting={bing}
+            canEdit
+            onSave={(value) => onSave('seo.bingSiteVerification', value)}
+          />
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/** A random IndexNow key, in the exact hexadecimal shape `indexNowKeyOrEmpty` requires (`@cogenta/schema`). */
+function generateIndexNowKey(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Fiche 50 tasks 3 and 5 — the two off-by-default indexing extras.
+ * `seo.indexNowKey` gets a bespoke control (a text input plus a "Generate"
+ * button) rather than the generic `SiteSettingsField`, because the button
+ * writes a value the field itself never typed — a plain `defaultValue`-based
+ * input would keep showing the old key after a `Generate` click, since
+ * nothing forces an uncontrolled input to pick up a value it did not type.
+ */
+function IndexingExtrasCard({
+  settings,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
+  const { t } = useTranslation()
+  const enabled = settings.find((setting) => setting.key === 'seo.indexNowEnabled')
+  const keySetting = settings.find((setting) => setting.key === 'seo.indexNowKey')
+  const llmsTxtEnabled = settings.find((setting) => setting.key === 'seo.llmsTxtEnabled')
+
+  const [keyValue, setKeyValue] = useState(
+    typeof keySetting?.value === 'string' ? keySetting.value : '',
+  )
+  const [keySaving, setKeySaving] = useState(false)
+  const [keyError, setKeyError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setKeyValue(typeof keySetting?.value === 'string' ? keySetting.value : '')
+  }, [keySetting?.value])
+
+  async function saveKey(next: string): Promise<void> {
+    setKeySaving(true)
+    setKeyError(null)
+    try {
+      await onSave('seo.indexNowKey', next)
+      setKeyValue(next)
+    } catch (caught) {
+      setKeyError(caught instanceof Error ? caught.message : t('settings.saveError'))
+    } finally {
+      setKeySaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>{t('seo.indexNowHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <p className="text-muted-foreground m-0 text-sm">{t('seo.indexNowDescription')}</p>
+        {enabled !== undefined && (
+          <SiteSettingsField
+            setting={enabled}
+            canEdit
+            onSave={(value) => onSave('seo.indexNowEnabled', value)}
+          />
+        )}
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="seo-indexnow-key"
+            className="font-sans text-sm font-medium text-foreground"
+          >
+            {t('seo.indexNowKeyLabel')}
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id="seo-indexnow-key"
+              className="flex-1 font-mono"
+              value={keyValue}
+              disabled={keySaving}
+              onChange={(event) => setKeyValue(event.target.value)}
+              onBlur={(event) => void saveKey(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={keySaving}
+              onClick={() => void saveKey(generateIndexNowKey())}
+            >
+              {t('seo.indexNowGenerateKey')}
+            </Button>
+          </div>
+          {keyValue !== '' && (
+            <p className="text-muted-foreground m-0 font-mono text-xs">
+              {t('seo.indexNowKeyFileHint', { url: `${window.location.origin}/${keyValue}.txt` })}
+            </p>
+          )}
+          {keyError !== null && (
+            <p role="alert" className="text-xs leading-5 font-medium text-destructive">
+              {keyError}
+            </p>
+          )}
+        </div>
+        {llmsTxtEnabled !== undefined && (
+          <SiteSettingsField
+            setting={llmsTxtEnabled}
+            canEdit
+            onSave={(value) => onSave('seo.llmsTxtEnabled', value)}
+          />
+        )}
+      </CardBody>
+    </Card>
   )
 }
 
@@ -516,6 +703,99 @@ function SocialTab({
 }
 
 /**
+ * A bare `Disallow: /` for `*` — the one line that blocks every crawler from
+ * the whole site (fiche 50's own named pitfall). Mirrors `@cogenta/seo`'s
+ * `robotsRuleDisallowsEverything` (`robots.ts`) verbatim rather than
+ * importing it: this admin has no dependency on `@cogenta/seo` today, and a
+ * single regex is not worth adding one for.
+ */
+const ROBOTS_DISALLOW_ALL_PATTERN = /^\s*Disallow:\s*\/\s*$/imu
+
+const ROBOTS_TEXTAREA_CLASSES =
+  'w-full appearance-none rounded-md border border-input bg-card px-3 py-2 font-mono text-xs ' +
+  'leading-5 text-card-foreground shadow-card transition-colors placeholder:text-muted-foreground ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+  'disabled:cursor-default disabled:opacity-60'
+
+/**
+ * Fiche 50 task 4 — an admin's own robots.txt lines, merged into the
+ * rendered document shown just above (`renderRobots`'s `customRules`
+ * option). A bespoke editor rather than the generic `SiteSettingsField`,
+ * because saving here has a gate the generic field cannot express: a rule
+ * that would block every crawler needs an explicit confirmation first, the
+ * same `window.confirm` pattern this admin already uses for an irreversible
+ * action (`comments.tsx`'s purge confirm).
+ */
+function RobotsCustomRulesEditor({
+  settings,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
+  const { t } = useTranslation()
+  const setting = settings.find((candidate) => candidate.key === 'seo.robotsCustomRules')
+  const value = typeof setting?.value === 'string' ? setting.value : ''
+
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function commit(next: string): Promise<void> {
+    if (next === value) return
+    if (
+      ROBOTS_DISALLOW_ALL_PATTERN.test(next) &&
+      !window.confirm(t('seo.robotsDisallowAllConfirm'))
+    ) {
+      return
+    }
+    setSaving(true)
+    setError(null)
+    setSaved(false)
+    try {
+      await onSave('seo.robotsCustomRules', next)
+      setSaved(true)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('settings.saveError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label
+        htmlFor="seo-robots-custom-rules"
+        className="font-sans text-sm font-medium text-foreground"
+      >
+        {t('seo.robotsCustomRulesLabel')}
+      </label>
+      <textarea
+        id="seo-robots-custom-rules"
+        className={ROBOTS_TEXTAREA_CLASSES}
+        rows={4}
+        disabled={saving}
+        defaultValue={value}
+        placeholder={t('seo.robotsCustomRulesPlaceholder')}
+        onBlur={(event) => void commit(event.target.value)}
+      />
+      <p className="text-muted-foreground m-0 text-xs">{t('seo.robotsCustomRulesHelp')}</p>
+      {error !== null && (
+        <p role="alert" className="text-xs leading-5 font-medium text-destructive">
+          {error}
+        </p>
+      )}
+      {error === null && saving && (
+        <p className="text-xs leading-5 text-muted-foreground">{t('settings.saving')}</p>
+      )}
+      {error === null && !saving && saved && (
+        <p className="text-xs leading-5 text-muted-foreground">{t('settings.saved')}</p>
+      )}
+    </div>
+  )
+}
+
+/**
  * `GET /api/seo/diagnostics` — fiche 13, Task 2, unchanged since. "C'est
  * cette section qui aurait attrapé le bug isPublished" is the fiche's own
  * framing, and it is why this panel still computes every number live from
@@ -525,7 +805,16 @@ function SocialTab({
  * scan walks every published entry, so it should not run just because an
  * admin opened `/seo` to edit a title template.
  */
-function DiagnosticsTab({ active }: { readonly active: boolean }): JSX.Element {
+function DiagnosticsTab({
+  active,
+  settings,
+  onSave,
+}: {
+  readonly active: boolean
+  /** Fiche 50 task 4 — needed only for the robots.txt custom-rules editor below. */
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
@@ -591,10 +880,18 @@ function DiagnosticsTab({ active }: { readonly active: boolean }): JSX.Element {
           )}
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle>
                 <h3>{t('seo.sitemapHeading')}</h3>
               </CardTitle>
+              <a
+                href={`${window.location.origin}/sitemap.xml`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary shrink-0 text-sm underline"
+              >
+                {t('seo.openSitemap')}
+              </a>
             </CardHeader>
             <CardBody className="flex flex-col gap-3">
               <p className="m-0 text-lg font-semibold">
@@ -619,7 +916,7 @@ function DiagnosticsTab({ active }: { readonly active: boolean }): JSX.Element {
                         </TableCell>
                         <TableCell>{report.urlCount}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {report.reason ?? '—'}
+                          {translatedSitemapReason(t, report.reason)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -630,10 +927,18 @@ function DiagnosticsTab({ active }: { readonly active: boolean }): JSX.Element {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle>
                 <h3>{t('seo.robotsHeading')}</h3>
               </CardTitle>
+              <a
+                href={`${window.location.origin}/robots.txt`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary shrink-0 text-sm underline"
+              >
+                {t('seo.openRobots')}
+              </a>
             </CardHeader>
             <CardBody className="flex flex-col gap-3">
               {data.robots.disallowsEverything && (
@@ -644,6 +949,7 @@ function DiagnosticsTab({ active }: { readonly active: boolean }): JSX.Element {
               <pre className="m-0 overflow-x-auto rounded-md border border-border bg-card p-3 font-mono text-xs">
                 {data.robots.content}
               </pre>
+              <RobotsCustomRulesEditor settings={settings} onSave={onSave} />
             </CardBody>
           </Card>
 

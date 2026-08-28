@@ -9,17 +9,27 @@ import type { AgentIdentity } from './context.js'
  * (`agents/store.ts`) writes one from structured fields on every
  * create/update, and this module is the one place that renders and parses
  * that fixed, small format — never a general-purpose markdown parser, just
- * enough structure to round-trip `{ role, objectives, style }` losslessly.
+ * enough structure to round-trip `{ role, objectives, style, systemPrompt }`
+ * losslessly.
+ *
+ * Fiche 55 task 1 adds a fourth, optional section: `## System prompt`,
+ * distinct from `style` (a tone note) — standing instructions the agent
+ * should always follow. It is purely additive: a file written before this
+ * fiche has no such heading, `parseIdentityMarkdown` simply never enters
+ * that section, and `systemPrompt` comes back `undefined` — never an error
+ * over a document that predates the field.
  */
 
 export interface AgentIdentityFields {
   readonly role: string
   readonly objectives: readonly string[]
   readonly style?: string
+  readonly systemPrompt?: string
 }
 
 const OBJECTIVES_HEADING = '## Objectives'
 const STYLE_HEADING = '## Style'
+const SYSTEM_PROMPT_HEADING = '## System prompt'
 
 export function renderIdentityMarkdown(name: string, fields: AgentIdentityFields): string {
   const lines = [
@@ -35,6 +45,9 @@ export function renderIdentityMarkdown(name: string, fields: AgentIdentityFields
   if (fields.style !== undefined && fields.style.trim().length > 0) {
     lines.push('', STYLE_HEADING, fields.style)
   }
+  if (fields.systemPrompt !== undefined && fields.systemPrompt.trim().length > 0) {
+    lines.push('', SYSTEM_PROMPT_HEADING, fields.systemPrompt)
+  }
   return `${lines.join('\n')}\n`
 }
 
@@ -42,17 +55,18 @@ export function renderIdentityMarkdown(name: string, fields: AgentIdentityFields
  * The inverse of `renderIdentityMarkdown` — tolerant of a hand-edited file
  * (a real deployment may replace the generated file with prose of its own):
  * the first non-heading paragraph is the role, `## Objectives` is a bullet
- * list, `## Style` is free text. A file with none of these headings still
- * parses — its entire body becomes the role, with no objectives and no
- * style — rather than throwing over a document that simply is not shaped
- * this way.
+ * list, `## Style` and `## System prompt` are free text. A file with none of
+ * these headings still parses — its entire body becomes the role, with no
+ * objectives, style or system prompt — rather than throwing over a document
+ * that simply is not shaped this way.
  */
 export function parseIdentityMarkdown(name: string, text: string): AgentIdentity {
   const lines = text.split('\n')
-  let section: 'role' | 'objectives' | 'style' = 'role'
+  let section: 'role' | 'objectives' | 'style' | 'systemPrompt' = 'role'
   const roleLines: string[] = []
   const objectives: string[] = []
   const styleLines: string[] = []
+  const systemPromptLines: string[] = []
 
   for (const rawLine of lines) {
     const line = rawLine.trimEnd()
@@ -65,6 +79,10 @@ export function parseIdentityMarkdown(name: string, text: string): AgentIdentity
       section = 'style'
       continue
     }
+    if (line.trim() === SYSTEM_PROMPT_HEADING) {
+      section = 'systemPrompt'
+      continue
+    }
     if (section === 'role') {
       if (line.trim().length > 0) roleLines.push(line.trim())
     } else if (section === 'objectives') {
@@ -73,18 +91,22 @@ export function parseIdentityMarkdown(name: string, text: string): AgentIdentity
         const objective = bullet.slice(2).trim()
         if (objective.length > 0 && objective !== '(none declared)') objectives.push(objective)
       }
-    } else {
+    } else if (section === 'style') {
       styleLines.push(line)
+    } else {
+      systemPromptLines.push(line)
     }
   }
 
   const role = roleLines.join(' ').trim()
   const style = styleLines.join('\n').trim()
+  const systemPrompt = systemPromptLines.join('\n').trim()
 
   return {
     name,
     role: role.length > 0 ? role : text.trim(),
     objectives,
     ...(style.length > 0 ? { style } : {}),
+    ...(systemPrompt.length > 0 ? { systemPrompt } : {}),
   }
 }

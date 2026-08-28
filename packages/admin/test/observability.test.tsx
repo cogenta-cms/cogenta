@@ -129,6 +129,35 @@ describe('the observability screen', () => {
     expect(screen.getByText('error')).toBeDefined()
   })
 
+  it('paginates traces client-side once there are more than one page holds (fiche 67 task 4)', async () => {
+    const traces = Array.from({ length: 30 }, (_, index) => ({
+      id: `t${index}`,
+      at: new Date(2026, 7, 20, 10, index).toISOString(),
+      traceId: `trace-${index}`,
+      spanId: `span-${index}`,
+      name: `GET /api/content/posts/${index}`,
+      method: 'GET',
+      path: `/path-${index}`,
+      statusCode: 200,
+      durationMs: 5,
+      ok: true,
+    }))
+    signedInAs(['admin'], { observability: { enabled: true, traces } })
+    render(<App />)
+    await goToObservability()
+
+    // The whole snapshot came back in one fetch (the ring buffer is already
+    // bounded) — the first page shows the first 25 entries, not all 30.
+    await screen.findByText('/path-0')
+    expect(screen.queryByText('/path-29')).toBeNull()
+
+    // Logs are empty in this fixture, so their pager does not render at all
+    // (`Pagination`'s `pageCount <= 1` case) — only the traces "Suivant" exists.
+    fireEvent.click(screen.getByRole('button', { name: 'Suivant' }))
+
+    await screen.findByText('/path-29')
+  })
+
   it('says nothing is being recorded when collection is off', async () => {
     signedInAs(['admin'], { observability: { enabled: false } })
     render(<App />)

@@ -406,6 +406,22 @@ export function installMockFetch(
     }
     /** `POST /api/assistant/run`'s answer, keyed by tool name — what each test's scripted provider "said". */
     readonly assistantRun?: Readonly<Record<string, unknown>>
+    /**
+     * Seeds `GET /api/providers` (and so the agent-creation form's provider
+     * picker, fiche 55 task 3) with configured providers — empty by default,
+     * same as a real site with none, which is exactly what
+     * `providers.test.tsx`'s own tests need. A test that needs to save a new
+     * agent (which now requires picking a configured, enabled provider)
+     * seeds one here rather than every test paying for it.
+     */
+    readonly providers?: readonly {
+      readonly provider: string
+      readonly enabled: boolean
+      readonly model: string
+      readonly baseUrl?: string
+      readonly maskedKey: string
+      readonly updatedAt: string
+    }[]
     /** What `GET /api/notices` answers with. Empty by default: most screens have nothing to recommend. */
     readonly notices?: readonly {
       id: string
@@ -525,6 +541,9 @@ export function installMockFetch(
         readonly name: string
         readonly label: string
         readonly description: string
+        /** Omit to simulate an older server predating fiche 48's manifest fields — the gallery card must degrade, not crash. */
+        readonly version?: string
+        readonly author?: string | null
       }[]
       /**
        * Simulates a server process running code from before this field
@@ -687,6 +706,7 @@ export function installMockFetch(
       readonly dailyViews?: readonly { day: string; views: number }[]
       readonly previousTotalViews?: number
       readonly previousUniqueVisitors?: number
+      readonly previousDailyViews?: readonly { day: string; views: number }[]
       readonly viewsChangePercent?: number | null
       readonly retentionDays?: number | null
     }
@@ -732,6 +752,14 @@ export function installMockFetch(
       readonly brokenEntryId: string | null
       readonly brokenMessage: string | null
     }
+    /**
+     * Overrides `GET /api/audit`'s two-entry default fixture (fiche 67
+     * task 1) — for a test that needs to exercise real cursor pagination.
+     * Each entry needs at least `id`/`at`; the mock paginates them exactly
+     * the way `audit-router.ts` does (`limit`, `after` decoded as
+     * `at id` base64url, newest first).
+     */
+    readonly auditEntries?: readonly Readonly<Record<string, unknown>>[]
     /** Fiche 21 task 1: what `GET /api/audit/{id}` answers with, for any id. */
     readonly auditDetail?: {
       readonly entry: Readonly<Record<string, unknown>>
@@ -896,7 +924,8 @@ export function installMockFetch(
     baseUrl?: string
     maskedKey: string
     updatedAt: string
-  }[] = []
+  }[] =
+    options.providers === undefined ? [] : options.providers.map((provider) => ({ ...provider }))
   // Mirrors `@cogenta/agents`' `KNOWN_PROVIDER_CATALOG` (fiche 56) closely
   // enough for the admin's catalog-driven form — this file imports nothing
   // but `vitest`, so it hand-copies the shape rather than the real data.
@@ -962,6 +991,9 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
   }[] = []
+  // Fiche 57's reference-folder resources — keyed by skill id, one array per
+  // skill, empty until a test uploads into it.
+  const mockSkillResources: Record<string, { path: string; size: number; updatedAt: string }[]> = {}
   // Fiche 45's "Prompt Settings" screen — empty by default, like a fresh
   // site whose store the CLI has not seeded yet; a test that wants a
   // non-empty screen creates one through the same POST route the real
@@ -1247,6 +1279,50 @@ export function installMockFetch(
       scope: 'site',
       value: '',
     },
+    // Fiche 50 tasks 2-5 — mirrors the six settings added to
+    // packages/schema/src/store/site-settings-registry.ts's `seo` group.
+    'seo.googleSiteVerification': {
+      group: 'seo',
+      order: 6,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.bingSiteVerification': {
+      group: 'seo',
+      order: 7,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.robotsCustomRules': {
+      group: 'seo',
+      order: 8,
+      uiType: 'text',
+      scope: 'site',
+      value: '',
+    },
+    'seo.indexNowEnabled': {
+      group: 'seo',
+      order: 9,
+      uiType: 'boolean',
+      scope: 'site',
+      value: false,
+    },
+    'seo.indexNowKey': {
+      group: 'seo',
+      order: 10,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'seo.llmsTxtEnabled': {
+      group: 'seo',
+      order: 11,
+      uiType: 'boolean',
+      scope: 'site',
+      value: false,
+    },
     // Observability (fiche L22 task 5) — mirrors
     // packages/schema/src/store/site-settings-registry.ts's `observability` group.
     'observability.enabled': {
@@ -1293,6 +1369,29 @@ export function installMockFetch(
     'navigation.hiddenItems': {
       group: 'navigation',
       order: 3,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    // Fiche 59 — mirrors packages/schema/src/store/site-settings-registry.ts's
+    // `channels.*BotName` entries.
+    'channels.telegramBotName': {
+      group: 'channels',
+      order: 0,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'channels.slackBotName': {
+      group: 'channels',
+      order: 1,
+      uiType: 'string',
+      scope: 'site',
+      value: '',
+    },
+    'channels.discordBotName': {
+      group: 'channels',
+      order: 2,
       uiType: 'string',
       scope: 'site',
       value: '',
@@ -1362,6 +1461,8 @@ export function installMockFetch(
       name: '@cogenta/theme-canonical',
       label: 'Canonical',
       description: 'The reference theme: all twelve blocks, zero client JavaScript.',
+      version: '1.1.0',
+      author: 'Cogenta',
     },
   ]
   function themeEffectiveTokens(): Record<string, unknown> {
@@ -1602,7 +1703,7 @@ export function installMockFetch(
     handle: string
     title: string
     status: 'active' | 'archived'
-    contentRef: null
+    contentRef: { collection: string; entryId: string } | null
     createdAt: string
     updatedAt: string
   }
@@ -1618,8 +1719,31 @@ export function installMockFetch(
     weightGrams: number
     taxCategory: string
     position: number
+    lowStockThreshold: number | null
+    compareAtPriceMinor: number | null
+    saleStartsAt: string | null
+    saleEndsAt: string | null
+    widthMm: number | null
+    heightMm: number | null
+    depthMm: number | null
     createdAt: string
     updatedAt: string
+  }
+  interface MockProductTerm {
+    productId: string
+    taxonomy: string
+    termId: string
+  }
+  interface MockStockMovement {
+    id: string
+    variantId: string
+    delta: number
+    balanceAfter: number
+    reason: 'sale' | 'restock' | 'stock_take' | 'manual'
+    actorId: string | null
+    referenceId: string | null
+    note: string | null
+    createdAt: string
   }
   interface MockCoupon {
     code: string
@@ -1631,6 +1755,8 @@ export function installMockFetch(
     endsAt: string | null
     maxRedemptions: number | null
     redemptions: number
+    maxRedemptionsPerCustomer: number | null
+    restrictedProductIds: string[]
     active: boolean
     createdAt: string
   }
@@ -1639,7 +1765,7 @@ export function installMockFetch(
     customerId: string
     variantId: string
     quantity: number
-    status: 'active' | 'paused' | 'cancelled'
+    status: 'active' | 'past_due' | 'paused' | 'cancelled'
     intervalUnit: 'day' | 'week' | 'month' | 'year'
     intervalCount: number
     priceMinor: number
@@ -1648,10 +1774,22 @@ export function installMockFetch(
     createdAt: string
     cancelledAt: string | null
   }
+  interface MockSubscriptionCycle {
+    id: string
+    subscriptionId: string
+    periodStart: string
+    periodEnd: string
+    orderId: string | null
+    status: 'billed' | 'skipped_out_of_stock' | 'failed'
+    createdAt: string
+  }
   let mockProductCounter = 0
   let mockVariantCounter = 0
+  let mockStockMovementCounter = 0
   const mockProducts: MockProduct[] = []
   const mockVariants: MockVariant[] = []
+  const mockProductTerms: MockProductTerm[] = []
+  const mockStockMovements: MockStockMovement[] = []
   const mockCoupons: MockCoupon[] = []
   let mockTaxRuleCounter = 0
   const mockTaxRules = [...(options.commerceTaxRules ?? [])]
@@ -1667,6 +1805,13 @@ export function installMockFetch(
     },
     {
       name: 'stripe',
+      tier: 'optimal',
+      settlesOffline: false,
+      configured: false,
+      selected: undefined,
+    },
+    {
+      name: 'paypal',
       tier: 'optimal',
       settlesOffline: false,
       configured: false,
@@ -1695,6 +1840,7 @@ export function installMockFetch(
       cancelledAt: null,
     },
   ]
+  const mockSubscriptionCycles: MockSubscriptionCycle[] = []
   const mockOrders = [
     {
       id: 'order-1',
@@ -1709,6 +1855,16 @@ export function installMockFetch(
       taxMinor: 0,
       totalMinor: 5000,
       couponCode: null,
+      shippingAddressLine1: null as string | null,
+      shippingAddressLine2: null as string | null,
+      shippingCity: null as string | null,
+      shippingPostalCode: null as string | null,
+      shippingRecipient: null as string | null,
+      shippingPhone: null as string | null,
+      trackingCarrier: null as string | null,
+      trackingNumber: null as string | null,
+      trackingUrl: null as string | null,
+      shippedAt: null as string | null,
       placedAt: '2026-03-01T00:00:00.000Z',
       updatedAt: '2026-03-01T00:00:00.000Z',
       lines: [
@@ -1749,6 +1905,41 @@ export function installMockFetch(
       amountMinor: 5000,
       currency: 'EUR',
       instructions: 'Bank transfer to IBAN …',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    },
+  ]
+  // Fiche 52 — refunds, credit notes and the transactional e-mail log, all
+  // empty by default: nothing has been refunded or shipped on the seeded
+  // fixture order until a test does it.
+  const mockRefunds: {
+    id: string
+    paymentId: string
+    orderId: string
+    status: string
+    amountMinor: number
+    currency: string
+    reason: string | null
+    createdAt: string
+  }[] = []
+  let mockRefundCounter = 0
+  const mockOrderEmails: {
+    id: string
+    orderId: string
+    kind: string
+    toEmail: string
+    status: string
+    attempts: number
+    lastError: string | null
+    createdAt: string
+    sentAt: string | null
+  }[] = []
+  const mockCustomers = [
+    {
+      id: 'customer-1',
+      email: 'shopper@example.com',
+      name: 'Shopper One' as string | null,
+      userId: null as string | null,
       createdAt: '2026-03-01T00:00:00.000Z',
       updatedAt: '2026-03-01T00:00:00.000Z',
     },
@@ -2287,7 +2478,15 @@ export function installMockFetch(
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' ? input : input.toString()
       const method = init?.method ?? 'GET'
-      const body = init?.body === undefined ? {} : JSON.parse(init.body as string)
+      // A real `multipart/form-data` upload (fiche 57's resource upload,
+      // `FormData` as the body) is not JSON — parsing it here would throw
+      // before any route-specific handler below ever runs. Every route that
+      // actually expects a `FormData` body reads `init?.body` itself further
+      // down; this shared `body` is only ever consumed by the JSON routes.
+      const body =
+        init?.body === undefined || init.body instanceof FormData
+          ? {}
+          : JSON.parse(init.body as string)
       const auth = (init?.headers as Record<string, string> | undefined)?.authorization
 
       if (url.endsWith('/api/auth/login') && method === 'POST') {
@@ -2465,9 +2664,22 @@ export function installMockFetch(
 
         if (rawId === undefined && method === 'GET') {
           if (!isAdmin) return forbidden
-          return json(200, {
-            data: apiKeys.map((key) => ({ ...key, usage: { last7Days: 0, last30Days: 3 } })),
-          })
+          const withUsage = apiKeys.map((key) => ({
+            ...key,
+            usage: { last7Days: 0, last30Days: 3 },
+          }))
+          // Fiche 67 task 5: real `limit`/`offset`, same "absent means every
+          // key" contract `parseApiKeysLimit` documents server-side —
+          // `mcp.tsx`'s picker (`listApiKeys`) never sends either and keeps
+          // getting the full array, byte for byte.
+          const parsedUrl = new URL(url, 'http://localhost')
+          const limitRaw = parsedUrl.searchParams.get('limit')
+          const pageLimit = limitRaw === null ? undefined : Number(limitRaw)
+          const offset = Number(parsedUrl.searchParams.get('offset') ?? '0')
+          const page =
+            pageLimit === undefined ? withUsage : withUsage.slice(offset, offset + pageLimit)
+          const hasMore = pageLimit !== undefined && offset + pageLimit < withUsage.length
+          return json(200, { data: page, page: { hasMore } })
         }
 
         if (rawId === undefined && method === 'POST') {
@@ -3297,7 +3509,9 @@ export function installMockFetch(
         })
       }
 
-      if (url.endsWith('/api/scheduled-tasks/queue') && method === 'GET') {
+      // `.split('?')[0]` because fiche 67 task 3's screen now always sends
+      // `?limit=`, which `.endsWith` alone would never match.
+      if (url.split('?')[0]?.endsWith('/api/scheduled-tasks/queue') && method === 'GET') {
         if (!user.roles.includes('admin')) {
           return json(403, {
             error: { code: 'FORBIDDEN', message: 'Only the admin role may read the job queue.' },
@@ -3350,6 +3564,7 @@ export function installMockFetch(
             dailyViews: options.analyticsSummary?.dailyViews ?? [],
             previousTotalViews: options.analyticsSummary?.previousTotalViews ?? 0,
             previousUniqueVisitors: options.analyticsSummary?.previousUniqueVisitors ?? 0,
+            previousDailyViews: options.analyticsSummary?.previousDailyViews ?? [],
             viewsChangePercent: options.analyticsSummary?.viewsChangePercent ?? null,
             retentionDays: options.analyticsSummary?.retentionDays ?? 400,
           },
@@ -3481,8 +3696,9 @@ export function installMockFetch(
             },
           })
         }
-        return json(200, {
-          data: [
+        const allEntries =
+          options.auditEntries ??
+          ([
             {
               id: 'audit-1',
               at: '2026-03-01T00:00:00.000Z',
@@ -3512,8 +3728,45 @@ export function installMockFetch(
               hash: 'def',
               previousHash: 'abc',
             },
-          ],
+          ] as readonly Readonly<Record<string, unknown>>[])
+
+        // Fiche 67 task 1 — real `limit`/`after` pagination, newest first,
+        // mirroring `audit-router.ts`: `after` decodes to the previous
+        // page's last `(at, id)`, and everything at or after it is dropped.
+        const parsedAuditUrl = new URL(url, 'http://localhost')
+        const sorted = [...allEntries].sort((a, b) => {
+          const atCompare = String(b['at']).localeCompare(String(a['at']))
+          return atCompare !== 0 ? atCompare : String(b['id']).localeCompare(String(a['id']))
         })
+        const afterRaw = parsedAuditUrl.searchParams.get('after')
+        let startIndex = 0
+        if (afterRaw !== null) {
+          const decoded = Buffer.from(afterRaw, 'base64url').toString('utf8')
+          const separator = decoded.indexOf(' ')
+          const cursor =
+            separator === -1
+              ? null
+              : { at: decoded.slice(0, separator), id: decoded.slice(separator + 1) }
+          const foundIndex =
+            cursor === null
+              ? -1
+              : sorted.findIndex((entry) => entry['at'] === cursor.at && entry['id'] === cursor.id)
+          if (foundIndex !== -1) startIndex = foundIndex + 1
+        }
+        const limitRaw = parsedAuditUrl.searchParams.get('limit')
+        const pageLimit = limitRaw === null ? 50 : Number(limitRaw)
+        const page = sorted.slice(startIndex, startIndex + pageLimit)
+        const hasMore = startIndex + pageLimit < sorted.length
+        const lastOfPage = page[page.length - 1]
+        const nextCursor =
+          hasMore && lastOfPage !== undefined
+            ? Buffer.from(
+                `${String(lastOfPage['at'])} ${String(lastOfPage['id'])}`,
+                'utf8',
+              ).toString('base64url')
+            : null
+
+        return json(200, { data: page, page: { hasMore, nextCursor } })
       }
 
       if (url.includes('/api/site-plans')) {
@@ -3969,6 +4222,63 @@ export function installMockFetch(
             error: { code: 'FORBIDDEN', message: 'Only the admin role may manage agent skills.' },
           })
         }
+        const resourceMatch = /\/api\/agent-skills\/([^/?]+)\/resources(?:\/(.+))?$/u.exec(url)
+        if (resourceMatch !== null) {
+          const skillId = resourceMatch[1] as string
+          const resourcePath = resourceMatch[2]
+          if (mockSkillResources[skillId] === undefined) mockSkillResources[skillId] = []
+          const bucket = mockSkillResources[skillId]
+          if (resourcePath === undefined) {
+            if (method === 'GET') return json(200, { data: bucket })
+            if (method === 'POST') {
+              const bodyInit = init?.body
+              let path: string | undefined
+              let size = 0
+              if (bodyInit instanceof FormData) {
+                const rawPath = bodyInit.get('path')
+                path = typeof rawPath === 'string' ? rawPath : undefined
+                const file = bodyInit.get('file')
+                size = file instanceof File ? file.size : 0
+              } else {
+                const parsed = JSON.parse(String(bodyInit ?? '{}')) as {
+                  path?: string
+                  content?: string
+                }
+                path = parsed.path
+                size = parsed.content !== undefined ? parsed.content.length : 0
+              }
+              if (path === undefined || path.trim().length === 0) {
+                return json(400, {
+                  error: {
+                    code: 'AGENT_SKILL_RESOURCE_INVALID',
+                    message: 'A resource upload needs a "path" field.',
+                  },
+                })
+              }
+              const resource = { path, size, updatedAt: '2026-03-01T00:00:00.000Z' }
+              const existingIndex = bucket.findIndex((entry) => entry.path === path)
+              if (existingIndex >= 0) bucket[existingIndex] = resource
+              else bucket.push(resource)
+              return json(201, { data: resource })
+            }
+          } else if (method === 'DELETE') {
+            const index = bucket.findIndex((entry) => entry.path === resourcePath)
+            if (index === -1) {
+              return json(404, {
+                error: {
+                  code: 'AGENT_SKILL_RESOURCE_UNKNOWN',
+                  message: `No resource "${resourcePath}".`,
+                },
+              })
+            }
+            bucket.splice(index, 1)
+            return json(200, { data: { path: resourcePath, removed: true } })
+          }
+          return json(404, {
+            error: { code: 'CONTENT_NOT_FOUND', message: 'No route matches this path.' },
+          })
+        }
+
         const skillMatch = /\/api\/agent-skills\/([^/?]+)/u.exec(url)
         if (skillMatch === null) {
           if (method === 'GET') return json(200, { data: mockAgentSkills })
@@ -5699,11 +6009,184 @@ export function installMockFetch(
           }
         }
 
-        // products
+        // products (fiche 51: search/sort/pagination, contentRef, terms, CSV)
+        if (segments[0] === 'products' && segments[1] === 'export' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const header =
+              'handle,title,status,sku,variant,price,currency,onhand,allowbackorder,weightgrams,taxcategory,lowstockthreshold,compareprice,salestartsat,saleendsat,widthmm,heightmm,depthmm'
+            const rows = mockProducts.flatMap((product) =>
+              mockVariants
+                .filter((variant) => variant.productId === product.id)
+                .map((variant) =>
+                  [
+                    product.handle,
+                    product.title,
+                    product.status,
+                    variant.sku,
+                    variant.title,
+                    (variant.priceMinor / 100).toFixed(2),
+                    variant.currency,
+                    String(variant.onHand),
+                    String(variant.allowBackorder),
+                    String(variant.weightGrams),
+                    variant.taxCategory,
+                    variant.lowStockThreshold === null ? '' : String(variant.lowStockThreshold),
+                    variant.compareAtPriceMinor === null
+                      ? ''
+                      : (variant.compareAtPriceMinor / 100).toFixed(2),
+                    variant.saleStartsAt ?? '',
+                    variant.saleEndsAt ?? '',
+                    variant.widthMm === null ? '' : String(variant.widthMm),
+                    variant.heightMm === null ? '' : String(variant.heightMm),
+                    variant.depthMm === null ? '' : String(variant.depthMm),
+                  ].join(','),
+                ),
+            )
+            return json(200, { csv: [header, ...rows].join('\r\n'), filename: 'products.csv' })
+          }
+        }
+        if (segments[0] === 'products' && segments[1] === 'import' && segments.length === 2) {
+          if (method === 'POST') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const csv: string = typeof body.csv === 'string' ? body.csv : ''
+            const apply = body.apply === true
+            const lines = csv.split(/\r?\n/u).filter((line) => line.trim() !== '')
+            const header = (lines[0] ?? '').split(',').map((cell) => cell.trim().toLowerCase())
+            const index = (name: string): number => header.indexOf(name)
+            const rows = lines.slice(1).map((line, offset) => {
+              const cells = line.split(',')
+              const cell = (name: string): string => (cells[index(name)] ?? '').trim()
+              const sku = cell('sku')
+              const existing = mockVariants.find((candidate) => candidate.sku === sku)
+              return {
+                line: offset + 2,
+                handle: cell('handle'),
+                sku,
+                title: cell('title'),
+                priceMinor: Math.round(Number(cell('price')) * 100),
+                currency: cell('currency') || 'EUR',
+                onHand: cell('onhand') === '' ? 0 : Number(cell('onhand')),
+                outcome: existing === undefined ? ('create' as const) : ('update' as const),
+              }
+            })
+            if (!apply) {
+              return json(200, {
+                rows: rows.map((row) => ({
+                  line: row.line,
+                  handle: row.handle,
+                  sku: row.sku,
+                  outcome: row.outcome,
+                })),
+                issues: [],
+                summary: {
+                  create: rows.filter((r) => r.outcome === 'create').length,
+                  update: rows.filter((r) => r.outcome === 'update').length,
+                  duplicate: 0,
+                  invalid: 0,
+                },
+              })
+            }
+            let created = 0
+            let updated = 0
+            for (const row of rows) {
+              let product = mockProducts.find((candidate) => candidate.handle === row.handle)
+              if (product === undefined) {
+                mockProductCounter += 1
+                product = {
+                  id: `product-${mockProductCounter}`,
+                  handle: row.handle,
+                  title: row.title,
+                  status: 'active',
+                  contentRef: null,
+                  createdAt: '2026-03-01T00:00:00.000Z',
+                  updatedAt: '2026-03-01T00:00:00.000Z',
+                }
+                mockProducts.push(product)
+              }
+              const existing = mockVariants.find((candidate) => candidate.sku === row.sku)
+              if (existing === undefined) {
+                mockVariantCounter += 1
+                mockVariants.push({
+                  id: `variant-${mockVariantCounter}`,
+                  productId: product.id,
+                  sku: row.sku,
+                  title: row.title,
+                  priceMinor: row.priceMinor,
+                  currency: row.currency,
+                  onHand: row.onHand,
+                  allowBackorder: false,
+                  weightGrams: 0,
+                  taxCategory: 'standard',
+                  position: 0,
+                  lowStockThreshold: null,
+                  compareAtPriceMinor: null,
+                  saleStartsAt: null,
+                  saleEndsAt: null,
+                  widthMm: null,
+                  heightMm: null,
+                  depthMm: null,
+                  createdAt: '2026-03-01T00:00:00.000Z',
+                  updatedAt: '2026-03-01T00:00:00.000Z',
+                })
+                created += 1
+              } else {
+                existing.priceMinor = row.priceMinor
+                existing.onHand = row.onHand
+                updated += 1
+              }
+            }
+            return json(200, { created, updated, skipped: 0, failed: [] })
+          }
+        }
+        if (segments[0] === 'products' && segments[1] === 'by-content' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const collection = parsed.searchParams.get('collection')
+            const entryId = parsed.searchParams.get('entryId')
+            const found =
+              mockProducts.find(
+                (candidate) =>
+                  candidate.contentRef?.collection === collection &&
+                  candidate.contentRef.entryId === entryId,
+              ) ?? null
+            return json(200, { product: found })
+          }
+        }
         if (segments[0] === 'products' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
-          return json(200, { products: mockProducts })
+          const q = parsed.searchParams.get('q')
+          const status = parsed.searchParams.get('status')
+          const sort = parsed.searchParams.get('sort') ?? 'createdAt'
+          const direction = parsed.searchParams.get('direction') ?? 'desc'
+          const limit = Number(parsed.searchParams.get('limit') ?? '25')
+          const offset = Number(parsed.searchParams.get('offset') ?? '0')
+          let filtered = mockProducts.filter((product) => {
+            if (status !== null && product.status !== status) return false
+            if (q !== null && q !== '') {
+              const needle = q.toLowerCase()
+              if (
+                !product.title.toLowerCase().includes(needle) &&
+                !product.handle.toLowerCase().includes(needle)
+              ) {
+                return false
+              }
+            }
+            return true
+          })
+          filtered = [...filtered].sort((a, b) => {
+            const left = sort === 'title' ? a.title : sort === 'handle' ? a.handle : a.createdAt
+            const right = sort === 'title' ? b.title : sort === 'handle' ? b.handle : b.createdAt
+            const compared = left < right ? -1 : left > right ? 1 : 0
+            return direction === 'asc' ? compared : -compared
+          })
+          const page = filtered.slice(offset, offset + limit + 1)
+          const hasMore = page.length > limit
+          return json(200, { products: hasMore ? page.slice(0, limit) : page, hasMore })
         }
         if (segments[0] === 'products' && segments.length === 1 && method === 'POST') {
           const refused = commerceRefused('commerce.catalog.write')
@@ -5721,6 +6204,29 @@ export function installMockFetch(
           mockProducts.push(product)
           return json(201, product)
         }
+        if (segments[0] === 'products' && segments[2] === 'terms' && segments.length === 3) {
+          if (method === 'PUT') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const productId = segments[1] ?? ''
+            const taxonomy = String(body.taxonomy)
+            const termIds = Array.isArray(body.termIds) ? (body.termIds as string[]) : []
+            for (let i = mockProductTerms.length - 1; i >= 0; i -= 1) {
+              const entry = mockProductTerms[i]
+              if (
+                entry !== undefined &&
+                entry.productId === productId &&
+                entry.taxonomy === taxonomy
+              ) {
+                mockProductTerms.splice(i, 1)
+              }
+            }
+            for (const termId of termIds) mockProductTerms.push({ productId, taxonomy, termId })
+            return json(200, {
+              terms: mockProductTerms.filter((entry) => entry.productId === productId),
+            })
+          }
+        }
         if (segments[0] === 'products' && segments.length === 2 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
@@ -5736,6 +6242,7 @@ export function installMockFetch(
           return json(200, {
             product,
             variants: mockVariants.filter((variant) => variant.productId === product.id),
+            terms: mockProductTerms.filter((entry) => entry.productId === product.id),
           })
         }
         if (segments[0] === 'products' && segments.length === 2 && method === 'PATCH') {
@@ -5753,6 +6260,12 @@ export function installMockFetch(
           if (typeof body.title === 'string') product.title = body.title
           if (typeof body.handle === 'string') product.handle = body.handle
           if (body.status === 'active' || body.status === 'archived') product.status = body.status
+          if ('contentRef' in body) {
+            product.contentRef =
+              body.contentRef === null
+                ? null
+                : (body.contentRef as { collection: string; entryId: string })
+          }
           return json(200, product)
         }
         if (segments[0] === 'products' && segments.length === 2 && method === 'DELETE') {
@@ -5764,6 +6277,34 @@ export function installMockFetch(
         }
 
         // variants
+        if (segments[0] === 'variants' && segments[1] === 'low-stock' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, {
+              variants: mockVariants.filter(
+                (variant) =>
+                  variant.lowStockThreshold !== null && variant.onHand <= variant.lowStockThreshold,
+              ),
+            })
+          }
+        }
+        if (
+          segments[0] === 'variants' &&
+          segments[2] === 'stock-movements' &&
+          segments.length === 3
+        ) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            return json(200, {
+              movements: mockStockMovements
+                .filter((movement) => movement.variantId === segments[1])
+                .slice()
+                .reverse(),
+            })
+          }
+        }
         if (segments[0] === 'products' && segments[2] === 'variants' && method === 'POST') {
           const refused = commerceRefused('commerce.catalog.write')
           if (refused !== null) return refused
@@ -5776,10 +6317,19 @@ export function installMockFetch(
             priceMinor: Number(body.priceMinor),
             currency: String(body.currency),
             onHand: typeof body.onHand === 'number' ? body.onHand : 0,
-            allowBackorder: false,
-            weightGrams: 0,
-            taxCategory: 'standard',
+            allowBackorder: typeof body.allowBackorder === 'boolean' ? body.allowBackorder : false,
+            weightGrams: typeof body.weightGrams === 'number' ? body.weightGrams : 0,
+            taxCategory: typeof body.taxCategory === 'string' ? body.taxCategory : 'standard',
             position: 0,
+            lowStockThreshold:
+              typeof body.lowStockThreshold === 'number' ? body.lowStockThreshold : null,
+            compareAtPriceMinor:
+              typeof body.compareAtPriceMinor === 'number' ? body.compareAtPriceMinor : null,
+            saleStartsAt: typeof body.saleStartsAt === 'string' ? body.saleStartsAt : null,
+            saleEndsAt: typeof body.saleEndsAt === 'string' ? body.saleEndsAt : null,
+            widthMm: typeof body.widthMm === 'number' ? body.widthMm : null,
+            heightMm: typeof body.heightMm === 'number' ? body.heightMm : null,
+            depthMm: typeof body.depthMm === 'number' ? body.depthMm : null,
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
           }
@@ -5802,6 +6352,29 @@ export function installMockFetch(
           if (typeof body.sku === 'string') variant.sku = body.sku
           if (typeof body.title === 'string') variant.title = body.title
           if (typeof body.allowBackorder === 'boolean') variant.allowBackorder = body.allowBackorder
+          if (typeof body.weightGrams === 'number') variant.weightGrams = body.weightGrams
+          if (typeof body.taxCategory === 'string') variant.taxCategory = body.taxCategory
+          if ('lowStockThreshold' in body) {
+            variant.lowStockThreshold =
+              typeof body.lowStockThreshold === 'number' ? body.lowStockThreshold : null
+          }
+          if ('compareAtPriceMinor' in body) {
+            variant.compareAtPriceMinor =
+              typeof body.compareAtPriceMinor === 'number' ? body.compareAtPriceMinor : null
+          }
+          if ('saleStartsAt' in body) {
+            variant.saleStartsAt = typeof body.saleStartsAt === 'string' ? body.saleStartsAt : null
+          }
+          if ('saleEndsAt' in body) {
+            variant.saleEndsAt = typeof body.saleEndsAt === 'string' ? body.saleEndsAt : null
+          }
+          if ('widthMm' in body)
+            variant.widthMm = typeof body.widthMm === 'number' ? body.widthMm : null
+          if ('heightMm' in body) {
+            variant.heightMm = typeof body.heightMm === 'number' ? body.heightMm : null
+          }
+          if ('depthMm' in body)
+            variant.depthMm = typeof body.depthMm === 'number' ? body.depthMm : null
           return json(200, variant)
         }
         if (segments[0] === 'variants' && segments.length === 2 && method === 'DELETE') {
@@ -5823,18 +6396,123 @@ export function installMockFetch(
               },
             })
           }
-          variant.onHand = Number(body.onHand)
+          const onHand = Number(body.onHand)
+          const delta = onHand - variant.onHand
+          variant.onHand = onHand
+          if (delta !== 0) {
+            mockStockMovementCounter += 1
+            mockStockMovements.push({
+              id: `movement-${mockStockMovementCounter}`,
+              variantId: variant.id,
+              delta,
+              balanceAfter: onHand,
+              reason: 'stock_take',
+              actorId: null,
+              referenceId: null,
+              note: null,
+              createdAt: '2026-03-01T00:00:00.000Z',
+            })
+          }
           return json(200, variant)
         }
 
         // orders
+        // Checked before the length-1/length-2 routes below, same reasoning
+        // as the real router: "export.csv" is not an order id.
+        if (segments[0] === 'orders' && segments[1] === 'export.csv' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const rows = mockOrders.map((order) => [
+            order.reference,
+            order.placedAt,
+            order.status,
+            order.email,
+            order.currency,
+            String(order.subtotalMinor),
+            String(order.discountMinor),
+            String(order.shippingMinor),
+            String(order.taxMinor),
+            String(order.totalMinor),
+            '',
+          ])
+          const csv = [
+            'reference,placed_at,status,email,currency,subtotal_minor,discount_minor,shipping_minor,tax_minor,total_minor,invoice_number',
+            ...rows.map((row) => row.join(',')),
+          ].join('\r\n')
+          return new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })
+        }
         if (segments[0] === 'orders' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
           const status = parsed.searchParams.get('status')
-          return json(200, {
-            orders: status === null ? mockOrders : mockOrders.filter((o) => o.status === status),
-          })
+          const from = parsed.searchParams.get('from')
+          const to = parsed.searchParams.get('to')
+          let list = status === null ? mockOrders : mockOrders.filter((o) => o.status === status)
+          if (from !== null) list = list.filter((o) => o.placedAt >= from)
+          if (to !== null) list = list.filter((o) => o.placedAt <= to)
+          return json(200, { orders: list })
+        }
+        // A shopkeeper-entered order (fiche 52 task 5). The mock keeps this
+        // deliberately simple: it always succeeds and always finds the
+        // seeded variant, since the real placement logic is proven against a
+        // real database in `@cogenta/commerce`'s own tests, not re-proven here.
+        if (segments[0] === 'orders' && segments.length === 1 && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const id = `order-manual-${mockOrders.length + 1}`
+          const lines = Array.isArray(body.lines) ? body.lines : []
+          const totalMinor = lines.reduce(
+            (sum: number, line: { quantity?: unknown }) =>
+              sum + (typeof line.quantity === 'number' ? line.quantity : 1) * 4500,
+            0,
+          )
+          const address =
+            body.shippingAddress !== null && typeof body.shippingAddress === 'object'
+              ? (body.shippingAddress as Record<string, unknown>)
+              : null
+          const order = {
+            id,
+            reference: `ORD-MANUAL-${mockOrders.length + 1}`,
+            customerId: null,
+            email: typeof body.email === 'string' ? body.email : 'unknown@example.com',
+            status: 'pending' as string,
+            currency: typeof body.currency === 'string' ? body.currency : 'EUR',
+            subtotalMinor: totalMinor,
+            discountMinor: 0,
+            shippingMinor: 0,
+            taxMinor: 0,
+            totalMinor,
+            couponCode: null,
+            shippingAddressLine1: address !== null ? (address.line1 as string) : null,
+            shippingAddressLine2: null,
+            shippingCity: address !== null ? (address.city as string) : null,
+            shippingPostalCode: address !== null ? (address.postalCode as string) : null,
+            shippingRecipient: null,
+            shippingPhone: null,
+            trackingCarrier: null as string | null,
+            trackingNumber: null as string | null,
+            trackingUrl: null as string | null,
+            shippedAt: null as string | null,
+            placedAt: '2026-03-03T00:00:00.000Z',
+            updatedAt: '2026-03-03T00:00:00.000Z',
+            lines: lines.map(
+              (line: { variantId?: unknown; quantity?: unknown }, index: number) => ({
+                id: `manual-line-${index}`,
+                variantId: typeof line.variantId === 'string' ? line.variantId : 'unknown',
+                sku: 'MANUAL',
+                title: 'Manual line',
+                quantity: typeof line.quantity === 'number' ? line.quantity : 1,
+                unitPriceMinor: 4500,
+                subtotalMinor: 4500,
+                discountMinor: 0,
+                taxMinor: 0,
+                totalMinor: 4500,
+                position: index,
+              }),
+            ),
+          }
+          mockOrders.push(order)
+          return json(201, { kind: 'placed', order })
         }
         if (segments[0] === 'orders' && segments.length === 2 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
@@ -5850,6 +6528,38 @@ export function installMockFetch(
             history: mockOrderHistory.filter((event) => event.orderId === order.id),
             payments: mockPayments.filter((payment) => payment.orderId === order.id),
           })
+        }
+        if (segments[0] === 'orders' && segments.length === 2 && method === 'PATCH') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          if (order.status !== 'pending') {
+            return json(409, {
+              error: {
+                code: 'COMMERCE_ORDER_LOCKED',
+                message: 'This order can no longer be edited.',
+              },
+            })
+          }
+          if (typeof body.email === 'string') order.email = body.email
+          const address =
+            body.shippingAddress !== null && typeof body.shippingAddress === 'object'
+              ? (body.shippingAddress as Record<string, unknown>)
+              : null
+          if (address !== null) {
+            order.shippingAddressLine1 = (address.line1 as string) ?? null
+            order.shippingAddressLine2 = (address.line2 as string) ?? null
+            order.shippingCity = (address.city as string) ?? null
+            order.shippingPostalCode = (address.postalCode as string) ?? null
+            order.shippingRecipient = (address.recipient as string) ?? null
+            order.shippingPhone = (address.phone as string) ?? null
+          }
+          return json(200, order)
         }
         if (segments[0] === 'orders' && segments[2] === 'status' && method === 'PUT') {
           const refused = commerceRefused('commerce.order.write')
@@ -5874,6 +6584,57 @@ export function installMockFetch(
           })
           return json(200, order)
         }
+        if (segments[0] === 'orders' && segments[2] === 'tracking' && method === 'PUT') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          order.trackingCarrier = typeof body.carrier === 'string' ? body.carrier : null
+          order.trackingNumber = typeof body.number === 'string' ? body.number : null
+          order.trackingUrl = typeof body.url === 'string' ? body.url : null
+          if (order.status === 'paid') {
+            order.status = 'shipped'
+            order.shippedAt = '2026-03-04T00:00:00.000Z'
+            mockOrderHistory.push({
+              id: `event-${mockOrderHistory.length + 1}`,
+              orderId: order.id,
+              at: '2026-03-04T00:00:00.000Z',
+              kind: 'status_changed',
+              fromStatus: 'paid',
+              toStatus: 'shipped',
+              actorId: user.id,
+              note: 'Shipped, tracking attached.',
+            })
+            mockOrderEmails.push({
+              id: `email-${mockOrderEmails.length + 1}`,
+              orderId: order.id,
+              kind: 'shipment',
+              toEmail: order.email,
+              status: 'sent',
+              attempts: 1,
+              lastError: null,
+              createdAt: '2026-03-04T00:00:00.000Z',
+              sentAt: '2026-03-04T00:00:00.000Z',
+            })
+          }
+          return json(200, order)
+        }
+        if (segments[0] === 'orders' && segments[2] === 'emails' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            emails: mockOrderEmails.filter((email) => email.orderId === segments[1]),
+          })
+        }
+        if (segments[0] === 'orders' && segments[2] === 'credit-notes' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, { creditNotes: [] })
+        }
 
         // payments
         if (segments[0] === 'payments' && segments[2] === 'settle' && method === 'POST') {
@@ -5891,6 +6652,13 @@ export function installMockFetch(
           payment.status = 'paid'
           return json(200, payment)
         }
+        if (segments[0] === 'payments' && segments[2] === 'refunds' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            refunds: mockRefunds.filter((refund) => refund.paymentId === segments[1]),
+          })
+        }
         if (segments[0] === 'payments' && segments[2] === 'refund' && method === 'POST') {
           const refused = commerceRefused('commerce.order.refund')
           if (refused !== null) return refused
@@ -5903,11 +6671,122 @@ export function installMockFetch(
               },
             })
           }
-          payment.status = 'refunded'
-          return json(200, payment)
+          // "Motif obligatoire" (fiche 52 task 6) — the mock enforces the
+          // same requirement the real router does.
+          if (typeof body.reason !== 'string' || body.reason.trim() === '') {
+            return json(400, {
+              error: {
+                code: 'COMMERCE_AMOUNT_INVALID',
+                message: '"reason" is required and must be a non-empty string.',
+              },
+            })
+          }
+          const amountMinor = typeof body.amountMinor === 'number' ? body.amountMinor : 0
+          mockRefundCounter += 1
+          const refund = {
+            id: `refund-${mockRefundCounter}`,
+            paymentId: payment.id,
+            orderId: payment.orderId,
+            status: 'succeeded',
+            amountMinor,
+            currency: payment.currency,
+            reason: body.reason,
+            createdAt: '2026-03-05T00:00:00.000Z',
+          }
+          mockRefunds.push(refund)
+          const refunded = mockRefunds
+            .filter((r) => r.paymentId === payment.id)
+            .reduce((sum, r) => sum + r.amountMinor, 0)
+          payment.status = refunded >= payment.amountMinor ? 'refunded' : 'partially_refunded'
+          return json(200, { refund, creditNote: null })
+        }
+
+        // customers
+        if (segments[0] === 'customers' && segments.length === 1 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const q = parsed.searchParams.get('q')?.toLowerCase()
+          const list =
+            q === undefined || q === ''
+              ? mockCustomers
+              : mockCustomers.filter(
+                  (c) =>
+                    c.email.toLowerCase().includes(q) || (c.name ?? '').toLowerCase().includes(q),
+                )
+          return json(200, { customers: list })
+        }
+        if (segments[0] === 'customers' && segments.length === 2 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const customer = mockCustomers.find((c) => c.id === segments[1])
+          if (customer === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+                message: 'This customer does not exist.',
+              },
+            })
+          }
+          const orders = mockOrders.filter((o) => o.customerId === customer.id)
+          const totalSpentMinor = orders
+            .filter((o) => o.status !== 'cancelled' && o.status !== 'refunded')
+            .reduce((sum, o) => sum + o.totalMinor, 0)
+          return json(200, {
+            customer,
+            orders,
+            totalSpentMinor,
+            currency: orders[0]?.currency ?? null,
+            subscriptions: mockSubscriptions.filter((s) => s.customerId === customer.id),
+          })
+        }
+        if (segments[0] === 'customers' && segments[2] === 'export' && method === 'POST') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const customer = mockCustomers.find((c) => c.id === segments[1])
+          if (customer === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+                message: 'This customer does not exist.',
+              },
+            })
+          }
+          return json(200, {
+            customer,
+            orders: mockOrders.filter((o) => o.customerId === customer.id),
+            totalSpentMinor: 0,
+            currency: null,
+            subscriptions: [],
+          })
+        }
+        if (segments[0] === 'customers' && segments[2] === 'anonymize' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const customer = mockCustomers.find((c) => c.id === segments[1])
+          if (customer === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+                message: 'This customer does not exist.',
+              },
+            })
+          }
+          customer.email = `anon-${customer.id}@deleted.invalid`
+          customer.name = null
+          return json(200, customer)
         }
 
         // coupons
+        if (segments[0] === 'coupons' && segments[1] === 'metrics' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            activeCoupons: mockCoupons.filter((c) => c.active).length,
+            totalRedemptions: mockCoupons.reduce((sum, c) => sum + c.redemptions, 0),
+            discountGivenMinor: [],
+            revenueMinor: [],
+          })
+        }
         if (segments[0] === 'coupons' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
@@ -5926,6 +6805,13 @@ export function installMockFetch(
             endsAt: typeof body.endsAt === 'string' ? body.endsAt : null,
             maxRedemptions: typeof body.maxRedemptions === 'number' ? body.maxRedemptions : null,
             redemptions: 0,
+            maxRedemptionsPerCustomer:
+              typeof body.maxRedemptionsPerCustomer === 'number'
+                ? body.maxRedemptionsPerCustomer
+                : null,
+            restrictedProductIds: Array.isArray(body.restrictedProductIds)
+              ? (body.restrictedProductIds as string[])
+              : [],
             active: true,
             createdAt: '2026-03-01T00:00:00.000Z',
           }
@@ -5941,6 +6827,18 @@ export function installMockFetch(
         }
 
         // subscriptions
+        if (segments[0] === 'subscriptions' && segments[1] === 'metrics' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return json(200, {
+            active: mockSubscriptions.filter((s) => s.status === 'active').length,
+            pastDue: mockSubscriptions.filter((s) => s.status === 'past_due').length,
+            paused: mockSubscriptions.filter((s) => s.status === 'paused').length,
+            cancelled: mockSubscriptions.filter((s) => s.status === 'cancelled').length,
+            mrrMinor: [],
+            churnRate: 0,
+          })
+        }
         if (segments[0] === 'subscriptions' && segments.length === 1 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
@@ -5951,6 +6849,53 @@ export function installMockFetch(
                 ? mockSubscriptions
                 : mockSubscriptions.filter((s) => s.status === status),
           })
+        }
+        if (segments[0] === 'subscriptions' && segments.length === 2 && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          const cycles: MockSubscriptionCycle[] = mockSubscriptionCycles.filter(
+            (c) => c.subscriptionId === subscription.id,
+          )
+          return json(200, { subscription, cycles, dunning: null })
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'pause' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.status = 'paused'
+          return json(200, subscription)
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'resume' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.status = 'active'
+          return json(200, subscription)
         }
         if (segments[0] === 'subscriptions' && segments[2] === 'cancel' && method === 'POST') {
           const refused = commerceRefused('commerce.order.write')
@@ -5967,6 +6912,35 @@ export function installMockFetch(
           subscription.status = 'cancelled'
           subscription.cancelledAt = '2026-03-02T00:00:00.000Z'
           return json(200, subscription)
+        }
+        if (segments[0] === 'subscriptions' && segments[2] === 'change-plan' && method === 'POST') {
+          const refused = commerceRefused('commerce.order.write')
+          if (refused !== null) return refused
+          const subscription = mockSubscriptions.find((candidate) => candidate.id === segments[1])
+          if (subscription === undefined) {
+            return json(404, {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'This subscription does not exist.',
+              },
+            })
+          }
+          subscription.variantId = String(body.variantId)
+          return json(200, { subscription, prorationMinor: 0, prorationOrderId: null })
+        }
+
+        // The preview route (fiche 54 task 2) never depends on a seller being
+        // configured or on an invoice existing — it renders straight from an
+        // order, real or, for this mock, any id at all.
+        if (segments[0] === 'orders' && segments[2] === 'invoice' && segments[3] === 'preview') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          return new Response(
+            new Blob(['%PDF-1.4 fake preview bytes'], { type: 'application/pdf' }),
+            {
+              status: 200,
+            },
+          )
         }
 
         // invoices — this mock has no seller configured, so an order is never
@@ -7006,7 +7980,20 @@ export function installMockFetch(
                 (formId === null || s.formId === formId) &&
                 (status === null || s.status === status),
             )
-            return json(200, { data: filtered, nextCursor: null })
+            // Fiche 67 task 2: the screen now sends real `limit`/`cursor` —
+            // same opaque "id of the previous page's last item" mock
+            // convention `media.tsx`'s fixture already established just
+            // above. Absent `limit` still returns everything in one page,
+            // byte for byte what this mock always did before this fiche.
+            const limitRaw = parsed.searchParams.get('limit')
+            const pageLimit = limitRaw === null ? undefined : Number(limitRaw)
+            const cursor = parsed.searchParams.get('cursor')
+            const startIndex = cursor === null ? 0 : filtered.findIndex((s) => s.id === cursor) + 1
+            const pageSize = pageLimit ?? filtered.length
+            const items = filtered.slice(startIndex, startIndex + pageSize)
+            const hasMore = startIndex + pageSize < filtered.length
+            const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null
+            return json(200, { data: items, nextCursor })
           }
           if (rest.length === 1 && rest[0] === 'unread-count' && method === 'GET') {
             return json(200, {

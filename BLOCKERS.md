@@ -1175,3 +1175,118 @@ table `cogenta_role_permissions` vit entièrement hors contrat, comme
 `cogenta_menus`/`cogenta_maintenance` ; `docs/04-contrats.md` § Permissions
 gagne un paragraphe décrivant la priorité table-puis-fichier sans monter de
 version.
+
+## 21. Fiche 50 — SEO éditoriale avancée : périmètre et ce qui reste ouvert
+
+**Tâche 6 (flux RSS/Atom) explicitement hors périmètre**, sur instruction
+directe : la fiche elle-même la marque « à confirmer » (§8, « gain SEO
+générique plutôt que “premium”, à trancher séparément ») ; `feeds.ts` reste
+écrit, testé unitairement, et non branché — même état qu'avant cette session,
+rien n'y a changé.
+
+**Aucune nouvelle table, aucun nouveau SQL** : les six réglages ajoutés
+(`seo.googleSiteVerification`/`bingSiteVerification`/`robotsCustomRules`/
+`indexNowEnabled`/`indexNowKey`/`llmsTxtEnabled`) passent par la même
+`SiteSettingsStore` générique que `seo.titleTemplate` et consorts depuis la
+fiche 21 — aucun chemin dialecte-spécifique nouveau, donc pas de nouvelle
+case Postgres/MySQL/MariaDB à ouvrir ici : la portabilité de ce magasin est
+déjà prouvée là où il a été construit.
+
+**IndexNow jamais pingé contre le vrai `api.indexnow.org`** : les tests
+(`packages/cli/test/serve-seo-advanced.test.ts`) interceptent
+`globalThis.fetch` pour ce seul hôte plutôt que de faire un vrai appel
+réseau sortant pendant la suite — cohérent avec la conception du module
+lui-même (`pingIndexNow` ne doit jamais faire échouer une publication sur un
+tiers indisponible), mais cela veut dire que le format exact de la réponse
+IndexNow réelle (200 vs 202, corps vide ou non) n'a jamais été observé en
+conditions réelles. `pingIndexNow` traite déjà tout ce qui n'est pas `ok`
+comme un échec journalisé, jamais une exception, donc le risque résiduel est
+faible.
+
+**Vérification Search Console/Bing jamais essayée avec un vrai jeton** : la
+balise `<meta>` est rendue et échappée, testée unitairement et en bout en
+bout (`serve-seo-advanced.test.ts`), mais aucune session Search
+Console/Webmaster Tools réelle n'a confirmé qu'un jeton collé depuis ces
+écrans est effectivement accepté — cette dernière étape appartient à
+l'humain qui possède le compte.
+
+## 22. Fiche 51 (catalogue commerce) — Postgres/MySQL/MariaDB non exécutés cette session
+
+Les 6 tâches de `docs/plans/51-commerce-catalogue.md` sont faites : `contentRef`
+branché des deux côtés (produit → contenu et contenu → produit), recherche/tri/
+pagination exposés jusqu'à l'écran, classification produit par taxonomie
+(`commerce.catalog.write`, décision tranchée et tracée dans la fiche et dans
+`docs/04-contrats.md` § Contrat E), seuil de stock bas + historique de mouvement
+append-only (`cogenta_commerce_stock_movements`), prix barré/promo + dimensions sur
+`variants`, import/export CSV avec correspondance de colonnes par nom et
+prévisualisation obligatoire avant toute écriture.
+
+**Postgres/MySQL/MariaDB non exécutés cette session — Docker indisponible**, même
+contrainte que partout ailleurs dans ce fichier. Les nouveaux cas
+(`stock_movements` append-only, `product_terms`, tri/pagination, les nouvelles
+colonnes nullable de `variants`) sont ajoutés dans `packages/commerce/test/
+catalog.contract.ts`, la même suite de contrat que `packages/commerce/test/
+integration/catalog.test.ts` fait déjà tourner contre les trois serveurs réels —
+donc déjà câblés pour s'exécuter dessus dès que `pnpm services:up` est disponible,
+sans travail supplémentaire. Vérifié sur SQLite uniquement : 212/212 tests
+`@cogenta/commerce` (dont l'extension du test de concurrence à deux connexions
+fichier réelles pour le seuil de stock bas), 18/18 tests e2e `@cogenta/cli` contre
+un vrai serveur HTTP, 10/10 tests d'écran admin contre l'application réelle
+(recherche, tri, pagination, actions groupées avec prévisualisation, lien de
+contenu créé/dissocié, catégorisation, alerte stock bas, import/export CSV).
+
+**Un `pnpm -F @cogenta/admin test` complet** (les ~4000 tests de tout l'admin) a
+montré 6 échecs répartis sur 4 fichiers jamais touchés fonctionnellement par cette
+fiche (`trash.test.tsx`, `entry-edit-workflow.test.tsx`,
+`notices/notice-board.test.tsx`, `entry-edit.test.tsx`) — trois relances isolées de
+`trash.test.tsx` seul ont échoué sur un test **différent à chaque fois** (« lists
+what was deleted… », puis « opens the design system modal… », puis « purges for
+good once the modal is confirmed »), et `entry-edit.test.tsx` est passé 21/21 en
+isolation stricte : la même famille de flaky d'environnement déjà documentée
+plusieurs fois dans ce fichier et dans l'historique du projet (contention CPU/
+mémoire sous parallélisme complet sur une machine partagée), pas une régression de
+cette fiche — aucun des quatre fichiers ne référence même le mot « commerce ».
+
+## 23. Fiche 61 — un test pré-existant échoue : une tentative de connexion
+échouée peut réinscrire l'e-mail d'un compte déjà anonymisé dans le journal
+d'audit
+
+**Trouvé en vérifiant la fiche 61** (journalisation des mutations de compte),
+**non corrigé** : hors périmètre de la fiche (task 1 ne nomme que
+`applyUserChange`/`bulkRoute`/`inviteRoute`), et touche un mécanisme d'une
+fiche différente.
+
+`packages/cli/test/serve-users.test.ts`'s « anonymizes an account
+irreversibly, keeps the audit log and content attribution coherent » (fiche
+17 tâche 5) échoue de façon reproductible, confirmé **avant tout changement
+de cette session** (`git stash` puis relance du test isolé contre `main`,
+même échec à l'identique). La cause n'est ni la fiche 17 ni la fiche 61 :
+`recordAuthAudit` (`packages/cli/src/commands/serve.ts`, ~ligne 3010)
+enregistre l'e-mail tenté verbatim (`diff: { email }`) pour **toute**
+tentative de connexion échouée, un comportement ajouté pendant la passe QA du
+lot L24 (« tentatives de connexion échouées non journalisées » — voir le
+tableau d'état en tête de `CLAUDE.md`). Le test anonymise un compte, tente
+ensuite de se connecter avec son ancien e-mail (qui échoue légitimement,
+401), puis vérifie qu'**aucune** entrée du journal ne contient cet e-mail —
+mais l'entrée `auth.login_failed` que la tentative elle-même vient de
+produire le contient forcément.
+
+**Pourquoi ce n'est pas qu'un test mal écrit** : la garantie que fiche 17
+promet pour l'anonymisation est explicite — « le contenu et le journal
+d'audit doivent rester nommables » via l'identifiant, **jamais l'e-mail
+effacé**. Une tentative de connexion ultérieure (une session périmée dans un
+gestionnaire de mots de passe, un lien d'hameçonnage, une simple faute de
+frappe visant quelqu'un d'autre) sur cette même adresse laisse maintenant une
+trace en clair, indéfiniment (aucune purge planifiée — voir § 12/11.1
+ci-dessus), dans le même journal exportable que consulte un responsable
+conformité. Ce n'est pas une fuite vers l'extérieur, mais cela affaiblit
+la garantie d'effacement que la fiche 17 documente comme sa réponse au RGPD.
+
+**Correctif non tenté ici** : `recordAuthAudit` devrait probablement
+continuer à journaliser la tentative (utile pour la détection de force
+brute), mais sans l'e-mail en clair — soit en l'omettant, soit en le
+hachant/tronquant — ou l'écran d'audit devrait filtrer ce champ à
+l'affichage/export. Nécessite une décision produit (quel niveau de détail
+garder pour la détection d'abus vs. quelle promesse tenir sur
+l'anonymisation), donc laissé à trancher plutôt que corrigé à la volée dans
+cette session.

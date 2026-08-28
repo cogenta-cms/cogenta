@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderRobotsTxt } from '../src/robots.js'
+import { renderRobotsTxt, robotsRuleDisallowsEverything } from '../src/robots.js'
 import { site } from './fixtures.js'
 
 describe('robots.txt', () => {
@@ -59,5 +59,49 @@ describe('robots.txt', () => {
 
   it('ends with exactly one newline', () => {
     expect(renderRobotsTxt({ site })).toMatch(/[^\n]\n$/u)
+  })
+
+  describe('custom rules (fiche 50 task 4)', () => {
+    it('merges an admin-written block after the derived group and before the sitemap', () => {
+      const output = renderRobotsTxt({ site, customRules: 'User-agent: GPTBot\nDisallow: /' })
+
+      expect(output).toBe(
+        `${[
+          'User-agent: *',
+          'Allow: /',
+          '',
+          'User-agent: GPTBot',
+          'Disallow: /',
+          '',
+          'Sitemap: https://example.com/sitemap.xml',
+        ].join('\n')}\n`,
+      )
+    })
+
+    it('contributes nothing when absent or blank', () => {
+      expect(renderRobotsTxt({ site, customRules: '' })).toBe(renderRobotsTxt({ site }))
+      expect(renderRobotsTxt({ site, customRules: '   \n  ' })).toBe(renderRobotsTxt({ site }))
+    })
+
+    it('normalises CRLF line endings', () => {
+      const output = renderRobotsTxt({ site, customRules: 'User-agent: Bing\r\nCrawl-delay: 5' })
+      expect(output).toContain('User-agent: Bing\nCrawl-delay: 5')
+    })
+  })
+
+  describe('detecting a rule that blocks every crawler', () => {
+    it('flags a bare "Disallow: /" line, whatever its surrounding case or spacing', () => {
+      expect(robotsRuleDisallowsEverything('Disallow: /')).toBe(true)
+      expect(robotsRuleDisallowsEverything('disallow:   /')).toBe(true)
+      expect(
+        robotsRuleDisallowsEverything('User-agent: GPTBot\nDisallow: /\nUser-agent: *\nAllow: /'),
+      ).toBe(true)
+    })
+
+    it('does not flag a scoped or partial disallow', () => {
+      expect(robotsRuleDisallowsEverything('Disallow: /admin')).toBe(false)
+      expect(robotsRuleDisallowsEverything('Allow: /')).toBe(false)
+      expect(robotsRuleDisallowsEverything('')).toBe(false)
+    })
   })
 })

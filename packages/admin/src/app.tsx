@@ -16,6 +16,8 @@ import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
 import { CommentsRoute } from './routes/comments.js'
 import { CommerceCouponsRoute } from './routes/commerce-coupons.js'
+import { CommerceCustomerRoute } from './routes/commerce-customer-detail.js'
+import { CommerceCustomersRoute } from './routes/commerce-customers.js'
 import { CommerceOrderRoute } from './routes/commerce-order-detail.js'
 import { CommerceOrdersRoute } from './routes/commerce-orders.js'
 import { CommercePaymentRoute } from './routes/commerce-payment.js'
@@ -114,6 +116,8 @@ export function App(): JSX.Element {
                 <Route path="commerce/products" element={<CommerceProductsRoute />} />
                 <Route path="commerce/orders" element={<CommerceOrdersRoute />} />
                 <Route path="commerce/orders/:id" element={<CommerceOrderRoute />} />
+                <Route path="commerce/customers" element={<CommerceCustomersRoute />} />
+                <Route path="commerce/customers/:id" element={<CommerceCustomerRoute />} />
                 <Route path="commerce/coupons" element={<CommerceCouponsRoute />} />
                 <Route path="commerce/subscriptions" element={<CommerceSubscriptionsRoute />} />
                 <Route path="commerce/settings" element={<CommerceSettingsRoute />} />

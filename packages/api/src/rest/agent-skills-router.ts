@@ -2,6 +2,7 @@ import { parseSkillFile } from '@cogenta/agents'
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import { isMultipartFormData } from './multipart.js'
 
 /**
  * `/api/agent-skills` — L22 task 1bis's "Skills" screen: named instruction
@@ -21,6 +22,18 @@ import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from
  * `@cogenta/cli`'s `agent-runtime.ts`, unchanged. Every response now also
  * carries `content`, so a `GET` can feed the admin's editor without a
  * second round trip to reconstruct it.
+ *
+ * **Reference-folder routes added by fiche 57.** `GET`/`POST
+ * /api/agent-skills/:id/resources` and `DELETE
+ * /api/agent-skills/:id/resources/<path>` proxy straight to
+ * `AgentSkillStore`'s own `listResources`/`addResource`/`removeResource` —
+ * this router does no path validation of its own, `AGENT_SKILL_RESOURCE_
+ * INVALID` is entirely the store's to raise. An upload accepts either a real
+ * `multipart/form-data` body (a `path` field plus a `file` part — what the
+ * admin screen sends, and what lets a binary asset upload without base64
+ * inflation, same reasoning as `media-router.ts`) or a JSON body
+ * `{ path, content }` with `content` as plain UTF-8 text, for a headless
+ * client writing a reference document directly.
  */
 
 export interface AgentSkillSummary {
@@ -55,6 +68,19 @@ export interface AgentSkillRegistryLike {
     },
   ): Promise<AgentSkillSummary>
   remove(id: string): Promise<void>
+  listResources(id: string): Promise<readonly AgentSkillResourceSummary[]>
+  addResource(
+    id: string,
+    relativePath: string,
+    content: string | Uint8Array,
+  ): Promise<AgentSkillResourceSummary>
+  removeResource(id: string, relativePath: string): Promise<void>
+}
+
+export interface AgentSkillResourceSummary {
+  readonly path: string
+  readonly size: number
+  readonly updatedAt: string
 }
 
 export interface AgentSkillsRouterOptions {
@@ -111,7 +137,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Agent-skill routes are /api/agent-skills and /api/agent-skills/:id.',
+    hint: 'Agent-skill routes are /api/agent-skills, /api/agent-skills/:id and /api/agent-skills/:id/resources.',
   })
 }
 
@@ -158,6 +184,49 @@ function parseContent(content: unknown): {
   return { name: metadata.name, description: metadata.description, instructions }
 }
 
+function resourceUploadInvalid(hint: string): CogentaError {
+  return new CogentaError({
+    code: 'AGENT_SKILL_RESOURCE_INVALID',
+    message: 'The resource upload is missing a required field.',
+    hint,
+  })
+}
+
+/**
+ * Two live transports, same as `media-router.ts`'s `upload()`: a real
+ * `multipart/form-data` body (`path` field, `file` part) for the admin
+ * screen and any binary asset, or a plain JSON `{ path, content }` for a
+ * headless client writing text. `isMultipartFormData` tells them apart
+ * structurally, never by header.
+ */
+function parseResourceUpload(body: unknown): { path: string; content: string | Uint8Array } {
+  if (isMultipartFormData(body)) {
+    const path = body.fields['path']
+    if (typeof path !== 'string' || path.trim().length === 0) {
+      throw resourceUploadInvalid(
+        'Send a "path" field naming the destination, e.g. "references/style-guide.md".',
+      )
+    }
+    const [file] = body.files
+    if (file === undefined) {
+      throw resourceUploadInvalid('Send the file under a field named "file" in the multipart body.')
+    }
+    return { path, content: file.data }
+  }
+  const record = asRecord(body)
+  const path = record['path']
+  const content = record['content']
+  if (typeof path !== 'string' || path.trim().length === 0) {
+    throw resourceUploadInvalid('Send { "path": "references/…", "content": "…" }.')
+  }
+  if (typeof content !== 'string') {
+    throw resourceUploadInvalid(
+      'Send { "path": "references/…", "content": "…" }, or a multipart/form-data upload.',
+    )
+  }
+  return { path, content }
+}
+
 export function createAgentSkillsRouter(options: AgentSkillsRouterOptions): AgentSkillsRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
 
@@ -168,7 +237,7 @@ export function createAgentSkillsRouter(options: AgentSkillsRouterOptions): Agen
         const segments = segmentsOf(request.path, basePath)
         if (segments === null) throw noRoute()
         const method = request.method.toUpperCase()
-        const [id, extra] = segments
+        const [id, sub, ...rest] = segments
 
         // GET|POST /api/agent-skills
         if (id === undefined) {
@@ -188,7 +257,27 @@ export function createAgentSkillsRouter(options: AgentSkillsRouterOptions): Agen
           return methodNotAllowed(['GET', 'POST'])
         }
 
-        if (extra !== undefined) throw noRoute()
+        // GET|POST /api/agent-skills/:id/resources, DELETE .../resources/<path>
+        if (sub === 'resources') {
+          if (rest.length === 0) {
+            if (method === 'GET') {
+              return jsonResponse(200, { data: await options.skills.listResources(id) })
+            }
+            if (method === 'POST') {
+              const { path, content } = parseResourceUpload(request.body)
+              const created = await options.skills.addResource(id, path, content)
+              return jsonResponse(201, { data: created })
+            }
+            return methodNotAllowed(['GET', 'POST'])
+          }
+          if (method === 'DELETE') {
+            await options.skills.removeResource(id, rest.join('/'))
+            return jsonResponse(200, { data: { path: rest.join('/'), removed: true } })
+          }
+          return methodNotAllowed(['DELETE'])
+        }
+
+        if (sub !== undefined) throw noRoute()
 
         if (method === 'GET') {
           const found = await options.skills.get(id)

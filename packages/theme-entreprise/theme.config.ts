@@ -16,6 +16,9 @@ import { defineTheme } from '@cogenta/render'
 export default defineTheme({
   name: 'entreprise',
   version: '1.1.0',
+  description:
+    'A confident, premium B2B theme: structured typography, real KPI/impact sections, a genuine dark mode.',
+  author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
   implements: [

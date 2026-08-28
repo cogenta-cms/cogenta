@@ -123,7 +123,7 @@ describe('the shop back office, by role', () => {
       {
         method: 'POST',
         path: `/api/commerce/payments/${paymentId}/refund`,
-        body: { amountMinor: 100 },
+        body: { amountMinor: 100, reason: 'Customer requested a refund.' },
       },
       SHOPKEEPER,
     )
@@ -136,12 +136,31 @@ describe('the shop back office, by role', () => {
           {
             method: 'POST',
             path: `/api/commerce/payments/${paymentId}/refund`,
-            body: { amountMinor: 100 },
+            body: { amountMinor: 100, reason: 'Customer requested a refund.' },
           },
           ADMIN,
         )
       ).status,
     ).toBe(200)
+  })
+
+  it('refuses a refund with no reason (fiche 52: "motif obligatoire")', async () => {
+    const { paymentId } = await seedOrder(shop)
+    await router.handle(
+      { method: 'POST', path: `/api/commerce/payments/${paymentId}/settle` },
+      SHOPKEEPER,
+    )
+
+    const refused = await router.handle(
+      {
+        method: 'POST',
+        path: `/api/commerce/payments/${paymentId}/refund`,
+        body: { amountMinor: 100 },
+      },
+      ADMIN,
+    )
+    expect(refused.status).toBe(400)
+    expect(await shop.payments.listRefunds(paymentId)).toHaveLength(0)
   })
 
   it('records who did it, from the actor and never from the body', async () => {

@@ -572,6 +572,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
    * applied once, not kept in sync between two call sites.
    */
   async function applyUserChange(
+    actor: Actor,
     user: User,
     changes: { readonly roles?: readonly string[]; readonly status?: 'active' | 'disabled' },
   ): Promise<void> {
@@ -603,6 +604,25 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       // like the revocation did not happen.
       if (changes.status === 'disabled') await auth.sessions.revokeAll(user.id)
     }
+
+    // Fiche 61 task 1 — the gap this fiche exists to close: every account
+    // mutation lands in the audit log, the same `auth.audit.record` call
+    // `anonymizeRoute` already made. Recording it *here*, the one place that
+    // actually changes a row, rather than sniffing the HTTP path afterwards
+    // (the way `cogenta serve`'s `recordUserAudit` still does for
+    // create/password/session), is what makes a bulk action produce one
+    // entry per account instead of relying on a path shape `/bulk` never
+    // matched in the first place.
+    await auth.audit.record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'user.update',
+      entryId: user.id,
+      diff: {
+        ...(changes.roles === undefined ? {} : { roles: changes.roles }),
+        ...(changes.status === undefined ? {} : { status: changes.status }),
+      },
+    })
   }
 
   /** `me` is the actor's own id, and never anything a request can spell differently. */
@@ -809,7 +829,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       ids.map(async (id) => {
         const user = await auth.users.byId(id)
         if (user === null) throw userNotFound()
-        await applyUserChange(user, changes)
+        await applyUserChange(actor, user, changes)
         return id
       }),
     )
@@ -854,7 +874,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
         })
       }
 
-      await applyUserChange(user, {
+      await applyUserChange(actor, user, {
         ...(roles === undefined ? {} : { roles }),
         ...(status === undefined ? {} : { status }),
       })
@@ -926,6 +946,17 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
         token: issued.token,
         expiresAt: issued.expiresAt,
       })
+
+      // Fiche 61 task 1 — the other half of the gap: resending or cancelling
+      // an invitation used to leave nothing in the audit log at all.
+      await auth.audit.record({
+        actorId: actor.id,
+        actorRoles: actor.roles,
+        action: 'user.invite_resend',
+        entryId: user.id,
+        diff: { expiresAt: issued.expiresAt },
+      })
+
       return jsonResponse(200, { data: { invited: true, expiresAt: issued.expiresAt } })
     }
 
@@ -933,8 +964,18 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       await auth.resets.revokeAllFor(user.id)
       // Safe as a real, hard delete — see `UserStore.delete`'s doc comment:
       // an `invited` account can never have signed in, so there is nothing
-      // for the audit log or a `createdBy` column to lose.
+      // for the audit log or a `createdBy` column to lose about *its*
+      // history. The cancellation itself is still an admin action worth
+      // recording, though, so it is written before the row disappears —
+      // `entryId` naming an id that no longer resolves is exactly what
+      // `anonymizeRoute` and every other terminal action already do.
       await auth.users.delete(user.id)
+      await auth.audit.record({
+        actorId: actor.id,
+        actorRoles: actor.roles,
+        action: 'user.invite_cancel',
+        entryId: user.id,
+      })
       return { status: 204, body: null, headers: {} }
     }
 

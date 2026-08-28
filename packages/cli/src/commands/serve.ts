@@ -164,8 +164,10 @@ import {
   createCommerceAdminRouter,
   createCommercePermissions,
   createCouponStore,
+  createCreditNoteStore,
   createCustomerStore,
   createInvoiceStore,
+  createOrderEmailQueue,
   createOrderStore,
   createPaymentRegistry,
   createPaymentStore,
@@ -173,6 +175,7 @@ import {
   createSubscriptionStore,
   createTaxStore,
   ensureCommerceTables,
+  type OrderEmailQueue,
   type PaymentConfig,
 } from '@cogenta/commerce'
 import {
@@ -287,6 +290,13 @@ import {
   withScheduledPublishEnqueue,
   withSearchIndexing,
 } from '@cogenta/schema'
+import {
+  canonicalUrl,
+  indexNowKeyFile,
+  llmsTxtSectionsFor,
+  pingIndexNow,
+  renderLlmsTxt,
+} from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
 import type { GraphQLSchema } from 'graphql'
 import { sendInviteMail } from '../invite-mail.js'
@@ -323,6 +333,7 @@ import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-al
 import {
   buildSitemapFiles,
   collectRoutedResources,
+  readSeoOperationalSettings,
   readSeoRenderDefaults,
   renderRobots,
   seoSiteFor,
@@ -348,6 +359,9 @@ import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
+
+/** IndexNow's own key-file path — matches `indexNowKeyFile`'s `path` (`@cogenta/seo`) for any hex key, whether or not it is the one currently configured (fiche 50 task 3). */
+const INDEXNOW_KEY_FILE_PATTERN = /^\/([a-fA-F0-9]{8,128})\.txt$/u
 
 /** The only `Content-Type` values `/_image` will ever put on the wire. */
 const SERVABLE_IMAGE_TYPES: ReadonlySet<string> = new Set([
@@ -732,6 +746,18 @@ interface Site {
   readonly formsRouter: FormsRouter
   /** Purges submissions past each form's own `retainDays` (fiche 16 task 7's GDPR retention, ADR-0022's `purgeExpired` model). Ticked by `runServe` on a `setInterval`. */
   readonly tickFormsPurge: () => Promise<number>
+  /**
+   * Sends whatever queued order confirmation/shipment e-mail is due, retrying
+   * a transient failure on the next tick (fiche 52 task 2, "file avec
+   * reprise"). `null` on a site with no e-mail transport configured — ticked
+   * by `runServe` the same way `tickFormsPurge` is.
+   */
+  readonly tickCommerceEmails:
+    | (() => Promise<{
+        readonly sent: number
+        readonly failed: number
+      }>)
+    | null
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -1857,12 +1883,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     coupons: commerceCoupons,
   })
   // Contract E's payment gateway (fiche 34 task 3) — the same registry
-  // pattern as cache/queue/storage (R1): Stripe is `optimal` and answers only
-  // with a real key that Stripe itself accepts, bank transfer is `degraded`
-  // and always answers, so a shop is sellable before anyone configures
-  // Stripe. `select()` never throws here (`payment.driver` defaults to
-  // `'auto'`, and the degraded driver always resolves), unlike database or
-  // storage where a named-but-unreachable driver is fatal on purpose.
+  // pattern as cache/queue/storage (R1): Stripe and PayPal are both `optimal`
+  // and answer only with real credentials the gateway itself accepts, bank
+  // transfer is `degraded` and always answers, so a shop is sellable before
+  // anyone configures either. `select()` never throws here (`payment.driver`
+  // defaults to `'auto'`, and the degraded driver always resolves), unlike
+  // database or storage where a named-but-unreachable driver is fatal on
+  // purpose.
   const paymentConfig: PaymentConfig = {
     driver: options.payment?.driver ?? 'auto',
     ...(options.payment?.stripeSecretKey === undefined
@@ -1871,6 +1898,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.payment?.stripeWebhookSecret === undefined
       ? {}
       : { webhookSecret: options.payment.stripeWebhookSecret }),
+    ...(options.payment?.paypalClientId === undefined
+      ? {}
+      : { clientId: options.payment.paypalClientId }),
+    ...(options.payment?.paypalClientSecret === undefined
+      ? {}
+      : { clientSecret: options.payment.paypalClientSecret }),
+    ...(options.payment?.paypalWebhookId === undefined
+      ? {}
+      : { webhookId: options.payment.paypalWebhookId }),
     ...(options.payment?.manualInstructions === undefined
       ? {}
       : { transferInstructions: options.payment.manualInstructions }),
@@ -1892,21 +1928,36 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // invoice with a made-up seller address is worse than no invoicing at all,
   // so the route stays unreachable rather than issuing one anyway.
   const billing = options.billing
-  const commerceInvoices =
+  const commerceSeller =
     billing === undefined
       ? undefined
-      : createInvoiceStore(db, {
-          orders: commerceOrders,
-          seller: {
-            address: [billing.legalName, ...billing.address],
-            ...(() => {
-              const footer = [billing.taxId, billing.footer]
-                .filter((part): part is string => part !== undefined)
-                .join(' — ')
-              return footer === '' ? {} : { footer }
-            })(),
-          },
-        })
+      : {
+          address: [billing.legalName, ...billing.address],
+          ...(() => {
+            const footer = [billing.taxId, billing.footer]
+              .filter((part): part is string => part !== undefined)
+              .join(' — ')
+            return footer === '' ? {} : { footer }
+          })(),
+        }
+  const commerceInvoices =
+    commerceSeller === undefined
+      ? undefined
+      : createInvoiceStore(db, { orders: commerceOrders, seller: commerceSeller })
+  // A credit note per refund (fiche 52 task 6) needs the same seller details
+  // as an invoice — the same gate, deliberately: a credit note without a
+  // real seller address is not a usable accounting document either.
+  const commerceCreditNotes =
+    commerceSeller === undefined
+      ? undefined
+      : createCreditNoteStore(db, { orders: commerceOrders, seller: commerceSeller })
+  // Transactional order e-mails (fiche 52 task 2) — the same degraded-by-default
+  // `EmailTransport` every other transactional sender in this file reuses
+  // (R1/R2): absent, orders still place and ship, nobody is ever notified.
+  const commerceOrderEmails: OrderEmailQueue | undefined =
+    options.emailTransport === undefined
+      ? undefined
+      : createOrderEmailQueue(db, { orders: commerceOrders, transport: options.emailTransport })
 
   // Contract F (ADR-0025) — a comment is not a collection entry, so its
   // tables are created idempotently here the same way commerce's are above:
@@ -2065,6 +2116,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       tax: commerceTax,
       shipping: commerceShipping,
       ...(commerceInvoices === undefined ? {} : { invoices: commerceInvoices }),
+      ...(commerceCreditNotes === undefined ? {} : { creditNotes: commerceCreditNotes }),
+      ...(commerceOrderEmails === undefined ? {} : { orderEmails: commerceOrderEmails }),
       payment: {
         registry: paymentRegistry,
         config: paymentConfig,
@@ -2088,6 +2141,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     formStore,
     formsRouter,
     tickFormsPurge: async () => (await formStore.submissions.purgeExpired()).purged,
+    tickCommerceEmails:
+      commerceOrderEmails === undefined ? null : () => commerceOrderEmails.flushDue(),
     notFoundLog,
     notFoundLogEnabled: options.notFoundLog.enabled,
     notFoundRouter: createNotFoundRouter({ store: notFoundLog }),
@@ -2142,6 +2197,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           collectionTitleTemplates: defaults.collectionTitleTemplates,
         }
       },
+      // Fiche 50 task 4 — read fresh, same reasoning as `titleDefaults`: the
+      // Diagnostics screen's robots.txt preview must show the exact document
+      // `/robots.txt` serves, not a stale one from before a custom rule was
+      // saved.
+      robotsCustomRules: async () =>
+        (await readSeoRenderDefaults(siteSettingsStore)).robotsCustomRules,
     }),
     // The review queue (`schema@2.1`, ADR-0027, fiche 37 task 3).
     reviewRouter,
@@ -2740,6 +2801,71 @@ async function recordContentAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/**
+ * Pings IndexNow the moment a publish or unpublish response succeeds (fiche
+ * 50 task 3) — off by default (`seo.indexNowEnabled`), a no-op with no key
+ * configured, and a no-op for a collection with no public route (nothing to
+ * tell a crawler about). Deliberately narrower than `recordContentAudit`
+ * above: a plain `content.update` is not a URL changing visibility the way a
+ * publish/unpublish is, and pinging on every keystroke-triggered autosave
+ * would spend the batch IndexNow itself documents as unnecessary.
+ *
+ * Never blocks or fails the response it follows: `pingIndexNow` already
+ * turns a network failure or a non-2xx answer into a logged result rather
+ * than a throw, and the `try`/`catch` here also covers the gateway read and
+ * URL computation around it, so a publish always reaches its caller whether
+ * or not IndexNow could be reached.
+ */
+async function notifyIndexNowOnContentChange(
+  site: Site,
+  actor: AccessContext['actor'],
+  pathname: string,
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (response.status < 200 || response.status >= 300) return
+  const segments = pathname
+    .replace(/^\/api\/content\/?/u, '')
+    .split('/')
+    .filter((segment) => segment.length > 0)
+  const [collectionName, id, subAction] = segments
+  if (collectionName === undefined || collectionName === '-') return
+  if (subAction !== 'publish' && subAction !== 'unpublish') return
+
+  try {
+    const operational = await readSeoOperationalSettings(site.siteSettingsStore)
+    if (!operational.indexNowEnabled || operational.indexNowKey === '') return
+
+    const collection = site.collections.find((candidate) => candidate.name === collectionName)
+    if (collection === undefined || collection.routing === undefined) return
+
+    const entryId = id ?? responseId(response)
+    if (entryId === undefined) return
+
+    // The acting editor's own context, not `ANONYMOUS`: they just
+    // published or unpublished this exact entry, so they can always read
+    // it straight back, published or not — an entry just unpublished would
+    // no longer be visible to `ANONYMOUS`, and the URL still needs telling.
+    const entry = await site.gateway.read(collectionName, entryId, { actor })
+    if (entry === null) return
+
+    const seoSite = seoSiteFor(site.site, await readSeoRenderDefaults(site.siteSettingsStore))
+    const url = canonicalUrl(seoSite, { collection, entry })
+    if (url === null) return
+
+    const result = await pingIndexNow({
+      host: new URL(site.site.url).host,
+      key: operational.indexNowKey,
+      urls: [url],
+    })
+    if (result.outcome === 'failed') {
+      logger.warn('IndexNow ping failed', { reason: result.reason, message: result.message })
+    }
+  } catch (error) {
+    logger.warn('IndexNow ping skipped after an unexpected error', { error: String(error) })
+  }
+}
+
 async function recordMediaAudit(
   site: Site,
   actor: AccessContext['actor'],
@@ -2927,14 +3053,24 @@ async function recordAuthAudit(
 /**
  * Account management, in the audit log.
  *
- * Who created an account, who changed a role, who disabled someone and who cut
- * a session short are exactly the events an append-only, hash-chained log
- * exists for — and they were previously invisible, since the only way to do any
- * of it was a terminal.
+ * Who created an account, who cut a session short, and who changed their own
+ * password are exactly the events an append-only, hash-chained log exists
+ * for — and they were previously invisible, since the only way to do any of
+ * it was a terminal.
  *
  * Recorded here, at the transport boundary, for the same reason the content and
  * media audits are: the router stays a pure request-in/response-out value, and
  * only a response that actually succeeded is written down.
+ *
+ * Role and status changes — single `PATCH`, bulk, and invitation
+ * resend/cancel — are deliberately **not** sniffed here any more (fiche 61
+ * task 1). Path-shape sniffing is exactly how those went unaudited for as
+ * long as they did: `/api/users/bulk` never matched this function's `target
+ * !== undefined && sub === undefined` shape, so a bulk disable produced no
+ * entry at all. `users-router.ts`'s `applyUserChange` and `inviteRoute` now
+ * call `auth.audit.record` directly, the same way `anonymizeRoute` always
+ * has — the one place that actually knows a mutation happened, rather than a
+ * second guess made from the URL afterwards.
  */
 async function recordUserAudit(
   site: Site,
@@ -2954,13 +3090,11 @@ async function recordUserAudit(
   const action =
     method === 'POST' && target === undefined
       ? 'user.create'
-      : method === 'PATCH' && target !== undefined && sub === undefined
-        ? 'user.update'
-        : method === 'POST' && sub === 'password'
-          ? 'user.password_change'
-          : method === 'DELETE' && sub === 'sessions'
-            ? 'user.session_revoke'
-            : null
+      : method === 'POST' && sub === 'password'
+        ? 'user.password_change'
+        : method === 'DELETE' && sub === 'sessions'
+          ? 'user.session_revoke'
+          : null
   if (action === null) return
 
   // The subject is named, never anything that could sign anyone in: no
@@ -3693,6 +3827,7 @@ export function createRequestListener(
           response,
           logger,
         )
+        await notifyIndexNowOnContentChange(site, actor, url.pathname, response, logger)
         return
       }
 
@@ -3746,12 +3881,21 @@ export function createRequestListener(
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toCommerceRequest(req, url, body)
         const response = await site.commerceRouter.handle(request, context.actor)
-        // The one route whose body is not JSON: an invoice PDF. Checked by
+        // Two routes whose body is not JSON: an invoice PDF (bytes) and the
+        // accounting CSV export (fiche 52 task 7, plain text). Checked by
         // shape, not by path — the router already decided what to send, this
         // layer only has to notice how.
         if (response.body instanceof Uint8Array) {
           res.writeHead(response.status, { 'content-type': 'application/pdf' })
           res.end(Buffer.from(response.body))
+          return
+        }
+        if (typeof response.body === 'string') {
+          res.writeHead(response.status, {
+            'content-type': 'text/csv; charset=utf-8',
+            'content-disposition': 'attachment; filename="orders.csv"',
+          })
+          res.end(response.body)
           return
         }
         res.writeHead(response.status, { 'content-type': 'application/json; charset=utf-8' })
@@ -3901,6 +4045,7 @@ export function createRequestListener(
               menus: { menuRouter: site.menuRouter },
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
+              seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             }
             const html =
               definition === null
@@ -3930,6 +4075,7 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           // A failure on a multi-step form only ever comes from the final
           // step's real validation (an intermediate step never calls it —
@@ -4350,7 +4496,7 @@ export function createRequestListener(
         }
         const body = (await readBody(req)) as { theme?: unknown } | undefined
         const themeName = typeof body?.theme === 'string' ? body.theme : ''
-        if (!availableThemes().some((candidate) => candidate.name === themeName)) {
+        if (!(await availableThemes()).some((candidate) => candidate.name === themeName)) {
           jsonError(
             res,
             404,
@@ -4632,12 +4778,65 @@ export function createRequestListener(
           res.writeHead(405, { allow: 'GET' }).end()
           return
         }
+        // Fiche 50 task 4 — an admin's own robots.txt lines, merged in
+        // verbatim by `renderRobots`. Read fresh, same "no restart" contract
+        // as everything else `readSeoRenderDefaults` feeds.
+        const { robotsCustomRules } = await readSeoRenderDefaults(site.siteSettingsStore)
         res.writeHead(200, {
           'content-type': 'text/plain; charset=utf-8',
           'cache-control': 'public, max-age=3600',
         })
-        res.end(renderRobots(seoSiteFor(site.site)))
+        res.end(
+          renderRobots(seoSiteFor(site.site), {
+            ...(robotsCustomRules === '' ? {} : { customRules: robotsCustomRules }),
+          }),
+        )
         return
+      }
+
+      // `llms.txt` (fiche 50 task 5) — off by default (`seo.llmsTxtEnabled`),
+      // reusing `llmsTxtSectionsFor`/`renderLlmsTxt` (`@cogenta/seo`), written
+      // and unit-tested back in L3/L9 but never served by any route until now.
+      if (url.pathname === '/llms.txt') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        const { llmsTxtEnabled } = await readSeoOperationalSettings(site.siteSettingsStore)
+        if (!llmsTxtEnabled) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This site does not serve llms.txt.')
+          return
+        }
+        const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
+        const seoSite = seoSiteFor(site.site, seoDefaults)
+        const resources = await collectRoutedResources(site.collections, site.gateway)
+        res.writeHead(200, {
+          'content-type': 'text/markdown; charset=utf-8',
+          'cache-control': 'public, max-age=600',
+        })
+        res.end(renderLlmsTxt({ site: seoSite, sections: llmsTxtSectionsFor(seoSite, resources) }))
+        return
+      }
+
+      // IndexNow's own ownership-proof key file (fiche 50 task 3) — served
+      // only when IndexNow is on and the requested key is the one currently
+      // configured. A path that merely *looks* like a key file, or a key
+      // that does not match, falls through to the ordinary 404 below rather
+      // than answering a distinct "wrong key" response that would let a
+      // prober learn whether IndexNow is configured at all.
+      {
+        const keyFileMatch = INDEXNOW_KEY_FILE_PATTERN.exec(url.pathname)
+        if (keyFileMatch !== null && req.method === 'GET') {
+          const operational = await readSeoOperationalSettings(site.siteSettingsStore)
+          if (operational.indexNowEnabled && operational.indexNowKey === keyFileMatch[1]) {
+            res.writeHead(200, {
+              'content-type': 'text/plain; charset=utf-8',
+              'cache-control': 'public, max-age=3600',
+            })
+            res.end(indexNowKeyFile(operational.indexNowKey).contents)
+            return
+          }
+        }
       }
 
       if (SITEMAP_PATH.test(url.pathname)) {
@@ -4684,6 +4883,7 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
           context,
         )
@@ -4710,6 +4910,7 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           const html =
             definition === null || !definition.active
@@ -4913,6 +5114,8 @@ export interface ServeOptions {
   readonly formsPurgeTickMs?: number
   /** Overrides `CHANNEL_NOTIFICATION_TICK_MS`, for the same reason as `scheduledPublishTickMs`. */
   readonly channelNotificationTickMs?: number
+  /** Test seam for the commerce order-email retry queue (fiche 52 task 2) — production always uses `COMMERCE_EMAIL_TICK_MS`. */
+  readonly commerceEmailTickMs?: number
   /**
    * Overrides `ANALYTICS_PURGE_TICK_MS`. Not a CLI flag, same reason as
    * `scheduledPublishTickMs`: a test proves the retention sweep really runs
@@ -4994,6 +5197,7 @@ const FORMS_PURGE_TICK_MS = 24 * 60 * 60 * 1000
  * scheduled publication above.
  */
 const CHANNEL_NOTIFICATION_TICK_MS = 60_000
+const COMMERCE_EMAIL_TICK_MS = 60_000
 
 /**
  * How often `runServe` purges analytics events (and their daily salts) past
@@ -5585,6 +5789,20 @@ export async function runServe(options: ServeOptions): Promise<number> {
     intervalMs: options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
     run: async () => ({ summary: `${await site.tickAnalyticsPurge()} purged` }),
   })
+  // Absent on a site with no e-mail transport configured (R1/R2) — registering
+  // a task that would always no-op is worse than not registering it at all.
+  if (site.tickCommerceEmails !== null) {
+    const tickCommerceEmails = site.tickCommerceEmails
+    scheduledTaskRegistry.register({
+      name: 'commerce-order-emails',
+      description: 'Send any due order confirmation/shipment e-mail, retrying a past failure.',
+      intervalMs: options.commerceEmailTickMs ?? COMMERCE_EMAIL_TICK_MS,
+      run: async () => {
+        const result = await tickCommerceEmails()
+        return { summary: `${result.sent} sent, ${result.failed} failed` }
+      },
+    })
+  }
   scheduledTaskRegistry.register({
     name: 'updates-auto-check',
     description:
@@ -5727,15 +5945,20 @@ export async function runServe(options: ServeOptions): Promise<number> {
   out.detail(assistant.summary)
   options.onListening?.({ port: boundPort, host })
 
-  // The seven recurring jobs above (scheduled publication, the tools queue
-  // drain riding along with it, the 404 log purge, audit integrity, the
-  // trash sweep, forms GDPR retention, channel notification flush, analytics
-  // retention) are now all `scheduledTaskRegistry` entries rather than seven
-  // independent `setInterval`s: one heartbeat drives `registry.tick()`,
+  // The recurring jobs above (scheduled publication, the tools queue drain
+  // riding along with it, the 404 log purge, audit integrity, the trash
+  // sweep, forms GDPR retention, channel notification flush, analytics
+  // retention, updates auto-check, and — fiche 52 task 2 — the commerce
+  // order-email retry queue) are all `scheduledTaskRegistry` entries rather
+  // than independent `setInterval`s: one heartbeat drives `registry.tick()`,
   // which itself decides which tasks are actually due against the interval
   // each was registered with above — the same cadence as before, since the
-  // heartbeat is at least as frequent as the fastest of the seven. A single
-  // failed tick is logged by the registry's own `execute()`, never fatal.
+  // heartbeat is at least as frequent as the fastest of them. Every one of
+  // their own tick overrides must be folded into `scheduledTasksHeartbeatMs`
+  // below, or a test that speeds up only its own task's interval sees no
+  // effect — a real bug this fiche found and fixed for its own task. A
+  // single failed tick is logged by the registry's own `execute()`, never
+  // fatal.
   const scheduledTasksHeartbeatMs = Math.min(
     options.scheduledPublishTickMs ?? SCHEDULED_PUBLISH_TICK_MS,
     options.notFoundPurgeTickMs ?? NOT_FOUND_PURGE_TICK_MS,
@@ -5745,6 +5968,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.channelNotificationTickMs ?? CHANNEL_NOTIFICATION_TICK_MS,
     options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
     options.updatesAutoCheckTickMs ?? UPDATES_AUTO_CHECK_TICK_MS,
+    options.commerceEmailTickMs ?? COMMERCE_EMAIL_TICK_MS,
   )
   const runScheduledTasksHeartbeat = (): void => {
     // Sequenced, not concurrent: `registry.tick()` already runs its due

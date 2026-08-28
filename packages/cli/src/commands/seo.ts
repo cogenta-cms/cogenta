@@ -13,6 +13,7 @@ import {
   buildMetaTags,
   buildSitemap,
   type ChangeFrequency,
+  escapeHtmlAttribute,
   groupTranslationFamilies,
   type HreflangAlternate,
   renderJsonLdScript,
@@ -61,6 +62,12 @@ export interface SeoRenderDefaults {
   readonly twitterHandle: string
   readonly defaultSocialImageUrl: string
   readonly sitemapCollectionSettings: Readonly<Record<string, SitemapCollectionOverride>>
+  /** Fiche 50 task 2 — rendered into `<meta name="google-site-verification">` by `siteVerificationMetaTags` below. Empty means the tag is omitted entirely. */
+  readonly googleSiteVerification: string
+  /** Same shape, rendered into `<meta name="msvalidate.01">` — Bing Webmaster Tools' own meta-tag verification. */
+  readonly bingSiteVerification: string
+  /** Fiche 50 task 4 — an admin's own robots.txt lines, merged in by `renderRobots` below. */
+  readonly robotsCustomRules: string
 }
 
 /**
@@ -107,6 +114,33 @@ const EMPTY_SEO_DEFAULTS: SeoRenderDefaults = {
   twitterHandle: '',
   defaultSocialImageUrl: '',
   sitemapCollectionSettings: {},
+  googleSiteVerification: '',
+  bingSiteVerification: '',
+  robotsCustomRules: '',
+}
+
+/**
+ * `<meta>` tags proving domain ownership to Google Search Console and Bing
+ * Webmaster Tools (fiche 50 task 2) — the meta-tag verification method both
+ * offer as an alternative to DNS/file verification, deliberately the only
+ * one this codebase implements: no OAuth flow, no Search Console/Webmaster
+ * API call, no second secret to hold (R1/R7). An admin pastes the token the
+ * provider's own verification page already shows them; this only renders
+ * it, HTML-escaped like every other attribute value `@cogenta/seo` emits.
+ */
+export function siteVerificationMetaTags(seo: SeoRenderDefaults | null | undefined): string {
+  const tags: string[] = []
+  if (seo?.googleSiteVerification) {
+    tags.push(
+      `<meta name="google-site-verification" content="${escapeHtmlAttribute(seo.googleSiteVerification)}" />`,
+    )
+  }
+  if (seo?.bingSiteVerification) {
+    tags.push(
+      `<meta name="msvalidate.01" content="${escapeHtmlAttribute(seo.bingSiteVerification)}" />`,
+    )
+  }
+  return tags.join('\n')
 }
 
 function stringSetting(value: unknown, fallback: string): string {
@@ -162,6 +196,9 @@ export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<S
     sitemapCollectionSettings,
     twitterHandle,
     defaultSocialImageUrl,
+    googleSiteVerification,
+    bingSiteVerification,
+    robotsCustomRules,
   ] = await Promise.all([
     store.get('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE),
     store.get('seo.collectionTitleTemplates', SITE_SETTINGS_SITE_SCOPE),
@@ -169,6 +206,9 @@ export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<S
     store.get('seo.sitemapCollectionSettings', SITE_SETTINGS_SITE_SCOPE),
     store.get('seo.twitterHandle', SITE_SETTINGS_SITE_SCOPE),
     store.get('seo.defaultSocialImageUrl', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.googleSiteVerification', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.bingSiteVerification', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.robotsCustomRules', SITE_SETTINGS_SITE_SCOPE),
   ])
 
   return {
@@ -188,6 +228,63 @@ export async function readSeoRenderDefaults(store: SiteSettingsStore): Promise<S
     ),
     sitemapCollectionSettings: toSitemapOverrides(
       recordSetting(sitemapCollectionSettings?.value, {}),
+    ),
+    googleSiteVerification: stringSetting(
+      googleSiteVerification?.value,
+      EMPTY_SEO_DEFAULTS.googleSiteVerification,
+    ),
+    bingSiteVerification: stringSetting(
+      bingSiteVerification?.value,
+      EMPTY_SEO_DEFAULTS.bingSiteVerification,
+    ),
+    robotsCustomRules: stringSetting(
+      robotsCustomRules?.value,
+      EMPTY_SEO_DEFAULTS.robotsCustomRules,
+    ),
+  }
+}
+
+/**
+ * The three off-by-default indexing extras (fiche 50 tasks 3 and 5) —
+ * separate from `SeoRenderDefaults` above because none of the three feeds a
+ * page's `<head>`: IndexNow is pinged from the content-write path, and
+ * `llms.txt` is a route toggle, not a per-page render decision.
+ */
+export interface SeoOperationalSettings {
+  readonly indexNowEnabled: boolean
+  readonly indexNowKey: string
+  readonly llmsTxtEnabled: boolean
+}
+
+const EMPTY_SEO_OPERATIONAL_SETTINGS: SeoOperationalSettings = {
+  indexNowEnabled: false,
+  indexNowKey: '',
+  llmsTxtEnabled: false,
+}
+
+function booleanSetting(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+/** Read fresh, same "no restart" contract as `readSeoRenderDefaults`. */
+export async function readSeoOperationalSettings(
+  store: SiteSettingsStore,
+): Promise<SeoOperationalSettings> {
+  const [indexNowEnabled, indexNowKey, llmsTxtEnabled] = await Promise.all([
+    store.get('seo.indexNowEnabled', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.indexNowKey', SITE_SETTINGS_SITE_SCOPE),
+    store.get('seo.llmsTxtEnabled', SITE_SETTINGS_SITE_SCOPE),
+  ])
+
+  return {
+    indexNowEnabled: booleanSetting(
+      indexNowEnabled?.value,
+      EMPTY_SEO_OPERATIONAL_SETTINGS.indexNowEnabled,
+    ),
+    indexNowKey: stringSetting(indexNowKey?.value, EMPTY_SEO_OPERATIONAL_SETTINGS.indexNowKey),
+    llmsTxtEnabled: booleanSetting(
+      llmsTxtEnabled?.value,
+      EMPTY_SEO_OPERATIONAL_SETTINGS.llmsTxtEnabled,
     ),
   }
 }
@@ -378,6 +475,8 @@ export function buildSitemapFiles(
 export interface RobotsRenderOptions {
   /** False on a staging or preview host: blocks every crawler outright. */
   readonly allowIndexing?: boolean
+  /** An admin's own robots.txt lines (fiche 50 task 4), merged in by `renderRobotsTxt`. */
+  readonly customRules?: string
 }
 
 export function renderRobots(site: SeoSite, options: RobotsRenderOptions = {}): string {
@@ -389,5 +488,6 @@ export function renderRobots(site: SeoSite, options: RobotsRenderOptions = {}): 
     // spend requests discovering that.
     groups: [{ userAgent: '*', allow: ['/'], disallow: ['/admin', '/api/'] }],
     ...(options.allowIndexing === undefined ? {} : { allowIndexing: options.allowIndexing }),
+    ...(options.customRules === undefined ? {} : { customRules: options.customRules }),
   })
 }

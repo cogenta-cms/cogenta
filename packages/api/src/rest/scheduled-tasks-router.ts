@@ -116,6 +116,30 @@ function parseJobStatus(value: string | undefined): JobState['status'] | undefin
   return statuses.includes(value as JobState['status']) ? (value as JobState['status']) : undefined
 }
 
+/**
+ * Fiche 67 task 3 — the "File" section pages client-side over one larger
+ * fetch rather than the driver contract growing an `offset` (that would mean
+ * teaching both `QueueDriver` implementations — `bullmq.ts` and
+ * `database.ts` — a new pagination shape for a working queue that is
+ * usually small to begin with). `ListJobsOptions.limit` already exists
+ * (default 50, `packages/core/src/queue/types.ts`); this just lets the
+ * screen ask for a wider window than that default, still bounded.
+ */
+const MAX_QUEUE_LIST_LIMIT = 500
+
+function parseQueueLimit(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_QUEUE_LIST_LIMIT) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: `"limit" must be a whole number between 1 and ${MAX_QUEUE_LIST_LIMIT}.`,
+      hint: `Ask for between 1 and ${MAX_QUEUE_LIST_LIMIT} jobs.`,
+    })
+  }
+  return parsed
+}
+
 export function createScheduledTasksRouter(
   options: ScheduledTasksRouterOptions,
 ): ScheduledTasksRouter {
@@ -153,7 +177,11 @@ export function createScheduledTasksRouter(
       if (options.queue === undefined) return jsonResponse(200, { data: { jobs: [] } })
       const params = new URLSearchParams(query ?? '')
       const status = parseJobStatus(params.get('status') ?? undefined)
-      const jobs = await options.queue.list(status === undefined ? {} : { status })
+      const limit = parseQueueLimit(params.get('limit') ?? undefined)
+      const jobs = await options.queue.list({
+        ...(status === undefined ? {} : { status }),
+        ...(limit === undefined ? {} : { limit }),
+      })
       return jsonResponse(200, { data: { jobs } })
     }
 

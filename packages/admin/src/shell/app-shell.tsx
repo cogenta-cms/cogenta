@@ -172,16 +172,19 @@ function readStoredSidebarCollapsed(): boolean {
 }
 
 /**
- * Cogenta's own logo — trimmed to its real content (no padding) from the
- * 500×500 sources in `docs/logo/`, kept as two theme-matched variants
- * (`logo-cogenta-light.png`: icon + dark "COGENTA" wordmark, for a light
- * topbar/footer; `logo-cogenta-dark.png`: icon + white wordmark, for a dark
- * one) rather than one small icon plus a separate HTML "Cogenta" label — the
- * icon-only 64×64 mark this replaced (fiche L21 task 8) read as blurry once
- * shown at any real size, and the wordmark is already part of the real
- * asset, not something to reconstruct in CSS. `BASE_URL` is what keeps this
- * correct in both dev (`/`) and the production build `cogenta serve` serves
- * under `/admin/` (`vite.config.ts`'s own `base` comment).
+ * Cogenta's own logo — a straight resize (no trim, no manual crop) of the
+ * corrected 500×500 sources in `docs/logo/`, kept as two theme-matched
+ * variants (`logo-cogenta-light.png`: icon + dark "COGENTA" wordmark, for a
+ * light topbar/footer; `logo-cogenta-dark.png`: icon + white wordmark, for a
+ * dark one) rather than one small icon plus a separate HTML "Cogenta" label —
+ * the icon-only 64×64 mark this replaced (fiche L21 task 8) read as blurry
+ * once shown at any real size, and the wordmark is already part of the real
+ * asset, not something to reconstruct in CSS. The earlier version of this
+ * asset was manually trimmed to zero padding, which read as visually cramped
+ * — the source files now already carry their own intentional padding, so
+ * nothing here re-crops them. `BASE_URL` is what keeps this correct in both
+ * dev (`/`) and the production build `cogenta serve` serves under `/admin/`
+ * (`vite.config.ts`'s own `base` comment).
  */
 const COGENTA_LOGO_LIGHT_URL = `${import.meta.env.BASE_URL}branding/logo-cogenta-light.png`
 const COGENTA_LOGO_DARK_URL = `${import.meta.env.BASE_URL}branding/logo-cogenta-dark.png`
@@ -412,7 +415,9 @@ export function AppShell(): JSX.Element {
               setGroupOpen((previous) => ({ ...previous, [group.id]: nowOpen }))
             }}
           >
-            <summary className="app-shell__nav-group-summary">{t(group.labelKey)}</summary>
+            <summary className="app-shell__nav-group-summary">
+              <span>{t(group.labelKey)}</span>
+            </summary>
             <ul>
               {group.items.map((item, index) => {
                 const Icon = iconFor(item)
@@ -427,7 +432,7 @@ export function AppShell(): JSX.Element {
                       } as CSSProperties & Record<'--reveal-delay', string>
                     }
                   >
-                    <NavLink to={item.to} end={item.to === '/'}>
+                    <NavLink to={item.to} end={item.to === '/'} title={t(item.labelKey)}>
                       <Icon className="size-4 shrink-0" />
                       <span>{t(item.labelKey)}</span>
                       {badgeCount !== null && badgeCount > 0 && (
@@ -595,13 +600,15 @@ export function AppShell(): JSX.Element {
         </div>
       </header>
 
-      <nav
-        id={SIDEBAR_ID}
-        className="app-shell__sidebar"
-        aria-label={t('shell.nav')}
-        data-collapsed={sidebarCollapsed ? 'true' : undefined}
-      >
-        {renderGroupList()}
+      <div className="app-shell__sidebar-wrap">
+        <nav
+          id={SIDEBAR_ID}
+          className="app-shell__sidebar"
+          aria-label={t('shell.nav')}
+          data-collapsed={sidebarCollapsed ? 'true' : undefined}
+        >
+          {renderGroupList()}
+        </nav>
         <button
           type="button"
           className="app-shell__collapse-toggle"
@@ -612,7 +619,7 @@ export function AppShell(): JSX.Element {
         >
           <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
         </button>
-      </nav>
+      </div>
 
       {drawerOpen && (
         // The drawer's real dismissal is the document-level Escape handler above;

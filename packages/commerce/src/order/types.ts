@@ -82,6 +82,31 @@ export interface OrderLine {
   readonly position: number
 }
 
+/**
+ * A real postal address, as opposed to `shippingCountry`/`shippingRegion` —
+ * the tax/rate *zone* an order already carried before this fiche, never
+ * enough for a courier to print a label from (fiche 52's opening constat).
+ * Every field but the two required by any address at all (`line1`, `city`,
+ * `postalCode`) is optional: a shop with only digital goods, or an order
+ * placed before this fiche existed, has none of this and still reads back
+ * fine.
+ */
+export interface ShippingAddress {
+  readonly line1: string
+  readonly line2?: string | null
+  readonly city: string
+  readonly postalCode: string
+  readonly recipient?: string | null
+  readonly phone?: string | null
+}
+
+/** Where a shipment actually went, once it did (fiche 52 task 4). */
+export interface OrderTracking {
+  readonly carrier: string
+  readonly number: string
+  readonly url?: string | null
+}
+
 export interface Order {
   readonly id: string
   /** Human-facing, unique, unrelated to any invoice number. */
@@ -100,6 +125,17 @@ export interface Order {
   readonly shippingRegion: string | null
   readonly shippingMethodId: string | null
   readonly shippingMethodLabel: string | null
+  /** The structured delivery address, or null when none was ever recorded. */
+  readonly shippingAddressLine1: string | null
+  readonly shippingAddressLine2: string | null
+  readonly shippingCity: string | null
+  readonly shippingPostalCode: string | null
+  readonly shippingRecipient: string | null
+  readonly shippingPhone: string | null
+  readonly trackingCarrier: string | null
+  readonly trackingNumber: string | null
+  readonly trackingUrl: string | null
+  readonly shippedAt: string | null
   readonly subscriptionId: string | null
   readonly lines: readonly OrderLine[]
   readonly placedAt: string
@@ -114,6 +150,8 @@ export const ORDER_EVENT_KINDS = [
   'payment_failed',
   'refunded',
   'invoiced',
+  'address_updated',
+  'tracking_added',
   'note',
 ] as const
 export type OrderEventKind = (typeof ORDER_EVENT_KINDS)[number]

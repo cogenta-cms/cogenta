@@ -56,6 +56,15 @@ export function PreviewFrame({
   // from "fits" so a viewport whose width is already available (or a test
   // environment with no real layout) never shows a needless shrink.
   const [scale, setScale] = useState(1)
+  // Pre-transform height, in px, chosen so the frame's *visible* (post-scale)
+  // height stays constant — `null` until the first real measurement, which
+  // falls back to the `h-[70vh]` class below. Without this, scaling the
+  // frame down to fit a narrow panel shrinks its height by the same factor
+  // as its width: a 70vh-tall frame scaled to 0.32 to fit a ~460px-wide
+  // column paints barely 150px tall, a postage stamp rather than a preview
+  // (found auditing the Page Builder end to end, 2026-08-26 — the panel's
+  // own width was the first bug, this compounded it).
+  const [frameHeight, setFrameHeight] = useState<number | null>(null)
 
   // The handlers are read through a ref so that a parent re-render — which
   // happens on every keystroke of an inline edit — does not tear down and
@@ -108,7 +117,11 @@ export function PreviewFrame({
       const horizontalPadding =
         Number.parseFloat(style.paddingLeft || '0') + Number.parseFloat(style.paddingRight || '0')
       const available = el.clientWidth - horizontalPadding
-      setScale(available > 0 && target > available ? available / target : 1)
+      const nextScale = available > 0 && target > available ? available / target : 1
+      setScale(nextScale)
+      // Same visible height (70% of the *browser's* viewport, not the
+      // panel's) no matter how much the width had to shrink.
+      setFrameHeight((window.innerHeight * 0.7) / nextScale)
     }
 
     recompute()
@@ -147,6 +160,7 @@ export function PreviewFrame({
         )}
         style={{
           width: VIEWPORT_WIDTHS[viewport],
+          ...(frameHeight === null ? {} : { height: `${frameHeight}px` }),
           transform: scale === 1 ? undefined : `scale(${scale})`,
           transformOrigin: 'top center',
         }}

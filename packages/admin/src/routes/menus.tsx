@@ -114,6 +114,39 @@ export function MenusRoute(): JSX.Element {
     }
   }, [token, t])
 
+  // `locales`/`collections`/`taxonomies` are all `[]` (or `[i18n.language]`
+  // for `locales`, the *admin's own* UI language — never the site's) until
+  // `useSchema()` resolves; every `useState(x[0] ?? fallback)` above reads
+  // that placeholder at mount and is never told the real value arrived, so
+  // it keeps proposing (and, unless the admin happens to click the field,
+  // silently submitting) a locale/collection/taxonomy nothing on the site
+  // actually has. Found end to end, 2026-08-27: "Dupliquer vers la langue"
+  // rendered "en" (the schema's real, sole locale, in the now-current
+  // options list) while its value stayed the stale 'fr' from before the
+  // schema loaded — a duplicate silently landed in the wrong locale with
+  // the control visibly showing the right one. Corrected only when the
+  // current value is no longer a real option, so a deliberate mid-session
+  // choice is never overwritten out from under the admin.
+  useEffect(() => {
+    if (schemaState.status !== 'ready') return
+    setNewLocale((current) => (locales.includes(current) ? current : (locales[0] ?? current)))
+    setDuplicateLocale((current) => (locales.includes(current) ? current : (locales[0] ?? current)))
+    setItemCollection((current) =>
+      collections.some((collection) => collection.name === current)
+        ? current
+        : (collections[0]?.name ?? current),
+    )
+    setItemTaxonomy((current) =>
+      taxonomies.some((taxonomy) => taxonomy.name === current)
+        ? current
+        : (taxonomies[0]?.name ?? current),
+    )
+    // Only once per schema readiness transition, not on every locales/
+    // collections/taxonomies re-render (those are recomputed every render
+    // from `schemaState`, so referencing them here would re-run this loop
+    // on every keystroke elsewhere on the page).
+  }, [schemaState.status])
+
   useEffect(() => {
     void loadMenus()
   }, [loadMenus])
@@ -327,6 +360,23 @@ export function MenusRoute(): JSX.Element {
     [items],
   )
 
+  // Locale coverage for the selected menu's own location: a location is a
+  // per-locale slot (`byLocation(location, locale)`, `theme-render.ts`), so
+  // assigning this menu to, say, "primary" only ever fills that slot for
+  // *this* menu's own locale — a visitor on any other declared locale still
+  // gets an empty header, with nothing in this screen ever saying so (found
+  // auditing this screen end to end, 2026-08-27: a `fr` menu assigned to
+  // "primary" on a site whose pages actually serve `en` rendered no
+  // navigation at all, silently). Computed from `menus`/`locales` already
+  // in hand — no second request.
+  const uncoveredLocales = useMemo(() => {
+    if (selected === null || selected.location === null || selected.location === '') return []
+    return locales.filter(
+      (locale) =>
+        !menus.some((menu) => menu.location === selected.location && menu.locale === locale),
+    )
+  }, [selected, menus, locales])
+
   // A rendered-as-published preview (task 5): the same "hide a dead link,
   // never serve one" rule `theme-render.ts`'s `renderMenuLinks` applies —
   // reimplemented at this one small scale rather than pulled in as a
@@ -469,6 +519,12 @@ export function MenusRoute(): JSX.Element {
           {problemCount > 0 && (
             <Notice tone="warning" title={t('menus.problemsTitle', { count: problemCount })}>
               {t('menus.problemsBody')}
+            </Notice>
+          )}
+
+          {uncoveredLocales.length > 0 && (
+            <Notice tone="warning" title={t('menus.localeCoverageTitle')}>
+              {t('menus.localeCoverageBody', { locales: uncoveredLocales.join(', ') })}
             </Notice>
           )}
 

@@ -157,6 +157,15 @@ export interface SchemaDraft {
   readonly applied: false
 }
 
+/** Fiche 55 task 3 — `assist.generate_agent_identity`'s output: a draft the agent-creation screen shows for review, never applied on its own. */
+export interface GeneratedAgentIdentity {
+  readonly role: string
+  readonly objectives: readonly string[]
+  readonly style: string | null
+  readonly systemPrompt: string | null
+  readonly applied: false
+}
+
 export function getAssistCapabilities(token: string): Promise<AssistCapabilities> {
   return request('/api/assistant', { headers: authHeader(token) })
 }
@@ -244,6 +253,19 @@ export function runSchemaOrgDraft(
   },
 ): Promise<SchemaDraft> {
   return runAssistTool<SchemaDraft>(token, 'assist.schema_org_draft', input)
+}
+
+/** Fiche 55 task 3 — drafts a new agent's identity from a short brief. Never applied: the caller reviews the result and decides what, if anything, to save. */
+export function runGenerateAgentIdentity(
+  token: string,
+  input: {
+    readonly agentName: string
+    readonly purpose: string
+    readonly toolNames?: readonly string[]
+    readonly constraints?: readonly string[]
+  },
+): Promise<GeneratedAgentIdentity> {
+  return runAssistTool<GeneratedAgentIdentity>(token, 'assist.generate_agent_identity', input)
 }
 
 /** L22 task 4 — `GET /api/assistant/documents`. */

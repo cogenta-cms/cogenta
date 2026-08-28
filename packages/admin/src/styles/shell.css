@@ -8,6 +8,18 @@
     "footer footer";
   min-height: 100%;
   background: var(--color-bg);
+  transition: grid-template-columns 200ms ease;
+}
+
+/* Reclaim the width the sidebar gives up — without this the content column
+   never grows, leaving a dead gap where the sidebar used to be. */
+.app-shell--sidebar-collapsed {
+  grid-template-columns: 3.5rem 1fr;
+}
+
+.app-shell__sidebar-wrap {
+  grid-area: sidebar;
+  position: relative;
 }
 
 .app-shell__footer {
@@ -171,14 +183,14 @@
 }
 
 .app-shell__sidebar {
-  grid-area: sidebar;
+  height: 100%;
   border-right: 1px solid var(--color-border);
   background: var(--card);
   padding: var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  transition: width 200ms ease;
+  overflow-x: hidden;
 }
 
 /* Groups (fiche 35 task 1) — a native `<details>` per group, so opening one
@@ -251,17 +263,24 @@
   position: relative;
 }
 
-/* The collapse toggle (fiche 35 task 2) — icons-only mode, remembered in
-   `localStorage`. */
+/* The collapse toggle (fiche 35 task 2, redesigned fiche 72) — a small
+   circular button straddling the sidebar's own right edge, centered
+   vertically, so it stays findable regardless of how tall the nav list
+   grows. Positioned relative to `.app-shell__sidebar-wrap`, not the `<nav>`
+   itself, so it never scrolls away with a long nav list. */
 .app-shell__collapse-toggle {
-  margin-top: auto;
-  align-self: flex-end;
+  position: absolute;
+  top: 50%;
+  right: -0.875rem;
+  transform: translateY(-50%);
+  z-index: 1;
   border: 1px solid var(--color-border);
-  background: transparent;
+  background: var(--card);
   color: var(--color-text-muted);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   width: 1.75rem;
   height: 1.75rem;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgb(0 0 0 / 0.08));
   cursor: pointer;
 }
 
@@ -270,14 +289,17 @@
   color: var(--color-text);
 }
 
-/* Icons-only sidebar: the label stays in the DOM (an accessible name, and
-   the drawer at a narrow viewport reuses the very same markup with labels
-   shown), only visually hidden here — a `title` attribute on the link
-   itself is what a mouse hover reads instead. */
-.app-shell--sidebar-collapsed .app-shell__sidebar {
-  width: 3.5rem;
-}
-
+/* Icons-only sidebar (fiche 35 task 2, redesigned fiche 72): the label
+   stays in the DOM (an accessible name, and the drawer at a narrow
+   viewport reuses the very same markup with labels shown), only visually
+   hidden here — a `title` attribute on the link itself is what a mouse
+   hover reads instead. The nav list itself stays visible: an icon-only
+   mode that also hides the icons defeats its own purpose (fiche 72's
+   found bug — every link, and therefore every icon, used to disappear
+   with the list it lived in). Groups keep their `<details>` structure for
+   accessibility, but the accordion collapse/expand has no visual meaning
+   here — a border between groups (already `border-bottom` on
+   `.app-shell__nav-group`) marks the boundary instead. */
 .app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-summary span,
 .app-shell--sidebar-collapsed .app-shell__sidebar a span,
 .app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__badge {
@@ -292,12 +314,17 @@
   border: 0;
 }
 
+.app-shell--sidebar-collapsed .app-shell__nav-group-summary {
+  padding-left: 0;
+  justify-content: center;
+}
+
 .app-shell--sidebar-collapsed .app-shell__nav-group-summary::before {
   display: none;
 }
 
-.app-shell--sidebar-collapsed .app-shell__nav-group > ul {
-  display: none;
+.app-shell--sidebar-collapsed .app-shell__sidebar a {
+  justify-content: center;
 }
 
 /* The hamburger that opens the mobile drawer — a topbar button, hidden

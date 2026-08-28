@@ -122,7 +122,7 @@ export function BlockOutline({
                 if (added !== '') onInsert(added, index)
               }}
               className={cn(
-                'flex items-center gap-1 rounded-md border px-2 py-1.5 transition-colors',
+                'group flex items-start gap-1 rounded-md border px-2 py-1.5 transition-colors',
                 selected ? 'border-primary bg-accent' : 'border-input bg-card',
               )}
             >
@@ -133,7 +133,7 @@ export function BlockOutline({
                 }
                 aria-current={selected ? 'true' : undefined}
                 className={cn(
-                  'flex-1 cursor-pointer border-0 bg-transparent p-0 text-left font-sans text-sm',
+                  'min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 py-1 text-left font-sans text-sm',
                   'text-card-foreground focus-visible:outline-2 focus-visible:outline-offset-2',
                   'focus-visible:outline-ring',
                 )}
@@ -145,47 +145,70 @@ export function BlockOutline({
                   </span>
                 )}
               </button>
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled}
-                aria-pressed={locked}
-                aria-label={
-                  locked
-                    ? t('builder.unlockBlock', { position: index + 1 })
-                    : t('builder.lockBlock', { position: index + 1 })
-                }
-                onClick={() => onToggleLock(block.key)}
+              {/*
+               * The four action icons only take up row width on hover or
+               * keyboard focus (`group-hover`/`group-focus-within`) — always
+               * reserving their width beside the label is what squeezed a
+               * name like "Média et légende" into three cramped, ragged
+               * lines in a 16rem column (found auditing the Page Builder end
+               * to end, 2026-08-26; the same row-actions-on-hover pattern
+               * WordPress's own list views use). `hidden` (not `opacity-0`)
+               * so the width is actually reclaimed at rest, not just made
+               * invisible; `:focus-within` is native CSS state, so tabbing
+               * from the label button into these reveals them with no JS
+               * re-render in between — nothing here becomes hover-only to
+               * *operate*, only to *take space* at rest. A selected row
+               * keeps them shown: it is the one an editor is actively
+               * working with.
+               */}
+              <div
+                className={cn(
+                  'shrink-0 items-center gap-1',
+                  selected ? 'flex' : 'hidden group-hover:flex group-focus-within:flex',
+                )}
               >
-                {locked ? '🔒' : '🔓'}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled || locked || index === 0}
-                aria-label={t('fields.blocksMoveUp', { position: index + 1 })}
-                onClick={() => onMove(block.key, index - 1)}
-              >
-                ↑
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled || locked || index === blocks.length - 1}
-                aria-label={t('fields.blocksMoveDown', { position: index + 1 })}
-                onClick={() => onMove(block.key, index + 1)}
-              >
-                ↓
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled || locked}
-                aria-label={t('fields.blocksRemove', { position: index + 1 })}
-                onClick={() => onRemove(block.key)}
-              >
-                ✕
-              </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled}
+                  aria-pressed={locked}
+                  aria-label={
+                    locked
+                      ? t('builder.unlockBlock', { position: index + 1 })
+                      : t('builder.lockBlock', { position: index + 1 })
+                  }
+                  onClick={() => onToggleLock(block.key)}
+                >
+                  {locked ? '🔒' : '🔓'}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled || locked || index === 0}
+                  aria-label={t('fields.blocksMoveUp', { position: index + 1 })}
+                  onClick={() => onMove(block.key, index - 1)}
+                >
+                  ↑
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled || locked || index === blocks.length - 1}
+                  aria-label={t('fields.blocksMoveDown', { position: index + 1 })}
+                  onClick={() => onMove(block.key, index + 1)}
+                >
+                  ↓
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled || locked}
+                  aria-label={t('fields.blocksRemove', { position: index + 1 })}
+                  onClick={() => onRemove(block.key)}
+                >
+                  ✕
+                </Button>
+              </div>
             </li>
           )
         })}

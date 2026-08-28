@@ -7,6 +7,7 @@ import type { ContentBlock } from '../api/content-client.js'
 import type { Pattern } from '../api/patterns-client.js'
 import { BlockForm } from '../blocks/block-form.js'
 import { blockDefinition } from '../blocks/vocabulary.js'
+import { cn } from '../ui/cn.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 import {
   insertBlock,
@@ -449,7 +450,19 @@ export function PageBuilder({
         </Notice>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_20rem]">
+      <div
+        className={cn(
+          'grid gap-4',
+          // The detail panel only needs its full 20rem once there is
+          // something to show in it — while it just holds the "select a
+          // block" placeholder, that width is better spent on the preview
+          // itself (real page builders never reserve settings-panel width
+          // for nothing selected).
+          selectedKeys.size > 0
+            ? 'lg:grid-cols-[16rem_minmax(0,1fr)_20rem]'
+            : 'lg:grid-cols-[16rem_minmax(0,1fr)_14rem]',
+        )}
+      >
         <div className="flex flex-col gap-4">
           <Card>
             <CardHeader>

@@ -25,16 +25,37 @@ export const TABLES = {
   orders: 'cogenta_commerce_orders',
   orderLines: 'cogenta_commerce_order_lines',
   orderEvents: 'cogenta_commerce_order_events',
+  orderEmails: 'cogenta_commerce_order_emails',
   payments: 'cogenta_commerce_payments',
   refunds: 'cogenta_commerce_refunds',
   taxRules: 'cogenta_commerce_tax_rules',
   shippingMethods: 'cogenta_commerce_shipping_methods',
   coupons: 'cogenta_commerce_coupons',
   couponRedemptions: 'cogenta_commerce_coupon_redemptions',
+  // Fiche 53 task 2: a coupon's own restriction and per-customer counters.
+  couponRestrictions: 'cogenta_commerce_coupon_restrictions',
+  couponCustomerRedemptions: 'cogenta_commerce_coupon_customer_redemptions',
   invoices: 'cogenta_commerce_invoices',
   invoiceSequences: 'cogenta_commerce_invoice_sequences',
+  creditNotes: 'cogenta_commerce_credit_notes',
   subscriptions: 'cogenta_commerce_subscriptions',
   subscriptionCycles: 'cogenta_commerce_subscription_cycles',
+  // Fiche 53 task 3: one open dunning cycle per subscription.
+  subscriptionDunning: 'cogenta_commerce_subscription_dunning',
+  // Fiche 53 task 5: which billing period a renewal notice was already sent
+  // for, so a repeated run never sends the same notice twice.
+  subscriptionRenewalNotices: 'cogenta_commerce_subscription_renewal_notices',
+  /** A product's link to a term of a taxonomy the *site* declares (ADR-0022,
+   * fiche 51 task 3) — not a foreign key for the same reason `content_ref` on
+   * `products` is not one: the term table is named after a taxonomy this
+   * package cannot know. A join row rather than a column on `products` because
+   * a product may carry more than one term, the same "many" a `f.taxonomy`
+   * field defaults to on a collection. */
+  productTerms: 'cogenta_commerce_product_terms',
+  /** Append-only. Every write that moves `on_hand` — a sale, a restock, a
+   * stock take — leaves one row here and never edits or removes an earlier
+   * one; the row is the audit trail, not a cache of the current count. */
+  stockMovements: 'cogenta_commerce_stock_movements',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -180,6 +201,24 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       shipping_region ${t64},
       shipping_method_id ${t64},
       shipping_method_label ${t255},
+      -- Structured delivery address (fiche 52 task 1) — the constat that
+      -- opened this fiche: shipping_country/shipping_region alone (above)
+      -- were the tax/rate *zone*, never a real address a courier can print on
+      -- a label. All six nullable: an order placed before this address ever
+      -- existed, or one nobody ever filled in, still reads back fine.
+      shipping_address_line1 ${t255},
+      shipping_address_line2 ${t255},
+      shipping_city ${t255},
+      shipping_postal_code ${t64},
+      shipping_recipient ${t255},
+      shipping_phone ${t64},
+      -- Shipment tracking (fiche 52 task 4). Set together, by setTracking(),
+      -- once goods actually leave — never guessed from the status alone,
+      -- because "shipped" and "we know how" are two different facts.
+      tracking_carrier ${t64},
+      tracking_number ${t255},
+      tracking_url ${t1024},
+      shipped_at ${t64},
       placed_at ${t64} not null,
       updated_at ${t64} not null,
       -- Set when a subscription cycle produced this order, null otherwise.
@@ -215,6 +254,24 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       to_status ${t64},
       actor_id ${t64},
       note ${t1024}
+    )`)
+
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.orderEmails, d)} (
+      id ${t64} not null primary key,
+      order_id ${t64} not null,
+      -- 'confirmation' | 'shipment' (order/notify.ts's OrderEmailKind) — a
+      -- closed vocabulary kept as free text, the same choice this whole
+      -- package makes for every other status/kind column.
+      kind ${t64} not null,
+      to_email ${t255} not null,
+      -- 'pending' | 'sent' | 'failed' — 'failed' is retried by flushDue()
+      -- until MAX_ATTEMPTS, never resurrected after.
+      status ${t64} not null,
+      attempts ${int} not null,
+      last_error ${t1024},
+      created_at ${t64} not null,
+      sent_at ${t64}
     )`)
 
   await db.query(sql`
@@ -299,9 +356,26 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       -- Null means unlimited. Zero means exhausted, not unlimited.
       max_redemptions ${int},
       redemptions ${int} not null,
+      -- Fiche 53 task 2. Null means no per-customer cap. Enforced against
+      -- ${identifier(TABLES.couponCustomerRedemptions, d)}, never against this
+      -- column's own value — it only ever records the *limit*, never a count.
+      max_redemptions_per_customer ${int},
       active ${bool} not null,
       created_at ${t64} not null
     )`)
+
+  // A database whose `coupons` table predates the per-customer cap: `create
+  // table if not exists` above is a no-op for it, so the column is added the
+  // same way every other in-place table growth in this codebase is
+  // (`menu-tables.ts`'s `location` column). Failure means the column already
+  // exists — the only realistic cause once this function has already run
+  // against this table — so it is swallowed exactly like the index
+  // statements below.
+  await db
+    .query(
+      sql`alter table ${identifier(TABLES.coupons, d)} add column ${identifier('max_redemptions_per_customer', d)} ${int}`,
+    )
+    .catch(() => undefined)
 
   await db.query(sql`
     create table if not exists ${identifier(TABLES.couponRedemptions, d)} (
@@ -310,6 +384,33 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       order_id ${t64} not null unique,
       customer_id ${t64},
       at ${t64} not null
+    )`)
+
+  // One row per product a coupon is restricted to. No rows at all means
+  // unrestricted — the common case, and the reason this is a join table
+  // rather than a nullable column on `coupons` (a coupon can name several
+  // products, and a nullable single column could only ever name one).
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.couponRestrictions, d)} (
+      id ${t64} not null primary key,
+      code ${t64} not null,
+      product_id ${t64} not null,
+      created_at ${t64} not null
+    )`)
+
+  // The atomic per-customer counter `redeem()` claims against (fiche 53 task
+  // 2). Deliberately not a `count(*)` over `couponRedemptions` at redemption
+  // time — a guarded single-row `UPDATE` is what stays atomic on Postgres,
+  // MySQL/MariaDB and SQLite alike (the same reasoning as the stock guard in
+  // `catalog/store.ts`), and an aggregate query is not a single row.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.couponCustomerRedemptions, d)} (
+      code ${t64} not null,
+      customer_id ${t64} not null,
+      count ${int} not null,
+      created_at ${t64} not null,
+      updated_at ${t64} not null,
+      primary key (code, customer_id)
     )`)
 
   await db.query(sql`
@@ -333,6 +434,24 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
     create table if not exists ${identifier(TABLES.invoiceSequences, d)} (
       series ${t64} not null primary key,
       next_seq ${int} not null
+    )`)
+
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.creditNotes, d)} (
+      id ${t64} not null primary key,
+      order_id ${t64} not null,
+      -- One credit note per refund, never per order: an order can be
+      -- refunded in several instalments, and each one gets its own
+      -- sequential, never-reused number (fiche 52 task 6).
+      refund_id ${t64} not null unique,
+      series ${t64} not null,
+      seq ${int} not null,
+      number ${t64} not null unique,
+      issued_at ${t64} not null,
+      currency ${t8} not null,
+      amount_minor ${int} not null,
+      reason ${t1024},
+      document text not null
     )`)
 
   await db.query(sql`
@@ -374,7 +493,147 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       created_at ${t64} not null
     )`)
 
+  // Fiche 53 task 3: at most one open dunning cycle per subscription — the
+  // primary key is the whole guard against tracking two at once. `period_key`
+  // is carried, not reinvented: it is the exact value `billOne` already
+  // claimed for the order this cycle is trying to collect, so this table
+  // never becomes a second source of truth about which period is which.
+  // `next_retry_at` doubles as the compare-and-set field `runDunning` claims
+  // against (same shape as `SCHEDULED_TASK_CLAIMS_TABLE` in
+  // `@cogenta/schema`): null means either "claimed and being processed right
+  // now" (transient) or "exhausted" (terminal, `suspended_at` tells the two
+  // apart) — and either way the due-query (`next_retry_at <= now`) simply
+  // never matches null, so a claimed-but-not-yet-resolved row can never be
+  // picked up twice.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.subscriptionDunning, d)} (
+      subscription_id ${t64} not null primary key,
+      order_id ${t64} not null,
+      period_key ${t255} not null,
+      failure_count ${int} not null,
+      first_failed_at ${t64} not null,
+      next_retry_at ${t64},
+      last_reason ${t1024},
+      suspended_at ${t64},
+      created_at ${t64} not null,
+      updated_at ${t64} not null
+    )`)
+
+  // Fiche 53 task 5: one row per (subscription, upcoming period) once a
+  // renewal notice has actually been sent for it — the insert itself is the
+  // claim (a duplicate insert hits the primary key and is swallowed by
+  // `sendRenewalNotices`), so a rerun never notifies a subscriber twice for
+  // the same renewal.
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.subscriptionRenewalNotices, d)} (
+      subscription_id ${t64} not null,
+      period_key ${t255} not null,
+      sent_at ${t64} not null,
+      primary key (subscription_id, period_key)
+    )`)
+
+  // Columns added to `orders` after it first shipped (fiche 52 tasks 1 and
+  // 4). The `create table` above already declares them, which covers a fresh
+  // install; a site whose `cogenta_commerce_orders` predates this fiche needs
+  // them added in place. Same idiom as `menu-tables.ts`'s `location` column
+  // and `theme-store.ts`'s `active_theme`: `alter table … add column`,
+  // failure swallowed unconditionally. On a table this function already
+  // created, the only realistic failure is "column already exists" — nothing
+  // destructive is attempted, and every added column is nullable, so no
+  // existing row is affected either way. This is deliberately outside
+  // contract A's up/down migration engine (see this file's own header
+  // comment) — there is no "down" for an additive, nullable column.
+  const ordersTable = identifier(TABLES.orders, d)
+  const orderColumnStatements: readonly SqlFragment[] = [
+    sql`alter table ${ordersTable} add column shipping_address_line1 ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_address_line2 ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_city ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_postal_code ${t64}`,
+    sql`alter table ${ordersTable} add column shipping_recipient ${t255}`,
+    sql`alter table ${ordersTable} add column shipping_phone ${t64}`,
+    sql`alter table ${ordersTable} add column tracking_carrier ${t64}`,
+    sql`alter table ${ordersTable} add column tracking_number ${t255}`,
+    sql`alter table ${ordersTable} add column tracking_url ${t1024}`,
+    sql`alter table ${ordersTable} add column shipped_at ${t64}`,
+  ]
+  for (const statement of orderColumnStatements) {
+    await db.query(statement).catch(() => undefined)
+  }
+
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.productTerms, d)} (
+      id ${t64} not null primary key,
+      product_id ${t64} not null,
+      -- Names a taxonomy the *site* declares (ADR-0022) and a term inside it —
+      -- neither is a foreign key here, for the same reason content_ref is not
+      -- one on products: the term table belongs to a schema this package
+      -- cannot know.
+      taxonomy ${t64} not null,
+      term_id ${t64} not null,
+      created_at ${t64} not null
+    )`)
+
+  await db.query(sql`
+    create table if not exists ${identifier(TABLES.stockMovements, d)} (
+      id ${t64} not null primary key,
+      variant_id ${t64} not null,
+      -- Positive for stock added, negative for stock taken. Never rewritten:
+      -- a mistake is corrected by a further movement, never by editing this
+      -- row (fiche 51 task 4's "append-only, jamais modifiable").
+      delta ${int} not null,
+      -- The absolute count this movement left the variant at — read back
+      -- without summing the whole history for a variant that has moved many
+      -- times.
+      balance_after ${int} not null,
+      reason ${t64} not null,
+      actor_id ${t64},
+      -- Names what caused the movement (an order id, most often), when there
+      -- is one. Free-form on purpose: a movement caused by a stock take has
+      -- no such thing.
+      reference_id ${t64},
+      note ${t1024},
+      created_at ${t64} not null
+    )`)
+
   await ensureIndexes(db)
+  await ensureColumns(db)
+}
+
+/**
+ * Columns added after this package's first release, on tables that already
+ * existed (fiche 51 tasks 4 and 5) — same pattern as `menu-tables.ts`'s own
+ * `location` column: `create table if not exists` above is a no-op on a
+ * database that already has `variants`, so the column is added here instead,
+ * and a failure is swallowed because the only realistic cause on a table this
+ * function has already run against is "the column is already there".
+ */
+async function ensureColumns(db: DatabaseHandle): Promise<void> {
+  const d = db.dialect
+  const variants = identifier(TABLES.variants, d)
+  const int = integerColumn()
+
+  const statements: SqlFragment[] = [
+    // Task 4: a variant with no threshold set (the default, and every
+    // variant created before this column existed) is never "low stock" —
+    // absence means "not watched", not "watched at zero".
+    sql`alter table ${variants} add column ${identifier('low_stock_threshold', d)} ${int}`,
+    // Task 5: the "was" price shown struck through, and the window during
+    // which it applies. All three null together means "no promotion" — the
+    // state every variant is already in.
+    sql`alter table ${variants} add column ${identifier('compare_at_price_minor', d)} ${int}`,
+    sql`alter table ${variants} add column ${identifier('sale_starts_at', d)} ${textColumn(d, 64)}`,
+    sql`alter table ${variants} add column ${identifier('sale_ends_at', d)} ${textColumn(d, 64)}`,
+    // Task 5: physical dimensions, in millimetres — integers for the same
+    // reason weight_grams already is (no decimal column means the same thing
+    // on all three dialects, ADR-0006).
+    sql`alter table ${variants} add column ${identifier('width_mm', d)} ${int}`,
+    sql`alter table ${variants} add column ${identifier('height_mm', d)} ${int}`,
+    sql`alter table ${variants} add column ${identifier('depth_mm', d)} ${int}`,
+  ]
+
+  for (const statement of statements) {
+    await db.query(statement).catch(() => undefined)
+  }
 }
 
 /**
@@ -397,6 +656,12 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
     ['cogenta_commerce_payments_order', TABLES.payments, 'order_id'],
     ['cogenta_commerce_refunds_payment', TABLES.refunds, 'payment_id'],
     ['cogenta_commerce_cycles_subscription', TABLES.subscriptionCycles, 'subscription_id'],
+    ['cogenta_commerce_coupon_restrictions_code', TABLES.couponRestrictions, 'code'],
+    ['cogenta_commerce_dunning_next_retry', TABLES.subscriptionDunning, 'next_retry_at'],
+    ['cogenta_commerce_order_emails_order', TABLES.orderEmails, 'order_id'],
+    ['cogenta_commerce_credit_notes_order', TABLES.creditNotes, 'order_id'],
+    ['cogenta_commerce_product_terms_product', TABLES.productTerms, 'product_id'],
+    ['cogenta_commerce_stock_movements_variant', TABLES.stockMovements, 'variant_id'],
   ]
 
   for (const [name, table, column] of wanted) {
@@ -412,5 +677,20 @@ async function ensureIndexes(db: DatabaseHandle): Promise<void> {
       // and a genuinely broken schema fails loudly on the next real query
       // rather than here.
     }
+  }
+
+  // A product cannot carry the same term twice — the write side (`setProductTerms`)
+  // already guarantees this by replacing the whole set, but the constraint is
+  // what actually protects the data on a caller this package does not control.
+  const productTermsUnique = identifier('cogenta_commerce_product_terms_unique', d)
+  const productTermsTable = identifier(TABLES.productTerms, d)
+  try {
+    await db.query(
+      d === 'mysql'
+        ? sql`create unique index ${productTermsUnique} on ${productTermsTable} (${identifier('product_id', d)}, ${identifier('taxonomy', d)}, ${identifier('term_id', d)})`
+        : sql`create unique index if not exists ${productTermsUnique} on ${productTermsTable} (${identifier('product_id', d)}, ${identifier('taxonomy', d)}, ${identifier('term_id', d)})`,
+    )
+  } catch {
+    // Already there.
   }
 }

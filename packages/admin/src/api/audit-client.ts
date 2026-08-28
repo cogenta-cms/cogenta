@@ -1,5 +1,5 @@
 import type { ContentDiff } from './content-client.js'
-import { API_BASE, ApiError, authHeader, request } from './http.js'
+import { API_BASE, ApiError, authHeader, request, requestBody } from './http.js'
 
 /**
  * The thin fetch layer over `/api/audit` — hand-mirrored from
@@ -35,6 +35,8 @@ export interface AuditFilter {
   /** Task 4's dedicated filter. */
   readonly actorKind?: AuditActorKind
   readonly limit?: number
+  /** Opaque — always the previous page's `nextCursor`, never constructed by hand (fiche 67 task 1). */
+  readonly after?: string
 }
 
 function filterParams(filter: AuditFilter): URLSearchParams {
@@ -46,15 +48,45 @@ function filterParams(filter: AuditFilter): URLSearchParams {
   if (filter.until !== undefined) params.set('until', filter.until)
   if (filter.actorKind !== undefined) params.set('actorKind', filter.actorKind)
   if (filter.limit !== undefined) params.set('limit', String(filter.limit))
+  if (filter.after !== undefined) params.set('after', filter.after)
   return params
 }
 
+/**
+ * Kept returning a plain array, byte for byte, for callers that only ever
+ * wanted "every recent entry matching this filter" without caring about a
+ * cursor — `dashboard.tsx`'s activity widget and `trash.tsx` among them.
+ * `listAuditEntriesPage` below is the one the audit screen itself uses for
+ * real pagination (fiche 67 task 1), same split as `listUsers`/`listUsersPage`.
+ */
 export function listAuditEntries(
   token: string,
   filter: AuditFilter = {},
 ): Promise<readonly AuditEntry[]> {
   const query = filterParams(filter).toString()
   return request(`/api/audit${query === '' ? '' : `?${query}`}`, { headers: authHeader(token) })
+}
+
+export interface AuditEntriesPage {
+  readonly entries: readonly AuditEntry[]
+  readonly hasMore: boolean
+  readonly nextCursor: string | null
+}
+
+export async function listAuditEntriesPage(
+  token: string,
+  filter: AuditFilter = {},
+): Promise<AuditEntriesPage> {
+  const query = filterParams(filter).toString()
+  const response = await requestBody<{
+    data: readonly AuditEntry[]
+    page: { hasMore: boolean; nextCursor: string | null }
+  }>(`/api/audit${query === '' ? '' : `?${query}`}`, { headers: authHeader(token) })
+  return {
+    entries: response.data,
+    hasMore: response.page.hasMore,
+    nextCursor: response.page.nextCursor,
+  }
 }
 
 /** Recomputes and re-chains every hash; throws (via the request layer) naming the first mismatch if the chain was tampered with. */

@@ -894,6 +894,10 @@ export function UsersRoute(): JSX.Element {
         closeLabel={t('users.close')}
       >
         <form onSubmit={submitAnonymize} className="flex flex-col gap-4">
+          {/* Fiche 61 task 2: confirm, in the screen itself and not just in
+              code comments, that this is Cogenta's answer to "delete" — not
+              a lesser option next to a hard delete that does not exist. */}
+          <p className="text-sm text-muted-foreground">{t('users.anonymizeNoHardDelete')}</p>
           <Notice tone="danger">
             <p>{t('users.anonymizeIrreversible')}</p>
           </Notice>

@@ -264,7 +264,8 @@
       "ops": "Exploitation",
       "settings": "Réglages",
       "help": "Aide"
-    }
+    },
+    "commerceCustomers": "Clients"
   },
   "breadcrumb": {
     "newEntry": "Nouveau",
@@ -646,6 +647,9 @@
     "permalinkPending": "Remplissez les champs dont dépend cette URL pour en voir un aperçu.",
     "authorCreatedBy": "Créé par {{author}}",
     "authorUpdatedBy": "Dernière modification par {{author}}",
+    "linkedProductLabel": "Produit lié",
+    "linkedProductName": "Ce contenu est lié au produit « {{title}} ».",
+    "linkedProductOpen": "Voir dans le catalogue",
     "shortcutsButton": "Raccourcis clavier",
     "shortcutSaveKeys": "⌘/Ctrl + S",
     "shortcutSaveLabel": "Enregistrer",
@@ -907,6 +911,8 @@
     "locationError": "L'emplacement n'a pas pu être enregistré.",
     "problemsTitle": "{{count}} lien(s) mort(s) dans ce menu",
     "problemsBody": "Un ou plusieurs éléments pointent vers un contenu non publié. Corrigez l'élément ou publiez la cible avant qu'un visiteur ne trouve le lien mort.",
+    "localeCoverageTitle": "Cet emplacement ne s'affichera pas partout",
+    "localeCoverageBody": "Aucun menu n'est assigné à cet emplacement pour : {{locales}}. Les pages servies dans ces langues n'auront aucune navigation à cet endroit tant qu'un menu ne leur est pas assigné — dupliquez ce menu vers ces langues, ou assignez-leur un menu existant.",
     "previewTitle": "Aperçu (tel qu'un visiteur le verrait)",
     "previewEmpty": "Rien ne s'afficherait publiquement pour l'instant.",
     "duplicateTo": "Dupliquer vers la langue",
@@ -1059,6 +1065,8 @@
     "includedColumn": "Dans le sitemap",
     "urlCountColumn": "URL",
     "reasonColumn": "Pourquoi pas",
+    "reasonNoRoute": "Cette collection ne déclare aucune route.",
+    "reasonNotPublicRole": "Cette collection n'est pas lisible par le rôle « public ».",
     "includedYes": "Oui",
     "includedNo": "Non",
     "robotsHeading": "robots.txt",
@@ -1073,7 +1081,20 @@
     "noIssues": "Aucun trouvé.",
     "anomaliesHeading": "Anomalies",
     "noAnomalies": "Rien d'anormal.",
-    "viewEntry": "Ouvrir"
+    "viewEntry": "Ouvrir",
+    "verificationHeading": "Vérification des moteurs de recherche",
+    "verificationDescription": "Vérification par balise meta uniquement — aucune connexion, aucun appel API. Collez le jeton affiché par la page de vérification propre à chaque fournisseur.",
+    "indexNowHeading": "IndexNow",
+    "indexNowDescription": "Avertit Bing, Yandex et Seznam dès qu'une page est publiée ou dépubliée, sans attendre leur prochaine exploration.",
+    "indexNowKeyLabel": "Clé",
+    "indexNowGenerateKey": "Générer une clé",
+    "indexNowKeyFileHint": "Servi automatiquement à {{url}}",
+    "openSitemap": "Ouvrir sitemap.xml",
+    "openRobots": "Ouvrir robots.txt",
+    "robotsCustomRulesLabel": "Règles personnalisées",
+    "robotsCustomRulesHelp": "Fusionné dans le robots.txt ci-dessus, après les règles affichées et avant la ligne Sitemap. Une directive par ligne, en syntaxe robots.txt réelle.",
+    "robotsDisallowAllConfirm": "Cela inclut « Disallow: / », qui bloque tous les robots pour tout le site. Enregistrer quand même ?",
+    "robotsCustomRulesPlaceholder": "User-agent: GPTBot\nDisallow: /"
   },
   "opsSettings": {
     "heading": "Sécurité & webhooks",
@@ -1282,6 +1303,7 @@
     "markError": "La soumission n'a pas pu être mise à jour.",
     "gdprSearchError": "La recherche n'a pas pu être effectuée.",
     "gdprEraseError": "L'effacement n'a pas pu être effectué.",
+    "loadMore": "Charger plus",
     "filterForm": "Formulaire",
     "allForms": "Tous les formulaires",
     "filterStatus": "Statut",
@@ -1389,9 +1411,14 @@
     "integrityHeading": "Vérification d'intégrité planifiée",
     "integrityNeverRun": "Pas encore vérifié.",
     "integrityLastChecked": "Dernière vérification {{at}} ({{mode}}).",
+    "integrityMode": {
+      "incremental": "incrémentale",
+      "full": "complète"
+    },
     "integrityOk": "Chaîne intacte lors de la dernière vérification.",
     "integrityBroken": "La vérification planifiée a trouvé la chaîne rompue à l'entrée {{entryId}}. Considérez comme non fiable toute entrée à partir de ce point.",
-    "retentionUnbounded": "Aucune purge n'est configurée pour ce journal : il conserve toutes les entrées et croît sans limite."
+    "retentionUnbounded": "Aucune purge n'est configurée pour ce journal : il conserve toutes les entrées et croît sans limite.",
+    "loadMore": "Charger plus"
   },
   "analytics": {
     "heading": "Statistiques",
@@ -1404,7 +1431,12 @@
     "totalViews": "Vues",
     "uniqueVisitors": "Visiteurs uniques",
     "chartHeading": "Vues par jour",
-    "chartLabel": "Diagramme en barres des vues par jour",
+    "chartLabel": "Courbe des vues par jour",
+    "legendCurrent": "Période actuelle",
+    "legendPrevious": "Période précédente",
+    "previousPage": "Précédent",
+    "nextPage": "Suivant",
+    "pageInfo": "{{from}}–{{to}} sur {{total}}",
     "pagesHeading": "Pages les plus vues",
     "page": "Page",
     "views": "Vues",
@@ -1478,14 +1510,33 @@
     "createAgent": "Créer un agent",
     "newAgentNamePlaceholder": "ex. Rédacteur de newsletter",
     "newAgentDefaultRole": "Un nouvel agent — modifiez son rôle, ses objectifs et ses outils ci-dessous.",
-    "newAgentHint": "Un agent minimal est créé sans outil et en autonomie co-pilote — modifiez-le pour lui accorder des outils et décrire son rôle.",
+    "newAgentHint": "Seuls le nom et le fournisseur sont obligatoires — le reste peut être rempli maintenant ou modifié plus tard.",
+    "createProvider": "Fournisseur",
+    "createNoProviders": "Aucun fournisseur n'est encore activé. Configurez-en un depuis l'écran Fournisseurs avant de créer un agent.",
+    "createModel": "Modèle (optionnel)",
+    "createModelHint": "Laissez vide pour utiliser le modèle configuré du fournisseur.",
     "identityRole": "Rôle",
     "identityObjectives": "Objectifs",
     "identityObjectivesHint": "Un objectif par ligne.",
     "identityStyle": "Style",
+    "identitySystemPrompt": "Prompt système",
+    "identitySystemPromptHint": "Instructions permanentes supplémentaires que cet agent doit toujours suivre, au-delà du rôle, des objectifs et du style — une règle, un format de sortie, une limite stricte.",
+    "identityHeading": "Identité",
+    "generateHeading": "Générer à partir d'un besoin",
+    "generateHint": "Décrivez le but de cet agent et le modèle rédige un rôle, des objectifs, un style et un prompt système ci-dessus — rien n'est enregistré tant que vous n'avez pas relu le brouillon et cliqué sur Enregistrer.",
+    "generatePurpose": "Objet",
+    "generatePurposeHint": "Que doit faire cet agent ? Une description en langage courant suffit.",
+    "generatePurposePlaceholder": "ex. Surveiller les nouvelles commandes et signaler celles qui semblent frauduleuses pour relecture humaine.",
+    "generateConstraints": "Contraintes",
+    "generateConstraintsHint": "Une contrainte par ligne, ex. « n'agit jamais sans relecture ».",
+    "generateButton": "Générer",
+    "generating": "Génération…",
+    "generateError": "Impossible de générer un brouillon d'identité.",
+    "generatedReview": "Généré — relisez le rôle, les objectifs, le style et le prompt système ci-dessus avant d'enregistrer.",
     "modelNone": "Aucune préférence de modèle déclarée.",
     "modelPreferred": "Préféré : {{model}}",
     "modelFallback": "repli : {{model}}",
+    "modelExplicit": "modèle : {{model}}",
     "autonomyDefault": "Niveau par défaut : {{level}}",
     "autonomyLevel": {
       "report-only": "Rapport seul",
@@ -1558,7 +1609,23 @@
     "enabledByDefault": "Activée par défaut pour les nouveaux agents",
     "noSkills": "Aucune compétence configurée.",
     "loadError": "Impossible de charger la liste des compétences.",
-    "saveError": "Impossible d'enregistrer cette compétence."
+    "saveError": "Impossible d'enregistrer cette compétence.",
+    "resources": {
+      "heading": "Fichiers de référence",
+      "intro": "Fichiers optionnels qu'une compétence peut porter à côté de son SKILL.md — références, scripts et gabarits — le même agencement standard qu'une vraie compétence Claude Code/Codex. Rien ici n'est chargé automatiquement dans le contexte d'un agent.",
+      "references": "Références",
+      "referencesHint": "Documents consultés à la demande — guides de style, glossaires, cahiers des charges.",
+      "scripts": "Scripts",
+      "scriptsHint": "Utilitaires exécutables que les instructions de la compétence peuvent référencer.",
+      "assets": "Gabarits",
+      "assetsHint": "Modèles, images et autres fichiers utilisés tels quels.",
+      "upload": "Téléverser un fichier",
+      "noFiles": "Aucun fichier pour l'instant.",
+      "remove": "Retirer",
+      "loadError": "Impossible de charger les fichiers de référence de cette compétence.",
+      "uploadError": "Impossible de téléverser ce fichier.",
+      "removeError": "Impossible de retirer ce fichier."
+    }
   },
   "promptSettings": {
     "heading": "Réglages des prompts",
@@ -1582,6 +1649,10 @@
       "ok": "opérationnel",
       "degraded": "dégradé",
       "down": "indisponible"
+    },
+    "healthTier": {
+      "optimal": "optimal",
+      "degraded": "dégradé"
     },
     "healthDegradedHint": "Fonctionne sans service externe — normal sur une installation neuve. Détail sur l'écran Santé.",
     "adminOnly": "Réservé au rôle « admin ».",
@@ -1682,6 +1753,11 @@
     "themePreviewLoading": "Chargement de l'aperçu…",
     "themePreviewError": "Cet aperçu n'a pas pu être chargé.",
     "themePreviewTitle": "Aperçu du thème {{theme}}",
+    "themeVersionLabel": "Version {{version}}",
+    "themeAuthorLabel": "Par {{author}}",
+    "themePersonalizeAction": "Personnaliser",
+    "customizeHeading": "Personnaliser",
+    "customizeBackAction": "Retour à la galerie",
     "galleryHeading": "Palettes de couleurs",
     "galleryEmpty": "Aucune palette n'a encore été déposée dans la galerie de ce site.",
     "aiHeading": "Générer un thème",
@@ -1747,6 +1823,8 @@
     "customizeDescription": "Ces réglages surchargent les jetons du modèle choisi. Vider un champ revient à la valeur du modèle.",
     "activeLabel": "Actif",
     "chooseAction": "Utiliser ce modèle",
+    "customizeAction": "Personnaliser",
+    "backToGalleryAction": "Retour à la galerie",
     "primaryColorLabel": "Couleur primaire",
     "backgroundColorLabel": "Couleur de fond",
     "textColorLabel": "Couleur du texte",
@@ -1756,7 +1834,7 @@
     "logoLabel": "Logo de l'admin",
     "resetFieldAction": "Revenir au modèle",
     "saveAction": "Enregistrer",
-    "previewNote": "Le reste de cet admin reflète déjà vos changements — cet écran en hérite aussi."
+    "previewNote": "L'aperçu ci-dessus reflète vos changements avant l'enregistrement ; le reste de cet admin ne les applique qu'une fois enregistrés."
   },
   "settings": {
     "heading": "Réglages du site",
@@ -1898,7 +1976,11 @@
         },
         "priceDisplay": {
           "label": "Affichage des prix",
-          "help": "Les prix du catalogue sont affichés TTC ou HT."
+          "help": "Les prix du catalogue sont affichés TTC ou HT.",
+          "options": {
+            "ttc": "TTC (taxes comprises)",
+            "ht": "HT (hors taxes)"
+          }
         },
         "countriesServed": {
           "label": "Pays servis",
@@ -1959,6 +2041,22 @@
         "defaultSocialImageUrl": {
           "label": "Image sociale par défaut",
           "help": "Un chemin ou une URL absolue, utilisée comme image Open Graph/Twitter Card uniquement quand une page n'a pas la sienne."
+        },
+        "googleSiteVerification": {
+          "label": "Vérification de site Google",
+          "help": "Le jeton de la méthode de vérification par balise HTML de Search Console, ex. « abc123… ». Rendu en balise <meta name=\"google-site-verification\"> sur chaque page."
+        },
+        "bingSiteVerification": {
+          "label": "Vérification de site Bing",
+          "help": "Le jeton de la méthode de vérification par balise meta de Bing Webmaster Tools. Rendu en balise <meta name=\"msvalidate.01\"> sur chaque page."
+        },
+        "indexNowEnabled": {
+          "label": "Avertir IndexNow à la publication/dépublication",
+          "help": "Désactivé par défaut : à activer une fois la clé ci-dessous renseignée."
+        },
+        "llmsTxtEnabled": {
+          "label": "Servir llms.txt",
+          "help": "Liste chaque page publiée, groupée par collection, pour un modèle qui n'a qu'une requête à dépenser. Désactivé par défaut."
         }
       },
       "observability": {
@@ -1974,7 +2072,27 @@
       "updates": {
         "autoUpdatePolicy": {
           "label": "Mises à jour automatiques",
-          "help": "Désactivé par défaut. Une fois activé, le site vérifie npm chaque jour et applique toute mise à jour correspondante — jamais une dont le changelog mentionne un contrat figé, toujours laissée pour relecture manuelle."
+          "help": "Désactivé par défaut. Une fois activé, le site vérifie npm chaque jour et applique toute mise à jour correspondante — jamais une dont le changelog mentionne un contrat figé, toujours laissée pour relecture manuelle.",
+          "options": {
+            "off": "Désactivé — vérifie seulement, n'applique jamais automatiquement",
+            "patch": "Versions correctives (patch) uniquement",
+            "patch-minor": "Versions correctives et mineures",
+            "patch-minor-major": "Versions correctives, mineures et majeures"
+          }
+        }
+      },
+      "channels": {
+        "telegramBotName": {
+          "label": "Nom du bot Telegram",
+          "help": "Facultatif, ce n'est pas un secret — affiché dans le guide « Comment faire ? » pour nommer le bot, par ex. « @mon_bot_cogenta »."
+        },
+        "slackBotName": {
+          "label": "Nom du bot Slack",
+          "help": "Facultatif, ce n'est pas un secret — affiché dans le guide « Comment faire ? », par ex. le nom d'affichage de l'app."
+        },
+        "discordBotName": {
+          "label": "Nom du bot Discord",
+          "help": "Facultatif, ce n'est pas un secret — affiché dans le guide « Comment faire ? », par ex. « MonBot#1234 »."
         }
       }
     }
@@ -2045,6 +2163,7 @@
     "anonymizedNote": "Ce compte a été anonymisé. Il n'y a plus rien à modifier.",
     "anonymizeAccount": "Anonymiser {{email}}",
     "anonymizeHeading": "Anonymiser {{email}}",
+    "anonymizeNoHardDelete": "Il n'existe pas de suppression définitive séparée pour un compte actif ou désactivé — son contenu et son historique d'audit doivent rester attribuables. Anonymiser est la réponse de Cogenta à « supprimer un compte ».",
     "anonymizeWarning": "Cette action est irréversible. L'e-mail, le nom, l'avatar et la bio du compte sont effacés ; son identifiant et son contenu restent exactement où ils sont.",
     "anonymizeIrreversible": "Il n'y a pas de retour en arrière possible. Les sessions sont révoquées immédiatement.",
     "anonymizeConfirmLabel": "Tapez {{email}} pour confirmer",
@@ -2087,6 +2206,7 @@
     "adminOnly": "Réservé au rôle « admin » : cette page crée et révoque des identifiants machine.",
     "intro": "Une clé authentifie un script ou une intégration comme un acteur machine, limité exactement aux rôles que vous lui accordez — jamais plus.",
     "tableLabel": "Liste des clés API",
+    "loadMore": "Charger plus",
     "newButton": "Nouvelle clé API",
     "newHeading": "Créer une clé API",
     "newDescription": "La clé est générée par le serveur et affichée une seule fois.",
@@ -2297,7 +2417,21 @@
     "codeExpiry": "Ce code expire à {{time}} et ne peut être utilisé qu'une seule fois.",
     "loadError": "Impossible de charger vos canaux liés.",
     "generateError": "Impossible de générer un code de liaison.",
-    "unlinkError": "Impossible de délier ce canal."
+    "unlinkError": "Impossible de délier ce canal.",
+    "howTo": {
+      "button": "Comment faire ?",
+      "title": "Connecter {{channel}}",
+      "intro": "Ces étapes sont identiques sur Telegram, Slack et Discord.",
+      "close": "Fermer",
+      "operatorHeading": "Une fois, côté opérateur du site",
+      "step0": "Créez un bot sur {{channel}}, renseignez ses identifiants dans des variables d'environnement du serveur, puis démarrez « cogenta channels » dans son propre process, séparé — il ne démarre jamais automatiquement avec « cogenta serve », et aucun code tapé dans une discussion n'est vu tant qu'il ne tourne pas.",
+      "userHeading": "À chaque liaison de compte",
+      "step1": "Cliquez sur « Générer un code de liaison » ci-dessus.",
+      "step2WithName": "Ouvrez une conversation privée avec {{botName}} sur {{channel}}.",
+      "step2WithoutName": "Ouvrez une conversation privée avec le bot de ce site sur {{channel}}.",
+      "step3": "Collez le code tel quel, comme un message normal — pas une commande.",
+      "step4": "Attendez la réponse de confirmation (« ✅ Compte lié. »)."
+    }
   },
   "rolesMatrix": {
     "heading": "Rôles et permissions",
@@ -2400,7 +2534,105 @@
     "variantTitleColumn": "Variante",
     "addVariant": "Ajouter une variante",
     "removeVariant": "Supprimer {{title}}",
-    "allowBackorder": "Se vend au-delà de zéro (rupture autorisée)"
+    "allowBackorder": "Se vend au-delà de zéro (rupture autorisée)",
+    "loadMore": "Charger plus de produits",
+    "searchLabel": "Rechercher",
+    "searchPlaceholder": "Titre ou identifiant…",
+    "sortLabel": "Trier par",
+    "sortCreatedDesc": "Plus récents",
+    "sortCreatedAsc": "Plus anciens",
+    "sortTitleAsc": "Titre (A→Z)",
+    "sortTitleDesc": "Titre (Z→A)",
+    "sortHandleAsc": "Identifiant (A→Z)",
+    "sortHandleDesc": "Identifiant (Z→A)",
+    "contentColumn": "Contenu",
+    "contentLinkedShort": "Lié",
+    "contentUnlinkedShort": "—",
+    "contentHeading": "Contenu éditorial",
+    "contentUnlinked": "Aucun contenu lié.",
+    "contentLinkCollection": "Collection",
+    "contentLinkChooseCollection": "Choisir une collection…",
+    "contentLinkCreate": "Créer une fiche liée",
+    "contentLinkOpen": "Ouvrir la fiche de contenu",
+    "contentLinkMissing": "La fiche liée est introuvable — elle a peut-être été supprimée.",
+    "contentLinkUnlink": "Dissocier",
+    "contentLinkError": "Impossible de mettre à jour le lien de contenu.",
+    "categoryHeading": "Catégorie",
+    "categoryTaxonomy": "Taxonomie",
+    "categoryTerms": "Termes",
+    "categoryEmpty": "Aucun terme dans cette taxonomie.",
+    "categorySave": "Enregistrer la catégorie",
+    "categorySaved": "Catégorie enregistrée.",
+    "categoryError": "Impossible d'enregistrer la catégorie.",
+    "lowStockToggle": "Stock bas uniquement",
+    "lowStockThresholdColumn": "Seuil d'alerte",
+    "lowStockBadge": "Stock bas",
+    "lowStockError": "Impossible de charger les variantes en stock bas.",
+    "lowStockEmpty": "Aucune variante en stock bas.",
+    "lowStockTableLabel": "Variantes en stock bas",
+    "bulkSelectedCount_one": "{{count}} produit sélectionné",
+    "bulkSelectedCount_other": "{{count}} produits sélectionnés",
+    "bulkSelectAll": "Tout sélectionner",
+    "bulkSelectOne": "Sélectionner {{title}}",
+    "bulkPriceButton": "Ajuster les prix",
+    "bulkArchiveButton": "Archiver la sélection",
+    "bulkArchiveConfirmButton": "Confirmer l'archivage",
+    "bulkClearSelection": "Vider la sélection",
+    "bulkPriceHeading": "Ajuster les prix de la sélection",
+    "bulkPricePercent": "Variation en %",
+    "bulkPricePercentHint": "Négatif pour baisser les prix, ex. « -10 » pour -10 %.",
+    "bulkPricePreviewLabel": "Aperçu des nouveaux prix",
+    "bulkPriceBefore": "Avant",
+    "bulkPriceAfter": "Après",
+    "bulkPriceApply": "Appliquer",
+    "bulkPriceError": "Impossible d'appliquer l'ajustement de prix.",
+    "bulkArchiveHeading": "Archiver la sélection",
+    "bulkArchiveConfirm_one": "Archiver {{count}} produit sélectionné ?",
+    "bulkArchiveConfirm_other": "Archiver {{count}} produits sélectionnés ?",
+    "bulkArchiveSuccess_one": "{{count}} produit archivé.",
+    "bulkArchiveSuccess_other": "{{count}} produits archivés.",
+    "importExportToggle": "Import / export CSV",
+    "importExportHeading": "Import / export CSV du catalogue",
+    "importExportDescription": "Exportez le catalogue, ou importez un fichier CSV — chaque ligne est une variante, les colonnes sont reconnues par leur nom, dans n'importe quel ordre.",
+    "exportButton": "Exporter en CSV",
+    "exportError": "Impossible d'exporter le catalogue.",
+    "importLabel": "Coller un CSV, ou choisir un fichier",
+    "importFileLabel": "Choisir un fichier CSV",
+    "importPreviewButton": "Prévisualiser",
+    "importApplyButton": "Appliquer l'import",
+    "importCancelButton": "Annuler",
+    "importSummaryCreate_one": "{{count}} création",
+    "importSummaryCreate_other": "{{count}} créations",
+    "importSummaryUpdate_one": "{{count}} mise à jour",
+    "importSummaryUpdate_other": "{{count}} mises à jour",
+    "importSummaryDuplicate_one": "{{count}} doublon ignoré",
+    "importSummaryDuplicate_other": "{{count}} doublons ignorés",
+    "importSummaryInvalid_one": "{{count}} ligne invalide",
+    "importSummaryInvalid_other": "{{count}} lignes invalides",
+    "importPreviewTableLabel": "Aperçu de l'import",
+    "importLineLabel": "Ligne {{line}}",
+    "importResultSummary": "{{created}} créé(s), {{updated}} mis à jour, {{failed}} échec(s).",
+    "importError": "Impossible de traiter ce fichier CSV.",
+    "importOutcomeCreate": "Sera créé",
+    "importOutcomeUpdate": "Sera mis à jour",
+    "importOutcomeDuplicate": "Doublon dans le fichier — ignoré",
+    "moreFields": "Plus de champs (seuil, promo, dimensions)",
+    "comparePriceColumn": "Prix barré",
+    "saleStartsColumn": "Début de promo",
+    "saleEndsColumn": "Fin de promo",
+    "widthColumn": "Largeur (mm)",
+    "heightColumn": "Hauteur (mm)",
+    "depthColumn": "Profondeur (mm)",
+    "dimensionInvalid": "Indiquez un nombre entier positif, ou laissez vide.",
+    "stockHistory": "Historique du stock",
+    "stockHistoryHeading": "Historique du stock — {{title}}",
+    "stockHistoryEmpty": "Aucun mouvement pour l'instant.",
+    "movementReason": {
+      "sale": "Vente",
+      "restock": "Réassort",
+      "stock_take": "Inventaire",
+      "manual": "Ajustement manuel"
+    }
   },
   "commerceOrders": {
     "heading": "Commandes",
@@ -2422,7 +2654,11 @@
       "delivered": "Livrée",
       "cancelled": "Annulée",
       "refunded": "Remboursée"
-    }
+    },
+    "newOrder": "Nouvelle commande",
+    "exportCsv": "Exporter en CSV",
+    "fromDate": "Du",
+    "toDate": "Au"
   },
   "commerceCoupons": {
     "heading": "Coupons",
@@ -2449,6 +2685,14 @@
     "endsAt": "Fin de validité",
     "maxRedemptions": "Limite d'utilisation",
     "maxRedemptionsHint": "Laissez vide pour une utilisation illimitée.",
+    "maxRedemptionsPerCustomer": "Limite par client",
+    "maxRedemptionsPerCustomerHint": "Laissez vide pour aucune limite par client.",
+    "restrictedProductIds": "Restreindre à des produits",
+    "restrictedProductIdsHint": "Identifiants de produits séparés par des virgules. Laissez vide pour appliquer à tous les produits.",
+    "perCustomerLimitLabel": "Max {{max}} par client",
+    "restrictedLabel": "Restreint à {{count}} produit(s)",
+    "metricsActive": "Coupons actifs",
+    "metricsRedemptions": "Utilisations totales",
     "unlimited": "{{used}} (illimité)",
     "limited": "{{used}} / {{max}}",
     "percentInvalid": "Indiquez un pourcentage entre 1 et 100.",
@@ -2475,12 +2719,35 @@
     "actionsColumn": "Actions",
     "empty": "Aucun abonnement pour l'instant.",
     "cancel": "Annuler",
+    "pause": "Suspendre",
+    "resume": "Reprendre",
+    "viewDetail": "Détails",
     "loadError": "Impossible de charger la liste des abonnements.",
     "cancelError": "Impossible d'annuler cet abonnement.",
+    "pauseError": "Impossible de suspendre cet abonnement.",
+    "resumeError": "Impossible de reprendre cet abonnement.",
+    "detailError": "Impossible de charger le détail de cet abonnement.",
+    "detailHeading": "Détail de l'abonnement",
+    "close": "Fermer",
+    "billingHistoryHeading": "Historique de facturation",
+    "periodColumn": "Période",
+    "cycleStatusColumn": "Résultat",
+    "noHistory": "Aucun cycle de facturation pour l'instant.",
+    "dunningInProgress": "Le prélèvement a échoué {{count}} fois ({{reason}}). Une nouvelle tentative est planifiée automatiquement.",
+    "dunningSuspended": "Cet abonnement a été suspendu automatiquement après {{count}} tentatives de paiement échouées.",
+    "metricsActive": "Abonnements actifs",
+    "metricsMrr": "MRR",
+    "metricsChurn": "Attrition",
     "status": {
       "active": "Actif",
+      "past_due": "Paiement échoué — nouvelle tentative",
       "paused": "En pause",
       "cancelled": "Annulé"
+    },
+    "cycleStatus": {
+      "billed": "Facturé",
+      "skipped_out_of_stock": "Ignoré — rupture de stock",
+      "failed": "Paiement échoué"
     },
     "interval": {
       "day_one": "{{count}} jour",
@@ -2569,7 +2836,8 @@
     "kind": {
       "flat": "Forfait",
       "by_weight": "Par poids",
-      "free": "Gratuit"
+      "free": "Gratuit",
+      "pickup": "Retrait en magasin"
     },
     "simulatorHeading": "Simulateur",
     "simWeight": "Poids (g)",
@@ -2588,8 +2856,11 @@
     "testModeOnHint": "Aucun argent réel ne circule. Désactivez payment.testMode dans la configuration du serveur quand vous êtes prêt à encaisser réellement.",
     "testModeOff": "Mode production",
     "testModeOffHint": "Cette boutique encaisse de l'argent réel.",
+    "providersHeading": "Moyens de paiement",
+    "providersHint": "Chaque moyen ci-dessous implémente la même interface de pilote — en ajouter un autre ne change rien à cet écran.",
     "driver": {
       "stripe": "Stripe",
+      "paypal": "PayPal",
       "manual": "Virement bancaire"
     },
     "active": "Actif",
@@ -2621,7 +2892,13 @@
     "invoiceHeading": "Modèle de facture",
     "invoiceHint": "L'identité du vendeur (nom légal, adresse, numéro de TVA) reste dans la configuration du serveur — ce sont ici les mentions qu'un commerçant change sans redéployer.",
     "seriesWarning": "Changer le préfixe de série en cours d'exercice comptable pose un problème comptable : le numéro séquentiel lui-même ne repart jamais à zéro, mais un nouveau préfixe se lit comme une série différente pour un auditeur. Confirmez avec votre comptable avant de le changer une fois l'exercice commencé.",
-    "invoicePreviewHint": "Pour prévisualiser une vraie facture, ouvrez une commande qui en a déjà une et utilisez son propre bouton « Télécharger la facture »."
+    "invoicePreviewHeading": "Prévisualiser une facture",
+    "invoicePreviewHint": "Génère un vrai PDF de facture pour n'importe quelle commande existante, à partir de ses données réelles — rien n'est enregistré et aucun numéro de facture n'est jamais réclamé, donc c'est sans risque à essayer autant de fois que nécessaire.",
+    "invoicePreviewOrderId": "Identifiant de commande",
+    "invoicePreviewOrderIdPlaceholder": "ex. 8f3e2c1a-…",
+    "invoicePreviewButton": "Prévisualiser la facture",
+    "invoicePreviewing": "Génération…",
+    "invoicePreviewError": "Impossible de générer un aperçu pour cette commande."
   },
   "commerceOrderDetail": {
     "back": "← Retour aux commandes",
@@ -2667,6 +2944,42 @@
       "refunded": "Remboursée",
       "invoiced": "Facturée",
       "note": "Note"
+    },
+    "addressTitle": "Adresse de livraison",
+    "addressNone": "Aucune adresse de livraison enregistrée.",
+    "addressEdit": "Modifier l'adresse",
+    "addressSave": "Enregistrer l'adresse",
+    "addressRecipient": "Destinataire",
+    "addressLine1": "Adresse (ligne 1)",
+    "addressLine2": "Adresse (ligne 2)",
+    "addressCity": "Ville",
+    "addressPostalCode": "Code postal",
+    "addressPhone": "Téléphone",
+    "addressError": "Impossible d'enregistrer cette adresse.",
+    "refundedSoFar": "déjà remboursé {{amount}}",
+    "refundAmount": "Montant",
+    "refundReason": "Motif (obligatoire)",
+    "refundReasonRequired": "Un motif est obligatoire pour un remboursement.",
+    "refundConfirm": "Confirmer le remboursement",
+    "creditNotesIssued": "{{count}} avoir émis",
+    "creditNotesIssued_other": "{{count}} avoirs émis",
+    "trackingTitle": "Suivi de l’expédition",
+    "trackingCarrier": "Transporteur",
+    "trackingNumber": "Numéro de suivi",
+    "trackingUrl": "URL de suivi",
+    "trackingShip": "Expédier, avec suivi",
+    "trackingSave": "Enregistrer le suivi",
+    "trackingError": "Impossible d'enregistrer les informations de suivi.",
+    "emailsTitle": "E-mails de la commande",
+    "noEmails": "Aucun e-mail envoyé pour cette commande pour l'instant.",
+    "emailKind": {
+      "confirmation": "Confirmation",
+      "shipment": "Avis d'expédition"
+    },
+    "emailStatus": {
+      "pending": "En attente",
+      "sent": "Envoyé",
+      "failed": "Échoué"
     }
   },
   "profile": {
@@ -3222,6 +3535,10 @@
     "errorTitle": "Une erreur est survenue",
     "driversHeading": "Pilotes",
     "driversIntro": "{{count}} problème(s) à corriger. Un pilote marqué « dégradé » est normal sur une installation neuve — cela signifie qu'aucun service externe (Redis, S3, …) n'est configuré, pas que quelque chose est cassé.",
+    "tier": {
+      "optimal": "optimal",
+      "degraded": "dégradé"
+    },
     "reasonNamed": "configuré explicitement",
     "reasonFirstAvailable": "premier pilote disponible",
     "reasonFallback": "après repli sur : {{skipped}}",
@@ -3272,7 +3589,10 @@
     "logsEmpty": "Aucune ligne de journal enregistrée pour l'instant.",
     "logsTime": "Heure",
     "logsLevel": "Niveau",
-    "logsMessage": "Message"
+    "logsMessage": "Message",
+    "previousPage": "Précédent",
+    "nextPage": "Suivant",
+    "pageInfo": "{{from}}–{{to}} sur {{total}}"
   },
   "tools": {
     "heading": "Outils",
@@ -3305,6 +3625,16 @@
     "loadError": "Impossible de charger les tâches planifiées.",
     "runError": "Impossible d'exécuter cette tâche.",
     "retryError": "Impossible de relancer ce travail.",
+    "taskName": {
+      "scheduled-publish": "Publie les entrées dont l'heure programmée est atteinte, et vide la file d'outils.",
+      "not-found-purge": "Purge les entrées du journal 404 passé le délai de rétention du site.",
+      "audit-integrity": "Vérifie que la chaîne de hachage du journal d'audit n'a pas été altérée.",
+      "trash-purge": "Supprime définitivement le contenu de la corbeille passé le délai de rétention du site.",
+      "forms-purge": "Purge les soumissions de formulaire passé le délai de rétention RGPD propre à chaque formulaire.",
+      "channel-notifications": "Envoie toute notification groupée en attente vers son canal.",
+      "analytics-purge": "Purge les événements de vue de page passé le délai de rétention configuré du site.",
+      "updates-auto-check": "Vérifie sur npm une nouvelle version de @cogenta/core/@cogenta/cli, et l'applique si la politique de mise à jour automatique l'autorise et qu'aucun risque de rupture de contrat n'a été signalé."
+    },
     "tasksHeading": "Tâches",
     "columnTask": "Tâche",
     "columnLastRun": "Dernière exécution",
@@ -3330,6 +3660,9 @@
       "cancelled": "Annulé"
     },
     "retryButton": "Relancer",
+    "previousPage": "Précédent",
+    "nextPage": "Suivant",
+    "queuePageInfo": "{{from}}–{{to}} sur {{total}}",
     "contentHeading": "Contenu programmé",
     "contentBody": "La liste des entrées en attente de publication se trouve sur le tableau de bord.",
     "contentLink": "Aller au tableau de bord",
@@ -3455,5 +3788,48 @@
         "note": "Modèle honnête, pas encore entièrement à l'écran : révoquer une seule capacité après coup a sa logique côté serveur, mais aucun écran de ce build ne l'expose encore — aujourd'hui, désactiver ou désinstaller est le levier disponible."
       }
     }
+  },
+  "commerceManualOrder": {
+    "heading": "Nouvelle commande",
+    "email": "E-mail du client",
+    "customerName": "Nom du client",
+    "currency": "Devise",
+    "lines": "Lignes",
+    "variantId": "ID de la variante",
+    "quantity": "Quantité",
+    "addLine": "Ajouter une ligne",
+    "removeLine": "Retirer",
+    "create": "Créer la commande",
+    "createError": "Impossible de créer cette commande.",
+    "outOfStock": "Stock insuffisant pour cette commande.",
+    "couponRefused": "Le code de réduction n'a pas pu être appliqué.",
+    "empty": "Ajoutez au moins une ligne."
+  },
+  "commerceCustomers": {
+    "heading": "Clients",
+    "tableLabel": "Clients",
+    "nameColumn": "Nom",
+    "emailColumn": "E-mail",
+    "ordersColumn": "Commandes",
+    "spentColumn": "Total dépensé",
+    "empty": "Aucun client pour le moment.",
+    "search": "Rechercher",
+    "loadError": "Impossible de charger les clients."
+  },
+  "commerceCustomerDetail": {
+    "back": "← Retour aux clients",
+    "heading": "Client",
+    "notFound": "Ce client n'existe pas.",
+    "loadError": "Impossible de charger ce client.",
+    "ordersTitle": "Commandes",
+    "totalSpent": "Total dépensé",
+    "subscriptionsTitle": "Abonnements",
+    "noSubscriptions": "Aucun abonnement.",
+    "exportButton": "Exporter (RGPD)",
+    "exportError": "Impossible d'exporter ce client.",
+    "anonymizeButton": "Anonymiser",
+    "anonymizeConfirm": "Ceci efface l’e-mail et le nom du client. Ses commandes gardent leur propre copie. Cette action est irréversible.",
+    "anonymizeError": "Impossible d'anonymiser ce client.",
+    "anonymized": "La fiche de ce client a été anonymisée."
   }
 }

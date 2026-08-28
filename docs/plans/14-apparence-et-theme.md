@@ -1,14 +1,25 @@
 # 14 — Apparence et thème
 
-> **État** : **absent côté admin.** Le moteur de skin existe, la CLI l'expose, l'admin
-> non.
+> **État d'origine** : **absent côté admin.** Le moteur de skin existe, la CLI l'expose,
+> l'admin non. *(Dépassé depuis — voir la fiche 48 ci-dessous : l'écran existe, avec un
+> sélecteur de thème depuis L23/L24.)*
 > **Paquets** : `@cogenta/render` (`renderSkin`, `validateSkin`),
 > `@cogenta/theme-canonical`, `@cogenta/agents` (`generateSkin`),
 > `@cogenta/plugins` (galerie de skins, L7 tâche 10)
 > **CLI** : `cogenta skin list | validate | apply | generate`
-> **Écran** : aucun
+> **Écran** : aucun *(d'origine — voir fiche 48)*
 > **Effort** : 6–8 jours
 > **ADR requise** : non, si l'écriture du thème reste soumise aux règles d'ADR-0010
+
+> **Mise à jour (fiche 48, `theme@1.2`, 2026-08-28)** : l'écran unique et dense décrit
+> plus bas comme la tâche 1 à faire est aujourd'hui scindé en deux — une galerie (aperçu,
+> nom, description, **version et auteur**, désormais lus depuis le manifeste du thème
+> plutôt que dupliqués à la main dans `theme-registry.ts`) et un écran de personnalisation
+> (jetons, CSS additionnel, identité, galerie de skins, génération IA), atteint par un
+> bouton « Personnaliser » sur la carte du thème actif. `ThemeManifest` gagne
+> `description?: string` et `author?: string`, tous deux optionnels (voir
+> `docs/04-contrats.md` § Contrat D). Le reste de ce document (tâches 2-5) garde sa
+> valeur de référence pour ce qui n'est pas encore livré.
 
 ---
 

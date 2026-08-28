@@ -33,6 +33,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
+    "@cogenta/channels": "workspace:*",
     "@cogenta/core": "workspace:*"
   },
   "devDependencies": {

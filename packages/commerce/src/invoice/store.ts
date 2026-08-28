@@ -13,6 +13,7 @@ import { toInt, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
 import type { PdfInvoiceDocument } from './pdf.js'
 import { renderInvoicePdf } from './pdf.js'
+import { claimSequenceNumber, formatSequenceNumber } from './sequence.js'
 
 /**
  * An invoice, and the number that makes it one.
@@ -96,6 +97,21 @@ export interface InvoiceStore {
   list(options?: { readonly series?: string; readonly limit?: number }): Promise<readonly Invoice[]>
   /** The PDF for an invoice. Regenerated from the snapshot, byte-identical. */
   pdf(id: string): Promise<Uint8Array>
+  /**
+   * A real invoice PDF for an order that has not been (and may never be)
+   * issued — fiche 54 task 2. Built from the exact same `documentFor`/
+   * `pdfDocumentFor`/`renderInvoicePdf` chain `issue()`+`pdf()` use, so a
+   * preview is never a second, drifting implementation of what an invoice
+   * looks like. What makes it a preview and not a side effect: no row is
+   * written, no order event is recorded, and above all no number is claimed
+   * from `claimNumber` — a real invoice number is gapless and never reused,
+   * so spending one on a screen a shop owner might reload ten times while
+   * tuning the template would corrupt the one thing this file exists to
+   * protect. `"PREVIEW"` in the number field is not a placeholder chosen for
+   * looks: it is what stops the output from ever being mistaken for a real,
+   * legally-numbered document.
+   */
+  preview(orderId: string): Promise<Uint8Array>
 }
 
 interface InvoiceRow {
@@ -124,20 +140,17 @@ function decode(row: InvoiceRow): Invoice {
   }
 }
 
-/** `2026-000042`. Zero-padded so the numbers sort as strings too. */
-export function formatInvoiceNumber(series: string, seq: number): string {
-  return `${series}-${String(seq).padStart(6, '0')}`
-}
-
 /**
- * How many attempts at claiming the next number before giving up.
+ * `2026-000042`. Zero-padded so the numbers sort as strings too.
  *
- * The claim is a compare-and-set, so a loser retries with the value it just
- * read. Under real contention two or three attempts is already unusual; ten is
- * a number nobody reaches without something else being wrong, and failing
- * loudly then is better than spinning.
+ * A thin alias of `formatSequenceNumber` (`sequence.ts`), kept under its
+ * original name for source compatibility — this was this package's public
+ * export before the sequence-claiming logic moved out to be shared with
+ * credit notes (fiche 52 task 6).
  */
-const CLAIM_ATTEMPTS = 10
+export function formatInvoiceNumber(series: string, seq: number): string {
+  return formatSequenceNumber(series, seq)
+}
 
 export function createInvoiceStore(
   db: DatabaseHandle,
@@ -146,54 +159,6 @@ export function createInvoiceStore(
 ): InvoiceStore {
   const d = db.dialect
   const invoices = identifier(TABLES.invoices, d)
-  const sequences = identifier(TABLES.invoiceSequences, d)
-
-  /**
-   * Takes the next number in a series, atomically.
-   *
-   * `update … set next_seq = next_seq + 1 where series = ? and next_seq = ?`
-   * — a compare-and-set whose `rowsAffected` decides the race, the same idiom
-   * that makes stock safe and a password reset token single use. Two invoices
-   * issued in the same millisecond get consecutive numbers, never the same
-   * one.
-   *
-   * Emphatically not `count(*) + 1`: that hands out a duplicate under any
-   * concurrency at all, and re-issues a number that a deleted row used to
-   * hold. A number, once handed out, is spent.
-   */
-  async function claimNumber(tx: SqlExecutor, series: string): Promise<number> {
-    for (let attempt = 0; attempt < CLAIM_ATTEMPTS; attempt += 1) {
-      const current = await tx.query<{ next_seq: unknown }>(
-        sql`select next_seq from ${sequences} where series = ${series}`,
-      )
-      const row = current.rows[0]
-
-      if (row === undefined) {
-        // First invoice of the series. A duplicate primary key here means
-        // somebody else created it in between, so the loop reads it and
-        // competes for the increment like everyone else.
-        try {
-          await tx.query(sql`insert into ${sequences} (series, next_seq) values (${series}, ${2})`)
-          return 1
-        } catch {
-          continue
-        }
-      }
-
-      const next = toInt(row.next_seq, 'invoice_sequence.next_seq')
-      const claimed = await tx.query(sql`
-        update ${sequences} set next_seq = ${next + 1}
-        where series = ${series} and next_seq = ${next}`)
-      if (claimed.rowsAffected > 0) return next
-    }
-
-    throw new CogentaError({
-      code: 'COMMERCE_INVOICE_SEQUENCE_CONFLICT',
-      message: `Could not take the next number in invoice series "${series}".`,
-      hint: 'The sequence is under unusually heavy contention. Retry the issue.',
-      details: { series, attempts: CLAIM_ATTEMPTS },
-    })
-  }
 
   async function read(id: string, executor: SqlExecutor = db): Promise<Invoice | null> {
     const result = await executor.query<InvoiceRow>(sql`select * from ${invoices} where id = ${id}`)
@@ -259,8 +224,8 @@ export function createInvoiceStore(
           // The number is taken inside the same transaction that writes the
           // invoice. If the write fails, the increment rolls back with it and
           // the number is not burned — which is what "gapless" requires.
-          const seq = await claimNumber(tx, series)
-          const number = formatInvoiceNumber(series, seq)
+          const seq = await claimSequenceNumber(tx, d, series)
+          const number = formatSequenceNumber(series, seq)
           const document = documentFor(order, number, issuedAt, input.buyerAddress ?? [])
 
           await tx.query(sql`
@@ -327,6 +292,20 @@ export function createInvoiceStore(
         })
       }
       return renderInvoicePdf(pdfDocumentFor(invoice.document))
+    },
+
+    preview: async (orderId) => {
+      const order = await dependencies.orders.read(orderId)
+      if (order === null) {
+        throw new CogentaError({
+          code: 'COMMERCE_ORDER_NOT_FOUND',
+          message: 'This order does not exist.',
+          hint: 'Check the order reference.',
+        })
+      }
+
+      const document = documentFor(order, 'PREVIEW', new Date(now()).toISOString(), [])
+      return renderInvoicePdf(pdfDocumentFor(document))
     },
   }
 }

@@ -152,6 +152,59 @@ describe('App, branding in the topbar (fiche L21 task 8)', () => {
   })
 })
 
+describe('App, sidebar collapsed (icons-only) mode (fiche 72)', () => {
+  it('marks the sidebar collapsed and gives every link a hover title, without removing any link', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+    expect(nav.getAttribute('data-collapsed')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replier la barre latérale' }))
+
+    expect(nav.getAttribute('data-collapsed')).toBe('true')
+
+    // Every link stays in the accessibility tree and clickable — collapsing
+    // must never hide the nav list itself (fiche 72's found bug: the whole
+    // `<ul>` used to get `display: none`, taking every icon down with it).
+    // `title` is the fiche's replacement for the now visually-hidden label,
+    // read on mouse hover.
+    const dashboardLink = screen.getByRole('link', { name: 'Tableau de bord' })
+    expect(dashboardLink.getAttribute('title')).toBe('Tableau de bord')
+    const mediaLink = screen.getByRole('link', { name: 'Médiathèque' })
+    expect(mediaLink.getAttribute('title')).toBe('Médiathèque')
+  })
+
+  it('wraps each group heading in its own element the collapsed-mode CSS can target', async () => {
+    // Regression test for the fiche 72 bug: the group `<summary>` wrote its
+    // label as bare text, so the CSS rule hiding it in collapsed mode
+    // (`.app-shell__nav-group-summary span`) never matched anything, and
+    // the group headings (CONTENU, APPARENCE…) stayed visible in full text
+    // even with the sidebar collapsed.
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    const summary = container.querySelector('.app-shell__nav-group-summary')
+    expect(summary?.querySelector('span')).not.toBeNull()
+  })
+
+  it('remembers the collapsed state across a remount', async () => {
+    const { unmount } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('button', { name: 'Replier la barre latérale' }))
+    expect(localStorage.getItem('cogenta.admin.sidebarCollapsed')).toBe('1')
+    unmount()
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+    expect(nav.getAttribute('data-collapsed')).toBe('true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Déplier la barre latérale' }))
+    expect(localStorage.getItem('cogenta.admin.sidebarCollapsed')).toBe('0')
+  })
+})
+
 describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
   it('hides a whole section for everyone once an admin turns it off, site-wide', async () => {
     installMockFetch({

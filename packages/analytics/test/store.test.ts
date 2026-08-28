@@ -245,6 +245,34 @@ describe('createAnalyticsStore — getSummary', () => {
     ])
   })
 
+  it('breaks the previous period down by day too, never mixing it with the current one', async () => {
+    const db = await testDb()
+    let clock = Date.UTC(2026, 0, 1, 12, 0, 0) // previous window's first day
+    const store = createAnalyticsStore(db, () => clock)
+
+    await store.recordEvent({ path: '/a', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+    clock = Date.UTC(2026, 0, 2, 12, 0, 0) // previous window's second day
+    await store.recordEvent({ path: '/a', ip: '203.0.113.5', userAgent: UA_DESKTOP })
+    await store.recordEvent({ path: '/a', ip: '203.0.113.6', userAgent: UA_DESKTOP })
+
+    clock = Date.UTC(2026, 0, 3, 12, 0, 0) // current window's first day
+    await store.recordEvent({ path: '/a', ip: '203.0.113.7', userAgent: UA_DESKTOP })
+
+    const summary = await store.getSummary({
+      since: new Date(Date.UTC(2026, 0, 3)),
+      until: new Date(Date.UTC(2026, 0, 5)),
+    })
+
+    expect(summary.previousDailyViews).toEqual([
+      { day: '2026-01-01', views: 1 },
+      { day: '2026-01-02', views: 2 },
+    ])
+    // The boundary day itself belongs to the current window, not the
+    // previous one — same half-open convention `previousTotalViews` already
+    // relies on.
+    expect(summary.dailyViews).toEqual([{ day: '2026-01-03', views: 1 }])
+  })
+
   it('never includes an event outside the requested window', async () => {
     const db = await testDb()
     let clock = Date.UTC(2025, 0, 1, 12, 0, 0)

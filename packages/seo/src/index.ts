@@ -51,7 +51,7 @@ export {
   renderMetaTags,
 } from './metadata.js'
 export type { RobotsGroup, RobotsOptions } from './robots.js'
-export { renderRobotsTxt } from './robots.js'
+export { renderRobotsTxt, robotsRuleDisallowsEverything } from './robots.js'
 export type {
   ChangeFrequency,
   SitemapCollectionOverride,

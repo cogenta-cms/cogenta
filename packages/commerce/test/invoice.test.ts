@@ -132,6 +132,68 @@ describe('invoice numbering', () => {
   })
 })
 
+describe('invoice preview (fiche 54 task 2) — a real document, never a real number', () => {
+  let db: DatabaseHandle
+  let shop: Shop
+  let invoices: InvoiceStore
+
+  beforeEach(async () => {
+    db = await testDb()
+    shop = createShop(db)
+    invoices = invoicesOf(db, shop)
+  })
+
+  afterEach(async () => {
+    await db.close()
+  })
+
+  it('renders a real, valid PDF for an order that has never been invoiced', async () => {
+    const orderId = await placeOrder(shop, 3300, 'PREVIEW-1')
+    const text = Buffer.from(await invoices.preview(orderId)).toString('latin1')
+
+    expect(text.startsWith('%PDF-')).toBe(true)
+    expect(text.trimEnd().endsWith('%%EOF')).toBe(true)
+    // The placeholder is the invoice **number**, not a decoration bolted on
+    // afterwards — the same field a real invoice prints its gapless,
+    // legally-meaningful number in, so nobody mistakes the two documents.
+    expect(text).toContain('PREVIEW')
+    expect(text).toContain('Cogenta Demo Shop')
+    expect(text).toContain('PREVIEW-1')
+  })
+
+  it('never claims a real sequence number — the next real invoice still opens the series at 1', async () => {
+    const previewed = await placeOrder(shop, 1000, 'PREVIEW-2')
+    await invoices.preview(previewed)
+    await invoices.preview(previewed)
+    await invoices.preview(previewed)
+
+    const orderId = await placeOrder(shop, 1000, 'REAL-1')
+    const issued = await invoices.issue({ orderId, series: '2026' })
+    expect(issued.number).toBe('2026-000001')
+  })
+
+  it('writes no row and records no order event — a preview is not a side effect', async () => {
+    const orderId = await placeOrder(shop, 1000, 'PREVIEW-3')
+    await invoices.preview(orderId)
+
+    expect(await invoices.readByOrder(orderId)).toBeNull()
+    const history = await shop.orders.history(orderId)
+    expect(history.some((event) => event.kind === 'invoiced')).toBe(false)
+  })
+
+  it('does not prevent the same order from being invoiced for real afterwards', async () => {
+    const orderId = await placeOrder(shop, 1000, 'PREVIEW-4')
+    await invoices.preview(orderId)
+
+    const issued = await invoices.issue({ orderId })
+    expect(issued.number).toContain('-000001')
+  })
+
+  it('refuses to preview an order that does not exist', async () => {
+    await expect(invoices.preview('not-a-real-order-id')).rejects.toThrowError(/does not exist/u)
+  })
+})
+
 describe('two invoices issued at the same instant', () => {
   let fixture: FileDb | undefined
   let second: DatabaseHandle | undefined

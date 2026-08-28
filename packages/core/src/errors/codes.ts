@@ -406,6 +406,10 @@ export const ERROR_CODES = [
   'COMMERCE_COUPON_NOT_FOUND',
   'COMMERCE_COUPON_INVALID',
   'COMMERCE_COUPON_EXHAUSTED',
+  // Fiche 53 task 2: a per-customer cap, distinct from the global one above,
+  // and a coupon restricted to products none of which are in the basket.
+  'COMMERCE_COUPON_CUSTOMER_EXHAUSTED',
+  'COMMERCE_COUPON_NOT_APPLICABLE',
 
   // Commerce — invoices (L15 task 8)
   'COMMERCE_INVOICE_NOT_FOUND',
@@ -415,6 +419,13 @@ export const ERROR_CODES = [
   // Commerce — subscriptions (L15 task 9)
   'COMMERCE_SUBSCRIPTION_NOT_FOUND',
   'COMMERCE_SUBSCRIPTION_INVALID',
+
+  // Commerce — customers, order edits, shipment tracking, credit notes
+  // (fiche 52: commandes et clients)
+  'COMMERCE_CUSTOMER_NOT_FOUND',
+  'COMMERCE_ORDER_LOCKED',
+  'COMMERCE_TRACKING_INVALID',
+  'COMMERCE_CREDIT_NOTE_NOT_FOUND',
 
   // Agents — vector store driver (L18 task 1/5)
   'VECTOR_DIMENSION_MISMATCH',
@@ -539,6 +550,13 @@ export const ERROR_CODES = [
   'AGENT_SKILL_BUILTIN_UNDELETABLE',
   'AGENT_REGISTRY_READ_ONLY',
   'AGENT_RUNTIME_UNAVAILABLE',
+
+  // Skill reference folders (fiche 57): `references/`, `scripts/`, `assets/`
+  // under a skill's own directory. A path outside those three, or one that
+  // tries to escape the skill's directory, is the caller's fault (invalid);
+  // a path that names nothing on disk when removing is a plain not-found.
+  'AGENT_SKILL_RESOURCE_INVALID',
+  'AGENT_SKILL_RESOURCE_UNKNOWN',
 
   // Agent execution loop, migrated onto LangGraph.js (L24 task 1). Thrown
   // only if the graph's own recursion ceiling is hit before `runAgentLoop`'s

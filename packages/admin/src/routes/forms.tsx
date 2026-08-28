@@ -72,8 +72,22 @@ const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
   },
   { name: 'required', kind: 'boolean', required: false, localized: false, options: {} },
   { name: 'help', kind: 'text', required: false, localized: false, options: {} },
-  { name: 'choicesText', kind: 'text', required: false, localized: false, options: {} },
-  { name: 'consentText', kind: 'text', required: false, localized: false, options: {} },
+  {
+    name: 'choicesText',
+    kind: 'text',
+    required: false,
+    localized: false,
+    options: {},
+    visibleWhen: { field: 'kind', equals: ['choiceSingle', 'choiceMulti'] },
+  },
+  {
+    name: 'consentText',
+    kind: 'text',
+    required: false,
+    localized: false,
+    options: {},
+    visibleWhen: { field: 'kind', equals: ['consent'] },
+  },
   { name: 'step', kind: 'text', required: false, localized: false, options: {} },
   { name: 'showIfField', kind: 'text', required: false, localized: false, options: {} },
   {
@@ -86,8 +100,22 @@ const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
     },
   },
   { name: 'showIfValue', kind: 'text', required: false, localized: false, options: {} },
-  { name: 'acceptCategoriesText', kind: 'text', required: false, localized: false, options: {} },
-  { name: 'maxSizeBytes', kind: 'text', required: false, localized: false, options: {} },
+  {
+    name: 'acceptCategoriesText',
+    kind: 'text',
+    required: false,
+    localized: false,
+    options: {},
+    visibleWhen: { field: 'kind', equals: ['file'] },
+  },
+  {
+    name: 'maxSizeBytes',
+    kind: 'text',
+    required: false,
+    localized: false,
+    options: {},
+    visibleWhen: { field: 'kind', equals: ['file'] },
+  },
 ]
 
 interface FieldEditorRow {

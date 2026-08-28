@@ -29,6 +29,14 @@ export type {
 export { CART_STATUSES, CART_TTL_MS, couponRefusal, createCartStore } from './cart/store.js'
 export type { Totals, TotalsInput, TotalsLine, TotalsLineInput } from './cart/totals.js'
 export { computeTotals } from './cart/totals.js'
+export type {
+  ProductImportIssue,
+  ProductImportOutcomeKind,
+  ProductImportPreview,
+  ProductImportResult,
+  ProductImportRowOutcome,
+} from './catalog/csv.js'
+export { applyProductsImport, exportProductsCsv, previewProductsImport } from './catalog/csv.js'
 export type { CatalogStore, ProductListOptions, StockOutcome } from './catalog/store.js'
 export { createCatalogStore } from './catalog/store.js'
 export type {
@@ -37,17 +45,23 @@ export type {
   CreateVariantInput,
   Product,
   ProductStatus,
+  ProductTerm,
+  StockMovement,
+  StockMovementOptions,
+  StockMovementReason,
   StockRequest,
   StockShortfall,
   UpdateProductInput,
   UpdateVariantInput,
   Variant,
 } from './catalog/types.js'
-export { PRODUCT_STATUSES } from './catalog/types.js'
+export { isOnSale, PRODUCT_STATUSES, STOCK_MOVEMENT_REASONS } from './catalog/types.js'
 export type {
   Coupon,
   CouponCheck,
+  CouponCheckContext,
   CouponKind,
+  CouponMetrics,
   CouponStore,
   CreateCouponInput,
 } from './coupon/store.js'
@@ -59,8 +73,16 @@ export {
 } from './coupon/store.js'
 export type { Customer, CustomerStore } from './customer/store.js'
 export { createCustomerStore, normaliseEmail } from './customer/store.js'
+export type {
+  CreditNote,
+  CreditNoteStore,
+  CreditNoteStoreDependencies,
+  IssueCreditNoteInput,
+} from './invoice/credit-note.js'
+export { createCreditNoteStore } from './invoice/credit-note.js'
 export type { PdfInvoiceDocument, PdfLine } from './invoice/pdf.js'
 export { renderInvoicePdf } from './invoice/pdf.js'
+export { claimSequenceNumber, formatSequenceNumber } from './invoice/sequence.js'
 export type {
   Invoice,
   InvoiceDocument,
@@ -81,15 +103,41 @@ export {
   minorUnitExponent,
   normaliseCurrency,
 } from './money.js'
+export type { OrderExportRow } from './order/csv.js'
+export { ordersToCsv } from './order/csv.js'
+export type {
+  OrderEmailKind,
+  OrderEmailQueue,
+  OrderEmailQueueDependencies,
+  OrderEmailRecord,
+  OrderEmailStatus,
+} from './order/notify.js'
+export {
+  buildConfirmationMessage,
+  buildShipmentMessage,
+  createOrderEmailQueue,
+  MAX_ATTEMPTS as ORDER_EMAIL_MAX_ATTEMPTS,
+  ORDER_EMAIL_KINDS,
+} from './order/notify.js'
 export type {
   OrderListOptions,
   OrderStore,
   OrderStoreDependencies,
+  PlaceManualOrderInput,
+  PlaceManualOrderLineInput,
   PlaceOrderInput,
   PlaceOrderOutcome,
 } from './order/store.js'
 export { createOrderStore, referenceFrom } from './order/store.js'
-export type { Order, OrderEvent, OrderEventKind, OrderLine, OrderStatus } from './order/types.js'
+export type {
+  Order,
+  OrderEvent,
+  OrderEventKind,
+  OrderLine,
+  OrderStatus,
+  OrderTracking,
+  ShippingAddress,
+} from './order/types.js'
 export {
   assertTransition,
   canTransition,
@@ -132,19 +180,31 @@ export type {
   ShippingStoreOptions,
 } from './shipping/store.js'
 export { createShippingStore, SHIPPING_KINDS, storedRate } from './shipping/store.js'
+export { createEmailRenewalNotifier } from './subscription/renewal-notifier.js'
 export type {
   BillingRunResult,
+  ChangePlanOptions,
+  ChangePlanResult,
   CreateSubscriptionInput,
+  DunningRunResult,
+  DunningState,
   IntervalUnit,
+  RenewalNoticeInput,
+  RenewalNotifier,
+  SendRenewalNoticesResult,
   Subscription,
   SubscriptionCycle,
+  SubscriptionMetrics,
   SubscriptionStatus,
   SubscriptionStore,
   SubscriptionStoreDependencies,
+  SubscriptionStoreOptions,
 } from './subscription/store.js'
 export {
   advancePeriod,
   createSubscriptionStore,
+  DEFAULT_DUNNING_SCHEDULE_DAYS,
+  DEFAULT_RENEWAL_NOTICE_DAYS,
   INTERVAL_UNITS,
   SUBSCRIPTION_STATUSES,
 } from './subscription/store.js'

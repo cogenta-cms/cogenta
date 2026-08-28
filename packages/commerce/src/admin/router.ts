@@ -1,14 +1,22 @@
 import { CogentaError, type DriverRegistry, isCogentaError } from '@cogenta/core'
+import { applyProductsImport, exportProductsCsv, previewProductsImport } from '../catalog/csv.js'
 import type { CatalogStore } from '../catalog/store.js'
 import { COUPON_KINDS, type CouponKind, type CouponStore } from '../coupon/store.js'
-import type { CustomerStore } from '../customer/store.js'
+import type { Customer, CustomerStore } from '../customer/store.js'
+import type { CreditNoteStore } from '../invoice/credit-note.js'
 import type { InvoiceStore } from '../invoice/store.js'
-import type { OrderStore } from '../order/store.js'
-import { ORDER_STATUSES, type OrderStatus } from '../order/types.js'
+import { type OrderExportRow, ordersToCsv } from '../order/csv.js'
+import type { OrderEmailQueue } from '../order/notify.js'
+import type { OrderStore, PlaceManualOrderLineInput } from '../order/store.js'
+import { ORDER_STATUSES, type OrderStatus, type ShippingAddress } from '../order/types.js'
 import type { PaymentStore } from '../payment/store.js'
 import type { PaymentConfig, PaymentGateway } from '../payment/types.js'
 import { SHIPPING_KINDS, type ShippingKind, type ShippingStore } from '../shipping/store.js'
-import type { SubscriptionStore } from '../subscription/store.js'
+import {
+  SUBSCRIPTION_STATUSES,
+  type SubscriptionStatus,
+  type SubscriptionStore,
+} from '../subscription/store.js'
 import { type TaxStore, taxFor } from '../tax/store.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
 import { COMMERCE_ANONYMOUS, COMMERCE_PERMISSIONS } from './permissions.js'
@@ -35,10 +43,12 @@ export interface CommerceRequest {
 export interface CommerceResponse {
   readonly status: number
   /**
-   * JSON-serialisable for every route but one: `GET /invoices/{id}/pdf`
-   * answers with a `Uint8Array` instead. The transport adapter (`cogenta
-   * serve`) checks for that one shape and sends bytes rather than JSON —
-   * this router does not know or care how its caller transports a response.
+   * JSON-serialisable for every route but two: `GET /invoices/{id}/pdf`
+   * answers with a `Uint8Array`, and `GET /orders/export.csv` (fiche 52 task
+   * 7) answers with a plain `string` of CSV text — no route ever answers
+   * with a bare string otherwise. The transport adapter (`cogenta serve`)
+   * checks for either shape and sends bytes/text rather than JSON — this
+   * router does not know or care how its caller transports a response.
    */
   readonly body: unknown
 }
@@ -67,6 +77,18 @@ export interface CommerceAdminRouterOptions {
   readonly payments: PaymentStore
   readonly coupons: CouponStore
   readonly invoices?: InvoiceStore
+  /**
+   * Credit notes (fiche 52 task 6) — absent exactly when `invoices` is,
+   * since both need the same seller details and a shop without one has no
+   * accounting document numbering to hand out for the other either.
+   */
+  readonly creditNotes?: CreditNoteStore
+  /**
+   * The transactional e-mail queue (fiche 52 task 2) — absent on a site that
+   * never configured an e-mail transport (R1/R2): orders still place and
+   * ship, nobody is ever notified.
+   */
+  readonly orderEmails?: OrderEmailQueue
   /** Absent on a site that never wires subscriptions — the routes then answer 404. */
   readonly subscriptions?: SubscriptionStore
   /** Tax zones/rates (fiche 34 task 1) — reuses the already-tested resolver, never a second implementation. */
@@ -95,11 +117,15 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_INVOICE_NOT_FOUND: 404,
   COMMERCE_SUBSCRIPTION_NOT_FOUND: 404,
   COMMERCE_SHIPPING_METHOD_UNKNOWN: 404,
+  COMMERCE_CUSTOMER_NOT_FOUND: 404,
+  COMMERCE_CREDIT_NOTE_NOT_FOUND: 404,
   COMMERCE_PRODUCT_INVALID: 400,
+  COMMERCE_TRACKING_INVALID: 400,
   COMMERCE_SKU_TAKEN: 409,
   COMMERCE_INVOICE_ALREADY_ISSUED: 409,
   COMMERCE_CART_CLOSED: 409,
   COMMERCE_ORDER_TRANSITION_INVALID: 409,
+  COMMERCE_ORDER_LOCKED: 409,
   COMMERCE_INVOICE_SEQUENCE_CONFLICT: 409,
   COMMERCE_AMOUNT_INVALID: 400,
   COMMERCE_CURRENCY_INVALID: 400,
@@ -107,6 +133,8 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_QUANTITY_INVALID: 400,
   COMMERCE_COUPON_INVALID: 400,
   COMMERCE_COUPON_EXHAUSTED: 409,
+  COMMERCE_COUPON_CUSTOMER_EXHAUSTED: 409,
+  COMMERCE_COUPON_NOT_APPLICABLE: 400,
   COMMERCE_TAX_RULE_INVALID: 400,
   COMMERCE_SHIPPING_UNAVAILABLE: 400,
   COMMERCE_SUBSCRIPTION_INVALID: 400,
@@ -179,6 +207,70 @@ function readOptionalBool(body: Record<string, unknown>, key: string): boolean |
   return typeof value === 'boolean' ? value : undefined
 }
 
+/**
+ * Reads a field that is legitimately nullable — a threshold, a compare-at
+ * price, a dimension — and tells "absent" (leave the current value alone)
+ * from "explicitly null" (clear it) from "a real value" (set it), the same
+ * three-way distinction `CatalogStore.updateVariant` itself already needs
+ * (its own `input.x === undefined ? current.x : input.x` guards).
+ */
+function optionalField<T>(
+  body: Record<string, unknown>,
+  key: string,
+  parse: (value: unknown) => T,
+): Partial<Record<string, T>> {
+  if (!(key in body)) return {}
+  return { [key]: parse(body[key]) }
+}
+
+function nullableInt(value: unknown): number | null {
+  if (value === null) return null
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  throw new CogentaError({
+    code: 'COMMERCE_QUANTITY_INVALID',
+    message: 'This field must be a whole number, or null to clear it.',
+    hint: 'Send an integer, or null.',
+  })
+}
+
+function nullableContentRef(value: unknown): { collection: string; entryId: string } | null {
+  if (value === null) return null
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).collection === 'string' &&
+    typeof (value as Record<string, unknown>).entryId === 'string'
+  ) {
+    const record = value as Record<string, unknown>
+    return { collection: record.collection as string, entryId: record.entryId as string }
+  }
+  throw new CogentaError({
+    code: 'COMMERCE_PRODUCT_INVALID',
+    message: '"contentRef" must be { collection, entryId }, or null to unlink.',
+    hint: 'Send { "collection": "…", "entryId": "…" }, or null.',
+  })
+}
+
+function nullableIsoString(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value === 'string' && value.trim() !== '') return value
+  throw new CogentaError({
+    code: 'COMMERCE_PRODUCT_INVALID',
+    message: 'This field must be an ISO date string, or null to clear it.',
+    hint: 'Send a date such as "2026-09-01T00:00:00.000Z", or null.',
+  })
+}
+
+/** A query-string integer, or `undefined` for anything that is not a positive whole number. */
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+/** Same cap `@cogenta/api`'s redirect router uses for its own CSV import/export (fiche 51 task 6). */
+const MAX_CSV_ROWS = 5000
+
 function readInt(body: Record<string, unknown>, key: string): number {
   const value = body[key]
   if (typeof value !== 'number' || !Number.isInteger(value)) {
@@ -191,11 +283,65 @@ function readInt(body: Record<string, unknown>, key: string): number {
   return value
 }
 
+/**
+ * Reads `body.shippingAddress` (fiche 52 task 1), if present. `undefined`
+ * means "this request said nothing about the address" (leave it alone on an
+ * update); an explicit `null` on the wire is honoured too, by returning
+ * `null` — "clear the address" — rather than being swallowed by `undefined`.
+ */
+function readShippingAddress(body: Record<string, unknown>): ShippingAddress | null | undefined {
+  const value = body.shippingAddress
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const address = readObject(value)
+  return {
+    line1: readString(address, 'line1'),
+    city: readString(address, 'city'),
+    postalCode: readString(address, 'postalCode'),
+    line2: readOptionalString(address, 'line2') ?? null,
+    recipient: readOptionalString(address, 'recipient') ?? null,
+    phone: readOptionalString(address, 'phone') ?? null,
+  }
+}
+
 export function createCommerceAdminRouter(
   options: CommerceAdminRouterOptions,
 ): CommerceAdminRouter {
   const basePath = (options.basePath ?? '/api/commerce').replace(/\/+$/u, '')
   const { permissions } = options
+
+  /**
+   * A customer's own fiche (fiche 52 task 3): their record plus every order
+   * they placed and what they spent on it. `orders.list({ customerId })`
+   * already exists and is already permission-agnostic at the store layer, so
+   * this is aggregation, not a new query engine.
+   */
+  async function customerDetail(customer: Customer): Promise<{
+    readonly customer: Customer
+    readonly orders: Awaited<ReturnType<OrderStore['list']>>
+    readonly totalSpentMinor: number
+    readonly currency: string | null
+    readonly subscriptions: Awaited<ReturnType<SubscriptionStore['list']>>
+  }> {
+    const orders = await options.orders.list({ customerId: customer.id, limit: 500 })
+    const spendable = orders.filter(
+      (order) => order.status !== 'cancelled' && order.status !== 'refunded',
+    )
+    const totalSpentMinor = spendable.reduce((sum, order) => sum + order.totalMinor, 0)
+    const subscriptions =
+      options.subscriptions === undefined
+        ? []
+        : (await options.subscriptions.list()).filter(
+            (subscription) => subscription.customerId === customer.id,
+          )
+    return {
+      customer,
+      orders,
+      totalSpentMinor,
+      currency: spendable[0]?.currency ?? orders[0]?.currency ?? null,
+      subscriptions,
+    }
+  }
 
   return {
     handle: async (request, actor = COMMERCE_ANONYMOUS) => {
@@ -230,16 +376,31 @@ export function createCommerceAdminRouter(
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
             const query = request.query ?? {}
+            // One row over the requested page: `hasMore` is then simply
+            // "did the extra row show up", never a second `count(*)` query
+            // (fiche 51 task 2 — the same technique `media-client.ts`'s
+            // cursor pagination already uses, adapted to this offset-based
+            // list rather than inventing a cursor for it).
+            const requestedLimit = parsePositiveInt(query.limit) ?? 25
+            const offset = parsePositiveInt(query.offset) ?? 0
+            const sort =
+              query.sort === 'title' || query.sort === 'handle' ? query.sort : 'createdAt'
+            const direction = query.direction === 'asc' ? 'asc' : 'desc'
+
+            const page = await options.catalog.listProducts({
+              ...(query.status === 'active' || query.status === 'archived'
+                ? { status: query.status }
+                : {}),
+              ...(query.q === undefined || query.q === '' ? {} : { search: query.q }),
+              sort,
+              direction,
+              limit: requestedLimit + 1,
+              offset,
+            })
+            const hasMore = page.length > requestedLimit
             return {
               status: 200,
-              body: {
-                products: await options.catalog.listProducts({
-                  ...(query.status === 'active' || query.status === 'archived'
-                    ? { status: query.status }
-                    : {}),
-                  ...(query.q === undefined ? {} : { search: query.q }),
-                }),
-              },
+              body: { products: hasMore ? page.slice(0, requestedLimit) : page, hasMore },
             }
           }
           if (method === 'POST') {
@@ -255,6 +416,64 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // The catalogue's CSV export (fiche 51 task 6) — checked ahead of the
+        // generic `/products/:id` route below, the same way `export`/`import`
+        // are ordered ahead of `:id` on `@cogenta/api`'s redirect router.
+        if (segments[0] === 'products' && segments[1] === 'export' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const products = await options.catalog.listProducts({ limit: MAX_CSV_ROWS })
+            const variantsByProduct = new Map(
+              await Promise.all(
+                products.map(
+                  async (product) =>
+                    [product.id, await options.catalog.listVariants(product.id)] as const,
+                ),
+              ),
+            )
+            return {
+              status: 200,
+              body: {
+                csv: exportProductsCsv(products, variantsByProduct),
+                filename: 'products.csv',
+              },
+            }
+          }
+        }
+
+        if (segments[0] === 'products' && segments[1] === 'import' && segments.length === 2) {
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const csv = readString(body, 'csv')
+            const apply = body.apply === true
+            return {
+              status: 200,
+              body: apply
+                ? await applyProductsImport(csv, options.catalog, MAX_CSV_ROWS)
+                : await previewProductsImport(csv, options.catalog, MAX_CSV_ROWS),
+            }
+          }
+        }
+
+        // The reverse of `contentRef` — what the content editor's own
+        // cross-link (fiche 51 task 1) asks to find "is there a commercial
+        // record for the entry I am looking at right now".
+        if (segments[0] === 'products' && segments[1] === 'by-content' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const collection = request.query?.collection
+            const entryId = request.query?.entryId
+            if (collection === undefined || entryId === undefined) {
+              return { status: 200, body: { product: null } }
+            }
+            return {
+              status: 200,
+              body: { product: await options.catalog.readProductByContentRef(collection, entryId) },
+            }
+          }
+        }
+
         if (segments[0] === 'products' && segments.length === 2) {
           const id = segments[1] ?? ''
           if (method === 'GET') {
@@ -263,7 +482,11 @@ export function createCommerceAdminRouter(
             if (product === null) return notFound('product')
             return {
               status: 200,
-              body: { product, variants: await options.catalog.listVariants(id) },
+              body: {
+                product,
+                variants: await options.catalog.listVariants(id),
+                terms: await options.catalog.listProductTerms(id),
+              },
             }
           }
           if (method === 'PATCH') {
@@ -277,6 +500,10 @@ export function createCommerceAdminRouter(
                 ...(body.status === 'active' || body.status === 'archived'
                   ? { status: body.status }
                   : {}),
+                // Fiche 51 task 1: `null` unlinks, an object links, absence
+                // leaves it alone — the same three-way distinction the
+                // nullable variant fields above already need.
+                ...optionalField(body, 'contentRef', nullableContentRef),
               }),
             }
           }
@@ -287,7 +514,53 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // A product's classification against a taxonomy the site declares
+        // (fiche 51 task 3, ADR-0022). Governed by `commerce.catalog.write`
+        // — the same permission as every other catalogue edit — rather than
+        // contract A's `canTerm`: categorising a product is catalogue work,
+        // and reusing contract A's term permission here would couple this
+        // router to a second, unrelated permission layer for one field.
+        if (segments[0] === 'products' && segments[2] === 'terms' && segments.length === 3) {
+          if (method === 'PUT') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const taxonomy = readString(body, 'taxonomy')
+            const termIds = Array.isArray(body.termIds)
+              ? body.termIds.filter((value): value is string => typeof value === 'string')
+              : []
+            return {
+              status: 200,
+              body: {
+                terms: await options.catalog.setProductTerms(segments[1] ?? '', taxonomy, termIds),
+              },
+            }
+          }
+        }
+
         // ---- variants -----------------------------------------------------
+        // Checked ahead of the generic `/variants/:id` route below, the same
+        // ordering discipline as `products/export` above.
+        if (segments[0] === 'variants' && segments[1] === 'low-stock' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: { variants: await options.catalog.listLowStock() } }
+          }
+        }
+
+        if (
+          segments[0] === 'variants' &&
+          segments[2] === 'stock-movements' &&
+          segments.length === 3
+        ) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return {
+              status: 200,
+              body: { movements: await options.catalog.listStockMovements(segments[1] ?? '') },
+            }
+          }
+        }
+
         if (segments[0] === 'products' && segments[2] === 'variants' && segments.length === 3) {
           if (method === 'POST') {
             permissions.assert('commerce.catalog.write', actor)
@@ -301,6 +574,18 @@ export function createCommerceAdminRouter(
                 priceMinor: readInt(body, 'priceMinor'),
                 currency: readString(body, 'currency'),
                 ...(typeof body.onHand === 'number' ? { onHand: body.onHand } : {}),
+                ...(typeof body.allowBackorder === 'boolean'
+                  ? { allowBackorder: body.allowBackorder }
+                  : {}),
+                ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+                ...(typeof body.taxCategory === 'string' ? { taxCategory: body.taxCategory } : {}),
+                ...optionalField(body, 'lowStockThreshold', nullableInt),
+                ...optionalField(body, 'compareAtPriceMinor', nullableInt),
+                ...optionalField(body, 'saleStartsAt', nullableIsoString),
+                ...optionalField(body, 'saleEndsAt', nullableIsoString),
+                ...optionalField(body, 'widthMm', nullableInt),
+                ...optionalField(body, 'heightMm', nullableInt),
+                ...optionalField(body, 'depthMm', nullableInt),
               }),
             }
           }
@@ -320,6 +605,16 @@ export function createCommerceAdminRouter(
                 ...(typeof body.allowBackorder === 'boolean'
                   ? { allowBackorder: body.allowBackorder }
                   : {}),
+                ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+                ...(typeof body.taxCategory === 'string' ? { taxCategory: body.taxCategory } : {}),
+                ...(typeof body.position === 'number' ? { position: body.position } : {}),
+                ...optionalField(body, 'lowStockThreshold', nullableInt),
+                ...optionalField(body, 'compareAtPriceMinor', nullableInt),
+                ...optionalField(body, 'saleStartsAt', nullableIsoString),
+                ...optionalField(body, 'saleEndsAt', nullableIsoString),
+                ...optionalField(body, 'widthMm', nullableInt),
+                ...optionalField(body, 'heightMm', nullableInt),
+                ...optionalField(body, 'depthMm', nullableInt),
               }),
             }
           }
@@ -345,10 +640,37 @@ export function createCommerceAdminRouter(
         }
 
         // ---- orders -------------------------------------------------------
+        // Checked before the generic list/detail routes below, since both
+        // share the `orders`/length-1 or length-2 shape: an accounting CSV
+        // export (fiche 52 task 7) is not an order whose id happens to be
+        // "export.csv".
+        if (segments[0] === 'orders' && segments[1] === 'export.csv' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const query = request.query ?? {}
+            const status = query.status
+            const orders = await options.orders.list({
+              ...((ORDER_STATUSES as readonly string[]).includes(status ?? '')
+                ? { status: status as OrderStatus }
+                : {}),
+              ...(query.from === undefined ? {} : { placedFrom: query.from }),
+              ...(query.to === undefined ? {} : { placedTo: query.to }),
+              limit: 5000,
+            })
+            const rows: OrderExportRow[] = []
+            for (const order of orders) {
+              const invoice = await options.invoices?.readByOrder(order.id)
+              rows.push({ order, invoiceNumber: invoice?.number ?? null })
+            }
+            return { status: 200, body: ordersToCsv(rows) }
+          }
+        }
+
         if (segments[0] === 'orders' && segments.length === 1 && method === 'GET') {
           permissions.assert('commerce.read', actor)
-          const status = request.query?.status
-          const q = request.query?.q
+          const query = request.query ?? {}
+          const status = query.status
+          const q = query.q
           return {
             status: 200,
             body: {
@@ -357,9 +679,51 @@ export function createCommerceAdminRouter(
                   ? { status: status as OrderStatus }
                   : {}),
                 ...(q === undefined || q === '' ? {} : { search: q }),
+                // Advanced filters (fiche 52 task 7): an inclusive placed-at
+                // date range, on top of the status/search this route already had.
+                ...(query.from === undefined ? {} : { placedFrom: query.from }),
+                ...(query.to === undefined ? {} : { placedTo: query.to }),
               }),
             },
           }
+        }
+
+        // A shopkeeper-entered order (fiche 52 task 5) — a phone order, a
+        // trade-show sale, or a correction. `placeManual` reuses `place()`
+        // internally (see `order/store.ts`), so this route never duplicates
+        // stock-taking, pricing or coupon logic.
+        if (segments[0] === 'orders' && segments.length === 1 && method === 'POST') {
+          permissions.assert('commerce.order.write', actor)
+          const body = readObject(request.body)
+          const rawLines = body.lines
+          if (!Array.isArray(rawLines) || rawLines.length === 0) {
+            throw new CogentaError({
+              code: 'COMMERCE_AMOUNT_INVALID',
+              message: '"lines" is required and must be a non-empty array.',
+              hint: 'Each line needs { variantId, quantity }.',
+            })
+          }
+          const lines: PlaceManualOrderLineInput[] = rawLines.map((entry) => {
+            const line = readObject(entry)
+            return { variantId: readString(line, 'variantId'), quantity: readInt(line, 'quantity') }
+          })
+          const customerName = readOptionalString(body, 'customerName')
+          const shippingAddress = readShippingAddress(body)
+          const outcome = await options.orders.placeManual({
+            email: readString(body, 'email'),
+            currency: readString(body, 'currency'),
+            lines,
+            actorId: actor.id,
+            ...(customerName === undefined ? {} : { customerName }),
+            ...(shippingAddress === undefined ? {} : { shippingAddress }),
+          })
+          if (outcome.kind === 'placed') {
+            if (options.orderEmails !== undefined) {
+              await options.orderEmails.enqueue(outcome.order.id, 'confirmation')
+            }
+            return { status: 201, body: outcome }
+          }
+          return { status: 200, body: outcome }
         }
 
         if (segments[0] === 'orders' && segments.length === 2 && method === 'GET') {
@@ -376,6 +740,27 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // Corrects the e-mail/address before payment (fiche 52 task 5,
+        // "modification pré-paiement") — locked by `OrderStore.update` once
+        // the order is no longer `pending`.
+        if (segments[0] === 'orders' && segments.length === 2 && method === 'PATCH') {
+          permissions.assert('commerce.order.write', actor)
+          const body = readObject(request.body)
+          const email = readOptionalString(body, 'email')
+          const shippingAddress = readShippingAddress(body)
+          return {
+            status: 200,
+            body: await options.orders.update(
+              segments[1] ?? '',
+              {
+                ...(email === undefined ? {} : { email }),
+                ...(shippingAddress === undefined ? {} : { shippingAddress }),
+              },
+              { actorId: actor.id },
+            ),
+          }
+        }
+
         if (segments[0] === 'orders' && segments[2] === 'status' && segments.length === 3) {
           if (method === 'PUT') {
             permissions.assert('commerce.order.write', actor)
@@ -388,12 +773,57 @@ export function createCommerceAdminRouter(
                 hint: `Use one of: ${ORDER_STATUSES.join(', ')}.`,
               })
             }
+            const updated = await options.orders.transition(segments[1] ?? '', to as OrderStatus, {
+              actorId: actor.id,
+              ...(typeof body.note === 'string' ? { note: body.note } : {}),
+            })
+            return { status: 200, body: updated }
+          }
+        }
+
+        // Shipment tracking (fiche 52 task 4). Setting it on a paid order
+        // also moves the order to `shipped` (see `OrderStore.setTracking`),
+        // which is what fires the shipment e-mail below.
+        if (segments[0] === 'orders' && segments[2] === 'tracking' && segments.length === 3) {
+          if (method === 'PUT') {
+            permissions.assert('commerce.order.write', actor)
+            const body = readObject(request.body)
+            const url = readOptionalString(body, 'url')
+            const before = await options.orders.read(segments[1] ?? '')
+            const updated = await options.orders.setTracking(
+              segments[1] ?? '',
+              {
+                carrier: readString(body, 'carrier'),
+                number: readString(body, 'number'),
+                ...(url === undefined ? {} : { url }),
+              },
+              { actorId: actor.id },
+            )
+            if (before?.status === 'paid' && updated.status === 'shipped' && options.orderEmails) {
+              await options.orderEmails.enqueue(updated.id, 'shipment')
+            }
+            return { status: 200, body: updated }
+          }
+        }
+
+        if (segments[0] === 'orders' && segments[2] === 'emails' && segments.length === 3) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.orderEmails === undefined) return { status: 200, body: { emails: [] } }
             return {
               status: 200,
-              body: await options.orders.transition(segments[1] ?? '', to as OrderStatus, {
-                actorId: actor.id,
-                ...(typeof body.note === 'string' ? { note: body.note } : {}),
-              }),
+              body: { emails: await options.orderEmails.listForOrder(segments[1] ?? '') },
+            }
+          }
+        }
+
+        if (segments[0] === 'orders' && segments[2] === 'credit-notes' && segments.length === 3) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.creditNotes === undefined) return { status: 200, body: { creditNotes: [] } }
+            return {
+              status: 200,
+              body: { creditNotes: await options.creditNotes.listForOrder(segments[1] ?? '') },
             }
           }
         }
@@ -420,12 +850,41 @@ export function createCommerceAdminRouter(
           if (method === 'POST') {
             permissions.assert('commerce.order.refund', actor)
             const body = readObject(request.body)
+            // "Motif obligatoire" (fiche 52 task 6) — a real reason, not an
+            // optional courtesy, for money leaving the business.
+            const reason = readString(body, 'reason')
+            const refund = await options.payments.refund(
+              segments[1] ?? '',
+              readInt(body, 'amountMinor'),
+              { actorId: actor.id, reason },
+            )
+            // A credit note per refund, automatically — the same gate as
+            // invoicing (billing configured), since a credit note without a
+            // seller address is not a usable accounting document either.
+            const creditNote =
+              options.creditNotes === undefined
+                ? null
+                : await options.creditNotes.issue({
+                    orderId: refund.orderId,
+                    refundId: refund.id,
+                    amountMinor: refund.amountMinor,
+                    reason,
+                    actorId: actor.id,
+                  })
+            return { status: 200, body: { refund, creditNote } }
+          }
+        }
+
+        // So the screen can show what is left to refund (fiche 52 task 6) —
+        // reads the exact list `PaymentStore.refund`'s own over-refund guard
+        // sums, never a second computation of "how much was already
+        // refunded".
+        if (segments[0] === 'payments' && segments[2] === 'refunds' && segments.length === 3) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
             return {
               status: 200,
-              body: await options.payments.refund(segments[1] ?? '', readInt(body, 'amountMinor'), {
-                actorId: actor.id,
-                ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
-              }),
+              body: { refunds: await options.payments.listRefunds(segments[1] ?? '') },
             }
           }
         }
@@ -440,6 +899,41 @@ export function createCommerceAdminRouter(
                 ...(request.query?.q === undefined ? {} : { search: request.query.q }),
               }),
             },
+          }
+        }
+
+        // A customer's own fiche (fiche 52 task 3): the record plus its
+        // orders and spend, aggregated here rather than inside
+        // `CustomerStore` — `CustomerStore` knows nothing about orders, and
+        // it should stay that way (a customer without a single sale is still
+        // a valid customer record).
+        if (segments[0] === 'customers' && segments.length === 2 && method === 'GET') {
+          permissions.assert('commerce.read', actor)
+          const customer = await options.customers.read(segments[1] ?? '')
+          if (customer === null) return notFound('customer')
+          return { status: 200, body: await customerDetail(customer) }
+        }
+
+        // GDPR export (fiche 52 task 3) — the same read permission as the
+        // rest of the back office already exposes this data through, bundled
+        // into one downloadable record rather than requiring several calls.
+        if (segments[0] === 'customers' && segments[2] === 'export' && segments.length === 3) {
+          if (method === 'POST' || method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const customer = await options.customers.read(segments[1] ?? '')
+            if (customer === null) return notFound('customer')
+            return { status: 200, body: await customerDetail(customer) }
+          }
+        }
+
+        // GDPR erasure of the customer record (fiche 52 task 3) — see
+        // `CustomerStore.anonymize`'s own comment on why orders themselves
+        // are left untouched. Gated behind the same permission as any other
+        // action on a customer's order data.
+        if (segments[0] === 'customers' && segments[2] === 'anonymize' && segments.length === 3) {
+          if (method === 'POST') {
+            permissions.assert('commerce.order.write', actor)
+            return { status: 200, body: await options.customers.anonymize(segments[1] ?? '') }
           }
         }
 
@@ -461,6 +955,25 @@ export function createCommerceAdminRouter(
             const invoice = await options.invoices.readByOrder(segments[1] ?? '')
             if (invoice === null) return notFound('invoice')
             return { status: 200, body: await options.invoices.pdf(invoice.id) }
+          }
+        }
+
+        // A real preview PDF for an order that may never be invoiced (fiche
+        // 54 task 2) — same shape and same `application/pdf` handling as the
+        // route above, checked first for the same reason: both start with
+        // the same three segments. `commerce.read`, not
+        // `commerce.invoice.issue`, because nothing here claims a number or
+        // writes a row (see `InvoiceStore.preview`'s own comment).
+        if (
+          segments[0] === 'orders' &&
+          segments[2] === 'invoice' &&
+          segments[3] === 'preview' &&
+          segments.length === 4
+        ) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            if (options.invoices === undefined) return notFound('invoice')
+            return { status: 200, body: await options.invoices.preview(segments[1] ?? '') }
           }
         }
 
@@ -525,8 +1038,27 @@ export function createCommerceAdminRouter(
                 ...(typeof body.maxRedemptions === 'number'
                   ? { maxRedemptions: body.maxRedemptions }
                   : {}),
+                ...(typeof body.maxRedemptionsPerCustomer === 'number'
+                  ? { maxRedemptionsPerCustomer: body.maxRedemptionsPerCustomer }
+                  : {}),
+                ...(Array.isArray(body.restrictedProductIds)
+                  ? {
+                      restrictedProductIds: body.restrictedProductIds.filter(
+                        (id: unknown): id is string => typeof id === 'string',
+                      ),
+                    }
+                  : {}),
               }),
             }
+          }
+        }
+
+        // Read before the generic /coupons/{code}/deactivate route below —
+        // "metrics" is not a coupon code, but the two paths share a shape.
+        if (segments[0] === 'coupons' && segments[1] === 'metrics' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: await options.coupons.metrics() }
           }
         }
 
@@ -558,10 +1090,61 @@ export function createCommerceAdminRouter(
               status: 200,
               body: {
                 subscriptions: await options.subscriptions.list(
-                  status === 'active' || status === 'paused' || status === 'cancelled'
-                    ? { status }
+                  (SUBSCRIPTION_STATUSES as readonly string[]).includes(status ?? '')
+                    ? { status: status as SubscriptionStatus }
                     : {},
                 ),
+              },
+            }
+          }
+        }
+
+        // Read before the generic /subscriptions/{id} route below — "metrics"
+        // is not a subscription id, but the two paths share a shape.
+        if (segments[0] === 'subscriptions' && segments[1] === 'metrics' && segments.length === 2) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: await options.subscriptions.metrics() }
+          }
+        }
+
+        // A subscription's own billing history (`cycles`) and open dunning
+        // cycle, if any — fiche 53 tasks 1 and 3: pause/resume/cancel were
+        // already routed below, but nothing surfaced either of these.
+        if (segments[0] === 'subscriptions' && segments.length === 2) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const id = segments[1] ?? ''
+            const subscription = await options.subscriptions.read(id)
+            if (subscription === null) return notFound('subscription')
+            return {
+              status: 200,
+              body: {
+                subscription,
+                cycles: await options.subscriptions.cycles(id),
+                dunning: await options.subscriptions.dunning(id),
               },
             }
           }
@@ -595,6 +1178,41 @@ export function createCommerceAdminRouter(
                   ? await subscriptions.resume(id)
                   : await subscriptions.cancel(id)
             return { status: 200, body: updated }
+          }
+        }
+
+        if (
+          segments[0] === 'subscriptions' &&
+          segments[2] === 'change-plan' &&
+          segments.length === 3
+        ) {
+          if (options.subscriptions === undefined) {
+            return {
+              status: 404,
+              body: {
+                error: {
+                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                  message: 'Subscriptions are not configured on this site.',
+                },
+              },
+            }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.order.write', actor)
+            const body = readObject(request.body)
+            const quantity = readOptionalInt(body, 'quantity')
+            const prorate = readOptionalBool(body, 'prorate')
+            return {
+              status: 200,
+              body: await options.subscriptions.changePlan(
+                segments[1] ?? '',
+                readString(body, 'variantId'),
+                {
+                  ...(quantity === undefined ? {} : { quantity }),
+                  ...(prorate === undefined ? {} : { prorate }),
+                },
+              ),
+            }
           }
         }
 
@@ -836,6 +1454,8 @@ const NOT_FOUND_CODES: Readonly<Record<string, string>> = {
   product: 'COMMERCE_PRODUCT_NOT_FOUND',
   order: 'COMMERCE_ORDER_NOT_FOUND',
   invoice: 'COMMERCE_INVOICE_NOT_FOUND',
+  subscription: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+  customer: 'COMMERCE_CUSTOMER_NOT_FOUND',
 }
 
 function notFound(what: string): CommerceResponse {

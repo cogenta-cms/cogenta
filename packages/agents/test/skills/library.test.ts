@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -84,6 +84,121 @@ describe('portable SKILL.md import (L24 task 4)', () => {
     expect(imported?.builtin).toBe(false)
 
     expect((await store.list()).map((s) => s.id)).toContain('new-package')
+  })
+})
+
+describe('reference-folder resources (fiche 57)', () => {
+  it('creates the three standard sub-folders empty at create()', async () => {
+    const created = await store.create({ name: 'Layout check', description: '', instructions: '' })
+    expect(await store.listResources(created.id)).toEqual([])
+    for (const resourceDir of ['references', 'scripts', 'assets']) {
+      const info = await stat(join(dir, created.id, resourceDir))
+      expect(info.isDirectory()).toBe(true)
+    }
+  })
+
+  it('adds and lists a resource under each standard folder', async () => {
+    const created = await store.create({ name: 'Docs', description: '', instructions: '' })
+    await store.addResource(created.id, 'references/style-guide.md', '# Style guide')
+    await store.addResource(created.id, 'scripts/lint.sh', '#!/bin/sh\necho ok')
+    await store.addResource(created.id, 'assets/logo.svg', new Uint8Array([1, 2, 3]))
+
+    const resources = await store.listResources(created.id)
+    expect(resources.map((r) => r.path).sort()).toEqual([
+      'assets/logo.svg',
+      'references/style-guide.md',
+      'scripts/lint.sh',
+    ])
+    for (const resource of resources) {
+      expect(resource.size).toBeGreaterThan(0)
+      expect(resource.updatedAt.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('overwrites a resource written twice at the same path', async () => {
+    const created = await store.create({ name: 'Overwrite', description: '', instructions: '' })
+    await store.addResource(created.id, 'references/note.md', 'first')
+    await store.addResource(created.id, 'references/note.md', 'second, longer body')
+    const resources = await store.listResources(created.id)
+    expect(resources).toHaveLength(1)
+    expect(resources[0]?.size).toBe(Buffer.byteLength('second, longer body'))
+  })
+
+  it('removes a resource', async () => {
+    const created = await store.create({
+      name: 'Removable resource',
+      description: '',
+      instructions: '',
+    })
+    await store.addResource(created.id, 'assets/template.txt', 'hello')
+    await store.removeResource(created.id, 'assets/template.txt')
+    expect(await store.listResources(created.id)).toEqual([])
+  })
+
+  it('refuses to remove a resource that does not exist', async () => {
+    const created = await store.create({
+      name: 'Missing resource',
+      description: '',
+      instructions: '',
+    })
+    await expect(store.removeResource(created.id, 'assets/ghost.txt')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_RESOURCE_UNKNOWN',
+    })
+  })
+
+  it('refuses to write outside the three standard folders', async () => {
+    const created = await store.create({ name: 'Guarded', description: '', instructions: '' })
+    await expect(store.addResource(created.id, 'notes.md', 'x')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_RESOURCE_INVALID',
+    })
+    await expect(store.addResource(created.id, 'other/notes.md', 'x')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_RESOURCE_INVALID',
+    })
+  })
+
+  it('refuses a path that tries to escape the skill directory', async () => {
+    const created = await store.create({ name: 'Escape check', description: '', instructions: '' })
+    await expect(
+      store.addResource(created.id, 'references/../../../etc/passwd', 'x'),
+    ).rejects.toMatchObject({ code: 'AGENT_SKILL_RESOURCE_INVALID' })
+    await expect(store.removeResource(created.id, 'assets/../../secret.txt')).rejects.toMatchObject(
+      { code: 'AGENT_SKILL_RESOURCE_INVALID' },
+    )
+  })
+
+  it('refuses a bare folder with no file segment', async () => {
+    const created = await store.create({ name: 'Bare folder', description: '', instructions: '' })
+    await expect(store.addResource(created.id, 'references', 'x')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_RESOURCE_INVALID',
+    })
+    await expect(store.addResource(created.id, 'references/', 'x')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_RESOURCE_INVALID',
+    })
+  })
+
+  it('throws AGENT_SKILL_UNKNOWN for resource operations on an unknown skill', async () => {
+    await expect(store.listResources('ghost')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_UNKNOWN',
+    })
+    await expect(store.addResource('ghost', 'references/x.md', 'x')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_UNKNOWN',
+    })
+    await expect(store.removeResource('ghost', 'references/x.md')).rejects.toMatchObject({
+      code: 'AGENT_SKILL_UNKNOWN',
+    })
+  })
+
+  it('lists an empty resource set for a skill created before this fiche (no sub-folders on disk)', async () => {
+    // Exactly the contract test the fiche's own acceptance criteria name: a
+    // skill directory that only has SKILL.md/.meta.json — never touched by
+    // this fiche's create() — must not error on listResources().
+    await mkdir(join(dir, 'legacy-skill'), { recursive: true })
+    await writeFile(
+      join(dir, 'legacy-skill', 'SKILL.md'),
+      '---\nname: legacy-skill\ndescription: Pre-existing skill.\n---\n\nBody.\n',
+      'utf8',
+    )
+    expect(await store.listResources('legacy-skill')).toEqual([])
   })
 })
 

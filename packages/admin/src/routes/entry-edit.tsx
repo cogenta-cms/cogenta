@@ -46,6 +46,7 @@ import { EntryForm } from '../collections/entry-form.js'
 import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { useAutosave } from '../collections/use-autosave.js'
 import { validateEntry } from '../collections/validate-entry.js'
+import { EntryProductLinkCard } from '../commerce/entry-product-link-card.js'
 import { previewPermalink } from '../lib/permalink.js'
 import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
@@ -1410,6 +1411,13 @@ export function EntryEditRoute(): JSX.Element {
                   )}
                 </CardBody>
               </Card>
+            )}
+
+            {/* The reverse of a product's `contentRef` (fiche 51 task 1): does
+                a commercial record point back at this entry. Renders nothing
+                for the overwhelming majority of entries, which sell nothing. */}
+            {!isNew && id !== undefined && token !== null && (
+              <EntryProductLinkCard token={token} collection={name} entryId={id} />
             )}
 
             {/* Author (task 4): display only — assigning it is fiche 37's job. */}

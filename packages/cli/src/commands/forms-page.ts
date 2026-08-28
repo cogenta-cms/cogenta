@@ -2,6 +2,7 @@ import type { AccessContext } from '@cogenta/api'
 import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
 import { HONEYPOT_FIELD, isFormFileValue, TIMESTAMP_FIELD } from '@cogenta/forms'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import type { SeoRenderDefaults } from './seo.js'
 import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from './theme-render.js'
 
 /**
@@ -47,6 +48,8 @@ export interface FormPageOptions {
   readonly branding?: () => Promise<BrandingSettings>
   /** Same live active-theme read the rest of the public site uses (`theme-render.ts`). Absent renders with the default theme. */
   readonly activeTheme?: () => Promise<string | null>
+  /** Same live SEO settings read the rest of the public site uses (`theme-render.ts`) — only the search-verification meta tags apply here (fiche 50 task 2). */
+  readonly seo?: () => Promise<SeoRenderDefaults>
 }
 
 export interface FormPageState {
@@ -218,6 +221,7 @@ ${body}
       ...(options.menus === undefined ? {} : { menus: options.menus }),
       ...(options.branding === undefined ? {} : { branding: options.branding }),
       ...(options.activeTheme === undefined ? {} : { activeTheme: options.activeTheme }),
+      ...(options.seo === undefined ? {} : { seo: options.seo }),
     },
     context,
   )

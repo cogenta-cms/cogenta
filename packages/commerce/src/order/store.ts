@@ -16,13 +16,45 @@ import type { CouponStore } from '../coupon/store.js'
 import type { CustomerStore } from '../customer/store.js'
 import { toInt, toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
-import type { Order, OrderEvent, OrderEventKind, OrderLine, OrderStatus } from './types.js'
+import type {
+  Order,
+  OrderEvent,
+  OrderEventKind,
+  OrderLine,
+  OrderStatus,
+  OrderTracking,
+  ShippingAddress,
+} from './types.js'
 import { assertTransition, holdsStock } from './types.js'
 
 export interface PlaceOrderInput {
   readonly cartId: string
   readonly email: string
   readonly customerName?: string | null
+  readonly actorId?: string | null
+  /** The delivery address (fiche 52 task 1). Absent for digital-only goods. */
+  readonly shippingAddress?: ShippingAddress | null
+}
+
+export interface PlaceManualOrderLineInput {
+  readonly variantId: string
+  readonly quantity: number
+}
+
+/**
+ * A manual order — one a shopkeeper types in themselves (fiche 52 task 5):
+ * a phone order, a trade-show sale, a correction for a customer who paid by
+ * some other means entirely. Deliberately **not** a second placement path:
+ * it opens a real cart, adds the real lines to it, and calls the exact same
+ * `place()` this file already has, so stock-taking, coupon redemption and
+ * pricing are never duplicated — only reused.
+ */
+export interface PlaceManualOrderInput {
+  readonly email: string
+  readonly customerName?: string | null
+  readonly currency: string
+  readonly lines: readonly PlaceManualOrderLineInput[]
+  readonly shippingAddress?: ShippingAddress | null
   readonly actorId?: string | null
 }
 
@@ -57,6 +89,10 @@ export interface OrderListOptions {
    * pattern for this kind of filter in this package.
    */
   readonly search?: string
+  /** Placed at or after this instant (inclusive), ISO 8601 — fiche 52 task 7. */
+  readonly placedFrom?: string
+  /** Placed at or before this instant (inclusive), ISO 8601 — fiche 52 task 7. */
+  readonly placedTo?: string
   readonly limit?: number
   readonly offset?: number
 }
@@ -73,6 +109,8 @@ export interface OrderStore {
    * sale that did not occur.
    */
   place(input: PlaceOrderInput): Promise<PlaceOrderOutcome>
+  /** A shopkeeper-entered order (fiche 52 task 5) — see `PlaceManualOrderInput`. */
+  placeManual(input: PlaceManualOrderInput): Promise<PlaceOrderOutcome>
   read(id: string): Promise<Order | null>
   readByReference(reference: string): Promise<Order | null>
   list(options?: OrderListOptions): Promise<readonly Order[]>
@@ -90,6 +128,29 @@ export interface OrderStore {
     options?: { readonly note?: string; readonly actorId?: string | null },
     tx?: SqlExecutor,
   ): Promise<void>
+  /**
+   * Corrects the e-mail and/or delivery address (fiche 52 task 5, "modification
+   * pré-paiement"). Only while `pending` — once an order is `paid`, whatever a
+   * courier or an invoice already refers to must not shift under it; a
+   * shopkeeper who needs to redirect a shipped parcel uses `setTracking`
+   * instead, or cancels and re-places the order.
+   */
+  update(
+    id: string,
+    patch: { readonly email?: string; readonly shippingAddress?: ShippingAddress | null },
+    options?: { readonly actorId?: string | null },
+  ): Promise<Order>
+  /**
+   * Records how a shipment actually went (fiche 52 task 4). Setting tracking
+   * on a `paid` order also transitions it to `shipped` — attaching a tracking
+   * number *is* what "we shipped it" means here — while a `shipped` order
+   * just gets its tracking corrected in place.
+   */
+  setTracking(
+    id: string,
+    tracking: OrderTracking,
+    options?: { readonly actorId?: string | null },
+  ): Promise<Order>
 }
 
 interface OrderRow {
@@ -109,6 +170,16 @@ interface OrderRow {
   shipping_region: unknown
   shipping_method_id: unknown
   shipping_method_label: unknown
+  shipping_address_line1: unknown
+  shipping_address_line2: unknown
+  shipping_city: unknown
+  shipping_postal_code: unknown
+  shipping_recipient: unknown
+  shipping_phone: unknown
+  tracking_carrier: unknown
+  tracking_number: unknown
+  tracking_url: unknown
+  shipped_at: unknown
   subscription_id: unknown
   placed_at: unknown
   updated_at: unknown
@@ -216,6 +287,16 @@ export function createOrderStore(
       shippingRegion: toNullableText(row.shipping_region),
       shippingMethodId: toNullableText(row.shipping_method_id),
       shippingMethodLabel: toNullableText(row.shipping_method_label),
+      shippingAddressLine1: toNullableText(row.shipping_address_line1),
+      shippingAddressLine2: toNullableText(row.shipping_address_line2),
+      shippingCity: toNullableText(row.shipping_city),
+      shippingPostalCode: toNullableText(row.shipping_postal_code),
+      shippingRecipient: toNullableText(row.shipping_recipient),
+      shippingPhone: toNullableText(row.shipping_phone),
+      trackingCarrier: toNullableText(row.tracking_carrier),
+      trackingNumber: toNullableText(row.tracking_number),
+      trackingUrl: toNullableText(row.tracking_url),
+      shippedAt: toNullableText(row.shipped_at),
       subscriptionId: toNullableText(row.subscription_id),
       lines: await linesOf(id, executor),
       placedAt: toText(row.placed_at, 'order.placed_at'),
@@ -259,7 +340,7 @@ export function createOrderStore(
               ${fields.actorId ?? null}, ${fields.note ?? null})`)
   }
 
-  return {
+  const store: OrderStore = {
     place: async (input) => {
       const priced = await dependencies.carts.price(input.cartId)
       const { cart, totals } = priced
@@ -280,10 +361,16 @@ export function createOrderStore(
       // one is the one that decides, because a coupon can expire or be
       // exhausted between adding it and paying.
       if (cart.couponCode !== null) {
+        const productIds: string[] = []
+        for (const line of cart.lines) {
+          const variant = await dependencies.catalog.readVariant(line.variantId)
+          if (variant !== null) productIds.push(variant.productId)
+        }
         const check = await dependencies.coupons.check(
           cart.couponCode,
           totals.subtotalMinor,
           cart.currency,
+          { customerId: customer.id, productIds },
         )
         if (check.kind !== 'ok') {
           return { kind: 'coupon_refused', reason: couponRefusal(check).message }
@@ -331,17 +418,25 @@ export function createOrderStore(
               }
             }
 
+            const address = input.shippingAddress ?? null
             await tx.query(sql`
               insert into ${orders} (id, reference, customer_id, email, status, currency,
                                      subtotal_minor, discount_minor, shipping_minor, tax_minor, total_minor,
                                      coupon_code, shipping_country, shipping_region,
                                      shipping_method_id, shipping_method_label,
+                                     shipping_address_line1, shipping_address_line2, shipping_city,
+                                     shipping_postal_code, shipping_recipient, shipping_phone,
+                                     tracking_carrier, tracking_number, tracking_url, shipped_at,
                                      placed_at, updated_at, subscription_id)
               values (${id}, ${reference}, ${customer.id}, ${customer.email}, ${'pending'}, ${cart.currency},
                       ${totals.subtotalMinor}, ${totals.discountMinor}, ${totals.shippingMinor},
                       ${totals.taxMinor}, ${totals.totalMinor},
                       ${cart.couponCode}, ${cart.shippingCountry}, ${cart.shippingRegion},
-                      ${cart.shippingMethodId}, ${null}, ${at}, ${at}, ${null})`)
+                      ${cart.shippingMethodId}, ${null},
+                      ${address?.line1 ?? null}, ${address?.line2 ?? null}, ${address?.city ?? null},
+                      ${address?.postalCode ?? null}, ${address?.recipient ?? null}, ${address?.phone ?? null},
+                      ${null}, ${null}, ${null}, ${null},
+                      ${at}, ${at}, ${null})`)
 
             for (const [position, line] of totals.lines.entries()) {
               await tx.query(sql`
@@ -382,6 +477,27 @@ export function createOrderStore(
       }
     },
 
+    placeManual: async (input) => {
+      if (input.lines.length === 0) return { kind: 'empty' }
+
+      const customer = await dependencies.customers.ensure(input.email, input.customerName)
+      const cart = await dependencies.carts.open({
+        currency: input.currency,
+        customerId: customer.id,
+      })
+      for (const line of input.lines) {
+        await dependencies.carts.addLine(cart.id, line.variantId, line.quantity)
+      }
+
+      return store.place({
+        cartId: cart.id,
+        email: input.email,
+        ...(input.customerName === undefined ? {} : { customerName: input.customerName }),
+        ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+        ...(input.shippingAddress === undefined ? {} : { shippingAddress: input.shippingAddress }),
+      })
+    },
+
     read: async (id) => read(id),
 
     readByReference: async (reference) => {
@@ -403,6 +519,12 @@ export function createOrderStore(
         conditions.push(
           sql`(lower(reference) like ${`%${search}%`} or lower(email) like ${`%${search}%`})`,
         )
+      }
+      if (options?.placedFrom !== undefined) {
+        conditions.push(sql`placed_at >= ${options.placedFrom}`)
+      }
+      if (options?.placedTo !== undefined) {
+        conditions.push(sql`placed_at <= ${options.placedTo}`)
       }
 
       let statement = sql`select * from ${orders}`
@@ -499,7 +621,101 @@ export function createOrderStore(
         note: options?.note ?? null,
       })
     },
+
+    update: async (id, patch, options) => {
+      const current = await load(id)
+      if (current.status !== 'pending') {
+        throw new CogentaError({
+          code: 'COMMERCE_ORDER_LOCKED',
+          message: `This order is ${current.status}, and its e-mail and delivery address can no longer be edited.`,
+          hint: 'Only a pending order — not yet paid — can be corrected here. Cancel and re-place it instead.',
+          details: { orderId: id, status: current.status },
+        })
+      }
+
+      const address = patch.shippingAddress
+      const at = stamp()
+      await db.query(sql`
+        update ${orders}
+        set email = ${patch.email ?? current.email},
+            shipping_address_line1 = ${address === undefined ? current.shippingAddressLine1 : (address?.line1 ?? null)},
+            shipping_address_line2 = ${address === undefined ? current.shippingAddressLine2 : (address?.line2 ?? null)},
+            shipping_city = ${address === undefined ? current.shippingCity : (address?.city ?? null)},
+            shipping_postal_code = ${address === undefined ? current.shippingPostalCode : (address?.postalCode ?? null)},
+            shipping_recipient = ${address === undefined ? current.shippingRecipient : (address?.recipient ?? null)},
+            shipping_phone = ${address === undefined ? current.shippingPhone : (address?.phone ?? null)},
+            updated_at = ${at}
+        where id = ${id}`)
+
+      await appendEvent(db, id, 'address_updated', {
+        actorId: options?.actorId ?? null,
+        note: 'Order details corrected before payment.',
+      })
+
+      return load(id)
+    },
+
+    setTracking: async (id, tracking, options) => {
+      const current = await load(id)
+      if (current.status !== 'paid' && current.status !== 'shipped') {
+        throw new CogentaError({
+          code: 'COMMERCE_TRACKING_INVALID',
+          message: `Tracking can only be recorded once an order is paid, and this one is ${current.status}.`,
+          hint: 'Settle the payment first — an order cannot ship before it is paid for.',
+          details: { orderId: id, status: current.status },
+        })
+      }
+      if (tracking.carrier.trim() === '' || tracking.number.trim() === '') {
+        throw new CogentaError({
+          code: 'COMMERCE_TRACKING_INVALID',
+          message: 'A carrier and a tracking number are both required.',
+          hint: 'Fill in both fields, or wait until the shipment has a real tracking number.',
+        })
+      }
+
+      return db.transaction(
+        async (tx) => {
+          const wasPaid = current.status === 'paid'
+          const at = stamp()
+          await tx.query(sql`
+            update ${orders}
+            set tracking_carrier = ${tracking.carrier},
+                tracking_number = ${tracking.number},
+                tracking_url = ${tracking.url ?? null},
+                shipped_at = ${current.shippedAt ?? at},
+                status = ${wasPaid ? 'shipped' : current.status},
+                updated_at = ${at}
+            where id = ${id}`)
+
+          await appendEvent(tx, id, 'tracking_added', {
+            actorId: options?.actorId ?? null,
+            note: `Tracking added: ${tracking.carrier} ${tracking.number}.`,
+          })
+          if (wasPaid) {
+            await appendEvent(tx, id, 'status_changed', {
+              fromStatus: 'paid',
+              toStatus: 'shipped',
+              actorId: options?.actorId ?? null,
+              note: 'Shipped, tracking attached.',
+            })
+          }
+
+          const updated = await read(id, tx)
+          if (updated === null) {
+            throw new CogentaError({
+              code: 'COMMERCE_ORDER_NOT_FOUND',
+              message: 'This order disappeared while it was being updated.',
+              hint: 'Refresh the order list.',
+            })
+          }
+          return updated
+        },
+        { immediate: true },
+      )
+    },
   }
+
+  return store
 }
 
 /** Internal. Unwinds the placement transaction with a caller-facing outcome. */

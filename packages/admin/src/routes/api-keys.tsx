@@ -4,7 +4,7 @@ import {
   type AdminApiKey,
   type CreatedApiKey,
   createApiKey,
-  listApiKeys,
+  listApiKeysPage,
   type RotatedApiKey,
   revokeApiKey,
   rotateApiKey,
@@ -20,6 +20,7 @@ import {
   Input,
   Modal,
   Notice,
+  Pagination,
   Select,
   Table,
   TableBody,
@@ -57,6 +58,7 @@ const GRACE_CHOICES = [1, 24, 24 * 7] as const
 type GraceHours = (typeof GRACE_CHOICES)[number]
 const UNUSED_WARNING_DAYS = 90
 const DAY_MS = 24 * 60 * 60 * 1000
+const PAGE_SIZE = 25
 
 function expiryFieldsFor(choice: ExpiryChoice): { expiresAt?: string; neverExpires?: boolean } {
   if (choice === 'never') return { neverExpires: true }
@@ -107,6 +109,8 @@ export function ApiKeysRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -125,7 +129,9 @@ export function ApiKeysRoute(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      setKeys(await listApiKeys(token))
+      const page = await listApiKeysPage(token, { limit: PAGE_SIZE })
+      setKeys(page.keys)
+      setHasMore(page.hasMore)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('apiKeys.loadError'))
     } finally {
@@ -136,6 +142,20 @@ export function ApiKeysRoute(): JSX.Element {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function loadMore(): Promise<void> {
+    if (token === null) return
+    setLoadingMore(true)
+    try {
+      const page = await listApiKeysPage(token, { limit: PAGE_SIZE, offset: keys.length })
+      setKeys((current) => [...current, ...page.keys])
+      setHasMore(page.hasMore)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('apiKeys.loadError'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   function parseScope(raw: string): string[] {
     return raw
@@ -362,6 +382,17 @@ export function ApiKeysRoute(): JSX.Element {
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {!loading && (
+        <Pagination
+          variant="cursor"
+          hasMore={hasMore}
+          loading={loadingMore}
+          onLoadMore={() => void loadMore()}
+          loadMoreLabel={t('apiKeys.loadMore')}
+          loadingLabel={t('common.loading')}
+        />
       )}
 
       <Modal

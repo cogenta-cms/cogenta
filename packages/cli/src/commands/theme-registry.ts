@@ -1,5 +1,6 @@
 import type { BlockRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
+import type { ThemeManifest } from '@cogenta/render'
 import type {
   ChromeInput,
   ChromeResult,
@@ -40,9 +41,11 @@ export interface ThemeModule {
 
 export interface BuiltinTheme {
   readonly name: string
+  /** The gallery's own display name — not part of the manifest (fiche 48: a theme package does not get to name the card it is shown on). */
   readonly label: string
-  readonly description: string
   readonly load: () => Promise<ThemeModule>
+  /** Loads `<package>/theme.config` — the manifest, separate from `load()` so a card can show version/description/author without pulling in the whole render module. */
+  readonly loadManifest: () => Promise<{ readonly default: ThemeManifest }>
 }
 
 /**
@@ -60,37 +63,32 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
   {
     name: '@cogenta/theme-canonical',
     label: 'Canonical',
-    description:
-      'The reference theme: all twelve blocks, zero client JavaScript, a neutral, accessible default.',
     load: () => import('@cogenta/theme-canonical'),
+    loadManifest: () => import('@cogenta/theme-canonical/theme.config'),
   },
   {
     name: '@cogenta/theme-ecommerce',
     label: 'Storefront',
-    description:
-      'A confident, product-grid-native storefront: shoppable cards, a bold CTA accent, zero client JavaScript.',
     load: () => import('@cogenta/theme-ecommerce'),
+    loadManifest: () => import('@cogenta/theme-ecommerce/theme.config'),
   },
   {
     name: '@cogenta/theme-portfolio',
     label: 'Portfolio',
-    description:
-      'An ultra-modern creative-portfolio theme: brutalist-meets-editorial display type, an electric accent, zero client JavaScript.',
     load: () => import('@cogenta/theme-portfolio'),
+    loadManifest: () => import('@cogenta/theme-portfolio/theme.config'),
   },
   {
     name: '@cogenta/theme-entreprise',
     label: 'Entreprise',
-    description:
-      'A confident, premium B2B theme: structured typography, real KPI/impact sections, a genuine dark mode.',
     load: () => import('@cogenta/theme-entreprise'),
+    loadManifest: () => import('@cogenta/theme-entreprise/theme.config'),
   },
   {
     name: '@cogenta/theme-magazine',
     label: 'Magazine',
-    description:
-      'An editorial magazine theme: print-inspired typography, a lead-story listing grid, zero client JavaScript.',
     load: () => import('@cogenta/theme-magazine'),
+    loadManifest: () => import('@cogenta/theme-magazine/theme.config'),
   },
 ]
 
@@ -98,9 +96,47 @@ export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'
 
 const BY_NAME = new Map(BUILTIN_THEMES.map((theme) => [theme.name, theme]))
 
+/** One entry of the appearance screen's theme gallery (fiche 48) — everything a card shows about a theme. */
+export interface AvailableThemeInfo {
+  readonly name: string
+  readonly label: string
+  /**
+   * `manifest.description`, when the theme declares one — the manifest is
+   * the source of truth (fiche 48 task 3: editing `theme.config.ts` alone
+   * changes this, no change to this file needed). Falls back to `label`
+   * for a theme that predates `theme@1.2` or simply omits `description`.
+   */
+  readonly description: string
+  /** `manifest.version` — the theme contract's own version, not the npm package version (two different numbers; this is the one contract D already models). */
+  readonly version: string
+  /** `manifest.author`, or `null` for a theme that does not declare one. */
+  readonly author: string | null
+}
+
+const manifestCache = new Map<string, Promise<ThemeManifest>>()
+
+function loadManifestOf(theme: BuiltinTheme): Promise<ThemeManifest> {
+  const cached = manifestCache.get(theme.name)
+  if (cached !== undefined) return cached
+  const promise = theme.loadManifest().then((mod) => mod.default)
+  manifestCache.set(theme.name, promise)
+  return promise
+}
+
 /** Every theme this instance can offer — what the appearance screen's picker lists. */
-export function availableThemes(): readonly { name: string; label: string; description: string }[] {
-  return BUILTIN_THEMES.map(({ name, label, description }) => ({ name, label, description }))
+export async function availableThemes(): Promise<readonly AvailableThemeInfo[]> {
+  return Promise.all(
+    BUILTIN_THEMES.map(async (theme) => {
+      const manifest = await loadManifestOf(theme)
+      return {
+        name: theme.name,
+        label: theme.label,
+        description: manifest.description ?? theme.label,
+        version: manifest.version,
+        author: manifest.author ?? null,
+      }
+    }),
+  )
 }
 
 const loaded = new Map<string, Promise<ThemeModule>>()

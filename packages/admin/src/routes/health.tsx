@@ -186,7 +186,8 @@ export function HealthRoute(): JSX.Element | null {
               {report.checks.map((check) => (
                 <li key={check.need}>
                   <Notice tone={statusTone(check.status)} live="off">
-                    <strong>{check.need}</strong>: {check.driver} ({check.tier}) —{' '}
+                    <strong>{check.need}</strong>: {check.driver} (
+                    {t(`health.tier.${check.tier}`, { defaultValue: check.tier })}) —{' '}
                     {describeReason(check, t)}
                     {check.message !== undefined && (
                       <p className="m-0 mt-1 text-xs">{check.message}</p>

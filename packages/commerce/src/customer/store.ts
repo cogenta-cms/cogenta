@@ -30,6 +30,23 @@ export interface CustomerStore {
     readonly search?: string
     readonly limit?: number
   }): Promise<readonly Customer[]>
+  /**
+   * GDPR erasure of the customer record itself (fiche 52 task 3): the email
+   * is overwritten with a unique, unreachable placeholder and the name is
+   * cleared. Idempotent — anonymising twice is a no-op the second time, not
+   * an error.
+   *
+   * Deliberately narrow: this touches only `cogenta_commerce_customers`.
+   * Every order this customer placed keeps its own copied `email` field
+   * (`OrderLine`/`Order` already never join back to the customer for their
+   * historical figures — see `order/store.ts`'s own comment on why a line
+   * copies rather than joins) — a paid invoice is a financial record most
+   * jurisdictions require to be *retained*, not erased, which is exactly the
+   * "legitimate interest" carve-out GDPR itself names. Erasing the person's
+   * own identifying record while keeping the accounting trail intact is the
+   * correct scope for "anonymise a customer", not a shortcut.
+   */
+  anonymize(id: string): Promise<Customer>
 }
 
 interface CustomerRow {
@@ -158,6 +175,33 @@ export function createCustomerStore(
               order by created_at desc`)
 
       return result.rows.slice(0, options?.limit ?? 100).map(decode)
+    },
+
+    anonymize: async (id) => {
+      const existing = await read(id)
+      if (existing === null) {
+        throw new CogentaError({
+          code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+          message: 'This customer does not exist.',
+          hint: 'It may already have been removed.',
+        })
+      }
+      // The id is folded in so the placeholder stays unique under the
+      // table's own `email` unique constraint — anonymising two different
+      // customers must not collide them into one row.
+      const placeholder = `anon-${id}@deleted.invalid`
+      await db.query(sql`
+        update ${table} set email = ${placeholder}, name = ${null}, user_id = ${null}, updated_at = ${stamp()}
+        where id = ${id}`)
+      const anonymised = await read(id)
+      if (anonymised === null) {
+        throw new CogentaError({
+          code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+          message: 'This customer disappeared while it was being anonymised.',
+          hint: 'Refresh the customer list.',
+        })
+      }
+      return anonymised
     },
   }
 }

@@ -426,6 +426,45 @@
   justify-content: center;
 }
 
+/* A badge's normal layout (`margin-left: auto`, inline after the label)
+   depends on the label actually taking up row space to push against. With
+   the label clipped to 1px above, that auto margin instead shoved the
+   badge past the icon and past the row's own edge — a bug report caught it
+   spilling out of a collapsed sidebar and overlapping the page underneath.
+   Pulling it out of flow entirely and pinning it to the trigger's own
+   corner (the trigger needs `position: relative` for that) is the same
+   convention as an app icon's own notification dot; the ring matches the
+   sidebar's background so the badge reads as sitting on the icon rather
+   than floating over whatever page happens to be underneath.
+   A first attempt kept the badge at its expanded size (a ~16px circle
+   against an 18px icon) — close enough to the icon's own footprint that it
+   swallowed the icon it was supposed to sit beside, which a follow-up bug
+   report caught too. Collapsed mode now shrinks it to an 8.8px dot with no
+   visible digit (`font-size: 0`) — the exact count is still the badge's
+   accessible name via `aria-label`, never removed, only no longer legible
+   at a size that would have required either a wider row or clipping the
+   icon it is meant to annotate. Position measured against the real,
+   rendered icon box in a browser (`getBoundingClientRect`), not guessed:
+   the dot's centre lands almost exactly on the icon's own top-right
+   corner. */
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__nav-group-trigger {
+  position: relative;
+}
+
+.app-shell--sidebar-collapsed .app-shell__sidebar .app-shell__badge {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.15rem;
+  margin-left: 0;
+  width: 0.55rem;
+  height: 0.55rem;
+  min-width: 0;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  box-shadow: 0 0 0 2px var(--card);
+}
+
 /* The drawer's own accordion (task 2 — a touch surface has no hover, so it
    keeps the expand-in-place behaviour the sidebar used to have). A drawn
    chevron, same technique as the flyout's static one, but this one still

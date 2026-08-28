@@ -1005,11 +1005,46 @@
     "pageDescription": "Titres, sitemap, réseaux sociaux, redirections et diagnostic — tout ce que ce site expose aux moteurs de recherche, en un seul écran.",
     "settingsLoadError": "Impossible de charger les réglages SEO.",
     "tab": {
+      "features": "Fonctionnalités",
       "general": "Général",
       "sitemap": "Sitemap",
       "social": "Réseaux sociaux",
       "redirects": "Redirections",
       "diagnostics": "Diagnostic"
+    },
+    "featuresHeading": "Fonctionnalités SEO",
+    "featuresDescription": "Toutes les sous-fonctionnalités SEO de ce site, au même endroit — activer une carte ici change exactement le même réglage que l'écran où il apparaît aussi, jamais un doublon.",
+    "feature": {
+      "contentScore": {
+        "title": "Score de contenu en temps réel",
+        "description": "Une checklist en direct pendant la rédaction d'une entrée — usage du mot-clé, longueur des phrases, sous-titres, longueur du contenu.",
+        "dependencyHint": "Sans objet — rien à configurer, cette carte ne fait qu'activer ou désactiver le panneau."
+      },
+      "linkAssistant": {
+        "title": "Assistant de maillage interne",
+        "description": "Repère les entrées sans lien entrant, et suggère des candidats de lien interne par mots de titre partagés, dans l'onglet Diagnostic.",
+        "dependencyHint": "Aucune collection n'a encore de route publique, il n'y a donc rien à analyser."
+      },
+      "searchVerification": {
+        "title": "Vérification des moteurs de recherche",
+        "description": "Affiche les balises de vérification Google/Bing enregistrées dans l'onglet Diagnostic.",
+        "dependencyHint": "Aucun jeton de vérification n'a encore été enregistré dans l'onglet Diagnostic."
+      },
+      "robotsCustomRules": {
+        "title": "Règles robots.txt personnalisées",
+        "description": "Fusionne les lignes robots.txt écrites par l'admin dans l'onglet Diagnostic avec le document servi.",
+        "dependencyHint": "Aucune règle robots.txt personnalisée n'a encore été enregistrée dans l'onglet Diagnostic."
+      },
+      "indexNow": {
+        "title": "IndexNow",
+        "description": "Notifie Bing, Yandex et Seznam dès qu'une page est publiée ou dépubliée.",
+        "dependencyHint": "Aucune clé IndexNow n'a encore été générée dans l'onglet Général."
+      },
+      "llmsTxt": {
+        "title": "llms.txt",
+        "description": "Publie un index en texte brut de tous les titres publiés, pour les robots d'indexation IA.",
+        "dependencyHint": "Sans objet — rien à configurer, cette carte ne fait qu'activer ou désactiver la route."
+      }
     },
     "collectionTemplatesHeading": "Gabarits de titre par type de contenu",
     "collectionTemplatesDescription": "Remplace le gabarit général ci-dessus, par collection. Laisser vide pour utiliser le gabarit général (ou aucun gabarit) pour cette collection.",

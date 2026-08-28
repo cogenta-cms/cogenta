@@ -1006,11 +1006,46 @@
     "pageDescription": "Titles, sitemap, social cards, redirections and diagnostics — everything this site exposes to search engines, in one screen.",
     "settingsLoadError": "Could not load the SEO settings.",
     "tab": {
+      "features": "Features",
       "general": "General",
       "sitemap": "Sitemap",
       "social": "Social",
       "redirects": "Redirects",
       "diagnostics": "Diagnostics"
+    },
+    "featuresHeading": "SEO features",
+    "featuresDescription": "Every SEO sub-feature this site offers, in one place — toggling a card here changes exactly the same setting as the screen it also appears on, never a duplicate.",
+    "feature": {
+      "contentScore": {
+        "title": "Real-time content score",
+        "description": "A live checklist while editing an entry — keyword usage, sentence length, subheadings, content length.",
+        "dependencyHint": "Not applicable — nothing to configure, this card only turns the panel on or off."
+      },
+      "linkAssistant": {
+        "title": "Internal link assistant",
+        "description": "Finds entries with no inbound link, and suggests internal-link candidates by shared title words, on the Diagnostics tab.",
+        "dependencyHint": "No collection has a public route yet, so there is nothing for this to scan."
+      },
+      "searchVerification": {
+        "title": "Search engine verification",
+        "description": "Renders the Google/Bing meta-tag verification tokens saved on the Diagnostics tab.",
+        "dependencyHint": "No verification token has been saved yet on the Diagnostics tab."
+      },
+      "robotsCustomRules": {
+        "title": "Custom robots.txt rules",
+        "description": "Merges the admin-written robots.txt lines saved on the Diagnostics tab into the served document.",
+        "dependencyHint": "No custom robots.txt rule has been saved yet on the Diagnostics tab."
+      },
+      "indexNow": {
+        "title": "IndexNow",
+        "description": "Pings Bing, Yandex and Seznam the moment a page is published or unpublished.",
+        "dependencyHint": "No IndexNow key has been generated yet on the General tab."
+      },
+      "llmsTxt": {
+        "title": "llms.txt",
+        "description": "Publishes a plain-text index of every published title, for AI crawlers.",
+        "dependencyHint": "Not applicable — nothing to configure, this card only turns the route on or off."
+      }
     },
     "collectionTemplatesHeading": "Title templates by content type",
     "collectionTemplatesDescription": "Overrides the general title template above, per collection. Leave empty to use the general template (or no template at all) for that collection.",

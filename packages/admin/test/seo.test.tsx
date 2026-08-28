@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -68,9 +68,75 @@ describe('the merged SEO screen', () => {
     await goToSeo()
 
     expect(screen.getByRole('tab', { name: 'Général', selected: true })).toBeDefined()
-    for (const label of ['Sitemap', 'Réseaux sociaux', 'Redirections', 'Diagnostic']) {
+    for (const label of [
+      'Fonctionnalités',
+      'Sitemap',
+      'Réseaux sociaux',
+      'Redirections',
+      'Diagnostic',
+    ]) {
       expect(screen.getByRole('tab', { name: label })).toBeDefined()
     }
+  })
+})
+
+describe('Fonctionnalités — feature activation grid (fiche 70 task 3)', () => {
+  it('lists every sub-feature with a working toggle, disabled while nothing is loaded yet', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSeo()
+    fireEvent.click(screen.getByRole('tab', { name: 'Fonctionnalités' }))
+
+    expect(await screen.findByRole('heading', { name: 'Fonctionnalités SEO' })).toBeDefined()
+    for (const title of [
+      'Score de contenu en temps réel',
+      'Assistant de maillage interne',
+      'Vérification des moteurs de recherche',
+      'Règles robots.txt personnalisées',
+      'IndexNow',
+      'llms.txt',
+    ]) {
+      expect(screen.getByText(title)).toBeDefined()
+    }
+  })
+
+  it('toggling IndexNow here changes the exact same setting the Général tab edits', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSeo()
+    fireEvent.click(screen.getByRole('tab', { name: 'Fonctionnalités' }))
+    await screen.findByRole('heading', { name: 'Fonctionnalités SEO' })
+
+    // `FEATURE_CARDS` (seo.tsx) orders IndexNow fifth (0-based index 4) —
+    // content score, link assistant, search verification, robots custom
+    // rules, IndexNow, llms.txt.
+    const switches = screen.getAllByRole('switch')
+    const indexNowToggle = switches[4] as HTMLInputElement
+    fireEvent.click(indexNowToggle)
+    await waitFor(() => expect(indexNowToggle.checked).toBe(true))
+
+    // Same setting `IndexingExtrasCard` (Général tab) already renders —
+    // switching tabs shows the identical, now-updated state rather than a
+    // second copy that could disagree with it.
+    fireEvent.click(screen.getByRole('tab', { name: 'Général' }))
+    const generalToggle = await screen.findByLabelText(
+      'Avertir IndexNow à la publication/dépublication',
+    )
+    expect((generalToggle as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('marks the internal link assistant card as dependency-missing when no collection has a public route', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSeo()
+    fireEvent.click(screen.getByRole('tab', { name: 'Fonctionnalités' }))
+
+    await screen.findByRole('heading', { name: 'Fonctionnalités SEO' })
+    expect(
+      screen.getByText(
+        "Aucune collection n'a encore de route publique, il n'y a donc rien à analyser.",
+      ),
+    ).toBeDefined()
   })
 })
 

@@ -65,7 +65,10 @@ import { RedirectsPanel } from './redirects.js'
  * `ops-settings` are, and a redirect never had a reader role either.
  */
 
-const TAB_ORDER = ['general', 'sitemap', 'social', 'redirects', 'diagnostics'] as const
+// `features` first (fiche 70 task 3's own "section en tête d'écran" — the
+// grid is the one screen that answers "what is on, what is off" for every
+// SEO sub-feature this admin offers, so it leads).
+const TAB_ORDER = ['features', 'general', 'sitemap', 'social', 'redirects', 'diagnostics'] as const
 type TabId = (typeof TAB_ORDER)[number]
 
 /**
@@ -233,6 +236,13 @@ export function SeoRoute(): JSX.Element {
       </div>
 
       <div id={`seo-panel-${tab}`} role="tabpanel" aria-labelledby={`seo-tab-${tab}`}>
+        {tab === 'features' && (
+          <FeaturesTab
+            settings={seoSettings}
+            collections={routedCollections}
+            onSave={saveSetting}
+          />
+        )}
         {tab === 'general' && (
           <GeneralTab
             settings={seoSettings}
@@ -264,6 +274,164 @@ export function SeoRoute(): JSX.Element {
 }
 
 type TabSaveHandler = (key: string, value: unknown) => Promise<void>
+
+/**
+ * Fiche 70 task 3 — one card per SEO sub-feature, each with a real toggle.
+ *
+ * The whole point named by the fiche's own acceptance criterion is that
+ * "activer une carte doit changer exactement le même réglage que l'écran
+ * d'origine, jamais un doublon" — every `settingKey` below is the identical
+ * key some other tab on this screen already reads/writes (IndexNow and
+ * llms.txt on the Général tab's `IndexingExtrasCard`, the verification
+ * tokens and custom rules on the Diagnostics tab), so flipping a card here
+ * and reloading the page a different tab was left on shows the same state,
+ * because it *is* the same state — one `SiteSettingsStore` row, never a
+ * second copy.
+ *
+ * Content score and the link assistant have no settings screen elsewhere
+ * (they existed for the first time in this fiche), so their card is that
+ * feature's only on/off switch.
+ */
+interface FeatureCardDescriptor {
+  readonly id:
+    | 'indexNow'
+    | 'llmsTxt'
+    | 'contentScore'
+    | 'linkAssistant'
+    | 'searchVerification'
+    | 'robotsCustomRules'
+  readonly settingKey: string
+}
+
+const FEATURE_CARDS: readonly FeatureCardDescriptor[] = [
+  { id: 'contentScore', settingKey: 'seo.contentScoreEnabled' },
+  { id: 'linkAssistant', settingKey: 'seo.linkAssistantEnabled' },
+  { id: 'searchVerification', settingKey: 'seo.searchVerificationEnabled' },
+  { id: 'robotsCustomRules', settingKey: 'seo.robotsCustomRulesEnabled' },
+  { id: 'indexNow', settingKey: 'seo.indexNowEnabled' },
+  { id: 'llmsTxt', settingKey: 'seo.llmsTxtEnabled' },
+]
+
+function stringSettingValue(settings: readonly SiteSetting[], key: string): string {
+  const value = settings.find((setting) => setting.key === key)?.value
+  return typeof value === 'string' ? value : ''
+}
+
+/**
+ * Whether a card reads as "grisé" (fiche's own word) — dependent on a
+ * setting nobody has filled in yet, so the switch would turn on a feature
+ * with nothing for it to actually do. Never means hidden: every card still
+ * renders, with its toggle and its explanation, exactly as the fiche
+ * requires ("jamais caché").
+ */
+function isDependencyMissing(
+  id: FeatureCardDescriptor['id'],
+  settings: readonly SiteSetting[],
+  collections: readonly { readonly name: string }[],
+): boolean {
+  if (id === 'linkAssistant') return collections.length === 0
+  if (id === 'indexNow') return stringSettingValue(settings, 'seo.indexNowKey') === ''
+  if (id === 'searchVerification') {
+    return (
+      stringSettingValue(settings, 'seo.googleSiteVerification') === '' &&
+      stringSettingValue(settings, 'seo.bingSiteVerification') === ''
+    )
+  }
+  if (id === 'robotsCustomRules')
+    return stringSettingValue(settings, 'seo.robotsCustomRules') === ''
+  return false
+}
+
+function FeaturesTab({
+  settings,
+  collections,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly collections: readonly {
+    readonly name: string
+    readonly labels: { readonly singular: string }
+  }[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h2 className="m-0 text-lg leading-7 font-semibold">{t('seo.featuresHeading')}</h2>
+        <p className="text-muted-foreground text-sm">{t('seo.featuresDescription')}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {FEATURE_CARDS.map((card) => (
+          <FeatureCard
+            key={card.id}
+            card={card}
+            settings={settings}
+            dependencyMissing={isDependencyMissing(card.id, settings, collections)}
+            onSave={onSave}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FeatureCard({
+  card,
+  settings,
+  dependencyMissing,
+  onSave,
+}: {
+  readonly card: FeatureCardDescriptor
+  readonly settings: readonly SiteSetting[]
+  readonly dependencyMissing: boolean
+  readonly onSave: TabSaveHandler
+}): JSX.Element {
+  const { t } = useTranslation()
+  const setting = settings.find((candidate) => candidate.key === card.settingKey)
+  const enabled = setting?.value === true
+  const [saving, setSaving] = useState(false)
+
+  async function toggle(next: boolean): Promise<void> {
+    setSaving(true)
+    try {
+      await onSave(card.settingKey, next)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card className={dependencyMissing ? 'opacity-60' : undefined}>
+      <CardBody className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="m-0 text-sm font-semibold text-foreground">
+            {t(`seo.feature.${card.id}.title`)}
+          </h3>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-checked={enabled}
+            aria-label={t(`seo.feature.${card.id}.title`)}
+            checked={enabled}
+            disabled={saving || setting === undefined}
+            onChange={(event) => void toggle(event.target.checked)}
+            className="shrink-0"
+          />
+        </div>
+        <p className="text-muted-foreground m-0 text-sm">
+          {t(`seo.feature.${card.id}.description`)}
+        </p>
+        {dependencyMissing && (
+          <p className="text-muted-foreground m-0 text-xs italic">
+            {t(`seo.feature.${card.id}.dependencyHint`)}
+          </p>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
 
 /** Exported for `test/seo/seo-tabs.test.tsx` — mounted directly, the same isolation `SeoPanel`'s own suite uses, without needing a routed collection in the shared app-level test fixture. */
 export function GeneralTab({

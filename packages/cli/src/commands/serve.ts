@@ -2927,14 +2927,24 @@ async function recordAuthAudit(
 /**
  * Account management, in the audit log.
  *
- * Who created an account, who changed a role, who disabled someone and who cut
- * a session short are exactly the events an append-only, hash-chained log
- * exists for — and they were previously invisible, since the only way to do any
- * of it was a terminal.
+ * Who created an account, who cut a session short, and who changed their own
+ * password are exactly the events an append-only, hash-chained log exists
+ * for — and they were previously invisible, since the only way to do any of
+ * it was a terminal.
  *
  * Recorded here, at the transport boundary, for the same reason the content and
  * media audits are: the router stays a pure request-in/response-out value, and
  * only a response that actually succeeded is written down.
+ *
+ * Role and status changes — single `PATCH`, bulk, and invitation
+ * resend/cancel — are deliberately **not** sniffed here any more (fiche 61
+ * task 1). Path-shape sniffing is exactly how those went unaudited for as
+ * long as they did: `/api/users/bulk` never matched this function's `target
+ * !== undefined && sub === undefined` shape, so a bulk disable produced no
+ * entry at all. `users-router.ts`'s `applyUserChange` and `inviteRoute` now
+ * call `auth.audit.record` directly, the same way `anonymizeRoute` always
+ * has — the one place that actually knows a mutation happened, rather than a
+ * second guess made from the URL afterwards.
  */
 async function recordUserAudit(
   site: Site,
@@ -2954,13 +2964,11 @@ async function recordUserAudit(
   const action =
     method === 'POST' && target === undefined
       ? 'user.create'
-      : method === 'PATCH' && target !== undefined && sub === undefined
-        ? 'user.update'
-        : method === 'POST' && sub === 'password'
-          ? 'user.password_change'
-          : method === 'DELETE' && sub === 'sessions'
-            ? 'user.session_revoke'
-            : null
+      : method === 'POST' && sub === 'password'
+        ? 'user.password_change'
+        : method === 'DELETE' && sub === 'sessions'
+          ? 'user.session_revoke'
+          : null
   if (action === null) return
 
   // The subject is named, never anything that could sign anyone in: no

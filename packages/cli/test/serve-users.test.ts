@@ -266,6 +266,47 @@ describe('cogenta serve — inviting an account by email (fiche 17 task 1)', () 
       await server.stop()
     }
   })
+
+  it('writes an audit entry for a resent invitation and for a cancelled one (fiche 61 task 1)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const created = await createInvite(server.base, token, {
+        email: 'audited@example.com',
+        roles: ['editor'],
+      })
+      const { data } = (await created.json()) as { data: { user: { id: string } } }
+      const userId = data.user.id
+
+      const resent = await fetch(`${server.base}/api/users/${userId}/invite`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(resent.status).toBe(200)
+
+      const cancelled = await fetch(`${server.base}/api/users/${userId}/invite`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(cancelled.status).toBe(204)
+
+      const audit = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data: entries } = (await audit.json()) as {
+        data: readonly { action: string; entryId: string | null }[]
+      }
+      expect(
+        entries.find((e) => e.action === 'user.invite_resend' && e.entryId === userId),
+      ).toBeDefined()
+      expect(
+        entries.find((e) => e.action === 'user.invite_cancel' && e.entryId === userId),
+      ).toBeDefined()
+    } finally {
+      await server.stop()
+    }
+  })
 })
 
 describe('cogenta serve — security: only admin can list, invite or modify accounts (fiche 17)', () => {
@@ -340,6 +381,43 @@ describe('cogenta serve — bulk actions (fiche 17 task 2)', () => {
       const body = (await response.json()) as { data: { succeeded: string[]; failed: unknown[] } }
       expect(body.data.succeeded.sort()).toEqual([...ids].sort())
       expect(body.data.failed).toEqual([])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('writes one audit entry per account a bulk action actually changed (fiche 61 task 1)', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createUser(root, 'a@example.com', 'a real password here', ['editor'])
+      await createUser(root, 'b@example.com', 'a real password here', ['editor'])
+
+      const listed = await fetch(`${server.base}/api/users`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data: users } = (await listed.json()) as {
+        data: readonly { id: string; email: string }[]
+      }
+      const ids = users.filter((u) => u.email !== 'admin@example.com').map((u) => u.id)
+
+      await fetch(`${server.base}/api/users/bulk`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'disable', ids }),
+      })
+
+      const audit = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data: entries } = (await audit.json()) as {
+        data: readonly { action: string; entryId: string | null }[]
+      }
+      const updateEntries = entries.filter((e) => e.action === 'user.update')
+      for (const id of ids) {
+        expect(updateEntries.find((e) => e.entryId === id)).toBeDefined()
+      }
     } finally {
       await server.stop()
     }

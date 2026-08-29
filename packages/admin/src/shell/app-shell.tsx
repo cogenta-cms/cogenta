@@ -658,7 +658,6 @@ export function AppShell(): JSX.Element {
                 type="button"
                 className="app-shell__nav-group-trigger"
                 aria-expanded={isOpen}
-                aria-haspopup="true"
                 title={label}
                 onFocus={() => openFlyout(group.id)}
                 onClick={() => {
@@ -671,11 +670,11 @@ export function AppShell(): JSX.Element {
                 {badge}
                 <span className="app-shell__nav-group-caret" aria-hidden="true" />
               </button>
-              <div className="app-shell__flyout" role="menu" aria-label={label}>
+              <nav className="app-shell__flyout" aria-label={label}>
                 <ul className="app-shell__nav-subitems">
                   {items.map((item) => renderNavItemRow(item))}
                 </ul>
-              </div>
+              </nav>
             </li>
           )
         })}

@@ -96,7 +96,12 @@ describe('subscriptions', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Abonnements' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+    // Unlike the previous test, nothing here first reads the table's own
+    // content before clicking — so this must wait for the async list fetch
+    // to resolve and the "Annuler" button to actually mount, rather than a
+    // bare `getByRole` racing the still-`loading` screen (a real, pre-existing
+    // flake, not something a synchronous query papers over).
+    fireEvent.click(await screen.findByRole('button', { name: 'Annuler' }))
     expect(await screen.findByText(/allowed to do that/u)).toBeDefined()
   })
 })

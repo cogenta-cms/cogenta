@@ -225,7 +225,6 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     const contentTrigger = screen.getByRole('button', { name: 'Contenu' })
-    expect(contentTrigger.getAttribute('aria-haspopup')).toBe('true')
     expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
   })
 

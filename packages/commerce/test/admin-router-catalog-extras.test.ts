@@ -113,6 +113,50 @@ describe('catalogue back office extras', () => {
     expect((unlinked.body as { contentRef: unknown }).contentRef).toBeNull()
   })
 
+  it('sets a product’s gallery and a variant’s photo through PATCH', async () => {
+    const product = await shop.catalog.createProduct({ handle: 'jacket', title: 'Jacket' })
+
+    const withImages = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/products/${product.id}`,
+        body: { imageMediaIds: ['media-2', 'media-1'] },
+      },
+      ADMIN,
+    )
+    expect((withImages.body as { imageMediaIds: unknown }).imageMediaIds).toEqual([
+      'media-2',
+      'media-1',
+    ])
+
+    const created = await router.handle(
+      {
+        method: 'POST',
+        path: `/api/commerce/products/${product.id}/variants`,
+        body: {
+          sku: 'JACKET-BLUE',
+          title: 'Blue',
+          priceMinor: 4999,
+          currency: 'EUR',
+          imageMediaId: 'media-blue',
+        },
+      },
+      ADMIN,
+    )
+    const variantId = (created.body as { id: string }).id
+    expect((created.body as { imageMediaId: unknown }).imageMediaId).toBe('media-blue')
+
+    const cleared = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/variants/${variantId}`,
+        body: { imageMediaId: null },
+      },
+      ADMIN,
+    )
+    expect((cleared.body as { imageMediaId: unknown }).imageMediaId).toBeNull()
+  })
+
   it('refuses to set a product’s classification without catalog-write', async () => {
     const product = await shop.catalog.createProduct({ handle: 'jacket', title: 'Jacket' })
     const response = await router.handle(

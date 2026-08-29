@@ -23,8 +23,11 @@ import { LowStockPanel } from '../commerce/low-stock-panel.js'
 import { formatMinor, majorTextToMinor, minorToMajorText } from '../commerce/money.js'
 import { ProductCategoryPicker } from '../commerce/product-category-picker.js'
 import { ProductContentLink } from '../commerce/product-content-link.js'
+import { ProductImagesField } from '../commerce/product-images-field.js'
 import { ProductImportExportPanel } from '../commerce/product-import-export-panel.js'
+import { VariantImageField } from '../commerce/variant-image-field.js'
 import { slugify } from '../lib/slugify.js'
+import { MediaThumbnail } from '../media/media-thumbnail.js'
 import {
   Button,
   Field,
@@ -434,6 +437,7 @@ export function CommerceProductsRoute(): JSX.Element {
                         onChange={toggleSelectAllVisible}
                       />
                     </TableHeader>
+                    <TableHeader>{t('commerceProducts.imageColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.titleColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.handleColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.contentColumn')}</TableHeader>
@@ -458,6 +462,21 @@ export function CommerceProductsRoute(): JSX.Element {
                             checked={selected.has(product.id)}
                             onChange={() => toggleSelected(product.id)}
                           />
+                        </TableCell>
+                        <TableCell>
+                          {product.imageMediaIds[0] === undefined || token === null ? (
+                            <span
+                              className="media-thumbnail media-thumbnail--placeholder"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <MediaThumbnail
+                              token={token}
+                              id={product.imageMediaIds[0]}
+                              alt=""
+                              previewable
+                            />
+                          )}
                         </TableCell>
                         <TableCell>{product.title}</TableCell>
                         <TableCell>{product.handle}</TableCell>
@@ -502,7 +521,7 @@ export function CommerceProductsRoute(): JSX.Element {
                     )
                   })}
                   {products.length === 0 && (
-                    <TableEmpty colSpan={8}>{t('commerceProducts.empty')}</TableEmpty>
+                    <TableEmpty colSpan={9}>{t('commerceProducts.empty')}</TableEmpty>
                   )}
                 </TableBody>
               </Table>
@@ -608,6 +627,20 @@ export function CommerceProductsRoute(): JSX.Element {
               <Button type="submit">{t('commerceProducts.saveButton')}</Button>
             </div>
           </form>
+
+          {editing !== null && token !== null && (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <h3 className="m-0 text-sm font-semibold">{t('commerceProducts.imagesHeading')}</h3>
+              <ProductImagesField
+                token={token}
+                product={editing}
+                onChange={(updated) => {
+                  setEditing(updated)
+                  setProducts((current) => current.map((p) => (p.id === updated.id ? updated : p)))
+                }}
+              />
+            </div>
+          )}
 
           {editing !== null && token !== null && (
             <div className="flex flex-col gap-2 border-t pt-4">
@@ -1052,6 +1085,7 @@ function VariantsModal(props: VariantsModalProps): JSX.Element {
           <Table>
             <TableHead>
               <TableRow>
+                <TableHeader>{t('commerceProducts.imageColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.skuColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.variantTitleColumn')}</TableHeader>
                 <TableHeader>{t('commerceProducts.priceColumn')}</TableHeader>
@@ -1063,7 +1097,14 @@ function VariantsModal(props: VariantsModalProps): JSX.Element {
               {props.variants.map((variant) =>
                 editingId === variant.id ? (
                   <TableRow key={variant.id}>
-                    <TableCell colSpan={5}>
+                    <TableCell colSpan={6}>
+                      <div className="mb-3 max-w-xs">
+                        <VariantImageField
+                          token={props.token}
+                          variant={variant}
+                          onChanged={props.onChanged}
+                        />
+                      </div>
                       <form
                         onSubmit={(event) => void submitVariantEdit(event, variant)}
                         className="flex flex-wrap items-end gap-3"
@@ -1154,6 +1195,21 @@ function VariantsModal(props: VariantsModalProps): JSX.Element {
                   </TableRow>
                 ) : (
                   <TableRow key={variant.id}>
+                    <TableCell>
+                      {variant.imageMediaId === null ? (
+                        <span
+                          className="media-thumbnail media-thumbnail--placeholder"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <MediaThumbnail
+                          token={props.token}
+                          id={variant.imageMediaId}
+                          alt=""
+                          previewable
+                        />
+                      )}
+                    </TableCell>
                     <TableCell>{variant.sku}</TableCell>
                     <TableCell>{variant.title}</TableCell>
                     <TableCell>
@@ -1206,7 +1262,7 @@ function VariantsModal(props: VariantsModalProps): JSX.Element {
                 ),
               )}
               {props.variants.length === 0 && (
-                <TableEmpty colSpan={5}>{t('commerceProducts.noVariant')}</TableEmpty>
+                <TableEmpty colSpan={6}>{t('commerceProducts.noVariant')}</TableEmpty>
               )}
             </TableBody>
           </Table>

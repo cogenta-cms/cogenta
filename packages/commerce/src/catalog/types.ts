@@ -25,6 +25,13 @@ export interface Product {
   readonly title: string
   readonly status: ProductStatus
   readonly contentRef: ContentRef | null
+  /** Media library ids, in display order — the first is the cover shown in
+   * admin lists and order lines. Direct on the commercial record rather than
+   * only reachable through `contentRef`: a product with no linked entry (most
+   * of them, day one) still needs a photo to be sellable at all. Opaque ids,
+   * same as `contentRef` — this package does not depend on the media store
+   * and never validates that one exists, only that the admin's own picker did. */
+  readonly imageMediaIds: readonly string[]
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -58,6 +65,10 @@ export interface Variant {
   readonly widthMm: number | null
   readonly heightMm: number | null
   readonly depthMm: number | null
+  /** A single media library id, or `null` — one photo per variant (a colour,
+   * a size), same convention as the product's own gallery above but never a
+   * list: a variant is one sellable thing, not a set to browse. */
+  readonly imageMediaId: string | null
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -67,6 +78,7 @@ export interface CreateProductInput {
   readonly title: string
   readonly status?: ProductStatus
   readonly contentRef?: ContentRef | null
+  readonly imageMediaIds?: readonly string[]
 }
 
 export interface UpdateProductInput {
@@ -74,6 +86,7 @@ export interface UpdateProductInput {
   readonly title?: string
   readonly status?: ProductStatus
   readonly contentRef?: ContentRef | null
+  readonly imageMediaIds?: readonly string[]
 }
 
 export interface CreateVariantInput {
@@ -94,6 +107,7 @@ export interface CreateVariantInput {
   readonly widthMm?: number | null
   readonly heightMm?: number | null
   readonly depthMm?: number | null
+  readonly imageMediaId?: string | null
 }
 
 export interface UpdateVariantInput {
@@ -112,6 +126,7 @@ export interface UpdateVariantInput {
   readonly widthMm?: number | null
   readonly heightMm?: number | null
   readonly depthMm?: number | null
+  readonly imageMediaId?: string | null
 }
 
 /** One classification of a product against a term of a taxonomy the site

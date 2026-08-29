@@ -228,6 +228,70 @@ describe('a product’s editorial content link and category', () => {
   })
 })
 
+describe('a product’s own images and a variant’s own photo', () => {
+  beforeEach(() => signedInAs(['admin']))
+
+  it('adds a product image from the media picker and shows it as the list thumbnail', async () => {
+    localStorage.clear()
+    localStorage.setItem('cogenta.session.token', VALID_TOKEN)
+    installMockFetch({ roles: ['admin'], mediaSeedCount: 1 })
+
+    render(<App />)
+    await goToProducts()
+    await createProduct('Écharpe', 'echarpe')
+
+    const row = within(table()).getByText('Écharpe').closest('tr') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'Modifier Écharpe' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Modifier Écharpe' })
+
+    fireEvent.click(within(editDialog).getByRole('button', { name: 'Ajouter des médias…' }))
+    const browseDialog = await screen.findByRole('dialog', { name: 'Choisir un média' })
+    fireEvent.click(await within(browseDialog).findByRole('button', { name: /seed-1\.png/u }))
+
+    // The picker itself now shows the picked asset...
+    await waitFor(() => {
+      expect(within(editDialog).getByText('seed-1.png')).toBeDefined()
+    })
+    // The browse dialog (`many: true`) stays open after a pick — a gallery
+    // keeps browsing to add more — so it must be closed explicitly before the
+    // outer edit dialog (made `aria-hidden` while a nested Radix dialog is
+    // open) is reachable again.
+    fireEvent.click(within(browseDialog).getByRole('button', { name: 'Annuler' }))
+    // ...and the save round-tripped: closing and reopening the edit dialog
+    // still shows it, proving it was persisted, not just held in local state.
+    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Modifier Écharpe' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Modifier Écharpe' })
+    expect(within(reopened).getByText('seed-1.png')).toBeDefined()
+  })
+
+  it('sets a variant’s own photo, independently of the rest of the variant edit form', async () => {
+    localStorage.clear()
+    localStorage.setItem('cogenta.session.token', VALID_TOKEN)
+    installMockFetch({ roles: ['admin'], mediaSeedCount: 1 })
+
+    render(<App />)
+    await goToProducts()
+    await createProduct('Bonnet', 'bonnet')
+    await addVariant('Bonnet', { sku: 'BONNET-1', price: '19.90' })
+
+    const row = within(table()).getByText('Bonnet').closest('tr') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'Gérer les variantes' }))
+    const variantsDialog = await screen.findByRole('dialog', { name: 'Variantes de Bonnet' })
+    fireEvent.click(
+      within(variantsDialog).getByRole('button', { name: 'Modifier BONNET-1 variant' }),
+    )
+
+    fireEvent.click(within(variantsDialog).getByRole('button', { name: 'Choisir…' }))
+    const browseDialog = await screen.findByRole('dialog', { name: 'Choisir un média' })
+    fireEvent.click(await within(browseDialog).findByRole('button', { name: /seed-1\.png/u }))
+
+    await waitFor(() => {
+      expect(within(variantsDialog).getByText('seed-1.png')).toBeDefined()
+    })
+  })
+})
+
 describe('the low-stock alert', () => {
   beforeEach(() => signedInAs(['admin']))
 

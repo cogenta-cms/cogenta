@@ -120,6 +120,7 @@ interface ProductRow {
   status: unknown
   content_collection: unknown
   content_entry_id: unknown
+  image_media_ids: unknown
   created_at: unknown
   updated_at: unknown
 }
@@ -143,6 +144,7 @@ interface VariantRow {
   width_mm: unknown
   height_mm: unknown
   depth_mm: unknown
+  image_media_id: unknown
   created_at: unknown
   updated_at: unknown
 }
@@ -164,6 +166,40 @@ interface ProductTermRow {
   term_id: unknown
 }
 
+/**
+ * `image_media_ids` is a JSON array of strings, stored as text (see
+ * `tables.ts`). A row written before this column existed, or a value this
+ * package did not itself write, decodes to "no images" rather than throwing
+ * — a gallery is not load-bearing data the way a price or a stock count is.
+ */
+function toStringArray(value: unknown): readonly string[] {
+  if (value === null || value === undefined) return []
+  const text = typeof value === 'string' ? value : String(value)
+  if (text.trim() === '') return []
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
+/** Trims, drops empties, and de-duplicates while keeping the first
+ * occurrence's position — the order a merchant arranged the gallery in. */
+function normalizeImageIds(ids: readonly string[]): readonly string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const id of ids) {
+    const trimmed = id.trim()
+    if (trimmed === '' || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+  return result
+}
+
 function decodeProduct(row: ProductRow): Product {
   const collection = toNullableText(row.content_collection)
   const entryId = toNullableText(row.content_entry_id)
@@ -176,6 +212,7 @@ function decodeProduct(row: ProductRow): Product {
     title: toText(row.title, 'product.title'),
     status: toText(row.status, 'product.status') as ProductStatus,
     contentRef: ref,
+    imageMediaIds: toStringArray(row.image_media_ids),
     createdAt: toText(row.created_at, 'product.created_at'),
     updatedAt: toText(row.updated_at, 'product.updated_at'),
   }
@@ -204,6 +241,7 @@ function decodeVariant(row: VariantRow): Variant {
     widthMm: toNullableInt(row.width_mm, 'variant.width_mm'),
     heightMm: toNullableInt(row.height_mm, 'variant.height_mm'),
     depthMm: toNullableInt(row.depth_mm, 'variant.depth_mm'),
+    imageMediaId: toNullableText(row.image_media_id),
     createdAt: toText(row.created_at, 'variant.created_at'),
     updatedAt: toText(row.updated_at, 'variant.updated_at'),
   }
@@ -474,11 +512,13 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       const at = stamp()
       const handle = assertHandle(input.handle)
 
+      const imageMediaIds = normalizeImageIds(input.imageMediaIds ?? [])
+
       await db.query(sql`
-        insert into ${products} (id, handle, title, status, content_collection, content_entry_id, created_at, updated_at)
+        insert into ${products} (id, handle, title, status, content_collection, content_entry_id, image_media_ids, created_at, updated_at)
         values (${id}, ${handle}, ${input.title}, ${input.status ?? 'active'},
                 ${input.contentRef?.collection ?? null}, ${input.contentRef?.entryId ?? null},
-                ${at}, ${at})`)
+                ${JSON.stringify(imageMediaIds)}, ${at}, ${at})`)
 
       return loadProduct(id)
     },
@@ -497,6 +537,10 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       const current = await loadProduct(id)
       const handle = input.handle === undefined ? current.handle : assertHandle(input.handle)
       const ref = input.contentRef === undefined ? current.contentRef : input.contentRef
+      const imageMediaIds =
+        input.imageMediaIds === undefined
+          ? current.imageMediaIds
+          : normalizeImageIds(input.imageMediaIds)
 
       await db.query(sql`
         update ${products}
@@ -505,6 +549,7 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
             status = ${input.status ?? current.status},
             content_collection = ${ref?.collection ?? null},
             content_entry_id = ${ref?.entryId ?? null},
+            image_media_ids = ${JSON.stringify(imageMediaIds)},
             updated_at = ${stamp()}
         where id = ${id}`)
 
@@ -602,19 +647,24 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       const widthMm = assertNullableNonNegativeInt(input.widthMm ?? null, 'A width')
       const heightMm = assertNullableNonNegativeInt(input.heightMm ?? null, 'A height')
       const depthMm = assertNullableNonNegativeInt(input.depthMm ?? null, 'A depth')
+      const imageMediaId =
+        input.imageMediaId === undefined || input.imageMediaId === null
+          ? null
+          : input.imageMediaId.trim() || null
 
       await db.query(sql`
         insert into ${variants} (id, product_id, sku, title, price_minor, currency, on_hand,
                                  allow_backorder, weight_grams, tax_category, position,
                                  low_stock_threshold, compare_at_price_minor, sale_starts_at, sale_ends_at,
-                                 width_mm, height_mm, depth_mm, created_at, updated_at)
+                                 width_mm, height_mm, depth_mm, image_media_id, created_at, updated_at)
         values (${id}, ${input.productId}, ${sku}, ${input.title},
                 ${assertMinor(input.priceMinor, 'A variant price')}, ${assertCurrency(input.currency)},
                 ${onHand}, ${fromBool(input.allowBackorder ?? false, d)},
                 ${input.weightGrams ?? 0}, ${input.taxCategory ?? 'standard'},
                 ${input.position ?? 0}, ${lowStockThreshold ?? null}, ${compareAtPriceMinor},
                 ${saleStartsAt ?? null}, ${saleEndsAt ?? null},
-                ${widthMm ?? null}, ${heightMm ?? null}, ${depthMm ?? null}, ${at}, ${at})`)
+                ${widthMm ?? null}, ${heightMm ?? null}, ${depthMm ?? null}, ${imageMediaId},
+                ${at}, ${at})`)
 
       return loadVariant(id)
     },
@@ -672,6 +722,12 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
         input.depthMm === undefined
           ? current.depthMm
           : assertNullableNonNegativeInt(input.depthMm, 'A depth')
+      const imageMediaId =
+        input.imageMediaId === undefined
+          ? current.imageMediaId
+          : input.imageMediaId === null
+            ? null
+            : input.imageMediaId.trim() || null
 
       // Stock is deliberately absent from this method. Setting it as one field
       // among many is how a concurrent sale gets overwritten by a form that
@@ -693,6 +749,7 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
             width_mm = ${widthMm ?? null},
             height_mm = ${heightMm ?? null},
             depth_mm = ${depthMm ?? null},
+            image_media_id = ${imageMediaId},
             updated_at = ${stamp()}
         where id = ${id}`)
 

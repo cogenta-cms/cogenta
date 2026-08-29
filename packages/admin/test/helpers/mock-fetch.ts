@@ -1763,6 +1763,7 @@ export function installMockFetch(
     title: string
     status: 'active' | 'archived'
     contentRef: { collection: string; entryId: string } | null
+    imageMediaIds: string[]
     createdAt: string
     updatedAt: string
   }
@@ -1785,6 +1786,7 @@ export function installMockFetch(
     widthMm: number | null
     heightMm: number | null
     depthMm: number | null
+    imageMediaId: string | null
     createdAt: string
     updatedAt: string
   }
@@ -6651,6 +6653,7 @@ export function installMockFetch(
                   title: row.title,
                   status: 'active',
                   contentRef: null,
+                  imageMediaIds: [],
                   createdAt: '2026-03-01T00:00:00.000Z',
                   updatedAt: '2026-03-01T00:00:00.000Z',
                 }
@@ -6678,6 +6681,7 @@ export function installMockFetch(
                   widthMm: null,
                   heightMm: null,
                   depthMm: null,
+                  imageMediaId: null,
                   createdAt: '2026-03-01T00:00:00.000Z',
                   updatedAt: '2026-03-01T00:00:00.000Z',
                 })
@@ -6748,6 +6752,9 @@ export function installMockFetch(
             title: String(body.title),
             status: 'active' as const,
             contentRef: null,
+            imageMediaIds: Array.isArray(body.imageMediaIds)
+              ? (body.imageMediaIds as string[])
+              : [],
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
           }
@@ -6816,6 +6823,11 @@ export function installMockFetch(
                 ? null
                 : (body.contentRef as { collection: string; entryId: string })
           }
+          if ('imageMediaIds' in body) {
+            product.imageMediaIds = Array.isArray(body.imageMediaIds)
+              ? (body.imageMediaIds as string[])
+              : []
+          }
           return json(200, product)
         }
         if (segments[0] === 'products' && segments.length === 2 && method === 'DELETE') {
@@ -6880,6 +6892,7 @@ export function installMockFetch(
             widthMm: typeof body.widthMm === 'number' ? body.widthMm : null,
             heightMm: typeof body.heightMm === 'number' ? body.heightMm : null,
             depthMm: typeof body.depthMm === 'number' ? body.depthMm : null,
+            imageMediaId: typeof body.imageMediaId === 'string' ? body.imageMediaId : null,
             createdAt: '2026-03-01T00:00:00.000Z',
             updatedAt: '2026-03-01T00:00:00.000Z',
           }
@@ -6925,6 +6938,9 @@ export function installMockFetch(
           }
           if ('depthMm' in body)
             variant.depthMm = typeof body.depthMm === 'number' ? body.depthMm : null
+          if ('imageMediaId' in body) {
+            variant.imageMediaId = typeof body.imageMediaId === 'string' ? body.imageMediaId : null
+          }
           return json(200, variant)
         }
         if (segments[0] === 'variants' && segments.length === 2 && method === 'DELETE') {

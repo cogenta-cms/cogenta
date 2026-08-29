@@ -24,6 +24,9 @@ export interface Product {
   readonly title: string
   readonly status: ProductStatus
   readonly contentRef: { readonly collection: string; readonly entryId: string } | null
+  /** Media library ids, in display order — the first is the cover shown in
+   * admin lists and order lines. */
+  readonly imageMediaIds: readonly string[]
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -50,6 +53,8 @@ export interface Variant {
   readonly widthMm: number | null
   readonly heightMm: number | null
   readonly depthMm: number | null
+  /** A single media library id, or `null` — one photo per variant. */
+  readonly imageMediaId: string | null
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -482,6 +487,7 @@ export function updateProduct(
     readonly status?: ProductStatus
     /** `null` unlinks, an object links, omitted leaves it alone (fiche 51 task 1). */
     readonly contentRef?: { readonly collection: string; readonly entryId: string } | null
+    readonly imageMediaIds?: readonly string[]
   },
 ): Promise<Product> {
   return requestBody(`/api/commerce/products/${encodeURIComponent(id)}`, {
@@ -510,6 +516,7 @@ export interface VariantExtraFields {
   readonly widthMm?: number | null
   readonly heightMm?: number | null
   readonly depthMm?: number | null
+  readonly imageMediaId?: string | null
 }
 
 export function createVariant(

@@ -609,6 +609,7 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
  */
 async function ensureColumns(db: DatabaseHandle): Promise<void> {
   const d = db.dialect
+  const products = identifier(TABLES.products, d)
   const variants = identifier(TABLES.variants, d)
   const int = integerColumn()
 
@@ -629,6 +630,15 @@ async function ensureColumns(db: DatabaseHandle): Promise<void> {
     sql`alter table ${variants} add column ${identifier('width_mm', d)} ${int}`,
     sql`alter table ${variants} add column ${identifier('height_mm', d)} ${int}`,
     sql`alter table ${variants} add column ${identifier('depth_mm', d)} ${int}`,
+    // A product's own photos, direct on the commercial record — bare `text`
+    // rather than `textColumn`'s `varchar(n)`: this is a JSON-encoded array
+    // of media ids (`catalog/store.ts`'s `decodeProduct`/`toStringArray`),
+    // the same unbounded-length choice `invoices.document` already made for
+    // its own JSON blob, and no dialect gives an array column the same
+    // meaning on all three (ADR-0006).
+    sql`alter table ${products} add column ${identifier('image_media_ids', d)} text`,
+    // A variant's own single photo — one id, never a list (see `types.ts`).
+    sql`alter table ${variants} add column ${identifier('image_media_id', d)} ${textColumn(d, 64)}`,
   ]
 
   for (const statement of statements) {

@@ -260,6 +260,58 @@ export function runCatalogContract(label: string, open: () => Promise<CatalogFix
       )
     })
 
+    it('carries a product gallery in order, deduplicated, and lets it be cleared', async () => {
+      const created = await store.createProduct({
+        handle: 'scarf',
+        title: 'Scarf',
+        imageMediaIds: ['media-2', 'media-1', 'media-2'],
+      })
+      // De-duplicated, first occurrence kept — order is what makes the first
+      // id the cover, so a repeat must not shift a later id into that slot.
+      expect(created.imageMediaIds).toEqual(['media-2', 'media-1'])
+
+      const reordered = await store.updateProduct(created.id, {
+        imageMediaIds: ['media-1', 'media-2', 'media-3'],
+      })
+      expect(reordered.imageMediaIds).toEqual(['media-1', 'media-2', 'media-3'])
+
+      const cleared = await store.updateProduct(created.id, { imageMediaIds: [] })
+      expect(cleared.imageMediaIds).toEqual([])
+
+      // A field left out of the request entirely leaves the gallery untouched.
+      const untouched = await store.updateProduct(created.id, { title: 'Scarf renamed' })
+      expect(untouched.imageMediaIds).toEqual([])
+    })
+
+    it('carries a variant photo, and lets it be cleared independently of every other field', async () => {
+      const variant = await seedVariant(store, 1)
+      const initial = await store.readVariant(variant.id)
+      expect(initial?.imageMediaId).toBeNull()
+
+      const withPhoto = await store.updateVariant(variant.id, { imageMediaId: 'media-red' })
+      expect(withPhoto.imageMediaId).toBe('media-red')
+
+      // Editing an unrelated field must not disturb the photo.
+      const priceChanged = await store.updateVariant(variant.id, { priceMinor: 2499 })
+      expect(priceChanged.imageMediaId).toBe('media-red')
+
+      const cleared = await store.updateVariant(variant.id, { imageMediaId: null })
+      expect(cleared.imageMediaId).toBeNull()
+    })
+
+    it('sets a variant photo at creation', async () => {
+      const product = await store.createProduct({ handle: 'mug', title: 'Mug' })
+      const variant = await store.createVariant({
+        productId: product.id,
+        sku: 'MUG-BLUE',
+        title: 'Blue',
+        priceMinor: 999,
+        currency: 'EUR',
+        imageMediaId: 'media-blue',
+      })
+      expect(variant.imageMediaId).toBe('media-blue')
+    })
+
     // fiche 51 task 4: a threshold, and the list it feeds.
     it('lists only variants at or below their own low-stock threshold', async () => {
       const watched = await seedVariant(store, 3, 'WATCHED')

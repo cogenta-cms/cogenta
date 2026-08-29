@@ -251,6 +251,29 @@ function nullableContentRef(value: unknown): { collection: string; entryId: stri
   })
 }
 
+/** A product's gallery — an array of media ids, or absent (left alone). */
+function mediaIdArray(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new CogentaError({
+      code: 'COMMERCE_PRODUCT_INVALID',
+      message: '"imageMediaIds" must be an array of media ids.',
+      hint: 'Send an array of strings, in the order the gallery should show them.',
+    })
+  }
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
+/** A variant's own single photo — a media id, or `null` to clear it. */
+function nullableMediaId(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value === 'string') return value
+  throw new CogentaError({
+    code: 'COMMERCE_PRODUCT_INVALID',
+    message: '"imageMediaId" must be a media id, or null to clear it.',
+    hint: 'Send a media library id, or null.',
+  })
+}
+
 function nullableIsoString(value: unknown): string | null {
   if (value === null) return null
   if (typeof value === 'string' && value.trim() !== '') return value
@@ -411,6 +434,7 @@ export function createCommerceAdminRouter(
               body: await options.catalog.createProduct({
                 handle: readString(body, 'handle'),
                 title: readString(body, 'title'),
+                ...optionalField(body, 'imageMediaIds', mediaIdArray),
               }),
             }
           }
@@ -504,6 +528,7 @@ export function createCommerceAdminRouter(
                 // leaves it alone — the same three-way distinction the
                 // nullable variant fields above already need.
                 ...optionalField(body, 'contentRef', nullableContentRef),
+                ...optionalField(body, 'imageMediaIds', mediaIdArray),
               }),
             }
           }
@@ -586,6 +611,7 @@ export function createCommerceAdminRouter(
                 ...optionalField(body, 'widthMm', nullableInt),
                 ...optionalField(body, 'heightMm', nullableInt),
                 ...optionalField(body, 'depthMm', nullableInt),
+                ...optionalField(body, 'imageMediaId', nullableMediaId),
               }),
             }
           }
@@ -615,6 +641,7 @@ export function createCommerceAdminRouter(
                 ...optionalField(body, 'widthMm', nullableInt),
                 ...optionalField(body, 'heightMm', nullableInt),
                 ...optionalField(body, 'depthMm', nullableInt),
+                ...optionalField(body, 'imageMediaId', nullableMediaId),
               }),
             }
           }

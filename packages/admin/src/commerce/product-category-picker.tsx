@@ -13,12 +13,14 @@ import { Button, Notice, Select } from '../ui/index.js'
  * `router.ts`'s own comment: categorising a product is catalogue work, not a
  * reason to couple this router to contract A's separate `canTerm` layer.
  *
- * One taxonomy at a time, chosen from whichever the site declares — a site
- * with no taxonomy at all (most sites) sees nothing here, same as the
- * taxonomy field already does in the content editor. `existingTerms` comes
- * from `readProduct`, already fetched by the screen that renders this —
- * fetching it a second time here would only risk showing something stale
- * the moment the two disagree.
+ * One taxonomy at a time, chosen from whichever the site declares. A site
+ * with no taxonomy at all says so explicitly (`categoryNoTaxonomy`) rather
+ * than rendering a heading with nothing under it — the silent `null` this
+ * used to return was itself reported as confusing (a "Catégorie" heading
+ * followed by nothing looks broken, not "there is nothing to configure").
+ * `existingTerms` comes from `readProduct`, already fetched by the screen
+ * that renders this — fetching it a second time here would only risk
+ * showing something stale the moment the two disagree.
  */
 export function ProductCategoryPicker({
   token,
@@ -82,7 +84,11 @@ export function ProductCategoryPicker({
     }
   }
 
-  if (taxonomies.length === 0) return null
+  if (taxonomies.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">{t('commerceProducts.categoryNoTaxonomy')}</p>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2">

@@ -1000,8 +1000,8 @@
     "problemsBody": "One or more items point at content that is not published. Fix the item or publish the target before a visitor finds the dead link.",
     "localeCoverageTitle": "This location won't show up everywhere",
     "localeCoverageBody": "No menu is assigned to this location for: {{locales}}. Pages served in those languages will have no navigation there until a menu is assigned — duplicate this menu into those languages, or assign them an existing menu.",
-    "previewTitle": "Preview (as a visitor would see it)",
-    "previewEmpty": "Nothing here would render publicly yet.",
+    "foreignLocaleTitle": "This menu will not appear anywhere on this site",
+    "foreignLocaleBody": "This menu is in \"{{locale}}\", a language this site does not declare (declared languages: {{locales}}). Any change here is saved correctly, but no page on this site will show it. Select or duplicate a menu in one of the declared languages.",
     "duplicateTo": "Duplicate to locale",
     "duplicate": "Duplicate menu",
     "duplicateError": "The menu could not be duplicated."

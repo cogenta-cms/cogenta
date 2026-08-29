@@ -999,8 +999,8 @@
     "problemsBody": "Un ou plusieurs éléments pointent vers un contenu non publié. Corrigez l'élément ou publiez la cible avant qu'un visiteur ne trouve le lien mort.",
     "localeCoverageTitle": "Cet emplacement ne s'affichera pas partout",
     "localeCoverageBody": "Aucun menu n'est assigné à cet emplacement pour : {{locales}}. Les pages servies dans ces langues n'auront aucune navigation à cet endroit tant qu'un menu ne leur est pas assigné — dupliquez ce menu vers ces langues, ou assignez-leur un menu existant.",
-    "previewTitle": "Aperçu (tel qu'un visiteur le verrait)",
-    "previewEmpty": "Rien ne s'afficherait publiquement pour l'instant.",
+    "foreignLocaleTitle": "Ce menu ne s'affichera nulle part sur ce site",
+    "foreignLocaleBody": "Ce menu est en « {{locale}} », une langue que ce site ne déclare pas (langues déclarées : {{locales}}). Toute modification ici est bien enregistrée, mais aucune page de ce site ne la montrera. Sélectionnez ou dupliquez un menu dans une des langues déclarées.",
     "duplicateTo": "Dupliquer vers la langue",
     "duplicate": "Dupliquer le menu",
     "duplicateError": "Le menu n'a pas pu être dupliqué."

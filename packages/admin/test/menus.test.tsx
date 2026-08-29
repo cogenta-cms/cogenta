@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createMenu as createMenuViaApi } from '../src/api/menu-client.js'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
 
@@ -281,5 +282,45 @@ describe('the menu screen', () => {
       },
       { timeout: 5000 },
     )
+  })
+})
+
+describe('a menu whose language the site does not declare', () => {
+  it('is skipped by the default selection in favour of a menu the site actually declares', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'], siteLocales: ['en'] })
+    // A leftover from before the site's declared locales changed — created
+    // directly through the API, exactly as a real one would be: today's
+    // "Nouveau menu" form only ever offers a declared locale, so this is not
+    // reachable through the UI itself, only inherited from an earlier state.
+    await createMenuViaApi(VALID_TOKEN, { name: 'ancien', locale: 'fr', label: 'Ancien menu' })
+    await createMenuViaApi(VALID_TOKEN, { name: 'actuel', locale: 'en', label: 'Menu actuel' })
+
+    render(<App />)
+    await goToMenus()
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Menu') as HTMLSelectElement).value).not.toBe('')
+    })
+    const selectedOption = (screen.getByLabelText('Menu') as HTMLSelectElement).selectedOptions[0]
+    expect(selectedOption?.textContent).toContain('Menu actuel')
+    expect(screen.queryByText(/Ce menu ne s'affichera nulle part/u)).toBeNull()
+  })
+
+  it('warns when the admin does select a menu in an undeclared language', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'], siteLocales: ['en'] })
+    await createMenuViaApi(VALID_TOKEN, { name: 'ancien', locale: 'fr', label: 'Ancien menu' })
+
+    render(<App />)
+    await goToMenus()
+
+    fireEvent.change(screen.getByLabelText('Menu'), {
+      target: { value: screen.getByRole('option', { name: /Ancien menu/u }).getAttribute('value') },
+    })
+
+    expect(await screen.findByText(/Ce menu ne s'affichera nulle part sur ce site/u)).toBeDefined()
   })
 })

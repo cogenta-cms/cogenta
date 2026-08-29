@@ -151,12 +151,31 @@ export function MenusRoute(): JSX.Element {
     void loadMenus()
   }, [loadMenus])
 
+  // Reported live, 2026-08-29: an admin edited a menu, added a real item, and
+  // it never appeared on the site — because the menu that happened to load
+  // first (`menus[0]`, API order, no locale awareness at all) was `fr` on a
+  // site whose schema declares only `en`. The edit was never lost; it was
+  // never going to be visible on any page this site serves. Preferring a
+  // menu whose `locale` the site actually declares is what a first-time
+  // admin needs by default; it does not stop anyone from picking a
+  // leftover/foreign-locale menu deliberately from the selector afterwards.
+  //
+  // Gated on `schemaState.status === 'ready'`, the same race this file's own
+  // `newLocale`/`itemCollection`/`itemTaxonomy` effect above already guards
+  // against: `menus` frequently resolves before the schema does, and at that
+  // moment `locales` is still `[i18n.language]` — the *admin's* UI language,
+  // not the site's — which would otherwise "correctly" match a leftover `fr`
+  // menu on an `en`-only site the instant the admin's own UI happens to be
+  // in French, defeating this fix in exactly the case it exists for. Not
+  // depending on `locales` while waiting keeps this from re-firing (and
+  // silently swapping the selection) on every later schema refetch too.
   useEffect(() => {
-    if (selectedId === null && menus.length > 0) {
-      const first = menus[0]
-      if (first !== undefined) setSelectedId(first.id)
-    }
-  }, [menus, selectedId])
+    if (selectedId !== null || menus.length === 0 || schemaState.status !== 'ready') return
+    const relevant = menus.find((menu) => locales.includes(menu.locale))
+    const first = relevant ?? menus[0]
+    if (first !== undefined) setSelectedId(first.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menus, selectedId, schemaState.status])
 
   const loadItems = useCallback(async () => {
     if (token === null || selectedId === null) {
@@ -377,21 +396,14 @@ export function MenusRoute(): JSX.Element {
     )
   }, [selected, menus, locales])
 
-  // A rendered-as-published preview (task 5): the same "hide a dead link,
-  // never serve one" rule `theme-render.ts`'s `renderMenuLinks` applies —
-  // reimplemented at this one small scale rather than pulled in as a
-  // dependency, since there is no navigation block in contract B for
-  // `POST /api/builder/render` to render. Not the live theme: a plain list
-  // that shows exactly what a visitor would and wouldn't see.
-  const previewItems = useMemo(
-    () =>
-      items.filter((item) => {
-        if (item.kind === 'submenu-placeholder') return true
-        if (item.kind === 'url') return item.url !== null && item.url !== ''
-        return item.resolvedRoute !== undefined && item.resolvedRoute !== null
-      }),
-    [items],
-  )
+  // Reported live, 2026-08-29: an admin edited this exact menu, added a real
+  // item, and it never reached the site — this menu's own `locale` (`fr`)
+  // was not one the site's schema declares at all (`en` only), a leftover
+  // from earlier testing. `uncoveredLocales` above catches the opposite
+  // shape (a declared locale with no menu at all); it says nothing when the
+  // menu itself belongs to a locale the site never serves.
+  const isForeignLocale =
+    selected !== null && schemaState.status === 'ready' && !locales.includes(selected.locale)
 
   if (schemaState.status === 'loading') return <p>{t('common.loading')}</p>
   if (schemaState.status === 'error') {
@@ -528,6 +540,15 @@ export function MenusRoute(): JSX.Element {
             </Notice>
           )}
 
+          {isForeignLocale && selected !== null && (
+            <Notice tone="danger" title={t('menus.foreignLocaleTitle')}>
+              {t('menus.foreignLocaleBody', {
+                locale: selected.locale,
+                locales: locales.join(', '),
+              })}
+            </Notice>
+          )}
+
           {loading && <p>{t('common.loading')}</p>}
           {!loading && items.length === 0 && <p>{t('menus.empty')}</p>}
           {!loading && items.length > 0 && (
@@ -538,39 +559,6 @@ export function MenusRoute(): JSX.Element {
               onEdit={setEditingItem}
               onDelete={(item) => void removeItem(item)}
             />
-          )}
-
-          {items.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <h2 className="text-base font-semibold">{t('menus.previewTitle')}</h2>
-              {previewItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t('menus.previewEmpty')}</p>
-              ) : (
-                <nav aria-label={t('menus.previewTitle')}>
-                  <ul className="m-0 flex flex-col gap-1 p-0">
-                    {previewItems.map((item) => (
-                      <li
-                        key={item.id}
-                        className="list-none"
-                        style={{ marginLeft: `${item.depth * 1.5}rem` }}
-                      >
-                        {item.kind === 'submenu-placeholder' ? (
-                          <span>{item.label}</span>
-                        ) : (
-                          <a
-                            href={
-                              item.kind === 'url' ? (item.url ?? '#') : (item.resolvedRoute ?? '#')
-                            }
-                          >
-                            {item.label}
-                          </a>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </nav>
-              )}
-            </div>
           )}
 
           {mayWrite && (

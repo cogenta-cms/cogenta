@@ -45,7 +45,7 @@ jobs:
       # Only what the generator actually imports — not a full `pnpm build`.
       - run: pnpm --filter @cogenta/render --filter @cogenta/export --filter @cogenta/blocks --filter @cogenta/core build
       - run: pnpm docs:site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/dist
 

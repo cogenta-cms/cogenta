@@ -427,3 +427,247 @@ describe('POST /api/agents/:name/run', () => {
     expect(response.status).toBe(400)
   })
 })
+
+/** A tiny in-memory `AgentConversationStoreLike`, enough to prove the router threads it correctly — the real store's own contract is `@cogenta/agents`' `conversations/store.test.ts` job. */
+function memoryConversations() {
+  const threads = new Map<
+    string,
+    { role: 'user' | 'assistant'; content: string; createdAt: string }[]
+  >()
+  function key(agentName: string, actorId: string): string {
+    return `${agentName} ${actorId}`
+  }
+  return {
+    async get(agentName: string, actorId: string) {
+      return threads.get(key(agentName, actorId)) ?? []
+    },
+    async append(
+      agentName: string,
+      actorId: string,
+      turns: readonly { role: 'user' | 'assistant'; content: string; createdAt: string }[],
+    ) {
+      const k = key(agentName, actorId)
+      const updated = [...(threads.get(k) ?? []), ...turns]
+      threads.set(k, updated)
+      return updated
+    },
+    async clear(agentName: string, actorId: string) {
+      threads.delete(key(agentName, actorId))
+    },
+  }
+}
+
+describe('GET/DELETE /api/agents/:name/conversation, POST …/conversation/messages', () => {
+  it('answers AGENT_RUNTIME_UNAVAILABLE when no conversation store is wired', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      ADMIN,
+    )
+    expect(response.status).toBe(503)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'AGENT_RUNTIME_UNAVAILABLE',
+    )
+  })
+
+  it('starts empty, then reflects a sent message and its reply', async () => {
+    const runner = {
+      run: async (
+        name: string,
+        instruction: string,
+        _trigger?: string,
+        history?: readonly { role: string; content: string }[],
+      ) => ({
+        agent: name,
+        stopReason: 'end_turn',
+        finalText: `reply to: ${instruction} (history: ${history?.length ?? 0})`,
+        steps: 1,
+        toolCalls: [{ name: 'content.list', input: { collection: 'post' } }],
+      }),
+    }
+    const conversations = memoryConversations()
+    const withChat = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      conversations,
+    })
+
+    const empty = await withChat.handle(
+      { method: 'GET', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      ADMIN,
+    )
+    expect((empty.body as { data: { turns: unknown[] } }).data.turns).toEqual([])
+
+    const sent = await withChat.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/messages',
+        query: {},
+        body: { message: 'hello' },
+      },
+      ADMIN,
+    )
+    expect(sent.status).toBe(200)
+    const sentBody = sent.body as {
+      data: { turns: { role: string; content: string }[]; run: { finalText: string } }
+    }
+    expect(sentBody.data.turns).toHaveLength(2)
+    expect(sentBody.data.turns[0]).toMatchObject({ role: 'user', content: 'hello' })
+    expect(sentBody.data.turns[1]).toMatchObject({
+      role: 'assistant',
+      content: 'reply to: hello (history: 0)',
+      toolCalls: [{ name: 'content.list', input: { collection: 'post' } }],
+    })
+    expect(sentBody.data.run.finalText).toBe('reply to: hello (history: 0)')
+
+    const after = await withChat.handle(
+      { method: 'GET', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      ADMIN,
+    )
+    expect((after.body as { data: { turns: unknown[] } }).data.turns).toHaveLength(2)
+  })
+
+  it('threads the prior turns into the next run as history', async () => {
+    const seen: (readonly { role: string; content: string }[] | undefined)[] = []
+    const runner = {
+      run: async (
+        name: string,
+        instruction: string,
+        _trigger?: string,
+        history?: readonly { role: string; content: string }[],
+      ) => {
+        seen.push(history)
+        return { agent: name, stopReason: 'end_turn', finalText: `ok: ${instruction}`, steps: 1 }
+      },
+    }
+    const withChat = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      conversations: memoryConversations(),
+    })
+
+    await withChat.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/messages',
+        query: {},
+        body: { message: 'first' },
+      },
+      ADMIN,
+    )
+    await withChat.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/messages',
+        query: {},
+        body: { message: 'second' },
+      },
+      ADMIN,
+    )
+
+    expect(seen[0]).toEqual([])
+    expect(seen[1]).toEqual([
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'ok: first' },
+    ])
+  })
+
+  it('keeps two actors talking to the same agent apart', async () => {
+    // Two admins, not admin-vs-editor: `requireAdmin` gates every route
+    // above this one, so a non-admin never reaches the conversation logic
+    // at all — that boundary is its own test below.
+    const OTHER_ADMIN = { id: 'user-other-admin', roles: ['admin'] }
+    const runner = {
+      run: async (name: string, instruction: string) => ({
+        agent: name,
+        stopReason: 'end_turn',
+        finalText: `ok: ${instruction}`,
+        steps: 1,
+      }),
+    }
+    const withChat = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      conversations: memoryConversations(),
+    })
+
+    await withChat.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/messages',
+        query: {},
+        body: { message: 'from admin' },
+      },
+      ADMIN,
+    )
+    const otherView = await withChat.handle(
+      { method: 'GET', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      OTHER_ADMIN,
+    )
+    expect((otherView.body as { data: { turns: unknown[] } }).data.turns).toEqual([])
+  })
+
+  it('clears the actor’s own thread — "Nouvelle conversation"', async () => {
+    const runner = {
+      run: async (name: string, instruction: string) => ({
+        agent: name,
+        stopReason: 'end_turn',
+        finalText: `ok: ${instruction}`,
+        steps: 1,
+      }),
+    }
+    const withChat = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      conversations: memoryConversations(),
+    })
+
+    await withChat.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/messages',
+        query: {},
+        body: { message: 'hello' },
+      },
+      ADMIN,
+    )
+    const cleared = await withChat.handle(
+      { method: 'DELETE', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      ADMIN,
+    )
+    expect(cleared.status).toBe(200)
+    const after = await withChat.handle(
+      { method: 'GET', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      ADMIN,
+    )
+    expect((after.body as { data: { turns: unknown[] } }).data.turns).toEqual([])
+  })
+
+  it('refuses an empty message', async () => {
+    const runner = {
+      run: async () => ({ agent: 'x', stopReason: 'end_turn', finalText: null, steps: 0 }),
+    }
+    const withChat = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      conversations: memoryConversations(),
+    })
+    const response = await withChat.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/messages',
+        query: {},
+        body: { message: '' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('requires an admin actor, like every other agent route', async () => {
+    const response = await router.handle(
+      { method: 'GET', path: '/api/agents/security/conversation', query: {}, body: undefined },
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
+  })
+})

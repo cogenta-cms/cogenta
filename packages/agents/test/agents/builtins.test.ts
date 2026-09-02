@@ -59,11 +59,12 @@ describe('ensureBuiltinAgents', () => {
     expect(security?.tools).toEqual(['deps.scan'])
   })
 
-  it('grants the read-only browse pair to a site seeded before it existed, and to nothing else', async () => {
+  it('grants the read-only browse tools to a site seeded before they existed, and to nothing else', async () => {
     await ensureBuiltinAgents(store)
-    // A superagent as it shipped before `content.collections`/`content.list`
-    // were added to the seed — the real state of any site upgraded from
-    // that version, since re-seeding never rewrites an existing agent.
+    // A superagent as it shipped before `content.collections`/`content.list`/
+    // `content.schema` were added to the seed — the real state of any site
+    // upgraded from that version, since re-seeding never rewrites an
+    // existing agent.
     await store.update(SUPERAGENT_NAME, {
       tools: ['content.read', 'content.write_draft', 'media.read'],
     })
@@ -79,6 +80,7 @@ describe('ensureBuiltinAgents', () => {
       'media.read',
       'content.collections',
       'content.list',
+      'content.schema',
     ])
     expect(all.find((agent) => agent.name === SECURITY_AGENT_NAME)?.tools).toEqual(['deps.scan'])
   })

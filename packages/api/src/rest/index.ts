@@ -16,9 +16,13 @@ export type {
 } from './agent-skills-router.js'
 export { createAgentSkillsRouter } from './agent-skills-router.js'
 export type {
+  AgentConversationMessage,
+  AgentConversationStoreLike,
+  AgentConversationTurn,
   AgentRegistryLike,
   AgentRunnerLike,
   AgentRunSummary,
+  AgentRunToolCallSummary,
   AgentSummary,
   AgentsRouter,
   AgentsRouterOptions,

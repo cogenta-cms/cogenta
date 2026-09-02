@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
@@ -218,6 +219,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
     name,
     model: config.model,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
+      const signal = requestSignalWithTimeout(options?.signal)
       const response = await doFetch(url, {
         method: 'POST',
         headers: {
@@ -225,8 +227,16 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
           authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify(buildOpenAiRequest(request)),
-        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+        signal,
       }).catch((cause: unknown) => {
+        if (signal.aborted && options?.signal?.aborted !== true) {
+          throw new CogentaError({
+            code: 'PROVIDER_REQUEST_FAILED',
+            message: `"${name}" did not answer in time.`,
+            hint: 'The vendor may be slow or unreachable right now; retry, or check its status page.',
+            cause,
+          })
+        }
         throw new CogentaError({
           code: 'PROVIDER_REQUEST_FAILED',
           message: `The request to "${name}" could not be sent.`,

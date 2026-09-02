@@ -12,6 +12,7 @@ export type {
   AgentRunner,
   AgentRunnerOptions,
   AgentRunSummary,
+  AgentRunToolCallSummary,
   RunAgentOptions,
 } from './agents/orchestrator.js'
 export { createAgentRunner } from './agents/orchestrator.js'
@@ -120,6 +121,17 @@ export type {
   BudgetUsage,
   KillSwitch,
 } from './budget/types.js'
+export type {
+  AgentConversationStore,
+  ConversationToolCall,
+  ConversationTurn,
+  FileAgentConversationStoreOptions,
+} from './conversations/store.js'
+export {
+  createFileAgentConversationStore,
+  createMemoryAgentConversationStore,
+  MAX_STORED_TURNS,
+} from './conversations/store.js'
 export type {
   DocumentFormat,
   ExtractDocumentInput,
@@ -497,6 +509,12 @@ export {
   createContentCollectionsTool,
   createContentListTool,
 } from './tools/core/content-browse.js'
+export type {
+  CollectionFieldSummary,
+  CollectionSchemaSummary,
+  ContentSchemaServiceLike,
+} from './tools/core/content-schema.js'
+export { createContentSchemaTool } from './tools/core/content-schema.js'
 export type { DepsScanOutput, DepsScanToolOptions } from './tools/core/deps-scan.js'
 export { createDepsScanTool } from './tools/core/deps-scan.js'
 export type {

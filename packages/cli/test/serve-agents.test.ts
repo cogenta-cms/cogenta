@@ -316,6 +316,124 @@ describe('cogenta serve — /api/agents runs a real tool-calling loop once a pro
   })
 })
 
+/**
+ * The bug this closes was reported live: a conversation started on one
+ * surface (the agent detail page's chat) did not "load" when reopened on
+ * another (the floating widget) — because nothing server-side kept a
+ * thread at all. `POST .../conversation/messages` is what both surfaces
+ * are wired to now; this proves the thread is real (persists across
+ * requests, keyed by the signed-in actor) and that a second message really
+ * does carry the first turn as history to the model, not just client-side.
+ */
+describe('cogenta serve — /api/agents/:name/conversation, a real standing thread', () => {
+  it('starts empty, persists a sent message and its reply, and threads history into the next turn', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const fake = await startFakeAnthropic([
+      {
+        content: [{ type: 'text', text: 'Hello! How can I help?' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      {
+        content: [{ type: 'text', text: 'Sure, following up on that.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ])
+    fakeProviders.push(fake)
+
+    await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        provider: 'anthropic',
+        apiKey: 'sk-ant-test-key',
+        model: 'claude-test',
+        baseUrl: fake.url,
+      }),
+    })
+
+    const agentPath = `/api/agents/${encodeURIComponent('Cogenta Agent')}`
+
+    const empty = await fetch(`${server.base}${agentPath}/conversation`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(empty.status).toBe(200)
+    expect((await empty.json()) as { data: { turns: unknown[] } }).toMatchObject({
+      data: { turns: [] },
+    })
+
+    const first = await fetch(`${server.base}${agentPath}/conversation/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ message: 'Hi there' }),
+    })
+    expect(first.status).toBe(200)
+    const firstBody = (await first.json()) as {
+      data: { turns: { role: string; content: string }[] }
+    }
+    expect(firstBody.data.turns).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Hi there' }),
+      expect.objectContaining({ role: 'assistant', content: 'Hello! How can I help?' }),
+    ])
+
+    // The thread survives being re-read — it lives server-side, not in
+    // whichever component happened to send the first message.
+    const reloaded = await fetch(`${server.base}${agentPath}/conversation`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(((await reloaded.json()) as { data: { turns: unknown[] } }).data.turns).toHaveLength(2)
+
+    await fetch(`${server.base}${agentPath}/conversation/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ message: 'And after that?' }),
+    })
+
+    // The second call to the fake vendor really carried the first turn as
+    // history (in `messages`); the new message itself travels in `system`'s
+    // own `<task>` tag (`assembleContext`'s own contract), not `messages`.
+    expect(fake.requests).toHaveLength(2)
+    const secondRequest = fake.requests[1] as {
+      system: string
+      messages: readonly { role: string; content: unknown }[]
+    }
+    const asText = secondRequest.messages
+      .map((m) => `${m.role}:${JSON.stringify(m.content)}`)
+      .join('\n')
+    expect(asText).toContain('Hi there')
+    expect(asText).toContain('Hello! How can I help?')
+    expect(secondRequest.system).toContain('And after that?')
+
+    const cleared = await fetch(`${server.base}${agentPath}/conversation`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(cleared.status).toBe(200)
+    const afterClear = await fetch(`${server.base}${agentPath}/conversation`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(((await afterClear.json()) as { data: { turns: unknown[] } }).data.turns).toEqual([])
+  })
+
+  it('never answers an anonymous or non-admin caller', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const agentPath = `/api/agents/${encodeURIComponent('Cogenta Agent')}`
+
+    const anonymous = await fetch(`${server.base}${agentPath}/conversation`)
+    expect(anonymous.status).toBe(403)
+  })
+})
+
 interface OpenAiScriptedResponse {
   readonly choices: readonly {
     readonly message: {

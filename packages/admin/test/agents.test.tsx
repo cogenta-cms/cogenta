@@ -99,6 +99,10 @@ describe('agents', () => {
     // through a `<Link>`, not a button that swaps state in place.
     fireEvent.click(screen.getByRole('link', { name: 'security' }))
 
+    // The page itself now opens straight on the chat (fiche feedback); the
+    // full configuration this test checks lives behind "Réglages".
+    fireEvent.click(await screen.findByRole('button', { name: "Réglages de l'agent" }))
+
     // Model preference.
     expect(await screen.findByText(/claude-sonnet/)).toBeDefined()
     expect(screen.getByText(/local/)).toBeDefined()
@@ -153,12 +157,15 @@ describe('agents', () => {
 
     // Fiche 71: the row's name is a real `<Link>` into `agents/:name`.
     fireEvent.click(await screen.findByRole('link', { name: 'Helper' }))
-    fireEvent.change(await screen.findByPlaceholderText('Que doit faire cet agent ?'), {
+    // The detail page's own chat feed (fiche: restructured from a single
+    // "Exécuter maintenant" instruction box into a real conversation).
+    fireEvent.change(await screen.findByLabelText('Message'), {
       target: { value: 'summarise recent posts' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Exécuter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }))
 
-    expect(await screen.findByText(/Mock result for: summarise recent posts/)).toBeDefined()
+    expect(await screen.findByText('summarise recent posts')).toBeDefined()
+    expect(await screen.findByText('Mock reply to: summarise recent posts')).toBeDefined()
   })
 
   // Fiche 55 task 3: creating still requires just a name and a provider —

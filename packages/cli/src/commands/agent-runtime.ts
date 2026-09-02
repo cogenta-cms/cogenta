@@ -5,8 +5,11 @@ import {
   type AgentRunner,
   type AgentSkillStore,
   type ApprovalQueue,
+  type CollectionFieldSummary,
+  type CollectionSchemaSummary,
   type ContentBrowseAccessContext,
   type ContentBrowseServiceLike,
+  type ContentSchemaServiceLike,
   type ContentServiceLike,
   createAgentRunner,
   createContentCollectionsTool,
@@ -14,9 +17,11 @@ import {
   createContentListTool,
   createContentPublishTool,
   createContentReadTool,
+  createContentSchemaTool,
   createContentWriteDraftTool,
   createDepsScanTool,
   createDocumentExtractTool,
+  createFileAgentConversationStore,
   createFileAgentDeclarationStore,
   createFileAgentSkillStore,
   createFilePromptTemplateStore,
@@ -44,6 +49,7 @@ import {
   type ToolRegistry,
 } from '@cogenta/agents'
 import type {
+  AgentConversationStoreLike,
   AgentRegistryLike,
   AgentRunnerLike,
   AgentSkillRegistryLike,
@@ -86,6 +92,7 @@ const PROVIDERS_SUBDIR = 'providers'
  * reason.
  */
 const PROMPT_TEMPLATES_SUBDIR = 'prompt-templates'
+const CONVERSATIONS_SUBDIR = 'conversations'
 
 export interface BuildAgentRuntimeOptions {
   /** `.cogenta/agents-runtime` under the project root, by convention — see `runServe`. */
@@ -136,6 +143,8 @@ export interface AgentRuntimeAssembly {
   readonly agentRunner: AgentRunnerLike
   readonly providerRegistry: ProviderRegistryLike
   readonly skillRegistry: AgentSkillRegistryLike
+  /** `/api/agents/:name/conversation` — one file store, same tier as the agent/skill/provider file stores below (R1). */
+  readonly conversations: AgentConversationStoreLike
   /** `/api/prompt-templates` (fiche 45) — the same store the assistant's `assist.*` tools resolve their instruction text against, so an edit here really does change what the next tool call sends the model. */
   readonly promptTemplateRegistry: PromptTemplateRegistryLike
   /**
@@ -279,6 +288,57 @@ function contentBrowseServiceLikeOf(
 }
 
 /**
+ * `CollectionDefinition` adapted to `content.schema`'s
+ * `ContentSchemaServiceLike` — a third adapter over the same `collections`
+ * config `contentBrowseServiceLikeOf` above already reads, on purpose:
+ * schema is static site config, not stored data, so `describe` performs no
+ * database read of its own; it only calls `service.summary(context)` for
+ * the exact same permission check `contentBrowseServiceLikeOf`'s
+ * `collections()` already makes, so `content.schema` never describes a
+ * collection this actor could not otherwise read.
+ */
+function contentSchemaServiceLikeOf(
+  service: ContentService,
+  collections: readonly CollectionDefinition[],
+): ContentSchemaServiceLike {
+  const byName = new Map(collections.map((collection) => [collection.name, collection]))
+
+  function fieldsOf(collection: CollectionDefinition): readonly CollectionFieldSummary[] {
+    return Object.entries(collection.fields).map(([key, field]) => ({
+      key,
+      kind: field.kind,
+      label: field.admin?.label ?? null,
+      required: field.required ?? false,
+      options: field.options,
+    }))
+  }
+
+  function summaryOf(collection: CollectionDefinition): CollectionSchemaSummary {
+    return {
+      collection: collection.name,
+      labelSingular: collection.labels.singular,
+      labelPlural: collection.labels.plural,
+      routed: collection.routing !== undefined,
+      fields: fieldsOf(collection),
+    }
+  }
+
+  return {
+    describe: async (context: ContentBrowseAccessContext, collectionName?: string) => {
+      const readable = new Set((await service.summary(context)).map((entry) => entry.collection))
+      if (collectionName !== undefined) {
+        const collection = byName.get(collectionName)
+        if (collection === undefined || !readable.has(collectionName)) return []
+        return [summaryOf(collection)]
+      }
+      return collections
+        .filter((collection) => readable.has(collection.name))
+        .map((collection) => summaryOf(collection))
+    },
+  }
+}
+
+/**
  * Refreshed after every write to `ProviderConfigStore` (the providers
  * router calls `refresh()` after each mutation) — an admin who saves a new
  * key takes effect on the next agent run, no restart, without this
@@ -320,6 +380,10 @@ function buildToolRegistry(options: {
     options.contentService,
     options.collections,
   )
+  const contentSchemaServiceLike = contentSchemaServiceLikeOf(
+    options.contentService,
+    options.collections,
+  )
   const definitions: ToolDefinition[] = [
     createContentReadTool(contentServiceLike),
     createContentWriteDraftTool(contentServiceLike),
@@ -334,6 +398,9 @@ function buildToolRegistry(options: {
     createNotFoundLogReadTool(options.notFoundLog),
     createContentCollectionsTool(contentBrowseServiceLike),
     createContentListTool(contentBrowseServiceLike),
+    // The missing half of the browse pair — a collection's field shape,
+    // not just its entries.
+    createContentSchemaTool(contentSchemaServiceLike),
     createRedirectCreateTool(options.redirects),
     ...options.mcpDefinitions,
   ]
@@ -520,6 +587,9 @@ export async function buildAgentRuntime(
   const promptTemplateStore = createFilePromptTemplateStore({
     dir: join(options.dataDir, PROMPT_TEMPLATES_SUBDIR),
   })
+  const conversationStore = createFileAgentConversationStore({
+    dir: join(options.dataDir, CONVERSATIONS_SUBDIR),
+  })
 
   await ensureBuiltinAgents(agentStore)
   await ensureBuiltinAgentSkills(skillStore)
@@ -588,8 +658,12 @@ export async function buildAgentRuntime(
   })
 
   const agentRunner: AgentRunnerLike = {
-    async run(name, instruction, trigger) {
-      return runner.run(name, { instruction, ...(trigger === undefined ? {} : { trigger }) })
+    async run(name, instruction, trigger, history) {
+      return runner.run(name, {
+        instruction,
+        ...(trigger === undefined ? {} : { trigger }),
+        ...(history === undefined ? {} : { history }),
+      })
     },
   }
 
@@ -652,6 +726,7 @@ export async function buildAgentRuntime(
     providerRegistry,
     skillRegistry,
     promptTemplateRegistry,
+    conversations: conversationStore,
     approvalQueue,
     summary,
     refreshMcpTools,

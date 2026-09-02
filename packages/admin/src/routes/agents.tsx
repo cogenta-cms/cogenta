@@ -59,6 +59,7 @@ export const CONTRACT_C_PERMISSIONS: readonly string[] = [
   'content.delete',
   'content.collections',
   'content.list',
+  'content.schema',
   'media.read',
   'media.write',
   'schema.read',

@@ -2634,6 +2634,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             agents: agentsRuntime.agentRegistry,
             audit: auth.audit,
             runner: agentsRuntime.agentRunner,
+            conversations: agentsRuntime.conversations,
           }),
           providersRouter: createProvidersRouter({ providers: agentsRuntime.providerRegistry }),
           agentSkillsRouter: createAgentSkillsRouter({ skills: agentsRuntime.skillRegistry }),

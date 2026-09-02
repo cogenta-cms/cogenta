@@ -88,12 +88,32 @@ export interface AgentWriteInput {
   readonly enabled?: boolean
 }
 
+export interface AgentRunToolCallSummary {
+  readonly name: string
+  readonly input: Readonly<Record<string, unknown>>
+}
+
 export interface AgentRunSummary {
   readonly agent: string
   readonly stopReason: string
   readonly finalText: string | null
   readonly steps: number
   readonly usage?: { readonly inputTokens: number; readonly outputTokens: number }
+  readonly toolCalls?: readonly AgentRunToolCallSummary[]
+}
+
+/**
+ * One turn of the actor's standing conversation with an agent — the piece
+ * that closed a real reported bug: starting a chat on one surface (the
+ * agent detail page) and reopening the floating widget did not "load" it,
+ * because nothing server-side kept a thread at all. Both surfaces now read
+ * and write through the same three functions below.
+ */
+export interface AgentConversationTurn {
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+  readonly createdAt: string
+  readonly toolCalls?: readonly AgentRunToolCallSummary[]
 }
 
 export interface AgentTrace {
@@ -189,5 +209,35 @@ export function runAgent(
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify({ instruction }),
+  })
+}
+
+export async function getAgentConversation(
+  token: string,
+  name: string,
+): Promise<readonly AgentConversationTurn[]> {
+  const { turns } = await request<{ turns: readonly AgentConversationTurn[] }>(
+    `/api/agents/${encodeURIComponent(name)}/conversation`,
+    { headers: authHeader(token) },
+  )
+  return turns
+}
+
+export async function sendAgentMessage(
+  token: string,
+  name: string,
+  message: string,
+): Promise<{ readonly turns: readonly AgentConversationTurn[]; readonly run: AgentRunSummary }> {
+  return request(`/api/agents/${encodeURIComponent(name)}/conversation/messages`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ message }),
+  })
+}
+
+export function clearAgentConversation(token: string, name: string): Promise<{ cleared: boolean }> {
+  return request(`/api/agents/${encodeURIComponent(name)}/conversation`, {
+    method: 'DELETE',
+    headers: authHeader(token),
   })
 }

@@ -6,7 +6,7 @@ import { withAutonomyForManifest } from '../autonomy/with-autonomy.js'
 import { createBudgetTracker } from '../budget/tracker.js'
 import type { BudgetTracker, KillSwitch } from '../budget/types.js'
 import { assembleContext, type SiteContext } from '../identity/context.js'
-import type { ProviderClient } from '../providers/types.js'
+import type { ChatMessage, ProviderClient } from '../providers/types.js'
 import { runAgentLoop } from '../runtime/loop.js'
 import type { ExecutableTool, RunResult, RunStopReason } from '../runtime/types.js'
 import type { AgentSkillStore } from '../skills/library.js'
@@ -57,10 +57,27 @@ export interface AgentProviderRegistryLike {
 export interface RunAgentOptions {
   /** Runtime-generated instruction (a trigger, an operator's typed request) — never external content (R8's own distinction, see `identity/context.ts`). */
   readonly instruction: string
+  /**
+   * Prior turns of a standing conversation with this agent, oldest first —
+   * plain `user`/`assistant` text, no `toolCalls`/`toolCallId` (a past run's
+   * tool instances are gone by the next call; replaying raw tool_use/
+   * tool_result blocks across runs would assume a continuity the runtime
+   * does not have). Spliced between the R8 `dataMessages` and the fixed
+   * trigger turn, so a multi-turn caller (the chat surfaces) gets real
+   * conversational memory without folding it into `instruction`'s own
+   * `<task>` tag — the string-concatenation hack this replaces.
+   */
+  readonly history?: readonly ChatMessage[]
   /** What started this run — recorded in the run-level audit entry. */
   readonly trigger?: string
   readonly signal?: AbortSignal
   readonly maxTokens?: number
+}
+
+/** One tool call the run made, folded down for a caller that only wants "what did it touch", not the full `StepRecord` shape. */
+export interface AgentRunToolCallSummary {
+  readonly name: string
+  readonly input: Readonly<Record<string, unknown>>
 }
 
 export interface AgentRunSummary {
@@ -69,6 +86,8 @@ export interface AgentRunSummary {
   readonly finalText: string | null
   readonly steps: number
   readonly usage: RunResult['usage']
+  /** Every tool call across every step, in call order — `[]` when the run made none. */
+  readonly toolCalls: readonly AgentRunToolCallSummary[]
 }
 
 export interface AgentRunnerOptions {
@@ -91,9 +110,21 @@ export interface AgentRunner {
   run(name: string, options: RunAgentOptions): Promise<AgentRunSummary>
 }
 
-const DEFAULT_MAX_TOKENS = 2000
+/**
+ * Per model call, not a cumulative run budget (`RunAgentLoopInput.maxTokens`
+ * — the same ceiling on every step). Raised from 2000 after a reproduced,
+ * live failure: the superagent, asked to draft a real content template
+ * (rich-text `body`, several fields), made seven legitimate tool calls —
+ * `content.schema` among them, doing exactly what it should — and its
+ * final answer was cut off mid-generation (`stopReason: 'max_tokens'`,
+ * DeepSeek's `finish_reason: 'length'`) before it ever produced visible
+ * text, leaving the chat turn blank. A real content draft in JSON form is
+ * verbose; 2000 was tuned for a short conversational reply, not a
+ * generation task this runtime now actively encourages.
+ */
+const DEFAULT_MAX_TOKENS = 8000
 /** One hop only — a sub-agent's own `subagents` are not wired recursively (see the module comment on why this is a deliberate, bounded choice, not an oversight). */
-const SUBAGENT_MAX_TOKENS = 1500
+const SUBAGENT_MAX_TOKENS = 6000
 
 function toolSiteOf(site: RunnerSite): ToolContext['site'] {
   return {
@@ -327,6 +358,7 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
           system,
           messages: [
             ...dataMessages,
+            ...(runOptions.history ?? []),
             { role: 'user', content: 'Carry out the TASK described in your system context.' },
           ],
           tools,
@@ -358,6 +390,12 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
         finalText: result.finalText,
         steps: result.steps.length,
         usage: result.usage,
+        toolCalls: result.steps.flatMap((step) =>
+          step.toolOutcomes.map((outcome) => ({
+            name: outcome.call.name,
+            input: outcome.call.input,
+          })),
+        ),
       }
     },
   }

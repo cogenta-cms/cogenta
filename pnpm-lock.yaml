@@ -321,6 +321,9 @@ importers:
 
   packages/agents:
     dependencies:
+      '@cogenta/blocks':
+        specifier: workspace:*
+        version: link:../blocks
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

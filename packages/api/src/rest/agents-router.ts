@@ -87,17 +87,75 @@ export interface AgentRegistryLike {
   }>
 }
 
+export interface AgentRunToolCallSummary {
+  readonly name: string
+  readonly input: Readonly<Record<string, unknown>>
+}
+
 export interface AgentRunSummary {
   readonly agent: string
   readonly stopReason: string
   readonly finalText: string | null
   readonly steps: number
   readonly usage?: { readonly inputTokens: number; readonly outputTokens: number }
+  /** Absent for a caller/registry that predates this field (a test double); present and possibly `[]` from a real runner. */
+  readonly toolCalls?: readonly AgentRunToolCallSummary[]
+}
+
+/**
+ * A prior turn of a standing conversation, plain text only — no tool call
+ * detail, matching `@cogenta/agents`' own `RunAgentOptions.history` (a past
+ * run's tool instances do not survive to the next call). Structural, like
+ * every other type in this file: `@cogenta/api` never depends on
+ * `@cogenta/agents`.
+ */
+export interface AgentConversationMessage {
+  readonly role: 'user' | 'assistant'
+  readonly content: string
 }
 
 /** Backs `POST /api/agents/:name/run` — absent means the site has no live runner wired (`AGENT_RUNTIME_UNAVAILABLE`), never a 500. */
 export interface AgentRunnerLike {
-  run(name: string, instruction: string, trigger?: string): Promise<AgentRunSummary>
+  run(
+    name: string,
+    instruction: string,
+    trigger?: string,
+    history?: readonly AgentConversationMessage[],
+  ): Promise<AgentRunSummary>
+}
+
+export interface AgentConversationTurn {
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+  readonly createdAt: string
+  readonly toolCalls?: readonly AgentRunToolCallSummary[]
+}
+
+/**
+ * Backs the conversation routes — `POST /api/agents/:name/run` stays a
+ * one-shot, unpersisted call (a scheduled trigger, an operator's "run now"),
+ * while these are what makes a chat surface possible: the actor's own
+ * standing thread with an agent, one per `(agentName, actorId)` (the bug
+ * this closes — "started a chat, then opened the floating widget, and it
+ * did not load the conversation" — was two UIs threading state
+ * independently, with nothing server-side to share). Optional on
+ * `AgentsRouterOptions`, same "absent means the capability is off" posture
+ * as `traces`/`audit`/`runner`; deliberately just a thin store (`get`/
+ * `append`/`clear`, mirroring `@cogenta/agents`' own `AgentConversationStore`)
+ * — the router is what threads a store's turns into `runner.run`'s
+ * `history`, so orchestration stays in one place rather than splitting
+ * across this interface and the router.
+ */
+export interface AgentConversationStoreLike {
+  /** Oldest first. `[]` for a thread never written to. */
+  get(agentName: string, actorId: string): Promise<readonly AgentConversationTurn[]>
+  /** Appends one or more turns atomically and returns the thread as it stands afterward. */
+  append(
+    agentName: string,
+    actorId: string,
+    turns: readonly AgentConversationTurn[],
+  ): Promise<readonly AgentConversationTurn[]>
+  clear(agentName: string, actorId: string): Promise<void>
 }
 
 export interface TraceStoreLike {
@@ -116,6 +174,8 @@ export interface AgentsRouterOptions {
   readonly audit?: AuditLogLike
   /** Omitted when this site has no live agent runner — `POST .../run` then answers `AGENT_RUNTIME_UNAVAILABLE` rather than crashing. */
   readonly runner?: AgentRunnerLike
+  /** Omitted when this site has no conversation store — the `/conversation` routes then answer `AGENT_RUNTIME_UNAVAILABLE`, same as `runner` (a conversation route also needs one to run the agent). */
+  readonly conversations?: AgentConversationStoreLike
   /** Mount point. `/api/agents` by default. */
   readonly basePath?: string
 }
@@ -177,7 +237,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Agent routes are /api/agents, /api/agents/:name, /:name/enable, /disable, /run, /traces and /history.',
+    hint: 'Agent routes are /api/agents, /api/agents/:name, /:name/enable, /disable, /run, /traces, /history, /conversation and /conversation/messages.',
   })
 }
 
@@ -203,6 +263,18 @@ function runtimeUnavailable(): CogentaError {
     message: 'No agent runner is configured for this site.',
     hint: 'This is a server configuration limit, not something the request can fix.',
   })
+}
+
+/** `requireAdmin` already ran by the time a conversation route reads this — a real session always carries an id, so `null` here would be an actor-resolution bug upstream, not a request the caller can fix. */
+function requireActorId(actor: Actor): string {
+  if (actor.id === null) {
+    throw new CogentaError({
+      code: 'FORBIDDEN',
+      message: 'This action needs a signed-in actor.',
+      hint: 'Sign in and retry.',
+    })
+  }
+  return actor.id
 }
 
 function requireAgent(options: AgentsRouterOptions, name: string): AgentSummary {
@@ -359,6 +431,57 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
             return jsonResponse(200, { data: { name, removed: true } })
           }
           return methodNotAllowed(['GET', 'PATCH', 'DELETE'])
+        }
+
+        // GET|DELETE /api/agents/:name/conversation, POST …/conversation/messages
+        // — the actor's own standing thread with this agent. Checked before
+        // the generic `extra` guard below since `…/messages` is the one
+        // three-segment path this router serves.
+        if (action === 'conversation') {
+          if (extra !== undefined && extra !== 'messages') throw noRoute()
+          requireAgent(options, name)
+          if (options.conversations === undefined) throw runtimeUnavailable()
+          const actorId = requireActorId(actor)
+
+          if (extra === 'messages') {
+            if (method !== 'POST') return methodNotAllowed(['POST'])
+            if (options.runner === undefined) throw runtimeUnavailable()
+            const body = asRecord(request.body)
+            const message = body['message']
+            if (typeof message !== 'string' || message.trim().length === 0) {
+              throw new CogentaError({
+                code: 'AGENT_DEFINITION_INVALID',
+                message: 'A message needs a non-empty "message".',
+                hint: 'Send { "message": "…" }.',
+              })
+            }
+            const priorTurns = await options.conversations.get(name, actorId)
+            const history = priorTurns.map((turn) => ({ role: turn.role, content: turn.content }))
+            const run = await options.runner.run(name, message.trim(), 'chat', history)
+            const createdAt = new Date().toISOString()
+            const turns = await options.conversations.append(name, actorId, [
+              { role: 'user', content: message.trim(), createdAt },
+              {
+                role: 'assistant',
+                content: run.finalText ?? '',
+                createdAt,
+                ...(run.toolCalls === undefined || run.toolCalls.length === 0
+                  ? {}
+                  : { toolCalls: run.toolCalls }),
+              },
+            ])
+            return jsonResponse(200, { data: { turns, run } })
+          }
+
+          if (method === 'GET') {
+            const turns = await options.conversations.get(name, actorId)
+            return jsonResponse(200, { data: { turns } })
+          }
+          if (method === 'DELETE') {
+            await options.conversations.clear(name, actorId)
+            return jsonResponse(200, { data: { cleared: true } })
+          }
+          return methodNotAllowed(['GET', 'DELETE'])
         }
 
         if (extra !== undefined) throw noRoute()

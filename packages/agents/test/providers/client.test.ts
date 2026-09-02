@@ -66,6 +66,39 @@ describe('createAnthropicClient', () => {
 
     await expect(client.chat(REQUEST)).rejects.toThrowError(/could not be sent/)
   })
+
+  it('always passes a signal, even when the caller supplies none', async () => {
+    const fetchImpl = vi.fn(async (_url: string | Request | URL, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal)
+      return jsonResponse(200, {
+        content: [{ type: 'text', text: 'Hi.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1, output_tokens: 1 },
+      })
+    })
+    const client = createAnthropicClient({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl })
+    await client.chat(REQUEST)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the generic failure, not a timeout, when the caller’s own signal is what aborted', async () => {
+    // Reproduces the distinction the fix relies on: the combined signal is
+    // aborted either way, so the client must check *why* before naming a
+    // timeout it never actually hit.
+    const caller = new AbortController()
+    caller.abort()
+    const client = createAnthropicClient({
+      apiKey: 'k',
+      model: 'claude-sonnet-5',
+      fetchImpl: async () => {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      },
+    })
+
+    await expect(client.chat(REQUEST, { signal: caller.signal })).rejects.toThrowError(
+      /could not be sent/,
+    )
+  })
 })
 
 describe('createOpenAiClient', () => {
@@ -83,6 +116,7 @@ describe('createOpenAiClient', () => {
     expect(result.content).toBe('Hi.')
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer k')
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 })
 
@@ -99,8 +133,9 @@ describe('createGoogleClient', () => {
     const result = await client.chat(REQUEST)
 
     expect(result.content).toBe('Hi.')
-    const [url] = fetchImpl.mock.calls[0] as unknown as [string]
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toContain('key=k')
     expect(url).toContain('gemini-3-pro:generateContent')
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 })

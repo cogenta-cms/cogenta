@@ -5,7 +5,6 @@ import { type AgentSkillSummary, listAgentSkills } from '../api/agent-skills-cli
 import {
   type AgentHistoryEntry,
   type AgentIdentityFields,
-  type AgentRunSummary,
   type AgentSummary,
   type AgentTrace,
   getAgentIdentity,
@@ -13,7 +12,6 @@ import {
   listAgents,
   listAgentTraces,
   removeAgent,
-  runAgent,
   updateAgent,
 } from '../api/agents-client.js'
 import { ApiError } from '../api/client.js'
@@ -23,15 +21,15 @@ import {
   type ProviderCatalogEntry,
   type ProviderSummary,
 } from '../api/providers-client.js'
+import { AgentChatFeed } from '../assist/agent-chat-feed.js'
+import { useAgentConversation } from '../assist/use-agent-conversation.js'
 import { useAuth } from '../auth/auth-context.js'
+import { SettingsIcon } from '../ui/icons.js'
 import {
   Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
   Field,
   Input,
+  Modal,
   Notice,
   Select,
   Table,
@@ -68,6 +66,9 @@ interface EditState {
   readonly tokensPerDay: string
   readonly callsPerHour: string
 }
+
+/** Traces/history each show at most this many entries before "afficher tout" — a real site's tool-call log grows fast, and the chat feed's own per-turn "outils utilisés" already covers the common case. */
+const TECHNICAL_LOG_PAGE_SIZE = 8
 
 function emptyEdit(): EditState {
   return {
@@ -126,9 +127,10 @@ export function AgentDetailRoute(): JSX.Element {
   const [editModelChoice, setEditModelChoice] = useState(CUSTOM_MODEL)
   const [saving, setSaving] = useState(false)
 
-  const [instruction, setInstruction] = useState('')
-  const [running, setRunning] = useState(false)
-  const [runResult, setRunResult] = useState<AgentRunSummary | null>(null)
+  const conversation = useAgentConversation(token, name, t('agentChat.sendError'))
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showAllTraces, setShowAllTraces] = useState(false)
+  const [showAllHistory, setShowAllHistory] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -176,7 +178,8 @@ export function AgentDetailRoute(): JSX.Element {
     }
     setDetailLoading(true)
     setEditing(false)
-    setRunResult(null)
+    setShowAllTraces(false)
+    setShowAllHistory(false)
     void Promise.all([
       listAgentTraces(token, selectedAgent.name),
       listAgentHistory(token, selectedAgent.name),
@@ -284,23 +287,22 @@ export function AgentDetailRoute(): JSX.Element {
     }
   }
 
-  async function submitRun(agent: AgentSummary): Promise<void> {
-    if (token === null || instruction.trim().length === 0) return
-    setRunning(true)
-    setError(null)
-    setRunResult(null)
-    try {
-      setRunResult(await runAgent(token, agent.name, instruction.trim()))
-      await Promise.all([
-        listAgentTraces(token, agent.name).then(setTraces),
-        listAgentHistory(token, agent.name).then(setHistory),
-      ])
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agents.runError'))
-    } finally {
-      setRunning(false)
-    }
-  }
+  // The chat feed's own `useAgentConversation` runs the agent now — this
+  // just keeps the collapsed technical log (traces/history) in step with
+  // it, the same refresh `submitRun` used to do inline before the chat
+  // feed replaced it.
+  const turnCount = conversation.turns.length
+  useEffect(() => {
+    if (token === null || selectedAgent === null || turnCount === 0) return
+    void Promise.all([
+      listAgentTraces(token, selectedAgent.name).then(setTraces),
+      listAgentHistory(token, selectedAgent.name).then(setHistory),
+    ])
+    // `turnCount` (a number), not `conversation.turns` (a new array
+    // reference every load): using the array itself would refire this on
+    // every render the hook re-resolves the same thread to an equal-length
+    // array, which is harmless but pointless.
+  }, [turnCount, token, selectedAgent])
 
   if (!isAdmin) {
     return (
@@ -328,7 +330,7 @@ export function AgentDetailRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="agents-detail-heading" className="flex flex-col gap-6">
+    <section aria-labelledby="agents-detail-heading" className="flex h-full flex-col gap-3">
       <Link to="/agents">{t('agents.detailBack')}</Link>
 
       {error !== null && (
@@ -337,484 +339,508 @@ export function AgentDetailRoute(): JSX.Element {
         </Notice>
       )}
 
-      <Card aria-labelledby="agents-detail-heading">
-        <CardHeader>
-          <CardTitle>
-            <h1 id="agents-detail-heading">
-              {t('agents.detailHeading', { name: selectedAgent.name })}
-            </h1>
-          </CardTitle>
-        </CardHeader>
-        <CardBody>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {!editing && (
-              <Button size="sm" onClick={() => void startEditing(selectedAgent)}>
-                {t('agents.edit')}
-              </Button>
-            )}
-            {editing && (
-              <>
-                <Button size="sm" disabled={saving} onClick={() => void submitEdit(selectedAgent)}>
-                  {t('common.save')}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                  {t('common.cancel')}
-                </Button>
-              </>
-            )}
-            {!selectedAgent.builtin && (
+      <div className="flex items-center justify-between gap-2">
+        <h1
+          id="agents-detail-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
+          {t('agents.detailHeading', { name: selectedAgent.name })}
+        </h1>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setSettingsOpen(true)}
+          aria-label={t('agents.settings')}
+        >
+          <SettingsIcon className="size-4" aria-hidden="true" />
+          {t('agents.settings')}
+        </Button>
+      </div>
+
+      {/* Fiche feedback: clicking an agent used to land on a long
+          configuration page with the chat buried at the bottom. The chat is
+          now the page itself; every configuration field moved into the
+          "Réglages" modal above, opened on demand rather than always taking
+          the whole screen. */}
+      <div className="flex min-h-[28rem] flex-1 flex-col gap-2">
+        <AgentChatFeed
+          conversation={conversation}
+          disabled={!selectedAgent.enabled}
+          {...(selectedAgent.enabled ? {} : { disabledHint: t('agents.runDisabledHint') })}
+        />
+      </div>
+
+      {/* Raw tool-call/audit events — collapsed by default, and each list
+          truncated to its most recent entries with its own "afficher tout"
+          toggle (fiche feedback: "toujours trop [long]"), since a real site
+          quickly accumulates dozens of these and the chat feed above
+          already carries a per-turn "outils utilisés" summary for anyone
+          who just wants to know what the last message touched. */}
+      <details>
+        <summary className="cursor-pointer text-sm leading-5 font-semibold">
+          {t('agents.technicalLog')}
+        </summary>
+        <div className="mt-3 flex flex-col gap-6">
+          <div>
+            <h4 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
+              {t('agents.traces')}
+            </h4>
+            <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+              {(showAllTraces ? traces : traces.slice(0, TECHNICAL_LOG_PAGE_SIZE)).map((trace) => (
+                <li key={trace.id}>
+                  {trace.startedAt} — {trace.stopReason}
+                </li>
+              ))}
+              {traces.length === 0 && <li>{t('agents.noTraces')}</li>}
+            </ul>
+            {!showAllTraces && traces.length > TECHNICAL_LOG_PAGE_SIZE && (
               <Button
+                variant="ghost"
                 size="sm"
-                variant="destructive"
-                disabled={saving}
-                onClick={() => void submitRemove(selectedAgent)}
+                className="mt-1"
+                onClick={() => setShowAllTraces(true)}
               >
-                {t('agents.remove')}
+                {t('agents.showAll', { count: traces.length })}
               </Button>
             )}
           </div>
 
-          {detailLoading && <p>{t('common.loading')}</p>}
-
-          {!detailLoading && editing && (
-            <div className="flex flex-col gap-4">
-              <Field label={t('agents.identityRole')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    value={edit.role}
-                    onChange={(event) => setEdit({ ...edit, role: event.target.value })}
-                  />
-                )}
-              </Field>
-              <Field
-                label={t('agents.identityObjectives')}
-                description={t('agents.identityObjectivesHint')}
-              >
-                {(control) => (
-                  <textarea
-                    {...control}
-                    className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
-                    rows={3}
-                    value={edit.objectives}
-                    onChange={(event) => setEdit({ ...edit, objectives: event.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label={t('agents.identityStyle')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    value={edit.style}
-                    onChange={(event) => setEdit({ ...edit, style: event.target.value })}
-                  />
-                )}
-              </Field>
-              <Field
-                label={t('agents.identitySystemPrompt')}
-                description={t('agents.identitySystemPromptHint')}
-              >
-                {(control) => (
-                  <textarea
-                    {...control}
-                    className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
-                    rows={3}
-                    value={edit.systemPrompt}
-                    onChange={(event) => setEdit({ ...edit, systemPrompt: event.target.value })}
-                  />
-                )}
-              </Field>
-
-              <div className="flex flex-wrap gap-3">
-                <Field label={t('agents.createProvider')}>
-                  {(control) => (
-                    <Select
-                      {...control}
-                      value={edit.modelPreferred}
-                      onChange={(event) => {
-                        setEdit({ ...edit, modelPreferred: event.target.value })
-                        setEditModelChoice(CUSTOM_MODEL)
-                      }}
-                    >
-                      {/* The agent's currently configured provider is always shown, even if it was since disabled — otherwise saving would silently switch it. */}
-                      {!enabledProviders.some((p) => p.provider === edit.modelPreferred) &&
-                        edit.modelPreferred.length > 0 && (
-                          <option value={edit.modelPreferred}>{edit.modelPreferred}</option>
-                        )}
-                      {enabledProviders.map((provider) => (
-                        <option key={provider.provider} value={provider.provider}>
-                          {provider.provider}
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                </Field>
-                {(editCatalogEntry?.knownModels.length ?? 0) > 0 && (
-                  <Field label={t('providers.knownModel')}>
-                    {(control) => (
-                      <Select
-                        {...control}
-                        value={editModelChoice}
-                        onChange={(event) => selectEditKnownModel(event.target.value)}
-                      >
-                        <option value={CUSTOM_MODEL}>{t('providers.customModelOption')}</option>
-                        {(editCatalogEntry?.knownModels ?? []).map((modelId) => (
-                          <option key={modelId} value={modelId}>
-                            {modelId}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </Field>
-                )}
-                <Field label={t('agents.createModel')} description={t('agents.createModelHint')}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      value={edit.modelExplicit}
-                      onChange={(event) => {
-                        setEdit({ ...edit, modelExplicit: event.target.value })
-                        setEditModelChoice(CUSTOM_MODEL)
-                      }}
-                      placeholder={t('providers.modelPlaceholder')}
-                    />
-                  )}
-                </Field>
-                <Field label={t('agents.autonomy')}>
-                  {(control) => (
-                    <Select
-                      {...control}
-                      value={edit.autonomyUi}
-                      onChange={(event) =>
-                        setEdit({ ...edit, autonomyUi: event.target.value as AutonomyUiLevel })
-                      }
-                    >
-                      {AUTONOMY_UI_LEVELS.map((level) => (
-                        <option key={level} value={level}>
-                          {t(`agents.autonomyLevel.${level}`)}
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                </Field>
-                <Field label={t('agents.budgetMetricTokensPerDay')}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="number"
-                      min={0}
-                      value={edit.tokensPerDay}
-                      onChange={(event) => setEdit({ ...edit, tokensPerDay: event.target.value })}
-                    />
-                  )}
-                </Field>
-                <Field label={t('agents.budgetMetricCallsPerHour')}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="number"
-                      min={0}
-                      value={edit.callsPerHour}
-                      onChange={(event) => setEdit({ ...edit, callsPerHour: event.target.value })}
-                    />
-                  )}
-                </Field>
-              </div>
-
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
-                  {t('agents.permissions')}
-                </h3>
-                <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
-                  {CONTRACT_C_PERMISSIONS.map((permission) => {
-                    const inputId = `agent-edit-permission-${permission}`
-                    return (
-                      <li key={permission} className="flex items-center gap-2">
-                        <input
-                          id={inputId}
-                          type="checkbox"
-                          checked={edit.tools.includes(permission)}
-                          onChange={() =>
-                            setEdit({ ...edit, tools: toggleIn(edit.tools, permission) })
-                          }
-                        />
-                        <label htmlFor={inputId}>{permission}</label>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-
-              {skillOptions.length > 0 && (
-                <div>
-                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.skills')}</h3>
-                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                    {skillOptions.map((skill) => {
-                      const inputId = `agent-edit-skill-${skill.id}`
-                      return (
-                        <li key={skill.id} className="flex items-center gap-2">
-                          <input
-                            id={inputId}
-                            type="checkbox"
-                            checked={edit.skills.includes(skill.id)}
-                            onChange={() =>
-                              setEdit({ ...edit, skills: toggleIn(edit.skills, skill.id) })
-                            }
-                          />
-                          <label htmlFor={inputId}>{skill.name}</label>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </div>
+          <div>
+            <h4 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
+              {t('agents.history')}
+            </h4>
+            <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+              {(showAllHistory ? history : history.slice(0, TECHNICAL_LOG_PAGE_SIZE)).map(
+                (entry) => (
+                  <li key={entry.id}>
+                    {entry.at} — {entry.action}
+                  </li>
+                ),
               )}
+              {history.length === 0 && <li>{t('agents.noHistory')}</li>}
+            </ul>
+            {!showAllHistory && history.length > TECHNICAL_LOG_PAGE_SIZE && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-1"
+                onClick={() => setShowAllHistory(true)}
+              >
+                {t('agents.showAll', { count: history.length })}
+              </Button>
+            )}
+          </div>
+        </div>
+      </details>
 
-              {otherAgentNames.length > 0 && (
-                <div>
-                  <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
-                    {t('agents.subagents')}
-                  </h3>
-                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                    {otherAgentNames.map((otherName) => {
-                      const inputId = `agent-edit-subagent-${otherName}`
-                      return (
-                        <li key={otherName} className="flex items-center gap-2">
-                          <input
-                            id={inputId}
-                            type="checkbox"
-                            checked={edit.subagents.includes(otherName)}
-                            onChange={() =>
-                              setEdit({ ...edit, subagents: toggleIn(edit.subagents, otherName) })
-                            }
-                          />
-                          <label htmlFor={inputId}>{otherName}</label>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
+      <Modal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        title={t('agents.settingsTitle', { name: selectedAgent.name })}
+        closeLabel={t('agents.settingsClose')}
+      >
+        <div className="flex flex-wrap gap-2">
+          {!editing && (
+            <Button size="sm" onClick={() => void startEditing(selectedAgent)}>
+              {t('agents.edit')}
+            </Button>
           )}
+          {editing && (
+            <>
+              <Button size="sm" disabled={saving} onClick={() => void submitEdit(selectedAgent)}>
+                {t('common.save')}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                {t('common.cancel')}
+              </Button>
+            </>
+          )}
+          {!selectedAgent.builtin && (
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={saving}
+              onClick={() => void submitRemove(selectedAgent)}
+            >
+              {t('agents.remove')}
+            </Button>
+          )}
+        </div>
 
-          {!detailLoading && !editing && (
-            <div className="flex flex-col gap-6">
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
-                  {t('agents.identityHeading')}
-                </h3>
-                {identity === null ? (
-                  <p className="m-0 text-sm">{t('common.loading')}</p>
-                ) : (
-                  <div className="flex flex-col gap-2 text-sm">
-                    <p className="m-0">{identity.role}</p>
-                    {identity.objectives.length > 0 && (
-                      <ul className="m-0 list-disc pl-5">
-                        {identity.objectives.map((objective) => (
-                          <li key={objective}>{objective}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {identity.style !== undefined && (
-                      <p className="m-0 opacity-80">
-                        {t('agents.identityStyle')}: {identity.style}
-                      </p>
-                    )}
-                    {identity.systemPrompt !== undefined && (
-                      <div>
-                        <p className="m-0 font-medium">{t('agents.identitySystemPrompt')}</p>
-                        <p className="m-0 whitespace-pre-wrap opacity-80">
-                          {identity.systemPrompt}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+        {detailLoading && <p>{t('common.loading')}</p>}
+
+        {!detailLoading && editing && (
+          <div className="flex flex-col gap-4">
+            <Field label={t('agents.identityRole')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  value={edit.role}
+                  onChange={(event) => setEdit({ ...edit, role: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('agents.identityObjectives')}
+              description={t('agents.identityObjectivesHint')}
+            >
+              {(control) => (
+                <textarea
+                  {...control}
+                  className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
+                  rows={3}
+                  value={edit.objectives}
+                  onChange={(event) => setEdit({ ...edit, objectives: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field label={t('agents.identityStyle')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  value={edit.style}
+                  onChange={(event) => setEdit({ ...edit, style: event.target.value })}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('agents.identitySystemPrompt')}
+              description={t('agents.identitySystemPromptHint')}
+            >
+              {(control) => (
+                <textarea
+                  {...control}
+                  className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
+                  rows={3}
+                  value={edit.systemPrompt}
+                  onChange={(event) => setEdit({ ...edit, systemPrompt: event.target.value })}
+                />
+              )}
+            </Field>
+
+            <div className="flex flex-wrap gap-3">
+              <Field label={t('agents.createProvider')}>
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={edit.modelPreferred}
+                    onChange={(event) => {
+                      setEdit({ ...edit, modelPreferred: event.target.value })
+                      setEditModelChoice(CUSTOM_MODEL)
+                    }}
+                  >
+                    {/* The agent's currently configured provider is always shown, even if it was since disabled — otherwise saving would silently switch it. */}
+                    {!enabledProviders.some((p) => p.provider === edit.modelPreferred) &&
+                      edit.modelPreferred.length > 0 && (
+                        <option value={edit.modelPreferred}>{edit.modelPreferred}</option>
+                      )}
+                    {enabledProviders.map((provider) => (
+                      <option key={provider.provider} value={provider.provider}>
+                        {provider.provider}
+                      </option>
+                    ))}
+                  </Select>
                 )}
-              </div>
-
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.model')}</h3>
-                {selectedAgent.model === undefined ? (
-                  <p className="m-0 text-sm">{t('agents.modelNone')}</p>
-                ) : (
-                  <p className="m-0 text-sm">
-                    {t('agents.modelPreferred', { model: selectedAgent.model.preferred })}
-                    {selectedAgent.model.fallback !== undefined &&
-                      ` — ${t('agents.modelFallback', { model: selectedAgent.model.fallback })}`}
-                    {selectedAgent.model.model !== undefined &&
-                      ` — ${t('agents.modelExplicit', { model: selectedAgent.model.model })}`}
-                  </p>
+              </Field>
+              {(editCatalogEntry?.knownModels.length ?? 0) > 0 && (
+                <Field label={t('providers.knownModel')}>
+                  {(control) => (
+                    <Select
+                      {...control}
+                      value={editModelChoice}
+                      onChange={(event) => selectEditKnownModel(event.target.value)}
+                    >
+                      <option value={CUSTOM_MODEL}>{t('providers.customModelOption')}</option>
+                      {(editCatalogEntry?.knownModels ?? []).map((modelId) => (
+                        <option key={modelId} value={modelId}>
+                          {modelId}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
+              <Field label={t('agents.createModel')} description={t('agents.createModelHint')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={edit.modelExplicit}
+                    onChange={(event) => {
+                      setEdit({ ...edit, modelExplicit: event.target.value })
+                      setEditModelChoice(CUSTOM_MODEL)
+                    }}
+                    placeholder={t('providers.modelPlaceholder')}
+                  />
                 )}
-              </div>
+              </Field>
+              <Field label={t('agents.autonomy')}>
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={edit.autonomyUi}
+                    onChange={(event) =>
+                      setEdit({ ...edit, autonomyUi: event.target.value as AutonomyUiLevel })
+                    }
+                  >
+                    {AUTONOMY_UI_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {t(`agents.autonomyLevel.${level}`)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Field label={t('agents.budgetMetricTokensPerDay')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="number"
+                    min={0}
+                    value={edit.tokensPerDay}
+                    onChange={(event) => setEdit({ ...edit, tokensPerDay: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={t('agents.budgetMetricCallsPerHour')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="number"
+                    min={0}
+                    value={edit.callsPerHour}
+                    onChange={(event) => setEdit({ ...edit, callsPerHour: event.target.value })}
+                  />
+                )}
+              </Field>
+            </div>
 
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.autonomy')}</h3>
-                <p className="m-0 text-sm">
-                  {t('agents.autonomyDefault', {
-                    level: t(
-                      `agents.autonomyLevel.${LEVEL_TO_UI[selectedAgent.autonomy?.default ?? ''] ?? 'co-pilot'}`,
-                    ),
-                  })}
-                </p>
-              </div>
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                {t('agents.permissions')}
+              </h3>
+              <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
+                {CONTRACT_C_PERMISSIONS.map((permission) => {
+                  const inputId = `agent-edit-permission-${permission}`
+                  return (
+                    <li key={permission} className="flex items-center gap-2">
+                      <input
+                        id={inputId}
+                        type="checkbox"
+                        checked={edit.tools.includes(permission)}
+                        onChange={() =>
+                          setEdit({ ...edit, tools: toggleIn(edit.tools, permission) })
+                        }
+                      />
+                      <label htmlFor={inputId}>{permission}</label>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
 
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
-                  {t('agents.budgetDetail')}
-                </h3>
-                <TableRoot label={t('agents.budgetDetail')}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableHeader>{t('agents.budgetMetric')}</TableHeader>
-                        <TableHeader>{t('agents.budgetLimit')}</TableHeader>
-                        <TableHeader>{t('agents.budgetUsage')}</TableHeader>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>{t('agents.budgetMetricTokensPerDay')}</TableCell>
-                        <TableCell>
-                          {selectedAgent.budget?.tokensPerDay ?? t('agents.budgetNoLimit')}
-                        </TableCell>
-                        <TableCell>{selectedAgent.usage?.tokensToday ?? 0}</TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>{t('agents.budgetMetricEurPerMonth')}</TableCell>
-                        <TableCell>
-                          {selectedAgent.budget?.eurPerMonth ?? t('agents.budgetNoLimit')}
-                        </TableCell>
-                        <TableCell>{selectedAgent.usage?.eurThisMonth ?? 0}</TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>{t('agents.budgetMetricCallsPerHour')}</TableCell>
-                        <TableCell>
-                          {selectedAgent.budget?.callsPerHour ?? t('agents.budgetNoLimit')}
-                        </TableCell>
-                        <TableCell>{selectedAgent.usage?.callsThisHour ?? 0}</TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </TableRoot>
-              </div>
-
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
-                  {t('agents.permissions')}
-                </h3>
-                <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
-                  {CONTRACT_C_PERMISSIONS.map((permission) => {
-                    const granted = selectedAgent.tools.includes(permission)
-                    const inputId = `agent-permission-${selectedAgent.name}-${permission}`
-                    return (
-                      <li key={permission} className="flex items-center gap-2">
-                        <input
-                          id={inputId}
-                          type="checkbox"
-                          checked={granted}
-                          disabled
-                          readOnly
-                          aria-readonly="true"
-                        />
-                        <label htmlFor={inputId}>{permission}</label>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-
+            {skillOptions.length > 0 && (
               <div>
                 <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.skills')}</h3>
                 <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                  {(selectedAgent.skills ?? []).map((skillId) => (
-                    <li key={skillId}>
-                      {skillOptions.find((skill) => skill.id === skillId)?.name ?? skillId}
-                    </li>
-                  ))}
-                  {(selectedAgent.skills === undefined || selectedAgent.skills.length === 0) && (
-                    <li>{t('agents.noSkills')}</li>
-                  )}
+                  {skillOptions.map((skill) => {
+                    const inputId = `agent-edit-skill-${skill.id}`
+                    return (
+                      <li key={skill.id} className="flex items-center gap-2">
+                        <input
+                          id={inputId}
+                          type="checkbox"
+                          checked={edit.skills.includes(skill.id)}
+                          onChange={() =>
+                            setEdit({ ...edit, skills: toggleIn(edit.skills, skill.id) })
+                          }
+                        />
+                        <label htmlFor={inputId}>{skill.name}</label>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
+            )}
 
+            {otherAgentNames.length > 0 && (
               <div>
                 <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
                   {t('agents.subagents')}
                 </h3>
                 <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                  {(selectedAgent.subagents ?? []).map((subagent) => (
-                    <li key={subagent}>{subagent}</li>
-                  ))}
-                  {(selectedAgent.subagents === undefined ||
-                    selectedAgent.subagents.length === 0) && <li>{t('agents.noSubagents')}</li>}
+                  {otherAgentNames.map((otherName) => {
+                    const inputId = `agent-edit-subagent-${otherName}`
+                    return (
+                      <li key={otherName} className="flex items-center gap-2">
+                        <input
+                          id={inputId}
+                          type="checkbox"
+                          checked={edit.subagents.includes(otherName)}
+                          onChange={() =>
+                            setEdit({ ...edit, subagents: toggleIn(edit.subagents, otherName) })
+                          }
+                        />
+                        <label htmlFor={inputId}>{otherName}</label>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
+            )}
+          </div>
+        )}
 
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.runNow')}</h3>
-                <div className="flex flex-col gap-2">
-                  <textarea
-                    className="w-full rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
-                    rows={2}
-                    placeholder={t('agents.runInstructionPlaceholder')}
-                    value={instruction}
-                    onChange={(event) => setInstruction(event.target.value)}
-                    disabled={!selectedAgent.enabled}
-                  />
-                  <div>
-                    <Button
-                      size="sm"
-                      disabled={
-                        running || instruction.trim().length === 0 || !selectedAgent.enabled
-                      }
-                      onClick={() => void submitRun(selectedAgent)}
-                    >
-                      {running ? t('agents.running') : t('agents.run')}
-                    </Button>
-                  </div>
-                  {!selectedAgent.enabled && (
-                    <p className="m-0 text-xs opacity-80">{t('agents.runDisabledHint')}</p>
+        {!detailLoading && !editing && (
+          <div className="flex flex-col gap-6">
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                {t('agents.identityHeading')}
+              </h3>
+              {identity === null ? (
+                <p className="m-0 text-sm">{t('common.loading')}</p>
+              ) : (
+                <div className="flex flex-col gap-2 text-sm">
+                  <p className="m-0">{identity.role}</p>
+                  {identity.objectives.length > 0 && (
+                    <ul className="m-0 list-disc pl-5">
+                      {identity.objectives.map((objective) => (
+                        <li key={objective}>{objective}</li>
+                      ))}
+                    </ul>
                   )}
-                  {runResult !== null && (
-                    <Notice tone="info" live="polite">
-                      <p className="m-0 text-sm">
-                        {t('agents.runStopReason', { reason: runResult.stopReason })}
-                      </p>
-                      {runResult.finalText !== null && (
-                        <p className="m-0 mt-1 text-sm">{runResult.finalText}</p>
-                      )}
-                    </Notice>
+                  {identity.style !== undefined && (
+                    <p className="m-0 opacity-80">
+                      {t('agents.identityStyle')}: {identity.style}
+                    </p>
+                  )}
+                  {identity.systemPrompt !== undefined && (
+                    <div>
+                      <p className="m-0 font-medium">{t('agents.identitySystemPrompt')}</p>
+                      <p className="m-0 whitespace-pre-wrap opacity-80">{identity.systemPrompt}</p>
+                    </div>
                   )}
                 </div>
-              </div>
-
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.traces')}</h3>
-                <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                  {traces.map((trace) => (
-                    <li key={trace.id}>
-                      {trace.startedAt} — {trace.stopReason}
-                    </li>
-                  ))}
-                  {traces.length === 0 && <li>{t('agents.noTraces')}</li>}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.history')}</h3>
-                <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-                  {history.map((entry) => (
-                    <li key={entry.id}>
-                      {entry.at} — {entry.action}
-                    </li>
-                  ))}
-                  {history.length === 0 && <li>{t('agents.noHistory')}</li>}
-                </ul>
-              </div>
+              )}
             </div>
-          )}
-        </CardBody>
-      </Card>
+
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.model')}</h3>
+              {selectedAgent.model === undefined ? (
+                <p className="m-0 text-sm">{t('agents.modelNone')}</p>
+              ) : (
+                <p className="m-0 text-sm">
+                  {t('agents.modelPreferred', { model: selectedAgent.model.preferred })}
+                  {selectedAgent.model.fallback !== undefined &&
+                    ` — ${t('agents.modelFallback', { model: selectedAgent.model.fallback })}`}
+                  {selectedAgent.model.model !== undefined &&
+                    ` — ${t('agents.modelExplicit', { model: selectedAgent.model.model })}`}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.autonomy')}</h3>
+              <p className="m-0 text-sm">
+                {t('agents.autonomyDefault', {
+                  level: t(
+                    `agents.autonomyLevel.${LEVEL_TO_UI[selectedAgent.autonomy?.default ?? ''] ?? 'co-pilot'}`,
+                  ),
+                })}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                {t('agents.budgetDetail')}
+              </h3>
+              <TableRoot label={t('agents.budgetDetail')}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>{t('agents.budgetMetric')}</TableHeader>
+                      <TableHeader>{t('agents.budgetLimit')}</TableHeader>
+                      <TableHeader>{t('agents.budgetUsage')}</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>{t('agents.budgetMetricTokensPerDay')}</TableCell>
+                      <TableCell>
+                        {selectedAgent.budget?.tokensPerDay ?? t('agents.budgetNoLimit')}
+                      </TableCell>
+                      <TableCell>{selectedAgent.usage?.tokensToday ?? 0}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>{t('agents.budgetMetricEurPerMonth')}</TableCell>
+                      <TableCell>
+                        {selectedAgent.budget?.eurPerMonth ?? t('agents.budgetNoLimit')}
+                      </TableCell>
+                      <TableCell>{selectedAgent.usage?.eurThisMonth ?? 0}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>{t('agents.budgetMetricCallsPerHour')}</TableCell>
+                      <TableCell>
+                        {selectedAgent.budget?.callsPerHour ?? t('agents.budgetNoLimit')}
+                      </TableCell>
+                      <TableCell>{selectedAgent.usage?.callsThisHour ?? 0}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableRoot>
+            </div>
+
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">
+                {t('agents.permissions')}
+              </h3>
+              <ul className="m-0 grid list-none grid-cols-2 gap-1 p-0 text-sm sm:grid-cols-3">
+                {CONTRACT_C_PERMISSIONS.map((permission) => {
+                  const granted = selectedAgent.tools.includes(permission)
+                  const inputId = `agent-permission-${selectedAgent.name}-${permission}`
+                  return (
+                    <li key={permission} className="flex items-center gap-2">
+                      <input
+                        id={inputId}
+                        type="checkbox"
+                        checked={granted}
+                        disabled
+                        readOnly
+                        aria-readonly="true"
+                      />
+                      <label htmlFor={inputId}>{permission}</label>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.skills')}</h3>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                {(selectedAgent.skills ?? []).map((skillId) => (
+                  <li key={skillId}>
+                    {skillOptions.find((skill) => skill.id === skillId)?.name ?? skillId}
+                  </li>
+                ))}
+                {(selectedAgent.skills === undefined || selectedAgent.skills.length === 0) && (
+                  <li>{t('agents.noSkills')}</li>
+                )}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="m-0 mb-2 text-sm leading-5 font-semibold">{t('agents.subagents')}</h3>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                {(selectedAgent.subagents ?? []).map((subagent) => (
+                  <li key={subagent}>{subagent}</li>
+                ))}
+                {(selectedAgent.subagents === undefined ||
+                  selectedAgent.subagents.length === 0) && <li>{t('agents.noSubagents')}</li>}
+              </ul>
+            </div>
+          </div>
+        )}
+      </Modal>
     </section>
   )
 }

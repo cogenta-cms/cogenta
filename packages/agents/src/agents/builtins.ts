@@ -63,6 +63,12 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
         // posts. Same permission as `content.read`, read-only.
         'content.collections',
         'content.list',
+        // `content.schema` — the missing half of the browse pair: without it
+        // the superagent could see *that* a collection or entry exists, but
+        // never *what fields* it takes, and a live run asked "peux-tu
+        // générer un template ?" answered by asking the human to specify
+        // every field itself. Same permission as `content.read`, read-only.
+        'content.schema',
         'content.write_draft',
         'content.publish',
         'content.delete',
@@ -150,14 +156,14 @@ export async function ensureBuiltinAgents(store: AgentDeclarationStore): Promise
 }
 
 /**
- * The one exception to "never touch an existing seed": `content.collections`
- * and `content.list` are the read-only half of `content.read` (same
- * permission, added after the superagent first shipped), so a built-in that
- * already holds `content.read` gains nothing it could not already do — it
- * only stops having to guess entry ids. An operator who removed
- * `content.read` on purpose is left alone.
+ * The one exception to "never touch an existing seed": `content.collections`,
+ * `content.list` and `content.schema` are all read-only, all under
+ * `content.read` (same permission, each added after the superagent first
+ * shipped), so a built-in that already holds `content.read` gains nothing it
+ * could not already do — it only stops having to guess entry ids or field
+ * shapes. An operator who removed `content.read` on purpose is left alone.
  */
-const CONTENT_BROWSE_TOOLS = ['content.collections', 'content.list'] as const
+const CONTENT_BROWSE_TOOLS = ['content.collections', 'content.list', 'content.schema'] as const
 
 async function grantContentBrowse(
   store: AgentDeclarationStore,

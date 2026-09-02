@@ -1119,6 +1119,13 @@ export function installMockFetch(
   > = {
     security: { role: 'Scans dependencies for known CVEs.', objectives: ['Report findings.'] },
   }
+  interface MockConversationTurn {
+    role: 'user' | 'assistant'
+    content: string
+    createdAt: string
+    toolCalls?: { name: string; input: Record<string, unknown> }[]
+  }
+  const mockAgentConversations: Record<string, MockConversationTurn[]> = {}
   // Kept in sync with `mockAgents.security.enabled` for the pre-existing
   // enable/disable tests, which read `securityAgentEnabled` directly.
   const syncSecurityEnabled = (): void => {
@@ -4522,7 +4529,9 @@ export function installMockFetch(
         }
         syncSecurityEnabled()
         const agentMatch =
-          /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history|identity|run))?/u.exec(url)
+          /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history|identity|run|conversation))?(?:\/(messages))?/u.exec(
+            url,
+          )
         if (agentMatch === null) {
           if (method === 'GET') {
             return json(200, {
@@ -4561,7 +4570,7 @@ export function installMockFetch(
             })
           }
         }
-        const [, name, action] = agentMatch ?? []
+        const [, name, action, subAction] = agentMatch ?? []
         if (name !== undefined && mockAgents[name] === undefined && action !== undefined) {
           return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
         }
@@ -4631,6 +4640,41 @@ export function installMockFetch(
               usage: { inputTokens: 10, outputTokens: 5 },
             },
           })
+        }
+        if (action === 'conversation' && name !== undefined) {
+          if (mockAgentConversations[name] === undefined) mockAgentConversations[name] = []
+          const turns = mockAgentConversations[name]
+          if (subAction === 'messages' && method === 'POST') {
+            const body = JSON.parse(String(init?.body ?? '{}')) as { message?: string }
+            const message = body.message ?? ''
+            const createdAt = new Date().toISOString()
+            const userTurn: MockConversationTurn = { role: 'user', content: message, createdAt }
+            const assistantTurn: MockConversationTurn = {
+              role: 'assistant',
+              content: `Mock reply to: ${message}`,
+              createdAt,
+            }
+            turns.push(userTurn, assistantTurn)
+            return json(200, {
+              data: {
+                turns,
+                run: {
+                  agent: name,
+                  stopReason: 'end_turn',
+                  finalText: assistantTurn.content,
+                  steps: 1,
+                  usage: { inputTokens: 10, outputTokens: 5 },
+                },
+              },
+            })
+          }
+          if (subAction === undefined && method === 'GET') {
+            return json(200, { data: { turns } })
+          }
+          if (subAction === undefined && method === 'DELETE') {
+            mockAgentConversations[name] = []
+            return json(200, { data: { cleared: true } })
+          }
         }
         if (action === 'traces' && method === 'GET') {
           return json(200, {

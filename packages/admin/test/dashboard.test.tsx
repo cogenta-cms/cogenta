@@ -371,4 +371,68 @@ describe('dashboard', () => {
       .closest('li') as HTMLLIElement
     expect(hiddenRow.querySelector('svg')).not.toBeNull()
   })
+
+  it('collapsing a widget on the dashboard hides its body but keeps it in place, and remembers that across a reload', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    const { unmount } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // The backups widget's body is a single, always-present paragraph — a
+    // simple, stable marker for "is the content showing".
+    await screen.findByRole('heading', { name: 'État des sauvegardes' })
+    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+
+    const collapseButton = screen.getByRole('button', { name: 'Réduire État des sauvegardes' })
+    expect(collapseButton.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(collapseButton)
+
+    // The card and its heading stay on the dashboard, in place — only the
+    // body content is gone, unlike removing a widget entirely.
+    expect(screen.getByRole('heading', { name: 'État des sauvegardes' })).toBeDefined()
+    expect(screen.queryByText(/uniquement en ligne de commande/u)).toBeNull()
+    const expandButton = screen.getByRole('button', { name: 'Déplier État des sauvegardes' })
+    expect(expandButton.getAttribute('aria-expanded')).toBe('false')
+
+    // Persisted the same way order/hidden already are — a reload keeps it collapsed.
+    unmount()
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    await screen.findByRole('heading', { name: 'État des sauvegardes' })
+    expect(screen.queryByText(/uniquement en ligne de commande/u)).toBeNull()
+
+    // Expanding it again shows the content back.
+    fireEvent.click(screen.getByRole('button', { name: 'Déplier État des sauvegardes' }))
+    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+  })
+
+  it('a reset button in the settings panel restores the default order, visibility and collapse state', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    // Collapse a widget and remove another, both away from the shipped defaults.
+    await screen.findByRole('heading', { name: 'État des sauvegardes' })
+    fireEvent.click(screen.getByRole('button', { name: 'Réduire État des sauvegardes' }))
+    expect(screen.queryByText(/uniquement en ligne de commande/u)).toBeNull()
+
+    openDashboardSettings()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retirer Résumé du contenu du tableau de bord' }),
+    )
+    expect(screen.queryByRole('heading', { name: 'Résumé du contenu', hidden: true })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Réinitialiser la disposition' }))
+
+    // Removed widget is back, and the collapsed one is expanded again.
+    expect(
+      await screen.findByRole('heading', { name: 'Résumé du contenu', hidden: true }),
+    ).toBeDefined()
+    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+  })
 })

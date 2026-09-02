@@ -31,10 +31,16 @@ export interface DashboardPrefs {
   readonly order: readonly DashboardWidgetId[]
   /** The subset of `order` that is hidden. */
   readonly hidden: ReadonlySet<DashboardWidgetId>
+  /**
+   * The subset of `order` whose card stays on the dashboard, in place, but
+   * with its body content collapsed — distinct from `hidden`, which removes
+   * a widget from the dashboard entirely.
+   */
+  readonly collapsed: ReadonlySet<DashboardWidgetId>
 }
 
 function defaults(): DashboardPrefs {
-  return { order: DASHBOARD_WIDGET_IDS, hidden: new Set() }
+  return { order: DASHBOARD_WIDGET_IDS, hidden: new Set(), collapsed: new Set() }
 }
 
 function isWidgetId(value: unknown): value is DashboardWidgetId {
@@ -62,14 +68,17 @@ export function loadDashboardPrefs(): DashboardPrefs {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null) return defaults()
-    const record = parsed as { order?: unknown; hidden?: unknown }
+    const record = parsed as { order?: unknown; hidden?: unknown; collapsed?: unknown }
 
     const storedOrder = Array.isArray(record.order) ? record.order.filter(isWidgetId) : []
     const missing = DASHBOARD_WIDGET_IDS.filter((id) => !storedOrder.includes(id))
     const order = [...storedOrder, ...missing]
 
     const storedHidden = Array.isArray(record.hidden) ? record.hidden.filter(isWidgetId) : []
-    return { order, hidden: new Set(storedHidden) }
+    const storedCollapsed = Array.isArray(record.collapsed)
+      ? record.collapsed.filter(isWidgetId)
+      : []
+    return { order, hidden: new Set(storedHidden), collapsed: new Set(storedCollapsed) }
   } catch {
     return defaults()
   }
@@ -79,7 +88,11 @@ export function saveDashboardPrefs(prefs: DashboardPrefs): void {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ order: prefs.order, hidden: [...prefs.hidden] }),
+      JSON.stringify({
+        order: prefs.order,
+        hidden: [...prefs.hidden],
+        collapsed: [...prefs.collapsed],
+      }),
     )
   } catch {
     // Storage denied: the reordering still applies to this render, it just

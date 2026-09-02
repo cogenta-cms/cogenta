@@ -13,46 +13,73 @@ describe('dashboard widget preferences (fiche 22 tâche 3)', () => {
     localStorage.clear()
   })
 
-  it('starts with every widget visible, in the shipped order', () => {
+  it('starts with every widget visible and expanded, in the shipped order', () => {
     const prefs = loadDashboardPrefs()
     expect(prefs.order).toEqual(DASHBOARD_WIDGET_IDS)
     expect(prefs.hidden.size).toBe(0)
+    expect(prefs.collapsed.size).toBe(0)
   })
 
-  it('remembers a saved order and hidden set', () => {
-    saveDashboardPrefs({ order: [...DASHBOARD_WIDGET_IDS].reverse(), hidden: new Set(['health']) })
+  it('remembers a saved order, hidden set and collapsed set', () => {
+    saveDashboardPrefs({
+      order: [...DASHBOARD_WIDGET_IDS].reverse(),
+      hidden: new Set(['health']),
+      collapsed: new Set(['activity']),
+    })
     const prefs = loadDashboardPrefs()
     expect(prefs.order).toEqual([...DASHBOARD_WIDGET_IDS].reverse())
     expect(prefs.hidden.has('health')).toBe(true)
+    expect(prefs.collapsed.has('activity')).toBe(true)
   })
 
-  it('drops a widget id this version no longer knows about', () => {
+  it('drops a widget id this version no longer knows about, from order, hidden and collapsed alike', () => {
     localStorage.setItem(
       'cogenta.dashboard.widgets.v1',
-      JSON.stringify({ order: [...DASHBOARD_WIDGET_IDS, 'retired-widget'], hidden: [] }),
+      JSON.stringify({
+        order: [...DASHBOARD_WIDGET_IDS, 'retired-widget'],
+        hidden: [],
+        collapsed: ['retired-widget'],
+      }),
     )
     const prefs = loadDashboardPrefs()
     expect(prefs.order).not.toContain('retired-widget')
     expect(prefs.order).toHaveLength(DASHBOARD_WIDGET_IDS.length)
+    expect(prefs.collapsed.size).toBe(0)
   })
 
-  it('appends a widget id this version added since the preference was saved, visible by default', () => {
+  it('appends a widget id this version added since the preference was saved, visible and expanded by default', () => {
     const partial = DASHBOARD_WIDGET_IDS.slice(0, 3)
     localStorage.setItem(
       'cogenta.dashboard.widgets.v1',
-      JSON.stringify({ order: partial, hidden: [] }),
+      JSON.stringify({ order: partial, hidden: [], collapsed: [] }),
     )
     const prefs = loadDashboardPrefs()
     expect(prefs.order).toHaveLength(DASHBOARD_WIDGET_IDS.length)
     for (const id of DASHBOARD_WIDGET_IDS) expect(prefs.order).toContain(id)
     expect(prefs.hidden.size).toBe(0)
+    expect(prefs.collapsed.size).toBe(0)
+  })
+
+  it('reads a stored preference written before collapse existed, defaulting to nothing collapsed', () => {
+    localStorage.setItem(
+      'cogenta.dashboard.widgets.v1',
+      JSON.stringify({ order: DASHBOARD_WIDGET_IDS, hidden: ['backups'] }),
+    )
+    const prefs = loadDashboardPrefs()
+    expect(prefs.hidden.has('backups')).toBe(true)
+    expect(prefs.collapsed.size).toBe(0)
   })
 
   it('resets to the shipped defaults, clearing storage', () => {
-    saveDashboardPrefs({ order: [...DASHBOARD_WIDGET_IDS].reverse(), hidden: new Set(['health']) })
+    saveDashboardPrefs({
+      order: [...DASHBOARD_WIDGET_IDS].reverse(),
+      hidden: new Set(['health']),
+      collapsed: new Set(['activity']),
+    })
     const reset = resetDashboardPrefs()
     expect(reset.order).toEqual(DASHBOARD_WIDGET_IDS)
     expect(reset.hidden.size).toBe(0)
+    expect(reset.collapsed.size).toBe(0)
     expect(loadDashboardPrefs().order).toEqual(DASHBOARD_WIDGET_IDS)
   })
 
@@ -73,7 +100,11 @@ describe('dashboard widget preferences (fiche 22 tâche 3)', () => {
     })
     try {
       expect(() =>
-        saveDashboardPrefs({ order: DASHBOARD_WIDGET_IDS, hidden: new Set() }),
+        saveDashboardPrefs({
+          order: DASHBOARD_WIDGET_IDS,
+          hidden: new Set(),
+          collapsed: new Set(),
+        }),
       ).not.toThrow()
     } finally {
       spy.mockRestore()

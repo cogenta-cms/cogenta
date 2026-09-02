@@ -27,6 +27,8 @@ import type { CollectionSummary, SchemaField } from '../schema/types.js'
 import {
   AuditIcon,
   BackupIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   ClockIcon,
   CloseIcon,
   CollectionsIcon,
@@ -439,7 +441,25 @@ export function DashboardRoute(): JSX.Element {
       const hidden = new Set(current.hidden)
       if (hidden.has(id)) hidden.delete(id)
       else hidden.add(id)
-      const next = { order: current.order, hidden }
+      const next = { order: current.order, hidden, collapsed: current.collapsed }
+      saveDashboardPrefs(next)
+      return next
+    })
+  }
+
+  /**
+   * Collapses/expands a widget's body content in place — the card stays on
+   * the dashboard, at its position, only its content is hidden. Distinct
+   * from `toggleHidden`, which removes the widget from the dashboard
+   * entirely. Same persistence mechanism (`dashboard-prefs.ts`,
+   * `localStorage`), no second storage.
+   */
+  function toggleCollapsed(id: DashboardWidgetId): void {
+    setPrefs((current) => {
+      const collapsed = new Set(current.collapsed)
+      if (collapsed.has(id)) collapsed.delete(id)
+      else collapsed.add(id)
+      const next = { order: current.order, hidden: current.hidden, collapsed }
       saveDashboardPrefs(next)
       return next
     })
@@ -466,7 +486,7 @@ export function DashboardRoute(): JSX.Element {
         direction === 'up'
           ? reorderWidget(current.order, id, neighbour)
           : reorderWidget(current.order, neighbour, id)
-      const next = { order, hidden: current.hidden }
+      const next = { order, hidden: current.hidden, collapsed: current.collapsed }
       saveDashboardPrefs(next)
       return next
     })
@@ -474,7 +494,11 @@ export function DashboardRoute(): JSX.Element {
 
   function dropBefore(id: DashboardWidgetId, beforeId: DashboardWidgetId): void {
     setPrefs((current) => {
-      const next = { order: reorderWidget(current.order, id, beforeId), hidden: current.hidden }
+      const next = {
+        order: reorderWidget(current.order, id, beforeId),
+        hidden: current.hidden,
+        collapsed: current.collapsed,
+      }
       saveDashboardPrefs(next)
       return next
     })
@@ -517,6 +541,36 @@ export function DashboardRoute(): JSX.Element {
     }
   }
 
+  /**
+   * The collapse/expand toggle placed in every widget card's own `<h2>`
+   * header, right of the heading text (`ml-auto` pushes it to the far
+   * right of the flex header). A chevron, rotating between "pointing down"
+   * (expanded) and "pointing right" (collapsed) — the same convention
+   * `ChevronDownIcon`/`ChevronRightIcon` already serve elsewhere in this
+   * admin. `aria-expanded` and a name naming the specific widget mirror how
+   * `removeWidget`/`addWidget` already name theirs.
+   */
+  function collapseToggle(id: DashboardWidgetId): JSX.Element {
+    const isCollapsed = prefs.collapsed.has(id)
+    return (
+      <button
+        type="button"
+        onClick={() => toggleCollapsed(id)}
+        aria-expanded={!isCollapsed}
+        aria-label={t(isCollapsed ? 'dashboard.expandWidget' : 'dashboard.collapseWidget', {
+          name: t(`dashboard.widgetName.${id}`),
+        })}
+        className="ml-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {isCollapsed ? (
+          <ChevronRightIcon className="size-4" />
+        ) : (
+          <ChevronDownIcon className="size-4" />
+        )}
+      </button>
+    )
+  }
+
   // ---------------------------------------------------------------- widgets
 
   function renderSummary(): JSX.Element {
@@ -528,66 +582,71 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-summary-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={PulseIcon} />
           {t('dashboard.summaryHeading')}
+          {collapseToggle('summary')}
         </h2>
-        {summaryError !== null && (
-          <p role="alert" className="m-0 text-sm font-medium text-destructive">
-            {summaryError}
-          </p>
-        )}
-        {summaryError === null && summary === null && (
-          <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
-        )}
-        {summaryError === null && summary !== null && summary.length === 0 && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.summaryEmpty')}</p>
-        )}
-        {summary !== null && summary.length > 0 && (
-          <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-            {summary.map((row) => (
-              <li
-                key={row.collection}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5 text-sm last:border-b-0 last:pb-0"
-              >
-                <Link
-                  to={`/collections/${encodeURIComponent(row.collection)}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {labelFor(row.collection)}
-                </Link>
-                <span className="flex flex-wrap gap-3 font-mono text-xs">
-                  <Link
-                    to={`/collections/${encodeURIComponent(row.collection)}`}
-                    className="text-muted-foreground hover:underline"
+        {!prefs.collapsed.has('summary') && (
+          <>
+            {summaryError !== null && (
+              <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                {summaryError}
+              </p>
+            )}
+            {summaryError === null && summary === null && (
+              <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
+            )}
+            {summaryError === null && summary !== null && summary.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.summaryEmpty')}</p>
+            )}
+            {summary !== null && summary.length > 0 && (
+              <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+                {summary.map((row) => (
+                  <li
+                    key={row.collection}
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5 text-sm last:border-b-0 last:pb-0"
                   >
-                    {t('dashboard.summaryTotal', { count: row.total })}
-                  </Link>
-                  {row.draft !== null && (
                     <Link
-                      to={`/collections/${encodeURIComponent(row.collection)}?status=draft`}
-                      className="text-primary underline underline-offset-2"
+                      to={`/collections/${encodeURIComponent(row.collection)}`}
+                      className="font-medium text-primary hover:underline"
                     >
-                      {t('dashboard.summaryDraft', { count: row.draft })}
+                      {labelFor(row.collection)}
                     </Link>
-                  )}
-                  {row.scheduled !== null && row.scheduled > 0 && (
-                    <Link
-                      to={`/collections/${encodeURIComponent(row.collection)}?status=scheduled`}
-                      className="text-muted-foreground hover:underline"
-                    >
-                      {t('dashboard.summaryScheduled', { count: row.scheduled })}
-                    </Link>
-                  )}
-                  {row.trashed !== null && row.trashed > 0 && (
-                    // Not a link: no screen today opens the trash pre-filtered
-                    // to one collection (`/trash` picks a collection itself),
-                    // so this stays a plain figure rather than a dead link.
-                    <span className="text-muted-foreground">
-                      {t('dashboard.summaryTrashed', { count: row.trashed })}
+                    <span className="flex flex-wrap gap-3 font-mono text-xs">
+                      <Link
+                        to={`/collections/${encodeURIComponent(row.collection)}`}
+                        className="text-muted-foreground hover:underline"
+                      >
+                        {t('dashboard.summaryTotal', { count: row.total })}
+                      </Link>
+                      {row.draft !== null && (
+                        <Link
+                          to={`/collections/${encodeURIComponent(row.collection)}?status=draft`}
+                          className="text-primary underline underline-offset-2"
+                        >
+                          {t('dashboard.summaryDraft', { count: row.draft })}
+                        </Link>
+                      )}
+                      {row.scheduled !== null && row.scheduled > 0 && (
+                        <Link
+                          to={`/collections/${encodeURIComponent(row.collection)}?status=scheduled`}
+                          className="text-muted-foreground hover:underline"
+                        >
+                          {t('dashboard.summaryScheduled', { count: row.scheduled })}
+                        </Link>
+                      )}
+                      {row.trashed !== null && row.trashed > 0 && (
+                        // Not a link: no screen today opens the trash pre-filtered
+                        // to one collection (`/trash` picks a collection itself),
+                        // so this stays a plain figure rather than a dead link.
+                        <span className="text-muted-foreground">
+                          {t('dashboard.summaryTrashed', { count: row.trashed })}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </section>
     )
@@ -602,33 +661,38 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-health-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={PulseIcon} />
           {t('dashboard.healthHeading')}
+          {collapseToggle('health')}
         </h2>
-        {!isAdmin && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
-        )}
-        {isAdmin && healthError !== null && (
-          <p role="alert" className="m-0 text-sm font-medium text-destructive">
-            {healthError}
-          </p>
-        )}
-        {isAdmin && healthError === null && health === null && (
-          <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
-        )}
-        {isAdmin && health !== null && (
-          <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
-            <li className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {t('dashboard.database')}
-              </span>
-              <HealthBadge report={health.database} />
-            </li>
-            <li className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {t('dashboard.storage')}
-              </span>
-              <HealthBadge report={health.storage} />
-            </li>
-          </ul>
+        {!prefs.collapsed.has('health') && (
+          <>
+            {!isAdmin && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+            )}
+            {isAdmin && healthError !== null && (
+              <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                {healthError}
+              </p>
+            )}
+            {isAdmin && healthError === null && health === null && (
+              <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
+            )}
+            {isAdmin && health !== null && (
+              <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
+                <li className="flex flex-col gap-1.5">
+                  <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t('dashboard.database')}
+                  </span>
+                  <HealthBadge report={health.database} />
+                </li>
+                <li className="flex flex-col gap-1.5">
+                  <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t('dashboard.storage')}
+                  </span>
+                  <HealthBadge report={health.storage} />
+                </li>
+              </ul>
+            )}
+          </>
         )}
       </section>
     )
@@ -643,37 +707,44 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-activity-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={AuditIcon} />
           {t('dashboard.activityHeading')}
+          {collapseToggle('activity')}
         </h2>
-        {!isAdmin && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
-        )}
-        {isAdmin && activityError !== null && (
-          <p role="alert" className="m-0 text-sm font-medium text-destructive">
-            {activityError}
-          </p>
-        )}
-        {isAdmin && activityError === null && activity.length === 0 && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noActivity')}</p>
-        )}
-        {isAdmin && activity.length > 0 && (
-          <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-            {activity.map((entry) => (
-              <li
-                key={entry.id}
-                className="border-b border-border pb-2.5 text-sm leading-5 last:border-b-0 last:pb-0"
-              >
-                <span className="font-mono text-xs text-muted-foreground">{entry.at}</span>
-                <br />
-                <span className="font-medium">
-                  {entry.actorId === null ? '—' : (actorNames.get(entry.actorId) ?? entry.actorId)}
-                </span>{' '}
-                — {entry.action}
-                {entry.collection !== null && (
-                  <span className="text-muted-foreground"> ({entry.collection})</span>
-                )}
-              </li>
-            ))}
-          </ul>
+        {!prefs.collapsed.has('activity') && (
+          <>
+            {!isAdmin && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+            )}
+            {isAdmin && activityError !== null && (
+              <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                {activityError}
+              </p>
+            )}
+            {isAdmin && activityError === null && activity.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noActivity')}</p>
+            )}
+            {isAdmin && activity.length > 0 && (
+              <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+                {activity.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="border-b border-border pb-2.5 text-sm leading-5 last:border-b-0 last:pb-0"
+                  >
+                    <span className="font-mono text-xs text-muted-foreground">{entry.at}</span>
+                    <br />
+                    <span className="font-medium">
+                      {entry.actorId === null
+                        ? '—'
+                        : (actorNames.get(entry.actorId) ?? entry.actorId)}
+                    </span>{' '}
+                    — {entry.action}
+                    {entry.collection !== null && (
+                      <span className="text-muted-foreground"> ({entry.collection})</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </section>
     )
@@ -688,33 +759,38 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-analytics-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={TrendIcon} />
           {t('analytics.widgetHeading')}
+          {collapseToggle('analytics')}
         </h2>
-        {!isAdmin && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
-        )}
-        {isAdmin && analyticsError !== null && (
-          <p role="alert" className="m-0 text-sm font-medium text-destructive">
-            {analyticsError}
-          </p>
-        )}
-        {isAdmin && analyticsError === null && analytics === null && (
-          <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
-        )}
-        {isAdmin && analytics !== null && (
+        {!prefs.collapsed.has('analytics') && (
           <>
-            <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 text-sm sm:grid-cols-2">
-              <li>
-                {t('analytics.widgetTotal')}: {analytics.totalViews}
-              </li>
-              <li>
-                {t('analytics.widgetVisitors')}: {analytics.uniqueVisitors}
-              </li>
-            </ul>
-            <p className="m-0 text-sm">
-              <a href="/analytics" className="font-medium text-primary hover:underline">
-                {t('analytics.widgetLink')}
-              </a>
-            </p>
+            {!isAdmin && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.adminOnly')}</p>
+            )}
+            {isAdmin && analyticsError !== null && (
+              <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                {analyticsError}
+              </p>
+            )}
+            {isAdmin && analyticsError === null && analytics === null && (
+              <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
+            )}
+            {isAdmin && analytics !== null && (
+              <>
+                <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 text-sm sm:grid-cols-2">
+                  <li>
+                    {t('analytics.widgetTotal')}: {analytics.totalViews}
+                  </li>
+                  <li>
+                    {t('analytics.widgetVisitors')}: {analytics.uniqueVisitors}
+                  </li>
+                </ul>
+                <p className="m-0 text-sm">
+                  <a href="/analytics" className="font-medium text-primary hover:underline">
+                    {t('analytics.widgetLink')}
+                  </a>
+                </p>
+              </>
+            )}
           </>
         )}
       </section>
@@ -730,29 +806,34 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-scheduled-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={ClockIcon} />
           {t('dashboard.scheduledHeading')}
+          {collapseToggle('scheduled')}
         </h2>
-        {scheduledError !== null && (
-          <p role="alert" className="m-0 text-sm font-medium text-destructive">
-            {scheduledError}
-          </p>
-        )}
-        {scheduledError === null && scheduled.length === 0 && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noScheduled')}</p>
-        )}
-        {scheduled.length > 0 && (
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {scheduled.map((item) => (
-              <li
-                key={`${item.collection}:${item.entry.id}`}
-                className="flex items-center gap-2 text-sm"
-              >
-                <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                  {item.collection}
-                </span>
-                {titleOf(item.entry)}
-              </li>
-            ))}
-          </ul>
+        {!prefs.collapsed.has('scheduled') && (
+          <>
+            {scheduledError !== null && (
+              <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                {scheduledError}
+              </p>
+            )}
+            {scheduledError === null && scheduled.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.noScheduled')}</p>
+            )}
+            {scheduled.length > 0 && (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {scheduled.map((item) => (
+                  <li
+                    key={`${item.collection}:${item.entry.id}`}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                      {item.collection}
+                    </span>
+                    {titleOf(item.entry)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </section>
     )
@@ -768,59 +849,64 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-todo-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={ClockIcon} />
           {t('dashboard.todoHeading')}
+          {collapseToggle('todo')}
         </h2>
-        {myDraftsError !== null && (
-          <p role="alert" className="m-0 text-sm font-medium text-destructive">
-            {myDraftsError}
-          </p>
-        )}
-        {!hasAnything && myDraftsError === null && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.todoEmpty')}</p>
-        )}
-        {myDrafts.length > 0 && (
-          <div>
-            <h3 className="m-0 mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t('dashboard.todoMyDrafts')}
-            </h3>
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
-              {myDrafts.map((item) => (
-                <li
-                  key={`draft:${item.collection}:${item.entry.id}`}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                    {item.collection}
-                  </span>
-                  <Link
-                    to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    {titleOf(item.entry)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {imminentSchedules.length > 0 && (
-          <div>
-            <h3 className="m-0 mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t('dashboard.todoImminent')}
-            </h3>
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
-              {imminentSchedules.map((item) => (
-                <li
-                  key={`imminent:${item.collection}:${item.entry.id}`}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                    {item.collection}
-                  </span>
-                  {titleOf(item.entry)}
-                </li>
-              ))}
-            </ul>
-          </div>
+        {!prefs.collapsed.has('todo') && (
+          <>
+            {myDraftsError !== null && (
+              <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                {myDraftsError}
+              </p>
+            )}
+            {!hasAnything && myDraftsError === null && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.todoEmpty')}</p>
+            )}
+            {myDrafts.length > 0 && (
+              <div>
+                <h3 className="m-0 mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t('dashboard.todoMyDrafts')}
+                </h3>
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                  {myDrafts.map((item) => (
+                    <li
+                      key={`draft:${item.collection}:${item.entry.id}`}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                        {item.collection}
+                      </span>
+                      <Link
+                        to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {titleOf(item.entry)}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {imminentSchedules.length > 0 && (
+              <div>
+                <h3 className="m-0 mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t('dashboard.todoImminent')}
+                </h3>
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                  {imminentSchedules.map((item) => (
+                    <li
+                      key={`imminent:${item.collection}:${item.entry.id}`}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                        {item.collection}
+                      </span>
+                      {titleOf(item.entry)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </section>
     )
@@ -835,87 +921,92 @@ export function DashboardRoute(): JSX.Element {
         <h2 id="dashboard-shortcuts-heading" className="m-0 flex items-center gap-3 text-base">
           <WidgetIconWell icon={PlusIcon} />
           {t('dashboard.shortcutsHeading')}
+          {collapseToggle('shortcuts')}
         </h2>
-        {creatableCollections.length === 0 && (
-          <p className="m-0 text-sm text-muted-foreground">{t('dashboard.shortcutsEmpty')}</p>
-        )}
-        <ul className="m-0 flex flex-wrap list-none gap-2 p-0">
-          {creatableCollections.map((collection) => (
-            <li key={collection.name}>
-              <Link
-                to={`/collections/${encodeURIComponent(collection.name)}/new`}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                <PlusIcon className="size-3.5" />
-                {t('dashboard.shortcutNew', { label: collection.labels.singular })}
-              </Link>
-            </li>
-          ))}
-          <li>
-            <Link
-              to="/media"
-              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              <MediaIcon className="size-3.5" />
-              {t('dashboard.shortcutUploadMedia')}
-            </Link>
-          </li>
-        </ul>
-
-        {creatableCollections.length > 0 && (
-          <form
-            onSubmit={(event) => void submitQuickDraft(event)}
-            className="flex flex-col gap-2 border-t border-dashed border-border pt-4"
-          >
-            <h3 className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t('dashboard.quickDraftHeading')}
-            </h3>
-            {draftError !== null && (
-              <p role="alert" className="m-0 text-sm font-medium text-destructive">
-                {draftError}
-              </p>
+        {!prefs.collapsed.has('shortcuts') && (
+          <>
+            {creatableCollections.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground">{t('dashboard.shortcutsEmpty')}</p>
             )}
-            <label className="flex flex-col gap-1 text-sm">
-              {t('dashboard.quickDraftCollection')}
-              <select
-                value={draftCollection}
-                onChange={(event) => setDraftCollection(event.target.value)}
-                className="rounded-sm border border-border bg-background px-2 py-1.5"
+            <ul className="m-0 flex flex-wrap list-none gap-2 p-0">
+              {creatableCollections.map((collection) => (
+                <li key={collection.name}>
+                  <Link
+                    to={`/collections/${encodeURIComponent(collection.name)}/new`}
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <PlusIcon className="size-3.5" />
+                    {t('dashboard.shortcutNew', { label: collection.labels.singular })}
+                  </Link>
+                </li>
+              ))}
+              <li>
+                <Link
+                  to="/media"
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  <MediaIcon className="size-3.5" />
+                  {t('dashboard.shortcutUploadMedia')}
+                </Link>
+              </li>
+            </ul>
+
+            {creatableCollections.length > 0 && (
+              <form
+                onSubmit={(event) => void submitQuickDraft(event)}
+                className="flex flex-col gap-2 border-t border-dashed border-border pt-4"
               >
-                <option value="">{t('dashboard.quickDraftChoose')}</option>
-                {creatableCollections.map((collection) => (
-                  <option key={collection.name} value={collection.name}>
-                    {collection.labels.singular}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              {t('dashboard.quickDraftTitle')}
-              <input
-                type="text"
-                value={draftTitle}
-                onChange={(event) => setDraftTitle(event.target.value)}
-                className="rounded-sm border border-border bg-background px-2 py-1.5"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              {t('dashboard.quickDraftBody')}
-              <textarea
-                value={draftBody}
-                onChange={(event) => setDraftBody(event.target.value)}
-                rows={3}
-                className="rounded-sm border border-border bg-background px-2 py-1.5"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={draftBusy || draftCollection === '' || draftTitle.trim() === ''}
-              className="self-start rounded-sm border border-foreground bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
-            >
-              {draftBusy ? t('common.loading') : t('dashboard.quickDraftSubmit')}
-            </button>
-          </form>
+                <h3 className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t('dashboard.quickDraftHeading')}
+                </h3>
+                {draftError !== null && (
+                  <p role="alert" className="m-0 text-sm font-medium text-destructive">
+                    {draftError}
+                  </p>
+                )}
+                <label className="flex flex-col gap-1 text-sm">
+                  {t('dashboard.quickDraftCollection')}
+                  <select
+                    value={draftCollection}
+                    onChange={(event) => setDraftCollection(event.target.value)}
+                    className="rounded-sm border border-border bg-background px-2 py-1.5"
+                  >
+                    <option value="">{t('dashboard.quickDraftChoose')}</option>
+                    {creatableCollections.map((collection) => (
+                      <option key={collection.name} value={collection.name}>
+                        {collection.labels.singular}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  {t('dashboard.quickDraftTitle')}
+                  <input
+                    type="text"
+                    value={draftTitle}
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    className="rounded-sm border border-border bg-background px-2 py-1.5"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  {t('dashboard.quickDraftBody')}
+                  <textarea
+                    value={draftBody}
+                    onChange={(event) => setDraftBody(event.target.value)}
+                    rows={3}
+                    className="rounded-sm border border-border bg-background px-2 py-1.5"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={draftBusy || draftCollection === '' || draftTitle.trim() === ''}
+                  className="self-start rounded-sm border border-foreground bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
+                >
+                  {draftBusy ? t('common.loading') : t('dashboard.quickDraftSubmit')}
+                </button>
+              </form>
+            )}
+          </>
         )}
       </section>
     )
@@ -933,8 +1024,9 @@ export function DashboardRoute(): JSX.Element {
         >
           <BackupIcon className="size-4" />
           {t('dashboard.backupsHeading')}
+          {collapseToggle('backups')}
         </h2>
-        <p className="m-0">{t('dashboard.backupsBody')}</p>
+        {!prefs.collapsed.has('backups') && <p className="m-0">{t('dashboard.backupsBody')}</p>}
       </section>
     )
   }
@@ -1192,7 +1284,7 @@ export function DashboardRoute(): JSX.Element {
             }}
             className={`relative${id === 'health' ? ' lg:col-span-2' : ''}`}
           >
-            <GripIcon className="pointer-events-none absolute top-3 right-3 size-4 text-muted-foreground/70" />
+            <GripIcon className="pointer-events-none absolute top-3 right-12 size-4 text-muted-foreground/70" />
             {renderers[id]()}
           </li>
         ))}

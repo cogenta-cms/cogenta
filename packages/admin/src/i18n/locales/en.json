@@ -1949,6 +1949,8 @@
     "moveUp": "Move up",
     "moveDown": "Move down",
     "resetLayout": "Reset layout",
+    "collapseWidget": "Collapse {{name}}",
+    "expandWidget": "Expand {{name}}",
     "widgetName": {
       "summary": "Content summary",
       "health": "Site health",

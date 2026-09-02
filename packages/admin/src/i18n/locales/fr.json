@@ -1949,6 +1949,8 @@
     "moveUp": "Monter",
     "moveDown": "Descendre",
     "resetLayout": "Réinitialiser la disposition",
+    "collapseWidget": "Réduire {{name}}",
+    "expandWidget": "Déplier {{name}}",
     "widgetName": {
       "summary": "Résumé du contenu",
       "health": "Santé du site",

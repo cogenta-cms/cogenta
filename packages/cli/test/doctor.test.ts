@@ -42,13 +42,24 @@ describe('doctor — a machine with no Redis, no Docker and no S3', () => {
     const report = await runDoctor({ cwd: root, env: {} })
 
     expect(report.problems).toEqual([])
-    expect(report.checks.map((check) => `${check.need}:${check.driver}`)).toEqual([
-      'database:sqlite',
-      'cache:file',
-      'storage:local',
-      'rateLimit:memory',
+    expect(report.checks.map((check) => check.need)).toEqual([
+      'database',
+      'cache',
+      'storage',
+      'images',
+      'vector',
+      'rateLimit',
     ])
-    expect(report.checks.every((check) => check.tier === 'degraded')).toBe(true)
+    // `images` is the one exception: `sharp` is a native module, not an
+    // external service, so whether it reports `optimal` (compiled for this
+    // OS/arch — true on the machine that runs this test suite) or
+    // `degraded` (the WebAssembly fallback) is orthogonal to "no Redis, no
+    // Docker, no S3" — the property every other need above actually tests.
+    expect(
+      report.checks
+        .filter((check) => check.need !== 'images')
+        .every((check) => check.tier === 'degraded'),
+    ).toBe(true)
 
     await rm(root, { recursive: true, force: true })
   })
@@ -106,6 +117,43 @@ describe('doctor — saying why', () => {
   })
 })
 
+describe('doctor — the vector driver (audit fiche 15, T05)', () => {
+  it('fails with an actionable message when vector.driver is pinned to pgvector on a non-Postgres site', async () => {
+    const root = await project('')
+    await writeFile(
+      join(root, 'cogenta.config.mjs'),
+      minimal(root).replace('database: {', "vector: { driver: 'pgvector' },\n  database: {"),
+      'utf8',
+    )
+
+    const report = await runDoctor({ cwd: root, env: {} })
+
+    // The `database` section above is still SQLite (`minimal`), so
+    // `pgvector`'s own `available()` check (`db.dialect !== 'postgres'`)
+    // refuses it — a *named*, unavailable driver is a `DRIVER_UNAVAILABLE`
+    // error, not a silent fallback (`createDriverRegistry`'s own contract),
+    // and `check()` turns that into a named problem instead of a stack trace.
+    expect(report.problems.some((problem) => problem.startsWith('vector:'))).toBe(true)
+    expect(report.checks.some((check) => check.need === 'vector')).toBe(false)
+
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('reports no problem when vector is left unconfigured — a degraded default exists', async () => {
+    const root = await project('')
+    await writeFile(join(root, 'cogenta.config.mjs'), minimal(root), 'utf8')
+
+    const report = await runDoctor({ cwd: root, env: {} })
+
+    expect(report.problems).toEqual([])
+    const vector = report.checks.find((check) => check.need === 'vector')
+    expect(vector).toBeDefined()
+    expect(vector?.tier).toBe('degraded')
+
+    await rm(root, { recursive: true, force: true })
+  })
+})
+
 describe('doctor — what it warns about', () => {
   it('says the CMS works without an LLM, rather than leaving it to be guessed', async () => {
     const root = await project('')
@@ -114,6 +162,40 @@ describe('doctor — what it warns about', () => {
     const report = await runDoctor({ cwd: root, env: {} })
 
     expect(report.notes.join(' ')).toContain('Everything works except the agents')
+    await rm(root, { recursive: true, force: true })
+  })
+
+  // Audit fiche 15, T05: reported as a note (no driver-tier concept exists
+  // for this need — `createImageProviderRegistry` is a plain API-key
+  // registry, unlike `database`/`cache`/`vector`), and only when configured
+  // — an unconfigured site gets no note at all, matching R2.
+  it('says nothing about image generation when it is not configured', async () => {
+    const root = await project('')
+    await writeFile(join(root, 'cogenta.config.mjs'), minimal(root), 'utf8')
+
+    const report = await runDoctor({ cwd: root, env: {} })
+
+    expect(report.notes.some((note) => note.includes('Image-generation'))).toBe(false)
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('names the image-generation provider and warns about a missing API key', async () => {
+    const root = await project('')
+    await writeFile(
+      join(root, 'cogenta.config.mjs'),
+      minimal(root).replace(
+        'database: {',
+        "imageGeneration: { provider: 'openai', model: 'gpt-image-1' },\n  database: {",
+      ),
+      'utf8',
+    )
+
+    const report = await runDoctor({ cwd: root, env: {} })
+
+    const note = report.notes.find((entry) => entry.includes('Image-generation'))
+    expect(note).toContain('openai')
+    expect(note).toContain('gpt-image-1')
+    expect(note).toContain('No API key')
     await rm(root, { recursive: true, force: true })
   })
 

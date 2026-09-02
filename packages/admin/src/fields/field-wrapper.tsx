@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { humanizeFieldName } from '../lib/humanize-field-name.js'
 import type { SchemaField } from '../schema/types.js'
 import '../styles/fields.css'
 
@@ -44,7 +45,13 @@ export function FieldWrapper({
   readonly error?: string | null
 }): JSX.Element {
   const { t } = useTranslation()
-  const label = field.admin?.label ?? field.name
+  // Fiche 01 audit T02 — a field with no declared `admin.label` used to
+  // show its raw technical name (`internalCode`); the humanised form reads
+  // as a label without inventing a translation for a name the schema
+  // author chose (`field.name` is not an i18n key). A field that already
+  // declares `admin.label` is untouched — 100% backward compatible for a
+  // site already configured.
+  const label = field.admin?.label ?? humanizeFieldName(field.name)
 
   const max = typeof field.options.max === 'number' ? field.options.max : undefined
   const length = typeof value === 'string' ? value.length : undefined

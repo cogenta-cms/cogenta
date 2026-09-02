@@ -12,6 +12,11 @@ function field(kind: SchemaField['kind'], overrides: Partial<SchemaField> = {}):
     unique: false,
     hasCustomValidation: false,
     options: {},
+    // An explicit label, kept exactly `field-name` for every test below
+    // that queries by that raw string — this file is about `FieldInput`'s
+    // per-kind behaviour, not the label fallback (that's
+    // `humanize-field-name.test.ts` and `field-wrapper.test.tsx`'s job).
+    admin: { label: 'field-name' },
     ...overrides,
   }
 }

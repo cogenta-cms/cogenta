@@ -295,3 +295,46 @@ export async function changeOwnPassword(
     body: JSON.stringify({ currentPassword, newPassword }),
   })
 }
+
+/**
+ * Mirrors `@cogenta/export`'s `PersonalDataExport` — kept as a local shape
+ * rather than a new dependency on `@cogenta/export` (R9), the same way this
+ * file already re-declares the server's user shape as `AdminUser`.
+ */
+export interface PersonalDataExport {
+  readonly generatedAt: string
+  readonly subjectEmail: string
+  readonly account: {
+    readonly id: string
+    readonly email: string
+    readonly roles: readonly string[]
+    readonly status: string
+    readonly createdAt: string
+  } | null
+  readonly authoredContent: readonly {
+    readonly collection: string
+    readonly id: string
+    readonly status: string
+    readonly createdAt: string
+    readonly title: string | null
+  }[]
+  readonly orders: readonly {
+    readonly id: string
+    readonly status: string
+    readonly createdAt: string
+    readonly totalMinorUnits: number
+    readonly currency: string
+  }[]
+  readonly gaps: readonly { readonly source: string; readonly reason: string }[]
+}
+
+/**
+ * T09-04 (RGPD) — self or `admin`, the same rule `/{id}` itself follows.
+ * The export is itself journalled server-side; this call has nothing more
+ * to do than fetch and hand the caller a downloadable blob.
+ */
+export function fetchPersonalDataExport(token: string, id: string): Promise<PersonalDataExport> {
+  return request(`/api/users/${encodeURIComponent(id)}/personal-data`, {
+    headers: authHeader(token),
+  })
+}

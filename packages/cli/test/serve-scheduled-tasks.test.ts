@@ -53,6 +53,29 @@ async function project(): Promise<string> {
   return root
 }
 
+/** Same as `project()`, with `security.audit.retainDays` configured (T09-01). */
+async function projectWithAuditRetention(retainDays: number): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'cogenta-scheduled-audit-'))
+  await writeFile(
+    join(root, 'cogenta.config.mjs'),
+    `export default {
+  site: { name: 'Test site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+  security: { audit: { retainDays: ${retainDays} } },
+}
+`,
+    'utf8',
+  )
+  await writeFile(
+    join(root, 'cogenta.schema.mjs'),
+    `export default ${JSON.stringify(COLLECTIONS, null, 2)}\n`,
+    'utf8',
+  )
+  return root
+}
+
 const activeServers: AbortController[] = []
 
 afterEach(() => {
@@ -68,6 +91,10 @@ const TASK_NAMES = [
   'scheduled-publish',
   'not-found-purge',
   'audit-integrity',
+  // T09-01 — always registered, same as `audit-integrity` right above:
+  // whether it actually purges anything depends entirely on
+  // `security.audit.retainDays` being configured.
+  'audit-prune',
   'trash-purge',
   'forms-purge',
   'channel-notifications',
@@ -204,6 +231,102 @@ describe('cogenta serve — /api/scheduled-tasks', () => {
       })
       expect(response.status).toBe(403)
       await response.arrayBuffer()
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+})
+
+/**
+ * `audit-prune` (T09-01) — `AuditLog.prune()` (`@cogenta/auth`) existed
+ * since fiche 21 task 5 with no scheduled caller anywhere in the codebase.
+ * The actual deletion/hash-chain mechanics are already proven, entry by
+ * entry, in `packages/auth/test/audit.test.ts`'s own
+ * `describe('AuditLog.prune (fiche 21 task 5)')`; this suite proves the
+ * wiring: the task is registered (`TASK_NAMES` above), a site with no
+ * `retainDays` never purges, and one with `retainDays` configured accepts
+ * it without corrupting the still-fresh log a real run against this suite's
+ * own just-created entries produces.
+ */
+describe('audit-prune (T09-01)', () => {
+  it('purges nothing on a site that never configured retainDays (R1 default)', async () => {
+    const root = await project()
+    const server = await startServer(root, {
+      registry: activeServers,
+      scheduledPublishTickMs: 3_600_000,
+      notFoundPurgeTickMs: 3_600_000,
+      auditIntegrityTickMs: 3_600_000,
+      trashPurgeTickMs: 3_600_000,
+      formsPurgeTickMs: 3_600_000,
+    })
+    try {
+      const token = await adminToken(root, server.base)
+      const before = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const beforeCount = ((await before.json()) as { data: readonly unknown[] }).data.length
+
+      const run = await fetch(`${server.base}/api/scheduled-tasks/audit-prune/run`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(run.status).toBe(200)
+      const runBody = (await run.json()) as { data: { outcome: string; summary: string | null } }
+      expect(runBody.data.outcome).toBe('success')
+      expect(runBody.data.summary).toBe('0 purged')
+
+      const after = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const afterCount = ((await after.json()) as { data: readonly unknown[] }).data.length
+      // The run itself did not add a prune entry (it pruned nothing), and
+      // nothing that was there before is gone.
+      expect(afterCount).toBeGreaterThanOrEqual(beforeCount)
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('accepts a configured retention window and leaves this run’s own fresh entries intact', async () => {
+    const root = await projectWithAuditRetention(30)
+    const server = await startServer(root, {
+      registry: activeServers,
+      scheduledPublishTickMs: 3_600_000,
+      notFoundPurgeTickMs: 3_600_000,
+      auditIntegrityTickMs: 3_600_000,
+      trashPurgeTickMs: 3_600_000,
+      formsPurgeTickMs: 3_600_000,
+    })
+    try {
+      const token = await adminToken(root, server.base)
+      const before = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const beforeEntries = ((await before.json()) as { data: readonly { id: string }[] }).data
+
+      const run = await fetch(`${server.base}/api/scheduled-tasks/audit-prune/run`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(run.status).toBe(200)
+      const runBody = (await run.json()) as { data: { outcome: string } }
+      expect(runBody.data.outcome).toBe('success')
+
+      const after = await fetch(`${server.base}/api/audit`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const afterEntries = ((await after.json()) as { data: readonly { id: string }[] }).data
+      // Nothing recorded moments ago by this very test is older than 30
+      // days — a configured window must not touch what is still fresh.
+      const afterIds = new Set(afterEntries.map((entry) => entry.id))
+      expect(beforeEntries.every((entry) => afterIds.has(entry.id))).toBe(true)
+
+      // The chain still verifies — a real run against a real (if empty)
+      // prune did not corrupt anything.
+      const verify = await fetch(`${server.base}/api/audit/verify`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(verify.status).toBe(200)
     } finally {
       await server.stop()
     }

@@ -106,6 +106,22 @@ const corsSchema = z
     path: ['credentials'],
   })
 
+/**
+ * Audit-log retention (T09-01 / fiche 21 task 5's retention half —
+ * `AuditLog.prune()` existed since that fiche with no caller anywhere in
+ * the codebase).
+ *
+ * Absent `retainDays` — the default — means the log grows without bound,
+ * exactly the behaviour before this setting existed: unlike the 404 log or
+ * analytics events, an audit trail disappearing on a schedule nobody asked
+ * for is a worse default than a bigger database, so `cogenta serve` never
+ * purges unless a site opts in. `0` is the explicit, documented way to say
+ * "never purge" out loud rather than by omission.
+ */
+const auditRetentionSchema = z.strictObject({
+  retainDays: z.number().int().nonnegative().max(3650).optional(),
+})
+
 const securitySchema = z.strictObject({
   cors: corsSchema.prefault({}),
   /**
@@ -130,6 +146,7 @@ const securitySchema = z.strictObject({
   hstsIncludeSubDomains: z.boolean().default(true),
   /** How long a public page may be cached, in seconds. */
   pageMaxAge: z.number().int().nonnegative().max(86_400).default(60),
+  audit: auditRetentionSchema.prefault({}),
 })
 
 /**

@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto'
 import type { AuthStore, UpdateProfileInput, User } from '@cogenta/auth'
 import { requiresMfa } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
-import type { CollectionDefinition } from '@cogenta/schema'
+import { exportPersonalData, type PersonalDataAccount } from '@cogenta/export'
+import type { CollectionDefinition, ContentStore } from '@cogenta/schema'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
 import { assertPasswordPolicy } from './password-policy.js'
@@ -57,6 +58,16 @@ export interface UsersRouterOptions {
    * the same as a site with no collections at all.
    */
   readonly collections?: readonly CollectionDefinition[]
+  /**
+   * Resolves a collection to its store — the same function `cogenta serve`
+   * already builds for REST/GraphQL/theme rendering. Only read by
+   * `GET /{id}/personal-data` (T09-04/RGPD), to walk each collection for
+   * entries this account authored. Absent with `collections` also absent
+   * (the default) is fine — there is then nothing to look through — but
+   * absent while `collections` is non-empty means content authorship can
+   * never be found for this router's export.
+   */
+  readonly storeFor?: (collection: CollectionDefinition) => ContentStore
   /**
    * Delivers the invitation token `POST /api/users` (`invite: true`) or the
    * resend route issues, the same shape `@cogenta/api`'s `onForgotPassword`
@@ -492,6 +503,19 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const collections = options.collections ?? []
   const now = options.now ?? Date.now
+  // Only ever called by `personalDataRoute` below, and only for a
+  // collection actually present in `collections` — when that array is
+  // empty (the default) this is never invoked, so a router built without
+  // `storeFor` still works for every other route.
+  const storeFor =
+    options.storeFor ??
+    ((collection: CollectionDefinition): ContentStore => {
+      throw new CogentaError({
+        code: 'CONTENT_NOT_FOUND',
+        message: `No content store is configured for collection "${collection.name}".`,
+        hint: 'This router was built with `collections` but no `storeFor` — wire both together.',
+      })
+    })
 
   async function mfaOf(userId: string): Promise<MfaSummary> {
     const totp = await auth.credentials.totpSecret(userId)
@@ -662,6 +686,10 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
           return await anonymizeRoute(request, actor, userId, method)
         }
 
+        if (segments[1] === 'personal-data' && segments.length === 2) {
+          return await personalDataRoute(actor, userId, method)
+        }
+
         // Checked before the generic `sessions` fallback below: that handler
         // treats `segments[2]` as a session id, so `revoke-others` must be
         // matched by name first or it would be read as one.
@@ -768,6 +796,19 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
         const issued = await auth.resets.issue(user.id, { ttlMs: INVITATION_TOKEN_TTL_MS })
         await options.onInvite({ user, roles, token: issued.token, expiresAt: issued.expiresAt })
 
+        // T09-05 — recorded here, at the one place the row is actually
+        // created, rather than by `cogenta serve` sniffing the HTTP path
+        // afterwards (the way `recordUserAudit` still did): an appeal to
+        // the shape of the request can miss a caller who reaches this same
+        // code through a future non-HTTP entry point, and never misses
+        // here.
+        await auth.audit.record({
+          actorId: actor.id,
+          actorRoles: actor.roles,
+          action: 'user.create',
+          entryId: user.id,
+        })
+
         return jsonResponse(201, {
           data: {
             user: publicUser(user, await viewContextFor(user), now()),
@@ -785,6 +826,16 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       const password = generatePassword()
       const user = await auth.users.create({ email, roles })
       await auth.credentials.setPassword(user.id, password)
+
+      // T09-05 — same direct call as the invite branch above. The generated
+      // password itself never enters `diff`, the same restraint every other
+      // audit write in this file already applies to a secret.
+      await auth.audit.record({
+        actorId: actor.id,
+        actorRoles: actor.roles,
+        action: 'user.create',
+        entryId: user.id,
+      })
 
       return jsonResponse(201, {
         data: {
@@ -1037,6 +1088,62 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     return jsonResponse(200, { data: { id: anonymized.id, anonymized: true } })
   }
 
+  /**
+   * `GET /api/users/{id}/personal-data` (T09-04 — the RGPD export
+   * `@cogenta/export`'s `exportPersonalData` had, until this route, no
+   * caller anywhere in the codebase). Self-or-admin, the same rule
+   * `userRoute`'s own `GET` already applies: an account can always read its
+   * own data, and only `admin` can pull someone else's — third-party access
+   * a data-protection authority can actually require of an operator, so it
+   * stays possible rather than being narrowed to self-only.
+   */
+  async function personalDataRoute(
+    actor: Actor,
+    userId: string,
+    method: string,
+  ): Promise<RestResponse> {
+    if (method !== 'GET') return methodNotAllowed(['GET'])
+    requireSelfOrAdmin(actor, userId, "export another account's personal data")
+
+    const user = await auth.users.byId(userId)
+    if (user === null) throw userNotFound()
+
+    const subject: PersonalDataAccount = {
+      id: user.id,
+      email: user.email,
+      roles: user.roles,
+      status: user.status,
+      createdAt: user.createdAt,
+    }
+
+    const report = await exportPersonalData({
+      email: user.email,
+      accounts: {
+        findByEmail: async (email) =>
+          email.toLowerCase() === user.email.toLowerCase() ? subject : null,
+      },
+      collections,
+      storeFor,
+      now: () => new Date(now()),
+    })
+
+    // The extraction is itself the kind of event the audit log has to
+    // carry — the same rule the audit export (fiche 21 task 2) already
+    // follows: pulling a person's data is an action, not a read that
+    // vanishes. `self` records whether this was the account's own request
+    // or an admin acting on somebody else's, which is exactly what a data
+    // controller has to be able to show when asked who accessed what.
+    await auth.audit.record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'user.personal_data_export',
+      entryId: user.id,
+      diff: { subjectEmail: user.email, self: actor.id === user.id },
+    })
+
+    return jsonResponse(200, { data: report })
+  }
+
   async function passwordRoute(
     request: RestRequest,
     actor: Actor,
@@ -1075,6 +1182,16 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     await auth.rateLimit.clear(`password-change:${userId}`)
 
     await auth.credentials.setPassword(userId, newPassword)
+
+    // T09-05 — direct write at the point of mutation; neither password ever
+    // enters `diff`.
+    await auth.audit.record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'user.password_change',
+      entryId: userId,
+    })
+
     return jsonResponse(200, { data: { changed: true } })
   }
 
@@ -1124,6 +1241,18 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     }
 
     await auth.sessions.revoke(sessionId)
+
+    // T09-05 — direct write; a 204 has no body for `cogenta serve`'s old
+    // path-sniffing `recordUserAudit` to have read a subject from anyway,
+    // it only ever fell back to the id already in the URL — the same id
+    // this route already resolved as `userId`.
+    await auth.audit.record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action: 'user.session_revoke',
+      entryId: userId,
+    })
+
     return { status: 204, body: null, headers: {} }
   }
 

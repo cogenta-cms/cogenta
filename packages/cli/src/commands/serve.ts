@@ -900,6 +900,17 @@ interface Site {
    */
   readonly checkAuditIntegrity: () => Promise<void>
   /**
+   * Purges audit-log entries older than `security.audit.retainDays`
+   * (T09-01) — `AuditLog.prune()` has existed since fiche 21 task 5 with no
+   * caller anywhere in the codebase. A no-op returning `{ pruned: 0 }` when
+   * `retainDays` is absent or `0` (never configured, or explicitly "never
+   * purge") — the silent "grows without bound" default stays exactly that,
+   * silent, unless a site opts in. `runServe` calls this on its own
+   * `setInterval`, daily by default; exposed so a test can call it directly
+   * instead of waiting a day.
+   */
+  readonly tickAuditPrune: () => Promise<{ readonly pruned: number }>
+  /**
    * Sweeps every collection's trash past its `retainDays` (fiche 07 task 5).
    * `purgeExpired()` has existed on every `ContentStore` since ADR-0022;
    * nothing ever called it, so a site's trash grew forever despite the admin
@@ -2408,6 +2419,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     usersRouter: createUsersRouter({
       auth,
       collections,
+      // T09-04/RGPD: `GET /{id}/personal-data` walks every collection for
+      // entries this account authored — the same `storeFor` REST, GraphQL
+      // and theme rendering already share.
+      storeFor,
       ...(options.onInvite == null ? {} : { onInvite: options.onInvite }),
     }),
     apiKeysRouter: createApiKeysRouter({ auth }),
@@ -2533,6 +2548,26 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         siteUrl: site.url,
         logger,
       })
+    },
+    tickAuditPrune: async () => {
+      const retainDays = options.security.audit.retainDays
+      // `undefined` (never configured) and `0` (the explicit "never purge"
+      // opt-out) are the same instruction here — see `tickAuditPrune`'s own
+      // interface comment and `auditRetentionSchema` (`@cogenta/core`).
+      if (retainDays === undefined || retainDays === 0) return { pruned: 0 }
+      const cutoff = new Date(Date.now() - retainDays * 24 * 60 * 60 * 1000).toISOString()
+      const result = await auth.audit.prune(cutoff)
+      // The purge is itself an event the audit log has to carry — the same
+      // rule the RGPD export follows (`users-router.ts`'s `personalDataRoute`):
+      // a retention sweep that deletes rows without a trace of having run
+      // would defeat the very audit trail it is trimming.
+      await auth.audit.record({
+        actorId: null,
+        actorRoles: [],
+        action: 'audit.prune',
+        diff: { retainDays, cutoff, prunedCount: result.prunedCount },
+      })
+      return { pruned: result.prunedCount }
     },
     tickTrashPurge,
     tickChannelNotifications: () => channelDispatcher.flushDue(),
@@ -3209,71 +3244,6 @@ async function recordAuthAudit(
 }
 
 /**
- * Account management, in the audit log.
- *
- * Who created an account, who cut a session short, and who changed their own
- * password are exactly the events an append-only, hash-chained log exists
- * for — and they were previously invisible, since the only way to do any of
- * it was a terminal.
- *
- * Recorded here, at the transport boundary, for the same reason the content and
- * media audits are: the router stays a pure request-in/response-out value, and
- * only a response that actually succeeded is written down.
- *
- * Role and status changes — single `PATCH`, bulk, and invitation
- * resend/cancel — are deliberately **not** sniffed here any more (fiche 61
- * task 1). Path-shape sniffing is exactly how those went unaudited for as
- * long as they did: `/api/users/bulk` never matched this function's `target
- * !== undefined && sub === undefined` shape, so a bulk disable produced no
- * entry at all. `users-router.ts`'s `applyUserChange` and `inviteRoute` now
- * call `auth.audit.record` directly, the same way `anonymizeRoute` always
- * has — the one place that actually knows a mutation happened, rather than a
- * second guess made from the URL afterwards.
- */
-async function recordUserAudit(
-  site: Site,
-  actor: AccessContext['actor'],
-  method: string,
-  pathname: string,
-  response: RestResponse,
-  logger: Logger,
-): Promise<void> {
-  if (response.status < 200 || response.status >= 300) return
-
-  const segments = pathname.split('/').filter((segment) => segment.length > 0)
-  // ['api', 'users', <id?>, <'sessions' | 'password'>?, <sessionId?>]
-  const target = segments[2]
-  const sub = segments[3]
-
-  const action =
-    method === 'POST' && target === undefined
-      ? 'user.create'
-      : method === 'POST' && sub === 'password'
-        ? 'user.password_change'
-        : method === 'DELETE' && sub === 'sessions'
-          ? 'user.session_revoke'
-          : null
-  if (action === null) return
-
-  // The subject is named, never anything that could sign anyone in: no
-  // password, no token, not even the new roles' provenance beyond the id.
-  const created = (
-    response.body as { readonly data?: { readonly user?: { readonly id?: unknown } } } | null
-  )?.data?.user
-  const subjectId =
-    typeof created?.id === 'string' ? created.id : target === 'me' ? actor.id : (target ?? null)
-
-  await site.auth.audit
-    .record({
-      actorId: actor.id,
-      actorRoles: actor.roles,
-      action,
-      ...(subjectId === null ? {} : { entryId: subjectId }),
-    })
-    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
-}
-
-/**
  * Who minted, rotated, revoked, purged or recovered a machine credential, in
  * the same append-only log as every other account action (L13 task 8;
  * rotation added by fiche 20 task 2 — "vérifier que c'est déjà le cas" for
@@ -3281,7 +3251,7 @@ async function recordUserAudit(
  * that fiche actually added here; purge and recover added by fiche 62 tasks
  * 2-3). The raw key itself never reaches this function — a `POST`'s response
  * carries it once, but the audit entry only ever names the key's id, exactly
- * like `recordUserAudit` never logs a password.
+ * like `users-router.ts`'s own direct writes (T09-05) never log a password.
  */
 async function recordApiKeyAudit(
   site: Site,
@@ -4504,7 +4474,10 @@ export function createRequestListener(
         const request = toRestRequest(req, url, body)
         const response = await site.usersRouter.handle(request, context.actor)
         writeRestResponse(res, response)
-        await recordUserAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        // T09-05: account creation, password change and session revoke are
+        // now recorded directly by `users-router.ts` itself, at the exact
+        // point each mutates a row — `recordUserAudit`'s HTTP-path sniffing
+        // is gone rather than kept as a redundant second writer.
         return
       }
 
@@ -5283,6 +5256,12 @@ export interface ServeOptions {
    */
   readonly auditIntegrityTickMs?: number
   /**
+   * Overrides `AUDIT_PRUNE_TICK_MS` (T09-01). Not a CLI flag, same reasoning
+   * as `auditIntegrityTickMs` — exists so a test can prove the sweep really
+   * runs without waiting a day for it.
+   */
+  readonly auditPruneTickMs?: number
+  /**
    * Overrides `TRASH_PURGE_TICK_MS`. Not a CLI flag, same reasoning as
    * `scheduledPublishTickMs`: no operator has a reason to change a daily
    * cadence, this exists so a test can prove the sweep really runs without
@@ -5375,6 +5354,17 @@ const NOT_FOUND_PURGE_TICK_MS = 24 * 60 * 60 * 1000
  * cheap incremental form rather than a full replay.
  */
 const AUDIT_INTEGRITY_TICK_MS = 24 * 60 * 60 * 1000
+
+/**
+ * How often `runServe` runs the audit-log retention sweep (T09-01). Daily,
+ * the same cadence as the integrity check right above it — nobody is
+ * waiting on a page load for an old audit entry to disappear, and
+ * `security.audit.retainDays` itself is measured in whole days. The tick
+ * itself is always registered; whether it actually prunes anything depends
+ * entirely on `retainDays` being configured — see `tickAuditPrune`'s own
+ * comment.
+ */
+const AUDIT_PRUNE_TICK_MS = 24 * 60 * 60 * 1000
 
 /**
  * How often `runServe` sweeps every collection's trash past its
@@ -5999,6 +5989,16 @@ export async function runServe(options: ServeOptions): Promise<number> {
     },
   })
   scheduledTaskRegistry.register({
+    name: 'audit-prune',
+    description: "Purge audit-log entries past the site's configured retention window.",
+    intervalMs: options.auditPruneTickMs ?? AUDIT_PRUNE_TICK_MS,
+    destructive: true,
+    run: async () => {
+      const result = await site.tickAuditPrune()
+      return { summary: `${result.pruned} purged` }
+    },
+  })
+  scheduledTaskRegistry.register({
     name: 'trash-purge',
     description: "Permanently delete trashed content past the site's retention window.",
     intervalMs: options.trashPurgeTickMs ?? TRASH_PURGE_TICK_MS,
@@ -6219,12 +6219,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
   options.onListening?.({ port: boundPort, host })
 
   // The recurring jobs above (scheduled publication, the tools queue drain
-  // riding along with it, the 404 log purge, audit integrity, the trash
-  // sweep, forms GDPR retention, channel notification flush, analytics
-  // retention, updates auto-check, the commerce order-email retry queue
-  // (fiche 52 task 2), the subscription billing/dunning/renewal-notice
-  // sweep (fiche 53 tasks 3/5, audit T-COM-01), and — audit A1-commerce
-  // P2 — the abandoned-cart sweep) are all
+  // riding along with it, the 404 log purge, audit integrity, audit-log
+  // retention (T09-01), the trash sweep, forms GDPR retention, channel
+  // notification flush, analytics retention, updates auto-check, the
+  // commerce order-email retry queue (fiche 52 task 2), the subscription
+  // billing/dunning/renewal-notice sweep (fiche 53 tasks 3/5, audit
+  // T-COM-01), and — audit A1-commerce P2 — the abandoned-cart sweep) are all
   // `scheduledTaskRegistry` entries rather
   // than independent `setInterval`s: one heartbeat drives `registry.tick()`,
   // which itself decides which tasks are actually due against the interval
@@ -6239,6 +6239,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.scheduledPublishTickMs ?? SCHEDULED_PUBLISH_TICK_MS,
     options.notFoundPurgeTickMs ?? NOT_FOUND_PURGE_TICK_MS,
     options.auditIntegrityTickMs ?? AUDIT_INTEGRITY_TICK_MS,
+    options.auditPruneTickMs ?? AUDIT_PRUNE_TICK_MS,
     options.trashPurgeTickMs ?? TRASH_PURGE_TICK_MS,
     options.formsPurgeTickMs ?? FORMS_PURGE_TICK_MS,
     options.channelNotificationTickMs ?? CHANNEL_NOTIFICATION_TICK_MS,

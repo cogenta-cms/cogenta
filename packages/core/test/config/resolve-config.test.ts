@@ -395,6 +395,29 @@ describe('resolveConfig — security (L10 task 6)', () => {
   })
 })
 
+/** T09-01 — the audit log grows without bound unless a site opts in. */
+describe('resolveConfig — audit retention (T09-01)', () => {
+  it('leaves retainDays absent by default, so the log keeps growing exactly as before', () => {
+    expect(resolveConfig(minimal, noEnv).security.audit.retainDays).toBeUndefined()
+  })
+
+  it('honours an explicit retention window', () => {
+    const config = resolveConfig({ ...minimal, security: { audit: { retainDays: 90 } } }, noEnv)
+    expect(config.security.audit.retainDays).toBe(90)
+  })
+
+  it('accepts 0 as the explicit "never purge" opt-out', () => {
+    const config = resolveConfig({ ...minimal, security: { audit: { retainDays: 0 } } }, noEnv)
+    expect(config.security.audit.retainDays).toBe(0)
+  })
+
+  it('refuses a negative retention window', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, security: { audit: { retainDays: -1 } } }, noEnv),
+    ).toThrow(CogentaError)
+  })
+})
+
 describe('resolveConfig — payment (contract E, fiche 34 task 3)', () => {
   it('defaults to "auto" and test mode on, so a shop cannot silently start taking real money', () => {
     const config = resolveConfig(minimal, noEnv)

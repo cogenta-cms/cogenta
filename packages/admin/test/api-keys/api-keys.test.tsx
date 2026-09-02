@@ -58,6 +58,32 @@ describe('the API key list', () => {
     expect(rows.queryByText(/cogenta_sk_mock/u)).toBeNull()
   })
 
+  /**
+   * T09-03 — the scope detail used to live only in a `title=` hover
+   * attribute, unreachable without a mouse. It is now a native `<details>`
+   * disclosure: natively focusable (no ARIA, no explicit `tabindex`) and
+   * activatable without a pointer, exactly the way `Enter`/`Space` on a
+   * focused `<summary>` behaves in every real browser.
+   */
+  it('makes the scope detail reachable by keyboard, not only a hover title', async () => {
+    render(<App />)
+    await goToApiKeys()
+    await screen.findByText('CI pipeline')
+
+    const summary = within(rowFor('CI pipeline')).getByText('viewer')
+    const details = summary.closest('details') as HTMLDetailsElement
+    expect(details).not.toBeNull()
+    expect(details.open).toBe(false)
+
+    summary.focus()
+    expect(document.activeElement).toBe(summary)
+
+    fireEvent.click(summary)
+
+    expect(details.open).toBe(true)
+    expect(within(details).getByText(/Articles: read/u)).toBeDefined()
+  })
+
   it('tells a non-admin plainly instead of rendering controls that would be refused', async () => {
     signedInAs(['editor'])
     // The "Comptes" nav group is hidden for a role with no visible item in

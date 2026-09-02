@@ -2342,6 +2342,8 @@
     "rolesHeading": "Rôles de {{email}}",
     "saveRoles": "Enregistrer les rôles",
     "viewSessions": "Voir les sessions de {{email}}",
+    "exportData": "Exporter les données personnelles de {{email}}",
+    "exportDataError": "Impossible d'exporter les données personnelles de ce compte.",
     "sessionsHeading": "Sessions de {{email}}",
     "disableAccount": "Désactiver {{email}}",
     "enableAccount": "Réactiver {{email}}",
@@ -3318,7 +3320,12 @@
     "activityHeading": "Mon activité",
     "activityIntro": "Vos vingt dernières actions, depuis le journal d'audit du site.",
     "activityEmpty": "Aucune activité enregistrée pour le moment.",
-    "activityError": "Impossible de charger votre activité."
+    "activityError": "Impossible de charger votre activité.",
+    "personalDataHeading": "Mes données personnelles",
+    "personalDataIntro": "Téléchargez tout ce que ce site conserve à votre sujet : profil, sessions, clés d'API, contenu rédigé et journal d'audit vous concernant.",
+    "exportData": "Exporter mes données personnelles",
+    "exportDataPending": "Export en cours…",
+    "exportDataError": "Impossible d'exporter vos données personnelles."
   },
   "pluginPermissions": {
     "heading": "Autorisations demandées",

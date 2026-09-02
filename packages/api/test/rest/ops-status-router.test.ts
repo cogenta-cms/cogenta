@@ -35,6 +35,7 @@ const SECURITY: CogentaConfig['security'] = {
   hstsMaxAge: 31536000,
   hstsIncludeSubDomains: true,
   pageMaxAge: 60,
+  audit: { retainDays: undefined },
 }
 
 function request(method: string, path: string): RestRequest {

@@ -2343,6 +2343,8 @@
     "rolesHeading": "Roles of {{email}}",
     "saveRoles": "Save the roles",
     "viewSessions": "See the sessions of {{email}}",
+    "exportData": "Export the personal data of {{email}}",
+    "exportDataError": "Could not export this account's personal data.",
     "sessionsHeading": "Sessions of {{email}}",
     "disableAccount": "Disable {{email}}",
     "enableAccount": "Re-enable {{email}}",
@@ -3319,7 +3321,12 @@
     "activityHeading": "My activity",
     "activityIntro": "Your twenty most recent actions, from the site's audit log.",
     "activityEmpty": "No recorded activity yet.",
-    "activityError": "Could not load your activity."
+    "activityError": "Could not load your activity.",
+    "personalDataHeading": "My personal data",
+    "personalDataIntro": "Download everything this site holds about you: profile, sessions, API keys, authored content and your own audit log entries.",
+    "exportData": "Export my personal data",
+    "exportDataPending": "Exporting…",
+    "exportDataError": "Could not export your personal data."
   },
   "pluginPermissions": {
     "heading": "Permissions requested",

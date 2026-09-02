@@ -418,6 +418,63 @@ describe('the appearance screen — "Marque" card (fiche 68 task 5, moved from R
   })
 })
 
+describe('the appearance screen — "Enregistrement automatique" toggle (shared with Réglages)', () => {
+  it('shows a "Enregistrer la marque" and a "Enregistrer l\'identité" button, disabled while autosave is on', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    const brandingSave = (await screen.findByRole('button', {
+      name: 'Enregistrer la marque',
+    })) as HTMLButtonElement
+    expect(brandingSave.disabled).toBe(true)
+
+    const identitySave = screen.getByRole('button', {
+      name: "Enregistrer l'identité",
+    }) as HTMLButtonElement
+    expect(identitySave.disabled).toBe(true)
+
+    // Distinct from the token editor's own "Enregistrer" — three buttons,
+    // three different accessible names, never a collision.
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeDefined()
+  })
+
+  it('defers the branding toggle to a draft, with no write, until "Enregistrer la marque" is clicked', async () => {
+    signedIn(['admin'])
+    localStorage.setItem('cogenta.admin.autosaveEnabled', 'false')
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    const toggle = (await screen.findByLabelText('Afficher la marque Cogenta')) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+
+    fireEvent.click(toggle)
+    // Shown right away, locally — but nothing sent yet.
+    expect(toggle.checked).toBe(false)
+
+    const brandingSave = screen.getByRole('button', {
+      name: 'Enregistrer la marque',
+    }) as HTMLButtonElement
+    expect(brandingSave.disabled).toBe(false)
+
+    fireEvent.click(brandingSave)
+    await screen.findByText('Enregistré.')
+
+    // Really persisted: leaving and re-entering personalization re-fetches
+    // the branding settings from the mock's own store.
+    fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    await screen.findByRole('heading', { name: 'Thème du site' })
+    await personalize()
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText('Afficher la marque Cogenta') as HTMLInputElement).checked,
+      ).toBe(false)
+    })
+  })
+})
+
 describe('the appearance screen — theme gallery preview (fiche L24 task 5)', () => {
   it('shows a real visual preview for every installed theme, not a placeholder', async () => {
     signedIn(['admin'], {

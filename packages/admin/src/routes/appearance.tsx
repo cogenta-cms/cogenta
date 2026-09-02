@@ -29,18 +29,23 @@ import {
 } from '../api/theme-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
+import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
+import { useSectionAutosave } from '../settings/site-settings-section.js'
 import {
   Button,
   Card,
   CardBody,
+  CardFooter,
   CardHeader,
   CardTitle,
   Field,
   Input,
   Label,
   Notice,
+  SavedIndicator,
   Select,
+  useSavedIndicator,
 } from '../ui/index.js'
 import { ThemeGalleryPreview } from './theme-gallery-preview.js'
 
@@ -140,10 +145,17 @@ const PREVIEW_DEBOUNCE_MS = 300
  * otherwise entirely about, and mixing the two would make one `load()`
  * respond to two unrelated failure modes.
  */
-function BrandingCard({ token }: { readonly token: string }): JSX.Element {
+function BrandingCard({
+  token,
+  autosaveEnabled,
+}: {
+  readonly token: string
+  readonly autosaveEnabled: boolean
+}): JSX.Element {
   const { t } = useTranslation()
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const indicator = useSavedIndicator()
 
   const load = useCallback(async () => {
     try {
@@ -159,10 +171,15 @@ function BrandingCard({ token }: { readonly token: string }): JSX.Element {
     void load()
   }, [load])
 
+  // Locale is always `null` here — every `branding.*` setting is site-scoped
+  // (matches this card's pre-fiche shape, which never passed one either).
   async function save(key: string, value: unknown): Promise<void> {
     await writeSetting(token, key, value)
     await load()
+    indicator.show()
   }
+
+  const section = useSectionAutosave(autosaveEnabled, (key, value) => save(key, value))
 
   return (
     <Card aria-labelledby="appearance-branding-heading">
@@ -184,10 +201,31 @@ function BrandingCard({ token }: { readonly token: string }): JSX.Element {
             canEdit
             translationNamespace="appearance"
             onSave={(value) => save(setting.key, value)}
+            {...section.fieldFor(setting.key, null)}
           />
         ))}
         <p className="m-0 text-xs text-muted-foreground">{t('appearance.brandingNote')}</p>
       </CardBody>
+      <CardFooter>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          loading={section.saving}
+          disabled={!section.hasPending}
+          onClick={() => void section.flush()}
+        >
+          {t('appearance.brandingSaveAction')}
+        </Button>
+        <SavedIndicator visible={indicator.visible} label={t('appearance.saved')} />
+      </CardFooter>
+      {section.error !== null && (
+        <div className="px-5 pb-4">
+          <Notice tone="danger" live="assertive">
+            <p>{section.error}</p>
+          </Notice>
+        </div>
+      )}
     </Card>
   )
 }
@@ -320,7 +358,13 @@ export function AppearanceRoute(): JSX.Element {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  // Shared with `settings.tsx` rather than a bespoke boolean + timeout: the
+  // token editor below has always required its own explicit "Enregistrer"
+  // click (never silent autosave), so only the *rendering* of its
+  // confirmation changes here — `hide()` still clears it the instant a
+  // further edit is made, exactly as the old `setSaved(false)` calls did.
+  const savedIndicator = useSavedIndicator()
+  const [autosaveEnabled] = useAutosaveEnabled()
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [description, setDescription] = useState('')
@@ -361,7 +405,7 @@ export function AppearanceRoute(): JSX.Element {
       ...previous,
       [group]: { ...previous[group], [name]: value },
     }))
-    setSaved(false)
+    savedIndicator.hide()
   }
 
   // One preview render per settled edit, the same debounce and
@@ -401,7 +445,7 @@ export function AppearanceRoute(): JSX.Element {
         tokenOverrides: Object.keys(overrideDraft).length === 0 ? null : overrideDraft,
         additionalCss: additionalCss === '' ? null : additionalCss,
       })
-      setSaved(true)
+      savedIndicator.show()
       await load()
     } catch (caught) {
       setSaveError(caught instanceof ApiError ? caught.message : t('appearance.saveError'))
@@ -467,13 +511,69 @@ export function AppearanceRoute(): JSX.Element {
     // into the draft the "Save" button above still has to be pressed for.
     setOverrideDraft(candidate.tokens as TokenOverrides)
     setCandidates(null)
-    setSaved(false)
+    savedIndicator.hide()
   }
 
   async function exportToFile(): Promise<void> {
     if (token === null) return
     await exportThemeToFile(token)
     await load()
+  }
+
+  /**
+   * "Identité" (logo/logo sombre/favicon/image de partage) — four
+   * `MediaPicker`s that used to call `saveThemeOverrides` straight from
+   * `onChange`, with no confirmation at all. Same draft-then-flush shape as
+   * `SectionAutosave` (`site-settings-section.ts`), hand-rolled here rather
+   * than reused: these four fields are not `SiteSettingsField`s (a media
+   * reference has no setting *key* the registry knows), and they share one
+   * PUT (`saveThemeOverrides` merges all four keys at once) rather than one
+   * write per field.
+   */
+  const identityIndicator = useSavedIndicator()
+  const [identityDraft, setIdentityDraft] = useState<
+    Partial<
+      Pick<
+        ThemeState['overrides'],
+        'logoMediaId' | 'logoDarkMediaId' | 'faviconMediaId' | 'shareImageMediaId'
+      >
+    >
+  >({})
+  const [identitySaving, setIdentitySaving] = useState(false)
+  const [identityError, setIdentityError] = useState<string | null>(null)
+
+  type IdentityField = 'logoMediaId' | 'logoDarkMediaId' | 'faviconMediaId' | 'shareImageMediaId'
+
+  function identityValue(field: IdentityField): string | null {
+    if (field in identityDraft) return identityDraft[field] ?? null
+    return theme?.overrides[field] ?? null
+  }
+
+  async function handleIdentityChange(field: IdentityField, value: string | null): Promise<void> {
+    if (!autosaveEnabled) {
+      setIdentityDraft((previous) => ({ ...previous, [field]: value }))
+      return
+    }
+    if (token === null) return
+    await saveThemeOverrides(token, { [field]: value })
+    await load()
+    identityIndicator.show()
+  }
+
+  async function flushIdentity(): Promise<void> {
+    if (token === null || Object.keys(identityDraft).length === 0) return
+    setIdentitySaving(true)
+    setIdentityError(null)
+    try {
+      await saveThemeOverrides(token, identityDraft)
+      setIdentityDraft({})
+      await load()
+      identityIndicator.show()
+    } catch (caught) {
+      setIdentityError(caught instanceof ApiError ? caught.message : t('appearance.saveError'))
+    } finally {
+      setIdentitySaving(false)
+    }
   }
 
   const iframe = useRef<HTMLIFrameElement | null>(null)
@@ -681,7 +781,7 @@ export function AppearanceRoute(): JSX.Element {
                             value={additionalCss}
                             onChange={(event) => {
                               setAdditionalCss(event.target.value)
-                              setSaved(false)
+                              savedIndicator.hide()
                             }}
                           />
                         )}
@@ -707,15 +807,12 @@ export function AppearanceRoute(): JSX.Element {
                           accept={['image']}
                           many={false}
                           value={
-                            theme.overrides.logoMediaId === null
+                            identityValue('logoMediaId') === null
                               ? []
-                              : [theme.overrides.logoMediaId]
+                              : [identityValue('logoMediaId') as string]
                           }
                           onChange={(ids) =>
-                            void (
-                              token !== null &&
-                              saveThemeOverrides(token, { logoMediaId: ids[0] ?? null }).then(load)
-                            )
+                            void handleIdentityChange('logoMediaId', ids[0] ?? null)
                           }
                         />
                       </div>
@@ -729,17 +826,12 @@ export function AppearanceRoute(): JSX.Element {
                           accept={['image']}
                           many={false}
                           value={
-                            theme.overrides.logoDarkMediaId === null
+                            identityValue('logoDarkMediaId') === null
                               ? []
-                              : [theme.overrides.logoDarkMediaId]
+                              : [identityValue('logoDarkMediaId') as string]
                           }
                           onChange={(ids) =>
-                            void (
-                              token !== null &&
-                              saveThemeOverrides(token, { logoDarkMediaId: ids[0] ?? null }).then(
-                                load,
-                              )
-                            )
+                            void handleIdentityChange('logoDarkMediaId', ids[0] ?? null)
                           }
                         />
                       </div>
@@ -751,17 +843,12 @@ export function AppearanceRoute(): JSX.Element {
                           accept={['image']}
                           many={false}
                           value={
-                            theme.overrides.faviconMediaId === null
+                            identityValue('faviconMediaId') === null
                               ? []
-                              : [theme.overrides.faviconMediaId]
+                              : [identityValue('faviconMediaId') as string]
                           }
                           onChange={(ids) =>
-                            void (
-                              token !== null &&
-                              saveThemeOverrides(token, { faviconMediaId: ids[0] ?? null }).then(
-                                load,
-                              )
-                            )
+                            void handleIdentityChange('faviconMediaId', ids[0] ?? null)
                           }
                         />
                       </div>
@@ -775,24 +862,42 @@ export function AppearanceRoute(): JSX.Element {
                           accept={['image']}
                           many={false}
                           value={
-                            theme.overrides.shareImageMediaId === null
+                            identityValue('shareImageMediaId') === null
                               ? []
-                              : [theme.overrides.shareImageMediaId]
+                              : [identityValue('shareImageMediaId') as string]
                           }
                           onChange={(ids) =>
-                            void (
-                              token !== null &&
-                              saveThemeOverrides(token, { shareImageMediaId: ids[0] ?? null }).then(
-                                load,
-                              )
-                            )
+                            void handleIdentityChange('shareImageMediaId', ids[0] ?? null)
                           }
                         />
                       </div>
                     </CardBody>
+                    <CardFooter>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        loading={identitySaving}
+                        disabled={Object.keys(identityDraft).length === 0}
+                        onClick={() => void flushIdentity()}
+                      >
+                        {t('appearance.identitySaveAction')}
+                      </Button>
+                      <SavedIndicator
+                        visible={identityIndicator.visible}
+                        label={t('appearance.saved')}
+                      />
+                    </CardFooter>
+                    {identityError !== null && (
+                      <div className="px-5 pb-4">
+                        <Notice tone="danger" live="assertive">
+                          <p>{identityError}</p>
+                        </Notice>
+                      </div>
+                    )}
                   </Card>
 
-                  <BrandingCard token={token ?? ''} />
+                  <BrandingCard token={token ?? ''} autosaveEnabled={autosaveEnabled} />
 
                   <Card aria-labelledby="appearance-gallery-heading">
                     <CardHeader>
@@ -921,9 +1026,10 @@ export function AppearanceRoute(): JSX.Element {
                         {t('appearance.exportAction')}
                       </Button>
                     )}
-                    {saved && (
-                      <span className="text-sm text-muted-foreground">{t('appearance.saved')}</span>
-                    )}
+                    <SavedIndicator
+                      visible={savedIndicator.visible}
+                      label={t('appearance.saved')}
+                    />
                   </div>
                   {saveError !== null && (
                     <Notice tone="danger" live="assertive">

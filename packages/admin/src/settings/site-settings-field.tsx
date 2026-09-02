@@ -31,6 +31,13 @@ import { Field, Input, Select } from '../ui/index.js'
  * never sent mid-keystroke), boolean/select-like fields immediately on
  * change — the same split WordPress and Strapi both use, and the one that
  * needs no separate "Save" button people can forget to press.
+ *
+ * That's the default (`autosave: true`, unchanged for every existing
+ * caller). When a screen's own "Enregistrer automatiquement" preference
+ * (`autosave-prefs.ts`) is off, `autosave={false}` turns `commit` into a
+ * pure local-state update — `onSave` is never called, `onDraftChange` is,
+ * and it is the caller's job (see `site-settings-section.ts`) to actually
+ * persist the draft later, typically from an explicit "Enregistrer" button.
  */
 
 const TEXTAREA_CLASSES =
@@ -65,6 +72,10 @@ export interface SiteSettingsFieldProps {
   readonly onSave: (value: unknown) => Promise<void>
   /** i18n namespace this field's label/help live under. Defaults to `'settings'`. */
   readonly translationNamespace?: string
+  /** `false` defers persistence to the caller (see the doc comment above). Defaults to `true`. */
+  readonly autosave?: boolean
+  /** Called with the new value instead of `onSave`, while `autosave` is `false`. */
+  readonly onDraftChange?: (value: unknown) => void
 }
 
 interface UseSiteSettingFieldResult {
@@ -82,6 +93,8 @@ function useSiteSettingField(
   canEdit: boolean,
   onSave: (value: unknown) => Promise<void>,
   translationNamespace: string,
+  autosave: boolean,
+  onDraftChange?: (value: unknown) => void,
 ): UseSiteSettingFieldResult {
   const { t } = useTranslation()
   const [value, setValue] = useState(setting.value)
@@ -105,6 +118,17 @@ function useSiteSettingField(
 
   async function commit(next: unknown): Promise<void> {
     if (!canEdit) return
+    if (!autosave) {
+      if (next === value) return
+      // Deferred: update what's shown, tell the caller a draft is pending,
+      // and stop — never call `onSave`, and never claim "saved" for a value
+      // that has not actually reached the server yet.
+      setValue(next)
+      setSaved(false)
+      setError(null)
+      onDraftChange?.(next)
+      return
+    }
     if (next === value && saved) return
     setSaving(true)
     setError(null)
@@ -215,6 +239,8 @@ export function SiteSettingsField({
   canEdit,
   onSave,
   translationNamespace = 'settings',
+  autosave = true,
+  onDraftChange,
 }: SiteSettingsFieldProps): JSX.Element {
   const { t } = useTranslation()
   const { value, saving, saved, error, commit, label, description } = useSiteSettingField(
@@ -222,6 +248,8 @@ export function SiteSettingsField({
     canEdit,
     onSave,
     translationNamespace,
+    autosave,
+    onDraftChange,
   )
   const fieldId = `site-setting-${setting.key}`
 

@@ -1987,6 +1987,7 @@
     "additionalCssLabel": "CSS, appended after the theme's own stylesheet",
     "additionalCssNote": "Served as part of the site's own stylesheet, never as an inline <style> tag — this cannot force the Content-Security-Policy to allow inline styles.",
     "identityHeading": "Identity",
+    "identitySaveAction": "Save identity",
     "logoLabel": "Logo",
     "logoDarkLabel": "Logo (dark mode)",
     "faviconLabel": "Favicon",
@@ -2057,6 +2058,7 @@
       }
     },
     "brandingHeading": "Branding",
+    "brandingSaveAction": "Save branding",
     "brandingNote": "The custom logo only takes effect once \"Show Cogenta branding\" is turned off — it stays saved either way, so switching branding back on never loses it.",
     "brandingLoadError": "Could not load the branding settings.",
     "field": {
@@ -2107,8 +2109,12 @@
     "saving": "Saving…",
     "saved": "Saved.",
     "savedNotice": "Change saved.",
+    "saveSectionAction": "Save",
     "provenanceEditable": "Editable here.",
     "provenanceReadOnly": "Defined in cogenta.config.mjs — read-only.",
+    "autosaveHeading": "Autosave",
+    "autosaveToggleLabel": "Save changes automatically",
+    "autosaveToggleHelp": "On by default: every field saves as soon as you change it. Turn this off to save nothing until you click \"Save\" — the button stays visible either way.",
     "tab": {
       "general": "General",
       "reading": "Reading",

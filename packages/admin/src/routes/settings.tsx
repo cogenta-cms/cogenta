@@ -1,12 +1,14 @@
-import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { readConfigStatus } from '../api/ops-status-client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
 import { useSchema } from '../schema/schema-context.js'
 import { useRefreshSiteSettings } from '../settings/site-settings-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
+import { type SectionAutosave, useSectionAutosave } from '../settings/site-settings-section.js'
 import { NAV_GROUPS, NAV_ITEMS, type NavGroupId } from '../shell/nav-items.js'
 import {
   type NavLayoutOverrides,
@@ -15,7 +17,18 @@ import {
   serialiseNavLayoutOverrides,
 } from '../shell/nav-layout.js'
 import { cn } from '../ui/cn.js'
-import { Card, CardBody, CardHeader, CardTitle, Notice, Select } from '../ui/index.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Notice,
+  SavedIndicator,
+  Select,
+  useSavedIndicator,
+} from '../ui/index.js'
 
 /**
  * "Réglages" — fiche 23's rewrite. Before this, `/settings` held exactly one
@@ -72,17 +85,15 @@ export function SettingsRoute(): JSX.Element {
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notFoundPath, setNotFoundPath] = useState<string | null>(null)
-  // Every field auto-saves on blur with no "Save" button — the only tell that
-  // it worked was a network request nobody but a developer would think to
-  // check. A brief, self-dismissing confirmation is the whole fix.
-  const [justSaved, setJustSaved] = useState(false)
-  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (savedTimeoutRef.current !== null) clearTimeout(savedTimeoutRef.current)
-    }
-  }, [])
+  // Every field auto-saves on blur with no "Save" button of its own — the
+  // only tell that it worked was a network request nobody but a developer
+  // would think to check. A brief, self-clearing confirmation is the whole
+  // fix — shared with `appearance.tsx` rather than each screen inventing its
+  // own timeout, and now fed by both an individual field's own autosave
+  // *and* a section's manual "Enregistrer" flush (`save()` below is the one
+  // funnel both go through).
+  const savedIndicator = useSavedIndicator()
+  const [autosaveEnabled, setAutosaveEnabled] = useAutosaveEnabled()
 
   useEffect(() => {
     if (token === null || !isAdmin) return
@@ -135,9 +146,7 @@ export function SettingsRoute(): JSX.Element {
     if (token === null) return
     await writeSetting(token, key, value, settingLocale ?? undefined)
     await reload()
-    if (savedTimeoutRef.current !== null) clearTimeout(savedTimeoutRef.current)
-    setJustSaved(true)
-    savedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500)
+    savedIndicator.show()
   }
 
   // Fiche 22 tâche 8, part 3 — the four `navigation.*` keys always travel
@@ -186,11 +195,28 @@ export function SettingsRoute(): JSX.Element {
         </Notice>
       )}
 
-      {justSaved && (
-        <Notice tone="success" live="polite">
-          <p>{t('settings.savedNotice')}</p>
-        </Notice>
-      )}
+      <SavedIndicator visible={savedIndicator.visible} label={t('settings.savedNotice')} />
+
+      <Card aria-labelledby="settings-autosave-heading">
+        <CardHeader>
+          <CardTitle>
+            <h2 id="settings-autosave-heading">{t('settings.autosaveHeading')}</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardBody>
+          <label className="flex items-center gap-2 font-sans text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={autosaveEnabled}
+              onChange={(event) => setAutosaveEnabled(event.target.checked)}
+            />
+            {t('settings.autosaveToggleLabel')}
+          </label>
+          <p className="m-0 mt-1.5 text-xs text-muted-foreground">
+            {t('settings.autosaveToggleHelp')}
+          </p>
+        </CardBody>
+      </Card>
 
       <div
         role="tablist"
@@ -227,6 +253,7 @@ export function SettingsRoute(): JSX.Element {
             defaultLocale={defaultLocale}
             onLocaleChange={setLocale}
             onSave={save}
+            autosaveEnabled={autosaveEnabled}
           />
         )}
         {tab === 'reading' && (
@@ -234,13 +261,30 @@ export function SettingsRoute(): JSX.Element {
             settings={byTab.get('reading') ?? []}
             notFoundPath={notFoundPath}
             onSave={save}
+            autosaveEnabled={autosaveEnabled}
           />
         )}
         {tab === 'discussion' && (
-          <DiscussionTab settings={byTab.get('discussion') ?? []} onSave={save} />
+          <DiscussionTab
+            settings={byTab.get('discussion') ?? []}
+            onSave={save}
+            autosaveEnabled={autosaveEnabled}
+          />
         )}
-        {tab === 'media' && <MediaTab settings={byTab.get('media') ?? []} onSave={save} />}
-        {tab === 'privacy' && <PrivacyTab settings={byTab.get('privacy') ?? []} onSave={save} />}
+        {tab === 'media' && (
+          <MediaTab
+            settings={byTab.get('media') ?? []}
+            onSave={save}
+            autosaveEnabled={autosaveEnabled}
+          />
+        )}
+        {tab === 'privacy' && (
+          <PrivacyTab
+            settings={byTab.get('privacy') ?? []}
+            onSave={save}
+            autosaveEnabled={autosaveEnabled}
+          />
+        )}
         {tab === 'navigation' && (
           <NavigationTab overrides={navOverrides} onSave={saveNavOverrides} />
         )}
@@ -252,6 +296,47 @@ export function SettingsRoute(): JSX.Element {
 
 type TabSaveHandler = (key: string, value: unknown, locale: string | null) => Promise<void>
 
+/**
+ * The explicit "Enregistrer" one field-autosaving `<Card>` always shows now,
+ * whatever the "Enregistrer automatiquement" preference is set to (the site
+ * owner's own words: "surtout et surtout toujours ajouter le bouton
+ * enregistrer chaque fois"). Disabled while `!section.hasPending` — true for
+ * the whole life of a `<Card>` when autosave is on, since nothing is ever
+ * queued in that case; see `site-settings-section.ts` for why that alone is
+ * enough, without also asking the toggle's own current state.
+ */
+function SectionSaveFooter({
+  section,
+  label,
+}: {
+  readonly section: SectionAutosave
+  readonly label: string
+}): JSX.Element {
+  return (
+    <>
+      <CardFooter>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          loading={section.saving}
+          disabled={!section.hasPending}
+          onClick={() => void section.flush()}
+        >
+          {label}
+        </Button>
+      </CardFooter>
+      {section.error !== null && (
+        <div className="px-5 pb-4">
+          <Notice tone="danger" live="assertive">
+            <p>{section.error}</p>
+          </Notice>
+        </div>
+      )}
+    </>
+  )
+}
+
 function GeneralTab({
   settings,
   locale,
@@ -259,6 +344,7 @@ function GeneralTab({
   defaultLocale,
   onLocaleChange,
   onSave,
+  autosaveEnabled,
 }: {
   readonly settings: readonly SiteSetting[]
   readonly locale: string
@@ -266,8 +352,10 @@ function GeneralTab({
   readonly defaultLocale: string
   readonly onLocaleChange: (locale: string) => void
   readonly onSave: TabSaveHandler
+  readonly autosaveEnabled: boolean
 }): JSX.Element {
   const { t } = useTranslation()
+  const section = useSectionAutosave(autosaveEnabled, onSave)
   return (
     <div className="flex flex-col gap-4">
       <Card aria-labelledby="settings-general-heading">
@@ -285,6 +373,7 @@ function GeneralTab({
                 setting={setting}
                 canEdit
                 onSave={(value) => onSave(setting.key, value, null)}
+                {...section.fieldFor(setting.key, null)}
               />
             ))}
 
@@ -319,9 +408,13 @@ function GeneralTab({
                 setting={setting}
                 canEdit
                 onSave={(value) => onSave(setting.key, value, locale)}
+                {...section.fieldFor(setting.key, locale)}
               />
             ))}
         </CardBody>
+        {settings.length > 0 && (
+          <SectionSaveFooter section={section} label={t('settings.saveSectionAction')} />
+        )}
       </Card>
 
       <Card aria-labelledby="settings-general-locale-heading">
@@ -344,12 +437,15 @@ function ReadingTab({
   settings,
   notFoundPath,
   onSave,
+  autosaveEnabled,
 }: {
   readonly settings: readonly SiteSetting[]
   readonly notFoundPath: string | null
   readonly onSave: TabSaveHandler
+  readonly autosaveEnabled: boolean
 }): JSX.Element {
   const { t } = useTranslation()
+  const section = useSectionAutosave(autosaveEnabled, onSave)
   return (
     <Card>
       <CardBody className="flex flex-col gap-4">
@@ -359,6 +455,7 @@ function ReadingTab({
             setting={setting}
             canEdit
             onSave={(value) => onSave(setting.key, value, null)}
+            {...section.fieldFor(setting.key, null)}
           />
         ))}
         <div className="flex flex-col gap-1.5">
@@ -371,6 +468,9 @@ function ReadingTab({
           </p>
         </div>
       </CardBody>
+      {settings.length > 0 && (
+        <SectionSaveFooter section={section} label={t('settings.saveSectionAction')} />
+      )}
     </Card>
   )
 }
@@ -378,11 +478,14 @@ function ReadingTab({
 function MediaTab({
   settings,
   onSave,
+  autosaveEnabled,
 }: {
   readonly settings: readonly SiteSetting[]
   readonly onSave: TabSaveHandler
+  readonly autosaveEnabled: boolean
 }): JSX.Element {
   const { t } = useTranslation()
+  const section = useSectionAutosave(autosaveEnabled, onSave)
   return (
     <Card>
       <CardBody className="flex flex-col gap-4">
@@ -392,6 +495,7 @@ function MediaTab({
             setting={setting}
             canEdit
             onSave={(value) => onSave(setting.key, value, null)}
+            {...section.fieldFor(setting.key, null)}
           />
         ))}
         <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -399,6 +503,9 @@ function MediaTab({
           <dd className="m-0">{t('settings.mediaFormatsValue')}</dd>
         </dl>
       </CardBody>
+      {settings.length > 0 && (
+        <SectionSaveFooter section={section} label={t('settings.saveSectionAction')} />
+      )}
     </Card>
   )
 }
@@ -415,11 +522,14 @@ function MediaTab({
 function DiscussionTab({
   settings,
   onSave,
+  autosaveEnabled,
 }: {
   readonly settings: readonly SiteSetting[]
   readonly onSave: TabSaveHandler
+  readonly autosaveEnabled: boolean
 }): JSX.Element {
   const { t } = useTranslation()
+  const section = useSectionAutosave(autosaveEnabled, onSave)
   return (
     <Card>
       <CardBody className="flex flex-col gap-4">
@@ -429,10 +539,14 @@ function DiscussionTab({
             setting={setting}
             canEdit
             onSave={(value) => onSave(setting.key, value, null)}
+            {...section.fieldFor(setting.key, null)}
           />
         ))}
         <p className="m-0 text-xs text-muted-foreground">{t('settings.discussionNote')}</p>
       </CardBody>
+      {settings.length > 0 && (
+        <SectionSaveFooter section={section} label={t('settings.saveSectionAction')} />
+      )}
     </Card>
   )
 }
@@ -440,11 +554,14 @@ function DiscussionTab({
 function PrivacyTab({
   settings,
   onSave,
+  autosaveEnabled,
 }: {
   readonly settings: readonly SiteSetting[]
   readonly onSave: TabSaveHandler
+  readonly autosaveEnabled: boolean
 }): JSX.Element {
   const { t } = useTranslation()
+  const section = useSectionAutosave(autosaveEnabled, onSave)
   const cookieBanner = settings.find((setting) => setting.key === 'privacy.cookieBannerEnabled')
   const bannerEnabled = cookieBanner?.value === true
 
@@ -459,10 +576,14 @@ function PrivacyTab({
               setting={setting}
               canEdit
               onSave={(value) => onSave(setting.key, value, null)}
+              {...section.fieldFor(setting.key, null)}
             />
           ))}
         <p className="m-0 text-xs text-muted-foreground">{t('settings.noCookieByDefault')}</p>
       </CardBody>
+      {settings.length > 0 && (
+        <SectionSaveFooter section={section} label={t('settings.saveSectionAction')} />
+      )}
     </Card>
   )
 }

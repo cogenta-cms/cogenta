@@ -1987,6 +1987,7 @@
     "additionalCssLabel": "CSS, ajouté après la feuille de style du thème",
     "additionalCssNote": "Servi comme partie de la feuille de style du site, jamais comme balise <style> en ligne — cela ne peut donc pas forcer la Content-Security-Policy à autoriser le style en ligne.",
     "identityHeading": "Identité",
+    "identitySaveAction": "Enregistrer l'identité",
     "logoLabel": "Logo",
     "logoDarkLabel": "Logo (mode sombre)",
     "faviconLabel": "Favicon",
@@ -2057,6 +2058,7 @@
       }
     },
     "brandingHeading": "Marque",
+    "brandingSaveAction": "Enregistrer la marque",
     "brandingNote": "Le logo personnalisé ne prend effet qu'une fois « Afficher la marque Cogenta » désactivé — il reste enregistré dans tous les cas, donc réactiver la marque Cogenta ne le perd jamais.",
     "brandingLoadError": "Impossible de charger les réglages de marque.",
     "field": {
@@ -2107,8 +2109,12 @@
     "saving": "Enregistrement…",
     "saved": "Enregistré.",
     "savedNotice": "Modification enregistrée.",
+    "saveSectionAction": "Enregistrer",
     "provenanceEditable": "Modifiable ici.",
     "provenanceReadOnly": "Défini dans cogenta.config.mjs — lecture seule.",
+    "autosaveHeading": "Enregistrement automatique",
+    "autosaveToggleLabel": "Enregistrer automatiquement les modifications",
+    "autosaveToggleHelp": "Activé par défaut : chaque champ s'enregistre dès que vous le modifiez. Désactivez pour ne rien enregistrer avant d'avoir cliqué sur « Enregistrer » — le bouton reste toujours présent dans les deux cas.",
     "tab": {
       "general": "Général",
       "reading": "Lecture",

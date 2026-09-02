@@ -352,3 +352,92 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
     })
   })
 })
+
+describe('the site settings screen — "Enregistrement automatique" toggle', () => {
+  it('is on by default, and an explicit "Enregistrer" button is present but has nothing pending', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    const toggle = (await screen.findByLabelText(
+      'Enregistrer automatiquement les modifications',
+    )) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+
+    const saveButton = (await screen.findByRole('button', {
+      name: 'Enregistrer',
+    })) as HTMLButtonElement
+    expect(saveButton.disabled).toBe(true)
+  })
+
+  it('still saves on blur, and reports it, while the toggle stays on', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    const title = await screen.findByLabelText('Titre du site')
+    fireEvent.change(title, { target: { value: 'Autosaved title' } })
+    fireEvent.blur(title)
+
+    await screen.findByText('Enregistré.')
+  })
+
+  it('defers a field to a draft, with no save, until "Enregistrer" is clicked once turned off', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    const toggle = await screen.findByLabelText('Enregistrer automatiquement les modifications')
+    fireEvent.click(toggle)
+
+    const title = await screen.findByLabelText('Titre du site')
+    fireEvent.change(title, { target: { value: 'Draft title' } })
+    fireEvent.blur(title)
+
+    // The field shows the edit right away — but nothing was sent yet.
+    expect((title as HTMLInputElement).value).toBe('Draft title')
+    expect(screen.queryByText('Enregistré.')).toBeNull()
+
+    const saveButton = (await screen.findByRole('button', {
+      name: 'Enregistrer',
+    })) as HTMLButtonElement
+    expect(saveButton.disabled).toBe(false)
+
+    fireEvent.click(saveButton)
+    // The manual flush goes through the very same `save()` the top-level
+    // confirmation is wired to — a different string from the per-field
+    // "Enregistré." (that one only ever fires on the autosave path).
+    await screen.findByText('Modification enregistrée.')
+
+    // Really persisted, not just a local flag: a reload of the same tab
+    // shows the value the mock's own store now holds.
+    fireEvent.click(screen.getByRole('tab', { name: 'Lecture' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Général' }))
+    await waitFor(() => {
+      expect((screen.getByLabelText('Titre du site') as HTMLInputElement).value).toBe('Draft title')
+    })
+  })
+
+  it('never sends a request for a deferred edit that was never flushed', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToSettings()
+
+    const toggle = await screen.findByLabelText('Enregistrer automatiquement les modifications')
+    fireEvent.click(toggle)
+
+    const title = await screen.findByLabelText('Titre du site')
+    fireEvent.change(title, { target: { value: 'Never sent' } })
+    fireEvent.blur(title)
+    expect(screen.queryByText('Enregistré.')).toBeNull()
+
+    // Switching tabs and back never round-trips the draft either — a tab is
+    // unmounted, not persisted, so this also proves the draft actually never
+    // reached the server: the mock's own store still has the old value.
+    fireEvent.click(screen.getByRole('tab', { name: 'Lecture' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Général' }))
+    await waitFor(() => {
+      expect((screen.getByLabelText('Titre du site') as HTMLInputElement).value).toBe('')
+    })
+  })
+})

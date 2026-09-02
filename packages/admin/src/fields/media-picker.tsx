@@ -1,21 +1,22 @@
-import { type DragEvent, type JSX, useCallback, useEffect, useId, useState } from 'react'
+import { type DragEvent, type JSX, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
-  fileToBase64,
   getMedia,
   listMedia,
+  listMediaFolders,
   type MediaAsset,
+  type MediaFolder,
   type MediaKind,
   mediaKindFor,
-  uploadMedia,
 } from '../api/media-client.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { UploadForm } from '../media/upload-form.js'
+import { useUploadQueue } from '../media/upload-queue.js'
 import '../styles/entry-picker.css'
 import '../styles/media.css'
 import { cn } from '../ui/cn.js'
-import { Button, Input, Label, Modal } from '../ui/index.js'
+import { Button, Input, Label, Modal, Select } from '../ui/index.js'
 
 /**
  * The reusable media picker (fiche 03 task 3): browse-and-search the media
@@ -55,6 +56,27 @@ export function MediaPicker({
   const [browsing, setBrowsing] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [dropError, setDropError] = useState<string | null>(null)
+
+  // `value` read fresh inside the upload queue's completion callback rather
+  // than closed over: several dropped files now upload concurrently (fiche
+  // 05 task 1), and two completions landing close together must each see
+  // the other's addition, not a `value` snapshot from whenever `enqueue()`
+  // was called.
+  const valueRef = useRef(value)
+  useEffect(() => {
+    valueRef.current = value
+  }, [value])
+
+  const uploads = useUploadQueue(token, (asset) => {
+    setResolved((current) => ({ ...current, [asset.id]: asset }))
+    const next = many
+      ? valueRef.current.includes(asset.id)
+        ? valueRef.current
+        : [...valueRef.current, asset.id]
+      : [asset.id]
+    valueRef.current = next
+    onChange(next)
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -100,41 +122,28 @@ export function MediaPicker({
     }
   }
 
-  async function uploadFiles(files: readonly File[]): Promise<void> {
+  /**
+   * Real multipart uploads, bounded to `MAX_CONCURRENT_UPLOADS` in parallel
+   * (fiche 05 task 1) — a dropped file carries no alt text to ask for, so it
+   * is filed decorative-by-necessity rather than blocked outright, exactly
+   * as before; the media library remains the place to add a real
+   * description later. What changed is the transport (`useUploadQueue`'s
+   * pool, real multipart, real byte progress) and that several dropped
+   * files now genuinely upload at once instead of one at a time.
+   */
+  function uploadFiles(files: readonly File[]): void {
     setDropError(null)
-    const uploaded: MediaAsset[] = []
     for (const file of files) {
       const kind = mediaKindFor(file.type)
       if (!accepts(accept, { kind })) {
         setDropError(t('fields.mediaDropRejected', { filename: file.name }))
         continue
       }
-      try {
-        const data = await fileToBase64(file)
-        // A dropped file carries no alt text to ask for; it is uploaded
-        // decorative-by-necessity rather than blocked outright, and the
-        // media library remains the place to add a real description later.
-        const asset = await uploadMedia(token, {
-          kind,
-          filename: file.name,
-          mimeType: file.type,
-          data,
-          decorative: true,
-          decorativeJustification: t('fields.mediaDropJustification'),
-        })
-        uploaded.push(asset)
-      } catch (caught) {
-        setDropError(caught instanceof ApiError ? caught.message : t('media.uploadError'))
-      }
+      uploads.enqueue(file, {
+        decorative: true,
+        decorativeJustification: t('fields.mediaDropJustification'),
+      })
     }
-    if (uploaded.length === 0) return
-    setResolved((current) => {
-      const next = { ...current }
-      for (const asset of uploaded) next[asset.id] = asset
-      return next
-    })
-    const ids = uploaded.map((asset) => asset.id)
-    onChange(many ? [...value, ...ids] : [ids[ids.length - 1] ?? value[0] ?? ''].filter(Boolean))
   }
 
   function handleDrop(event: DragEvent<HTMLFieldSetElement>): void {
@@ -142,7 +151,7 @@ export function MediaPicker({
     setDragOver(false)
     if (disabled) return
     const files = [...event.dataTransfer.files]
-    if (files.length > 0) void uploadFiles(many ? files : files.slice(0, 1))
+    if (files.length > 0) uploadFiles(many ? files : files.slice(0, 1))
   }
 
   return (
@@ -269,6 +278,35 @@ export function MediaPicker({
         </p>
       )}
 
+      {uploads.items.some((item) => item.status !== 'done') && (
+        <ul className="media-picker__upload-queue" aria-label={t('media.uploadQueueHeading')}>
+          {uploads.items
+            .filter((item) => item.status !== 'done')
+            .map((item) => (
+              <li key={item.id}>
+                {item.status === 'failed' ? (
+                  <span role="alert" className="media-picker__upload-error">
+                    {item.filename}: {item.error ?? t('media.uploadError')}
+                    <button type="button" onClick={() => uploads.retry(item.id)}>
+                      {t('media.retryUpload')}
+                    </button>
+                  </span>
+                ) : (
+                  <span>
+                    {item.filename} —{' '}
+                    {t(
+                      item.status === 'uploading'
+                        ? 'media.uploadInProgress'
+                        : 'media.uploadPending',
+                      { filename: item.filename },
+                    )}
+                  </span>
+                )}
+              </li>
+            ))}
+        </ul>
+      )}
+
       <Modal
         open={browsing}
         onOpenChange={setBrowsing}
@@ -294,6 +332,7 @@ function BrowsePanel({
 }): JSX.Element {
   const { t } = useTranslation()
   const searchId = useId()
+  const folderFilterId = useId()
   const [items, setItems] = useState<readonly MediaAsset[]>([])
   const [cursor, setCursor] = useState<string | undefined>(undefined)
   const [hasMore, setHasMore] = useState(false)
@@ -302,6 +341,23 @@ function BrowsePanel({
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState('')
   const [uploading, setUploading] = useState(false)
+  // Fiche 05 task 4: '' means "every folder", the only meaning `<select>`
+  // can express with a plain empty option — `listMedia`'s own `null` for
+  // "unclassified" is a real, distinct choice, offered as its own option.
+  const [folders, setFolders] = useState<readonly MediaFolder[]>([])
+  const [folderFilter, setFolderFilter] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    listMediaFolders(token)
+      .then((found) => {
+        if (!cancelled) setFolders(found)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   // The server filters by exactly one `kind`; a field constrained to a
   // proper subset of more than one kind (`accept: ['image', 'video']`) is
@@ -320,6 +376,9 @@ function BrowsePanel({
           ...(singleKindFilter === undefined ? {} : { kind: singleKindFilter }),
           ...(after === undefined ? {} : { cursor: after }),
           ...(submitted === '' ? {} : { q: submitted }),
+          ...(folderFilter === ''
+            ? {}
+            : { folderId: folderFilter === 'unclassified' ? null : folderFilter }),
         })
         const filtered = page.items.filter((asset) => accepts(accept, asset))
         setItems((current) => (after === undefined ? filtered : [...current, ...filtered]))
@@ -331,17 +390,36 @@ function BrowsePanel({
         setLoading(false)
       }
     },
-    [token, singleKindFilter, submitted, accept, t],
+    [token, singleKindFilter, submitted, folderFilter, accept, t],
   )
 
-  // Reloads from the top whenever the target token, the kind filter or the
-  // committed search text changes.
+  // Reloads from the top whenever the target token, the kind filter, the
+  // folder filter, or the committed search text changes.
   useEffect(() => {
     void load()
   }, [load])
 
   return (
     <div className="entry-picker__browse">
+      {folders.length > 0 && (
+        <div className="entry-picker__folder-filter">
+          <Label htmlFor={folderFilterId}>{t('fields.mediaFolderFilterLabel')}</Label>
+          <Select
+            id={folderFilterId}
+            value={folderFilter}
+            onChange={(event) => setFolderFilter(event.target.value)}
+          >
+            <option value="">{t('fields.mediaFolderFilterAll')}</option>
+            <option value="unclassified">{t('media.unclassified')}</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
       <form
         className="entry-picker__search"
         onSubmit={(event) => {

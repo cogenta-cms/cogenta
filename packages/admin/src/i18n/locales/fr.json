@@ -69,6 +69,8 @@
     "mediaDropHint": "Déposer un fichier ici pour le téléverser.",
     "mediaDialogTitle": "Choisir un média",
     "mediaSearchLabel": "Rechercher",
+    "mediaFolderFilterLabel": "Dossier",
+    "mediaFolderFilterAll": "Tous les dossiers",
     "mediaUploadToggle": "Téléverser un nouveau fichier",
     "wordCount": "{{count}} mot(s) · ~{{minutes}} min de lecture"
   },
@@ -728,6 +730,12 @@
     "loadMore": "Charger la suite",
 
     "uploadProgress": "fichier {{current}} sur {{total}}",
+    "uploadLimits": "Jusqu’à {{maxSize}} par fichier. Types acceptés : {{types}}.",
+    "uploadQueueHeading": "Téléversements",
+    "uploadPending": "En attente…",
+    "uploadInProgress": "Téléversement de {{filename}}",
+    "uploadDone": "Téléversé",
+    "retryUpload": "Réessayer",
     "moveError": "Impossible de déplacer ce média.",
     "replaceError": "Impossible de remplacer ce fichier.",
     "replaceFileLabel": "Remplacer le fichier",
@@ -758,6 +766,7 @@
     "usageTruncated": "L’analyse s’est arrêtée avant d’avoir tout parcouru — d’autres usages existent peut-être.",
 
     "foldersHeading": "Dossiers",
+    "pageDropHint": "Déposer des fichiers n'importe où sur cette page pour les téléverser.",
     "foldersLoadError": "Impossible de charger les dossiers.",
     "allFolders": "Tous les médias",
     "unclassified": "Non classés",

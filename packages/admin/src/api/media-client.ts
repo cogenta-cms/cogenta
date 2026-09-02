@@ -191,12 +191,116 @@ export async function listMedia(token: string, options: ListMediaOptions = {}): 
   }
 }
 
+/**
+ * The legacy JSON-with-base64 upload (`fileToBase64` + this). Kept for a
+ * headless client that already speaks it (`media-router.ts`'s own doc
+ * comment: "nothing forces an existing headless client that POSTs plain
+ * JSON to learn multipart"), but **not** the path the admin UI uses any
+ * more — see `uploadMediaMultipart` below (fiche 05 task 1, audit
+ * `05-mediatheque.md` §6 T01). Base64 inflates the payload by roughly a
+ * third and `fetch` cannot report upload progress at all, which is exactly
+ * what made every "uploading…" spinner in this admin a lie about how much
+ * was actually left.
+ */
 export function uploadMedia(token: string, input: UploadMediaInput): Promise<MediaAsset> {
   return request(`/api/media`, {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(input),
   })
+}
+
+interface UploadResponseBody {
+  readonly data?: MediaAsset
+  readonly error?: { readonly code?: string; readonly message?: string; readonly hint?: string }
+}
+
+export interface MultipartUploadMetadata {
+  readonly alt?: string
+  readonly decorative?: boolean
+  readonly decorativeJustification?: string
+  readonly tags?: readonly string[]
+}
+
+/**
+ * `POST /api/media` as real `multipart/form-data`, the transport
+ * `media-router.ts` has actually routed to `normaliseMultipartUpload` since
+ * fiche 11 task 1 — this admin never sent it, despite a comment that used
+ * to claim otherwise (fiche 05 task 1, audit `05-mediatheque.md` §6 T01).
+ *
+ * `XMLHttpRequest`, not `fetch`: only `xhr.upload.onprogress` reports real
+ * byte-level progress while a body is still being sent — `fetch` has no
+ * equivalent for a request body, only for reading a response, which is the
+ * wrong end for an upload.
+ */
+export function uploadMediaMultipart(
+  token: string,
+  file: File,
+  metadata: MultipartUploadMetadata = {},
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<MediaAsset> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData()
+    form.append('file', file)
+    // Sent explicitly, not left for the server to derive from the part's
+    // own declared content type: `verifyRealType` on the server only
+    // re-sniffs the bytes when `kind === 'image'`, which is exactly the
+    // security check L10 added against a disguised upload — the JSON path
+    // has always sent this for the same reason, and the multipart path must
+    // not silently drop that protection by omission.
+    form.append('kind', mediaKindFor(file.type))
+    if (metadata.alt !== undefined) form.append('alt', metadata.alt)
+    if (metadata.decorative !== undefined) form.append('decorative', String(metadata.decorative))
+    if (metadata.decorativeJustification !== undefined) {
+      form.append('decorativeJustification', metadata.decorativeJustification)
+    }
+    if (metadata.tags !== undefined && metadata.tags.length > 0) {
+      form.append('tags', metadata.tags.join(','))
+    }
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE}/api/media`)
+    xhr.setRequestHeader('authorization', `Bearer ${token}`)
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded, event.total)
+    }
+    xhr.onload = () => {
+      let body: UploadResponseBody | null = null
+      try {
+        body = JSON.parse(xhr.responseText) as UploadResponseBody
+      } catch {
+        body = null
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && body?.data !== undefined) {
+        resolve(body.data)
+        return
+      }
+      reject(
+        new ApiError(
+          body?.error?.code ?? 'INTERNAL',
+          body?.error?.message ?? 'Could not upload this file.',
+          body?.error?.hint,
+        ),
+      )
+    }
+    xhr.onerror = () => {
+      reject(new ApiError('INTERNAL', 'The upload failed before reaching the server.', undefined))
+    }
+    xhr.onabort = () => {
+      reject(new ApiError('INTERNAL', 'The upload was cancelled.', undefined))
+    }
+    xhr.send(form)
+  })
+}
+
+export interface MediaLimits {
+  readonly maxUploadBytes: number
+  readonly acceptedMimeTypes: readonly string[]
+}
+
+/** `GET /api/media/-/limits` — shown before the first file is picked, so a rejection is never the surprise. */
+export function getMediaLimits(token: string): Promise<MediaLimits> {
+  return request(`/api/media/-/limits`, { headers: authHeader(token) })
 }
 
 export function getMedia(token: string, id: string): Promise<MediaAsset> {

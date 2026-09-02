@@ -69,6 +69,8 @@
     "mediaDropHint": "Drop a file here to upload it.",
     "mediaDialogTitle": "Choose media",
     "mediaSearchLabel": "Search",
+    "mediaFolderFilterLabel": "Folder",
+    "mediaFolderFilterAll": "All folders",
     "mediaUploadToggle": "Upload a new file",
     "wordCount": "{{count}} word(s) · ~{{minutes}} min read"
   },
@@ -729,6 +731,12 @@
     "loadMore": "Load more",
 
     "uploadProgress": "file {{current}} of {{total}}",
+    "uploadLimits": "Up to {{maxSize}} per file. Accepted types: {{types}}.",
+    "uploadQueueHeading": "Uploads",
+    "uploadPending": "Waiting…",
+    "uploadInProgress": "Uploading {{filename}}",
+    "uploadDone": "Uploaded",
+    "retryUpload": "Retry",
     "moveError": "Could not move this media asset.",
     "replaceError": "Could not replace this file.",
     "replaceFileLabel": "Replace file",
@@ -759,6 +767,7 @@
     "usageTruncated": "The scan stopped before finishing — more usages may exist.",
 
     "foldersHeading": "Folders",
+    "pageDropHint": "Drop files anywhere on this page to upload them.",
     "foldersLoadError": "Could not load the folders.",
     "allFolders": "All media",
     "unclassified": "Unclassified",

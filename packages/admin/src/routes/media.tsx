@@ -22,6 +22,7 @@ import { MediaDetail } from '../media/media-detail.js'
 import { MediaFolderTree, setMediaDragData } from '../media/media-folder-tree.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { UploadForm } from '../media/upload-form.js'
+import { useUploadQueue } from '../media/upload-queue.js'
 import {
   Button,
   Card,
@@ -285,6 +286,38 @@ export function MediaRoute(): JSX.Element {
     }
   }
 
+  // Fiche 05 task 1 — a drop zone across the whole page, not just inside the
+  // upload panel: `uploads.enqueue()` still calls the auth hook with an
+  // empty token while `token` is briefly `null` (before the "not signed in
+  // yet" return below runs), which is harmless — nothing can be dropped on
+  // an unrendered page.
+  const uploads = useUploadQueue(token ?? '', (asset) => setItems((current) => [asset, ...current]))
+  const [pageDragOver, setPageDragOver] = useState(false)
+
+  // A page-wide file drop uploads decorative-by-necessity — the same choice
+  // `MediaPicker`'s own drop zone already made (fiche 03) — never the sole
+  // path (the upload panel above remains, with its real alt-text form).
+  // `types.includes('Files')` is what keeps this from intercepting the
+  // folder tree's internal asset-to-folder drag (`setMediaDragData`, a
+  // custom MIME type, never `'Files'`).
+  function handlePageDragOver(event: DragEvent): void {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    setPageDragOver(true)
+  }
+
+  function handlePageDrop(event: DragEvent): void {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    setPageDragOver(false)
+    for (const file of [...event.dataTransfer.files]) {
+      uploads.enqueue(file, {
+        decorative: true,
+        decorativeJustification: t('fields.mediaDropJustification'),
+      })
+    }
+  }
+
   if (token === null) return <p>{t('common.loading')}</p>
 
   const selectedAsset = items.find((item) => item.id === selectedId) ?? null
@@ -302,10 +335,56 @@ export function MediaRoute(): JSX.Element {
   })()
 
   return (
-    <section aria-labelledby="media-heading" className="flex flex-col gap-6">
+    <section
+      aria-labelledby="media-heading"
+      className={`flex flex-col gap-6 ${pageDragOver ? 'outline-2 outline-dashed outline-primary outline-offset-[-8px]' : ''}`}
+      onDragOver={handlePageDragOver}
+      onDragLeave={() => setPageDragOver(false)}
+      onDrop={handlePageDrop}
+    >
       <h1 id="media-heading" className="m-0 text-xl leading-7 font-semibold">
         {t('media.heading')}
       </h1>
+
+      {pageDragOver && (
+        <p className="rounded-md border border-dashed border-primary bg-primary/5 p-3 text-center text-sm">
+          {t('media.pageDropHint')}
+        </p>
+      )}
+
+      {uploads.items.some((item) => item.status !== 'done') && (
+        <ul
+          className="m-0 flex list-none flex-col gap-1 p-0"
+          aria-label={t('media.uploadQueueHeading')}
+        >
+          {uploads.items
+            .filter((item) => item.status !== 'done')
+            .map((item) => (
+              <li key={item.id} className="text-sm">
+                {item.status === 'failed' ? (
+                  <span role="alert">
+                    {item.filename}: {item.error ?? t('media.uploadError')}{' '}
+                    <button type="button" onClick={() => uploads.retry(item.id)}>
+                      {t('media.retryUpload')}
+                    </button>
+                  </span>
+                ) : (
+                  <span>
+                    {item.filename} —{' '}
+                    {t(
+                      item.status === 'uploading'
+                        ? 'media.uploadInProgress'
+                        : 'media.uploadPending',
+                      {
+                        filename: item.filename,
+                      },
+                    )}
+                  </span>
+                )}
+              </li>
+            ))}
+        </ul>
+      )}
 
       <div className="grid grid-cols-[16rem_1fr] gap-6">
         <aside>

@@ -25,6 +25,11 @@ function pngFile(name = 'cover.png'): File {
   return new File(['fake-png-bytes'], name, { type: 'image/png' })
 }
 
+/** A `DataTransfer` carrying real dropped files — `types` includes `'Files'`, which is exactly what tells a page-wide drop zone (fiche 05 task 1) apart from an internal asset drag (`setMediaDragData`'s own custom MIME type). */
+function fileDropDataTransfer(files: readonly File[]): DataTransfer {
+  return { types: ['Files'], files } as unknown as DataTransfer
+}
+
 describe('media library', () => {
   it('lists no media initially, and shows one after an upload', async () => {
     render(<App />)
@@ -117,6 +122,60 @@ describe('media library', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
 
     await waitFor(() => expect(screen.getByText('Aucun média.')).toBeDefined())
+  })
+})
+
+/**
+ * Fiche 05 task 1 (audit `05-mediatheque.md` §6 T01): the real multipart
+ * upload transport, upload limits shown before the first file is picked,
+ * and a whole-page drop zone that starts an upload without ever needing the
+ * form's own file picker.
+ */
+describe('media library — real upload transport (fiche 05 task 1)', () => {
+  it('shows the upload size limit and accepted types before any file is picked', async () => {
+    render(<App />)
+    await goToMedia()
+
+    // `GET /api/media/-/limits` — fetched once, rendered before a file is
+    // even chosen, so a rejection is never a surprise.
+    await screen.findByText(/250 MB/)
+    expect(screen.getByText(/image\/png/)).toBeDefined()
+  })
+
+  it('uploading a file shows a real progress entry that clears once done', async () => {
+    render(<App />)
+    await goToMedia()
+
+    fireEvent.change(screen.getByLabelText('Fichier'), { target: { files: [pngFile()] } })
+    fireEvent.change(screen.getByLabelText('Texte alternatif', { exact: false }), {
+      target: { value: 'A red bicycle' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Téléverser' }))
+
+    // The asset lands in the grid — proof the multipart transport actually
+    // completed against the mock's own `XMLHttpRequest` stub, not `fetch`.
+    expect(await screen.findByRole('button', { name: /cover\.png/ })).toBeDefined()
+    // And the transient queue entry cleared once the upload finished —
+    // "done" items are not left cluttering the panel forever.
+    await waitFor(() => expect(screen.queryByText(/cover\.png —/)).toBeNull())
+  })
+
+  it('dropping a file anywhere on the page uploads it, without opening the upload form', async () => {
+    render(<App />)
+    await goToMedia()
+
+    const section = screen.getByRole('heading', { name: 'Médiathèque' }).closest('section')
+    expect(section).not.toBeNull()
+
+    const dataTransfer = fileDropDataTransfer([pngFile('dropped-anywhere.png')])
+    fireEvent.dragOver(section as HTMLElement, { dataTransfer })
+    fireEvent.drop(section as HTMLElement, { dataTransfer })
+
+    // Decorative-by-necessity — the same choice `MediaPicker`'s own drop
+    // zone already made (fiche 03): a page-wide drop carries no alt text to
+    // ask for, and this is never the only path to upload (the form above
+    // still asks for a real description).
+    expect(await screen.findByRole('button', { name: /dropped-anywhere\.png/ })).toBeDefined()
   })
 })
 

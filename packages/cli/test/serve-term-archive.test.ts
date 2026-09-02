@@ -239,7 +239,9 @@ describe('the public term archive (audit T01)', () => {
       // for as long as no archive page existed to point at.
       const resolved = (await (
         await fetch(`${server.base}/api/menus/${menu.id}`, { headers: auth(token) })
-      ).json()) as { data: { items: readonly { label: string; route: string | null }[] } }
+      ).json()) as {
+        data: { items: readonly { label: string; resolvedRoute: string | null }[] }
+      }
       const item = resolved.data.items.find((candidate) => candidate.label === 'Cooking')
       expect(item?.resolvedRoute).toBe('/topic/cuisine')
 

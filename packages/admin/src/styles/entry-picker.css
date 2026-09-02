@@ -8,7 +8,7 @@
 .entry-picker__empty {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--color-text-muted, #666);
+  color: var(--muted-foreground);
   font-style: italic;
 }
 
@@ -28,14 +28,23 @@
   gap: 0.5rem;
   flex-wrap: wrap;
   padding: 0.375rem 0.5rem;
-  border: 1px solid var(--color-border, #ccc);
-  border-radius: var(--radius, 4px);
-  background: var(--color-bg, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.entry-picker__token:hover {
+  border-color: var(--input);
+  box-shadow: var(--shadow-card);
 }
 
 .entry-picker__token-title {
   flex: 1 1 auto;
   font-size: 0.875rem;
+  color: var(--foreground);
 }
 
 .entry-picker__token-actions {
@@ -49,19 +58,19 @@
   padding: 0.0625rem 0.375rem;
   border-radius: 999px;
   font-size: 0.6875rem;
-  background: var(--color-surface-muted, #eee);
-  color: var(--color-text-muted, #555);
+  background: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .entry-picker__badge--trashed {
-  background: var(--color-danger-surface, #fdecea);
-  color: var(--color-danger, #b3261e);
+  background: var(--destructive-surface);
+  color: var(--destructive);
 }
 
 .entry-picker__notice {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--color-danger, #b3261e);
+  color: var(--destructive);
 }
 
 .entry-picker__change {
@@ -98,15 +107,35 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.625rem;
-  border: 1px solid var(--color-border, #ccc);
-  border-radius: var(--radius, 4px);
-  background: var(--color-bg, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
   cursor: pointer;
   text-align: left;
   font: inherit;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.entry-picker__result:hover {
+  background: var(--accent);
+  border-color: var(--primary);
+}
+
+.entry-picker__result:active {
+  transform: scale(0.99);
 }
 
 .entry-picker__result--picked {
   opacity: 0.6;
   cursor: default;
+}
+
+.entry-picker__result--picked:hover {
+  background: var(--card);
+  border-color: var(--border);
+  transform: none;
 }

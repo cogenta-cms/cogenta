@@ -386,7 +386,7 @@ export function MediaRoute(): JSX.Element {
       onDragLeave={() => setPageDragOver(false)}
       onDrop={handlePageDrop}
     >
-      <h1 id="media-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="media-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('media.heading')}
       </h1>
 

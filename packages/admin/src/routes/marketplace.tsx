@@ -395,7 +395,10 @@ export function MarketplaceRoute(): JSX.Element {
   return (
     <section aria-labelledby="marketplace-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="marketplace-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="marketplace-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('marketplace.heading')}
         </h1>
         <p className="mt-1 text-sm">{t('marketplace.intro')}</p>

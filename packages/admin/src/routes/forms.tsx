@@ -423,7 +423,7 @@ export function FormsRoute(): JSX.Element {
     <section aria-labelledby={headingId} className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 id={headingId} className="m-0 text-xl leading-7 font-semibold">
+          <h1 id={headingId} className="m-0 text-2xl leading-tight font-bold tracking-tight">
             {t('forms.heading')}
           </h1>
           <p className="text-muted-foreground text-sm">{t('forms.description')}</p>

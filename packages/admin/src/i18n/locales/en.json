@@ -394,7 +394,11 @@
     "useTotpCode": "Use my authenticator app instead",
     "recoveryHeading": "Recovery code",
     "recoveryPrompt": "Enter one of the recovery codes you were given when you set up two-step verification. Each code works once.",
-    "recoveryCodeIncorrect": "This recovery code is not valid."
+    "recoveryCodeIncorrect": "This recovery code is not valid.",
+    "tagline": "The CMS that runs itself.",
+    "highlightAgents": "Autonomous agents",
+    "highlightThemes": "Multiple themes",
+    "highlightHeadless": "Headless API"
   },
   "forgotPassword": {
     "heading": "Reset your password",
@@ -1875,6 +1879,12 @@
   },
   "dashboard": {
     "heading": "Dashboard",
+    "kpi": {
+      "entries": "Entries",
+      "drafts": "Drafts",
+      "trash": "Trash",
+      "health": "Health"
+    },
     "healthHeading": "Site health",
     "healthStatus": {
       "ok": "operational",

@@ -243,7 +243,7 @@ export function SearchRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="search-heading" className="flex flex-col gap-6">
-      <h1 id="search-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="search-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {freeText.length > 0 || rawQuery.length > 0
           ? t('searchPage.heading', { query: rawQuery })
           : t('searchPage.headingEmpty')}

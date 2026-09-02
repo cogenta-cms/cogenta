@@ -196,7 +196,7 @@ export function TaxonomiesRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="taxonomies-heading" className="flex flex-col gap-6">
-      <h1 id="taxonomies-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="taxonomies-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('taxonomies.heading')}
       </h1>
 

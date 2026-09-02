@@ -20,9 +20,14 @@ import { cn } from './cn.js'
  */
 
 const CONTROL_CLASSES =
-  'w-full appearance-none rounded-md border border-input bg-card px-3 py-2 font-sans text-sm ' +
-  'leading-5 text-card-foreground shadow-card transition-colors placeholder:text-muted-foreground ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+  'w-full h-10 appearance-none rounded-md border border-input bg-card px-3 font-sans text-sm ' +
+  'leading-5 text-card-foreground shadow-card transition-all duration-150 ease-out ' +
+  'placeholder:text-muted-foreground ' +
+  // Both `focus:` and `focus-visible:` on purpose: a native `<select>` does
+  // not reliably get `:focus-visible` in every engine, and a ring the mouse
+  // never sees is a control that silently loses its own focus indicator.
+  'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40 ' +
+  'focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ' +
   'aria-invalid:border-destructive disabled:cursor-default disabled:opacity-60'
 
 export interface FieldControlProps {

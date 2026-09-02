@@ -19,18 +19,26 @@
 
 /* The vendored logo (task 8's own two files) at a size a nav-adjacent header
  * actually needs. `logo-cogenta-transparent.png` is already a reasonable
- * 53 KB — the file this screen ships — not the 741 KB opaque original,
+ * ~33 KB — the file this screen ships — not the ~900 KB opaque original,
  * which nothing on this screen displays large enough to warrant its
  * resolution. Its wordmark is rendered in black, so a light backing plate
  * keeps it legible when the admin theme is dark, without depending on
  * whatever the separate white-label system (task 8, built elsewhere)
- * eventually decides about theme-aware logos. */
+ * eventually decides about theme-aware logos.
+ *
+ * `#ffffff` here is a deliberate, flagged exception to "no literal colour":
+ * the plate exists specifically to stay light regardless of colour scheme
+ * (a fixed-black wordmark needs a fixed-light backing, not one that goes
+ * dark with the rest of the admin) — no `--*` token in `theme.css` is
+ * invariant across schemes (`--rail-*` is the file's only documented
+ * exception, and it is a navy family, not white), and adding one is out of
+ * scope for a pass that does not touch `theme.css`. */
 .doc-header__logo-plate {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0.375rem 0.625rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   background: #ffffff;
   flex: none;
 }
@@ -119,7 +127,13 @@
 /* L22 task 7 — `documentation-docs.tsx`'s rendered Markdown body. Plain,
  * readable typography over the admin's own tokens; no new component, since
  * this content is a fixed set of HTML tags produced by
- * `@cogenta/render`'s `renderMarkdownToHtml`, not admin UI. */
+ * `@cogenta/render`'s `renderMarkdownToHtml`, not admin UI. `65ch` caps the
+ * measure at a comfortable reading width regardless of how wide the
+ * surrounding column runs. */
+.doc-content {
+  max-width: 65ch;
+}
+
 .doc-content :is(h1, h2, h3, h4) {
   color: var(--foreground);
 }
@@ -133,6 +147,30 @@
   margin: 1.5rem 0 0.5rem;
 }
 
+/* Heading anchors: `renderMarkdownToHtml` (`@cogenta/render`) already gives
+ * every h2-h4 a stable `id` (its own in-page and cross-page links target
+ * `#<id>`) — this is the CSS half, a `#` glyph that appears on hover so a
+ * heading with a real, working anchor visibly announces it. `scroll-margin`
+ * keeps the sticky topbar from covering the heading a hash link jumps to. */
+.doc-content :is(h2, h3, h4)[id] {
+  position: relative;
+  scroll-margin-top: 5rem;
+}
+
+.doc-content :is(h2, h3, h4)[id]::before {
+  content: "#";
+  position: absolute;
+  left: -1.1em;
+  color: var(--primary);
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.doc-content :is(h2, h3, h4)[id]:hover::before {
+  opacity: 0.5;
+}
+
 .doc-content p,
 .doc-content ul,
 .doc-content ol,
@@ -144,14 +182,14 @@
 
 .doc-content code {
   background: var(--muted);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   padding: 0.1em 0.35em;
   font-size: 0.875em;
 }
 
 .doc-content pre {
   background: var(--muted);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-md);
   padding: 1rem;
   overflow-x: auto;
 }

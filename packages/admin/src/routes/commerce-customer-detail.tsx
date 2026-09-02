@@ -126,7 +126,9 @@ export function CommerceCustomerRoute(): JSX.Element {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link to="/commerce/customers">{t('commerceCustomerDetail.back')}</Link>
-          <h1 className="m-0 text-xl leading-7 font-semibold">{customer.name ?? customer.email}</h1>
+          <h1 className="m-0 text-2xl leading-tight font-bold tracking-tight">
+            {customer.name ?? customer.email}
+          </h1>
           <p className="text-sm">{customer.email}</p>
         </div>
         {canWrite && (

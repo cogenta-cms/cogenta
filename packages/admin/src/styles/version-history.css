@@ -1,20 +1,63 @@
+/*
+ * A timeline rather than a plain stacked list: `.version-history__list`
+ * draws one continuous rail (`::before`) behind every entry, and each
+ * `.version-history__item` drops its own accent dot (`::before`) onto that
+ * rail — the same "one hairline, one dot per event" reading a changelog or
+ * a commit graph uses. Positioning is approximate rather than
+ * pixel-measured (a decorative rail, not a data axis).
+ */
 .version-history__list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: relative;
+}
+
+.version-history__list::before {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  width: 2px;
+  background: var(--border);
 }
 
 .version-history__item {
-  border: 1px solid var(--color-border, #ccc);
-  border-radius: 4px;
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1rem;
+  transition:
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.version-history__item:hover {
+  box-shadow: var(--shadow-raised);
+  border-color: var(--input);
+}
+
+.version-history__item::before {
+  content: "";
+  position: absolute;
+  left: -1.3125rem;
+  top: 50%;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-top: -0.3125rem;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px var(--card);
 }
 
 .version-history__actions {
@@ -53,7 +96,7 @@
   align-items: center;
   gap: 0.25rem;
   font-size: 0.75rem;
-  color: var(--color-muted-foreground, #666);
+  color: var(--muted-foreground);
 }
 
 .version-history__radio-label {
@@ -62,26 +105,26 @@
 }
 
 .version-history__status--draft {
-  color: var(--color-muted-foreground, #666);
+  color: var(--muted-foreground);
 }
 
 .version-history__status--published {
-  color: var(--color-success, #1a7f37);
+  color: var(--success);
   font-weight: 600;
 }
 
 .version-history__status--archived {
-  color: var(--color-muted-foreground, #666);
+  color: var(--muted-foreground);
   text-decoration: line-through;
 }
 
 .version-history__status--scheduled {
-  color: var(--color-info, #0969da);
+  color: var(--info);
 }
 
 .version-history__author {
   font-size: 0.85rem;
-  color: var(--color-muted-foreground, #666);
+  color: var(--muted-foreground);
 }
 
 .version-history__show-more {
@@ -94,11 +137,11 @@
 }
 
 .version-history__word-removed {
-  background: var(--color-destructive-surface, #ffeef0);
+  background: var(--destructive-surface);
   text-decoration: line-through;
 }
 
 .version-history__word-added {
-  background: var(--color-success-surface, #e6ffed);
+  background: var(--success-surface);
   text-decoration: none;
 }

@@ -1,83 +1,13 @@
-import { type FormEvent, type JSX, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
-import { listSettings } from '../api/settings-client.js'
-import { getShellStatus } from '../api/shell-status-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { deriveBrandingSettings, deriveSiteTitle } from '../settings/site-settings-context.js'
+import { AuthLayout } from '../auth/auth-layout.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 interface LocationState {
   readonly from?: { readonly pathname: string }
-}
-
-/**
- * The white-label decision this anonymous screen needs — a subset of
- * `BrandingSettings`/`useSiteTitle` derived the same way `app-shell.tsx`'s
- * `renderBrandMark()` does, but from this screen's own direct
- * `listSettings()` call (`GET /api/settings` answers an anonymous caller —
- * `settings-client.ts`'s own header says so) rather than
- * `SiteSettingsProvider`, which only wraps the authenticated shell routes
- * and never mounts for `/login` (fiche 35 audit T01).
- */
-interface LoginBranding {
-  readonly showCogentaBranding: boolean
-  readonly customLogoMediaId: string | null
-  readonly siteTitle: string | null
-}
-
-/** Same bare mark `app-shell.tsx`'s `BRAND_MARK_FALLBACK` uses — a named constant, not a raw `//` literal in JSX, which Biome's JSX linter reads as a stray line comment. */
-const BRAND_MARK_FALLBACK = '//'
-
-/**
- * The mark and version above the card — present on every step (password,
- * TOTP, recovery), never inside `<Card>`: a sign-in screen with no visible
- * "which product is this" is disorienting the first time anyone sees it,
- * and it was missing entirely before this.
- *
- * Three outcomes, same priority order as `app-shell.tsx`'s
- * `renderBrandMark()` (logo-override case excluded — that one is the
- * *admin theme's* own logo, a signed-in-only concept this anonymous screen
- * has no access to): (1) Cogenta's own credit, the default and the only
- * case that shows the version number — a white-labelled install has no
- * reason to advertise which CMS runs it; (2) a white-label logo, served
- * through the public, unauthenticated `/_image` endpoint (the same one
- * `media-detail.tsx` uses) since this screen has no session token to send
- * `/api/media/{id}/file`'s auth-gated route — `alt` carries the site's own
- * title rather than the literal word "Cogenta" it was just asked not to
- * name; (3) branding off with nothing uploaded yet: an unlabelled mark,
- * never a hole where a logo should be.
- */
-function LoginBrand({
-  version,
-  branding,
-}: {
-  readonly version: string | null
-  readonly branding: LoginBranding
-}): JSX.Element {
-  const { showCogentaBranding, customLogoMediaId, siteTitle } = branding
-  return (
-    <div className="flex flex-col items-center gap-2">
-      {showCogentaBranding ? (
-        <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
-      ) : customLogoMediaId !== null ? (
-        <img
-          src={`/_image?id=${encodeURIComponent(customLogoMediaId)}&w=80`}
-          alt={siteTitle ?? ''}
-          width={40}
-          height={40}
-        />
-      ) : (
-        <span aria-hidden="true" className="text-lg font-semibold text-muted-foreground">
-          {BRAND_MARK_FALLBACK}
-        </span>
-      )}
-      {showCogentaBranding && version !== null && version !== '' && (
-        <span className="font-mono text-xs text-muted-foreground">v{version}</span>
-      )}
-    </div>
-  )
 }
 
 type Step =
@@ -97,6 +27,11 @@ type Step =
  * including `admin`; the second factor is offered from the profile and
  * recommended by a persistent notice in the admin, and this screen only ever
  * asks for a code from someone who already chose to enrol one.
+ *
+ * The brand mark, tagline and feature highlights that used to sit above the
+ * card here now live in `AuthLayout`'s dark rail (`src/auth/auth-layout.tsx`)
+ * — shared with `forgot-password.tsx`/`reset-password.tsx` rather than
+ * redrawn on every screen.
  */
 export function LoginRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -115,39 +50,6 @@ export function LoginRoute(): JSX.Element {
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [version, setVersion] = useState<string | null>(null)
-  // Defaults to showing Cogenta while the request is in flight or fails —
-  // the same "never flash unbranded" discipline `useBrandingSettings`
-  // documents, so a slow network never briefly shows a bare mark on a
-  // white-labelled site (or, worse, "Cogenta" on one that turned it off).
-  const [branding, setBranding] = useState<LoginBranding>({
-    showCogentaBranding: true,
-    customLogoMediaId: null,
-    siteTitle: null,
-  })
-
-  useEffect(() => {
-    let cancelled = false
-    getShellStatus()
-      .then((status) => {
-        if (!cancelled) setVersion(status.cogentaVersion)
-      })
-      .catch(() => undefined)
-    listSettings()
-      .then((settings) => {
-        if (cancelled) return
-        const { showCogentaBranding, customLogoMediaId } = deriveBrandingSettings(settings)
-        setBranding({
-          showCogentaBranding,
-          customLogoMediaId,
-          siteTitle: deriveSiteTitle(settings),
-        })
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   /**
    * `ApiError#message` is the server's own English string (`@cogenta/auth`
@@ -252,9 +154,8 @@ export function LoginRoute(): JSX.Element {
 
   if (step.kind === 'totp') {
     return (
-      <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-        <LoginBrand version={version} branding={branding} />
-        <Card className="w-full max-w-sm">
+      <AuthLayout>
+        <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
           <CardBody>
             <form
               onSubmit={submitTotp}
@@ -262,7 +163,10 @@ export function LoginRoute(): JSX.Element {
               className="flex flex-col gap-4"
             >
               <div className="flex flex-col gap-1.5">
-                <h1 id="totp-heading" className="m-0 text-xl leading-7 font-semibold">
+                <h1
+                  id="totp-heading"
+                  className="m-0 text-xl leading-7 font-semibold tracking-tight"
+                >
                   {t('login.totpHeading')}
                 </h1>
                 <p className="m-0 text-sm text-muted-foreground">{t('login.totpPrompt')}</p>
@@ -279,6 +183,7 @@ export function LoginRoute(): JSX.Element {
                     required
                     value={code}
                     onChange={(event) => setCode(event.target.value)}
+                    className="h-11"
                   />
                 )}
               </Field>
@@ -287,7 +192,7 @@ export function LoginRoute(): JSX.Element {
                   <p>{error}</p>
                 </Notice>
               )}
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} className="h-11 rounded-full">
                 {t('login.verify')}
               </Button>
               <button
@@ -304,15 +209,14 @@ export function LoginRoute(): JSX.Element {
             </form>
           </CardBody>
         </Card>
-      </main>
+      </AuthLayout>
     )
   }
 
   if (step.kind === 'recovery') {
     return (
-      <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-        <LoginBrand version={version} branding={branding} />
-        <Card className="w-full max-w-sm">
+      <AuthLayout>
+        <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
           <CardBody>
             <form
               onSubmit={submitRecoveryCode}
@@ -320,7 +224,10 @@ export function LoginRoute(): JSX.Element {
               className="flex flex-col gap-4"
             >
               <div className="flex flex-col gap-1.5">
-                <h1 id="recovery-heading" className="m-0 text-xl leading-7 font-semibold">
+                <h1
+                  id="recovery-heading"
+                  className="m-0 text-xl leading-7 font-semibold tracking-tight"
+                >
                   {t('login.recoveryHeading')}
                 </h1>
                 <p className="m-0 text-sm text-muted-foreground">{t('login.recoveryPrompt')}</p>
@@ -334,6 +241,7 @@ export function LoginRoute(): JSX.Element {
                     required
                     value={recoveryCode}
                     onChange={(event) => setRecoveryCode(event.target.value)}
+                    className="h-11"
                   />
                 )}
               </Field>
@@ -342,7 +250,7 @@ export function LoginRoute(): JSX.Element {
                   <p>{error}</p>
                 </Notice>
               )}
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} className="h-11 rounded-full">
                 {t('login.verify')}
               </Button>
               <button
@@ -359,19 +267,23 @@ export function LoginRoute(): JSX.Element {
             </form>
           </CardBody>
         </Card>
-      </main>
+      </AuthLayout>
     )
   }
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-      <LoginBrand version={version} branding={branding} />
-      <Card className="w-full max-w-sm">
+    <AuthLayout>
+      <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
         <CardBody>
-          <h1 id="login-heading" className="m-0 text-xl leading-7 font-semibold">
+          <h1 id="login-heading" className="m-0 text-xl leading-7 font-semibold tracking-tight">
             {t('login.heading')}
           </h1>
-          <Button variant="secondary" onClick={() => void submitPasskey()} disabled={submitting}>
+          <Button
+            variant="secondary"
+            onClick={() => void submitPasskey()}
+            disabled={submitting}
+            className="h-11 rounded-full"
+          >
             {t('login.passkeyButton')}
           </Button>
           <p className="m-0 text-center text-sm text-muted-foreground">{t('login.or')}</p>
@@ -390,6 +302,7 @@ export function LoginRoute(): JSX.Element {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
+                  className="h-11"
                 />
               )}
             </Field>
@@ -403,6 +316,7 @@ export function LoginRoute(): JSX.Element {
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  className="h-11"
                 />
               )}
             </Field>
@@ -420,7 +334,7 @@ export function LoginRoute(): JSX.Element {
                 <p>{error}</p>
               </Notice>
             )}
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting} className="h-11 rounded-full">
               {t('login.submit')}
             </Button>
           </form>
@@ -431,6 +345,6 @@ export function LoginRoute(): JSX.Element {
           </p>
         </CardBody>
       </Card>
-    </main>
+    </AuthLayout>
   )
 }

@@ -279,7 +279,7 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
     await goToSettings()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
-    const commerce = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    const commerce = (await screen.findByRole('checkbox', { name: 'Boutique' })) as HTMLInputElement
     expect(commerce.checked).toBe(true)
   })
 
@@ -289,12 +289,14 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
     await goToSettings()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
-    const commerce = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    const commerce = (await screen.findByRole('checkbox', { name: 'Boutique' })) as HTMLInputElement
     expect(commerce.checked).toBe(true)
 
     fireEvent.click(commerce)
     await waitFor(() => {
-      expect((screen.getByLabelText('Boutique') as HTMLInputElement).checked).toBe(false)
+      expect((screen.getByRole('checkbox', { name: 'Boutique' }) as HTMLInputElement).checked).toBe(
+        false,
+      )
     })
 
     // The dashboard's own sidebar reflects the same site-wide setting, not
@@ -310,7 +312,7 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
     await goToSettings()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
-    const commerce = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    const commerce = (await screen.findByRole('checkbox', { name: 'Boutique' })) as HTMLInputElement
     expect(commerce.checked).toBe(false)
   })
 
@@ -327,7 +329,9 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
     // label with its own group, "Réglages", so any test on that pair has to
     // navigate the DOM by structure — `.closest('li')`, then a scoped
     // `:scope >` selector — rather than by matching text a second time).
-    const commerceCheckbox = (await screen.findByLabelText('Boutique')) as HTMLInputElement
+    const commerceCheckbox = (await screen.findByRole('checkbox', {
+      name: 'Boutique',
+    })) as HTMLInputElement
     const commerceRow = commerceCheckbox.closest('li') as HTMLLIElement
     const upButton = Array.from(commerceRow.querySelectorAll(':scope > div > button')).find(
       (button) => button.textContent === 'Monter',

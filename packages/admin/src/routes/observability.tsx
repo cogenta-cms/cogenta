@@ -117,7 +117,10 @@ export function ObservabilityRoute(): JSX.Element {
   return (
     <section aria-labelledby="observability-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="observability-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="observability-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('observability.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('observability.intro')}</p>

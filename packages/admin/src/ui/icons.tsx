@@ -237,6 +237,22 @@ export const InfoIcon = icon(
   </>,
 )
 
+/** `Notice`'s success tone — a circle with a check, distinct from `CheckIcon`'s bare mark and from `NoticeDangerIcon`'s cross below. */
+export const NoticeSuccessIcon = icon(
+  <>
+    <circle cx="10" cy="10" r="7.5" />
+    <path d="M6.6 10.3l2.3 2.3 4.6-5.2" />
+  </>,
+)
+
+/** `Notice`'s danger tone — a circle with a cross, distinct from `AlertIcon`'s triangle used for the warning tone. */
+export const NoticeDangerIcon = icon(
+  <>
+    <circle cx="10" cy="10" r="7.5" />
+    <path d="M7.4 7.4l5.2 5.2M12.6 7.4l-5.2 5.2" />
+  </>,
+)
+
 /**
  * The rich text toolbar's own glyphs (fiche 04 task 1): one icon per
  * existing mark/block/insertion, no visible label — `RichTextToolbar` keeps

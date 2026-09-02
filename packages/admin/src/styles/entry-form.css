@@ -1,5 +1,5 @@
 .entry-form__error {
-  color: var(--color-danger);
+  color: var(--destructive);
 }
 
 /* Quiet on purpose: an autosave is a safety net, not an event worth a colour. */
@@ -20,17 +20,53 @@
 
 /* Field groups (fiche 02 task 6) — a native `<details>`, so the collapse/expand
    state is keyboard-operable and announced for free, no `aria-expanded`
-   bookkeeping required. */
+   bookkeeping required. Styled as a section card (elevation + radius-lg) so a
+   form with several groups reads as a stack of cards, not a plain outline. */
 .entry-form__group {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
   padding: var(--space-3) var(--space-4);
   margin-bottom: var(--space-4);
+  transition:
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.entry-form__group[open] {
+  box-shadow: var(--shadow-raised);
 }
 
 .entry-form__group > summary {
   cursor: pointer;
   font-weight: 600;
+  color: var(--foreground);
+  list-style: none;
+}
+
+.entry-form__group > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Same hand-drawn chevron as `base.css`'s generic `details > summary` rule
+   — restated here because this file is unlayered and would otherwise beat
+   that layered default with nothing of its own. */
+.entry-form__group > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin-right: 0.6em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  opacity: 0.6;
+  transition: transform 160ms ease;
+}
+
+.entry-form__group[open] > summary::before {
+  transform: rotate(45deg);
 }
 
 .entry-form__group[open] > summary {
@@ -46,6 +82,7 @@
 .entry-form__shortcuts summary {
   cursor: pointer;
   font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 .entry-form__shortcuts dl {
@@ -57,18 +94,22 @@
 }
 
 .entry-form__shortcuts dt {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
 .entry-form__shortcuts dd {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--muted-foreground);
 }
 
+/* The unsaved-draft recovery notice — a real, semantic warning (`role="alert"`
+   in `entry-edit.tsx`), so it earns the warning surface rather than reading
+   as a plain outlined box indistinguishable from any other panel. */
 .entry-form__recovery {
-  border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  background: var(--warning-surface);
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
 }
@@ -83,9 +124,18 @@
 }
 
 .blocks-field__item {
-  border: 1px solid var(--color-border, #ccc);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
   padding: 0.75rem;
+  transition:
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.blocks-field__item:hover {
+  box-shadow: var(--shadow-raised);
 }
 
 .blocks-field__item-header {

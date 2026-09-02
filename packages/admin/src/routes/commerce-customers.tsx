@@ -64,7 +64,10 @@ export function CommerceCustomersRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="commerce-customers-heading" className="flex flex-col gap-6">
-      <h1 id="commerce-customers-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1
+        id="commerce-customers-heading"
+        className="m-0 text-2xl leading-tight font-bold tracking-tight"
+      >
         {t('commerceCustomers.heading')}
       </h1>
 

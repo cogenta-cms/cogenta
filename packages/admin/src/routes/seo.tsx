@@ -205,7 +205,7 @@ export function SeoRoute(): JSX.Element {
   return (
     <section aria-labelledby="seo-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="seo-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="seo-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('seo.pageHeading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('seo.pageDescription')}</p>

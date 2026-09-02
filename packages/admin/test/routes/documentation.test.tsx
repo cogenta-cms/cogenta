@@ -27,7 +27,7 @@ function signedIn(overrides: Parameters<typeof installMockFetch>[0] = {}): void 
 async function openDocumentation(): Promise<void> {
   render(<App />)
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Documentation' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Aide' }))
   await screen.findByRole('heading', { name: 'Documentation', level: 1 })
 }
 
@@ -36,9 +36,7 @@ describe('the Documentation screen', () => {
     signedIn({ roles: ['viewer'] })
     await openDocumentation()
 
-    expect(screen.getByRole('link', { name: 'Documentation' }).getAttribute('aria-current')).toBe(
-      'page',
-    )
+    expect(screen.getByRole('link', { name: 'Aide' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('opens on the Content tab, with its summary, quickstart and real screen links', async () => {

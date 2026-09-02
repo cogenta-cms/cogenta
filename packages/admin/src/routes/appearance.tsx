@@ -490,7 +490,7 @@ export function AppearanceRoute(): JSX.Element {
   return (
     <section aria-labelledby="appearance-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="appearance-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="appearance-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('appearance.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('appearance.description')}</p>

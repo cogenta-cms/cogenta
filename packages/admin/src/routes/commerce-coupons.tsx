@@ -169,7 +169,10 @@ export function CommerceCouponsRoute(): JSX.Element {
   return (
     <section aria-labelledby="commerce-coupons-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 id="commerce-coupons-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="commerce-coupons-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('commerceCoupons.heading')}
         </h1>
         <Button onClick={() => setCreating(true)}>{t('commerceCoupons.newButton')}</Button>

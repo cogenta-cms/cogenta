@@ -19,6 +19,17 @@
 
 .app-shell__footer {
   grid-area: footer;
+  /* Painted above the sticky rail (z-index 30): a sticky element is
+     constrained by its containing block — the whole grid, footer row
+     included — not by its own grid area, so on a page shorter than one
+     screen the rail's viewport-tall box overlaps this row (seen live on a
+     short dark-mode page with the sidebar collapsed). A percentage
+     max-height on the rail cannot cap it either: the content row is
+     `1fr` inside a `min-height` container, so its height is indefinite
+     and the percentage resolves to `auto`. Letting the footer win the
+     stacking order is the fix that holds regardless of page height. */
+  position: relative;
+  z-index: 31;
   border-top: 1px solid var(--color-border);
   background: var(--card);
   padding: var(--space-2) var(--space-4);
@@ -693,6 +704,26 @@
   background: var(--rail-bg);
   border-right: 1px solid var(--rail-border);
   isolation: isolate;
+  /* Above anything the workspace can raise on its own. `.app-shell__content`
+     is a grid item with `z-index: auto`, so a positioned descendant inside
+     it — the sticky `<thead>` of every data table (`z-index: 10`) — competes
+     in the ROOT stacking context, and the sidebar's original `z-index: 1`
+     lost that contest: a flyout opened beside a table was painted behind
+     its header row. Seen live on /admin/users. `30` stays under the modal
+     overlay (`z-40`) and the drawer. */
+  z-index: 30;
+  /* Pinned under the sticky top bar (116px, `.app-shell__topbar`) so the
+     navigation never scrolls out of reach on a long screen — WordPress's
+     own behaviour. `sticky`, not `fixed`: the rail keeps its grid column,
+     so nothing else in the layout has to know about it. `align-self: start`
+     is what lets a sticky grid item actually move; stretched to the row's
+     full height it would have nowhere to go. No `overflow` is set here for
+     the same reason spelled out on the original rule above: it would clip
+     the flyout. */
+  position: sticky;
+  top: 116px;
+  height: calc(100vh - 116px);
+  align-self: start;
 }
 
 /* An ambient glow anchored to the top of the rail — the one atmospheric
@@ -802,7 +833,10 @@
   border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
-  z-index: 2;
+  /* Above the sidebar (30): once the page scrolls, the rail slides under
+     this sticky bar and must never paint over the logo; and above any
+     sticky table header (10) in the workspace for the same reason. */
+  z-index: 35;
 }
 
 .app-shell__topbar::after {

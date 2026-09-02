@@ -160,7 +160,7 @@ export function RolesRoute(): JSX.Element {
   return (
     <section aria-labelledby="roles-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="roles-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="roles-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('rolesMatrix.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('rolesMatrix.description')}</p>

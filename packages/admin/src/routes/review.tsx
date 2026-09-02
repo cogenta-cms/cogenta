@@ -170,7 +170,7 @@ export function ReviewRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="review-heading" className="flex flex-col gap-6">
-      <h1 id="review-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="review-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('review.heading')}
       </h1>
 

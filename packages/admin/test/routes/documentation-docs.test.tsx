@@ -29,7 +29,7 @@ describe('the full documentation browser', () => {
     signedIn()
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Documentation' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Aide' }))
     await screen.findByRole('heading', { name: 'Documentation', level: 1 })
 
     fireEvent.click(screen.getByRole('link', { name: 'Ouvrir la documentation complète' }))

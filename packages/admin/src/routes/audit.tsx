@@ -238,7 +238,7 @@ export function AuditRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="audit-heading" className="flex flex-col gap-6">
-      <h1 id="audit-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="audit-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('audit.heading')}
       </h1>
 

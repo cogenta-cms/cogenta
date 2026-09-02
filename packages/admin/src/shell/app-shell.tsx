@@ -807,7 +807,9 @@ export function AppShell(): JSX.Element {
         <span className="app-shell__footer-brand">
           {renderBrandMark()}
           {branding.showCogentaBranding && version !== '' && (
-            <span className="app-shell__footer-version">v{version}</span>
+            <span className="app-shell__footer-version rounded-full border border-border px-2 py-0.5 font-mono">
+              v{version}
+            </span>
           )}
         </span>
         <span className="app-shell__footer-site">{siteTitle ?? t('shell.footer')}</span>
@@ -883,7 +885,20 @@ export function AppShell(): JSX.Element {
           <ThemeToggle />
           {email !== null && (
             <>
-              <span className="app-shell__account-email">{email}</span>
+              {/* The account chip: an avatar circle (the e-mail's first
+                  letter, decorative — `app-shell__account-email` right next
+                  to it still carries the real accessible text) inside a
+                  pill, matching the "Voir le site"/"Se déconnecter" buttons
+                  either side of it. */}
+              <span className="flex items-center gap-2 rounded-full border border-border bg-card/60 py-1 pr-3 pl-1">
+                <span
+                  aria-hidden="true"
+                  className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-primary"
+                >
+                  {email.charAt(0).toUpperCase()}
+                </span>
+                <span className="app-shell__account-email">{email}</span>
+              </span>
               <button
                 type="button"
                 className="app-shell__logout"

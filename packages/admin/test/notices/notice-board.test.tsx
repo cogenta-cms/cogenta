@@ -43,6 +43,10 @@ describe('the admin notice board', () => {
     signedIn([MFA_NOTICE])
     render(<App />)
 
+    // The board fetches its notices after the shell has mounted; wait for
+    // the page underneath first, so the default query timeout is spent on
+    // the notice itself rather than on the whole first render.
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
     const action = await screen.findByRole('link', { name: 'Configurer maintenant' })
     expect(action.getAttribute('href')).toBe('/settings')
   })

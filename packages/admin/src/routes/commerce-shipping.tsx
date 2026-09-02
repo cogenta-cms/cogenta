@@ -188,7 +188,10 @@ export function CommerceShippingRoute(): JSX.Element {
     <section aria-labelledby="commerce-shipping-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="commerce-shipping-heading" className="m-0 text-xl leading-7 font-semibold">
+          <h1
+            id="commerce-shipping-heading"
+            className="m-0 text-2xl leading-tight font-bold tracking-tight"
+          >
             {t('commerceShipping.heading')}
           </h1>
           <p className="text-muted-foreground text-sm">{t('commerceShipping.description')}</p>

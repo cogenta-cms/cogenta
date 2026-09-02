@@ -296,7 +296,7 @@ export function McpRoute(): JSX.Element {
     <section aria-labelledby="mcp-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="mcp-heading" className="m-0 text-xl leading-7 font-semibold">
+          <h1 id="mcp-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
             {t('mcp.heading')}
           </h1>
           <p className="mt-1 text-sm">{t('mcp.intro')}</p>

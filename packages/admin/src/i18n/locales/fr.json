@@ -394,7 +394,11 @@
     "useTotpCode": "Utiliser mon application d'authentification",
     "recoveryHeading": "Code de récupération",
     "recoveryPrompt": "Entrez l'un des codes de récupération reçus lors de l'activation de la vérification en deux étapes. Chaque code ne fonctionne qu'une fois.",
-    "recoveryCodeIncorrect": "Ce code de récupération n'est pas valide."
+    "recoveryCodeIncorrect": "Ce code de récupération n'est pas valide.",
+    "tagline": "Le CMS qui s'exploite lui-même.",
+    "highlightAgents": "Agents autonomes",
+    "highlightThemes": "Thèmes multiples",
+    "highlightHeadless": "API headless"
   },
   "forgotPassword": {
     "heading": "Réinitialiser le mot de passe",
@@ -1875,6 +1879,12 @@
   },
   "dashboard": {
     "heading": "Tableau de bord",
+    "kpi": {
+      "entries": "Contenus",
+      "drafts": "Brouillons",
+      "trash": "Corbeille",
+      "health": "Santé"
+    },
     "healthHeading": "Santé du site",
     "healthStatus": {
       "ok": "opérationnel",

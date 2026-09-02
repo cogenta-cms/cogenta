@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { buttonVariants } from '../ui/index.js'
+import { buttonVariants, cn } from '../ui/index.js'
 
 /**
  * The wildcard route (`app.tsx`'s `path="*"`, last child, inside `AppShell`).
@@ -18,10 +18,18 @@ export function NotFoundRoute(): JSX.Element {
   const { t } = useTranslation()
 
   return (
-    <main className="flex flex-col items-start gap-4 p-6">
-      <h1 className="m-0 text-xl leading-7 font-semibold">{t('notFound.heading')}</h1>
+    <main className="reveal flex min-h-[60vh] flex-col items-center justify-center gap-3 p-6 text-center">
+      <p
+        aria-hidden="true"
+        className="m-0 font-mono text-7xl leading-none font-bold tracking-tight text-primary sm:text-8xl"
+      >
+        404
+      </p>
+      <h1 className="m-0 text-xl leading-7 font-semibold tracking-tight">
+        {t('notFound.heading')}
+      </h1>
       <p className="m-0 max-w-prose text-sm text-muted-foreground">{t('notFound.body')}</p>
-      <Link className={buttonVariants({ variant: 'primary' })} to="/">
+      <Link className={cn(buttonVariants({ variant: 'primary' }), 'mt-2 rounded-full px-6')} to="/">
         {t('notFound.backToDashboard')}
       </Link>
     </main>

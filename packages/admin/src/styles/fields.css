@@ -8,7 +8,7 @@
 .field label {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--foreground);
 }
 
 .field input[type="text"],
@@ -18,39 +18,53 @@
 .field select,
 .field textarea {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
-  color: var(--color-text);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
   font: inherit;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.field input[type="text"]:focus-visible,
+.field input[type="number"]:focus-visible,
+.field input[type="date"]:focus-visible,
+.field input[type="datetime-local"]:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent);
 }
 
 .field textarea {
   min-height: 6rem;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
 }
 
 .field__required {
-  color: var(--color-danger);
+  color: var(--destructive);
 }
 
 .field__help {
   margin: 0;
   font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  color: var(--muted-foreground);
 }
 
 .field__error {
   margin: 0;
   font-size: 0.8125rem;
-  color: var(--color-danger);
+  color: var(--destructive);
 }
 
 .field__placeholder {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--color-text-muted);
+  color: var(--muted-foreground);
   font-style: italic;
 }
 
@@ -92,20 +106,22 @@
   background: none;
   padding: 0;
   font-size: 0.75rem;
-  color: var(--color-primary, #2563eb);
+  color: var(--primary);
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .field__counter {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: var(--muted-foreground);
   align-self: flex-end;
+  font-variant-numeric: tabular-nums;
 }
 
 .field__counter--over {
-  color: var(--color-danger);
+  color: var(--destructive);
   font-weight: 600;
 }
 
@@ -113,8 +129,8 @@
   display: inline-block;
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
   flex: none;
 }
 
@@ -131,8 +147,8 @@
   grid-template-rows: repeat(3, 64px);
   width: fit-content;
   position: relative;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -143,6 +159,16 @@
   object-fit: cover;
 }
 
+/*
+ * The marker ring has to read against an arbitrary map tile photo, whose
+ * brightness this admin does not control — the one place in this pass that
+ * genuinely needs an invariant white outline rather than a scheme-aware
+ * token, the same case `media.css`'s focal-point marker is in. No `--*`
+ * token in `theme.css` names an invariant colour (`--rail-*` is the file's
+ * only documented exception, and it is a navy family, not white); adding
+ * one is out of scope for a pass that does not touch `theme.css`. Flagged
+ * here rather than silently left as a literal.
+ */
 .field__map-marker {
   position: absolute;
   top: 50%;
@@ -152,7 +178,7 @@
   margin: -5px 0 0 -5px;
   border-radius: 50%;
   border: 2px solid white;
-  background: var(--color-danger, red);
+  background: var(--destructive);
   pointer-events: none;
 }
 
@@ -177,7 +203,8 @@
   gap: 0.25rem;
   padding: 0.125rem 0.375rem;
   border-radius: 999px;
-  background: var(--color-surface-muted, #eee);
+  background: var(--muted);
+  color: var(--foreground);
   font-size: 0.8125rem;
 }
 
@@ -189,6 +216,7 @@
   padding: 0;
   line-height: 1;
   font-size: 0.9rem;
+  color: inherit;
 }
 
 .field__select-options {
@@ -198,8 +226,9 @@
   max-height: 12rem;
   overflow-y: auto;
   padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
 }
 
 .field__select-option {
@@ -216,8 +245,8 @@
 }
 
 .field--link-target {
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border: 1px dashed var(--input);
+  border-radius: var(--radius-md);
   padding: var(--space-2);
 }
 
@@ -233,7 +262,7 @@
 .field__link-target-type legend {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--foreground);
   padding: 0;
 }
 
@@ -260,9 +289,19 @@
 }
 
 .repeater-field__item {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
   padding: var(--space-3);
+  transition:
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.repeater-field__item:hover {
+  border-color: var(--input);
+  box-shadow: var(--shadow-raised);
 }
 
 .repeater-field__item-header {
@@ -293,11 +332,12 @@
 
 .repeater-field__hint {
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: var(--muted-foreground);
 }
 
 .field__word-count {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
 }

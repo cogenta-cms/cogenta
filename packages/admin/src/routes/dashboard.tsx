@@ -29,11 +29,15 @@ import {
   BackupIcon,
   ClockIcon,
   CloseIcon,
+  CollectionsIcon,
+  EditIcon,
   GripIcon,
+  HealthIcon,
   MediaIcon,
   PlusIcon,
   PulseIcon,
   SettingsIcon,
+  TrashIcon,
   TrendIcon,
 } from '../ui/icons.js'
 import { Modal } from '../ui/modal.js'
@@ -97,6 +101,19 @@ function plainTextToRichText(text: string): readonly Record<string, unknown>[] {
 /** The first declared field of `kind`, deterministically — never "the first string value found" (that guess is what fiche 01 names as a real bug elsewhere). */
 function firstFieldOf(collection: CollectionSummary, kind: SchemaField['kind']): string | null {
   return collection.fields.find((field) => field.kind === kind)?.name ?? null
+}
+
+/** The small rounded icon well every widget card's `<h2>` now shows its glyph inside, instead of a bare coloured icon floating next to the text. */
+function WidgetIconWell({
+  icon: Icon,
+}: {
+  readonly icon: (props: { className?: string }) => JSX.Element
+}): JSX.Element {
+  return (
+    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+      <Icon className="size-4" />
+    </span>
+  )
 }
 
 const STATUS_DOT: Record<SiteHealth[keyof SiteHealth]['status'], string> = {
@@ -376,6 +393,42 @@ export function DashboardRoute(): JSX.Element {
     })
   }, [scheduled])
 
+  // The KPI row (Nightops v2 redesign): four at-a-glance tiles built purely
+  // from state this route already fetches for the widgets below it — no new
+  // request. `entries`/`drafts`/`trash` roll up `summary`, the same content
+  // summary the "Résumé du contenu" widget already renders, and each stays
+  // `null` — never a fabricated zero — when nothing in `summary` actually
+  // carries that figure for this role, the same discipline the widget's own
+  // per-row rendering already follows for drafts and trash.
+  const entriesTotal = useMemo(
+    () => (summary === null ? null : summary.reduce((sum, row) => sum + row.total, 0)),
+    [summary],
+  )
+  const draftsTotal = useMemo(() => {
+    if (summary === null) return null
+    const rows = summary.filter((row) => row.draft !== null)
+    return rows.length === 0 ? null : rows.reduce((sum, row) => sum + (row.draft ?? 0), 0)
+  }, [summary])
+  const trashedTotal = useMemo(() => {
+    if (summary === null) return null
+    const rows = summary.filter((row) => row.trashed !== null)
+    return rows.length === 0 ? null : rows.reduce((sum, row) => sum + (row.trashed ?? 0), 0)
+  }, [summary])
+  // The same admin-only `health` state as the "Santé du site" widget below,
+  // collapsed to whichever of database/storage reads worse — `down` beats
+  // `degraded` beats `ok`, so one bad driver is never hidden behind a good one.
+  const overallHealthStatus = useMemo<SiteHealth[keyof SiteHealth]['status'] | null>(() => {
+    if (!isAdmin || health === null) return null
+    const severity: Record<SiteHealth[keyof SiteHealth]['status'], number> = {
+      ok: 0,
+      degraded: 1,
+      down: 2,
+    }
+    return severity[health.database.status] >= severity[health.storage.status]
+      ? health.database.status
+      : health.storage.status
+  }, [isAdmin, health])
+
   function labelFor(name: string): string {
     const found = readableCollections.find((collection) => collection.name === name)
     return found?.labels.plural ?? name
@@ -470,10 +523,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-summary-heading"
-        className="reveal reveal-1 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-1 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-summary-heading" className="m-0 flex items-center gap-2 text-base">
-          <PulseIcon className="size-4 text-primary" />
+        <h2 id="dashboard-summary-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={PulseIcon} />
           {t('dashboard.summaryHeading')}
         </h2>
         {summaryError !== null && (
@@ -496,7 +549,7 @@ export function DashboardRoute(): JSX.Element {
               >
                 <Link
                   to={`/collections/${encodeURIComponent(row.collection)}`}
-                  className="font-medium text-foreground hover:underline"
+                  className="font-medium text-primary hover:underline"
                 >
                   {labelFor(row.collection)}
                 </Link>
@@ -544,10 +597,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-health-heading"
-        className="reveal reveal-2 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-2 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-health-heading" className="m-0 flex items-center gap-2 text-base">
-          <PulseIcon className="size-4 text-primary" />
+        <h2 id="dashboard-health-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={PulseIcon} />
           {t('dashboard.healthHeading')}
         </h2>
         {!isAdmin && (
@@ -585,10 +638,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-activity-heading"
-        className="reveal reveal-3 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-3 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-activity-heading" className="m-0 flex items-center gap-2 text-base">
-          <AuditIcon className="size-4 text-primary" />
+        <h2 id="dashboard-activity-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={AuditIcon} />
           {t('dashboard.activityHeading')}
         </h2>
         {!isAdmin && (
@@ -630,10 +683,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-analytics-heading"
-        className="reveal reveal-4 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-4 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-analytics-heading" className="m-0 flex items-center gap-2 text-base">
-          <TrendIcon className="size-4 text-primary" />
+        <h2 id="dashboard-analytics-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={TrendIcon} />
           {t('analytics.widgetHeading')}
         </h2>
         {!isAdmin && (
@@ -658,7 +711,7 @@ export function DashboardRoute(): JSX.Element {
               </li>
             </ul>
             <p className="m-0 text-sm">
-              <a href="/analytics" className="text-primary underline underline-offset-2">
+              <a href="/analytics" className="font-medium text-primary hover:underline">
                 {t('analytics.widgetLink')}
               </a>
             </p>
@@ -672,10 +725,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-scheduled-heading"
-        className="reveal reveal-5 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-5 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-scheduled-heading" className="m-0 flex items-center gap-2 text-base">
-          <ClockIcon className="size-4 text-primary" />
+        <h2 id="dashboard-scheduled-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={ClockIcon} />
           {t('dashboard.scheduledHeading')}
         </h2>
         {scheduledError !== null && (
@@ -710,10 +763,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-todo-heading"
-        className="reveal reveal-6 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal reveal-6 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-todo-heading" className="m-0 flex items-center gap-2 text-base">
-          <ClockIcon className="size-4 text-primary" />
+        <h2 id="dashboard-todo-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={ClockIcon} />
           {t('dashboard.todoHeading')}
         </h2>
         {myDraftsError !== null && (
@@ -740,7 +793,7 @@ export function DashboardRoute(): JSX.Element {
                   </span>
                   <Link
                     to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
-                    className="hover:underline"
+                    className="font-medium text-primary hover:underline"
                   >
                     {titleOf(item.entry)}
                   </Link>
@@ -777,10 +830,10 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-shortcuts-heading"
-        className="reveal flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-card"
+        className="reveal flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2 id="dashboard-shortcuts-heading" className="m-0 flex items-center gap-2 text-base">
-          <PlusIcon className="size-4 text-primary" />
+        <h2 id="dashboard-shortcuts-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={PlusIcon} />
           {t('dashboard.shortcutsHeading')}
         </h2>
         {creatableCollections.length === 0 && (
@@ -872,7 +925,7 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-backups-heading"
-        className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-card p-5 text-sm text-muted-foreground"
+        className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-card p-5 text-sm text-muted-foreground"
       >
         <h2
           id="dashboard-backups-heading"
@@ -883,6 +936,67 @@ export function DashboardRoute(): JSX.Element {
         </h2>
         <p className="m-0">{t('dashboard.backupsBody')}</p>
       </section>
+    )
+  }
+
+  /**
+   * The four KPI tiles themselves — see the `entriesTotal`/`draftsTotal`/
+   * `trashedTotal`/`overallHealthStatus` computation above for where each
+   * value actually comes from. `'—'` is the honest placeholder wherever a
+   * role has no visibility into that figure at all, never a `0` invented to
+   * fill the tile.
+   */
+  function renderKpiRow(): JSX.Element {
+    const tiles: readonly {
+      readonly key: string
+      readonly labelKey: string
+      readonly icon: (props: { className?: string }) => JSX.Element
+      readonly value: string
+    }[] = [
+      {
+        key: 'entries',
+        labelKey: 'dashboard.kpi.entries',
+        icon: CollectionsIcon,
+        value: entriesTotal === null ? '—' : String(entriesTotal),
+      },
+      {
+        key: 'drafts',
+        labelKey: 'dashboard.kpi.drafts',
+        icon: EditIcon,
+        value: draftsTotal === null ? '—' : String(draftsTotal),
+      },
+      {
+        key: 'trash',
+        labelKey: 'dashboard.kpi.trash',
+        icon: TrashIcon,
+        value: trashedTotal === null ? '—' : String(trashedTotal),
+      },
+      {
+        key: 'health',
+        labelKey: 'dashboard.kpi.health',
+        icon: HealthIcon,
+        value:
+          overallHealthStatus === null ? '—' : t(`dashboard.healthStatus.${overallHealthStatus}`),
+      },
+    ]
+
+    return (
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {tiles.map((tile, index) => (
+          <div
+            key={tile.key}
+            className={`reveal reveal-${index + 1} flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-card`}
+          >
+            <span className="flex size-9 items-center justify-center rounded-md bg-accent text-primary">
+              <tile.icon className="size-4" />
+            </span>
+            <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              {t(tile.labelKey)}
+            </span>
+            <span className="text-3xl font-bold tabular-nums">{tile.value}</span>
+          </div>
+        ))}
+      </div>
     )
   }
 
@@ -913,28 +1027,35 @@ export function DashboardRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="dashboard-heading" className="flex flex-col gap-8">
-      <div className="reveal flex items-start justify-between gap-4 border-b-2 border-foreground pb-4">
-        <div>
-          <p className="m-0 font-mono text-xs font-medium tracking-[0.2em] text-primary uppercase">
-            {t('shell.brand')}
-          </p>
-          <h1 id="dashboard-heading" className="m-0 text-3xl leading-tight font-bold">
-            {t('dashboard.heading')}
-          </h1>
+      <div className="reveal flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="m-0 font-mono text-xs font-medium tracking-[0.2em] text-primary uppercase">
+              {t('shell.brand')}
+            </p>
+            <h1 id="dashboard-heading" className="m-0 text-3xl leading-tight font-bold">
+              {t('dashboard.heading')}
+            </h1>
+          </div>
+          {/* Fiche 39 tâche 2: a dedicated, always-visible icon replaces the
+              collapsed `<details>` that used to be the only way to discover
+              this panel — nothing here is behind a repli anymore. */}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t('dashboard.customize')}
+            title={t('dashboard.customize')}
+            className="mt-1 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <SettingsIcon className="size-5" />
+          </button>
         </div>
-        {/* Fiche 39 tâche 2: a dedicated, always-visible icon replaces the
-            collapsed `<details>` that used to be the only way to discover
-            this panel — nothing here is behind a repli anymore. */}
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          aria-label={t('dashboard.customize')}
-          title={t('dashboard.customize')}
-          className="mt-1 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          <SettingsIcon className="size-5" />
-        </button>
+        {/* A thin gradient hairline replaces the old solid 2px rule — same
+            role (closes off the page header), lighter weight. */}
+        <div className="h-px bg-gradient-to-r from-primary/60 to-transparent" aria-hidden="true" />
       </div>
+
+      {renderKpiRow()}
 
       {/* Fiche 22 tâche 3, redesigned by tâche 8 part 2 and again by fiche 39:
           order and visibility, per person, per browser (`localStorage`,

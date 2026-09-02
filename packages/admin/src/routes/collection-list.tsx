@@ -531,7 +531,7 @@ export function CollectionListRoute(): JSX.Element {
   if (collection === undefined || !canPerform('read', collection, roles)) {
     return (
       <section aria-labelledby="collection-heading" className="flex flex-col gap-4">
-        <h1 id="collection-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="collection-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('collectionList.notFoundHeading')}
         </h1>
         <p>
@@ -552,7 +552,7 @@ export function CollectionListRoute(): JSX.Element {
   return (
     <section aria-labelledby="collection-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 id="collection-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="collection-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {collection.labels.plural}
         </h1>
         {canCreate && (

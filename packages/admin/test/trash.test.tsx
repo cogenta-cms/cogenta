@@ -27,7 +27,7 @@ afterEach(() => {
 
 async function goToTrash(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Corbeille' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Corbeille' }))
   await screen.findByRole('heading', { name: 'Corbeille' })
 }
 

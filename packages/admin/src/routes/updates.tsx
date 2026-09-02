@@ -110,7 +110,7 @@ export function UpdatesRoute(): JSX.Element {
   return (
     <section aria-labelledby="updates-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="updates-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="updates-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('updates.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('updates.description')}</p>

@@ -125,7 +125,10 @@ export function AdminAppearanceRoute(): JSX.Element {
   return (
     <section aria-labelledby="admin-appearance-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="admin-appearance-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="admin-appearance-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('adminAppearance.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('adminAppearance.description')}</p>

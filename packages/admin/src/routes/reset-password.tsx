@@ -2,6 +2,7 @@ import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ApiError, getPasswordPolicy, resetPassword } from '../api/client.js'
+import { AuthLayout } from '../auth/auth-layout.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 /** The floor this screen falls back to before `getPasswordPolicy()` answers — matches the server's own default (`password-policy.ts`), never a guess that could be wrong. */
@@ -52,27 +53,32 @@ export function ResetPasswordRoute(): JSX.Element {
 
   if (token === '') {
     return (
-      <main className="flex min-h-full items-center justify-center p-6">
-        <Card className="w-full max-w-sm">
+      <AuthLayout>
+        <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
           <CardBody>
             <Notice tone="danger" live="assertive">
               <p>{t('resetPassword.missingToken')}</p>
             </Notice>
             <p className="m-0 text-center text-sm">
-              <Link to="/forgot-password">{t('forgotPassword.heading')}</Link>
+              <Link to="/forgot-password" className="text-primary hover:underline">
+                {t('forgotPassword.heading')}
+              </Link>
             </p>
           </CardBody>
         </Card>
-      </main>
+      </AuthLayout>
     )
   }
 
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
+    <AuthLayout>
+      <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
         <CardBody>
           <div className="flex flex-col gap-1.5">
-            <h1 id="reset-password-heading" className="m-0 text-xl leading-7 font-semibold">
+            <h1
+              id="reset-password-heading"
+              className="m-0 text-xl leading-7 font-semibold tracking-tight"
+            >
               {t('resetPassword.heading')}
             </h1>
           </div>
@@ -82,7 +88,9 @@ export function ResetPasswordRoute(): JSX.Element {
               <Notice tone="success" live="assertive">
                 <p>{t('resetPassword.done')}</p>
               </Notice>
-              <Button onClick={() => navigate('/login')}>{t('resetPassword.goToLogin')}</Button>
+              <Button onClick={() => navigate('/login')} className="h-11 rounded-full">
+                {t('resetPassword.goToLogin')}
+              </Button>
             </>
           ) : (
             <form
@@ -104,6 +112,7 @@ export function ResetPasswordRoute(): JSX.Element {
                     minLength={minLength}
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
+                    className="h-11"
                   />
                 )}
               </Field>
@@ -128,13 +137,13 @@ export function ResetPasswordRoute(): JSX.Element {
                   <p>{error}</p>
                 </Notice>
               )}
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} className="h-11 rounded-full">
                 {t('resetPassword.submit')}
               </Button>
             </form>
           )}
         </CardBody>
       </Card>
-    </main>
+    </AuthLayout>
   )
 }

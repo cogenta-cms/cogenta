@@ -185,7 +185,10 @@ export function PromptSettingsRoute(): JSX.Element {
   return (
     <section aria-labelledby="prompt-settings-heading" className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 id="prompt-settings-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="prompt-settings-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('promptSettings.heading')}
         </h1>
         <Button size="sm" onClick={() => setCreating((value) => !value)}>

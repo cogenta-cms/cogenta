@@ -147,7 +147,7 @@ export function ChannelsRoute(): JSX.Element {
   return (
     <section aria-labelledby="channels-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="channels-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="channels-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('channels.heading')}
         </h1>
         <p className="mt-1 text-sm">{t('channels.intro')}</p>

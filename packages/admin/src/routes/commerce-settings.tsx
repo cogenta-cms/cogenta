@@ -114,7 +114,10 @@ export function CommerceSettingsRoute(): JSX.Element {
   return (
     <section aria-labelledby="commerce-settings-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="commerce-settings-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="commerce-settings-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('commerceSettings.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('commerceSettings.description')}</p>

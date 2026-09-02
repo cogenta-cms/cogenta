@@ -185,7 +185,7 @@ export function ProvidersRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="providers-heading" className="flex flex-col gap-6">
-      <h1 id="providers-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="providers-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('providers.heading')}
       </h1>
       <p className="m-0 text-sm opacity-80">{t('providers.intro')}</p>

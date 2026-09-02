@@ -248,7 +248,10 @@ export function McpClientsRoute(): JSX.Element {
     <section aria-labelledby="mcp-clients-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="mcp-clients-heading" className="m-0 text-xl leading-7 font-semibold">
+          <h1
+            id="mcp-clients-heading"
+            className="m-0 text-2xl leading-tight font-bold tracking-tight"
+          >
             {t('mcpClients.heading')}
           </h1>
           <p className="mt-1 text-sm">{t('mcpClients.intro')}</p>

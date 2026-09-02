@@ -2,6 +2,7 @@ import { type FormEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { ApiError, forgotPassword } from '../api/client.js'
+import { AuthLayout } from '../auth/auth-layout.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 /**
@@ -46,11 +47,14 @@ export function ForgotPasswordRoute(): JSX.Element {
   }
 
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
+    <AuthLayout>
+      <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
         <CardBody>
           <div className="flex flex-col gap-1.5">
-            <h1 id="forgot-password-heading" className="m-0 text-xl leading-7 font-semibold">
+            <h1
+              id="forgot-password-heading"
+              className="m-0 text-xl leading-7 font-semibold tracking-tight"
+            >
               {t('forgotPassword.heading')}
             </h1>
             <p className="m-0 text-sm text-muted-foreground">{t('forgotPassword.intro')}</p>
@@ -76,6 +80,7 @@ export function ForgotPasswordRoute(): JSX.Element {
                     required
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
+                    className="h-11"
                   />
                 )}
               </Field>
@@ -84,17 +89,19 @@ export function ForgotPasswordRoute(): JSX.Element {
                   <p>{error}</p>
                 </Notice>
               )}
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} className="h-11 rounded-full">
                 {t('forgotPassword.submit')}
               </Button>
             </form>
           )}
 
           <p className="m-0 text-center text-sm">
-            <Link to="/login">{t('forgotPassword.backToLogin')}</Link>
+            <Link to="/login" className="text-primary hover:underline">
+              {t('forgotPassword.backToLogin')}
+            </Link>
           </p>
         </CardBody>
       </Card>
-    </main>
+    </AuthLayout>
   )
 }

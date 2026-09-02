@@ -609,7 +609,7 @@ export function ProfileRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="profile-heading" className="flex max-w-3xl flex-col gap-6">
-      <h1 id="profile-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="profile-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('profile.heading')}
       </h1>
 

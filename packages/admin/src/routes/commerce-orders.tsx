@@ -147,7 +147,10 @@ export function CommerceOrdersRoute(): JSX.Element {
   return (
     <section aria-labelledby="commerce-orders-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 id="commerce-orders-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="commerce-orders-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('commerceOrders.heading')}
         </h1>
         <div className="flex gap-2">

@@ -52,7 +52,10 @@ export function DocumentationDocsRoute(): JSX.Element {
   return (
     <section aria-labelledby="documentation-docs-heading" className="flex flex-col gap-6">
       <div>
-        <h1 id="documentation-docs-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1
+          id="documentation-docs-heading"
+          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+        >
           {t('documentation.docs.heading')}
         </h1>
         <p className="m-0 mt-1 text-sm text-muted-foreground">{t('documentation.docs.intro')}</p>

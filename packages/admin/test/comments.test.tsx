@@ -152,7 +152,7 @@ describe('the comment moderation queue', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     const link = screen.getByRole('link', { name: /Commentaires/u })
-    expect(within(link).getByText('1')).toBeDefined()
+    expect(await within(link).findByText('1')).toBeDefined()
   })
 
   it('a viewer sees the queue but no moderation actions succeed silently — the buttons themselves are still offered as a courtesy, the router is the real gate', async () => {

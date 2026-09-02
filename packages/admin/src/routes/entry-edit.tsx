@@ -1174,7 +1174,7 @@ export function EntryEditRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="entry-heading" className="flex flex-col gap-6">
-      <h1 id="entry-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="entry-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t(isNew ? 'entryEdit.newHeading' : 'entryEdit.editHeading', {
           label: collection.labels.singular,
         })}
@@ -1289,7 +1289,7 @@ export function EntryEditRoute(): JSX.Element {
               <Card className="entry-form__status">
                 <CardBody className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">
+                    <span className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">
                       {t('entryEdit.statusLabel')}
                     </span>
                     {canPublish && isManagedStatus(status) ? (

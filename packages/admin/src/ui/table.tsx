@@ -35,7 +35,7 @@ export function TableRoot({ className, label, ...props }: TableRootProps): JSX.E
       aria-label={label}
       tabIndex={0}
       className={cn(
-        'w-full overflow-x-auto rounded-lg border border-border bg-card shadow-card ' +
+        'w-full overflow-x-auto rounded-xl border border-border bg-card shadow-card ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         className,
       )}
@@ -48,7 +48,14 @@ export function TableRoot({ className, label, ...props }: TableRootProps): JSX.E
 export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>): JSX.Element {
   return (
     <table
-      className={cn('w-full border-collapse font-sans text-sm text-card-foreground', className)}
+      className={cn(
+        'w-full border-collapse font-sans text-sm text-card-foreground ' +
+          // The first column reads as the row's identity (a name, a slug, a
+          // subject line) — a structural selector rather than a prop, so no
+          // call site has to remember to mark its own first `TableCell`.
+          '[&_tbody_td:first-child]:font-medium [&_tbody_td:first-child]:text-foreground',
+        className,
+      )}
       {...props}
     />
   )
@@ -58,7 +65,12 @@ export function TableHead({
   className,
   ...props
 }: HTMLAttributes<HTMLTableSectionElement>): JSX.Element {
-  return <thead className={cn('bg-muted', className)} {...props} />
+  // Sticky within whatever scrolls — `TableRoot` only scrolls horizontally,
+  // so in practice this sticks against the page's own vertical scroll, which
+  // is the useful case (a long list keeps its column headers in view).
+  return (
+    <thead className={cn('sticky top-0 z-10 bg-muted/80 backdrop-blur', className)} {...props} />
+  )
 }
 
 export function TableBody({
@@ -75,7 +87,7 @@ export function TableRow({
   return (
     <tr
       className={cn(
-        'border-b border-border transition-colors duration-150 ease-out last:border-b-0 hover:bg-accent/60',
+        'border-b border-border transition-colors duration-150 ease-out last:border-b-0 hover:bg-accent/50',
         className,
       )}
       {...props}
@@ -92,7 +104,7 @@ export function TableHeader({
     <th
       scope={scope ?? 'col'}
       className={cn(
-        'px-4 py-2.5 text-left align-middle text-xs leading-5 font-semibold tracking-wide text-muted-foreground uppercase',
+        'px-4 py-3 text-left align-middle text-xs leading-5 font-semibold tracking-wider text-muted-foreground uppercase',
         className,
       )}
       {...props}

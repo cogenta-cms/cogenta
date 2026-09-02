@@ -146,7 +146,7 @@ export function ScheduledRoute(): JSX.Element | null {
 
   return (
     <section aria-labelledby="scheduled-heading" className="flex flex-col gap-6">
-      <h1 id="scheduled-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="scheduled-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('scheduled.heading')}
       </h1>
       <p className="m-0 text-sm text-muted-foreground">

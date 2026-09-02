@@ -177,7 +177,7 @@ export function HealthRoute(): JSX.Element | null {
 
   return (
     <section aria-labelledby="health-heading" className="flex flex-col gap-6">
-      <h1 id="health-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="health-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('health.heading')}
       </h1>
 

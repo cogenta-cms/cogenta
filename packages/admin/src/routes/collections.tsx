@@ -92,7 +92,7 @@ export function CollectionsRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="collections-heading" className="flex flex-col gap-6">
-      <h1 id="collections-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="collections-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('collections.heading')}
       </h1>
 

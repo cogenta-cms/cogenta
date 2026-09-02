@@ -70,7 +70,7 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            'fixed inset-0 z-40 bg-foreground/40',
+            'fixed inset-0 z-40 bg-foreground/50 backdrop-blur-sm',
             'data-[state=open]:[animation:cg-admin-overlay-in_150ms_ease-out_forwards]',
             'data-[state=closed]:[animation:cg-admin-overlay-out_150ms_ease-in_forwards]',
           )}

@@ -1,6 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import type { JSX, ReactNode } from 'react'
 import { cn } from './cn.js'
+import { AlertIcon, InfoIcon, NoticeDangerIcon, NoticeSuccessIcon } from './icons.js'
 
 /**
  * The admin's notification.
@@ -21,15 +22,18 @@ import { cn } from './cn.js'
  */
 
 const noticeVariants = cva(
-  'flex gap-3 rounded-lg border px-4 py-3 font-sans text-sm leading-5 shadow-card ' +
+  // A hairline border all round, plus a strong 4px stripe on the leading edge
+  // in the tone's own colour — the accent that actually carries the meaning,
+  // rather than a uniformly tinted outline.
+  'flex gap-3 rounded-lg border border-l-4 px-4 py-3 font-sans text-sm leading-5 shadow-card ' +
     '[animation:cg-admin-notice-in_220ms_ease-out]',
   {
     variants: {
       tone: {
-        info: 'border-info/30 bg-info-surface text-foreground',
-        success: 'border-success/30 bg-success-surface text-foreground',
-        warning: 'border-warning/40 bg-warning-surface text-foreground',
-        danger: 'border-destructive/30 bg-destructive-surface text-foreground',
+        info: 'border-border border-l-info bg-info-surface text-foreground',
+        success: 'border-border border-l-success bg-success-surface text-foreground',
+        warning: 'border-border border-l-warning bg-warning-surface text-foreground',
+        danger: 'border-border border-l-destructive bg-destructive-surface text-foreground',
       },
     },
     defaultVariants: { tone: 'info' },
@@ -41,6 +45,14 @@ const ACCENT_BY_TONE = {
   success: 'text-success',
   warning: 'text-warning',
   danger: 'text-destructive',
+} as const
+
+/** One distinct glyph per tone, rather than one shape recoloured four ways. */
+const ICON_BY_TONE = {
+  info: InfoIcon,
+  success: NoticeSuccessIcon,
+  warning: AlertIcon,
+  danger: NoticeDangerIcon,
 } as const
 
 export interface NoticeProps extends VariantProps<typeof noticeVariants> {
@@ -66,7 +78,9 @@ export function Notice({
   live = 'polite',
   className,
 }: NoticeProps): JSX.Element {
-  const accent = ACCENT_BY_TONE[tone ?? 'info']
+  const resolvedTone = tone ?? 'info'
+  const accent = ACCENT_BY_TONE[resolvedTone]
+  const ToneIcon = ICON_BY_TONE[resolvedTone]
   const liveProps =
     live === 'off'
       ? {}
@@ -104,20 +118,5 @@ export function Notice({
         </button>
       )}
     </div>
-  )
-}
-
-/** One shape for all four tones: colour carries the meaning, and the text says it too. */
-function ToneIcon({ className }: { readonly className: string }): JSX.Element {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      viewBox="0 0 20 20"
-      className={className}
-      fill="currentColor"
-    >
-      <path d="M10 1a9 9 0 100 18 9 9 0 000-18zm0 4a1.1 1.1 0 110 2.2A1.1 1.1 0 0110 5zm1 10H9V9h2z" />
-    </svg>
   )
 }

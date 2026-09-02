@@ -17,14 +17,18 @@
  * The palette they render with is `../styles/theme.css`.
  */
 
+export type { BadgeProps } from './badge.js'
+export { Badge } from './badge.js'
 export type { ButtonProps } from './button.js'
 export { Button, buttonVariants } from './button.js'
+export type { CardProps } from './card.js'
 export {
   Card,
   CardBody,
   CardDescription,
   CardFooter,
   CardHeader,
+  CardIcon,
   CardTitle,
 } from './card.js'
 export { cn } from './cn.js'
@@ -34,8 +38,12 @@ export type { ModalProps } from './modal.js'
 export { Modal } from './modal.js'
 export type { NoticeProps } from './notice.js'
 export { Notice } from './notice.js'
+export type { PageHeaderProps } from './page-header.js'
+export { PageHeader } from './page-header.js'
 export type { CursorPaginationProps, PagesPaginationProps, PaginationProps } from './pagination.js'
 export { Pagination } from './pagination.js'
+export type { StatProps } from './stat.js'
+export { Stat } from './stat.js'
 export type { TableRootProps } from './table.js'
 export {
   Table,

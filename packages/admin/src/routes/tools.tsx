@@ -90,7 +90,7 @@ export function ToolsRoute(): JSX.Element | null {
 
   return (
     <section aria-labelledby="tools-heading" className="flex flex-col gap-6">
-      <h1 id="tools-heading" className="m-0 text-xl leading-7 font-semibold">
+      <h1 id="tools-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('tools.heading')}
       </h1>
       <p className="m-0 text-sm text-muted-foreground">{t('tools.intro')}</p>

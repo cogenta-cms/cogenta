@@ -203,6 +203,319 @@
   .reveal-6 {
     --reveal-delay: 340ms;
   }
+
+  /* --------------------------------------------------------------------
+   * Nightops v2 — global element rules for the ~60 routes that still reach
+   * for a bare `<input>`/`<table>`/`<button>` or a hand-written stylesheet
+   * instead of `src/ui/` primitives. Scoped to `.app-shell__content` (the
+   * workspace) rather than the document root: the dark navigation rail
+   * (`.app-shell__sidebar`) is a sibling grid area, never a descendant of
+   * `.app-shell__content`, so it is excluded for free, with no `:not()`
+   * needed. `shell.css` and the seven hand-written route stylesheets next
+   * to this file (fields.css, entry-form.css, entry-picker.css, media.css,
+   * rich-text.css, version-history.css, documentation.css) are themselves
+   * unlayered — CSS's implicit "beats every named layer" bucket — so a
+   * route that already names one of their classes keeps that file's own,
+   * more specific look; these rules exist for whatever still slips through
+   * bare, and stay in `@layer base` so a Tailwind utility on the same
+   * element always wins, exactly as the file header above requires.
+   * ------------------------------------------------------------------ */
+
+  .app-shell__content h1 {
+    margin: 0;
+    font-size: 2rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .app-shell__content h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .app-shell__content h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 600;
+  }
+
+  /* An uppercase eyebrow rather than a fourth size step down — `<h4>` in
+     this admin marks a sub-section label, not a smaller headline. */
+  .app-shell__content h4 {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  /* Bare form controls. The four excluded `type`s render their own native
+     chrome (a checkbox/radio's box, a range's track, a color swatch) that
+     this box-and-border treatment would only fight with. */
+  .app-shell__content
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  .app-shell__content select,
+  .app-shell__content textarea {
+    min-height: 2.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input);
+    background: var(--card);
+    color: var(--foreground);
+    font: inherit;
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  /* A `<textarea>` grows with its content (`rows`); a fixed minimum height
+     would just leave dead padding under one line of text. */
+  .app-shell__content textarea {
+    min-height: auto;
+  }
+
+  .app-shell__content
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+      [type="color"]
+    )::placeholder,
+  .app-shell__content textarea::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  .app-shell__content
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+      [type="color"]
+    ):focus-visible,
+  .app-shell__content select:focus-visible,
+  .app-shell__content textarea:focus-visible {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent);
+  }
+
+  .app-shell__content
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+      [type="color"]
+    ):disabled,
+  .app-shell__content select:disabled,
+  .app-shell__content textarea:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .app-shell__content input[type="checkbox"],
+  .app-shell__content input[type="radio"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--primary);
+  }
+
+  /* A pill-shaped secondary button — only for a `<button>` that names no
+     class of its own; any styled button (the overwhelming majority, via
+     `src/ui/button.tsx` or a route's own class) is untouched. */
+  .app-shell__content button:not([class]) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    min-height: 2.25rem;
+    padding: 0 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--foreground);
+    font: inherit;
+    /* Sized to match `src/ui/button.tsx`'s secondary `md` variant, so a bare
+       button and a primitive sitting on the same row read as one family. */
+    font-size: 0.875rem;
+    line-height: 1;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow-card);
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+
+  .app-shell__content button:not([class]):hover {
+    background: var(--accent);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .app-shell__content button:not([class]):active {
+    transform: scale(0.97);
+  }
+
+  .app-shell__content button:not([class]):disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* A bare `<table>` — `border-collapse: separate` (rather than `collapse`)
+     is what lets a per-cell `border-radius` below actually render; a
+     collapsed border model ignores it. `overflow: hidden` on the table
+     itself is what turns those per-cell radii into one clipped rounded
+     rectangle instead of four independent corner cuts. */
+  .app-shell__content table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .app-shell__content th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-shell__content td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--foreground);
+  }
+
+  .app-shell__content tbody tr {
+    transition: background-color 160ms ease;
+  }
+
+  .app-shell__content tbody tr:hover {
+    background: var(--accent);
+  }
+
+  .app-shell__content tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Layout is deliberately NOT set here: a fieldset carrying Tailwind's
+     `flex` (the rich-text mode switcher, for one) would otherwise inherit a
+     column direction it never asked for and stack its buttons. */
+  .app-shell__content fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+    min-width: 0;
+  }
+
+  .app-shell__content legend {
+    padding: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+
+  .app-shell__content hr {
+    margin: 1rem 0;
+    border: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .app-shell__content code,
+  .app-shell__content kbd {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--muted);
+    border-radius: var(--radius-sm);
+    padding: 0.15em 0.4em;
+  }
+
+  .app-shell__content kbd {
+    border-bottom: 2px solid var(--border);
+  }
+
+  /* A hand-drawn chevron, the same technique `shell.css` already uses for
+     the sidebar flyout's "opens a submenu" mark, rather than relying on the
+     native marker (`list-style` on it is inconsistent across browsers and
+     cannot be recoloured/rotated). */
+  .app-shell__content details > summary {
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .app-shell__content details > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .app-shell__content details > summary::before {
+    content: "";
+    display: inline-block;
+    width: 0.4em;
+    height: 0.4em;
+    margin-right: 0.5em;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    opacity: 0.6;
+    transition: transform 160ms ease;
+  }
+
+  .app-shell__content details[open] > summary::before {
+    transform: rotate(45deg);
+  }
+
+  .app-shell__content a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .app-shell__content dl {
+    margin: 0;
+  }
+
+  .app-shell__content dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .app-shell__content dd {
+    margin: 0 0 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .app-shell__content progress,
+  .app-shell__content meter {
+    accent-color: var(--primary);
+  }
+}
+
+/* Unlayered, like the reduced-motion rule below: a viewer's own selection
+   colour and scrollbar should never lose to a more specific component rule
+   elsewhere, and neither is something any component is expected to
+   override. */
+::selection {
+  background: color-mix(in oklab, var(--primary) 25%, transparent);
+  color: var(--foreground);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 20%, transparent) transparent;
 }
 
 /* Left unlayered on purpose: this one must beat everything, including a

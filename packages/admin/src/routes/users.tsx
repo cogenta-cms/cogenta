@@ -426,7 +426,7 @@ export function UsersRoute(): JSX.Element {
   return (
     <section aria-labelledby="users-heading" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 id="users-heading" className="m-0 text-xl leading-7 font-semibold">
+        <h1 id="users-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('users.heading')}
         </h1>
         <Button onClick={() => setCreating(true)}>{t('users.newButton')}</Button>

@@ -1,0 +1,192 @@
+/*
+ * The split sign-in / password-reset layout shared by `login.tsx`,
+ * `forgot-password.tsx` and `reset-password.tsx` (`src/auth/auth-layout.tsx`).
+ *
+ * A dark "aurora" rail on the left (`>= lg`), the workspace background on the
+ * right — the same dark-in-both-schemes rail register `shell.css` already
+ * uses for the sidebar, reused here as the very first thing an anonymous
+ * visitor sees rather than invented a second time. Below `lg` the rail
+ * collapses to a compact header band: the brand mark and version stay
+ * visible, the tagline and feature chips (which need real vertical room to
+ * read, not a cramped scroll) do not.
+ */
+
+.auth-layout {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  background: var(--background);
+}
+
+@media (min-width: 64rem) {
+  .auth-layout {
+    flex-direction: row;
+  }
+}
+
+.auth-layout__rail {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 1.75rem 1.5rem;
+  background: var(--rail-bg);
+  color: var(--rail-fg);
+  /* Re-point the handful of tokens the utilities below actually read at the
+     rail's own palette — the same technique `shell.css` uses for the
+     sidebar (`.app-shell__sidebar`), so `bg-accent`/`text-primary`/
+     `text-muted-foreground` inside this subtree resolve against the rail's
+     colours instead of the workspace's, with no second set of classes. */
+  --muted-foreground: var(--rail-muted);
+  --accent: var(--rail-hover);
+  --accent-foreground: var(--rail-accent);
+  --primary: var(--rail-accent);
+}
+
+@media (min-width: 64rem) {
+  .auth-layout__rail {
+    flex: 0 0 40%;
+    max-width: 32rem;
+    min-height: 100dvh;
+    padding: 3rem;
+  }
+}
+
+.auth-layout__rail-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  max-width: 22rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.auth-layout__rail-inner img {
+  filter: drop-shadow(0 0 16px var(--rail-glow));
+}
+
+/* Compact header band below `lg`: brand + version only. */
+.auth-layout__tagline,
+.auth-layout__chips {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .auth-layout__tagline,
+  .auth-layout__chips {
+    display: flex;
+  }
+}
+
+.auth-layout__tagline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.auth-layout__chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.auth-layout__chip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* Three soft, blurred glows drifting slowly behind the brand content — the
+   one atmospheric flourish this panel gets, all under the 20s ceiling.
+   `prefers-reduced-motion` is handled globally in `base.css` (every
+   animation-duration collapses to ~0 there), so no per-component override
+   is needed here. */
+.auth-layout__glow {
+  position: absolute;
+  z-index: 0;
+  border-radius: 999px;
+  filter: blur(56px);
+  pointer-events: none;
+  background: radial-gradient(circle, var(--rail-glow), transparent 70%);
+}
+
+.auth-layout__glow--a {
+  top: -10rem;
+  left: -8rem;
+  width: 26rem;
+  height: 26rem;
+  animation: auth-drift-a 18s ease-in-out infinite alternate;
+}
+
+.auth-layout__glow--b {
+  right: -9rem;
+  bottom: -8rem;
+  width: 24rem;
+  height: 24rem;
+  animation: auth-drift-b 20s ease-in-out infinite alternate;
+}
+
+.auth-layout__glow--c {
+  top: 35%;
+  right: 8%;
+  width: 16rem;
+  height: 16rem;
+  animation: auth-drift-c 15s ease-in-out infinite alternate;
+}
+
+@keyframes auth-drift-a {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(2.5rem, 2rem) scale(1.08);
+  }
+}
+
+@keyframes auth-drift-b {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-2rem, -1.5rem) scale(1.06);
+  }
+}
+
+@keyframes auth-drift-c {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-1.5rem, 1.5rem);
+  }
+}
+
+.auth-layout__content {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+@media (min-width: 64rem) {
+  .auth-layout__content {
+    padding: 3rem;
+  }
+}

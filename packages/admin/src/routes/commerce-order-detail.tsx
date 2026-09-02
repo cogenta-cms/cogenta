@@ -280,7 +280,7 @@ export function CommerceOrderRoute(): JSX.Element {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link to="/commerce/orders">{t('commerceOrderDetail.back')}</Link>
-          <h1 className="m-0 text-xl leading-7 font-semibold">
+          <h1 className="m-0 text-2xl leading-tight font-bold tracking-tight">
             {t('commerceOrderDetail.heading', { reference: order.reference })}
           </h1>
           <p className="text-sm">

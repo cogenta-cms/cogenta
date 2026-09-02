@@ -99,7 +99,11 @@ function PagesPagination({
       >
         {previousLabel}
       </Button>
-      {pageInfo !== undefined && <span>{pageInfo}</span>}
+      {pageInfo !== undefined && (
+        <span className="inline-flex items-center rounded-full border border-border bg-muted px-3 py-1 font-mono text-xs tabular-nums text-muted-foreground">
+          {pageInfo}
+        </span>
+      )}
       <Button
         variant="secondary"
         size="sm"

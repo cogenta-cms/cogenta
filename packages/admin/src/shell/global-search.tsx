@@ -24,6 +24,7 @@ import { matchesQuery } from '../search/fold.js'
 import { parseInlineFilters } from '../search/inline-filters.js'
 import { recentSearches, rememberSearch } from '../search/recent-searches.js'
 import { useTheme } from '../theme/theme-context.js'
+import { SearchIcon } from '../ui/icons.js'
 import { Input } from '../ui/index.js'
 import { NAV_ITEMS } from './nav-items.js'
 import { isNavItemVisible } from './nav-visibility.js'
@@ -518,23 +519,38 @@ export function GlobalSearch(): JSX.Element {
       <label htmlFor={inputId} className="sr-only">
         {t('globalSearch.label')}
       </label>
-      <Input
-        id={inputId}
-        type="search"
-        role="combobox"
-        aria-expanded={showPopover}
-        aria-controls={listboxId}
-        aria-autocomplete="list"
-        autoComplete="off"
-        placeholder={t('globalSearch.placeholder')}
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-      />
+      {/* Command-bar look: a leading search glyph and a trailing `Ctrl K`
+          hint (the shortcut this component already wires up below, in the
+          `⌘K`/`Ctrl+K` effect) sit inside the same rounded pill as the
+          input, both purely decorative (`aria-hidden`) — the accessible
+          name and the shortcut itself are unchanged. */}
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          id={inputId}
+          type="search"
+          role="combobox"
+          aria-expanded={showPopover}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          autoComplete="off"
+          placeholder={t('globalSearch.placeholder')}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          className="rounded-full pr-14 pl-9"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+        >
+          Ctrl K
+        </span>
+      </div>
       {announcement !== '' && (
         <div className="sr-only" role="status" aria-live="polite">
           {announcement}

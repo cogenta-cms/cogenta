@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -33,6 +34,7 @@ export const service = defineCollection({
     name: f.text({ required: true, max: 120 }),
     slug: f.slug({ from: 'name', unique: true }),
     description: f.text({ max: 400, multiline: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug']],
   permissions: {

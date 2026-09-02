@@ -46,8 +46,9 @@ export async function resetPlaygroundData(options: ResetPlaygroundDataOptions): 
     })
   }
 
-  await dropSchemaTables(options.db, pack.collections)
-  await createSchemaTables(options.db, pack.collections)
+  const taxonomies = pack.taxonomies ?? []
+  await dropSchemaTables(options.db, pack.collections, taxonomies)
+  await createSchemaTables(options.db, pack.collections, taxonomies)
 
   await ensureAuthTables(options.db)
   const adminId =

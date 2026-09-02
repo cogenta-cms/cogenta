@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { createVectorRegistry } from '@cogenta/agents'
 import { PREVIEW_SIGNING_KEY_ENV, PREVIEW_SIGNING_KEY_MINIMUM_LENGTH } from '@cogenta/api'
 import {
   type CogentaConfig,
@@ -7,6 +8,7 @@ import {
   createLogger,
   createRateLimitRegistry,
   createStorageRegistry,
+  type DatabaseHandle,
   type DriverSelection,
   type DriverSelectionReason,
   type DriverTier,
@@ -15,6 +17,7 @@ import {
   loadConfig,
   type SkipReasonCode,
 } from '@cogenta/core'
+import { createImageRegistry } from '@cogenta/render'
 import type { Output } from '../output.js'
 
 export interface DoctorCheck {
@@ -113,6 +116,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
   const check = async (
     need: string,
     select: () => Promise<DriverSelection<unknown>>,
+    /** Runs after the selection is disposed — for a check that opened a resource of its own to make the selection (the `vector` check below, which needs a real database connection for the `pgvector` driver). */
+    cleanup?: () => Promise<void>,
   ): Promise<void> => {
     let selection: DriverSelection<unknown> | undefined
     try {
@@ -133,12 +138,51 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
       problems.push(`${need}: ${describe(error)}`)
     } finally {
       await selection?.dispose()
+      await cleanup?.()
     }
   }
 
   await check('database', () => createDatabaseRegistry(registryOptions).select(config.database))
   await check('cache', () => createCacheRegistry(registryOptions).select(config.cache))
   await check('storage', () => createStorageRegistry(registryOptions).select(config.storage))
+  // Audit fiche 05, T06 (R1/skill `new-driver`'s "doctor reporting"
+  // requirement): the image pipeline's driver (sharp vs the WebAssembly
+  // fallback) never appeared in `cogenta doctor`, unlike every other need
+  // above — an operator on a host where `sharp` cannot install had no way
+  // to learn that short of a slow first upload. `select({})` mirrors the
+  // real call site (`media-images.ts`'s own `buildImageProcessing`): no
+  // config section exists for this need, only tier order.
+  await check('images', () => createImageRegistry(registryOptions).select({}))
+  // Audit fiche 15, T05: `vector` (L18, semantic search) was never checked
+  // either, so a misconfigured `vector.driver: 'pgvector'` was only
+  // discovered the first time the assistant actually needed it. Unlike the
+  // needs above, `pgvector` requires a real database connection — this
+  // check opens its own (never the one `database` above already disposed
+  // by the time this runs) and closes it via `cleanup`, after `check()`
+  // has read everything it needs from the selection's `health()`.
+  // `config.embeddings.dimensions` always has a default (384), so this can
+  // run unconditionally — a vector need exists whether or not a real
+  // embedding provider is configured (R2: the degraded `memory`/`file`
+  // drivers work with zero AI configured too).
+  let vectorDb: DriverSelection<DatabaseHandle> | undefined
+  await check(
+    'vector',
+    async () => {
+      vectorDb = await createDatabaseRegistry(registryOptions).select(config.database)
+      return createVectorRegistry({
+        db: vectorDb.instance,
+        ...(registryOptions.logger === undefined ? {} : { logger: registryOptions.logger }),
+      }).select({
+        driver: config.vector.driver,
+        dimensions: config.embeddings.dimensions,
+        path: config.vector.path,
+        table: config.vector.table,
+      })
+    },
+    async () => {
+      await vectorDb?.dispose()
+    },
+  )
   // Per-API-key request quota (fiche 20 task 3) — "file de jobs : base de
   // données (dégradé), car Redis est absent" for this need too: an operator
   // must be able to see which counter is actually enforcing a key's limit.
@@ -155,6 +199,22 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
             : ''
         }`,
   )
+
+  // Audit fiche 15, T05: image generation (L18 task 4) is a *note*, not a
+  // `check()` — `createImageProviderRegistry` (`@cogenta/agents`) has no
+  // driver-tier/health concept the way `database`/`cache`/`vector` do (no
+  // service-free way to draw a picture, R2's whole reason this is an
+  // optional section with no default provider at all) — so, like the LLM
+  // note above, this only reports what is configured rather than treating
+  // its absence as a problem `cogenta doctor` should ever flag.
+  if (config.imageGeneration !== undefined) {
+    notes.push(
+      `Image-generation provider: ${config.imageGeneration.provider} (${config.imageGeneration.model}).` +
+        (config.imageGeneration.apiKey === undefined
+          ? ' No API key in the environment, so image generation will not run.'
+          : ''),
+    )
+  }
 
   if (config.database.driver === 'sqlite') {
     notes.push('SQLite: one machine, no vector index. Fine for a single site, not for a fleet.')

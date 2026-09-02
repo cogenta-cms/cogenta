@@ -56,6 +56,32 @@ describe('scaffoldSite', () => {
     }
   })
 
+  // Audit fiche 15, T04: a scaffolded site's `package.json` had no
+  // `scripts.start` and no `engines.node`, so `npm start`/most PaaS
+  // auto-detection had nothing to run, and nothing told a host the Node
+  // version this site actually requires (the same "22.13 or later"
+  // `cogenta doctor` already checks for its SQLite driver).
+  it('writes package.json with scripts.start and engines.node', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+    dirs.push(targetDir)
+
+    await scaffoldSite({
+      targetDir,
+      siteName: 'My Site',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+    })
+
+    const pkg = JSON.parse(await readFile(join(targetDir, 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>
+      engines?: Record<string, string>
+    }
+    expect(pkg.scripts?.start).toBe('cogenta serve')
+    expect(pkg.engines?.node).toBe('>=22.13')
+  })
+
   it('writes the llm block into the config file only when a provider was chosen', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
     dirs.push(targetDir)

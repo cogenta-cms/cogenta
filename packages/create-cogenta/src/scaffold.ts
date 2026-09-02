@@ -22,6 +22,7 @@ import {
   createSchemaTables,
   createSearchIndex,
   reindexAll,
+  type TaxonomyDefinition,
   validateCollectionSet,
 } from '@cogenta/schema'
 import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
@@ -172,13 +173,24 @@ function mergeCollections(
   return { all, added }
 }
 
-function schemaFileContents(collections: readonly CollectionDefinition[]): string {
-  // Every `FieldDefinition` a blueprint declares here is plain, serialisable
-  // data (contract A) — `defineCollection` validates and returns it as-is,
-  // never wrapping it in behaviour — so writing it out as a JSON literal is
-  // exactly the array `loadCollections` (`@cogenta/cli`) reads back, not an
-  // approximation of it.
-  return `export default ${JSON.stringify(collections, null, 2)}\n`
+function schemaFileContents(
+  collections: readonly CollectionDefinition[],
+  taxonomies: readonly TaxonomyDefinition[],
+): string {
+  // Every `FieldDefinition`/`TaxonomyDefinition` a blueprint declares here is
+  // plain, serialisable data (contract A) — `defineCollection`/
+  // `defineTaxonomy` validate and return it as-is, never wrapping it in
+  // behaviour — so writing it out as a JSON literal is exactly the shape
+  // `loadCollections` (`@cogenta/cli`) reads back, not an approximation of
+  // it. `taxonomies` is a *named* export (`export const taxonomies = …`,
+  // schema@2.0) alongside the default collections array — `loadCollections`
+  // reads that exact name, and a schema file written before ADR-0022 simply
+  // has no such export, which it treats as "no taxonomies".
+  const taxonomiesExport =
+    taxonomies.length > 0
+      ? `export const taxonomies = ${JSON.stringify(taxonomies, null, 2)}\n`
+      : ''
+  return `export default ${JSON.stringify(collections, null, 2)}\n${taxonomiesExport}`
 }
 
 function packageJsonContents(answers: ScaffoldAnswers): string {
@@ -191,6 +203,18 @@ function packageJsonContents(answers: ScaffoldAnswers): string {
     version: '0.0.0',
     private: true,
     type: 'module',
+    // Audit fiche 15, T04: a scaffolded site had no `scripts.start`, so
+    // `npm start`/most PaaS auto-detection (which look for exactly this
+    // script) had nothing to run — the only documented way to boot it was
+    // typing `cogenta serve` by hand. `engines.node` mirrors the version
+    // this installer itself requires and `cogenta doctor` already checks
+    // for (`doctor.ts`'s own SQLite driver check names "22.13 or later"),
+    // so a host that honours `engines` (Node's own `--engines-strict`, most
+    // PaaS buildpacks) refuses to run this site on a Node too old for it,
+    // instead of failing later with an obscure `SCHEMA_INVALID` or a
+    // missing `node:sqlite`.
+    engines: { node: '>=22.13' },
+    scripts: { start: 'cogenta serve' },
     dependencies: {
       '@cogenta/core': 'latest',
       '@cogenta/cli': 'latest',
@@ -294,7 +318,8 @@ export async function scaffoldSite(
   // answer produce a site `cogenta serve` can actually start.
   const schemaPath = join(answers.targetDir, 'cogenta.schema.mjs')
   const merged = mergeCollections(pack?.collections ?? [], answers.approvedCollections ?? [])
-  await writeFile(schemaPath, schemaFileContents(merged.all), 'utf8')
+  const taxonomies = pack?.taxonomies ?? []
+  await writeFile(schemaPath, schemaFileContents(merged.all, taxonomies), 'utf8')
   let skinSource: 'generated' | 'preset' | 'default' | undefined
 
   // A plan the human approved brings its own skin, whatever blueprint was
@@ -371,7 +396,7 @@ export async function scaffoldSite(
       url: databaseUrlFor(answers),
     })
     try {
-      await createSchemaTables(selection.instance, merged.all)
+      await createSchemaTables(selection.instance, merged.all, taxonomies)
       await ensureAuthTables(selection.instance)
       const admin = await createUserStore(selection.instance).byEmail(answers.adminEmail)
       if (pack !== undefined && (answers.seedDemoContent ?? true)) {

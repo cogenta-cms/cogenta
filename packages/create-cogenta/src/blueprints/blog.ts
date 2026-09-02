@@ -3,14 +3,19 @@ import type { DatabaseHandle } from '@cogenta/core'
 import {
   type CollectionDefinition,
   createContentStore,
+  createTaxonomyStore,
   defineCollection,
+  defineTaxonomy,
   f,
   type RichTextDocument,
+  type TaxonomyDefinition,
   validateCollectionSet,
+  validateTaxonomySet,
 } from '@cogenta/schema'
 import {
   type BlueprintContentPack,
   type RecommendedAgentHint,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -22,17 +27,24 @@ import {
  * both on every entry. Authorship reuses `SystemFields.createdBy`, which
  * points at the real user/actor system, rather than a separate author
  * collection this blueprint would have to invent and keep in sync.
+ *
+ * `category`/`tag` are `defineTaxonomy()` declarations, not collections
+ * (audit fiche 04, T02/T10 — `schema@2.0`, ADR-0022, already figé; using it
+ * here is a plain application of a frozen contract, not a new decision). A
+ * blog post's category and tags are classification, not content: they have
+ * no status, no version, no translation family of their own, which is
+ * exactly what a taxonomy term already refuses to have and a collection
+ * never did. `category` stays hierarchical (its default — a blog may want
+ * "Guides > Tutorials" one day); `tag` is declared flat, matching the
+ * "tags never nest" convention `defineTaxonomy`'s own doc comment names.
  */
 
-export const category = defineCollection({
+export const category: TaxonomyDefinition = defineTaxonomy({
   name: 'category',
-  labels: { singular: 'Category', plural: 'Categories' },
-  routing: { pattern: '/blog/category/:slug' },
-  fields: {
-    name: f.text({ required: true, max: 80 }),
-    slug: f.slug({ from: 'name', unique: true }),
+  labels: {
+    singular: { en: 'Category', fr: 'Catégorie' },
+    plural: { en: 'Categories', fr: 'Catégories' },
   },
-  indexes: [['slug']],
   permissions: {
     read: ['public'],
     create: ['editor', 'admin'],
@@ -41,14 +53,13 @@ export const category = defineCollection({
   },
 })
 
-export const tag = defineCollection({
+export const tag: TaxonomyDefinition = defineTaxonomy({
   name: 'tag',
-  labels: { singular: 'Tag', plural: 'Tags' },
-  fields: {
-    name: f.text({ required: true, max: 40 }),
-    slug: f.slug({ from: 'name', unique: true }),
+  labels: {
+    singular: { en: 'Tag', fr: 'Étiquette' },
+    plural: { en: 'Tags', fr: 'Étiquettes' },
   },
-  indexes: [['slug']],
+  hierarchical: false,
   permissions: {
     read: ['public'],
     create: ['editor', 'admin'],
@@ -74,8 +85,9 @@ export const post = defineCollection({
     body: f.richText({ required: true }),
     excerpt: f.text({ max: 300, multiline: true }),
     coverImage: f.media({ accept: ['image'] }),
-    category: f.relation({ to: 'category', onDelete: 'setNull' }),
-    tags: f.relation({ to: 'tag', many: true, onDelete: 'cascade' }),
+    category: f.taxonomy({ of: 'category', many: false }),
+    tags: f.taxonomy({ of: 'tag', many: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug']],
   permissions: {
@@ -105,6 +117,7 @@ export const page = defineCollection({
     title: f.text({ required: true, max: 200 }),
     slug: f.slug({ from: 'title', unique: true }),
     blocks: f.blocks({ required: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug']],
   permissions: {
@@ -118,14 +131,26 @@ export const page = defineCollection({
 /**
  * Also the export written into the scaffolded site's `cogenta.schema.mjs`
  * (`scaffold.ts`), so `loadCollections` (`@cogenta/cli`) reads back exactly
- * these four collections.
+ * these two collections — `category`/`tag` are no longer collections
+ * (`BLOG_TAXONOMIES` below), so they no longer belong in this list.
  */
-export const BLOG_COLLECTIONS: readonly CollectionDefinition[] = [post, category, tag, page]
+export const BLOG_COLLECTIONS: readonly CollectionDefinition[] = [post, page]
+
+/**
+ * The blueprint's declared taxonomies, written into the scaffolded site's
+ * `cogenta.schema.mjs` as its named `taxonomies` export (`loadCollections`,
+ * `@cogenta/cli`, reads exactly that name).
+ */
+export const BLOG_TAXONOMIES: readonly TaxonomyDefinition[] = [category, tag]
 
 // Cross-collection checks (duplicate names, dangling relation targets) run
 // at import time, same as `defineCollection` itself: a mistake here costs a
 // restart, not a database.
 validateCollectionSet(BLOG_COLLECTIONS)
+// Same idea for taxonomy fields (`post.category`/`post.tags`): a `f.taxonomy`
+// pointing at an undeclared taxonomy is caught here, not the first time a
+// site tries to save a post.
+validateTaxonomySet(BLOG_TAXONOMIES, BLOG_COLLECTIONS)
 
 export interface BlogDemoCategory {
   readonly name: string
@@ -360,29 +385,29 @@ async function seedBlogDemoContent(
   defaultLocale: string,
   adminId: string | null,
 ): Promise<void> {
-  const categoryStore = createContentStore({ db, collection: category, defaultLocale })
-  const tagStore = createContentStore({ db, collection: tag, defaultLocale })
+  // `category`/`tag` are taxonomies, not collections (T02, ADR-0022) — their
+  // demo terms go through `TaxonomyStore`, not `createContentStore`.
+  const categoryStore = createTaxonomyStore({ db, taxonomy: category })
+  const tagStore = createTaxonomyStore({ db, taxonomy: tag })
   const postStore = createContentStore({ db, collection: post, defaultLocale })
   const pageStore = createContentStore({ db, collection: page, defaultLocale })
 
   const categoryIdBySlug = new Map<string, string>()
   for (const demo of BLOG_DEMO_CATEGORIES) {
-    const entry = await categoryStore.create({
-      status: 'published',
-      createdBy: adminId,
-      values: { name: demo.name, slug: demo.slug },
+    const term = await categoryStore.create({
+      slug: demo.slug,
+      labels: { [defaultLocale]: demo.name },
     })
-    categoryIdBySlug.set(demo.slug, entry.id)
+    categoryIdBySlug.set(demo.slug, term.id)
   }
 
   const tagIdBySlug = new Map<string, string>()
   for (const demo of BLOG_DEMO_TAGS) {
-    const entry = await tagStore.create({
-      status: 'published',
-      createdBy: adminId,
-      values: { name: demo.name, slug: demo.slug },
+    const term = await tagStore.create({
+      slug: demo.slug,
+      labels: { [defaultLocale]: demo.name },
     })
-    tagIdBySlug.set(demo.slug, entry.id)
+    tagIdBySlug.set(demo.slug, term.id)
   }
 
   for (const demo of BLOG_DEMO_POSTS) {
@@ -412,6 +437,7 @@ async function seedBlogDemoContent(
 
 export const blogContentPack: BlueprintContentPack = {
   collections: BLOG_COLLECTIONS,
+  taxonomies: BLOG_TAXONOMIES,
   recommendedAgents: BLOG_RECOMMENDED_AGENTS,
   seedDemoContent: seedBlogDemoContent,
 }

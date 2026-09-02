@@ -12,6 +12,7 @@ import {
   definePageCollection,
   type RecommendedAgentHint,
   richTextParagraph,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -50,6 +51,7 @@ export const product = defineCollection({
     category: f.select({ options: ['Apparel', 'Home', 'Accessories'], required: true }),
     inStock: f.boolean(),
     photo: f.media({ accept: ['image'] }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug'], ['category']],
   permissions: {

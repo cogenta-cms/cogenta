@@ -5,7 +5,7 @@ import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import { createContentStore, createSearchIndex } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
-import { category, post } from '../src/blueprints/blog.js'
+import { post } from '../src/blueprints/blog.js'
 import { resetPlaygroundData } from '../src/playground-reset.js'
 
 describe('resetPlaygroundData', () => {
@@ -57,8 +57,11 @@ describe('resetPlaygroundData', () => {
       adminEmail: 'owner@example.com',
     })
 
-    const categories = createContentStore({ db, collection: category, defaultLocale: 'en' })
-    const page = await categories.list({ state: 'published' })
+    // `category`/`tag` are taxonomies (T02) — a term has no `createdBy` of
+    // its own (ADR-0022: no status, no version, no author). `post` is the
+    // seeded collection that still carries attribution.
+    const posts = createContentStore({ db, collection: post, defaultLocale: 'en' })
+    const page = await posts.list({ state: 'published' })
     expect(page.items[0]?.createdBy).toBe(admin.id)
   })
 

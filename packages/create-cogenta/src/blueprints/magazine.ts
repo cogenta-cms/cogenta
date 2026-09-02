@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -33,6 +34,7 @@ export const article = defineCollection({
     excerpt: f.text({ max: 300, multiline: true }),
     section: f.select({ options: ['News', 'Culture', 'Opinion'], required: true }),
     body: f.blocks({ required: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug'], ['section']],
   permissions: {

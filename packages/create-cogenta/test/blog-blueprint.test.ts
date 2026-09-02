@@ -4,7 +4,13 @@ import { join } from 'node:path'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
-import { buildPath, createContentStore, createSearchIndex, matchPath } from '@cogenta/schema'
+import {
+  buildPath,
+  createContentStore,
+  createSearchIndex,
+  createTaxonomyStore,
+  matchPath,
+} from '@cogenta/schema'
 import {
   type FetchedEntries,
   type HtmlNode,
@@ -25,7 +31,7 @@ describe('scaffoldSite — blog blueprint', () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  it('writes a schema file loadCollections can load back, with post/category/tag/page', async () => {
+  it('writes a schema file loadCollections can load back, with post/page and category/tag as taxonomies', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-blog-'))
     dirs.push(targetDir)
 
@@ -43,8 +49,23 @@ describe('scaffoldSite — blog blueprint', () => {
     expect(result.fellBackToBlank).toBe(false)
     expect(result.schemaPath).toBe(join(targetDir, 'cogenta.schema.mjs'))
 
+    // T02 (schema@2.0, ADR-0022): `category`/`tag` are no longer collections
+    // — `post`/`page` is the whole `default` export now.
     const collections = await loadCollections(targetDir)
-    expect(collections.map((c) => c.name).sort()).toEqual(['category', 'page', 'post', 'tag'])
+    expect(collections.map((c) => c.name).sort()).toEqual(['page', 'post'])
+
+    // `loadCollections` (`@cogenta/cli`) only reads the default export — the
+    // named `taxonomies` export it also reads (`loadSchemaModule`) is
+    // asserted here by reading the written file directly, to stay inside
+    // this agent's file-touch boundary rather than widening `@cogenta/cli`'s
+    // public surface for one test.
+    const schemaSource = await readFile(result.schemaPath, 'utf8')
+    const taxonomiesMatch = schemaSource.match(/export const taxonomies = (\[[\s\S]*\])\s*$/)
+    expect(taxonomiesMatch).not.toBeNull()
+    const taxonomyNames = (JSON.parse(taxonomiesMatch?.[1] ?? '[]') as { readonly name: string }[])
+      .map((t) => t.name)
+      .sort()
+    expect(taxonomyNames).toEqual(['category', 'tag'])
   })
 
   it('seeds real demo posts, categories and tags into real SQLite — not the scaffold return value alone', async () => {
@@ -70,16 +91,20 @@ describe('scaffoldSite — blog blueprint', () => {
     })
     try {
       const postStore = createContentStore({ db: selection.instance, collection: post })
-      const categoryStore = createContentStore({ db: selection.instance, collection: category })
-      const tagStore = createContentStore({ db: selection.instance, collection: tag })
+      // `category`/`tag` are taxonomies (T02) — their demo terms live in the
+      // real `TaxonomyStore`, not a `ContentStore`.
+      const categoryStore = createTaxonomyStore({ db: selection.instance, taxonomy: category })
+      const tagStore = createTaxonomyStore({ db: selection.instance, taxonomy: tag })
 
       const posts = await postStore.list()
       const categories = await categoryStore.list()
       const tags = await tagStore.list()
 
       expect(posts.items.length).toBeGreaterThanOrEqual(3)
-      expect(categories.items.length).toBeGreaterThanOrEqual(2)
-      expect(tags.items.length).toBeGreaterThanOrEqual(3)
+      // `TaxonomyStore.list()` returns the term array directly — a term has
+      // no draft/published lifecycle to paginate around (ADR-0022).
+      expect(categories.length).toBeGreaterThanOrEqual(2)
+      expect(tags.length).toBeGreaterThanOrEqual(3)
 
       const welcome = posts.items.find((entry) => entry.values.slug === 'welcome-to-cogenta')
       expect(welcome).toBeDefined()
@@ -181,16 +206,26 @@ describe('scaffoldSite — blog blueprint', () => {
     )
   })
 
-  it('resolves /blog/:slug, /blog/category/:slug and /:slug generically through @cogenta/schema routing', () => {
+  // Audit fiche 06, T01 (P0): without these four fields, the admin's SEO
+  // panel (`seo-panel.tsx`) renders nothing for every entry of every routed
+  // collection this blueprint scaffolds.
+  it('declares the four conventional SEO override fields on every routed collection', () => {
+    for (const collection of [post, page]) {
+      expect(Object.keys(collection.fields)).toEqual(
+        expect.arrayContaining(['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']),
+      )
+    }
+  })
+
+  // T02 (ADR-0022): `category` no longer has a route of its own — a
+  // taxonomy declares no `routing`, unlike the collection it replaced. Its
+  // demo-content archive URL (`/blog/category/:slug`) is gone with it; a
+  // themed term-archive page is not something this correction adds.
+  it('resolves /blog/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(BLOG_COLLECTIONS, '/blog/welcome-to-cogenta')).toEqual({
       collection: 'post',
       locale: null,
       params: { slug: 'welcome-to-cogenta' },
-    })
-    expect(matchPath(BLOG_COLLECTIONS, '/blog/category/guides')).toEqual({
-      collection: 'category',
-      locale: null,
-      params: { slug: 'guides' },
     })
     expect(matchPath(BLOG_COLLECTIONS, '/about')).toEqual({
       collection: 'page',

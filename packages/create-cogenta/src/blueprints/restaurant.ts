@@ -12,6 +12,7 @@ import {
   definePageCollection,
   type RecommendedAgentHint,
   richTextParagraph,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -35,6 +36,7 @@ export const menuItem = defineCollection({
     description: f.text({ max: 300, multiline: true }),
     price: f.number({ required: true, min: 0 }),
     category: f.select({ options: ['Starters', 'Mains', 'Desserts'], required: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug'], ['category']],
   permissions: {

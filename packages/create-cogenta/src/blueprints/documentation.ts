@@ -12,6 +12,7 @@ import {
   definePageCollection,
   type RecommendedAgentHint,
   richTextParagraph,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -34,6 +35,7 @@ export const docPage = defineCollection({
     section: f.text({ required: true, max: 80 }),
     order: f.number({ required: true, integer: true, min: 0 }),
     body: f.blocks({ required: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug'], ['section']],
   permissions: {

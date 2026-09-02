@@ -226,3 +226,4 @@ FAIT ≈ 633 · PARTIEL ≈ 108 · ABSENT ≈ 75 · POINT MORT ≈ 64. Aucune vi
 - **Vague C** — P0-8 flotte, P0-9 pont vitrine (ADR rédigée d'abord), registre de blocs par site, `cogenta cron`, cache par tags (décision).
 
 ## Journal des corrections lancées
+- 2026-09-02 02:55 — **Vague A lancée** (worktrees isolés) : A1 commerce (Sonnet), A2 RGPD/audit/auth (Sonnet), A3 blueprints/scaffold/doctor (Sonnet), A4 rendu public/thèmes (Opus), A5 médiathèque (Sonnet), A6 finitions admin (Sonnet). Rapports attendus dans `corrections/A*.md`. Fusion séquentielle dans `main` avec typecheck + tests après chaque fusion.

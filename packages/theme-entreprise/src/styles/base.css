@@ -258,6 +258,16 @@ img {
   margin-inline-end: auto;
 }
 
+/* The uploaded corporate logo. Height-constrained so the header bar keeps a
+   constant height whatever aspect ratio the company's mark has. */
+.cg-site-header__logo {
+  display: block;
+  block-size: 2rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+}
+
 .cg-nav {
   display: flex;
   align-items: center;

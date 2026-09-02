@@ -4,6 +4,7 @@ import {
   type ChromeResult,
   escapeAttribute,
   escapeText,
+  renderBrandMark,
 } from '@cogenta/theme-kit'
 
 /**
@@ -47,11 +48,16 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const home = escapeAttribute(input.homeHref)
   const headerNav = renderNavLinks(input.headerNav, 'cg-nav')
   const footerNav = renderNavLinks(input.footerNav, 'cg-nav cg-nav--footer')
+  // The asterisk glyph is this theme's own typographic mark. It belongs to
+  // the *wordmark* treatment, so an uploaded logo replaces both together —
+  // an asterisk stapled to somebody else's logo is not a design decision
+  // this theme gets to make on their behalf.
+  const logo = renderBrandMark(input.brand, { className: 'cg-site-header__logo' })
+  const mark = logo ?? `<span class="cg-site-header__glyph" aria-hidden="true">*</span>${siteName}`
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-    `<a class="cg-site-header__mark" href="${home}">` +
-    `<span class="cg-site-header__glyph" aria-hidden="true">*</span>${siteName}</a>` +
+    `<a class="cg-site-header__mark" href="${home}">${mark}</a>` +
     `${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}` +
     `</div></header>`
 

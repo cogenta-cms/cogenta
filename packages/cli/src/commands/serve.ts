@@ -351,6 +351,7 @@ import { availableThemes, DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
   DEFAULT_IMAGE_ENDPOINT,
+  EMPTY_SITE_IDENTITY,
   entryTitle,
   joinStyles,
   loadSkinCss,
@@ -359,6 +360,7 @@ import {
   renderRequestedPage,
   renderThemeGalleryPreview,
   resolveEntry,
+  type SiteIdentityMedia,
   STYLESHEET_PATH,
 } from './theme-render.js'
 import { computeEffectiveStyles, computePreviewStyles, createThemeWiring } from './theme-wiring.js'
@@ -850,6 +852,15 @@ interface Site {
    * field existed.
    */
   readonly activeTheme?: () => Promise<string | null>
+  /**
+   * The site's own logo/dark logo/favicon/share image, read live off the
+   * same theme-overrides row `activeTheme` above already reads (audit
+   * 2026-09-01 §7 T01 — the four settings the appearance screen saved and
+   * nothing ever read). `undefined` under the same condition every other
+   * theme field here is, and `theme-render.ts` then renders exactly as it
+   * did before this existed.
+   */
+  readonly siteIdentity?: () => Promise<SiteIdentityMedia>
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -2470,6 +2481,19 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           activeTheme: async () =>
             (await (options.theme as ThemeRouterOptions).store.get()).activeTheme,
         }),
+    ...(options.theme === undefined
+      ? {}
+      : {
+          siteIdentity: async (): Promise<SiteIdentityMedia> => {
+            const overrides = await (options.theme as ThemeRouterOptions).store.get()
+            return {
+              logoMediaId: overrides.logoMediaId,
+              logoDarkMediaId: overrides.logoDarkMediaId,
+              faviconMediaId: overrides.faviconMediaId,
+              shareImageMediaId: overrides.shareImageMediaId,
+            }
+          },
+        }),
     security: options.security,
     health: options.health,
     tickScheduledPublishing: () => scheduledPublishQueue.tick(),
@@ -2701,6 +2725,16 @@ async function brandingForSite(site: Site): Promise<BrandingSettings> {
  */
 async function activeThemeForSite(site: Site): Promise<string | null> {
   return site.activeTheme === undefined ? null : site.activeTheme()
+}
+
+/**
+ * The site's identity media, or "nothing chosen" for an instance with no
+ * theme wiring at all — the same shape `activeThemeForSite` above has, for
+ * the same reason: `theme-render.ts` must not have to know which of its
+ * callers built a theme store.
+ */
+async function identityForSite(site: Site): Promise<SiteIdentityMedia> {
+  return site.siteIdentity === undefined ? EMPTY_SITE_IDENTITY : site.siteIdentity()
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
@@ -4160,6 +4194,8 @@ export function createRequestListener(
               menus: { menuRouter: site.menuRouter },
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
+              identity: () => identityForSite(site),
+              loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
               seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             }
             const html =
@@ -4190,6 +4226,8 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            identity: () => identityForSite(site),
+            loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           // A failure on a multi-step form only ever comes from the final
@@ -4556,6 +4594,7 @@ export function createRequestListener(
               return typeof setting?.value === 'string' ? setting.value : null
             },
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
+            identity: () => identityForSite(site),
           },
           context,
         )
@@ -4839,6 +4878,7 @@ export function createRequestListener(
               // everything this preview *does* claim to show.
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
+              identity: () => identityForSite(site),
             },
             context,
           )
@@ -5010,6 +5050,8 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            identity: () => identityForSite(site),
+            loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
           context,
@@ -5037,6 +5079,8 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            identity: () => identityForSite(site),
+            loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           const html =
@@ -5098,6 +5142,7 @@ export function createRequestListener(
           },
           branding: () => brandingForSite(site),
           activeTheme: () => activeThemeForSite(site),
+          identity: () => identityForSite(site),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {

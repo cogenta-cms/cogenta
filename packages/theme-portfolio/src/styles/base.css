@@ -262,6 +262,16 @@ img {
   margin-inline-end: auto;
 }
 
+/* The uploaded site logo. Height-constrained, so a wordmark and a square
+   mark both leave the index bar exactly as tall as it was. */
+.cg-site-header__logo {
+  display: block;
+  block-size: 1.75rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+}
+
 .cg-site-header__glyph {
   color: var(--cg-accent);
   font-size: 1.2em;

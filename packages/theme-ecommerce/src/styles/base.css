@@ -269,6 +269,16 @@ img {
   text-transform: uppercase;
 }
 
+/* The uploaded shop logo. Height-constrained so the bar keeps its height
+   whatever aspect ratio the retailer's mark has. */
+.ce-header__logo {
+  display: block;
+  block-size: 2.25rem;
+  inline-size: auto;
+  max-inline-size: 15rem;
+  object-fit: contain;
+}
+
 .ce-header__brand:hover {
   color: var(--ce-accent);
 }

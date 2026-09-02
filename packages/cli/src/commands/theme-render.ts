@@ -18,6 +18,7 @@ import {
 } from '@cogenta/schema'
 import type { SeoImage } from '@cogenta/seo'
 import {
+  type ChromeBrand,
   type ChromeNavLink,
   buildCollectionListQuery as collectionListQuery,
   escapeAttribute,
@@ -282,6 +283,174 @@ export interface ThemeRenderOptions {
    * behaviour, unchanged for a site that has never touched this setting.
    */
   readonly activeTheme?: () => Promise<string | null>
+  /**
+   * The site's own visual identity, as the appearance screen's "Identité"
+   * card already stores it: logo, dark-scheme logo, favicon, share image
+   * (`ThemeOverridesState`, `@cogenta/schema`).
+   *
+   * Every one of those four settings was writable, saved, and read back by
+   * the admin — and read by nothing else at all. This option is what finally
+   * makes them reach a rendered page (audit 2026-09-01, §7 T01).
+   *
+   * Read live per request, the same reasoning `branding`/`homePath` give:
+   * choosing a logo in the admin must show on the very next page view, with
+   * no restart. Absent, or resolving to all-`null`, renders exactly as
+   * before: the site name in text, and `DEFAULT_LOGO_PATH` as the favicon.
+   */
+  readonly identity?: () => Promise<SiteIdentityMedia>
+}
+
+/**
+ * The four media ids the appearance screen's identity card stores. Ids, not
+ * URLs: resolving one to a URL means asking the media library whether it
+ * still exists and whether it is an image at all, which is a decision this
+ * renderer makes (through `loadMedia`), not one the settings row can carry.
+ */
+export interface SiteIdentityMedia {
+  readonly logoMediaId: string | null
+  readonly logoDarkMediaId: string | null
+  readonly faviconMediaId: string | null
+  /**
+   * The default `og:image`. Deliberately *not* a second social-image
+   * mechanism beside `seo.defaultSocialImageUrl`: see `resolveIdentity` for
+   * which one wins and why.
+   */
+  readonly shareImageMediaId: string | null
+}
+
+/** "Nothing has ever been chosen" — the pre-T01 rendering, exactly. */
+export const EMPTY_SITE_IDENTITY: SiteIdentityMedia = {
+  logoMediaId: null,
+  logoDarkMediaId: null,
+  faviconMediaId: null,
+  shareImageMediaId: null,
+}
+
+/** The site identity, resolved against the real media library — see `ThemeRenderOptions.identity`. */
+interface ResolvedIdentity {
+  readonly brand: ChromeBrand
+  /** The chosen favicon's URL, or `null` for "nothing chosen" — `faviconLinkTag` decides what that falls back to. */
+  readonly faviconHref: string | null
+  /** The absolute-or-site-relative URL of the chosen share image, or `null`. */
+  readonly shareImageUrl: string | null
+}
+
+/**
+ * Resolves the four identity media ids into what a page actually needs.
+ *
+ * One batch through the very same `loadMedia` every other image on the page
+ * goes through — never a second lookup path, and never a URL built from an
+ * id this renderer has not confirmed is a live image: a `kind !== 'image'`
+ * asset (a PDF someone picked in the media browser) resolves to `null` and
+ * the site falls back, rather than emitting a `<link rel="icon">` pointing
+ * at a document.
+ *
+ * **The share-image decision (audit T01, left open as "à trancher").**
+ * `seo.defaultSocialImageUrl` stays the one field the SEO pipeline reads;
+ * `shareImageMediaId` becomes a *source* for it, not a rival — when the
+ * appearance screen names a media, its `/_image` URL is what
+ * `fallbackImageFor` sees, and otherwise the SEO screen's URL is used
+ * unchanged. Two screens, one effective value, and neither field is
+ * silently dead: the appearance one wins because it is the more specific
+ * choice (a picked asset beats a typed URL), and because dropping it would
+ * throw away a setting sites have already saved.
+ */
+async function resolveIdentity(
+  siteName: string,
+  imageEndpoint: string,
+  options: Pick<ThemeRenderOptions, 'identity' | 'loadMedia'>,
+): Promise<ResolvedIdentity> {
+  const identity = options.identity === undefined ? EMPTY_SITE_IDENTITY : await options.identity()
+  const ids = [
+    identity.logoMediaId,
+    identity.logoDarkMediaId,
+    identity.faviconMediaId,
+    identity.shareImageMediaId,
+  ].filter((id): id is string => id !== null && id !== '')
+
+  const assets = new Map<string, RenderMediaAsset>()
+  if (ids.length > 0 && options.loadMedia !== undefined) {
+    for (const [id, asset] of await options.loadMedia([...new Set(ids)])) assets.set(id, asset)
+  }
+
+  const sourceFor = (id: string | null): ImageSource | null => {
+    if (id === null || id === '') return null
+    const asset = assets.get(id)
+    if (asset === undefined || asset.kind !== 'image') return null
+    return describeMedia(asset, {}, { endpoint: imageEndpoint, mediaEndpoint: imageEndpoint })
+  }
+
+  const favicon = sourceFor(identity.faviconMediaId)
+  const share = sourceFor(identity.shareImageMediaId)
+  return {
+    brand: {
+      name: siteName,
+      logo: sourceFor(identity.logoMediaId),
+      logoDark: sourceFor(identity.logoDarkMediaId),
+      faviconUrl: favicon === null ? null : favicon.src,
+    },
+    faviconHref: favicon === null ? null : favicon.src,
+    shareImageUrl: share === null ? null : share.src,
+  }
+}
+
+/**
+ * `<link rel="icon">`, and what it falls back to.
+ *
+ * The fallback is **branding-aware**, and that is not a detail: Cogenta's
+ * default icon is Cogenta's own logo, so a site that turned the credit off
+ * (fiche L21 task 8) and then got that logo back in its browser tab would
+ * have its white-labelling undone by the very change that started serving a
+ * favicon at all. A white-labelled site therefore falls back to its own
+ * uploaded replacement logo, and to *no icon tag whatsoever* when it has
+ * none — a browser's own blank default, which is the honest answer, not
+ * somebody else's mark.
+ *
+ * The `type` is only ever declared for the default, which really is the PNG
+ * this package ships; a media-library asset goes through `/_image`, which
+ * answers WebP or PNG depending on what the upload pipeline wrote, so
+ * declaring `image/png` there would be a claim this file cannot make. A
+ * browser sniffs the bytes either way.
+ */
+function faviconLinkTag(
+  chosen: string | null,
+  branding: BrandingSettings,
+  imageEndpoint: string,
+): string {
+  const href = chosen ?? defaultFaviconFor(branding, imageEndpoint)
+  if (href === null) return ''
+  const typeAttr = href === DEFAULT_LOGO_PATH ? ' type="image/png"' : ''
+  return `<link rel="icon"${typeAttr} href="${escapeAttribute(href)}">`
+}
+
+function defaultFaviconFor(branding: BrandingSettings, imageEndpoint: string): string | null {
+  if (branding.showCogentaBranding) return DEFAULT_LOGO_PATH
+  if (branding.customLogoMediaId !== null && branding.customLogoMediaId !== '') {
+    return `${imageEndpoint}?id=${encodeURIComponent(branding.customLogoMediaId)}&w=64`
+  }
+  return null
+}
+
+/**
+ * Four of the five built-in themes pull their typefaces from Google Fonts
+ * with a CSS `@import`, which the browser only discovers *after* the
+ * stylesheet has downloaded and parsed — two extra round trips before the
+ * first glyph is requested. `preconnect` collapses the DNS/TLS half of that
+ * wait, and it is emitted unconditionally on purpose: the cost of two unused
+ * hints on a system-font theme is a few dozen bytes, while making it
+ * conditional would mean this file keeping a list of which themes use web
+ * fonts — exactly the per-theme knowledge the chrome extension point exists
+ * to keep out of here.
+ *
+ * `font-display: swap` itself is already declared by every one of those four
+ * `@import` URLs (`&display=swap`), so no font blocks first paint today;
+ * these hints are the remaining half of that fix.
+ */
+function fontPreconnectTags(): string {
+  return (
+    `<link rel="preconnect" href="https://fonts.googleapis.com">` +
+    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`
+  )
 }
 
 /** `branding.showCogentaBranding` / `branding.customLogoMediaId`, resolved (fiche L21 task 8). */
@@ -622,6 +791,10 @@ export interface PageChromeOptions {
    * the pre-fiche-50 behaviour.
    */
   readonly seo?: () => Promise<SeoRenderDefaults>
+  /** Same live read `ThemeRenderOptions.identity` documents (audit T01) — absent renders the site name in text and Cogenta's default favicon. */
+  readonly identity?: () => Promise<SiteIdentityMedia>
+  /** Same batch loader `ThemeRenderOptions.loadMedia` documents. Absent means no logo and no favicon can be resolved, so both fall back. */
+  readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, RenderMediaAsset>>
 }
 
 /**
@@ -667,11 +840,10 @@ export async function renderPageChrome(
     footerNav = footerMenu ?? []
   }
 
-  const brandingHtml = renderFooterBranding(
-    await brandingFor(options.branding),
-    DEFAULT_IMAGE_ENDPOINT,
-  )
+  const branding = await brandingFor(options.branding)
+  const brandingHtml = renderFooterBranding(branding, DEFAULT_IMAGE_ENDPOINT)
   const theme = await themeFor(options.activeTheme)
+  const identity = await resolveIdentity(options.site.name, DEFAULT_IMAGE_ENDPOINT, options)
   const chrome = theme.renderChrome({
     site: options.site,
     locale: options.locale,
@@ -682,6 +854,7 @@ export async function renderPageChrome(
     headerNav,
     footerNav,
     brandingHtml,
+    brand: identity.brand,
   })
   const verificationTags = siteVerificationMetaTags(
     options.seo === undefined ? null : await options.seo(),
@@ -693,7 +866,8 @@ export async function renderPageChrome(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" type="image/png" href="${DEFAULT_LOGO_PATH}">
+${faviconLinkTag(identity.faviconHref, branding, DEFAULT_IMAGE_ENDPOINT)}
+${fontPreconnectTags()}
 ${options.headHtml}
 ${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
@@ -1098,7 +1272,17 @@ async function renderEntryPage(
   // render rather than cached at server startup — see `ThemeRenderOptions.seo`'s
   // own doc comment. It feeds both the site-wide fields below (`description`,
   // `twitterSite`) and the per-page title template/fallback image.
-  const seoSettings = options.seo === undefined ? null : await options.seo()
+  const storedSeoSettings = options.seo === undefined ? null : await options.seo()
+  // The site's own identity (audit T01). Resolved here rather than beside
+  // the chrome below because the share image it carries has to reach the SEO
+  // pipeline: `shareImageMediaId` is a *source* for
+  // `seo.defaultSocialImageUrl`, not a second social-image mechanism — see
+  // `resolveIdentity`.
+  const identity = await resolveIdentity(options.site.name, imageEndpoint, options)
+  const seoSettings =
+    identity.shareImageUrl === null || storedSeoSettings === null
+      ? storedSeoSettings
+      : { ...storedSeoSettings, defaultSocialImageUrl: identity.shareImageUrl }
   const seoSite = seoSiteFor(options.site, seoSettings)
   const resource = { collection, entry }
   const alternates = await alternatesForEntry(
@@ -1180,7 +1364,8 @@ async function renderEntryPage(
       context,
     ),
   ])
-  const brandingHtml = renderFooterBranding(await brandingFor(options.branding), imageEndpoint)
+  const branding = await brandingFor(options.branding)
+  const brandingHtml = renderFooterBranding(branding, imageEndpoint)
   const chrome = theme.renderChrome({
     site: options.site,
     locale: themeContext.locale,
@@ -1190,6 +1375,7 @@ async function renderEntryPage(
     headerNav: headerMenu ?? [],
     footerNav: footerMenu ?? [],
     brandingHtml,
+    brand: identity.brand,
   })
 
   // The same frame `Base.astro` builds for a real Astro build: a skip link
@@ -1203,6 +1389,8 @@ async function renderEntryPage(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+${faviconLinkTag(identity.faviconHref, branding, imageEndpoint)}
+${fontPreconnectTags()}
 ${head}
 ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>

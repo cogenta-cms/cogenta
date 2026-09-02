@@ -280,6 +280,18 @@ img {
   text-decoration: none;
 }
 
+/* The uploaded site logo, set at nameplate scale — a masthead's logo is the
+   nameplate, so it gets the height the wordmark had rather than a header-bar
+   height borrowed from another theme. */
+.cg-masthead__logo {
+  display: block;
+  margin-inline: auto;
+  block-size: 3rem;
+  inline-size: auto;
+  max-inline-size: min(100%, 26rem);
+  object-fit: contain;
+}
+
 .cg-masthead__wordmark:hover {
   color: var(--cg-accent);
 }

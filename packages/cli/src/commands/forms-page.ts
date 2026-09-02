@@ -1,9 +1,15 @@
 import type { AccessContext } from '@cogenta/api'
 import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
 import { HONEYPOT_FIELD, isFormFileValue, TIMESTAMP_FIELD } from '@cogenta/forms'
+import type { MediaAsset } from '@cogenta/render'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { SeoRenderDefaults } from './seo.js'
-import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from './theme-render.js'
+import {
+  type BrandingSettings,
+  type PageChromeMenus,
+  renderPageChrome,
+  type SiteIdentityMedia,
+} from './theme-render.js'
 
 /**
  * `GET /forms/{name}` — the "route dédiée" ADR-0026 chose over a contract B
@@ -50,6 +56,10 @@ export interface FormPageOptions {
   readonly activeTheme?: () => Promise<string | null>
   /** Same live SEO settings read the rest of the public site uses (`theme-render.ts`) — only the search-verification meta tags apply here (fiche 50 task 2). */
   readonly seo?: () => Promise<SeoRenderDefaults>
+  /** Same live site-identity read every other public page uses (audit T01) — the logo and favicon belong on this page too. */
+  readonly identity?: () => Promise<SiteIdentityMedia>
+  /** Same batch media loader (`theme-render.ts`). Needed only to resolve the identity above; absent means the site name in text. */
+  readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
 }
 
 export interface FormPageState {
@@ -222,6 +232,8 @@ ${body}
       ...(options.branding === undefined ? {} : { branding: options.branding }),
       ...(options.activeTheme === undefined ? {} : { activeTheme: options.activeTheme }),
       ...(options.seo === undefined ? {} : { seo: options.seo }),
+      ...(options.identity === undefined ? {} : { identity: options.identity }),
+      ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
     },
     context,
   )

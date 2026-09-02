@@ -705,12 +705,18 @@ export function listCreditNotes(
  */
 export async function exportOrdersCsv(
   token: string,
-  filter: { readonly status?: OrderStatus; readonly from?: string; readonly to?: string } = {},
+  filter: {
+    readonly status?: OrderStatus
+    readonly from?: string
+    readonly to?: string
+    readonly q?: string
+  } = {},
 ): Promise<string> {
   const params = new URLSearchParams()
   if (filter.status !== undefined) params.set('status', filter.status)
   if (filter.from !== undefined && filter.from !== '') params.set('from', filter.from)
   if (filter.to !== undefined && filter.to !== '') params.set('to', filter.to)
+  if (filter.q !== undefined && filter.q.trim() !== '') params.set('q', filter.q)
   const query = params.toString()
   const response = await fetch(
     `${API_BASE}/api/commerce/orders/export.csv${query === '' ? '' : `?${query}`}`,

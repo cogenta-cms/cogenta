@@ -170,3 +170,92 @@ pnpm exec biome check --write packages/admin/src/routes/commerce-subscription-de
 `@cogenta/commerce` n'a reçu aucune modification pour cette tâche (la route serveur
 existait déjà depuis la fiche 53).
 
+## T-COM-03 (P1) — Recherche et filtres avancés sur la liste des commandes
+
+**Fait, avec un correctif à l'audit.**
+
+**Ce qui existait déjà, contrairement à ce que le travail détaillé de l'audit
+supposait** : `OrderStore.list()`/`OrderListOptions` (`packages/commerce/src/order/store.ts`)
+avait déjà `search` (référence/e-mail, sous-chaîne insensible à la casse),
+`customerId`, `placedFrom`/`placedTo` — le tout réellement en SQL, déjà testé
+(`packages/commerce/test/checkout.contract.ts:258-267`). Le routeur admin
+(`GET /api/commerce/orders`) lisait déjà `?q=`/`?from=`/`?to=` et les transmettait au
+store. Le client admin (`listOrders`) avait déjà un troisième paramètre `q`. **Rien de
+tout cela n'était donc à écrire.**
+
+**Ce qui manquait réellement** : l'écran (`commerce-orders.tsx`) appelait
+`listOrders(token, statusFilter, undefined, {...})` — le troisième argument, `q`, était
+codé en dur à `undefined` : aucune boîte de recherche n'existait, malgré une route et
+un client déjà prêts. C'est le seul vrai trou, et le seul critère d'acceptation
+explicite de la fiche (« trouver une commande par les quatre derniers caractères de sa
+référence ou par l'e-mail du client, sans quitter l'écran »).
+
+**Changements** :
+- `packages/admin/src/routes/commerce-orders.tsx` : nouveau champ de recherche
+  (`type="search"`), relié à l'état déjà porté par `listOrders`/`exportOrdersCsv`. Total
+  de la période affichée ajouté sous la liste (`periodTotals`, `useMemo`, sommé
+  côté client à partir des lignes déjà chargées, **aucune route nouvelle** — exactement
+  ce que le travail détaillé de l'audit demandait), groupé par devise pour ne jamais
+  additionner deux devises en un seul nombre trompeur.
+- `packages/admin/src/api/commerce-client.ts` : `exportOrdersCsv` gagne un filtre `q`
+  optionnel (jusqu'ici l'export ignorait totalement la recherche — une recherche qui
+  réduisait l'écran à trois commandes exportait quand même tout le magasin).
+- `packages/commerce/src/admin/router.ts` : `GET /orders/export.csv` lit désormais
+  `?q=` lui aussi et le transmet à `orders.list({ search })`, exactement comme
+  `GET /orders` le fait déjà juste au-dessus dans le même fichier.
+- `packages/admin/test/helpers/mock-fetch.ts` : le mock `GET /orders` filtre
+  maintenant par `q` (référence/e-mail), pour que l'écran ait quelque chose de réel à
+  filtrer dans un test — pur ajout, `status`/`from`/`to` inchangés.
+
+**Décision autonome tranchée sans s'arrêter** : `customerId` (déjà dans le store) et
+`paymentMethod` (n'existe nulle part — le mode de paiement vit sur `Payment`, une
+table séparée liée par `orderId`, jamais sur `Order` lui-même) n'ont **pas** été ajoutés
+comme filtres d'écran. Le seul critère d'acceptation explicite de la fiche porte sur la
+référence/l'e-mail, déjà couvert ; un filtre par mode de paiement exigerait une
+jointure ou une deuxième requête que rien dans l'audit ne justifie pour un correctif
+P1 d'un jour — hors périmètre assumé, pas oublié.
+
+**Tests réels** :
+- `packages/commerce/test/fiche-52-export-filters.test.ts` (nouveau test) : l'export
+  ne contient que les commandes correspondant à `?q=`, la même chose que
+  `GET /orders` fait déjà — deux commandes seedées à des dates différentes, l'export
+  filtré ne contient que l'e-mail de la commande recherchée.
+- `packages/admin/test/commerce/commerce.test.tsx` (nouveau test dans « the order list
+  and detail ») : crée une deuxième commande via le flux manuel existant de l'écran,
+  vérifie que les deux apparaissent, tape un terme de recherche, vérifie qu'une seule
+  reste visible — et que le total de la période s'affiche. Note technique : le premier
+  `findByText` après création de la commande manuelle a montré une vraie instabilité de
+  minuterie sous forte charge de cette machine (imports de test à 40-95 s observés
+  pendant le débogage) — passée de manière non déterministe avec le délai par défaut de
+  1000 ms de Testing Library ; portée à `{ timeout: 3000 }`, avec quoi le test passe de
+  façon répétée en isolation et dans le fichier complet. Ce n'est pas un bug de logique
+  (la même exécution, avec juste plus de temps accordé, réussit systématiquement) —
+  même famille de flake sous charge déjà abondamment documentée dans ce dépôt pour
+  d'autres suites `test/commerce/`.
+
+**Preuve — commandes exécutées** :
+```
+pnpm turbo run typecheck --filter=@cogenta/commerce --filter=@cogenta/admin
+                                                             # 8/8 tâches, aucune erreur
+pnpm -F @cogenta/commerce exec vitest run test/fiche-52-export-filters.test.ts
+                                                             # 5/5 tests verts
+pnpm -F @cogenta/commerce test                              # 302 verts + 1 échec (payment-stripe.test.ts,
+                                                             # jamais touché par cette tâche), reconfirmé
+                                                             # non reproductible en isolation (30/30 verts) —
+                                                             # même famille de flake, pas une régression
+pnpm -F @cogenta/admin exec vitest run test/commerce/commerce.test.tsx \
+  test/commerce/coupons-subscriptions.test.tsx              # 18/18 tests verts (exécution propre)
+pnpm exec biome check --write packages/commerce/src/admin/router.ts \
+  packages/commerce/test/fiche-52-export-filters.test.ts packages/admin/src/routes/commerce-orders.tsx \
+  packages/admin/src/api/commerce-client.ts packages/admin/test/commerce/commerce.test.tsx \
+  packages/admin/test/helpers/mock-fetch.ts packages/admin/src/i18n/locales/en.json \
+  packages/admin/src/i18n/locales/fr.json
+                                                             # 8 infos préexistants dans mock-fetch.ts sans
+                                                             # rapport (mêmes lignes que T-COM-01/02), aucune
+                                                             # erreur
+```
+
+**Changeset** : `.changeset/audit-t-com-03-order-search-filter.md` (`@cogenta/commerce`
+patch — `GET /orders/export.csv` gagne `?q=`, aucun changement de forme de
+`OrderListOptions`).
+

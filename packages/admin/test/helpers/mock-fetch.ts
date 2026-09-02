@@ -7055,9 +7055,19 @@ export function installMockFetch(
           const status = parsed.searchParams.get('status')
           const from = parsed.searchParams.get('from')
           const to = parsed.searchParams.get('to')
+          // Audit T-COM-03: mirrors the real router's `q` (reference/e-mail,
+          // case-insensitive substring) — the screen's new search box has
+          // something real to filter against in a mocked test, the same way
+          // `status`/`from`/`to` already did.
+          const q = parsed.searchParams.get('q')?.trim().toLowerCase()
           let list = status === null ? mockOrders : mockOrders.filter((o) => o.status === status)
           if (from !== null) list = list.filter((o) => o.placedAt >= from)
           if (to !== null) list = list.filter((o) => o.placedAt <= to)
+          if (q !== undefined && q !== '') {
+            list = list.filter(
+              (o) => o.reference.toLowerCase().includes(q) || o.email.toLowerCase().includes(q),
+            )
+          }
           return json(200, { orders: list })
         }
         // A shopkeeper-entered order (fiche 52 task 5). The mock keeps this

@@ -145,6 +145,35 @@ describe('order list filters and export (task 7)', () => {
     expect(csv).toContain(invoice.number)
   })
 
+  it('exports only orders matching q, the same way GET /orders does (audit T-COM-03)', async () => {
+    const router = createCommerceAdminRouter({
+      catalog: shop.catalog,
+      orders: shop.orders,
+      customers: shop.customers,
+      payments: shop.payments,
+      coupons: shop.coupons,
+      tax: shop.tax,
+      shipping: shop.shipping,
+      permissions: createCommercePermissions(),
+    })
+
+    await seedOrderAt('2026-04-04')
+    await seedOrderAt('2026-05-05')
+
+    const response = await router.handle(
+      {
+        method: 'GET',
+        path: '/api/commerce/orders/export.csv',
+        query: { q: '2026-04-04' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    const csv = response.body as string
+    expect(csv).toContain('buyer-2026-04-04@x.com')
+    expect(csv).not.toContain('buyer-2026-05-05@x.com')
+  })
+
   it('refuses the export without commerce.read', async () => {
     const router = createCommerceAdminRouter({
       catalog: shop.catalog,

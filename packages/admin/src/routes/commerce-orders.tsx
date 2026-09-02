@@ -1,4 +1,4 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
 import {
@@ -66,6 +66,11 @@ export function CommerceOrdersRoute(): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  // Audit T-COM-03: `listOrders`'s third argument (`q`, reference/e-mail
+  // search — fiche 52 task 7's own acceptance criterion) had a real client
+  // function and a real server route, but this screen never read anything
+  // into it — it passed `undefined` unconditionally.
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -78,7 +83,7 @@ export function CommerceOrdersRoute(): JSX.Element {
       const { orders: list } = await listOrders(
         token,
         statusFilter === '' ? undefined : statusFilter,
-        undefined,
+        search.trim() === '' ? undefined : search.trim(),
         {
           ...(fromDate === '' ? {} : { from: fromDate }),
           ...(toDate === '' ? {} : { to: toDate }),
@@ -90,11 +95,23 @@ export function CommerceOrdersRoute(): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [token, canRead, statusFilter, fromDate, toDate, t])
+  }, [token, canRead, statusFilter, search, fromDate, toDate, t])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // Audit T-COM-03: "le total de la période affichée" — summed client-side
+  // from the rows already loaded, no new route. Grouped by currency (a shop
+  // billing in more than one is never summed across them into a meaningless
+  // single figure), currencies in first-seen order.
+  const periodTotals = useMemo(() => {
+    const byCurrency = new Map<string, number>()
+    for (const order of orders) {
+      byCurrency.set(order.currency, (byCurrency.get(order.currency) ?? 0) + order.totalMinor)
+    }
+    return [...byCurrency.entries()]
+  }, [orders])
 
   async function exportCsv(): Promise<void> {
     if (token === null) return
@@ -104,6 +121,7 @@ export function CommerceOrdersRoute(): JSX.Element {
         ...(statusFilter === '' ? {} : { status: statusFilter }),
         ...(fromDate === '' ? {} : { from: fromDate }),
         ...(toDate === '' ? {} : { to: toDate }),
+        ...(search.trim() === '' ? {} : { q: search.trim() }),
       })
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
       const url = URL.createObjectURL(blob)
@@ -145,6 +163,19 @@ export function CommerceOrdersRoute(): JSX.Element {
       </div>
 
       <div className="flex flex-wrap gap-4">
+        <div className="max-w-xs">
+          <Field label={t('commerceOrders.searchLabel')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="search"
+                value={search}
+                placeholder={t('commerceOrders.searchPlaceholder')}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
         <div className="max-w-xs">
           <Field label={t('commerceOrders.statusFilter')}>
             {(control) => (
@@ -230,6 +261,15 @@ export function CommerceOrdersRoute(): JSX.Element {
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {!loading && error === null && orders.length > 0 && (
+        <p className="text-sm">
+          {t('commerceOrders.periodTotal')}{' '}
+          {periodTotals
+            .map(([currency, totalMinor]) => formatMinor(totalMinor, currency, i18n.language))
+            .join(' + ')}
+        </p>
       )}
 
       {token !== null && (

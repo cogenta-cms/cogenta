@@ -676,10 +676,16 @@ export function createCommerceAdminRouter(
             permissions.assert('commerce.read', actor)
             const query = request.query ?? {}
             const status = query.status
+            const q = query.q
             const orders = await options.orders.list({
               ...((ORDER_STATUSES as readonly string[]).includes(status ?? '')
                 ? { status: status as OrderStatus }
                 : {}),
+              // Audit T-COM-03: `q` already narrows `GET /orders` (the list
+              // route above) by reference/e-mail — the export ignored it
+              // entirely, so a search that found three orders on screen
+              // still exported all of them.
+              ...(q === undefined || q === '' ? {} : { search: q }),
               ...(query.from === undefined ? {} : { placedFrom: query.from }),
               ...(query.to === undefined ? {} : { placedTo: query.to }),
               limit: 5000,

@@ -259,3 +259,48 @@ pnpm exec biome check --write packages/commerce/src/admin/router.ts \
 patch — `GET /orders/export.csv` gagne `?q=`, aucun changement de forme de
 `OrderListOptions`).
 
+## P1 — Tests admin pour `commerce-customer-detail.tsx` (export/anonymisation RGPD)
+
+**Fait.**
+
+**Constat de l'audit confirmé** : 221 lignes d'écran (fiche/export/anonymisation) sans
+aucun test admin — pour une action irréversible (anonymisation), un vrai risque.
+Aucune modification de l'écran lui-même n'était nécessaire : les routes serveur, le
+client (`readCustomer`/`exportCustomer`/`anonymizeCustomer`) et les routes mockées
+existaient déjà en entier.
+
+**Nouveau fichier** : `packages/admin/test/commerce/commerce-customer-detail.test.tsx`,
+cinq tests :
+- La fiche affiche les champs agrégés côté serveur (total dépensé, section
+  Commandes) sans les recalculer.
+- L'export déclenche un vrai téléchargement JSON (`URL.createObjectURL` espionné,
+  appelé une fois).
+- L'anonymisation **n'agit qu'après une confirmation réelle**
+  (`window.confirm` espionné) — le texte affiché après succès et l'e-mail anonymisé
+  apparaissent bien ensuite.
+- **Refuser la confirmation n'anonymise rien** — ni le message de succès, ni l'e-mail
+  anonymisé n'apparaissent.
+- Un rôle sans `commerce.order.write` (`viewer`, qui n'a que `commerce.read`) ne voit
+  **aucun** bouton Exporter/Anonymiser — courtoisie côté client, la vraie porte
+  restant côté serveur (R4), déjà vérifiée par les routes mockées
+  (`commerceRefused('commerce.order.write')` pour l'anonymisation,
+  `commerceRefused('commerce.read')` pour l'export/la lecture).
+
+**Bug de test trouvé et corrigé pendant l'écriture** (pas dans le code de production) :
+ma première version supposait le client seed sans nom (`customer.name` `null`), donc un
+lien/titre affichant l'e-mail — en réalité `mockCustomers[0].name` vaut `'Shopper One'`
+dans `mock-fetch.ts`, donc le lien de la liste et le titre H1 de la fiche affichent le
+nom, l'e-mail restant une ligne séparée en dessous. Corrigé en relisant le seed avant de
+réécrire les assertions.
+
+**Preuve — commandes exécutées** :
+```
+pnpm turbo run typecheck --filter=@cogenta/admin --force   # 5/5 tâches, aucune erreur
+pnpm -F @cogenta/admin exec vitest run test/commerce/commerce-customer-detail.test.tsx
+                                                             # 5/5 tests verts
+pnpm exec biome check --write packages/admin/test/commerce/commerce-customer-detail.test.tsx
+                                                             # aucune erreur, aucun fix nécessaire
+```
+
+**Changeset** : aucun — nouveau fichier de test uniquement, `@cogenta/admin` est privé.
+

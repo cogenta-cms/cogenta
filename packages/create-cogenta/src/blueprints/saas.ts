@@ -12,6 +12,7 @@ import {
   definePageCollection,
   type RecommendedAgentHint,
   richTextParagraph,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -34,6 +35,7 @@ export const feature = defineCollection({
     name: f.text({ required: true, max: 120 }),
     slug: f.slug({ from: 'name', unique: true }),
     description: f.text({ max: 300, multiline: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug']],
   permissions: {

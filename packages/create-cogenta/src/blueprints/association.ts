@@ -12,6 +12,7 @@ import {
   definePageCollection,
   type RecommendedAgentHint,
   richTextParagraph,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -32,6 +33,7 @@ export const event = defineCollection({
     date: f.datetime({ required: true }),
     location: f.text({ max: 200 }),
     description: f.text({ max: 500, multiline: true }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug'], ['date']],
   permissions: {

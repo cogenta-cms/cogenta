@@ -1,6 +1,11 @@
 import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
 import type { DatabaseHandle } from '@cogenta/core'
-import { type CollectionDefinition, defineCollection, f } from '@cogenta/schema'
+import {
+  type CollectionDefinition,
+  defineCollection,
+  f,
+  type TaxonomyDefinition,
+} from '@cogenta/schema'
 
 /**
  * One paragraph, as the structured rich-text document contract A stores (never
@@ -53,6 +58,8 @@ export type SeedDemoContent = (
  */
 export interface BlueprintContentPack {
   readonly collections: readonly CollectionDefinition[]
+  /** Declared taxonomies (`schema@2.0`, ADR-0022). Absent: the blueprint declares none — the pre-T02 behaviour. */
+  readonly taxonomies?: readonly TaxonomyDefinition[]
   readonly recommendedAgents: readonly RecommendedAgentHint[]
   readonly seedDemoContent: SeedDemoContent
 }
@@ -73,6 +80,59 @@ export function toBlockZoneEntry(block: VocabularyBlock): {
 }
 
 /**
+ * The four SEO override fields `seo-panel.tsx` (the admin's SEO panel) and
+ * `@cogenta/seo`'s `metadata.ts`/`indexable.ts` already read by naming
+ * convention (fiche 13, Task 0 § decision (a)) — declaring them on a
+ * collection is the only thing that makes the panel render instead of the
+ * `null` it falls back to for a collection that has none of them. Shared
+ * across every routed collection of every blueprint (well past the "three
+ * real usages" bar in AGENTS.md) so the four names, the four field kinds
+ * and their limits never drift blueprint to blueprint.
+ *
+ * `admin.label`/`admin.help` are a single string each — `FieldAdminOptions`
+ * (`@cogenta/schema`) has no per-locale form, unlike a taxonomy's or a
+ * collection's own `labels` — so these are written in English, consistent
+ * with every other piece of blueprint content and every other field label
+ * in this file and its siblings (all English-only; there is no French
+ * variant of any blueprint's schema to match).
+ *
+ * `seoCanonical` is deliberately not included (fiche 13 audit, T01): rarely
+ * useful for a brand-new site and left as a field an editor adds by hand if
+ * they ever need it, rather than a fifth SEO field in every form by default.
+ */
+export const SEO_FIELDS = {
+  seoTitle: f.text({
+    max: 60,
+    admin: {
+      label: 'SEO title',
+      help: 'Overrides the browser tab title and the title shown in search results. Leave blank to use the page title.',
+    },
+  }),
+  seoDescription: f.text({
+    max: 160,
+    multiline: true,
+    admin: {
+      label: 'SEO description',
+      help: 'The summary shown under the title in search results. Leave blank to derive one from the content.',
+    },
+  }),
+  seoImage: f.media({
+    accept: ['image'],
+    admin: {
+      label: 'SEO image',
+      help: 'Used for social previews (Open Graph, Twitter Card). Leave blank to fall back to the page content.',
+    },
+  }),
+  seoNoindex: f.boolean({
+    default: false,
+    admin: {
+      label: 'Hide from search engines',
+      help: 'Adds a "noindex" instruction and removes this entry from the sitemap.',
+    },
+  }),
+} as const
+
+/**
  * The "page types" shape every blueprint beyond `blog` needs (this is the
  * third real usage of it, after `blog.ts`'s own hand-written `page` — see
  * AGENTS.md "not before three real usages"): a title plus a block zone,
@@ -90,6 +150,7 @@ export function definePageCollection(routingPattern: string): CollectionDefiniti
       title: f.text({ required: true, max: 200 }),
       slug: f.slug({ from: 'title', unique: true }),
       blocks: f.blocks({ required: true }),
+      ...SEO_FIELDS,
     },
     indexes: [['slug']],
     permissions: {

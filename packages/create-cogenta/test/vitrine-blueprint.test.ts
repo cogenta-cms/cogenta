@@ -25,6 +25,19 @@ describe('scaffoldSite — vitrine blueprint', () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
+  // Audit fiche 06, T01 (P0): without these four fields, the admin's SEO
+  // panel (`seo-panel.tsx`) renders nothing for every entry of every routed
+  // collection this blueprint scaffolds. `testimonial` is deliberately
+  // excluded — it has no `routing` of its own, so the panel is not
+  // reachable for it in the first place.
+  it('declares the four conventional SEO override fields on every routed collection', () => {
+    for (const collection of [service, page]) {
+      expect(Object.keys(collection.fields)).toEqual(
+        expect.arrayContaining(['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']),
+      )
+    }
+  })
+
   it('writes a schema file loadCollections can load back, with service/testimonial/page', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
     dirs.push(targetDir)

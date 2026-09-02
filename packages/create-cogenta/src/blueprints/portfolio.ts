@@ -11,6 +11,7 @@ import {
   type BlueprintContentPack,
   definePageCollection,
   type RecommendedAgentHint,
+  SEO_FIELDS,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -30,6 +31,7 @@ export const project = defineCollection({
     summary: f.text({ max: 300, multiline: true }),
     role: f.text({ max: 120 }),
     year: f.text({ max: 4 }),
+    ...SEO_FIELDS,
   },
   indexes: [['slug']],
   permissions: {

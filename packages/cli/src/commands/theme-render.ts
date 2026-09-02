@@ -446,6 +446,23 @@ function defaultFaviconFor(branding: BrandingSettings, imageEndpoint: string): s
  * `@import` URLs (`&display=swap`), so no font blocks first paint today;
  * these hints are the remaining half of that fix.
  */
+/**
+ * The site's own feeds, discoverable (audit T03). A reader pasting the site's
+ * URL into a feed reader finds them through these two tags and nothing else —
+ * the routes existed before this and were invisible.
+ *
+ * Both formats are advertised because readers disagree about which they
+ * prefer, and both are served from the same content, so offering one would
+ * only make the other undiscoverable for no gain.
+ */
+function feedLinkTags(siteName: string): string {
+  const title = escapeAttribute(siteName)
+  return (
+    `<link rel="alternate" type="application/rss+xml" title="${title}" href="/feed.xml">` +
+    `<link rel="alternate" type="application/atom+xml" title="${title}" href="/atom.xml">`
+  )
+}
+
 function fontPreconnectTags(): string {
   return (
     `<link rel="preconnect" href="https://fonts.googleapis.com">` +
@@ -867,6 +884,7 @@ export async function renderPageChrome(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 ${faviconLinkTag(identity.faviconHref, branding, DEFAULT_IMAGE_ENDPOINT)}
+${feedLinkTags(options.site.name)}
 ${fontPreconnectTags()}
 ${options.headHtml}
 ${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
@@ -892,19 +910,58 @@ ${chrome.footer}
  * "no executable client JavaScript anywhere on the page") applies to this
  * markup exactly as it does to the rest of the page — there is no `onclick`,
  * no toggle, nothing that needs a script to work.
+ *
+ * Its three labels used to be hardcoded English, and its first one hardcoded
+ * the word "Cogenta" — visible to every signed-in editor of a French, or
+ * white-labelled, site (audit 2026-09-01, 10-coquille-reglages-dashboard.md
+ * T02). Both are now resolved: the name follows the same
+ * `showCogentaBranding` switch the footer credit already follows, and the
+ * labels come from the two-language table below.
+ *
+ * A table rather than `react-i18next` (ADR-0019's library) because this is
+ * pure server-rendered HTML with no React runtime anywhere near it; three
+ * strings do not justify pulling an i18n runtime into the render path. The
+ * language is the page's own — a visitor reading the French edition of a
+ * page gets French chrome, which is also the only locale signal this render
+ * has (an `Actor` carries `id` and `roles`, and no locale).
  */
-function renderAdminBar(collectionName: string, entryId: string): string {
+const ADMIN_BAR_LABELS: Record<string, { readonly edit: string; readonly create: string }> = {
+  en: { edit: 'Edit this page', create: 'New' },
+  fr: { edit: 'Modifier cette page', create: 'Nouveau' },
+}
+
+function adminBarLabels(locale: string): { readonly edit: string; readonly create: string } {
+  // `fr-CA` and `fr` get the same table entry; anything with no entry gets
+  // English rather than a key or an empty string.
+  const base = locale.split('-')[0]?.toLowerCase() ?? 'en'
+  return ADMIN_BAR_LABELS[base] ?? (ADMIN_BAR_LABELS.en as { edit: string; create: string })
+}
+
+function renderAdminBar(
+  collectionName: string,
+  entryId: string,
+  options: {
+    readonly siteName: string
+    readonly showCogentaBranding: boolean
+    readonly locale: string
+  },
+): string {
   const collection = encodeURIComponent(collectionName)
   const entry = encodeURIComponent(entryId)
-  return `<div class="cg-admin-bar" role="navigation" aria-label="Cogenta admin">
+  const labels = adminBarLabels(options.locale)
+  // A white-labelled site names itself, never the CMS behind it — the same
+  // rule `renderFooterBranding` already applies to the credit below.
+  const adminName = options.showCogentaBranding ? 'Cogenta' : options.siteName
+  const home = escapeHtml(adminName)
+  return `<div class="cg-admin-bar" role="navigation" aria-label="${escapeAttribute(adminName)}">
 <style>
 .cg-admin-bar{display:flex;gap:1rem;align-items:center;padding:0.4rem 1rem;background:#1a1a1a;color:#fff;font:500 0.8125rem/1.4 system-ui,sans-serif;position:sticky;top:0;z-index:1000}
 .cg-admin-bar a{color:#fff;text-decoration:none;opacity:0.85}
 .cg-admin-bar a:hover,.cg-admin-bar a:focus-visible{opacity:1;text-decoration:underline}
 </style>
-<a href="/admin">Cogenta Admin</a>
-<a href="/admin/collections/${collection}/${entry}">Edit this page</a>
-<a href="/admin/collections/${collection}/new">New</a>
+<a href="/admin">${home}</a>
+<a href="/admin/collections/${collection}/${entry}">${escapeHtml(labels.edit)}</a>
+<a href="/admin/collections/${collection}/new">${escapeHtml(labels.create)}</a>
 </div>`
 }
 
@@ -1279,6 +1336,10 @@ async function renderEntryPage(
   // `seo.defaultSocialImageUrl`, not a second social-image mechanism — see
   // `resolveIdentity`.
   const identity = await resolveIdentity(options.site.name, imageEndpoint, options)
+  // Resolved here, above both its consumers: the admin bar's own name follows
+  // the same white-label switch as the footer credit, and the favicon's
+  // fallback follows it too (see `faviconLinkTag`).
+  const branding = await brandingFor(options.branding)
   const seoSettings =
     identity.shareImageUrl === null || storedSeoSettings === null
       ? storedSeoSettings
@@ -1335,7 +1396,11 @@ async function renderEntryPage(
   // the gate, this check is.
   const adminBar =
     options.adminBar === true && context.actor.id !== null
-      ? renderAdminBar(collection.name, entry.id)
+      ? renderAdminBar(collection.name, entry.id, {
+          siteName: options.site.name,
+          showCogentaBranding: branding.showCogentaBranding,
+          locale: themeContext.locale,
+        })
       : ''
 
   // The navigation menus (audit follow-up to L13's menu system, generalised
@@ -1364,7 +1429,6 @@ async function renderEntryPage(
       context,
     ),
   ])
-  const branding = await brandingFor(options.branding)
   const brandingHtml = renderFooterBranding(branding, imageEndpoint)
   const chrome = theme.renderChrome({
     site: options.site,
@@ -1390,6 +1454,7 @@ async function renderEntryPage(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 ${faviconLinkTag(identity.faviconHref, branding, imageEndpoint)}
+${feedLinkTags(options.site.name)}
 ${fontPreconnectTags()}
 ${head}
 ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}

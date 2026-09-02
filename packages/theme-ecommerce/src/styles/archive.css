@@ -1,0 +1,40 @@
+/*
+ * The taxonomy-term archive (contract D `theme@1.3`).
+ *
+ * Only the three things an archive adds beyond what `collectionList` already
+ * styles — a breadcrumb, a sub-term row, a prev/next pager. The entry list
+ * itself reuses the `ce-entry`/`ce-collection__items` rules, on purpose: an
+ * archive of articles must look like this theme's list of articles, and a
+ * second set of card rules is exactly how those two drift apart.
+ */
+
+.ce-archive {
+  max-inline-size: var(--ce-page);
+  margin-inline: auto;
+  padding: var(--ce-s10) var(--ce-gutter);
+}
+
+.ce-archive__breadcrumb ol,
+.ce-archive__children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ce-s3);
+  margin: 0 0 var(--ce-s4);
+  padding: 0;
+  list-style: none;
+  font-size: var(--ce-text-sm);
+}
+
+.ce-archive__children {
+  margin-block: var(--ce-s4) var(--ce-s8);
+}
+
+.ce-archive__pager {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ce-s4);
+  margin-block-start: var(--ce-s10);
+  padding-block-start: var(--ce-s5);
+  border-block-start: 1px solid var(--ce-line-soft);
+  font-weight: var(--ce-weight-semibold);
+}

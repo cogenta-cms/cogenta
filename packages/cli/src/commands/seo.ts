@@ -24,6 +24,7 @@ import {
   type SeoSite,
   type SitemapCollectionOverride,
   type SitemapFile,
+  type SitemapUrl,
   sitemapUrlsFor,
 } from '@cogenta/seo'
 
@@ -485,15 +486,27 @@ export function buildSitemapFiles(
   site: SeoSite,
   resources: readonly SeoResource[],
   collectionOverrides?: Readonly<Record<string, SitemapCollectionOverride>>,
+  /**
+   * URLs a crawler should know about that are not entries — today, the
+   * taxonomy term archives (audit 2026-09-01, 04-taxonomies-menus.md T01).
+   *
+   * A separate parameter rather than a synthetic `SeoResource`, because a
+   * term genuinely is not one: it has no `status`, no `publishedAt` and no
+   * translation family, and faking those three to get it through
+   * `indexableResources` would put a lie in the middle of the SEO pipeline
+   * so that a URL could come out the other end. These arrive already
+   * decided-upon and are appended verbatim.
+   */
+  extraUrls?: readonly SitemapUrl[],
 ): readonly SitemapFile[] {
-  return buildSitemap(
-    site,
-    sitemapUrlsFor(
+  return buildSitemap(site, [
+    ...sitemapUrlsFor(
       site,
       resources,
       collectionOverrides === undefined ? {} : { collectionOverrides },
     ),
-  )
+    ...(extraUrls ?? []),
+  ])
 }
 
 export interface RobotsRenderOptions {

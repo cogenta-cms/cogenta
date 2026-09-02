@@ -241,7 +241,9 @@ describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
     try {
       await seed(monolingual, [{ title: 'Alone', slug: 'alone' }])
       const html = await (await fetch(`${single.base}/alone`)).text()
-      expect(html).not.toContain('rel="alternate"')
+      // `hreflang` specifically: the page does carry `rel="alternate"` links
+      // for its RSS and Atom feeds (audit T03), which are a different thing.
+      expect(html).not.toContain('hreflang')
     } finally {
       await single.stop()
     }

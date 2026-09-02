@@ -11,6 +11,7 @@
  */
 
 export * from './actions.js'
+export * from './archive.js'
 export * from './chrome.js'
 export * from './comments.js'
 export * from './contract.js'

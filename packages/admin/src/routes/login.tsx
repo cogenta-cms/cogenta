@@ -2,8 +2,10 @@ import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
+import { listSettings } from '../api/settings-client.js'
 import { getShellStatus } from '../api/shell-status-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { deriveBrandingSettings, deriveSiteTitle } from '../settings/site-settings-context.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 interface LocationState {
@@ -11,18 +13,67 @@ interface LocationState {
 }
 
 /**
+ * The white-label decision this anonymous screen needs — a subset of
+ * `BrandingSettings`/`useSiteTitle` derived the same way `app-shell.tsx`'s
+ * `renderBrandMark()` does, but from this screen's own direct
+ * `listSettings()` call (`GET /api/settings` answers an anonymous caller —
+ * `settings-client.ts`'s own header says so) rather than
+ * `SiteSettingsProvider`, which only wraps the authenticated shell routes
+ * and never mounts for `/login` (fiche 35 audit T01).
+ */
+interface LoginBranding {
+  readonly showCogentaBranding: boolean
+  readonly customLogoMediaId: string | null
+  readonly siteTitle: string | null
+}
+
+/** Same bare mark `app-shell.tsx`'s `BRAND_MARK_FALLBACK` uses — a named constant, not a raw `//` literal in JSX, which Biome's JSX linter reads as a stray line comment. */
+const BRAND_MARK_FALLBACK = '//'
+
+/**
  * The mark and version above the card — present on every step (password,
  * TOTP, recovery), never inside `<Card>`: a sign-in screen with no visible
  * "which product is this" is disorienting the first time anyone sees it,
- * and it was missing entirely before this. `/_cogenta/logo-cogenta.png` is
- * the same public, unauthenticated asset the site's own footer credit and
- * favicon already use — no separate branding lookup needed here.
+ * and it was missing entirely before this.
+ *
+ * Three outcomes, same priority order as `app-shell.tsx`'s
+ * `renderBrandMark()` (logo-override case excluded — that one is the
+ * *admin theme's* own logo, a signed-in-only concept this anonymous screen
+ * has no access to): (1) Cogenta's own credit, the default and the only
+ * case that shows the version number — a white-labelled install has no
+ * reason to advertise which CMS runs it; (2) a white-label logo, served
+ * through the public, unauthenticated `/_image` endpoint (the same one
+ * `media-detail.tsx` uses) since this screen has no session token to send
+ * `/api/media/{id}/file`'s auth-gated route — `alt` carries the site's own
+ * title rather than the literal word "Cogenta" it was just asked not to
+ * name; (3) branding off with nothing uploaded yet: an unlabelled mark,
+ * never a hole where a logo should be.
  */
-function LoginBrand({ version }: { readonly version: string | null }): JSX.Element {
+function LoginBrand({
+  version,
+  branding,
+}: {
+  readonly version: string | null
+  readonly branding: LoginBranding
+}): JSX.Element {
+  const { showCogentaBranding, customLogoMediaId, siteTitle } = branding
   return (
     <div className="flex flex-col items-center gap-2">
-      <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
-      {version !== null && version !== '' && (
+      {showCogentaBranding ? (
+        <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
+      ) : customLogoMediaId !== null ? (
+        <img
+          src={`/_image?id=${encodeURIComponent(customLogoMediaId)}&w=80`}
+          alt={siteTitle ?? ''}
+          width={40}
+          height={40}
+        />
+      ) : (
+        <span aria-hidden="true" className="text-lg font-semibold text-muted-foreground">
+          {BRAND_MARK_FALLBACK}
+        </span>
+      )}
+      {showCogentaBranding && version !== null && version !== '' && (
         <span className="font-mono text-xs text-muted-foreground">v{version}</span>
       )}
     </div>
@@ -65,12 +116,32 @@ export function LoginRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
+  // Defaults to showing Cogenta while the request is in flight or fails —
+  // the same "never flash unbranded" discipline `useBrandingSettings`
+  // documents, so a slow network never briefly shows a bare mark on a
+  // white-labelled site (or, worse, "Cogenta" on one that turned it off).
+  const [branding, setBranding] = useState<LoginBranding>({
+    showCogentaBranding: true,
+    customLogoMediaId: null,
+    siteTitle: null,
+  })
 
   useEffect(() => {
     let cancelled = false
     getShellStatus()
       .then((status) => {
         if (!cancelled) setVersion(status.cogentaVersion)
+      })
+      .catch(() => undefined)
+    listSettings()
+      .then((settings) => {
+        if (cancelled) return
+        const { showCogentaBranding, customLogoMediaId } = deriveBrandingSettings(settings)
+        setBranding({
+          showCogentaBranding,
+          customLogoMediaId,
+          siteTitle: deriveSiteTitle(settings),
+        })
       })
       .catch(() => undefined)
     return () => {
@@ -182,7 +253,7 @@ export function LoginRoute(): JSX.Element {
   if (step.kind === 'totp') {
     return (
       <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-        <LoginBrand version={version} />
+        <LoginBrand version={version} branding={branding} />
         <Card className="w-full max-w-sm">
           <CardBody>
             <form
@@ -240,7 +311,7 @@ export function LoginRoute(): JSX.Element {
   if (step.kind === 'recovery') {
     return (
       <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-        <LoginBrand version={version} />
+        <LoginBrand version={version} branding={branding} />
         <Card className="w-full max-w-sm">
           <CardBody>
             <form
@@ -294,7 +365,7 @@ export function LoginRoute(): JSX.Element {
 
   return (
     <main className="flex min-h-full flex-col items-center justify-center gap-4 p-6">
-      <LoginBrand version={version} />
+      <LoginBrand version={version} branding={branding} />
       <Card className="w-full max-w-sm">
         <CardBody>
           <h1 id="login-heading" className="m-0 text-xl leading-7 font-semibold">

@@ -166,3 +166,116 @@ describe('subscription detail — a real route with its own URL (fiche 71)', () 
     expect(screen.queryByText('Historique de facturation')).toBeNull()
   })
 })
+
+// Audit T-COM-02: `changeSubscriptionPlan` (`/subscriptions/{id}/change-plan`)
+// shipped server-side with fiche 53 task 4 and had no screen ever calling it.
+describe('subscription detail — changing plan (audit T-COM-02)', () => {
+  const seededVariant = {
+    id: 'variant-xl',
+    productId: 'product-xl',
+    sku: 'PLAN-XL',
+    title: 'Édition XL',
+    priceMinor: 2500,
+    currency: 'EUR',
+    onHand: 10,
+    allowBackorder: false,
+    weightGrams: 0,
+    taxCategory: 'standard',
+    position: 0,
+    lowStockThreshold: null,
+    compareAtPriceMinor: null,
+    saleStartsAt: null,
+    saleEndsAt: null,
+    widthMm: null,
+    heightMm: null,
+    depthMm: null,
+    imageMediaId: null,
+    createdAt: '2026-03-01T00:00:00.000Z',
+    updatedAt: '2026-03-01T00:00:00.000Z',
+  }
+  const seededCatalog = {
+    commerceProducts: [
+      {
+        id: 'product-xl',
+        handle: 'plan-xl',
+        title: 'Grand format',
+        status: 'active' as const,
+        contentRef: null,
+        imageMediaIds: [],
+        createdAt: '2026-03-01T00:00:00.000Z',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      },
+    ],
+    commerceVariants: [seededVariant],
+  }
+
+  async function pickVariant(): Promise<void> {
+    fireEvent.click(screen.getByRole('button', { name: 'Changer de formule' }))
+    const productSelect = await screen.findByLabelText('Produit')
+    // The product list is its own async fetch (`listProducts`, opened by
+    // `openChangePlan`) — the select mounts disabled with only the
+    // placeholder option until it resolves.
+    const productOption = await waitFor(
+      () =>
+        within(productSelect).getByRole('option', { name: 'Grand format' }) as HTMLOptionElement,
+    )
+    fireEvent.change(productSelect, { target: { value: productOption.value } })
+
+    const variantSelect = await screen.findByLabelText('Variante')
+    const variantOption = await waitFor(() =>
+      within(variantSelect).getByRole('option', { name: /Édition XL —/ }),
+    )
+    fireEvent.change(variantSelect, {
+      target: { value: (variantOption as HTMLOptionElement).value },
+    })
+  }
+
+  it('changes the plan and shows the settled result, only after an explicit confirmation', async () => {
+    // Not the shared `signedInAs` helper: it calls `installMockFetch` with no
+    // seed data, and this test needs the product/variant seeded above.
+    localStorage.clear()
+    localStorage.setItem('cogenta.session.token', VALID_TOKEN)
+    // The mock's `change-plan` route always settles with no charge due
+    // (`prorationMinor: 0`) — this proves the screen's whole round trip
+    // (pick a variant of the same currency, confirm, read the server's own
+    // result back), not the store's actual proration arithmetic, which
+    // `@cogenta/commerce`'s own tests already cover.
+    installMockFetch({ roles: ['admin'], ...seededCatalog })
+    window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
+    render(<App />)
+    await screen.findByText('Historique de facturation')
+
+    await pickVariant()
+
+    // First click only opens a confirmation — the fiche's own acceptance
+    // criterion is that a plan change (it can charge money immediately) is
+    // never applied on one click.
+    fireEvent.click(screen.getByRole('button', { name: 'Vérifier le changement' }))
+    expect(screen.getByText(/Ce changement s'applique immédiatement/)).toBeDefined()
+    expect(screen.queryByText('Formule changée.', { exact: false })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le changement' }))
+
+    expect(
+      await screen.findByText("Formule changée. Rien n'était dû pour le reste de cette période."),
+    ).toBeDefined()
+    // The panel closes on success — its own heading is gone, only the
+    // "Changer de formule" toggle button (which reopens it) remains.
+    expect(screen.queryByRole('heading', { name: 'Changer de formule' })).toBeNull()
+  })
+
+  it('refuses to change plan without commerce.order.write', async () => {
+    localStorage.clear()
+    localStorage.setItem('cogenta.session.token', VALID_TOKEN)
+    installMockFetch({ roles: ['viewer'], ...seededCatalog })
+    window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
+    render(<App />)
+    await screen.findByText('Historique de facturation')
+
+    await pickVariant()
+    fireEvent.click(screen.getByRole('button', { name: 'Vérifier le changement' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le changement' }))
+
+    expect(await screen.findByText(/allowed to do that/u)).toBeDefined()
+  })
+})

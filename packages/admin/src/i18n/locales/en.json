@@ -2996,7 +2996,25 @@
   "commerceSubscriptionDetail": {
     "back": "← Back to subscriptions",
     "notFound": "This subscription does not exist.",
-    "loadError": "Could not load this subscription."
+    "loadError": "Could not load this subscription.",
+    "changePlanOpen": "Change plan",
+    "changePlanHeading": "Change plan",
+    "changePlanProductLabel": "Product",
+    "changePlanProductPlaceholder": "Choose a product",
+    "changePlanVariantLabel": "Variant",
+    "changePlanVariantPlaceholder": "Choose a variant",
+    "changePlanQuantityLabel": "Quantity",
+    "changePlanProrateLabel": "Prorate for the rest of the current period",
+    "changePlanSubmit": "Review the change",
+    "changePlanConfirmPrompt": "This changes the plan immediately. If proration is on, the price difference for the rest of this period is charged now — or, for a downgrade, reported as a credit this system does not refund automatically.",
+    "changePlanConfirmButton": "Confirm the change",
+    "changePlanCancelButton": "Cancel",
+    "changePlanLoadProductsError": "Could not load the product catalogue.",
+    "changePlanLoadVariantsError": "Could not load this product's variants.",
+    "changePlanError": "Could not change this subscription's plan.",
+    "changePlanChargedResult": "Plan changed. {{amount}} was charged now for the rest of this period.",
+    "changePlanNoChargeResult": "Plan changed. Nothing was due for the rest of this period.",
+    "changePlanCreditResult": "Plan changed. A credit of {{amount}} is owed for the rest of this period — it was not refunded automatically; process it separately."
   },
   "commerceTax": {
     "heading": "Tax",

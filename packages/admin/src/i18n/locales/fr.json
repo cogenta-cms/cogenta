@@ -2995,7 +2995,25 @@
   "commerceSubscriptionDetail": {
     "back": "← Retour aux abonnements",
     "notFound": "Cet abonnement n'existe pas.",
-    "loadError": "Impossible de charger cet abonnement."
+    "loadError": "Impossible de charger cet abonnement.",
+    "changePlanOpen": "Changer de formule",
+    "changePlanHeading": "Changer de formule",
+    "changePlanProductLabel": "Produit",
+    "changePlanProductPlaceholder": "Choisir un produit",
+    "changePlanVariantLabel": "Variante",
+    "changePlanVariantPlaceholder": "Choisir une variante",
+    "changePlanQuantityLabel": "Quantité",
+    "changePlanProrateLabel": "Calculer le prorata pour le reste de la période en cours",
+    "changePlanSubmit": "Vérifier le changement",
+    "changePlanConfirmPrompt": "Ce changement s'applique immédiatement. Si le prorata est activé, la différence de prix pour le reste de la période est facturée tout de suite — ou, pour une baisse, signalée comme un avoir que ce système ne rembourse jamais automatiquement.",
+    "changePlanConfirmButton": "Confirmer le changement",
+    "changePlanCancelButton": "Annuler",
+    "changePlanLoadProductsError": "Impossible de charger le catalogue produits.",
+    "changePlanLoadVariantsError": "Impossible de charger les variantes de ce produit.",
+    "changePlanError": "Impossible de changer la formule de cet abonnement.",
+    "changePlanChargedResult": "Formule changée. {{amount}} ont été facturés immédiatement pour le reste de cette période.",
+    "changePlanNoChargeResult": "Formule changée. Rien n'était dû pour le reste de cette période.",
+    "changePlanCreditResult": "Formule changée. Un avoir de {{amount}} est dû pour le reste de cette période — il n'a pas été remboursé automatiquement ; à traiter séparément."
   },
   "commerceTax": {
     "heading": "Taxes",

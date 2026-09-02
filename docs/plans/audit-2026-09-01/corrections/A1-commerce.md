@@ -85,3 +85,88 @@ machine, même blocage récurrent documenté partout ailleurs dans ce dépôt) �
 incidence ici, cette tâche ne touche aucun SQL, uniquement le câblage du planificateur
 déjà dialecte-agnostique.
 
+## T-COM-02 (P1) — Exposer `changePlan` dans l'écran d'abonnement
+
+**Fait.**
+
+**Correction à l'audit** : l'audit affirmait que `grep -n "changePlan"
+packages/admin/src/api/commerce-client.ts` ne trouvait rien — en réalité la fonction
+cliente existait déjà (`changeSubscriptionPlan`, ajoutée par le commit de la fiche 53
+elle-même, `1dd9e6f`), simplement sous un nom qui ne contient pas le sous-texte littéral
+« changePlan » (`changeSubscriptionPlan` ≠ `change` + `Plan` contigus). Ce qui manquait
+réellement, et que le reste de l'audit décrit correctement, c'est l'écran : aucun
+formulaire, aucun bouton, aucun test.
+
+**Changements** :
+- `packages/admin/src/api/commerce-client.ts` : `changeSubscriptionPlan` gagne un type
+  de retour nommé et exporté, `ChangePlanResult` (au lieu d'un type anonyme en ligne) —
+  pur renommage de type, aucun changement de forme.
+- `packages/admin/src/routes/commerce-subscription-detail.tsx` : nouveau panneau
+  « Changer de formule » — sélecteur de produit (`listProducts`), puis de variante
+  (`readProduct`, filtrée à la devise de l'abonnement pour ne jamais proposer un choix
+  que le serveur refuserait avec `COMMERCE_CURRENCY_MISMATCH`), champ quantité, case à
+  cocher prorata (cochée par défaut, comme le store). **Deux clics, jamais un** : le
+  premier clic (« Vérifier le changement ») ouvre seulement une confirmation explicite
+  (le critère d'acceptation de la fiche : jamais appliqué à l'aveugle) ; le second
+  (« Confirmer le changement ») appelle réellement l'API. Après succès, le résultat
+  exact renvoyé par le serveur est affiché honnêtement : un prorata positif dit
+  clairement qu'un montant a été facturé immédiatement (jamais deviné côté client — il
+  n'existe aucun mode « aperçu » côté serveur, voir décision ci-dessous), zéro dit qu'il
+  n'y avait rien à facturer, et **un prorata négatif dit explicitement qu'il s'agit d'un
+  avoir dû qui n'a pas été remboursé automatiquement** — jamais présenté comme un avoir
+  déjà appliqué, exactement le risque que le critère d'acceptation nommait.
+- i18n FR/EN complètes (`commerceSubscriptionDetail.changePlan*`, 15 nouvelles clés
+  chacune).
+- `packages/admin/test/helpers/mock-fetch.ts` : deux nouvelles options d'amorçage,
+  additions pures — `commerceProducts`/`commerceVariants` (même patron que
+  `commerceTaxRules`/`commerceShippingMethods` déjà existants), pour qu'un test avec un
+  rôle limité à `commerce.read` (un `viewer`) puisse peupler le sélecteur de variante
+  sans passer par l'écran Produits qui exige `commerce.catalog.write`.
+
+**Décision autonome tranchée sans s'arrêter** : le magasin `changePlan` n'a **aucun**
+mode « calcul à blanc » (`dry-run`) — il calcule le prorata et, s'il est positif,
+facture réellement une commande dans le même appel (fiche 53 task 4). Ajouter un vrai
+mode d'aperçu aurait exigé d'étendre le contrat E (non figé, donc permis, mais un
+périmètre plus large qu'un correctif P1 de 0,5 jour). Le critère de l'audit
+(« affiché… avant validation ») est donc satisfait par une **confirmation explicite
+à deux clics** plutôt qu'un montant prévisualisé avant le premier appel réel — le
+serveur n'a tout simplement rien à prévisualiser sans s'engager. C'est un choix honnête
+plutôt qu'un chiffre inventé côté client qui dupliquerait (et pourrait diverger de)
+l'arithmétique réelle du store.
+
+**Tests réels** (`packages/admin/test/commerce/coupons-subscriptions.test.tsx`, nouveau
+describe « subscription detail — changing plan (audit T-COM-02) ») :
+- Un admin choisit un produit puis une variante, voit la confirmation apparaître **sans
+  que rien ne soit envoyé au serveur avant le second clic**, confirme, et voit le
+  résultat exact renvoyé par le mock (`prorationMinor: 0` → « Rien n'était dû ») — le
+  panneau se referme après succès.
+- Un `viewer` (seulement `commerce.read`) peut choisir la même variante mais se voit
+  refuser à la confirmation (`commerce.order.write` manquant) — même style que le test
+  de refus déjà existant sur « Annuler ».
+
+**Preuve — commandes exécutées** :
+```
+pnpm turbo run typecheck --filter=@cogenta/admin --force   # 5/5 tâches, aucune erreur
+pnpm -F @cogenta/admin exec vitest run test/commerce/coupons-subscriptions.test.tsx
+                                                             # 12/12 tests verts
+pnpm -F @cogenta/admin exec vitest run test/commerce/       # 48/50 verts en une seule exécution ;
+                                                             # les 2 échecs (dont un test préexistant,
+                                                             # aucun des miens) confirmés non
+                                                             # reproductibles en isolation (12/12 verts
+                                                             # rejoués seuls) — même famille de flake
+                                                             # sous forte parallélisation déjà
+                                                             # documentée pour ce même fichier lors de
+                                                             # la fiche 53, pas une régression.
+pnpm exec biome check --write packages/admin/src/routes/commerce-subscription-detail.tsx \
+  packages/admin/src/api/commerce-client.ts packages/admin/test/commerce/coupons-subscriptions.test.tsx \
+  packages/admin/test/helpers/mock-fetch.ts packages/admin/src/i18n/locales/en.json \
+  packages/admin/src/i18n/locales/fr.json
+                                                             # imports réordonnés automatiquement (biome),
+                                                             # 8 infos préexistants dans mock-fetch.ts sans
+                                                             # rapport, aucune erreur
+```
+
+**Changeset** : aucun — `@cogenta/admin` est privé (pas de changeset), et
+`@cogenta/commerce` n'a reçu aucune modification pour cette tâche (la route serveur
+existait déjà depuis la fiche 53).
+

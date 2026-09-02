@@ -134,6 +134,7 @@
     "linkTargetDraft": "Cible : brouillon",
     "linkTargetTrashed": "Cible : à la corbeille",
     "insertImageButton": "Insérer une image",
+    "imageDropHint": "Déposez une image ici pour l'insérer",
     "imageDialogTitle": "Insérer une image",
     "imageModeLabel": "Source de l'image",
     "imageModeBrowse": "Médiathèque",

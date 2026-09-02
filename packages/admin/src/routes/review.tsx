@@ -8,6 +8,7 @@ import type { ReviewQueueItem, ReviewQueueScope } from '../api/review-client.js'
 import { listReviewQueue } from '../api/review-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { useSchema } from '../schema/schema-context.js'
+import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
   buttonVariants,
@@ -42,6 +43,7 @@ export function ReviewRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const schemaState = useSchema()
+  const refreshChromeStatus = useRefreshChromeStatus()
 
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
 
@@ -75,6 +77,10 @@ export function ReviewRoute(): JSX.Element {
     try {
       await approveReview(token, collection, id)
       await load()
+      // Fiche 35 audit T02: without this, the sidebar's "à relire" badge
+      // stayed stale until the next full navigation — same bug as the
+      // trash badge, same fix (`useRefreshChromeStatus`).
+      refreshChromeStatus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('review.approveError'))
     } finally {
@@ -89,6 +95,7 @@ export function ReviewRoute(): JSX.Element {
     try {
       await requestReviewChanges(token, collection, id)
       await load()
+      refreshChromeStatus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('review.requestChangesError'))
     } finally {

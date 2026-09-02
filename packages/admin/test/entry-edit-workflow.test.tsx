@@ -107,3 +107,59 @@ describe('the editorial workflow sidebar', () => {
     await expectNoSeriousA11yViolations(container)
   })
 })
+
+/**
+ * Fiche 35 audit T02 — none of the three workflow transitions here called
+ * `useRefreshChromeStatus()`, so the sidebar's "à relire" badge
+ * (`reviewPending`) stayed stale until the next full navigation — same bug
+ * `review.tsx`'s equivalent transitions have, same fix.
+ */
+describe('workflow transitions in the editor refresh the sidebar status', () => {
+  function shellStatusCallCount(): number {
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status'))
+      .length
+  }
+
+  it('refreshes after submitting for review', async () => {
+    signedIn(['contributor'])
+    await openWfEntry()
+    await screen.findByRole('button', { name: 'Soumettre à relecture' })
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Soumettre à relecture' }))
+    await screen.findByText('En attente de relecture')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+
+  it('refreshes after approving', async () => {
+    signedIn(['editor'], 'pending')
+    await openWfEntry()
+    await screen.findByText('En attente de relecture')
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
+    await screen.findByText('Approuvé')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+
+  it('refreshes after requesting changes', async () => {
+    signedIn(['editor'], 'pending')
+    await openWfEntry()
+    await screen.findByRole('button', { name: 'Demander des modifications' })
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Demander des modifications' }))
+    await screen.findByText('Modifications demandées')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+})

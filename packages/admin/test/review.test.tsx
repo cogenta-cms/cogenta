@@ -87,3 +87,50 @@ describe('the review queue screen', () => {
     await expectNoSeriousA11yViolations(container)
   })
 })
+
+/**
+ * Fiche 35 audit T02 — neither `approve` nor `requestChanges` called
+ * `useRefreshChromeStatus()`, so the sidebar's "à relire" badge
+ * (`reviewPending`) stayed stale after a transition made here, until the
+ * next full navigation — the same L20 audit point 15 bug `trash.tsx`'s own
+ * restore/purge already guard against.
+ */
+describe('review transitions refresh the sidebar status', () => {
+  function shellStatusCallCount(): number {
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status'))
+      .length
+  }
+
+  it('refreshes after approving', async () => {
+    signedIn(['editor'])
+    render(<App />)
+    await goToReview()
+    fireEvent.click(screen.getByRole('tab', { name: 'Toutes en attente' }))
+    await screen.findByRole('button', { name: 'Approuver' })
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
+    await screen.findByText('Rien ici.')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+
+  it('refreshes after requesting changes', async () => {
+    signedIn(['editor'])
+    render(<App />)
+    await goToReview()
+    fireEvent.click(screen.getByRole('tab', { name: 'Toutes en attente' }))
+    await screen.findByRole('button', { name: 'Demander des modifications' })
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Demander des modifications' }))
+    await screen.findByText('Rien ici.')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+})

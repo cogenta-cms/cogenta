@@ -397,11 +397,24 @@ export function ApiKeysRoute(): JSX.Element {
                     <TableCell>{key.name}</TableCell>
                     <TableCell className="font-mono text-sm">{key.prefix}…</TableCell>
                     <TableCell>
-                      <span
-                        title={key.scope.map((role) => roleDetail(role, collections)).join('\n')}
-                      >
-                        {key.scope.join(', ')}
-                      </span>
+                      {/* T09-03 — the scope detail used to live only in a
+                          `title=` hover, unreachable by keyboard or on a
+                          touch screen. A native `<details>` disclosure, the
+                          same accessible pattern already used elsewhere in
+                          this admin (`collection-list.tsx`'s column picker,
+                          `entry-edit.tsx`'s history/translations sections):
+                          keyboard- and screen-reader-correct with no ARIA to
+                          get wrong, and no new design-system component for
+                          a single use (R9). `roleDetail` itself is
+                          unchanged — only its presentation moved. */}
+                      <details>
+                        <summary className="cursor-pointer text-sm">{key.scope.join(', ')}</summary>
+                        <ul className="m-0 mt-1 list-none p-0 text-xs text-muted-foreground">
+                          {key.scope.map((role) => (
+                            <li key={role}>{roleDetail(role, collections)}</li>
+                          ))}
+                        </ul>
+                      </details>
                       {writeRoles.length > 0 && (
                         <p className="mt-1 text-xs text-warning">
                           {t('apiKeys.scopeWriteWarning', { roles: writeRoles.join(', ') })}

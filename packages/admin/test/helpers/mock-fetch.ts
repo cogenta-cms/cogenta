@@ -3421,6 +3421,36 @@ export function installMockFetch(
           return json(200, { data: toWireAccount(account) })
         }
 
+        // T09-04 (RGPD) — `GET /{id}/personal-data`, self-or-admin like the
+        // profile GET just above. The mock only needs the shape
+        // `fetchPersonalDataExport` reads (`account`), not a faithful
+        // re-implementation of the server's content/order/gap gathering,
+        // which is proved for real in `packages/api/test/rest/users-router.test.ts`.
+        if (sub === 'personal-data' && method === 'GET') {
+          if (id !== user.id && !isAdmin) return forbidden
+          if (account === undefined) {
+            return json(404, { error: { code: 'AUTH_USER_NOT_FOUND', message: 'No account.' } })
+          }
+          return json(200, {
+            data: {
+              generatedAt: '2026-03-02T00:00:00.000Z',
+              subjectEmail: account.email,
+              account: {
+                id: account.id,
+                email: account.email,
+                roles: account.roles,
+                status: account.status,
+                createdAt: account.createdAt,
+              },
+              authoredContent: [],
+              orders: [],
+              gaps: [
+                { source: 'comments', reason: 'Comments have no store in this codebase yet.' },
+              ],
+            },
+          })
+        }
+
         if (sub === undefined && method === 'PATCH') {
           if (!isAdmin) return forbidden
           if (account === undefined) {

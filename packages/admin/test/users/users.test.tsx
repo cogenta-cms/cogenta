@@ -319,6 +319,33 @@ describe('anonymizing an account', () => {
   })
 })
 
+/** T09-04 (RGPD) — an admin exporting another account's personal data. */
+describe("exporting another account's personal data", () => {
+  it('downloads a JSON file for the selected account', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:mock-personal-data')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+
+    render(<App />)
+    await goToUsers()
+    await within(await screen.findByRole('table')).findByText('bob@example.com')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Exporter les données personnelles de bob@example.com' }),
+    )
+
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+    })
+    const [blob] = createObjectURL.mock.calls[0] as [Blob]
+    expect(blob.type).toBe('application/json')
+
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+  })
+})
+
 describe('the user list, for accessibility', () => {
   it('has no serious accessibility violation', async () => {
     const { container } = render(<App />)

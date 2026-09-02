@@ -18,6 +18,7 @@ import { getMedia, listMedia, type MediaAsset } from '../api/media-client.js'
 import {
   type AdminUser,
   changeOwnPassword,
+  fetchPersonalDataExport,
   listUserSessions,
   readUser,
   revokeOtherSessions,
@@ -119,6 +120,12 @@ export function ProfileRoute(): JSX.Element {
   // caller's own twenty most recent actions.
   const [activity, setActivity] = useState<readonly AuditEntry[]>([])
   const [activityError, setActivityError] = useState<string | null>(null)
+
+  // T09-04 (RGPD) — "export my data". Every role, always the caller's own
+  // account: the server enforces self-or-admin, this screen only ever asks
+  // for `me`.
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -297,6 +304,32 @@ export function ProfileRoute(): JSX.Element {
     link.download = 'cogenta-recovery-codes.txt'
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  /**
+   * T09-04 (RGPD) — the same `Blob`+`<a download>` pattern as
+   * `downloadRecoveryCodes` just above, for a JSON file instead of plain
+   * text. The export itself is journalled server-side (`user.personal_data_export`);
+   * this only has to fetch it and hand it to the browser.
+   */
+  async function exportOwnData(): Promise<void> {
+    if (token === null || profile === null) return
+    setExportError(null)
+    setExporting(true)
+    try {
+      const report = await fetchPersonalDataExport(token, profile.id)
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'cogenta-personal-data.json'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (caught) {
+      setExportError(caught instanceof ApiError ? caught.message : t('profile.exportDataError'))
+    } finally {
+      setExporting(false)
+    }
   }
 
   async function revokeOthers(): Promise<void> {
@@ -822,6 +855,30 @@ export function ProfileRoute(): JSX.Element {
               ))}
             </ul>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2 id="personal-data">{t('profile.personalDataHeading')}</h2>
+          </CardTitle>
+          <CardDescription>{t('profile.personalDataIntro')}</CardDescription>
+        </CardHeader>
+        <CardBody>
+          {exportError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{exportError}</p>
+            </Notice>
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={exporting || profile === null}
+            onClick={() => void exportOwnData()}
+          >
+            {exporting ? t('profile.exportDataPending') : t('profile.exportData')}
+          </Button>
         </CardBody>
       </Card>
     </section>

@@ -8,6 +8,7 @@ import {
   type CreatedUser,
   cancelInvitation,
   createUser,
+  fetchPersonalDataExport,
   listUserSessions,
   listUsersPage,
   resendInvitation,
@@ -291,6 +292,30 @@ export function UsersRoute(): JSX.Element {
       await load()
     } catch (caught) {
       setActionError(describeApiError(caught, t('users.updateError')))
+    }
+  }
+
+  /**
+   * T09-04 (RGPD) — an admin exporting somebody else's data. Same download
+   * mechanics as the self-service export on the profile screen; the server
+   * enforces `self-or-admin` and journals the extraction either way, so
+   * this button has nothing left to guard beyond being admin-only, which
+   * this whole screen already is.
+   */
+  async function exportUserData(user: AdminUser): Promise<void> {
+    if (token === null) return
+    setActionError(null)
+    try {
+      const report = await fetchPersonalDataExport(token, user.id)
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `cogenta-personal-data-${user.id}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (caught) {
+      setActionError(describeApiError(caught, t('users.exportDataError')))
     }
   }
 
@@ -670,6 +695,13 @@ export function UsersRoute(): JSX.Element {
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => void openSessions(user)}>
                             {t('users.viewSessions', { email: user.email })}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void exportUserData(user)}
+                          >
+                            {t('users.exportData', { email: user.email })}
                           </Button>
                           <Button
                             variant={user.status === 'active' ? 'destructive' : 'secondary'}

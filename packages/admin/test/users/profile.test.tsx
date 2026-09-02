@@ -381,6 +381,31 @@ describe('my profile — password policy', () => {
   })
 })
 
+/** T09-04 (RGPD) — self-service export, available to every role. */
+describe('my profile — personal data export', () => {
+  it('downloads a JSON file of the caller’s own data', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:mock-personal-data')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+
+    render(<App />)
+    await goToProfile()
+    await screen.findByText(/Work laptop/u)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exporter mes données personnelles' }))
+
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+    })
+    const [blob] = createObjectURL.mock.calls[0] as [Blob]
+    expect(blob.type).toBe('application/json')
+
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+  })
+})
+
 describe('my profile — accessibility', () => {
   it('has no serious accessibility violation', async () => {
     const { container } = render(<App />)

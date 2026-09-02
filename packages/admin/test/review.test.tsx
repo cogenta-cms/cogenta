@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { expectNoSeriousA11yViolations } from './helpers/axe.js'
@@ -132,5 +132,58 @@ describe('review transitions refresh the sidebar status', () => {
     await screen.findByText('Rien ici.')
 
     expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+})
+
+/**
+ * Fiche 35 audit T01 — `assignReviewer` wired into the review queue too:
+ * `GET /api/users` is `admin`-only server-side, so the candidate list only
+ * populates for an actor holding `admin` alongside `editor` (the role
+ * `wf-article`'s `publish` rule grants, needed just to see this tab's rows
+ * at all per `review-router.ts`'s `scopeCollections`).
+ */
+describe('assigning a reviewer from the queue', () => {
+  it('lists real candidates and assigns through the real route', async () => {
+    // `assign-reviewer` is guarded by `update` server-side (`wf-article`'s
+    // `{ roles: ['contributor'], own: true }`), not `publish` — this actor
+    // needs `contributor` (it owns `wf-entry-1`, `createdBy: 'user-1'`
+    // matches the default test user) to call it at all, `editor` to be a
+    // real, listable candidate itself (the `publish` rule `reviewerCandidatesFor`
+    // filters on), and `admin` for the candidate list to populate. Only the
+    // "mine" tab's scope gate is `update`, so that is the tab this uses.
+    signedIn(['contributor', 'editor', 'admin'])
+    render(<App />)
+    await goToReview()
+    fireEvent.click(screen.getByRole('tab', { name: 'Mes soumissions' }))
+    await screen.findByText('Workflow draft')
+
+    const select = await screen.findByRole('combobox', {
+      name: 'Relecteur assigné pour « Workflow draft »',
+    })
+    expect(await within(select).findByRole('option', { name: 'alice@example.com' })).toBeDefined()
+
+    fireEvent.change(select, { target: { value: 'user-1' } })
+
+    // `changeReviewer` reloads the queue on success, replacing this row's
+    // DOM node — re-query rather than trust the stale `select` reference.
+    await waitFor(async () => {
+      const refreshed = await screen.findByRole('combobox', {
+        name: 'Relecteur assigné pour « Workflow draft »',
+      })
+      expect((refreshed as HTMLSelectElement).value).toBe('user-1')
+    })
+  })
+
+  it('offers only "unassigned" to a non-admin, who cannot browse the account list', async () => {
+    signedIn(['editor'])
+    render(<App />)
+    await goToReview()
+    fireEvent.click(screen.getByRole('tab', { name: 'Toutes en attente' }))
+    await screen.findByText('Workflow draft')
+
+    const select = await screen.findByRole('combobox', {
+      name: 'Relecteur assigné pour « Workflow draft »',
+    })
+    expect(within(select).getAllByRole('option')).toHaveLength(1)
   })
 })

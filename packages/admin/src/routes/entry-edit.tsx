@@ -14,6 +14,7 @@ import type {
 } from '../api/content-client.js'
 import {
   approveReview,
+  assignReviewer,
   createEntry,
   deleteEntry,
   duplicateEntry,
@@ -26,7 +27,7 @@ import {
   updateEntry,
 } from '../api/content-client.js'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
-import { readUser } from '../api/users-client.js'
+import { type AdminUser, listUsers, readUser } from '../api/users-client.js'
 import { AssistantPanel, type AssistField } from '../assist/assistant-panel.js'
 import { ClassifyPanel } from '../assist/classify-panel.js'
 import { FaqSchemaPanel } from '../assist/faq-schema-panel.js'
@@ -51,8 +52,9 @@ import { EntryProductLinkCard } from '../commerce/entry-product-link-card.js'
 import { previewPermalink } from '../lib/permalink.js'
 import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
-import { canPerform } from '../schema/permissions.js'
+import { canPerform, PUBLIC_ROLE } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { normalisePermissionRule } from '../schema/types.js'
 import { SeoPanel } from '../seo/seo-panel.js'
 import { useNewEntryDefaultBlocksSetting } from '../settings/site-settings-context.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
@@ -281,6 +283,8 @@ export function EntryEditRoute(): JSX.Element {
   const [workflowBusy, setWorkflowBusy] = useState(false)
   const [workflowError, setWorkflowError] = useState<ApiErrorDescription | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+  /** Fiche 35 audit T01 — every account that holds `publish` on this collection, the reviewer picker's real options. */
+  const [reviewerCandidates, setReviewerCandidates] = useState<readonly AdminUser[]>([])
   /**
    * Whether the assistant has anything to show at all (L20 audit point 16).
    * `AssistantPanel`/`ClassifyPanel`/`ModerationCheck`/`FaqSchemaPanel` each
@@ -847,6 +851,28 @@ export function EntryEditRoute(): JSX.Element {
     }
   }
 
+  /**
+   * Fiche 35 audit T01 — the point mort this closes: `assignReviewer`
+   * (`content-client.ts`) and its route existed since ADR-0027, unreachable
+   * from any screen. Guarded by `update` server-side (not `publish`), so
+   * both a submitter proposing a reviewer and a reviewer reassigning one hit
+   * the same route.
+   */
+  async function changeReviewer(reviewerId: string | null): Promise<void> {
+    if (token === null || id === undefined) return
+    setWorkflowBusy(true)
+    setWorkflowError(null)
+    setWorkflowMessage(null)
+    try {
+      const entry = await assignReviewer(token, name, id, reviewerId)
+      setAssignedReviewer(entry.assignedReviewer)
+    } catch (caught) {
+      setWorkflowError(describeApiError(caught, t('entryEdit.workflow.reviewerAssignError')))
+    } finally {
+      setWorkflowBusy(false)
+    }
+  }
+
   /** Copies the working state into a new draft, then opens it — never the source. */
   async function duplicate(): Promise<void> {
     if (token === null || id === undefined) return
@@ -923,6 +949,39 @@ export function EntryEditRoute(): JSX.Element {
   const workflowEnabled = collection?.workflow?.enabled === true
   const canSubmitReview = workflowEnabled && !isNew && canWrite
   const canReview = workflowEnabled && !isNew && canPublish
+
+  /**
+   * Fiche 35 audit T01 — the reviewer picker's options: every account that
+   * holds `publish` on this collection, since that is who can actually act
+   * on an assignment. `GET /api/users` (`listUsers`) is `admin`-only
+   * server-side (`users-router.ts`'s `requireAdmin`) regardless of what a
+   * collection's own `publish` rule says — the same reason `dashboard.tsx`,
+   * `audit.tsx`, `trash.tsx` and `version-history.tsx` all gate their own
+   * `listUsers` call on `isAdmin` and fall back to an empty map rather than
+   * a call the server would 403. A `publish`-holding non-admin still sees
+   * this select (visibility is `canSubmitReview || canReview`, unrelated to
+   * `admin`) and can still clear an assignment or keep an id already set —
+   * it just cannot discover new candidates by name, the same degradation
+   * every other name-resolving screen here already accepts.
+   */
+  const isAdmin = roles.includes('admin')
+  useEffect(() => {
+    if (token === null || collection === undefined || !isAdmin) return
+    if (!workflowEnabled || !(canSubmitReview || canReview)) return
+    const rule = normalisePermissionRule(collection.permissions.publish)
+    listUsers(token)
+      .then((users) => {
+        setReviewerCandidates(
+          rule.roles.includes(PUBLIC_ROLE)
+            ? users
+            : users.filter((candidate) =>
+                candidate.roles.some((role) => rule.roles.includes(role)),
+              ),
+        )
+      })
+      .catch(() => setReviewerCandidates([]))
+  }, [token, collection, isAdmin, workflowEnabled, canSubmitReview, canReview])
+
   /**
    * Scheduling needs somewhere to put the date: the store refuses
    * `unpublish(id, { status: 'scheduled' })` on a collection that never
@@ -1360,10 +1419,35 @@ export function EntryEditRoute(): JSX.Element {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">
+                    <Label htmlFor="entry-workflow-reviewer">
                       {t('entryEdit.workflow.reviewerLabel')}
-                    </span>
-                    <span>{assignedReviewer ?? t('entryEdit.workflow.reviewerUnassigned')}</span>
+                    </Label>
+                    <Select
+                      id="entry-workflow-reviewer"
+                      aria-label={t('entryEdit.workflow.reviewerSelectLabel')}
+                      value={assignedReviewer ?? ''}
+                      disabled={workflowBusy}
+                      onChange={(event) =>
+                        void changeReviewer(event.target.value === '' ? null : event.target.value)
+                      }
+                    >
+                      <option value="">{t('entryEdit.workflow.reviewerUnassigned')}</option>
+                      {reviewerCandidates.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.displayName ?? candidate.email}
+                        </option>
+                      ))}
+                      {/* An id assigned by someone else, or from before this
+                          picker existed, that is not in `reviewerCandidates`
+                          (a role change, a removed account…) — kept
+                          selectable rather than silently reset to
+                          unassigned, which would be a write this screen
+                          never asked for. */}
+                      {assignedReviewer !== null &&
+                        !reviewerCandidates.some(
+                          (candidate) => candidate.id === assignedReviewer,
+                        ) && <option value={assignedReviewer}>{assignedReviewer}</option>}
+                    </Select>
                   </div>
 
                   {canReview && reviewState === 'pending' && (

@@ -3,16 +3,20 @@ import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { ApiError } from '../api/client.js'
-import { approveReview, requestReviewChanges } from '../api/content-client.js'
+import { approveReview, assignReviewer, requestReviewChanges } from '../api/content-client.js'
 import type { ReviewQueueItem, ReviewQueueScope } from '../api/review-client.js'
 import { listReviewQueue } from '../api/review-client.js'
+import { type AdminUser, listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { PUBLIC_ROLE } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { normalisePermissionRule } from '../schema/types.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
   buttonVariants,
   Notice,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -46,12 +50,15 @@ export function ReviewRoute(): JSX.Element {
   const refreshChromeStatus = useRefreshChromeStatus()
 
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
 
   const [scope, setScope] = useState<ReviewQueueScope>('assigned')
   const [items, setItems] = useState<readonly ReviewQueueItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  /** Fiche 35 audit T01 — every account, filtered per row against that row's own collection's `publish` rule (the eligible-reviewer question). Fetched once; who is eligible per collection is a render-time filter, not a second fetch per collection. */
+  const [allUsers, setAllUsers] = useState<readonly AdminUser[]>([])
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -69,6 +76,57 @@ export function ReviewRoute(): JSX.Element {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Fiche 35 audit T01 — `listUsers` is `admin`-only server-side, unrelated
+  // to what a collection's `publish` rule says; same `isAdmin` gate as
+  // `dashboard.tsx`/`audit.tsx`/`trash.tsx`/`version-history.tsx`'s own
+  // `listUsers` calls, same reason (see `entry-edit.tsx`'s longer note).
+  useEffect(() => {
+    if (token === null || !isAdmin) return
+    listUsers(token)
+      .then(setAllUsers)
+      .catch(() => setAllUsers([]))
+  }, [token, isAdmin])
+
+  /**
+   * Fiche 35 audit T01 — the point mort this closes: `assignReviewer`
+   * (`content-client.ts:614`) and its route existed since ADR-0027,
+   * unreachable from any screen. Guarded by `update` server-side (not
+   * `publish`), so this is safe to offer on every tab: "pending"/"assigned"
+   * only ever list collections this actor holds `publish` on
+   * (`review-router.ts`'s `scopeCollections`), and "mine" only ever lists
+   * this actor's own entries, which `update`'s `own: true` already covers.
+   */
+  async function changeReviewer(
+    collection: string,
+    id: string,
+    reviewerId: string | null,
+  ): Promise<void> {
+    if (token === null) return
+    setBusy(id)
+    setError(null)
+    try {
+      await assignReviewer(token, collection, id, reviewerId)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('review.reviewerAssignError'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** The reviewer picker's real options for one row — every account that holds `publish` on that row's own collection. */
+  function reviewerCandidatesFor(collection: string): readonly AdminUser[] {
+    const target =
+      schemaState.status === 'ready'
+        ? schemaState.schema.collections.find((candidate) => candidate.name === collection)
+        : undefined
+    if (target === undefined) return []
+    const rule = normalisePermissionRule(target.permissions.publish)
+    return rule.roles.includes(PUBLIC_ROLE)
+      ? allUsers
+      : allUsers.filter((candidate) => candidate.roles.some((role) => rule.roles.includes(role)))
+  }
 
   async function approve(collection: string, id: string): Promise<void> {
     if (token === null) return
@@ -148,6 +206,7 @@ export function ReviewRoute(): JSX.Element {
                 <TableHeader>{t('review.author')}</TableHeader>
                 <TableHeader>{t('review.age')}</TableHeader>
                 <TableHeader>{t('review.state')}</TableHeader>
+                <TableHeader>{t('review.reviewer')}</TableHeader>
                 <TableHeader>{t('review.actions')}</TableHeader>
               </TableRow>
             </TableHead>
@@ -159,6 +218,35 @@ export function ReviewRoute(): JSX.Element {
                   <TableCell>{item.entry.createdBy ?? '—'}</TableCell>
                   <TableCell>{ageOf(item.entry.updatedAt, t)}</TableCell>
                   <TableCell>{t(`entryEdit.workflow.state.${item.entry.reviewState}`)}</TableCell>
+                  <TableCell>
+                    <Select
+                      aria-label={t('review.reviewerSelectLabel', { title: titleOf(item) })}
+                      value={item.entry.assignedReviewer ?? ''}
+                      disabled={busy === item.entry.id}
+                      onChange={(event) =>
+                        void changeReviewer(
+                          item.collection,
+                          item.entry.id,
+                          event.target.value === '' ? null : event.target.value,
+                        )
+                      }
+                    >
+                      <option value="">{t('entryEdit.workflow.reviewerUnassigned')}</option>
+                      {reviewerCandidatesFor(item.collection).map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.displayName ?? candidate.email}
+                        </option>
+                      ))}
+                      {item.entry.assignedReviewer !== null &&
+                        !reviewerCandidatesFor(item.collection).some(
+                          (candidate) => candidate.id === item.entry.assignedReviewer,
+                        ) && (
+                          <option value={item.entry.assignedReviewer}>
+                            {item.entry.assignedReviewer}
+                          </option>
+                        )}
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
                       <Link

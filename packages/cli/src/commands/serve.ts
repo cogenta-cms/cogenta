@@ -3638,6 +3638,14 @@ async function loadRenderMedia(
       ...(asset.width === null ? {} : { width: asset.width }),
       ...(asset.height === null ? {} : { height: asset.height }),
       focal: asset.focal,
+      // Fiche 05 task 2: the field `ImageSource`/`variantUrl` have carried
+      // since `theme@1.2` (`packages/render/src/images/types.ts`'s own
+      // `version` doc comment) but nobody ever set — a replaced original
+      // kept serving under the exact same `/_image?id=…` query string a
+      // year-long `immutable` cache had already stored. `contentHash`
+      // changes on every `MediaStore.replace()`, so folding it in here is
+      // what actually breaks that cache.
+      version: asset.contentHash,
     })
   }
   return found

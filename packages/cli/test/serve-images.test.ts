@@ -257,17 +257,96 @@ describe('cogenta serve — images (L10 task 5)', () => {
       const html = await (await fetch(`${server.base}/with-a-picture`)).text()
 
       expect(html).toContain('srcset=')
-      expect(html).toContain(`/_image?id=${asset.id}&amp;w=320 320w`)
-      expect(html).toContain(`/_image?id=${asset.id}&amp;w=960 960w`)
+      // `&v=` (fiche 05 task 2) rides along on every candidate URL — it is
+      // the asset's `contentHash`, not asserted verbatim here since it is
+      // content-derived, but its presence is what a replace changes.
+      expect(html).toMatch(new RegExp(`/_image\\?id=${asset.id}&amp;w=320&amp;v=[^"'\\s]+ 320w`))
+      expect(html).toMatch(new RegExp(`/_image\\?id=${asset.id}&amp;w=960&amp;v=[^"'\\s]+ 960w`))
       // Alt text comes from the media entity, never invented by the theme.
       expect(html).toContain('alt="A wide gradient"')
 
       // The same asset, absolute, as the social image: a crawler follows no
       // relative path and sends no session.
-      expect(html).toContain(
-        `<meta property="og:image" content="https://example.com/_image?id=${asset.id}&amp;w=1000" />`,
+      expect(html).toMatch(
+        new RegExp(
+          `<meta property="og:image" content="https://example\\.com/_image\\?id=${asset.id}&amp;w=1000&amp;v=[^"']+" />`,
+        ),
       )
       expect(html).toContain('<meta name="twitter:card" content="summary_large_image" />')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  // Fiche 05 task 2: `RenderMediaAsset.version` (`contentHash`) was already
+  // computed by `loadRenderMedia` but never actually read by `variantUrl`,
+  // so replacing a logo left every already-rendered page pointing at the
+  // exact same `/_image?id=…` a year-long `immutable` cache had already
+  // stored. What actually breaks that cache is the URL itself changing —
+  // a browser or CDN holding an `immutable` response never revalidates it,
+  // so it never learns the origin changed at all.
+  it('changes the rendered image URL after a replace, so an already-cached page never needs to notice', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const asset = await upload(server.base, token, makePng(1000, 500), 'A wide gradient')
+
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            values: { title: 'Cache bust', slug: 'cache-bust', cover: asset.id },
+            blocks: {
+              body: [
+                {
+                  key: 'figure-1',
+                  type: 'mediaFigure',
+                  data: { media: asset.id, caption: 'A wide gradient' },
+                },
+              ],
+            },
+          }),
+        })
+      ).json()) as { data: { id: string } }
+      await fetch(`${server.base}/api/content/page/${created.data.id}/publish`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+
+      const before = await (await fetch(`${server.base}/cache-bust`)).text()
+      const beforeMatch = before.match(/\/_image\?id=[^"'\s]+&(?:amp;)?w=\d+&(?:amp;)?v=[^"'\s]+/)
+      expect(beforeMatch).not.toBeNull()
+      const beforeUrl = (beforeMatch?.[0] ?? '').replaceAll('&amp;', '&')
+      const beforeContent = await (await fetch(`${server.base}${beforeUrl}`)).arrayBuffer()
+
+      // A different size, not just re-uploaded identical bytes: the fixture
+      // gradient is a pure function of width/height, so this is what makes
+      // the replacement's pixels actually differ from the original's.
+      const form = new FormData()
+      form.append('file', new Blob([makePng(900, 450)], { type: 'image/png' }), 'gradient.png')
+      const replaced = await fetch(`${server.base}/api/media/${asset.id}/replace`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      })
+      expect(replaced.status).toBe(200)
+
+      const after = await (await fetch(`${server.base}/cache-bust`)).text()
+      const afterMatch = after.match(/\/_image\?id=[^"'\s]+&(?:amp;)?w=\d+&(?:amp;)?v=[^"'\s]+/)
+      expect(afterMatch).not.toBeNull()
+      const afterUrl = (afterMatch?.[0] ?? '').replaceAll('&amp;', '&')
+
+      // Same asset id and requested width, but a different `v=` — the
+      // rendered `src`/`srcset` genuinely changed, which is the only thing
+      // that makes an already-cached `immutable` response irrelevant.
+      expect(afterUrl).not.toBe(beforeUrl)
+      expect(afterUrl.split('v=')[1]).not.toBe(beforeUrl.split('v=')[1])
+
+      const afterContent = await (await fetch(`${server.base}${afterUrl}`)).arrayBuffer()
+      expect(Buffer.from(afterContent).equals(Buffer.from(beforeContent))).toBe(false)
     } finally {
       await server.stop()
     }

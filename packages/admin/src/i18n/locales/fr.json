@@ -802,6 +802,9 @@
     "directionLabel": "Ordre",
     "directionDesc": "Décroissant",
     "directionAsc": "Croissant",
+    "dateFromLabel": "Depuis le",
+    "dateToLabel": "Jusqu’au",
+    "totalCount": "{{shown}} affichés sur {{total}}",
 
     "selectedCount": "{{count}} sélectionné(s)",
     "selectAsset": "Sélectionner « {{filename}} »",

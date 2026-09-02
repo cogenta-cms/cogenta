@@ -81,6 +81,11 @@ export function MediaRoute(): JSX.Element {
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [kindFilter, setKindFilter] = useState<MediaKind | ''>('')
   const [tagFilter, setTagFilter] = useState('')
+  // Fiche 05 task 7: both already supported by GET /api/media, never wired
+  // to this screen.
+  const [fromFilter, setFromFilter] = useState('')
+  const [toFilter, setToFilter] = useState('')
+  const [total, setTotal] = useState<number | null>(null)
   const [sort, setSort] = useState<{ field: MediaSortField; direction: 'asc' | 'desc' }>({
     field: 'createdAt',
     direction: 'desc',
@@ -137,6 +142,8 @@ export function MediaRoute(): JSX.Element {
         ...(kindFilter === '' ? {} : { kind: kindFilter }),
         ...(tagFilter.trim() === '' ? {} : { tag: tagFilter.trim() }),
         ...(submittedQuery.trim() === '' ? {} : { q: submittedQuery.trim() }),
+        ...(fromFilter === '' ? {} : { from: fromFilter }),
+        ...(toFilter === '' ? {} : { to: toFilter }),
         sort: sort.field,
         direction: sort.direction,
         ...(selectedFolderId === undefined ? {} : { folderId: selectedFolderId }),
@@ -144,13 +151,24 @@ export function MediaRoute(): JSX.Element {
       setItems(page.items)
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
+      setTotal(page.total ?? null)
       setSelected(new Set())
     } catch (caught) {
       setError(describeApiError(caught, t('media.loadError')))
     } finally {
       setLoading(false)
     }
-  }, [token, kindFilter, tagFilter, submittedQuery, sort, selectedFolderId, t])
+  }, [
+    token,
+    kindFilter,
+    tagFilter,
+    submittedQuery,
+    fromFilter,
+    toFilter,
+    sort,
+    selectedFolderId,
+    t,
+  ])
 
   useEffect(() => {
     void load()
@@ -166,6 +184,8 @@ export function MediaRoute(): JSX.Element {
         ...(kindFilter === '' ? {} : { kind: kindFilter }),
         ...(tagFilter.trim() === '' ? {} : { tag: tagFilter.trim() }),
         ...(submittedQuery.trim() === '' ? {} : { q: submittedQuery.trim() }),
+        ...(fromFilter === '' ? {} : { from: fromFilter }),
+        ...(toFilter === '' ? {} : { to: toFilter }),
         sort: sort.field,
         direction: sort.direction,
         ...(selectedFolderId === undefined ? {} : { folderId: selectedFolderId }),
@@ -173,6 +193,7 @@ export function MediaRoute(): JSX.Element {
       setItems((current) => [...current, ...page.items])
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
+      setTotal(page.total ?? null)
     } catch (caught) {
       setError(describeApiError(caught, t('media.loadError')))
     } finally {
@@ -545,8 +566,36 @@ export function MediaRoute(): JSX.Element {
                   </Select>
                 )}
               </Field>
+
+              <Field label={t('media.dateFromLabel')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="date"
+                    value={fromFilter}
+                    onChange={(event) => setFromFilter(event.target.value)}
+                  />
+                )}
+              </Field>
+
+              <Field label={t('media.dateToLabel')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="date"
+                    value={toFilter}
+                    onChange={(event) => setToFilter(event.target.value)}
+                  />
+                )}
+              </Field>
             </form>
           </search>
+
+          {total !== null && (
+            <p className="text-sm text-muted-foreground">
+              {t('media.totalCount', { shown: items.length, total })}
+            </p>
+          )}
 
           {selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2">

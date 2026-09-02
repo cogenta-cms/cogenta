@@ -284,6 +284,9 @@ describe('media library pagination', () => {
 
     expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(25)
     expect(screen.queryByText('seed-30.png')).toBeNull()
+    // Fiche 05 task 7: the total from the API's own page.total, not just the
+    // count of what happened to load so far.
+    expect(await screen.findByText('25 affichés sur 30')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Charger la suite' }))
 
@@ -292,6 +295,35 @@ describe('media library pagination', () => {
     })
     expect(screen.getByText('seed-30.png')).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Charger la suite' })).toBeNull()
+    expect(screen.getByText('30 affichés sur 30')).toBeDefined()
+  })
+
+  // Fiche 05 task 7: both fields already existed in `ListMediaOptions` and
+  // the server's own query parsing — this screen never rendered them.
+  it('sends a date range to the API when the from/to filters are set', async () => {
+    const requestedUrls: string[] = []
+    installMockFetch({ mediaSeedCount: 3 })
+    const mockedFetch = globalThis.fetch
+    vi.stubGlobal('fetch', ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/media?') || url.endsWith('/api/media')) requestedUrls.push(url)
+      return mockedFetch(input, init)
+    }) as typeof fetch)
+
+    render(<App />)
+    await goToMedia()
+    await screen.findAllByRole('button', { name: /seed-\d+\.png/ })
+
+    fireEvent.change(screen.getByLabelText('Depuis le'), { target: { value: '2026-01-01' } })
+    fireEvent.change(screen.getByLabelText('Jusqu’au'), { target: { value: '2026-01-31' } })
+
+    await waitFor(() => {
+      expect(
+        requestedUrls.some(
+          (url) => url.includes('from=2026-01-01') && url.includes('to=2026-01-31'),
+        ),
+      ).toBe(true)
+    })
   })
 
   it('shows no "load more" control when the library fits on one page', async () => {

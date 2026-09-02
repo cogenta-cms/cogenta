@@ -803,6 +803,9 @@
     "directionLabel": "Order",
     "directionDesc": "Descending",
     "directionAsc": "Ascending",
+    "dateFromLabel": "From",
+    "dateToLabel": "To",
+    "totalCount": "{{shown}} shown of {{total}}",
 
     "selectedCount": "{{count}} selected",
     "selectAsset": "Select \"{{filename}}\"",

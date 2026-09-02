@@ -70,6 +70,9 @@ function field(overrides: Partial<SchemaField['options']> = {}, many = true): Sc
     unique: false,
     hasCustomValidation: false,
     options: { of: 'topic', many, ...overrides },
+    // Kept exactly `topics` (the raw name) for this file's own assertions —
+    // the label fallback itself is `humanize-field-name.test.ts`'s job.
+    admin: { label: 'topics' },
   }
 }
 

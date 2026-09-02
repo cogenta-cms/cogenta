@@ -23,6 +23,7 @@ import { loadTablePrefs, PAGE_SIZES, saveTablePrefs } from '../lib/table-prefs.j
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
+import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
   buttonVariants,
@@ -89,6 +90,7 @@ export function CollectionListRoute(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const refreshChromeStatus = useRefreshChromeStatus()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
 
@@ -385,6 +387,10 @@ export function CollectionListRoute(): JSX.Element {
       // Never guess the new state locally — the server holds the transition
       // table, so the only honest thing after an action is to ask it again.
       await load()
+      // Fiche 35 audit T03: without this, trashing a row here left the
+      // sidebar's "Trash" badge showing a stale count — same fix as
+      // `trash.tsx`'s own restore/purge.
+      if (action === 'trash') refreshChromeStatus()
     } catch (caught) {
       setRowError(describeApiError(caught, t('collectionList.rowActionError')))
     } finally {
@@ -429,6 +435,9 @@ export function CollectionListRoute(): JSX.Element {
     setBulkReport({ action, total: ids.length, failures })
     setBulkRunning(null)
     await load()
+    // Same reasoning as `runRowAction` above — a bulk trash from the
+    // selection toolbar is exactly as capable of leaving the badge stale.
+    if (action === 'trash' && failures.length < ids.length) refreshChromeStatus()
   }
 
   function requestBulk(action: BulkAction): void {

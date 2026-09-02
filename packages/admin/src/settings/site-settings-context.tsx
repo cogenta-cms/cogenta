@@ -95,6 +95,25 @@ export interface BrandingSettings {
 }
 
 /**
+ * Pure extraction of `BrandingSettings` from a settings list — split out of
+ * `useBrandingSettings` below so a screen that renders before
+ * `SiteSettingsProvider` exists (the anonymous login screen, fiche 35
+ * audit T01) can derive the same white-label decision from its own direct
+ * `listSettings()` call, instead of duplicating the two keys and the
+ * "unset means show Cogenta" default a second time.
+ */
+export function deriveBrandingSettings(settings: readonly SiteSetting[]): BrandingSettings {
+  const byKey = new Map(settings.map((setting) => [setting.key, setting.value]))
+  const showCogentaBranding = byKey.get('branding.showCogentaBranding')
+  const customLogoMediaId = byKey.get('branding.customLogoMediaId')
+  return {
+    showCogentaBranding: showCogentaBranding !== false,
+    customLogoMediaId:
+      typeof customLogoMediaId === 'string' && customLogoMediaId !== '' ? customLogoMediaId : null,
+  }
+}
+
+/**
  * Cogenta's own credit and its white-label override (fiche L21 task 8),
  * read off the same provider `useFormattingSettings` already does — the
  * same "default to the pre-feature behaviour while loading or on error"
@@ -107,22 +126,20 @@ export function useBrandingSettings(): BrandingSettings {
   if (state.status !== 'ready') {
     return { showCogentaBranding: true, customLogoMediaId: null }
   }
-  const byKey = new Map(state.settings.map((setting) => [setting.key, setting.value]))
-  const showCogentaBranding = byKey.get('branding.showCogentaBranding')
-  const customLogoMediaId = byKey.get('branding.customLogoMediaId')
-  return {
-    showCogentaBranding: showCogentaBranding !== false,
-    customLogoMediaId:
-      typeof customLogoMediaId === 'string' && customLogoMediaId !== '' ? customLogoMediaId : null,
-  }
+  return deriveBrandingSettings(state.settings)
+}
+
+/** Pure counterpart of `useSiteTitle`, for the same reason `deriveBrandingSettings` exists — a caller reading its own `listSettings()` outside `SiteSettingsProvider`. */
+export function deriveSiteTitle(settings: readonly SiteSetting[]): string | null {
+  const title = settings.find((setting) => setting.key === 'general.title')?.value
+  return typeof title === 'string' && title !== '' ? title : null
 }
 
 /** `general.title`, read the same defensive way — `''` (unset) normalised to `null`, never blocking a caller that only wants a fallback label. */
 export function useSiteTitle(): string | null {
   const state = useSiteSettingsState()
   if (state.status !== 'ready') return null
-  const title = state.settings.find((setting) => setting.key === 'general.title')?.value
-  return typeof title === 'string' && title !== '' ? title : null
+  return deriveSiteTitle(state.settings)
 }
 
 /** The registry's own default (`site-settings-registry.ts`'s `content.newEntryDefaultBlocks`), kept in sync by hand for the reason `DEFAULT_TIME_ZONE` above already documents. */

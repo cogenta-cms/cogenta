@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { expectNoSeriousA11yViolations } from './helpers/axe.js'
@@ -105,5 +105,128 @@ describe('the editorial workflow sidebar', () => {
 
     const container = document.body
     await expectNoSeriousA11yViolations(container)
+  })
+})
+
+/**
+ * Fiche 35 audit T02 — none of the three workflow transitions here called
+ * `useRefreshChromeStatus()`, so the sidebar's "à relire" badge
+ * (`reviewPending`) stayed stale until the next full navigation — same bug
+ * `review.tsx`'s equivalent transitions have, same fix.
+ */
+describe('workflow transitions in the editor refresh the sidebar status', () => {
+  function shellStatusCallCount(): number {
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status'))
+      .length
+  }
+
+  it('refreshes after submitting for review', async () => {
+    signedIn(['contributor'])
+    await openWfEntry()
+    await screen.findByRole('button', { name: 'Soumettre à relecture' })
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Soumettre à relecture' }))
+    await screen.findByText('En attente de relecture')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+
+  it('refreshes after approving', async () => {
+    signedIn(['editor'], 'pending')
+    await openWfEntry()
+    await screen.findByText('En attente de relecture')
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
+    await screen.findByText('Approuvé')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+
+  it('refreshes after requesting changes', async () => {
+    signedIn(['editor'], 'pending')
+    await openWfEntry()
+    await screen.findByRole('button', { name: 'Demander des modifications' })
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Demander des modifications' }))
+    await screen.findByText('Modifications demandées')
+
+    expect(shellStatusCallCount()).toBeGreaterThan(before)
+  })
+})
+
+/**
+ * Fiche 35 audit T01 — `assignReviewer` (`content-client.ts:614`) and its
+ * route existed since ADR-0027 but no screen ever called it. `GET
+ * /api/users` behind the candidate list is `admin`-only server-side, same
+ * as `dashboard.tsx`/`trash.tsx`/`version-history.tsx`'s own `listUsers`
+ * calls — the signed-in actor here holds `contributor` (owns `wf-entry-1`,
+ * `createdBy: 'user-1'` matches the default test user) so it may call
+ * `assign-reviewer` itself, `editor` so it is itself a real candidate the
+ * `publish` rule includes, and `admin` so the candidate list actually
+ * populates.
+ */
+/**
+ * Fiche 35 audit T01 — `assignReviewer` (`content-client.ts:614`) and its
+ * route existed since ADR-0027 but no screen ever called it. `GET
+ * /api/users` behind the candidate list is `admin`-only server-side, same
+ * as `dashboard.tsx`/`trash.tsx`/`version-history.tsx`'s own `listUsers`
+ * calls — the signed-in actor here holds `contributor` (owns `wf-entry-1`,
+ * `createdBy: 'user-1'` matches the default test user) so it may call
+ * `assign-reviewer` itself, `editor` so it is itself a real candidate the
+ * `publish` rule includes, and `admin` so the candidate list actually
+ * populates. A heavier role set renders more of the shell (more nav/badge
+ * fetches), so this describe uses its own longer-timeout open rather than
+ * the shared `openWfEntry()` default.
+ */
+describe('assigning a reviewer', () => {
+  async function openWfEntrySlow(): Promise<void> {
+    window.history.pushState(null, '', '/collections/wf-article/wf-entry-1')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Modifier : Workflow article' }, { timeout: 8000 })
+  }
+
+  it('lists real candidates and assigns through the real route', async () => {
+    signedIn(['contributor', 'editor', 'admin'])
+    await openWfEntrySlow()
+
+    const select = await screen.findByRole(
+      'combobox',
+      { name: 'Relecteur assigné' },
+      { timeout: 8000 },
+    )
+    expect(
+      await within(select).findByRole('option', { name: 'alice@example.com' }, { timeout: 8000 }),
+    ).toBeDefined()
+
+    fireEvent.change(select, { target: { value: 'user-1' } })
+
+    await waitFor(
+      () => {
+        expect((select as HTMLSelectElement).value).toBe('user-1')
+      },
+      { timeout: 8000 },
+    )
+  })
+
+  it('offers only "unassigned" to a non-admin, who cannot browse the account list', async () => {
+    signedIn(['contributor'])
+    await openWfEntrySlow()
+
+    const select = await screen.findByRole(
+      'combobox',
+      { name: 'Relecteur assigné' },
+      { timeout: 8000 },
+    )
+    expect(within(select).getAllByRole('option')).toHaveLength(1)
   })
 })

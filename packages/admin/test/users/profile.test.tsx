@@ -406,6 +406,101 @@ describe('my profile — personal data export', () => {
   })
 })
 
+/**
+ * Fiche 35 audit T04 — `getChannelPreferences`/`setChannelPreferences`
+ * (`notices-client.ts`) existed since fiche 38 with no screen ever calling
+ * them. `channels.tsx` (the linking screen) deliberately left this out of
+ * its own scope — this is that screen, on `profile.tsx`.
+ */
+describe('my profile — notification preferences', () => {
+  it('explains there is nothing to configure yet when no channel is linked', async () => {
+    render(<App />)
+    await goToProfile()
+
+    expect(
+      await screen.findByText(
+        "Aucun canal lié pour le moment. Liez un compte Telegram, Slack ou Discord depuis l'écran Canaux pour choisir ce qu'il reçoit.",
+      ),
+    ).toBeDefined()
+  })
+
+  it('loads a linked channel’s real preferences, changes them, and saves through the real route', async () => {
+    installMockFetch({
+      linkedChannels: [
+        {
+          channelName: 'telegram',
+          channelUserId: 'tg-user-1',
+          linkedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+      channelPreferences: {
+        telegram: { minSeverity: 'info', grouping: 'immediate', quietHours: null },
+      },
+    })
+    const first = render(<App />)
+    await goToProfile()
+
+    const severity = (await screen.findByLabelText('Gravité minimale reçue')) as HTMLSelectElement
+    expect(severity.value).toBe('info')
+
+    fireEvent.change(severity, { target: { value: 'critical' } })
+    fireEvent.change(screen.getByLabelText('Regroupement'), { target: { value: 'daily' } })
+    fireEvent.click(screen.getByLabelText('Heures calmes'))
+    fireEvent.change(screen.getByLabelText('De'), { target: { value: '22:00' } })
+    fireEvent.change(screen.getByLabelText('À'), { target: { value: '07:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('Enregistré.')).toBeDefined()
+    first.unmount()
+    // `BrowserRouter` reads real `window.history`, left at `/profile` by
+    // the first render above — reset it the same way `setup.ts`'s own
+    // `afterEach` does, so the second render starts fresh at the dashboard.
+    window.history.pushState(null, '', '/')
+
+    // Reloading the screen proves the write actually landed server-side,
+    // not just in this component's own local state.
+    const { unmount } = render(<App />)
+    await goToProfile()
+    expect(
+      (await screen.findByLabelText('Gravité minimale reçue')) as HTMLSelectElement,
+    ).toHaveProperty('value', 'critical')
+    expect(screen.getByLabelText('Regroupement')).toHaveProperty('value', 'daily')
+    expect(screen.getByLabelText('De')).toHaveProperty('value', '22:00')
+    expect(screen.getByLabelText('À')).toHaveProperty('value', '07:00')
+    unmount()
+  })
+
+  it('only ever reads and writes this signed-in account’s own preferences (no id in any call)', async () => {
+    installMockFetch({
+      linkedChannels: [
+        {
+          channelName: 'slack',
+          channelUserId: 'slack-user-1',
+          linkedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+    })
+    const fetchSpy = vi.fn(globalThis.fetch)
+    vi.stubGlobal('fetch', fetchSpy)
+
+    render(<App />)
+    await goToProfile()
+    await screen.findByLabelText('Gravité minimale reçue')
+
+    // Every request this screen makes for preferences names the channel
+    // type only (`telegram`/`slack`/`discord`) — never a user id — because
+    // the server resolves "whose preferences" from the bearer token, the
+    // same way every other route on this page already does.
+    const preferenceCalls = fetchSpy.mock.calls
+      .map((call) => String(call[0]))
+      .filter((url) => url.includes('/preferences'))
+    expect(preferenceCalls.length).toBeGreaterThan(0)
+    for (const url of preferenceCalls) {
+      expect(url).toContain('/api/notices/channels/slack/preferences')
+    }
+  })
+})
+
 describe('my profile — accessibility', () => {
   it('has no serious accessibility violation', async () => {
     const { container } = render(<App />)

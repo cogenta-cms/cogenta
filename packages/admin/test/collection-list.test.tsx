@@ -304,3 +304,61 @@ describe('CollectionListRoute', () => {
     expect(saved.columns).toEqual(['summary'])
   })
 })
+
+/**
+ * Fiche 35 audit T03 — neither the row action nor the bulk action called
+ * `useRefreshChromeStatus()`, so the sidebar's "Trash" badge stayed stale
+ * after trashing an entry from this screen, exactly the L20 audit point 15
+ * bug `trash.tsx`'s own restore/purge already guard against.
+ */
+describe('trashing from the collection list refreshes the sidebar status', () => {
+  function shellStatusCallCount(): number {
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status'))
+      .length
+  }
+
+  it('refreshes after a single-row trash action', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    const row = screen.getByText('First article').closest('tr')
+    if (row === null) throw new Error('expected a table row')
+    fireEvent.click(within(row).getByRole('button', { name: 'Corbeille' }))
+
+    // This fixture's `DELETE` handler answers 204 without simulating the
+    // entry actually leaving `article`'s list (unlike the trash screen's own
+    // dedicated store) — the fact this test cares about is the refresh
+    // call, not the row's disappearance.
+    await waitFor(
+      () => {
+        expect(shellStatusCallCount()).toBeGreaterThan(before)
+      },
+      { timeout: 5000 },
+    )
+  })
+
+  it('refreshes after a bulk trash action', async () => {
+    render(<App />)
+    await goToArticles()
+    await screen.findByText('First article')
+
+    const before = shellStatusCallCount()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner First article' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer (1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre à la corbeille' }))
+
+    await waitFor(
+      () => {
+        expect(shellStatusCallCount()).toBeGreaterThan(before)
+      },
+      { timeout: 5000 },
+    )
+  })
+})

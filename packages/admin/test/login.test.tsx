@@ -226,6 +226,47 @@ describe('an account with a sensitive role and no second factor', () => {
   })
 })
 
+/**
+ * Fiche 35 audit T01 — the login screen used to hard-code Cogenta's own
+ * logo (`/_cogenta/logo-cogenta.png`) and the literal `alt="Cogenta"`,
+ * defeating white-labelling on the one screen every visitor without a
+ * session sees. It now reads `GET /api/settings`'s public `branding` group
+ * the same way `app-shell.tsx`'s `renderBrandMark()` does for the signed-in
+ * chrome, just from a direct anonymous call rather than
+ * `SiteSettingsProvider` (which never mounts for `/login`).
+ */
+describe('branding on the login screen', () => {
+  it('shows the Cogenta mark by default', async () => {
+    installMockFetch()
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+
+    await waitFor(() => {
+      const logo = container.querySelector('img[alt="Cogenta"]')
+      expect(logo?.getAttribute('src')).toBe('/_cogenta/logo-cogenta.png')
+    })
+  })
+
+  it('shows the white-label logo and the site title instead, once branding is off', async () => {
+    installMockFetch({
+      siteSettings: {
+        'branding.showCogentaBranding': false,
+        'branding.customLogoMediaId': 'media-1',
+        'general.title': 'Acme Press',
+      },
+    })
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+
+    await waitFor(() => {
+      const logo = container.querySelector('img[alt="Acme Press"]')
+      expect(logo).not.toBeNull()
+      expect(logo?.getAttribute('src')).toBe('/_image?id=media-1&w=80')
+    })
+    expect(container.querySelector('img[alt="Cogenta"]')).toBeNull()
+  })
+})
+
 describe('session restore', () => {
   it('goes straight to the dashboard with a token the server still honours', async () => {
     installMockFetch()

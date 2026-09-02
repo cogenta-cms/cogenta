@@ -503,12 +503,37 @@ export function installMockFetch(
       dismissible: boolean
       action?: { code: string; href: string }
     }[]
+    /** Seeds `GET /api/notices/history` (fiche 38 task 2's notification centre, fiche 35 audit T05's period filter) — empty by default. */
+    readonly noticeHistory?: readonly {
+      id: string
+      code: string
+      severity: string
+      params?: Record<string, string>
+      action?: { code: string; href: string }
+      dismissible: boolean
+      firstSeenAt: string
+      lastSeenAt: string
+      resolvedAt: string | null
+      readAt: string | null
+    }[]
     /** What `GET /api/notices/channels` answers with (L22 task 2's "Canaux" screen) — no channel linked by default. */
     readonly linkedChannels?: readonly {
       channelName: string
       channelUserId: string
       linkedAt: string
     }[]
+    /** Seeds `GET .../preferences` per channel name (fiche 35 audit T04) — the server's own default (every severity, no quiet hours, immediate) for any channel not listed here. */
+    readonly channelPreferences?: Readonly<
+      Record<
+        string,
+        {
+          eventTypes?: readonly string[]
+          minSeverity?: 'info' | 'warning' | 'critical'
+          quietHours?: { startMinute: number; endMinute: number } | null
+          grouping?: 'immediate' | 'hourly' | 'daily'
+        }
+      >
+    >
     /** What `GET /api/webhooks-status` answers with — no endpoint configured by default. */
     readonly webhooksStatus?: {
       endpoints: readonly string[]
@@ -1843,6 +1868,7 @@ export function installMockFetch(
   const importPreviewRuns = new Map<string, MockImportRun>()
 
   let notices = [...(options.notices ?? [])]
+  let noticeHistory = [...(options.noticeHistory ?? [])]
 
   // Account state, per `installMockFetch()` call: the signed-in user plus
   // whatever the test creates through the real routes.
@@ -2283,6 +2309,26 @@ export function installMockFetch(
     ...(options.linkedChannels ?? []),
   ]
   let channelLinkCodeCounter = 0
+
+  // Fiche 35 audit T04 — per-channel notification preferences
+  // (`getChannelPreferences`/`setChannelPreferences`), one entry per
+  // channel this account has linked. The server's own default (unset =
+  // every severity, no quiet hours, immediate) if a test never seeds one.
+  interface MockChannelPreferences {
+    eventTypes: readonly string[]
+    minSeverity: 'info' | 'warning' | 'critical'
+    quietHours: { startMinute: number; endMinute: number } | null
+    grouping: 'immediate' | 'hourly' | 'daily'
+  }
+  function defaultChannelPreferences(): MockChannelPreferences {
+    return { eventTypes: [], minSeverity: 'info', quietHours: null, grouping: 'immediate' }
+  }
+  const channelPreferences = new Map<string, MockChannelPreferences>(
+    Object.entries(options.channelPreferences ?? {}).map(([channelName, prefs]) => [
+      channelName,
+      { ...defaultChannelPreferences(), ...prefs },
+    ]),
+  )
 
   // The marketplace catalog (L17). A static, fixed set of entries — the real
   // catalog is caller-assembled (`createMarketplaceCatalog`), so what matters
@@ -2838,6 +2884,38 @@ export function installMockFetch(
         return json(200, { data: notices })
       }
 
+      // `GET /api/notices/history` — fiche 38 task 2's notification centre,
+      // filterable by severity and by `since` (fiche 35 audit T05's period
+      // filter).
+      if (url.includes('/api/notices/history') && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const parsed = new URL(url, 'http://localhost')
+        const severityFilter = parsed.searchParams.get('severity')
+        const since = parsed.searchParams.get('since')
+        const until = parsed.searchParams.get('until')
+        const filtered = noticeHistory.filter(
+          (entry) =>
+            (severityFilter === null || entry.severity === severityFilter) &&
+            (since === null || entry.lastSeenAt >= since) &&
+            (until === null || entry.lastSeenAt <= until),
+        )
+        return json(200, { data: filtered })
+      }
+
+      if (url.endsWith('/api/notices/read') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        const now = new Date().toISOString()
+        const ids = body.all === true ? null : (body.ids as readonly string[] | undefined)
+        noticeHistory = noticeHistory.map((entry) =>
+          ids === null || ids?.includes(entry.id) ? { ...entry, readAt: now } : entry,
+        )
+        return new Response(null, { status: 204 })
+      }
+
       // `/api/notices/channels/*` — L22 task 2's "Canaux" screen, on the same
       // `ChannelLinkStore` fiche 38's notice delivery already exposed
       // (`channel-settings-router.ts`, unmodified by this lot).
@@ -2878,6 +2956,24 @@ export function installMockFetch(
         if (action === undefined && method === 'DELETE') {
           linkedChannels = linkedChannels.filter((link) => link.channelName !== channelName)
           return new Response(null, { status: 204 })
+        }
+
+        // Fiche 35 audit T04 — per-channel notification preferences.
+        if (action === 'preferences' && method === 'GET') {
+          return json(200, {
+            data: channelPreferences.get(channelName) ?? defaultChannelPreferences(),
+          })
+        }
+        if (action === 'preferences' && method === 'PUT') {
+          const next: MockChannelPreferences = {
+            eventTypes: Array.isArray(body.eventTypes) ? (body.eventTypes as string[]) : [],
+            minSeverity: (body.minSeverity as MockChannelPreferences['minSeverity']) ?? 'info',
+            quietHours:
+              (body.quietHours as MockChannelPreferences['quietHours'] | undefined) ?? null,
+            grouping: (body.grouping as MockChannelPreferences['grouping']) ?? 'immediate',
+          }
+          channelPreferences.set(channelName, next)
+          return json(200, { data: next })
         }
       }
 

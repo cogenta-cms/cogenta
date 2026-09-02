@@ -16,6 +16,15 @@ import {
 } from '../api/client.js'
 import { getMedia, listMedia, type MediaAsset } from '../api/media-client.js'
 import {
+  type ChannelGrouping,
+  type ChannelMinSeverity,
+  type ChannelPreferences,
+  getChannelPreferences,
+  type LinkedChannel,
+  listLinkedChannels,
+  setChannelPreferences,
+} from '../api/notices-client.js'
+import {
   type AdminUser,
   changeOwnPassword,
   fetchPersonalDataExport,
@@ -43,6 +52,160 @@ import {
   Select,
 } from '../ui/index.js'
 import { SessionList } from './users.js'
+
+/** Minutes since midnight ↔ an `<input type="time">` value — `ChannelPreferences.quietHours` is minutes (channel-format-agnostic, no time zone of its own), `<input type="time">` wants `HH:MM`. */
+function minutesToTimeInput(minutes: number): string {
+  const hours = Math.floor(minutes / 60) % 24
+  const mins = minutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+}
+
+function timeInputToMinutes(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  if (match === null) return null
+  const hours = Number(match[1])
+  const mins = Number(match[2])
+  return hours * 60 + mins
+}
+
+const MIN_SEVERITY_OPTIONS: readonly ChannelMinSeverity[] = ['info', 'warning', 'critical']
+const GROUPING_OPTIONS: readonly ChannelGrouping[] = ['immediate', 'hourly', 'daily']
+
+/**
+ * One linked channel's notification preferences, editable — fiche 38 task 4
+ * / fiche 35 audit T04. `minSeverity`/`grouping` are plain selects;
+ * "quiet hours" is a checkbox (on/off) plus two time inputs, since the API
+ * itself makes that same distinction (`null` disables it entirely, never a
+ * zero-length window).
+ */
+function ChannelPreferencesEditor({
+  channel,
+  prefs,
+  busy,
+  saved,
+  onSave,
+}: {
+  readonly channel: LinkedChannel
+  readonly prefs: ChannelPreferences
+  readonly busy: boolean
+  readonly saved: boolean
+  onSave(next: ChannelPreferences): void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const [minSeverity, setMinSeverity] = useState<ChannelMinSeverity>(prefs.minSeverity)
+  const [grouping, setGrouping] = useState<ChannelGrouping>(prefs.grouping)
+  const [quietEnabled, setQuietEnabled] = useState(prefs.quietHours !== null)
+  const [quietStart, setQuietStart] = useState(
+    minutesToTimeInput(prefs.quietHours?.startMinute ?? 22 * 60),
+  )
+  const [quietEnd, setQuietEnd] = useState(
+    minutesToTimeInput(prefs.quietHours?.endMinute ?? 7 * 60),
+  )
+
+  function submit(): void {
+    const startMinute = timeInputToMinutes(quietStart)
+    const endMinute = timeInputToMinutes(quietEnd)
+    onSave({
+      eventTypes: prefs.eventTypes,
+      minSeverity,
+      grouping,
+      quietHours:
+        quietEnabled && startMinute !== null && endMinute !== null
+          ? { startMinute, endMinute }
+          : null,
+    })
+  }
+
+  return (
+    <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+      <legend className="text-sm font-semibold">
+        {t(`channels.name.${channel.channelName}`, { defaultValue: channel.channelName })}
+      </legend>
+      <Field label={t('profile.notificationsMinSeverityLabel')}>
+        {(control) => (
+          <Select
+            {...control}
+            value={minSeverity}
+            onChange={(event) => setMinSeverity(event.target.value as ChannelMinSeverity)}
+          >
+            {MIN_SEVERITY_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {t(`profile.notificationsSeverity.${option}`)}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+      <Field label={t('profile.notificationsGroupingLabel')}>
+        {(control) => (
+          <Select
+            {...control}
+            value={grouping}
+            onChange={(event) => setGrouping(event.target.value as ChannelGrouping)}
+          >
+            {GROUPING_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {t(`profile.notificationsGrouping.${option}`)}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+      <div className="flex items-center gap-2">
+        <input
+          id={`notif-quiet-enabled-${channel.channelName}`}
+          type="checkbox"
+          checked={quietEnabled}
+          onChange={(event) => setQuietEnabled(event.target.checked)}
+        />
+        <label htmlFor={`notif-quiet-enabled-${channel.channelName}`}>
+          {t('profile.notificationsQuietHoursEnable')}
+        </label>
+      </div>
+      {quietEnabled && (
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label={t('profile.notificationsQuietHoursStart')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="time"
+                value={quietStart}
+                onChange={(event) => setQuietStart(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('profile.notificationsQuietHoursEnd')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="time"
+                value={quietEnd}
+                onChange={(event) => setQuietEnd(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
+      )}
+      {/* A critical notice always reaches every channel regardless of quiet
+          hours (`toChannelSeverity` forces `danger` to `critical`) — said
+          here rather than left implicit, since this control could otherwise
+          read as a blanket do-not-disturb. */}
+      <p className="m-0 text-xs text-muted-foreground">
+        {t('profile.notificationsQuietHoursCriticalNote')}
+      </p>
+      <div className="flex items-center gap-3">
+        <Button type="button" disabled={busy} onClick={submit}>
+          {busy ? t('profile.notificationsSaving') : t('profile.notificationsSave')}
+        </Button>
+        {saved && !busy && (
+          <span role="status" className="text-sm text-success">
+            {t('profile.notificationsSaved')}
+          </span>
+        )}
+      </div>
+    </fieldset>
+  )
+}
 
 /**
  * "My profile" — L11 task 3.
@@ -127,6 +290,41 @@ export function ProfileRoute(): JSX.Element {
   const [exportError, setExportError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
 
+  // Fiche 38 task 4 / fiche 35 audit T04 — per-channel notification
+  // preferences. `getChannelPreferences`/`setChannelPreferences`
+  // (`notices-client.ts`) existed since fiche 38 with no screen ever
+  // calling them; `channels.tsx` (the linking screen) deliberately left
+  // this out of its own scope. One entry per channel this account already
+  // linked — a channel with no link has nothing to set preferences on.
+  const [linkedChannels, setLinkedChannels] = useState<readonly LinkedChannel[]>([])
+  const [channelPrefs, setChannelPrefsState] = useState<
+    Readonly<Record<string, ChannelPreferences>>
+  >({})
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
+  const [notificationsSaveError, setNotificationsSaveError] = useState<string | null>(null)
+  const [notificationsSavedChannel, setNotificationsSavedChannel] = useState<string | null>(null)
+  const [notificationsBusyChannel, setNotificationsBusyChannel] = useState<string | null>(null)
+
+  const loadNotificationPreferences = useCallback(async () => {
+    if (token === null) return
+    setNotificationsError(null)
+    try {
+      const channels = await listLinkedChannels(token)
+      setLinkedChannels(channels)
+      const entries = await Promise.all(
+        channels.map(
+          async (channel) =>
+            [channel.channelName, await getChannelPreferences(token, channel.channelName)] as const,
+        ),
+      )
+      setChannelPrefsState(Object.fromEntries(entries))
+    } catch (caught) {
+      setNotificationsError(
+        caught instanceof ApiError ? caught.message : t('profile.notificationsLoadError'),
+      )
+    }
+  }, [token, t])
+
   const load = useCallback(async () => {
     if (token === null) return
     setLoadError(null)
@@ -157,12 +355,35 @@ export function ProfileRoute(): JSX.Element {
   useEffect(() => {
     void load()
     void loadActivity()
+    void loadNotificationPreferences()
     // Public and unchanging for the lifetime of the page: fetched once,
     // never as part of the profile reload above.
     getPasswordPolicy()
       .then(setPasswordPolicy)
       .catch(() => undefined)
-  }, [load, loadActivity])
+  }, [load, loadActivity, loadNotificationPreferences])
+
+  /** Fiche 38 task 4 — writes one channel's preferences, and only that channel's local state, on success. */
+  async function saveChannelPreferences(
+    channelName: string,
+    next: ChannelPreferences,
+  ): Promise<void> {
+    if (token === null) return
+    setNotificationsBusyChannel(channelName)
+    setNotificationsSaveError(null)
+    setNotificationsSavedChannel(null)
+    try {
+      const saved = await setChannelPreferences(token, channelName, next)
+      setChannelPrefsState((current) => ({ ...current, [channelName]: saved }))
+      setNotificationsSavedChannel(channelName)
+    } catch (caught) {
+      setNotificationsSaveError(
+        caught instanceof ApiError ? caught.message : t('profile.notificationsSaveError'),
+      )
+    } finally {
+      setNotificationsBusyChannel(null)
+    }
+  }
 
   useEffect(() => {
     if (profile === null) return
@@ -827,6 +1048,45 @@ export function ProfileRoute(): JSX.Element {
       </Card>
 
       <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2 id="notifications">{t('profile.notificationsHeading')}</h2>
+          </CardTitle>
+          <CardDescription>{t('profile.notificationsIntro')}</CardDescription>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-6">
+          {notificationsError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{notificationsError}</p>
+            </Notice>
+          )}
+          {notificationsSaveError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{notificationsSaveError}</p>
+            </Notice>
+          )}
+          {linkedChannels.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('profile.notificationsNoChannels')}</p>
+          ) : (
+            linkedChannels.map((channel) => {
+              const prefs = channelPrefs[channel.channelName]
+              if (prefs === undefined) return null
+              return (
+                <ChannelPreferencesEditor
+                  key={channel.channelName}
+                  channel={channel}
+                  prefs={prefs}
+                  busy={notificationsBusyChannel === channel.channelName}
+                  saved={notificationsSavedChannel === channel.channelName}
+                  onSave={(next) => void saveChannelPreferences(channel.channelName, next)}
+                />
+              )
+            })
+          )}
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader>

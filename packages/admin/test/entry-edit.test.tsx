@@ -507,3 +507,36 @@ describe('autosaving a draft in progress', () => {
     expect(screen.queryByRole('button', { name: 'Les restaurer' })).toBeNull()
   })
 })
+
+/**
+ * Fiche 35 audit T03 — `moveToTrash` never called `useRefreshChromeStatus()`,
+ * so the sidebar's "Trash" badge stayed stale after trashing an entry from
+ * the editor, exactly the L20 audit point 15 bug `trash.tsx`'s own
+ * restore/purge already guard against.
+ */
+describe('trashing an entry from the editor', () => {
+  it('refreshes the sidebar status', async () => {
+    render(<App />)
+    await goToArticles()
+    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }
+    const shellStatusCalls = (): number =>
+      fetchMock.mock.calls.filter((call) => String(call[0]).includes('/api/shell-status')).length
+    const before = shellStatusCalls()
+    expect(before).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre à la corbeille' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Articles' }, { timeout: 5000 }),
+    ).toBeDefined()
+    await waitFor(
+      () => {
+        expect(shellStatusCalls()).toBeGreaterThan(before)
+      },
+      { timeout: 5000 },
+    )
+  })
+})

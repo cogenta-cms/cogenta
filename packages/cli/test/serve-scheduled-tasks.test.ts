@@ -77,10 +77,16 @@ const TASK_NAMES = [
   // (degraded) `FileEmailTransport`, so the commerce order-email retry
   // queue always exists, whether or not the site sells anything yet.
   'commerce-order-emails',
+  // Fiche 53 tasks 3/5, audit T-COM-01 — always registered: `commerce`
+  // tables and stores exist unconditionally (contract E, ADR-0024), so
+  // subscription billing/dunning/renewal notices need no email transport
+  // to be scheduled, only `sendRenewalNotices` itself degrades to a safe
+  // no-op (R2) without one.
+  'commerce-subscriptions',
 ].sort()
 
 describe('cogenta serve — /api/scheduled-tasks', () => {
-  it('lists the nine registered recurring jobs, not a 404', async () => {
+  it('lists the ten registered recurring jobs, not a 404', async () => {
     const root = await project()
     // Slow every tick way down: this test only cares that the route exists
     // and answers with real registrations, not that a sweep actually fires

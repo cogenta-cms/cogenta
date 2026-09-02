@@ -670,3 +670,184 @@
 .skip-link:focus {
   top: var(--space-2);
 }
+
+/* ------------------------------------------------------------------------
+ * Redesign (2026-09-02): the dark navigation rail.
+ *
+ * The sidebar is dark in BOTH colour schemes — a Linear/Vercel-register
+ * rail beside a light or dark workspace. Rather than restyling every rule
+ * above, it re-points the handful of colour variables those rules already
+ * read (`--color-text`, `--color-text-muted`, `--color-surface`,
+ * `--color-border`, `--accent`, `--card`) at the `--rail-*` tokens
+ * `theme.css` defines outside the scheme blocks. The flyout lives inside
+ * the sidebar's subtree, so it inherits the same rail colours for free.
+ * ---------------------------------------------------------------------- */
+.app-shell__sidebar {
+  --color-text: var(--rail-fg);
+  --color-text-muted: var(--rail-muted);
+  --color-surface: var(--rail-hover);
+  --color-border: var(--rail-border);
+  --accent: var(--rail-active);
+  --card: #0f1222;
+  --color-primary: var(--rail-accent);
+  background: var(--rail-bg);
+  border-right: 1px solid var(--rail-border);
+  isolation: isolate;
+}
+
+/* An ambient glow anchored to the top of the rail — the one atmospheric
+   flourish, kept behind the content (`z-index: -1` inside the rail's own
+   isolated stacking context) and switched off with reduced motion. */
+.app-shell__sidebar::before {
+  content: "";
+  position: absolute;
+  inset: -20% -40% auto -40%;
+  height: 40%;
+  background: radial-gradient(ellipse at 50% 0%, var(--rail-glow), transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(24px);
+}
+
+.app-shell__sidebar .app-shell__nav-group-trigger,
+.app-shell__sidebar a,
+.app-shell__sidebar-toggle {
+  position: relative;
+  border-radius: var(--radius-md);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.app-shell__sidebar .app-shell__nav-group-trigger:hover,
+.app-shell__sidebar a:hover {
+  transform: translateX(2px);
+}
+
+.app-shell__sidebar .app-shell__nav-group-trigger:active,
+.app-shell__sidebar a:active {
+  transform: translateX(2px) scale(0.985);
+}
+
+/* Icons in the rail sit in a small rounded well; the active one lights up
+   with the accent and a soft glow so "you are here" reads at a glance. */
+.app-shell__sidebar .app-shell__nav-group-trigger > svg,
+.app-shell__sidebar a > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease,
+    filter 160ms ease;
+}
+
+.app-shell__sidebar .app-shell__nav-group-trigger.active,
+.app-shell__sidebar .app-shell__nav-group[data-current="true"] > .app-shell__nav-group-trigger,
+.app-shell__sidebar a.active {
+  color: var(--rail-fg);
+  background: var(--rail-active);
+  box-shadow: inset 0 0 0 1px oklch(0.8 0.15 268 / 25%);
+}
+
+.app-shell__sidebar .app-shell__nav-group-trigger.active::before,
+.app-shell__sidebar
+  .app-shell__nav-group[data-current="true"]
+  > .app-shell__nav-group-trigger::before,
+.app-shell__sidebar a.active::before {
+  content: "";
+  position: absolute;
+  left: -0.25rem;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--rail-accent);
+  box-shadow: 0 0 12px var(--rail-glow);
+}
+
+.app-shell__sidebar .app-shell__nav-group-trigger.active > svg,
+.app-shell__sidebar
+  .app-shell__nav-group[data-current="true"]
+  > .app-shell__nav-group-trigger
+  > svg,
+.app-shell__sidebar a.active > svg {
+  opacity: 1;
+  color: var(--rail-accent);
+  filter: drop-shadow(0 0 6px var(--rail-glow));
+}
+
+/* The flyout, now a floating dark panel with a real overlay shadow. */
+.app-shell__sidebar .app-shell__flyout {
+  background: #0f1222;
+  border: 1px solid var(--rail-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  backdrop-filter: blur(12px);
+}
+
+/* Badges on the rail pick up the accent instead of a grey pill. */
+.app-shell__sidebar .app-shell__badge {
+  background: var(--rail-accent);
+  color: #0b0d1a;
+  box-shadow: 0 0 10px var(--rail-glow);
+}
+
+/* The top bar: frosted, with a hairline gradient underline. */
+.app-shell__topbar {
+  background: color-mix(in oklab, var(--card) 85%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.app-shell__topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-primary), transparent 60%);
+  opacity: 0.6;
+}
+
+.app-shell__view-site,
+.app-shell__logout {
+  border-radius: 999px;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.app-shell__view-site:hover,
+.app-shell__logout:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
+}
+
+/* The workspace: a faint radial wash of the accent at the top-left so the
+   page never reads as a flat grey slab. */
+.app-shell__content {
+  background:
+    radial-gradient(60rem 24rem at 0% 0%, var(--accent), transparent 70%), var(--background);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__sidebar::before {
+    display: none;
+  }
+  .app-shell__sidebar .app-shell__nav-group-trigger,
+  .app-shell__sidebar a,
+  .app-shell__view-site,
+  .app-shell__logout {
+    transition: none;
+    transform: none !important;
+  }
+}

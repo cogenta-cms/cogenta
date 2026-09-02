@@ -3793,6 +3793,7 @@
     "skipFailedToStart": "{{driver}} n'a pas pu démarrer : {{detail}}",
     "notesHeading": "Notes",
     "problemsHeading": "Problèmes",
+    "technicalDetail": "détail technique",
     "migrationsHeading": "Migrations",
     "migrationsSummary": "{{total}} migration(s) au total, {{pending}} en attente.",
     "destructive": "destructive",

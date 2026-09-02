@@ -3793,6 +3793,7 @@
     "skipFailedToStart": "{{driver}} failed to start: {{detail}}",
     "notesHeading": "Notes",
     "problemsHeading": "Problems",
+    "technicalDetail": "technical detail",
     "migrationsHeading": "Migrations",
     "migrationsSummary": "{{total}} migration(s) total, {{pending}} pending.",
     "destructive": "destructive",

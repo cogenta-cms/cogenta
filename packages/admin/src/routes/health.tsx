@@ -40,6 +40,23 @@ function statusTone(status: 'ok' | 'degraded' | 'down'): 'success' | 'warning' |
 }
 
 /**
+ * Fiche 35 audit T06 — `cogenta doctor`'s `notes`/`problems`/`check.message`
+ * are free English text, built at the CLI's own diagnostic layer with no
+ * i18n concept of its own (a real code-per-message restructuring is the
+ * fiche's own "complete option", out of scope for this fix). Labelling each
+ * one honestly as a technical detail, rather than letting it read as
+ * incomplete or broken French, is the fiche's own recommended fast path.
+ */
+function TechnicalDetailBadge(): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <span className="rounded border border-current px-1 text-[0.65rem] uppercase tracking-wide opacity-70">
+      {t('health.technicalDetail')}
+    </span>
+  )
+}
+
+/**
  * `check.reason` on its own is `@cogenta/core`'s driver registry composing
  * plain English sentences ("named in the configuration", "redis not
  * available") for `cogenta doctor`'s terminal output, which has never been
@@ -190,7 +207,9 @@ export function HealthRoute(): JSX.Element | null {
                     {t(`health.tier.${check.tier}`, { defaultValue: check.tier })}) —{' '}
                     {describeReason(check, t)}
                     {check.message !== undefined && (
-                      <p className="m-0 mt-1 text-xs">{check.message}</p>
+                      <p className="m-0 mt-1 text-xs">
+                        <TechnicalDetailBadge /> {check.message}
+                      </p>
                     )}
                   </Notice>
                 </li>
@@ -201,7 +220,9 @@ export function HealthRoute(): JSX.Element | null {
                 <h3 className="text-sm font-semibold">{t('health.notesHeading')}</h3>
                 <ul className="m-0 pl-5 text-sm text-muted-foreground">
                   {report.notes.map((note) => (
-                    <li key={note}>{note}</li>
+                    <li key={note}>
+                      <TechnicalDetailBadge /> {note}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -213,7 +234,9 @@ export function HealthRoute(): JSX.Element | null {
                 </h3>
                 <ul className="m-0 pl-5 text-sm text-destructive">
                   {report.problems.map((problem) => (
-                    <li key={problem}>{problem}</li>
+                    <li key={problem}>
+                      <TechnicalDetailBadge /> {problem}
+                    </li>
                   ))}
                 </ul>
               </div>

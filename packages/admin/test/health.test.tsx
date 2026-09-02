@@ -87,3 +87,54 @@ describe('health screen — driver reasons', () => {
     expect(await screen.findByText(/first available driver/)).toBeDefined()
   })
 })
+
+/**
+ * Fiche 35 audit T06 — `cogenta doctor`'s `notes`/`problems`/`check.message`
+ * are free English text with no i18n concept of its own; a French speaker
+ * used to read it as broken or incomplete translation. Each one is now
+ * labelled "détail technique" instead — not translated (nothing here is a
+ * translation, it's a label around untranslated text), but no longer
+ * indistinguishable from a missing string.
+ */
+describe('health screen — untranslated diagnostic text', () => {
+  it('labels a note as a technical detail rather than showing it as plain French', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      healthReport: {
+        checks: [
+          {
+            need: 'database',
+            status: 'ok',
+            driver: 'sqlite',
+            tier: 'degraded',
+            reason: 'first available driver',
+            message: 'SQLite: one machine, no vector index.',
+          },
+        ],
+        notes: ['No cogenta.config file found. The configuration came from the environment.'],
+        problems: ['storage: disk usage could not be read'],
+      },
+    })
+
+    render(<App />)
+    await goToHealth()
+
+    expect(
+      await screen.findByText(
+        'No cogenta.config file found. The configuration came from the environment.',
+        { exact: false },
+      ),
+    ).toBeDefined()
+    expect(
+      screen.getByText('storage: disk usage could not be read', { exact: false }),
+    ).toBeDefined()
+    expect(
+      screen.getByText('SQLite: one machine, no vector index.', { exact: false }),
+    ).toBeDefined()
+
+    // Three technical-detail badges: one per note, problem and check message.
+    expect(screen.getAllByText('détail technique')).toHaveLength(3)
+  })
+})

@@ -4,6 +4,7 @@ import { ApiError } from '../api/client.js'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import {
   bulkDeleteMedia,
+  bulkMediaUsage,
   bulkMoveMedia,
   createMediaFolder,
   deleteMediaFolder,
@@ -14,6 +15,7 @@ import {
   type MediaFolder,
   type MediaKind,
   type MediaSortField,
+  type MediaUsageReport,
   moveMedia,
   updateMediaFolder,
 } from '../api/media-client.js'
@@ -92,6 +94,13 @@ export function MediaRoute(): JSX.Element {
   } | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkMoveTarget, setBulkMoveTarget] = useState('')
+  // Fiche 05 task 3: what a bulk delete is about to orphan, fetched once the
+  // confirmation dialog is asked for — never blocking the delete itself
+  // (R6: reversible and journalled, not locked), only making the usage
+  // impossible to miss before it happens.
+  const [bulkDeleteUsage, setBulkDeleteUsage] = useState<Readonly<
+    Record<string, MediaUsageReport>
+  > | null>(null)
 
   const [folderModal, setFolderModal] = useState<
     | { readonly mode: 'create'; readonly parentId: string | null }
@@ -181,6 +190,20 @@ export function MediaRoute(): JSX.Element {
   }
 
   // ---------------------------------------------------------------- bulk actions
+
+  /** Fiche 05 task 3 — fetches usage before the confirmation dialog opens, so it is there the instant a reviewer looks. */
+  async function openBulkDeleteConfirm(): Promise<void> {
+    if (token === null) return
+    setConfirmBulkDelete(true)
+    setBulkDeleteUsage(null)
+    try {
+      setBulkDeleteUsage(await bulkMediaUsage(token, [...selected]))
+    } catch {
+      // The confirmation still works without it — usage is informative, not
+      // a gate (R6: reversible and journalled, never locked).
+      setBulkDeleteUsage({})
+    }
+  }
 
   async function runBulkDelete(): Promise<void> {
     if (token === null) return
@@ -532,7 +555,7 @@ export function MediaRoute(): JSX.Element {
                 variant="destructive"
                 size="sm"
                 disabled={bulkBusy}
-                onClick={() => setConfirmBulkDelete(true)}
+                onClick={() => void openBulkDeleteConfirm()}
               >
                 {t('media.bulkDelete', { count: selected.size })}
               </Button>
@@ -741,6 +764,43 @@ export function MediaRoute(): JSX.Element {
         }
       >
         <p>{t('media.bulkDeleteConfirmBody')}</p>
+        {bulkDeleteUsage !== null &&
+          (() => {
+            const used = [...selected]
+              .map((id) => ({
+                id,
+                asset: items.find((item) => item.id === id),
+                report: bulkDeleteUsage[id],
+              }))
+              .filter(
+                (entry): entry is typeof entry & { report: MediaUsageReport } =>
+                  entry.report !== undefined && entry.report.matches.length > 0,
+              )
+            if (used.length === 0) return null
+            return (
+              <div>
+                <p>{t('media.bulkDeleteUsageWarning', { count: used.length })}</p>
+                <ul className="m-0 flex flex-col gap-2 p-0 text-sm">
+                  {used.map((entry) => (
+                    <li key={entry.id} className="list-none">
+                      <strong>{entry.asset?.filename ?? entry.id}</strong>
+                      <ul className="m-0 flex flex-col gap-0.5 pl-4">
+                        {entry.report.matches.map((match) => (
+                          <li key={`${match.collection}-${match.entryId}-${match.field}`}>
+                            {t('media.usageItem', {
+                              collection: match.collection,
+                              entryId: match.entryId,
+                              field: match.field,
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })()}
       </Modal>
     </section>
   )

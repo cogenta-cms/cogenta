@@ -810,6 +810,7 @@
     "bulkReportSummary": "{{count}} média(s) traité(s).",
     "bulkDeleteConfirmTitle": "Supprimer {{count}} média(s) ?",
     "bulkDeleteConfirmBody": "Cette action est définitive.",
+    "bulkDeleteUsageWarning": "{{count}} des fichiers sélectionnés sont encore référencés par du contenu :",
     "bulkDeleteConfirmAction": "Supprimer"
   },
   "collectionList": {

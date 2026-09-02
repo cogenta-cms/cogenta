@@ -913,6 +913,18 @@ export function installMockFetch(
      */
     readonly mediaSeedCount?: number
     /**
+     * Fiche 05 task 3: `GET .../usage` and `POST .../bulk-usage`'s answer
+     * for a given media id — absent means "no usage" (`matches: []`), the
+     * same empty-by-default a site with no `usage` source wired configures
+     * on the real router.
+     */
+    readonly mediaUsage?: Readonly<
+      Record<
+        string,
+        readonly { readonly collection: string; readonly entryId: string; readonly field: string }[]
+      >
+    >
+    /**
      * `true` (the default) mocks a site with an `AgentRegistry` mounted, the
      * way this suite always has. `false` reproduces the real, honest shape
      * of `cogenta serve` today (L20 audit §1 point 5): no registry is ever
@@ -5184,7 +5196,31 @@ export function installMockFetch(
         if (found === undefined) {
           return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
         }
-        return json(200, { data: { matches: [], scannedEntries: 0, truncated: false } })
+        const matches = options.mediaUsage?.[found.id] ?? []
+        return json(200, { data: { matches, scannedEntries: 0, truncated: false } })
+      }
+
+      // `POST /api/media/-/bulk-usage` (fiche 05 task 3) — checked before
+      // the admin's bulk-delete confirmation dialog opens.
+      if (url.endsWith('/api/media/-/bulk-usage') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        const ids = Array.isArray(body.ids) ? (body.ids as string[]) : []
+        const reports: Record<
+          string,
+          { matches: unknown; scannedEntries: number; truncated: boolean }
+        > = {}
+        for (const id of ids) {
+          reports[id] = {
+            matches: options.mediaUsage?.[id] ?? [],
+            scannedEntries: 0,
+            truncated: false,
+          }
+        }
+        return json(200, { data: reports })
       }
 
       const mediaExifMatch = /\/api\/media\/([^/?]+)\/exif(?:\?.*)?$/u.exec(url)

@@ -506,6 +506,10 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         return bulkMove(request, actor)
       }
+      if (second === 'bulk-usage') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return bulkUsage(request, actor)
+      }
       throw noRoute()
     }
 
@@ -985,6 +989,23 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
       storeFor: options.usage.storeFor,
       ...(options.usage.maxEntries === undefined ? {} : { maxEntries: options.usage.maxEntries }),
     })
+  }
+
+  /**
+   * `POST /api/media/-/bulk-usage` (fiche 05 task 3) — the same bounded scan
+   * `usageOf` already runs, once per id, so the bulk-delete confirmation can
+   * show what a selection is about to orphan before a single asset is
+   * removed. Never blocks the delete itself (R6 asks for reversible and
+   * journalled, not locked) — this only makes the usage impossible to miss.
+   */
+  async function bulkUsage(request: RestRequest, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const input = decode(bulkIdsSchema, request.body)
+    const reports: Record<string, MediaUsageReport> = {}
+    for (const id of input.ids) {
+      reports[id] = await scanUsage(id)
+    }
+    return jsonResponse(200, { data: reports })
   }
 
   async function remove(id: string, actor: Actor): Promise<RestResponse> {

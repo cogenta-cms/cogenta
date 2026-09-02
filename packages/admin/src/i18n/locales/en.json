@@ -811,6 +811,7 @@
     "bulkReportSummary": "{{count}} media asset(s) processed.",
     "bulkDeleteConfirmTitle": "Delete {{count}} media asset(s)?",
     "bulkDeleteConfirmBody": "This cannot be undone.",
+    "bulkDeleteUsageWarning": "{{count}} of the selected files are still referenced by content:",
     "bulkDeleteConfirmAction": "Delete"
   },
   "collectionList": {

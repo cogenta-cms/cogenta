@@ -330,6 +330,22 @@ export function getMediaUsage(token: string, id: string): Promise<MediaUsageRepo
   return request(`/api/media/${encodeURIComponent(id)}/usage`, { headers: authHeader(token) })
 }
 
+/**
+ * `POST /api/media/-/bulk-usage` (fiche 05 task 3) — one report per id,
+ * checked before a bulk-delete confirmation is even shown, so a selection
+ * that would orphan a reference is impossible to miss.
+ */
+export function bulkMediaUsage(
+  token: string,
+  ids: readonly string[],
+): Promise<Readonly<Record<string, MediaUsageReport>>> {
+  return request(`/api/media/-/bulk-usage`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ ids }),
+  })
+}
+
 /** `null` for a non-image asset, or a JPEG with no EXIF block — see `media-router.ts`'s own comment. */
 export function getMediaExif(token: string, id: string): Promise<ExifData | null> {
   return request(`/api/media/${encodeURIComponent(id)}/exif`, { headers: authHeader(token) })

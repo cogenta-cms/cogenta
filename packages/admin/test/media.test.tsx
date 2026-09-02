@@ -241,6 +241,32 @@ describe('media library folders', () => {
       expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(1)
     })
   })
+
+  // Fiche 05 task 3: usage is checked before the confirmation dialog even
+  // opens, so a selection that would orphan a real reference is impossible
+  // to miss — and never a gate, only a warning (R6).
+  it('warns, before confirming, that some selected files are still referenced by content', async () => {
+    installMockFetch({
+      mediaSeedCount: 3,
+      mediaUsage: {
+        'media-seed-1': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+        'media-seed-2': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+        'media-seed-3': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+      },
+    })
+    render(<App />)
+    await goToMedia()
+
+    await screen.findAllByRole('button', { name: /seed-\d+\.png/ })
+    const checkboxes = screen.getAllByRole('checkbox', { name: /Sélectionner/ })
+    fireEvent.click(checkboxes[0] as HTMLElement)
+    fireEvent.click(checkboxes[1] as HTMLElement)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer (2)' }))
+
+    await screen.findByText(/2 des fichiers sélectionnés sont encore référencés/)
+    expect(screen.getAllByText(/article · entry-1 · cover/)).toHaveLength(2)
+  })
 })
 
 /**

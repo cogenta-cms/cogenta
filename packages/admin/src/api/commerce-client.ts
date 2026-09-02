@@ -705,12 +705,18 @@ export function listCreditNotes(
  */
 export async function exportOrdersCsv(
   token: string,
-  filter: { readonly status?: OrderStatus; readonly from?: string; readonly to?: string } = {},
+  filter: {
+    readonly status?: OrderStatus
+    readonly from?: string
+    readonly to?: string
+    readonly q?: string
+  } = {},
 ): Promise<string> {
   const params = new URLSearchParams()
   if (filter.status !== undefined) params.set('status', filter.status)
   if (filter.from !== undefined && filter.from !== '') params.set('from', filter.from)
   if (filter.to !== undefined && filter.to !== '') params.set('to', filter.to)
+  if (filter.q !== undefined && filter.q.trim() !== '') params.set('q', filter.q)
   const query = params.toString()
   const response = await fetch(
     `${API_BASE}/api/commerce/orders/export.csv${query === '' ? '' : `?${query}`}`,
@@ -869,15 +875,23 @@ export function cancelSubscription(token: string, id: string): Promise<Subscript
   })
 }
 
+/**
+ * Audit T-COM-02: named so the screen that finally calls this (fiche 53
+ * task 4 shipped the route with no client caller) can type its own result
+ * state without repeating the shape inline.
+ */
+export interface ChangePlanResult {
+  readonly subscription: Subscription
+  /** Positive: charged immediately via `prorationOrderId`. Zero: nothing was due. Negative: a downgrade's credit — this package has no credit-note mechanism, so it is reported, never silently applied. */
+  readonly prorationMinor: number
+  readonly prorationOrderId: string | null
+}
+
 export function changeSubscriptionPlan(
   token: string,
   id: string,
   input: { readonly variantId: string; readonly quantity?: number; readonly prorate?: boolean },
-): Promise<{
-  readonly subscription: Subscription
-  readonly prorationMinor: number
-  readonly prorationOrderId: string | null
-}> {
+): Promise<ChangePlanResult> {
   return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/change-plan`, {
     method: 'POST',
     headers: authHeader(token),

@@ -663,6 +663,48 @@ export function installMockFetch(
       createdAt: string
     }[]
     /**
+     * Seeds `GET /api/commerce/products` (audit T-COM-02: the subscription
+     * detail screen's "Change plan" panel picks a variant from this list —
+     * without it, a test exercising that panel would first have to create a
+     * product through the catalogue screen itself, which a role with only
+     * `commerce.read` cannot do). Empty by default, like every other
+     * commerce seed above.
+     */
+    readonly commerceProducts?: readonly {
+      id: string
+      handle: string
+      title: string
+      status: 'active' | 'archived'
+      contentRef: { collection: string; entryId: string } | null
+      imageMediaIds: string[]
+      createdAt: string
+      updatedAt: string
+    }[]
+    /** Seeds `readProduct`'s variant list for the products above. Empty by default. */
+    readonly commerceVariants?: readonly {
+      id: string
+      productId: string
+      sku: string
+      title: string
+      priceMinor: number
+      currency: string
+      onHand: number
+      allowBackorder: boolean
+      weightGrams: number
+      taxCategory: string
+      position: number
+      lowStockThreshold: number | null
+      compareAtPriceMinor: number | null
+      saleStartsAt: string | null
+      saleEndsAt: string | null
+      widthMm: number | null
+      heightMm: number | null
+      depthMm: number | null
+      imageMediaId: string | null
+      createdAt: string
+      updatedAt: string
+    }[]
+    /**
      * Overrides `/api/commerce/payment/drivers` (fiche 34 task 3). A driver
      * entry may carry extra JSON fields beyond what `PaymentDriverStatus`
      * declares — this is exactly the shape a security test uses to prove the
@@ -1847,8 +1889,8 @@ export function installMockFetch(
   let mockProductCounter = 0
   let mockVariantCounter = 0
   let mockStockMovementCounter = 0
-  const mockProducts: MockProduct[] = []
-  const mockVariants: MockVariant[] = []
+  const mockProducts: MockProduct[] = [...(options.commerceProducts ?? [])]
+  const mockVariants: MockVariant[] = [...(options.commerceVariants ?? [])]
   const mockProductTerms: MockProductTerm[] = []
   const mockStockMovements: MockStockMovement[] = []
   const mockCoupons: MockCoupon[] = []
@@ -7013,9 +7055,19 @@ export function installMockFetch(
           const status = parsed.searchParams.get('status')
           const from = parsed.searchParams.get('from')
           const to = parsed.searchParams.get('to')
+          // Audit T-COM-03: mirrors the real router's `q` (reference/e-mail,
+          // case-insensitive substring) — the screen's new search box has
+          // something real to filter against in a mocked test, the same way
+          // `status`/`from`/`to` already did.
+          const q = parsed.searchParams.get('q')?.trim().toLowerCase()
           let list = status === null ? mockOrders : mockOrders.filter((o) => o.status === status)
           if (from !== null) list = list.filter((o) => o.placedAt >= from)
           if (to !== null) list = list.filter((o) => o.placedAt <= to)
+          if (q !== undefined && q !== '') {
+            list = list.filter(
+              (o) => o.reference.toLowerCase().includes(q) || o.email.toLowerCase().includes(q),
+            )
+          }
           return json(200, { orders: list })
         }
         // A shopkeeper-entered order (fiche 52 task 5). The mock keeps this

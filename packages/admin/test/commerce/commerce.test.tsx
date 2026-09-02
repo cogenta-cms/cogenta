@@ -182,4 +182,41 @@ describe('the order list and detail', () => {
 
     await screen.findByText(/refunded so far|remboursé/u)
   })
+
+  // Audit T-COM-03: `listOrders`'s search parameter (`q`) already had a real
+  // client function and a real server route (fiche 52 task 7) — this screen
+  // never read anything into it, so a search that should have found one
+  // order among many always showed every order instead.
+  it('filters the order list by a search term, and shows the total for what is shown', async () => {
+    render(<App />)
+    await goToOrders()
+    expect(within(table()).getByText('ORD-0001')).toBeDefined()
+    expect(screen.getByText('Total des commandes affichées :', { exact: false })).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle commande' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Nouvelle commande' })
+    fireEvent.change(within(dialog).getByLabelText('E-mail du client'), {
+      target: { value: 'second-buyer@example.com' },
+    })
+    fireEvent.change(within(dialog).getByLabelText('ID de la variante'), {
+      target: { value: 'variant-seed' },
+    })
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+    // Creating navigates straight to the new order's own detail screen.
+    await screen.findByText('second-buyer@example.com', { exact: false }, { timeout: 3000 })
+
+    fireEvent.click(screen.getByRole('link', { name: 'Commandes' }))
+    await screen.findByRole('heading', { name: 'Commandes' })
+    expect(within(table()).getByText('ORD-0001')).toBeDefined()
+    expect(within(table()).getByText(/ORD-MANUAL-/)).toBeDefined()
+
+    fireEvent.change(screen.getByLabelText('Rechercher'), {
+      target: { value: 'second-buyer' },
+    })
+
+    await waitFor(() => {
+      expect(within(table()).queryByText('ORD-0001')).toBeNull()
+      expect(within(table()).getByText(/ORD-MANUAL-/)).toBeDefined()
+    })
+  })
 })

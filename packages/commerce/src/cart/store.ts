@@ -87,6 +87,19 @@ export interface CartStore {
   claim(cartId: string, customerId: string): Promise<Cart>
   price(cartId: string): Promise<PricedCart>
   abandon(cartId: string): Promise<void>
+  /**
+   * Abandons every still-open cart whose last activity is older than
+   * `olderThanMs` (audit A1-commerce P2 — `abandon()` existed since fiche 32
+   * but nothing ever called it automatically: an open cart nobody touched in
+   * weeks stayed `open` forever). A bulk sibling of `abandon()`, meant for a
+   * scheduler — `cogenta serve` ticks this, never a person naming a cart id.
+   * Idempotent per call: a cart this abandons no longer matches
+   * `status = 'open'`, so a rerun before another cart goes stale finds
+   * nothing new.
+   */
+  abandonInactive(options?: {
+    readonly olderThanMs?: number
+  }): Promise<{ readonly abandoned: number }>
 }
 
 interface CartRow {
@@ -115,6 +128,15 @@ interface LineRow {
 /** Thirty days. Long enough to be a real "saved basket", short enough that the
  * table does not become a graveyard nobody ever prunes. */
 export const CART_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * Default staleness before `abandonInactive` marks an open cart abandoned:
+ * 24 hours. Deliberately much shorter than `CART_TTL_MS` (thirty days) —
+ * that TTL bounds how long a cart *row* is kept at all, this bounds how long
+ * a cart stays counted as a live, in-progress purchase. Configurable per
+ * call because a shop's own definition of "gave up" varies.
+ */
+export const DEFAULT_CART_ABANDON_MS = 24 * 60 * 60 * 1000
 
 export function createCartStore(
   db: DatabaseHandle,
@@ -388,6 +410,22 @@ export function createCartStore(
       await db.query(
         sql`update ${carts} set status = ${'abandoned'}, updated_at = ${stamp()} where id = ${cartId} and status = ${'open'}`,
       )
+    },
+
+    abandonInactive: async (options) => {
+      const olderThanMs = options?.olderThanMs ?? DEFAULT_CART_ABANDON_MS
+      const threshold = new Date(now() - olderThanMs).toISOString()
+      // A single `UPDATE ... WHERE status = 'open' AND updated_at <= threshold`,
+      // the same shape `rowsAffected`-driven idempotence the rest of this
+      // package already relies on (`takeStock`'s guarded stock update,
+      // `CouponStore.redeem`'s claim) — the row itself leaves `status = 'open'`
+      // the instant it matches, so a concurrent or repeated call can never
+      // double-count or double-fire whatever reads this count.
+      const result = await db.query(
+        sql`update ${carts} set status = ${'abandoned'}, updated_at = ${stamp()}
+            where status = ${'open'} and updated_at <= ${threshold}`,
+      )
+      return { abandoned: result.rowsAffected }
     },
   }
 

@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createLogger, createSqliteHandle } from '@cogenta/core'
+import { createLogger, createSqliteHandle, identifier, sql } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runServe } from '../src/commands/serve.js'
 import { createOutput } from '../src/output.js'
@@ -98,7 +98,12 @@ const activeServers: AbortController[] = []
 
 async function startServer(
   root: string,
-  extra: { readonly commerceEmailTickMs?: number } = {},
+  extra: {
+    readonly commerceEmailTickMs?: number
+    readonly commerceBillingTickMs?: number
+    readonly cartAbandonTickMs?: number
+    readonly cartAbandonAfterMs?: number
+  } = {},
 ): Promise<{ base: string; stop: () => Promise<void> }> {
   const controller = new AbortController()
   activeServers.push(controller)
@@ -120,6 +125,15 @@ async function startServer(
     ...(extra.commerceEmailTickMs === undefined
       ? {}
       : { commerceEmailTickMs: extra.commerceEmailTickMs }),
+    ...(extra.commerceBillingTickMs === undefined
+      ? {}
+      : { commerceBillingTickMs: extra.commerceBillingTickMs }),
+    ...(extra.cartAbandonTickMs === undefined
+      ? {}
+      : { cartAbandonTickMs: extra.cartAbandonTickMs }),
+    ...(extra.cartAbandonAfterMs === undefined
+      ? {}
+      : { cartAbandonAfterMs: extra.cartAbandonAfterMs }),
   })
 
   const bound = await Promise.race([
@@ -506,6 +520,169 @@ describe('the shop, end to end', () => {
       subscriptions: readonly { id: string }[]
     }
     expect(afterCancelBody.subscriptions.map((s) => s.id)).toContain(subscription.id)
+  })
+
+  /**
+   * Audit T-COM-01 (P0): `runBilling`/`runDunning`/`sendRenewalNotices`
+   * existed, fully tested at `@cogenta/commerce`'s own level, and had no
+   * caller anywhere in `cogenta serve` — a subscription whose renewal date
+   * had come and gone stayed unbilled forever on a real site. This proves
+   * the `commerce-subscriptions` scheduled task (registered unconditionally,
+   * unlike `commerce-order-emails`) actually bills a due subscription, and
+   * that a second tick — the retry queue's own default cadence would fire
+   * many of these before the next real billing date — never bills it twice.
+   */
+  it('bills a subscription whose renewal date has already passed, once a tick runs, and never twice', async () => {
+    const root = await project()
+    const server = await startServer(root, { commerceBillingTickMs: 20 })
+    const token = await signIn(root, server.base, ['admin'])
+
+    const { createSubscriptionStore, ...stores } = await import('@cogenta/commerce')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await stores.ensureCommerceTables(db)
+    const catalog = stores.createCatalogStore(db)
+    const customers = stores.createCustomerStore(db)
+    const tax = stores.createTaxStore(db)
+    const shipping = stores.createShippingStore(db)
+    const coupons = stores.createCouponStore(db)
+    const carts = stores.createCartStore(db, { catalog, tax, shipping, coupons })
+    const orders = stores.createOrderStore(db, { catalog, carts, customers, coupons })
+    const payments = stores.createPaymentStore(db, {
+      gateway: stores.createManualPaymentGateway(),
+      orders,
+    })
+    const subscriptions = createSubscriptionStore(db, { catalog, customers, orders, payments })
+
+    const product = await catalog.createProduct({ handle: 'roast', title: 'Monthly roast' })
+    const variant = await catalog.createVariant({
+      productId: product.id,
+      sku: 'ROAST-1',
+      title: 'Monthly roast',
+      priceMinor: 1800,
+      currency: 'EUR',
+      onHand: 100,
+    })
+    const customer = await customers.ensure('overdue-subscriber@example.com')
+    // One hour ago: due on the very first tick. Billing this period sets
+    // `nextBillingAt` to `startAt` plus a full month — comfortably in the
+    // future — so no tick that follows finds this subscription due again,
+    // which is exactly what "a replay does not double-bill" needs to
+    // observe over real time.
+    const startAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const subscription = await subscriptions.create({
+      customerId: customer.id,
+      variantId: variant.id,
+      intervalUnit: 'month',
+      startAt,
+    })
+    await db.close()
+
+    const detailUrl = `${server.base}/api/commerce/subscriptions/${subscription.id}`
+    const authHeaders = { authorization: `Bearer ${token}` }
+    type Detail = {
+      subscription: { status: string; nextBillingAt: string }
+      cycles: readonly { orderId: string | null; status: string }[]
+    }
+
+    const deadline = Date.now() + 5000
+    let detail: Detail | undefined
+    for (;;) {
+      const response = await fetch(detailUrl, { headers: authHeaders })
+      detail = (await response.json()) as Detail
+      if (detail.cycles.length > 0) break
+      if (Date.now() > deadline) {
+        throw new Error('Expected the overdue subscription to be billed within 5s of ticking.')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    }
+
+    expect(detail.cycles).toHaveLength(1)
+    expect(detail.cycles[0]?.status).toBe('billed')
+    const orderId = detail.cycles[0]?.orderId
+    expect(orderId).toBeTruthy()
+    // Bank-transfer instructions settle as "pending", not "failed" (R2), so
+    // billing this subscription never opens a dunning cycle — it stays active.
+    expect(detail.subscription.status).toBe('active')
+
+    const orderResponse = await fetch(`${server.base}/api/commerce/orders/${orderId}`, {
+      headers: authHeaders,
+    })
+    expect(orderResponse.status).toBe(200)
+    const orderBody = (await orderResponse.json()) as {
+      order: { subscriptionId: string | null }
+    }
+    expect(orderBody.order.subscriptionId).toBe(subscription.id)
+
+    // Let several more ticks fire (the interval is 20ms) — `next_billing_at`
+    // moved a month out the instant the first tick billed this period, so a
+    // replay finds nothing due and the cycle count must not move.
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const again = await fetch(detailUrl, { headers: authHeaders })
+    const stillOne = (await again.json()) as Detail
+    expect(stillOne.cycles).toHaveLength(1)
+  })
+
+  /**
+   * Audit A1-commerce (P2): `CartStore.abandon()` existed since fiche 32
+   * with no automatic caller — an open cart nobody touched stayed `open`
+   * forever on a real site. Proves the `commerce-carts` scheduled task
+   * (always registered, same as `commerce-subscriptions`) actually marks a
+   * stale cart abandoned without a person calling anything, and leaves a
+   * recently-touched cart alone. There is no HTTP route for a cart at all
+   * (no storefront exists yet — `BLOCKERS.md`'s "pont vitrine" gap), so this
+   * seeds and reads the cart directly through the real store, the same
+   * shortcut `seedPaidOrder` above already takes for orders.
+   */
+  it('abandons a cart nobody has touched in a while, once a tick runs, and leaves a fresh one alone', async () => {
+    const root = await project()
+    // Not bound to a variable: nothing in this test calls `server.base` (no
+    // HTTP route exists for a cart at all), and `afterEach` above already
+    // aborts every server `startServer` registers.
+    await startServer(root, {
+      cartAbandonTickMs: 20,
+      cartAbandonAfterMs: 60 * 60 * 1000, // one hour
+    })
+
+    const stores = await import('@cogenta/commerce')
+    const seedDb = await createSqliteHandle({ url: join(root, 'site.db') })
+    const catalog = stores.createCatalogStore(seedDb)
+    const tax = stores.createTaxStore(seedDb)
+    const shipping = stores.createShippingStore(seedDb)
+    const coupons = stores.createCouponStore(seedDb)
+    const carts = stores.createCartStore(seedDb, { catalog, tax, shipping, coupons })
+
+    const stale = await carts.open({ currency: 'EUR', sessionKey: 'stale-shopper' })
+    const fresh = await carts.open({ currency: 'EUR', sessionKey: 'fresh-shopper' })
+
+    const cartsTable = identifier('cogenta_commerce_carts', seedDb.dialect)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    await seedDb.query(
+      sql`update ${cartsTable} set updated_at = ${twoHoursAgo} where id = ${stale.id}`,
+    )
+    await seedDb.close()
+
+    const pollDb = await createSqliteHandle({ url: join(root, 'site.db') })
+    const pollCarts = stores.createCartStore(pollDb, {
+      catalog: stores.createCatalogStore(pollDb),
+      tax: stores.createTaxStore(pollDb),
+      shipping: stores.createShippingStore(pollDb),
+      coupons: stores.createCouponStore(pollDb),
+    })
+
+    const deadline = Date.now() + 5000
+    for (;;) {
+      const found = await pollCarts.read(stale.id)
+      if (found?.status === 'abandoned') break
+      if (Date.now() > deadline) {
+        throw new Error('Expected the stale cart to be abandoned within 5s of ticking.')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    }
+
+    expect((await pollCarts.read(stale.id))?.status).toBe('abandoned')
+    expect((await pollCarts.read(fresh.id))?.status).toBe('open')
+
+    await pollDb.close()
   })
 
   // ---- fiche 19: permission matrix ---------------------------------------

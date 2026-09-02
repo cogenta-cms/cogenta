@@ -168,6 +168,7 @@ import {
   createCouponStore,
   createCreditNoteStore,
   createCustomerStore,
+  createEmailRenewalNotifier,
   createInvoiceStore,
   createOrderEmailQueue,
   createOrderStore,
@@ -773,6 +774,33 @@ interface Site {
         readonly failed: number
       }>)
     | null
+  /**
+   * Bills every subscription whose `nextBillingAt` has come due, retries
+   * whatever renewal payment is due for retry today, then sends any renewal
+   * notice that has fallen inside its warning window (fiche 53 tasks 3 and
+   * 5, audit T-COM-01: `runBilling`/`runDunning`/`sendRenewalNotices` had no
+   * caller anywhere in `cogenta serve`, so a subscription was never actually
+   * billed on a real site). Never `null`: unlike `tickCommerceEmails`, this
+   * needs no email transport — `sendRenewalNotices` is its own safe no-op
+   * (R2) when `commerceSubscriptions` has no `notifyRenewal` configured.
+   * Ticked by `runServe` the same way `tickFormsPurge` is.
+   */
+  readonly tickCommerceSubscriptions: () => Promise<{
+    readonly billed: number
+    readonly dunningRetried: number
+    readonly dunningSuspended: number
+    readonly renewalNoticesSent: number
+  }>
+  /**
+   * Marks every open cart stale past its threshold as abandoned (audit
+   * A1-commerce P2: `CartStore.abandon()` existed since fiche 32 with no
+   * automatic caller). Never `null`: needs nothing but this site's own
+   * commerce tables, already created unconditionally. Ticked by `runServe`
+   * the same way `tickFormsPurge` is.
+   */
+  readonly tickCartAbandon: (options?: {
+    readonly olderThanMs?: number
+  }) => Promise<{ readonly abandoned: number }>
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -1970,6 +1998,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     customers: commerceCustomers,
     orders: commerceOrders,
     payments: commercePayments,
+    // Absent on a site with no e-mail transport configured (R1/R2) — same
+    // degrade-to-no-op gate `commerceOrderEmails` uses below, reusing
+    // `@cogenta/channels` via `createEmailRenewalNotifier` rather than a
+    // second renderer (fiche 53 task 5).
+    ...(options.emailTransport === undefined
+      ? {}
+      : { notifyRenewal: createEmailRenewalNotifier(options.emailTransport) }),
   })
   // Absent until the site fills in `billing` (contract E, ADR-0024): an
   // invoice with a made-up seller address is worse than no invoicing at all,
@@ -2201,6 +2236,23 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     tickFormsPurge: async () => (await formStore.submissions.purgeExpired()).purged,
     tickCommerceEmails:
       commerceOrderEmails === undefined ? null : () => commerceOrderEmails.flushDue(),
+    tickCommerceSubscriptions: async () => {
+      // Sequential, not `Promise.all`: `runDunning` and `sendRenewalNotices`
+      // both read subscription state `runBilling` may just have changed
+      // (a subscription billed this tick is no longer the one dunning
+      // should be retrying, and a subscription just billed has a fresh
+      // `nextBillingAt` a renewal notice should measure against).
+      const billing = await commerceSubscriptions.runBilling()
+      const dunning = await commerceSubscriptions.runDunning()
+      const renewal = await commerceSubscriptions.sendRenewalNotices()
+      return {
+        billed: billing.billed.length,
+        dunningRetried: dunning.retried.length,
+        dunningSuspended: dunning.suspended.length,
+        renewalNoticesSent: renewal.notified.length,
+      }
+    },
+    tickCartAbandon: async (tickOptions) => commerceCarts.abandonInactive(tickOptions ?? {}),
     notFoundLog,
     notFoundLogEnabled: options.notFoundLog.enabled,
     notFoundRouter: createNotFoundRouter({ store: notFoundLog }),
@@ -5244,6 +5296,25 @@ export interface ServeOptions {
   /** Test seam for the commerce order-email retry queue (fiche 52 task 2) — production always uses `COMMERCE_EMAIL_TICK_MS`. */
   readonly commerceEmailTickMs?: number
   /**
+   * Test seam for the subscription billing/dunning/renewal-notice sweep
+   * (fiche 53 tasks 3 and 5, audit T-COM-01) — production always uses
+   * `COMMERCE_BILLING_TICK_MS`.
+   */
+  readonly commerceBillingTickMs?: number
+  /**
+   * Test seam for the abandoned-cart sweep (audit A1-commerce P2) —
+   * production always uses `CART_ABANDON_TICK_MS`.
+   */
+  readonly cartAbandonTickMs?: number
+  /**
+   * How stale an open cart must be before the sweep marks it abandoned.
+   * Not a CLI flag: a shop that wants a different definition of "gave up"
+   * sets it in code, the same way every other tick override here is a test
+   * seam first — production always uses `CartStore`'s own
+   * `DEFAULT_CART_ABANDON_MS` (24h) unless this is set.
+   */
+  readonly cartAbandonAfterMs?: number
+  /**
    * Overrides `ANALYTICS_PURGE_TICK_MS`. Not a CLI flag, same reason as
    * `scheduledPublishTickMs`: a test proves the retention sweep really runs
    * without waiting a day for it.
@@ -5325,6 +5396,31 @@ const FORMS_PURGE_TICK_MS = 24 * 60 * 60 * 1000
  */
 const CHANNEL_NOTIFICATION_TICK_MS = 60_000
 const COMMERCE_EMAIL_TICK_MS = 60_000
+/**
+ * How often `runServe` runs the subscription billing sweep (fiche 53 task 3,
+ * audit T-COM-01): `runBilling` bills every subscription whose
+ * `nextBillingAt` has come due, `runDunning` retries whatever renewal
+ * payment is due for retry today, and `sendRenewalNotices` warns a
+ * subscriber ahead of their charge (fiche 53 task 5). All three are
+ * idempotent per period/attempt on their own (compare-and-set on
+ * `next_retry_at`, one row per period for a notice) — this tick is only the
+ * clock, the same "no persistent worker" trade `SCHEDULED_PUBLISH_TICK_MS`
+ * documents. Daily, not every minute: nobody is waiting on a page load for a
+ * subscription renewal the way a scheduled publish is waited on.
+ */
+const COMMERCE_BILLING_TICK_MS = 24 * 60 * 60 * 1000
+/**
+ * How often `runServe` runs the abandoned-cart sweep (audit A1-commerce P2):
+ * `CartStore.abandon()` existed since fiche 32 with no automatic caller, so
+ * a cart nobody touched stayed `open` forever on a real site. Idempotent on
+ * its own (a cart this abandons no longer matches `status = 'open'`, so a
+ * rerun before another cart goes stale finds nothing) — this tick is only
+ * the clock. Hourly, not daily: unlike a subscription renewal, "has this
+ * shopper given up" is worth noticing sooner, and unlike scheduled
+ * publication nobody is watching a page load for it either, so a middle
+ * cadence.
+ */
+const CART_ABANDON_TICK_MS = 60 * 60 * 1000
 
 /**
  * How often `runServe` purges analytics events (and their daily salts) past
@@ -5944,6 +6040,42 @@ export async function runServe(options: ServeOptions): Promise<number> {
       },
     })
   }
+  // Fiche 53 tasks 3 and 5, audit T-COM-01 (P0): `runBilling`/`runDunning`/
+  // `sendRenewalNotices` existed, were fully tested against the store, and
+  // were never once called by `cogenta serve` — a subscription's own
+  // idempotence guarantees (compare-and-set on `next_retry_at`, one row per
+  // billing period) were true of code nothing ever ran. Always registered,
+  // unlike `commerce-order-emails` above: subscription billing needs no
+  // email transport, only this site's own commerce tables, which
+  // `ensureCommerceTables` already created unconditionally.
+  scheduledTaskRegistry.register({
+    name: 'commerce-subscriptions',
+    description:
+      'Bill due subscriptions, retry due dunning payments, and send due renewal notices.',
+    intervalMs: options.commerceBillingTickMs ?? COMMERCE_BILLING_TICK_MS,
+    run: async () => {
+      const result = await site.tickCommerceSubscriptions()
+      return {
+        summary: `${result.billed} billed, ${result.dunningRetried} dunning retried, ${result.dunningSuspended} suspended, ${result.renewalNoticesSent} renewal notices sent`,
+      }
+    },
+  })
+  // Audit A1-commerce (P2): `CartStore.abandon()` existed since fiche 32
+  // with no automatic caller — an open cart nobody touched stayed `open`
+  // forever on a real site. Always registered, same reasoning as
+  // `commerce-subscriptions` just above: no email transport needed, only
+  // this site's own unconditionally-created commerce tables.
+  scheduledTaskRegistry.register({
+    name: 'commerce-carts',
+    description: 'Mark every open cart abandoned once it has been inactive past its threshold.',
+    intervalMs: options.cartAbandonTickMs ?? CART_ABANDON_TICK_MS,
+    run: async () => {
+      const result = await site.tickCartAbandon(
+        options.cartAbandonAfterMs === undefined ? {} : { olderThanMs: options.cartAbandonAfterMs },
+      )
+      return { summary: `${result.abandoned} abandoned` }
+    },
+  })
   scheduledTaskRegistry.register({
     name: 'updates-auto-check',
     description:
@@ -6089,8 +6221,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // The recurring jobs above (scheduled publication, the tools queue drain
   // riding along with it, the 404 log purge, audit integrity, the trash
   // sweep, forms GDPR retention, channel notification flush, analytics
-  // retention, updates auto-check, and — fiche 52 task 2 — the commerce
-  // order-email retry queue) are all `scheduledTaskRegistry` entries rather
+  // retention, updates auto-check, the commerce order-email retry queue
+  // (fiche 52 task 2), the subscription billing/dunning/renewal-notice
+  // sweep (fiche 53 tasks 3/5, audit T-COM-01), and — audit A1-commerce
+  // P2 — the abandoned-cart sweep) are all
+  // `scheduledTaskRegistry` entries rather
   // than independent `setInterval`s: one heartbeat drives `registry.tick()`,
   // which itself decides which tasks are actually due against the interval
   // each was registered with above — the same cadence as before, since the
@@ -6110,6 +6245,8 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.analyticsPurgeTickMs ?? ANALYTICS_PURGE_TICK_MS,
     options.updatesAutoCheckTickMs ?? UPDATES_AUTO_CHECK_TICK_MS,
     options.commerceEmailTickMs ?? COMMERCE_EMAIL_TICK_MS,
+    options.commerceBillingTickMs ?? COMMERCE_BILLING_TICK_MS,
+    options.cartAbandonTickMs ?? CART_ABANDON_TICK_MS,
   )
   const runScheduledTasksHeartbeat = (): void => {
     // Sequenced, not concurrent: `registry.tick()` already runs its due

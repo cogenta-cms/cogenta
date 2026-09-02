@@ -25,10 +25,16 @@ header comment for why.
 npm create cogenta my-site
 ```
 
-This runs an interactive wizard: site name, site URL, primary language, a site type
-("blank" or "blog" — more blueprints are coming), a database (SQLite unless it detects
-a local Postgres or MySQL), an optional LLM provider, and an admin email. Answer the
-prompts, or skip them entirely:
+This runs an interactive wizard: site name, site URL, primary language, a site type, a
+database (SQLite unless it detects a local Postgres or MySQL), an optional LLM
+provider, and an admin email. The site type is a **blueprint** — a content model, a
+skin, recommended agents and demo content, all at once, and every part of it stays
+editable afterwards. Ten are available: `blank` (empty schema, nothing pre-configured),
+`blog`, `magazine`, `portfolio`, `vitrine` (showcase site), `documentation`,
+`association` (nonprofit), `restaurant`, `saas` and `store` (product catalogue) — see
+[`packages/create-cogenta/src/blueprints/registry.ts`](../packages/create-cogenta/src/blueprints/registry.ts)
+for the full, current list and one-line description of each. Answer the prompts, or
+skip them entirely:
 
 ```sh
 npm create cogenta my-site -- --yes
@@ -41,13 +47,19 @@ service, no network call beyond an optional LLM key validation. For scripted ins
 What you get, at minimum:
 
 - `cogenta.config.mjs` — your site's configuration (below).
-- `package.json` — declares `@cogenta/core`, `@cogenta/cli` and `@cogenta/theme-canonical`.
+- `package.json` — declares `@cogenta/core`, `@cogenta/cli` and `@cogenta/theme-canonical`,
+  a `start` script (`cogenta serve`, so `npm start` and most PaaS auto-detection work
+  unmodified) and `engines.node` (`>=22.13`, the version this installer itself requires).
 - `.cogenta/site.db` — a real SQLite database, already migrated.
 - An admin user, created for you.
 
 Choosing the `blog` site type additionally writes `cogenta.schema.mjs` (a real content
-model — posts, categories, tags, pages), seeds demo content through it, and applies the
-canonical theme's default skin.
+model — posts and pages, both with the `seoTitle`/`seoDescription`/`seoImage`/
+`seoNoindex` override fields the admin's SEO panel already reads by convention) with
+`category`/`tag` declared as real taxonomies rather than collections (`f.taxonomy()`,
+ADR-0022), seeds demo content and demo terms through it, and applies the canonical
+theme's default skin. Every other blueprint beyond `blank` does the same for its own
+kind of site.
 
 ## 2. `cogenta.config.mjs`
 
@@ -149,15 +161,22 @@ config is wrong, `doctor` names the exact field, never a stack trace.
 
 ## 5. A first real edit
 
-Add a second field to the `note` collection above — say, a `tags` field:
+Add a second field to the `note` collection above — say, a `tags` field. Plain
+classification like this — no status, no version, no lifecycle of its own — is what a
+**taxonomy** is for (`schema@2.0`, ADR-0022), declared with `defineTaxonomy()` and
+pointed at with `f.taxonomy()` rather than `f.relation()`:
 
 ```ts
-tags: f.relation({ to: 'tag', many: true, onDelete: 'cascade' }),
+tags: f.taxonomy({ of: 'tag', many: true }),
 ```
 
-(this needs a `tag` collection to point at — see `post`/`tag` in
+(this needs a `tag` taxonomy to point at — see `category`/`tag` in
 [`packages/create-cogenta/src/blueprints/blog.ts`](../packages/create-cogenta/src/blueprints/blog.ts)
-for a complete worked example with a real relation). Save the file, then:
+for a complete worked example, term seeding included). `f.relation()` is still the
+right tool when the target *does* have its own lifecycle — a real collection with
+drafts, versions and permissions of its own — see `comment.post` in
+[`packages/import/src/wordpress/collections.ts`](../packages/import/src/wordpress/collections.ts)
+for a worked example of that case. Save the file, then:
 
 ```sh
 npx cogenta migrate up

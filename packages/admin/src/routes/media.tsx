@@ -4,6 +4,7 @@ import { ApiError } from '../api/client.js'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import {
   bulkDeleteMedia,
+  bulkMediaUsage,
   bulkMoveMedia,
   createMediaFolder,
   deleteMediaFolder,
@@ -14,6 +15,7 @@ import {
   type MediaFolder,
   type MediaKind,
   type MediaSortField,
+  type MediaUsageReport,
   moveMedia,
   updateMediaFolder,
 } from '../api/media-client.js'
@@ -22,6 +24,7 @@ import { MediaDetail } from '../media/media-detail.js'
 import { MediaFolderTree, setMediaDragData } from '../media/media-folder-tree.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { UploadForm } from '../media/upload-form.js'
+import { useUploadQueue } from '../media/upload-queue.js'
 import {
   Button,
   Card,
@@ -78,6 +81,11 @@ export function MediaRoute(): JSX.Element {
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [kindFilter, setKindFilter] = useState<MediaKind | ''>('')
   const [tagFilter, setTagFilter] = useState('')
+  // Fiche 05 task 7: both already supported by GET /api/media, never wired
+  // to this screen.
+  const [fromFilter, setFromFilter] = useState('')
+  const [toFilter, setToFilter] = useState('')
+  const [total, setTotal] = useState<number | null>(null)
   const [sort, setSort] = useState<{ field: MediaSortField; direction: 'asc' | 'desc' }>({
     field: 'createdAt',
     direction: 'desc',
@@ -91,6 +99,13 @@ export function MediaRoute(): JSX.Element {
   } | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkMoveTarget, setBulkMoveTarget] = useState('')
+  // Fiche 05 task 3: what a bulk delete is about to orphan, fetched once the
+  // confirmation dialog is asked for — never blocking the delete itself
+  // (R6: reversible and journalled, not locked), only making the usage
+  // impossible to miss before it happens.
+  const [bulkDeleteUsage, setBulkDeleteUsage] = useState<Readonly<
+    Record<string, MediaUsageReport>
+  > | null>(null)
 
   const [folderModal, setFolderModal] = useState<
     | { readonly mode: 'create'; readonly parentId: string | null }
@@ -127,6 +142,8 @@ export function MediaRoute(): JSX.Element {
         ...(kindFilter === '' ? {} : { kind: kindFilter }),
         ...(tagFilter.trim() === '' ? {} : { tag: tagFilter.trim() }),
         ...(submittedQuery.trim() === '' ? {} : { q: submittedQuery.trim() }),
+        ...(fromFilter === '' ? {} : { from: fromFilter }),
+        ...(toFilter === '' ? {} : { to: toFilter }),
         sort: sort.field,
         direction: sort.direction,
         ...(selectedFolderId === undefined ? {} : { folderId: selectedFolderId }),
@@ -134,13 +151,24 @@ export function MediaRoute(): JSX.Element {
       setItems(page.items)
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
+      setTotal(page.total ?? null)
       setSelected(new Set())
     } catch (caught) {
       setError(describeApiError(caught, t('media.loadError')))
     } finally {
       setLoading(false)
     }
-  }, [token, kindFilter, tagFilter, submittedQuery, sort, selectedFolderId, t])
+  }, [
+    token,
+    kindFilter,
+    tagFilter,
+    submittedQuery,
+    fromFilter,
+    toFilter,
+    sort,
+    selectedFolderId,
+    t,
+  ])
 
   useEffect(() => {
     void load()
@@ -156,6 +184,8 @@ export function MediaRoute(): JSX.Element {
         ...(kindFilter === '' ? {} : { kind: kindFilter }),
         ...(tagFilter.trim() === '' ? {} : { tag: tagFilter.trim() }),
         ...(submittedQuery.trim() === '' ? {} : { q: submittedQuery.trim() }),
+        ...(fromFilter === '' ? {} : { from: fromFilter }),
+        ...(toFilter === '' ? {} : { to: toFilter }),
         sort: sort.field,
         direction: sort.direction,
         ...(selectedFolderId === undefined ? {} : { folderId: selectedFolderId }),
@@ -163,6 +193,7 @@ export function MediaRoute(): JSX.Element {
       setItems((current) => [...current, ...page.items])
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
+      setTotal(page.total ?? null)
     } catch (caught) {
       setError(describeApiError(caught, t('media.loadError')))
     } finally {
@@ -180,6 +211,20 @@ export function MediaRoute(): JSX.Element {
   }
 
   // ---------------------------------------------------------------- bulk actions
+
+  /** Fiche 05 task 3 — fetches usage before the confirmation dialog opens, so it is there the instant a reviewer looks. */
+  async function openBulkDeleteConfirm(): Promise<void> {
+    if (token === null) return
+    setConfirmBulkDelete(true)
+    setBulkDeleteUsage(null)
+    try {
+      setBulkDeleteUsage(await bulkMediaUsage(token, [...selected]))
+    } catch {
+      // The confirmation still works without it — usage is informative, not
+      // a gate (R6: reversible and journalled, never locked).
+      setBulkDeleteUsage({})
+    }
+  }
 
   async function runBulkDelete(): Promise<void> {
     if (token === null) return
@@ -285,6 +330,38 @@ export function MediaRoute(): JSX.Element {
     }
   }
 
+  // Fiche 05 task 1 — a drop zone across the whole page, not just inside the
+  // upload panel: `uploads.enqueue()` still calls the auth hook with an
+  // empty token while `token` is briefly `null` (before the "not signed in
+  // yet" return below runs), which is harmless — nothing can be dropped on
+  // an unrendered page.
+  const uploads = useUploadQueue(token ?? '', (asset) => setItems((current) => [asset, ...current]))
+  const [pageDragOver, setPageDragOver] = useState(false)
+
+  // A page-wide file drop uploads decorative-by-necessity — the same choice
+  // `MediaPicker`'s own drop zone already made (fiche 03) — never the sole
+  // path (the upload panel above remains, with its real alt-text form).
+  // `types.includes('Files')` is what keeps this from intercepting the
+  // folder tree's internal asset-to-folder drag (`setMediaDragData`, a
+  // custom MIME type, never `'Files'`).
+  function handlePageDragOver(event: DragEvent): void {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    setPageDragOver(true)
+  }
+
+  function handlePageDrop(event: DragEvent): void {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    setPageDragOver(false)
+    for (const file of [...event.dataTransfer.files]) {
+      uploads.enqueue(file, {
+        decorative: true,
+        decorativeJustification: t('fields.mediaDropJustification'),
+      })
+    }
+  }
+
   if (token === null) return <p>{t('common.loading')}</p>
 
   const selectedAsset = items.find((item) => item.id === selectedId) ?? null
@@ -302,10 +379,56 @@ export function MediaRoute(): JSX.Element {
   })()
 
   return (
-    <section aria-labelledby="media-heading" className="flex flex-col gap-6">
+    <section
+      aria-labelledby="media-heading"
+      className={`flex flex-col gap-6 ${pageDragOver ? 'outline-2 outline-dashed outline-primary outline-offset-[-8px]' : ''}`}
+      onDragOver={handlePageDragOver}
+      onDragLeave={() => setPageDragOver(false)}
+      onDrop={handlePageDrop}
+    >
       <h1 id="media-heading" className="m-0 text-xl leading-7 font-semibold">
         {t('media.heading')}
       </h1>
+
+      {pageDragOver && (
+        <p className="rounded-md border border-dashed border-primary bg-primary/5 p-3 text-center text-sm">
+          {t('media.pageDropHint')}
+        </p>
+      )}
+
+      {uploads.items.some((item) => item.status !== 'done') && (
+        <ul
+          className="m-0 flex list-none flex-col gap-1 p-0"
+          aria-label={t('media.uploadQueueHeading')}
+        >
+          {uploads.items
+            .filter((item) => item.status !== 'done')
+            .map((item) => (
+              <li key={item.id} className="text-sm">
+                {item.status === 'failed' ? (
+                  <span role="alert">
+                    {item.filename}: {item.error ?? t('media.uploadError')}{' '}
+                    <button type="button" onClick={() => uploads.retry(item.id)}>
+                      {t('media.retryUpload')}
+                    </button>
+                  </span>
+                ) : (
+                  <span>
+                    {item.filename} —{' '}
+                    {t(
+                      item.status === 'uploading'
+                        ? 'media.uploadInProgress'
+                        : 'media.uploadPending',
+                      {
+                        filename: item.filename,
+                      },
+                    )}
+                  </span>
+                )}
+              </li>
+            ))}
+        </ul>
+      )}
 
       <div className="grid grid-cols-[16rem_1fr] gap-6">
         <aside>
@@ -443,8 +566,36 @@ export function MediaRoute(): JSX.Element {
                   </Select>
                 )}
               </Field>
+
+              <Field label={t('media.dateFromLabel')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="date"
+                    value={fromFilter}
+                    onChange={(event) => setFromFilter(event.target.value)}
+                  />
+                )}
+              </Field>
+
+              <Field label={t('media.dateToLabel')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="date"
+                    value={toFilter}
+                    onChange={(event) => setToFilter(event.target.value)}
+                  />
+                )}
+              </Field>
             </form>
           </search>
+
+          {total !== null && (
+            <p className="text-sm text-muted-foreground">
+              {t('media.totalCount', { shown: items.length, total })}
+            </p>
+          )}
 
           {selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2">
@@ -453,7 +604,7 @@ export function MediaRoute(): JSX.Element {
                 variant="destructive"
                 size="sm"
                 disabled={bulkBusy}
-                onClick={() => setConfirmBulkDelete(true)}
+                onClick={() => void openBulkDeleteConfirm()}
               >
                 {t('media.bulkDelete', { count: selected.size })}
               </Button>
@@ -662,6 +813,43 @@ export function MediaRoute(): JSX.Element {
         }
       >
         <p>{t('media.bulkDeleteConfirmBody')}</p>
+        {bulkDeleteUsage !== null &&
+          (() => {
+            const used = [...selected]
+              .map((id) => ({
+                id,
+                asset: items.find((item) => item.id === id),
+                report: bulkDeleteUsage[id],
+              }))
+              .filter(
+                (entry): entry is typeof entry & { report: MediaUsageReport } =>
+                  entry.report !== undefined && entry.report.matches.length > 0,
+              )
+            if (used.length === 0) return null
+            return (
+              <div>
+                <p>{t('media.bulkDeleteUsageWarning', { count: used.length })}</p>
+                <ul className="m-0 flex flex-col gap-2 p-0 text-sm">
+                  {used.map((entry) => (
+                    <li key={entry.id} className="list-none">
+                      <strong>{entry.asset?.filename ?? entry.id}</strong>
+                      <ul className="m-0 flex flex-col gap-0.5 pl-4">
+                        {entry.report.matches.map((match) => (
+                          <li key={`${match.collection}-${match.entryId}-${match.field}`}>
+                            {t('media.usageItem', {
+                              collection: match.collection,
+                              entryId: match.entryId,
+                              field: match.field,
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })()}
       </Modal>
     </section>
   )

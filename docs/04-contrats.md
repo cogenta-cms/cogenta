@@ -717,6 +717,16 @@ interface MediaReference {
   readonly height?: number
   readonly focal?: { readonly x: number; readonly y: number } | null
   readonly poster?: string
+  /**
+   * A short, stable digest of the asset's current bytes. Present, folded
+   * into every `/_image` URL `ctx.image()` builds as `&v=`, so replacing the
+   * file behind an id (`MediaStore.replace()`) changes the URL and not just
+   * the bytes a year-long `immutable` cache had already stored. Absent is
+   * fully backward compatible: no `&v=` is added, exactly the behaviour
+   * before this field was actually wired up. Optional, additive to
+   * `theme@1.2` — a theme that reads only `src`/`srcset` is unaffected.
+   */
+  readonly version?: string
 }
 
 interface ImageOptions {

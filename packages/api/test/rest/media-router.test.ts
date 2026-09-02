@@ -9,6 +9,13 @@ import {
   type MediaStore,
   type StorageDriver,
 } from '@cogenta/core'
+import {
+  type CollectionDefinition,
+  type ContentStore,
+  createContentStore,
+  createSchemaTables,
+  dropSchemaTables,
+} from '@cogenta/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMediaRouter, type MediaRouter } from '../../src/rest/media-router.js'
 import { ANONYMOUS } from '../../src/types.js'
@@ -340,5 +347,157 @@ describe('DELETE /api/media/{id}', () => {
     expect(response.status).toBe(204)
     expect(await store.get(body.data.id)).toBeNull()
     expect(await storage.exists(body.data.storageKey)).toBe(false)
+  })
+})
+
+/**
+ * `GET /api/media/{id}/usage` and `POST /api/media/-/bulk-usage` (fiche 05
+ * tasks 3 and 5, audit `05-mediatheque.md` — neither route had a single
+ * test in this file before this fiche, despite both being live since fiche
+ * 11). A real `ContentStore` against a real entry, the same fixture shape
+ * `packages/schema/test/media-usage.test.ts` already uses for
+ * `findMediaUsage` itself — this suite proves the *router* wires it
+ * correctly, not the scan logic a second time.
+ */
+describe('GET /api/media/{id}/usage and POST /api/media/-/bulk-usage', () => {
+  const article: CollectionDefinition = {
+    name: 'usage_router_article',
+    labels: { singular: 'Article', plural: 'Articles' },
+    routing: { pattern: '/:slug' },
+    fields: {
+      title: { kind: 'text', required: true, options: { max: 200 } },
+      slug: { kind: 'slug', required: true, options: { from: 'title' } },
+      cover: { kind: 'media', options: { accept: ['image'], many: false } },
+    },
+    permissions: { read: ['public'] },
+  }
+
+  let usageDb: DatabaseHandle
+  let articleStore: ContentStore
+  let usageRouter: MediaRouter
+  let assetId: string
+
+  beforeEach(async () => {
+    usageDb = await createSqliteHandle({ url: ':memory:' })
+    await createSchemaTables(usageDb, [article])
+    articleStore = createContentStore({ db: usageDb, collection: article, siblings: [article] })
+    usageRouter = createMediaRouter({
+      store,
+      storage,
+      usage: {
+        collections: [article],
+        storeFor: () => articleStore,
+      },
+    })
+
+    const uploaded = await usageRouter.handle(
+      {
+        method: 'POST',
+        path: '/api/media',
+        query: {},
+        body: {
+          kind: 'image',
+          filename: 'used.png',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+          alt: 'A cover photo',
+        },
+      },
+      EDITOR,
+    )
+    assetId = (uploaded.body as { data: { id: string } }).data.id
+
+    await articleStore.create({
+      values: { title: 'With a cover', slug: 'with-a-cover', cover: assetId },
+    })
+  })
+
+  afterEach(async () => {
+    await dropSchemaTables(usageDb, [article])
+    await usageDb.close()
+  })
+
+  it('reports the real entry referencing the asset', async () => {
+    const response = await usageRouter.handle(
+      { method: 'GET', path: `/api/media/${assetId}/usage`, query: {} },
+      EDITOR,
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as {
+      data: { matches: readonly { collection: string; at: string }[]; truncated: boolean }
+    }
+    expect(body.data.matches).toHaveLength(1)
+    expect(body.data.matches[0]).toMatchObject({
+      collection: 'usage_router_article',
+      at: 'cover',
+    })
+    expect(body.data.truncated).toBe(false)
+  })
+
+  it('refuses an anonymous usage read', async () => {
+    const response = await usageRouter.handle(
+      { method: 'GET', path: `/api/media/${assetId}/usage`, query: {} },
+      ANONYMOUS,
+    )
+    expect(response.status).toBe(401)
+  })
+
+  it('reports 404 for an unknown asset', async () => {
+    const response = await usageRouter.handle(
+      { method: 'GET', path: '/api/media/nope/usage', query: {} },
+      EDITOR,
+    )
+    expect(response.status).toBe(404)
+  })
+
+  it('bulk-usage reports one entry per id, empty for one that is not referenced', async () => {
+    const unused = await usageRouter.handle(
+      {
+        method: 'POST',
+        path: '/api/media',
+        query: {},
+        body: {
+          kind: 'image',
+          filename: 'unused.png',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+          alt: 'Never referenced',
+        },
+      },
+      EDITOR,
+    )
+    const unusedId = (unused.body as { data: { id: string } }).data.id
+
+    const response = await usageRouter.handle(
+      {
+        method: 'POST',
+        path: '/api/media/-/bulk-usage',
+        query: {},
+        body: { ids: [assetId, unusedId] },
+      },
+      EDITOR,
+    )
+    expect(response.status).toBe(200)
+    const body = response.body as {
+      data: Record<string, { matches: readonly unknown[]; truncated: boolean }>
+    }
+    expect(body.data[assetId]?.matches).toHaveLength(1)
+    expect(body.data[unusedId]?.matches).toHaveLength(0)
+  })
+
+  it('refuses an anonymous bulk-usage request', async () => {
+    const response = await usageRouter.handle(
+      { method: 'POST', path: '/api/media/-/bulk-usage', query: {}, body: { ids: [assetId] } },
+      ANONYMOUS,
+    )
+    expect(response.status).toBe(401)
+  })
+
+  it('rejects an empty id list rather than silently reporting nothing', async () => {
+    const response = await usageRouter.handle(
+      { method: 'POST', path: '/api/media/-/bulk-usage', query: {}, body: { ids: [] } },
+      EDITOR,
+    )
+    expect(response.status).toBe(400)
   })
 })

@@ -25,6 +25,11 @@ function pngFile(name = 'cover.png'): File {
   return new File(['fake-png-bytes'], name, { type: 'image/png' })
 }
 
+/** A `DataTransfer` carrying real dropped files — `types` includes `'Files'`, which is exactly what tells a page-wide drop zone (fiche 05 task 1) apart from an internal asset drag (`setMediaDragData`'s own custom MIME type). */
+function fileDropDataTransfer(files: readonly File[]): DataTransfer {
+  return { types: ['Files'], files } as unknown as DataTransfer
+}
+
 describe('media library', () => {
   it('lists no media initially, and shows one after an upload', async () => {
     render(<App />)
@@ -121,6 +126,60 @@ describe('media library', () => {
 })
 
 /**
+ * Fiche 05 task 1 (audit `05-mediatheque.md` §6 T01): the real multipart
+ * upload transport, upload limits shown before the first file is picked,
+ * and a whole-page drop zone that starts an upload without ever needing the
+ * form's own file picker.
+ */
+describe('media library — real upload transport (fiche 05 task 1)', () => {
+  it('shows the upload size limit and accepted types before any file is picked', async () => {
+    render(<App />)
+    await goToMedia()
+
+    // `GET /api/media/-/limits` — fetched once, rendered before a file is
+    // even chosen, so a rejection is never a surprise.
+    await screen.findByText(/250 MB/)
+    expect(screen.getByText(/image\/png/)).toBeDefined()
+  })
+
+  it('uploading a file shows a real progress entry that clears once done', async () => {
+    render(<App />)
+    await goToMedia()
+
+    fireEvent.change(screen.getByLabelText('Fichier'), { target: { files: [pngFile()] } })
+    fireEvent.change(screen.getByLabelText('Texte alternatif', { exact: false }), {
+      target: { value: 'A red bicycle' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Téléverser' }))
+
+    // The asset lands in the grid — proof the multipart transport actually
+    // completed against the mock's own `XMLHttpRequest` stub, not `fetch`.
+    expect(await screen.findByRole('button', { name: /cover\.png/ })).toBeDefined()
+    // And the transient queue entry cleared once the upload finished —
+    // "done" items are not left cluttering the panel forever.
+    await waitFor(() => expect(screen.queryByText(/cover\.png —/)).toBeNull())
+  })
+
+  it('dropping a file anywhere on the page uploads it, without opening the upload form', async () => {
+    render(<App />)
+    await goToMedia()
+
+    const section = screen.getByRole('heading', { name: 'Médiathèque' }).closest('section')
+    expect(section).not.toBeNull()
+
+    const dataTransfer = fileDropDataTransfer([pngFile('dropped-anywhere.png')])
+    fireEvent.dragOver(section as HTMLElement, { dataTransfer })
+    fireEvent.drop(section as HTMLElement, { dataTransfer })
+
+    // Decorative-by-necessity — the same choice `MediaPicker`'s own drop
+    // zone already made (fiche 03): a page-wide drop carries no alt text to
+    // ask for, and this is never the only path to upload (the form above
+    // still asks for a real description).
+    expect(await screen.findByRole('button', { name: /dropped-anywhere\.png/ })).toBeDefined()
+  })
+})
+
+/**
  * Fiche 46: the folder tree, and the bulk actions fiche 11 built server-side
  * but this screen never called. End-to-end against the real screen, not
  * just the router (`media-folder-router.test.ts` already proves the API).
@@ -182,6 +241,32 @@ describe('media library folders', () => {
       expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(1)
     })
   })
+
+  // Fiche 05 task 3: usage is checked before the confirmation dialog even
+  // opens, so a selection that would orphan a real reference is impossible
+  // to miss — and never a gate, only a warning (R6).
+  it('warns, before confirming, that some selected files are still referenced by content', async () => {
+    installMockFetch({
+      mediaSeedCount: 3,
+      mediaUsage: {
+        'media-seed-1': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+        'media-seed-2': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+        'media-seed-3': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+      },
+    })
+    render(<App />)
+    await goToMedia()
+
+    await screen.findAllByRole('button', { name: /seed-\d+\.png/ })
+    const checkboxes = screen.getAllByRole('checkbox', { name: /Sélectionner/ })
+    fireEvent.click(checkboxes[0] as HTMLElement)
+    fireEvent.click(checkboxes[1] as HTMLElement)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer (2)' }))
+
+    await screen.findByText(/2 des fichiers sélectionnés sont encore référencés/)
+    expect(screen.getAllByText(/article · entry-1 · cover/)).toHaveLength(2)
+  })
 })
 
 /**
@@ -199,6 +284,9 @@ describe('media library pagination', () => {
 
     expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(25)
     expect(screen.queryByText('seed-30.png')).toBeNull()
+    // Fiche 05 task 7: the total from the API's own page.total, not just the
+    // count of what happened to load so far.
+    expect(await screen.findByText('25 affichés sur 30')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Charger la suite' }))
 
@@ -207,6 +295,35 @@ describe('media library pagination', () => {
     })
     expect(screen.getByText('seed-30.png')).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Charger la suite' })).toBeNull()
+    expect(screen.getByText('30 affichés sur 30')).toBeDefined()
+  })
+
+  // Fiche 05 task 7: both fields already existed in `ListMediaOptions` and
+  // the server's own query parsing — this screen never rendered them.
+  it('sends a date range to the API when the from/to filters are set', async () => {
+    const requestedUrls: string[] = []
+    installMockFetch({ mediaSeedCount: 3 })
+    const mockedFetch = globalThis.fetch
+    vi.stubGlobal('fetch', ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/media?') || url.endsWith('/api/media')) requestedUrls.push(url)
+      return mockedFetch(input, init)
+    }) as typeof fetch)
+
+    render(<App />)
+    await goToMedia()
+    await screen.findAllByRole('button', { name: /seed-\d+\.png/ })
+
+    fireEvent.change(screen.getByLabelText('Depuis le'), { target: { value: '2026-01-01' } })
+    fireEvent.change(screen.getByLabelText('Jusqu’au'), { target: { value: '2026-01-31' } })
+
+    await waitFor(() => {
+      expect(
+        requestedUrls.some(
+          (url) => url.includes('from=2026-01-01') && url.includes('to=2026-01-31'),
+        ),
+      ).toBe(true)
+    })
   })
 
   it('shows no "load more" control when the library fits on one page', async () => {

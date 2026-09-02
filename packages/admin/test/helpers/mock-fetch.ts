@@ -334,6 +334,79 @@ function mockRecoveryCodeBatch(): readonly string[] {
   return Array.from({ length: 10 }, (_, index) => `CODE${index}-AAAAA`)
 }
 
+/** Mirrors `mediaKindFor` (`api/media-client.ts`) — the mock has no import path to the real one. */
+function mockMediaKindFor(mimeType: string): string {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'file'
+}
+
+/**
+ * `POST /api/media` (upload) as this mock understands JSON `body.*` — a real
+ * `multipart/form-data` upload (fiche 05 task 1: `uploadMediaMultipart`,
+ * the admin's real transport since this fiche) carries the same fields as
+ * `FormData` entries instead, so this reads either shape into the one this
+ * route's own handler already expects, the same way the real server's
+ * `normaliseMultipartUpload`/`legacyJsonUpload` both funnel into one
+ * `NormalisedUpload`.
+ */
+interface MockUploadBody {
+  kind: string | undefined
+  filename: string | undefined
+  mimeType: string | undefined
+  alt: string | undefined
+  decorative: boolean | undefined
+  decorativeJustification: string | undefined
+  tags: unknown
+  focal: unknown
+  folderId: unknown
+}
+
+function mockUploadBody(jsonBody: Record<string, unknown>, form: FormData | null): MockUploadBody {
+  if (form === null) {
+    return {
+      kind: jsonBody['kind'] as string | undefined,
+      filename: jsonBody['filename'] as string | undefined,
+      mimeType: jsonBody['mimeType'] as string | undefined,
+      alt: jsonBody['alt'] as string | undefined,
+      decorative: jsonBody['decorative'] as boolean | undefined,
+      decorativeJustification: jsonBody['decorativeJustification'] as string | undefined,
+      tags: jsonBody['tags'],
+      focal: jsonBody['focal'],
+      folderId: jsonBody['folderId'],
+    }
+  }
+  const file = form.get('file')
+  const tagsField = form.get('tags')
+  const kindField = form.get('kind')
+  const altField = form.get('alt')
+  const justificationField = form.get('decorativeJustification')
+  return {
+    kind:
+      typeof kindField === 'string' && kindField !== ''
+        ? kindField
+        : file instanceof File
+          ? mockMediaKindFor(file.type)
+          : undefined,
+    filename: file instanceof File ? file.name : undefined,
+    mimeType: file instanceof File ? file.type : undefined,
+    alt: typeof altField === 'string' ? altField : undefined,
+    decorative: form.get('decorative') === 'true',
+    decorativeJustification:
+      typeof justificationField === 'string' ? justificationField : undefined,
+    tags:
+      typeof tagsField === 'string' && tagsField.length > 0
+        ? tagsField
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0)
+        : undefined,
+    focal: undefined,
+    folderId: undefined,
+  }
+}
+
 /**
  * A fetch stub that answers exactly the `/api/auth/*` shape the real server
  * returns — this is a network mock for a browser unit test, not the database
@@ -881,6 +954,18 @@ export function installMockFetch(
      * the same empty library every media test saw before this fiche.
      */
     readonly mediaSeedCount?: number
+    /**
+     * Fiche 05 task 3: `GET .../usage` and `POST .../bulk-usage`'s answer
+     * for a given media id — absent means "no usage" (`matches: []`), the
+     * same empty-by-default a site with no `usage` source wired configures
+     * on the real router.
+     */
+    readonly mediaUsage?: Readonly<
+      Record<
+        string,
+        readonly { readonly collection: string; readonly entryId: string; readonly field: string }[]
+      >
+    >
     /**
      * `true` (the default) mocks a site with an `AgentRegistry` mounted, the
      * way this suite always has. `false` reproduces the real, honest shape
@@ -4992,6 +5077,22 @@ export function installMockFetch(
         }
       }
 
+      // `GET /api/media/-/limits` (fiche 05 task 1) — shown by `UploadForm`
+      // before the first file is picked.
+      if (url.endsWith('/api/media/-/limits') && method === 'GET') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        return json(200, {
+          data: {
+            maxUploadBytes: 250 * 1024 * 1024,
+            acceptedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/avif'],
+          },
+        })
+      }
+
       const mediaFileMatch = /\/api\/media\/([^/?]+)\/file(?:\?.*)?$/u.exec(url)
       if (mediaFileMatch !== null) {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
@@ -5167,7 +5268,31 @@ export function installMockFetch(
         if (found === undefined) {
           return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
         }
-        return json(200, { data: { matches: [], scannedEntries: 0, truncated: false } })
+        const matches = options.mediaUsage?.[found.id] ?? []
+        return json(200, { data: { matches, scannedEntries: 0, truncated: false } })
+      }
+
+      // `POST /api/media/-/bulk-usage` (fiche 05 task 3) — checked before
+      // the admin's bulk-delete confirmation dialog opens.
+      if (url.endsWith('/api/media/-/bulk-usage') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
+          })
+        }
+        const ids = Array.isArray(body.ids) ? (body.ids as string[]) : []
+        const reports: Record<
+          string,
+          { matches: unknown; scannedEntries: number; truncated: boolean }
+        > = {}
+        for (const id of ids) {
+          reports[id] = {
+            matches: options.mediaUsage?.[id] ?? [],
+            scannedEntries: 0,
+            truncated: false,
+          }
+        }
+        return json(200, { data: reports })
       }
 
       const mediaExifMatch = /\/api\/media\/([^/?]+)\/exif(?:\?.*)?$/u.exec(url)
@@ -5385,8 +5510,12 @@ export function installMockFetch(
               error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage media.' },
             })
           }
-          const decorative = body.decorative === true
-          if (decorative && (body.decorativeJustification ?? '').length === 0) {
+          // Fiche 05 task 1: the admin's real upload transport is now
+          // `multipart/form-data` (`uploadMediaMultipart`), not the JSON
+          // `body` this route used to be the only path for.
+          const uploadBody = mockUploadBody(body, init?.body instanceof FormData ? init.body : null)
+          const decorative = uploadBody.decorative === true
+          if (decorative && (uploadBody.decorativeJustification ?? '').length === 0) {
             return json(400, {
               error: {
                 code: 'MEDIA_INVALID',
@@ -5394,7 +5523,7 @@ export function installMockFetch(
               },
             })
           }
-          if (!decorative && (body.alt ?? '').length === 0) {
+          if (!decorative && (uploadBody.alt ?? '').length === 0) {
             return json(400, {
               error: { code: 'MEDIA_INVALID', message: 'Alt text is required.' },
             })
@@ -5402,19 +5531,21 @@ export function installMockFetch(
           mediaCounter += 1
           const created: MockMediaAsset = {
             id: `media-${mediaCounter}`,
-            kind: body.kind,
-            filename: body.filename,
-            mimeType: body.mimeType,
+            kind: uploadBody.kind ?? mockMediaKindFor(uploadBody.mimeType ?? ''),
+            filename: uploadBody.filename ?? 'upload.bin',
+            mimeType: uploadBody.mimeType ?? 'application/octet-stream',
             size: 10,
             width: null,
             height: null,
-            alt: decorative ? '' : (body.alt ?? ''),
+            alt: decorative ? '' : (uploadBody.alt ?? ''),
             decorative,
-            decorativeJustification: decorative ? (body.decorativeJustification ?? null) : null,
-            focal: body.focal ?? null,
-            tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
+            decorativeJustification: decorative
+              ? (uploadBody.decorativeJustification ?? null)
+              : null,
+            focal: (uploadBody.focal ?? null) as MockMediaAsset['focal'],
+            tags: Array.isArray(uploadBody.tags) ? (uploadBody.tags as string[]) : [],
             contentHash: `hash-${mediaCounter}`,
-            folderId: (body.folderId ?? null) as string | null,
+            folderId: (uploadBody.folderId ?? null) as string | null,
             createdAt: '2026-03-01T00:00:00.000Z',
             createdBy: USER.id,
           }
@@ -8862,4 +8993,70 @@ export function installMockFetch(
       throw new Error(`unhandled request in test: ${method} ${url}`)
     }),
   )
+
+  installMockXhr()
+}
+
+/**
+ * `uploadMediaMultipart` (fiche 05 task 1) uses `XMLHttpRequest`, not
+ * `fetch` — only `xhr.upload.onprogress` reports real byte-level upload
+ * progress, which `fetch` has no equivalent for. jsdom's real
+ * `XMLHttpRequest` would try an actual network request in a test, so this
+ * stub exists purely to translate an XHR call into the same stubbed
+ * `fetch` above (already routed by then), rather than duplicating any
+ * route logic a second time.
+ */
+function installMockXhr(): void {
+  class MockXMLHttpRequest {
+    #method = 'GET'
+    #url = ''
+    #headers: Record<string, string> = {}
+    status = 0
+    responseText = ''
+    upload: {
+      onprogress:
+        | ((event: { lengthComputable: boolean; loaded: number; total: number }) => void)
+        | null
+    } = { onprogress: null }
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    onabort: (() => void) | null = null
+
+    open(method: string, url: string): void {
+      this.#method = method
+      this.#url = url
+    }
+
+    setRequestHeader(name: string, value: string): void {
+      this.#headers[name] = value
+    }
+
+    send(body?: Document | XMLHttpRequestBodyInit | null): void {
+      // A single "done" progress event is honest about what this stub can
+      // simulate — a real byte-by-byte trickle needs a real socket, which a
+      // unit test has no business opening.
+      const size = body instanceof FormData ? estimateFormDataSize(body) : 0
+      this.upload.onprogress?.({ lengthComputable: true, loaded: size, total: size })
+
+      fetch(this.#url, { method: this.#method, headers: this.#headers, body: body as BodyInit })
+        .then(async (response) => {
+          this.status = response.status
+          this.responseText = await response.text()
+          this.onload?.()
+        })
+        .catch(() => {
+          this.onerror?.()
+        })
+    }
+  }
+
+  function estimateFormDataSize(form: FormData): number {
+    let total = 0
+    for (const value of form.values()) {
+      total += value instanceof File ? value.size : String(value).length
+    }
+    return total
+  }
+
+  vi.stubGlobal('XMLHttpRequest', MockXMLHttpRequest)
 }

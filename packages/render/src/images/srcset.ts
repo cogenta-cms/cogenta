@@ -40,6 +40,13 @@ export function variantUrl(
   if (options.height !== undefined) parameters.set('h', String(options.height))
   if (options.format !== undefined) parameters.set('f', options.format)
   if (options.fit !== undefined) parameters.set('fit', options.fit)
+  // Cache-busting (fiche 05 task 2): the field has existed on `MediaAsset`
+  // since `theme@1.2` but was never actually read here, so a replaced
+  // original kept serving under the year-long `immutable` cache the old
+  // query string had already earned. `contentHash` changes on every
+  // `MediaStore.replace()`, so folding it in changes the URL, not just the
+  // bytes behind it.
+  if (media.version !== undefined) parameters.set('v', media.version)
   // The focal point is deliberately absent: the endpoint reads it from the media
   // entity. Putting it in the URL would let a visitor choose the crop, and would
   // multiply the cache keys of every image by the number of points someone

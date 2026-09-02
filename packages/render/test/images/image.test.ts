@@ -244,6 +244,23 @@ describe('ctx.image() — what a theme gets back', () => {
     expect(candidateWidths(700, 1000)).toEqual([320, 640, 700, 960])
     expect(candidateWidths(2000, 500)).toEqual([320, 500])
   })
+
+  // Fiche 05 task 2: `MediaAsset.version` existed on the type since
+  // `theme@1.2` but `variantUrl` never read it — a replaced original kept
+  // serving under the exact query string a year-long `immutable` cache had
+  // already stored.
+  it('folds a present version into every candidate URL, breaking the cache after a replace', () => {
+    const versioned = { ...photo, version: 'abc123' }
+    const source = describeMedia(versioned, { width: 800 })
+
+    expect(source.src).toBe('/_image?id=photo-1&w=800&v=abc123')
+    for (const entry of source.srcset.split(', ')) expect(entry).toContain('v=abc123')
+  })
+
+  it('omits `v=` entirely when no version is known, unchanged from before this field was wired up', () => {
+    const source = describeMedia(photo, { width: 800 })
+    expect(source.src).not.toContain('v=')
+  })
 })
 
 describe('/_image query parsing', () => {

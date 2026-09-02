@@ -117,4 +117,57 @@ describe('MediaPicker — a many-valued gallery', () => {
 
     await waitFor(() => expect(screen.getByText(/ghost-media/)).toBeDefined())
   })
+
+  // Fiche 05 task 4: the browse panel had no way to narrow by folder — a
+  // field with a media library of hundreds of files scrolled the whole
+  // thing.
+  it('filters the browse panel by folder', async () => {
+    const listCalls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/media/folders')) {
+          return json(200, {
+            data: [
+              {
+                id: 'folder-1',
+                parentId: null,
+                name: 'Logos',
+                path: '/folder-1/',
+                position: 0,
+                createdAt: '2026-03-01T00:00:00.000Z',
+              },
+            ],
+          })
+        }
+        if (/\/api\/media(\?|$)/u.test(url)) {
+          listCalls.push(url)
+          return json(200, { data: [], page: { hasMore: false, nextCursor: null } })
+        }
+        return json(200, { data: [], page: { hasMore: false, nextCursor: null } })
+      }),
+    )
+
+    render(
+      <MediaPicker
+        id="cover"
+        token={TOKEN}
+        accept={['image']}
+        many={false}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choisir…' }))
+    await screen.findByLabelText('Dossier')
+    await waitFor(() => expect(listCalls.length).toBeGreaterThan(0))
+
+    fireEvent.change(screen.getByLabelText('Dossier'), { target: { value: 'folder-1' } })
+
+    await waitFor(() =>
+      expect(listCalls.some((url) => url.includes('folderId=folder-1'))).toBe(true),
+    )
+  })
 })

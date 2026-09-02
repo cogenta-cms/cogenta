@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildOpenAiRequest, parseOpenAiResponse } from '../../src/providers/openai.js'
+import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 
 describe('buildOpenAiRequest', () => {
@@ -41,7 +42,7 @@ describe('buildOpenAiRequest', () => {
       {
         type: 'function',
         function: {
-          name: 'content.publish',
+          name: 'content__publish',
           description: 'Publish content.',
           parameters: { type: 'object', properties: { id: { type: 'string' } } },
         },
@@ -55,7 +56,7 @@ describe('buildOpenAiRequest', () => {
           {
             id: 'call-1',
             type: 'function',
-            function: { name: 'content.publish', arguments: '{"id":"e1"}' },
+            function: { name: 'content__publish', arguments: '{"id":"e1"}' },
           },
         ],
       },
@@ -101,24 +102,32 @@ describe('parseOpenAiResponse', () => {
   })
 
   it('parses tool_calls arguments as JSON and maps finish_reason: tool_calls to tool_use', () => {
-    const parsed = parseOpenAiResponse({
-      choices: [
-        {
-          message: {
-            content: null,
-            tool_calls: [
-              {
-                id: 'call-1',
-                type: 'function',
-                function: { name: 'content.publish', arguments: '{"id":"e1"}' },
-              },
-            ],
+    const parsed = parseOpenAiResponse(
+      {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call-1',
+                  type: 'function',
+                  function: { name: 'content__publish', arguments: '{"id":"e1"}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
           },
-          finish_reason: 'tool_calls',
-        },
-      ],
-      usage: { prompt_tokens: 30, completion_tokens: 10 },
-    })
+        ],
+        usage: { prompt_tokens: 30, completion_tokens: 10 },
+      },
+      createToolNameDecoder({
+        model: 'm',
+        maxTokens: 1,
+        messages: [],
+        tools: [{ name: 'content.publish', description: '', inputSchema: {} }],
+      }),
+    )
 
     expect(parsed.content).toBeNull()
     expect(parsed.stopReason).toBe('tool_use')

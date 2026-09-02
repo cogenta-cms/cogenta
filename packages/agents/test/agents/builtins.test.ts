@@ -59,6 +59,30 @@ describe('ensureBuiltinAgents', () => {
     expect(security?.tools).toEqual(['deps.scan'])
   })
 
+  it('grants the read-only browse pair to a site seeded before it existed, and to nothing else', async () => {
+    await ensureBuiltinAgents(store)
+    // A superagent as it shipped before `content.collections`/`content.list`
+    // were added to the seed — the real state of any site upgraded from
+    // that version, since re-seeding never rewrites an existing agent.
+    await store.update(SUPERAGENT_NAME, {
+      tools: ['content.read', 'content.write_draft', 'media.read'],
+    })
+    // An operator who removed `content.read` on purpose is left alone.
+    await store.update(SECURITY_AGENT_NAME, { tools: ['deps.scan'] })
+
+    await ensureBuiltinAgents(store)
+
+    const all = await store.list()
+    expect(all.find((agent) => agent.name === SUPERAGENT_NAME)?.tools).toEqual([
+      'content.read',
+      'content.write_draft',
+      'media.read',
+      'content.collections',
+      'content.list',
+    ])
+    expect(all.find((agent) => agent.name === SECURITY_AGENT_NAME)?.tools).toEqual(['deps.scan'])
+  })
+
   it('only ever seeds exactly four agents', async () => {
     await ensureBuiltinAgents(store)
     expect(await store.list()).toHaveLength(4)

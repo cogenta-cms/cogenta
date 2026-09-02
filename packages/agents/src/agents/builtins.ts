@@ -1,4 +1,4 @@
-import type { AgentDeclarationInput, AgentDeclarationStore } from './store.js'
+import type { AgentDeclarationInput, AgentDeclarationStore, StoredAgent } from './store.js'
 
 /**
  * L22 task 1 items 2 and 5, plus task 3 — the four agents every site starts
@@ -57,6 +57,12 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
       model: DEFAULT_MODEL,
       tools: [
         'content.read',
+        // The browse pair (L22 task 3) — without them the superagent could
+        // only read an entry whose id it already knew, and a live run
+        // against DeepSeek showed it guessing ids 1..10 to count a site's
+        // posts. Same permission as `content.read`, read-only.
+        'content.collections',
+        'content.list',
         'content.write_draft',
         'content.publish',
         'content.delete',
@@ -139,5 +145,26 @@ export async function ensureBuiltinAgents(store: AgentDeclarationStore): Promise
   for (const seed of builtinAgentSeeds()) {
     const existing = await store.get(seed.name)
     if (existing === undefined) await store.create(seed, true)
+    else await grantContentBrowse(store, existing)
   }
+}
+
+/**
+ * The one exception to "never touch an existing seed": `content.collections`
+ * and `content.list` are the read-only half of `content.read` (same
+ * permission, added after the superagent first shipped), so a built-in that
+ * already holds `content.read` gains nothing it could not already do — it
+ * only stops having to guess entry ids. An operator who removed
+ * `content.read` on purpose is left alone.
+ */
+const CONTENT_BROWSE_TOOLS = ['content.collections', 'content.list'] as const
+
+async function grantContentBrowse(
+  store: AgentDeclarationStore,
+  existing: StoredAgent,
+): Promise<void> {
+  if (!existing.tools.includes('content.read')) return
+  const missing = CONTENT_BROWSE_TOOLS.filter((tool) => !existing.tools.includes(tool))
+  if (missing.length === 0) return
+  await store.update(existing.name, { tools: [...existing.tools, ...missing] })
 }

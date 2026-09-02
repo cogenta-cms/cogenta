@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
   ChatOptions,
@@ -74,7 +75,12 @@ function toAnthropicMessage(message: ChatMessage): AnthropicMessage {
   const blocks: AnthropicContentBlock[] = []
   if (message.content !== undefined) blocks.push({ type: 'text', text: message.content })
   for (const call of message.toolCalls ?? []) {
-    blocks.push({ type: 'tool_use', id: call.id, name: call.name, input: call.input })
+    blocks.push({
+      type: 'tool_use',
+      id: call.id,
+      name: encodeToolName(call.name),
+      input: call.input,
+    })
   }
   // A plain string is equivalent to a single text block and reads better in
   // request logs — only messages that carry tool content need the array form.
@@ -95,7 +101,7 @@ export function buildAnthropicRequest(request: ChatRequest): AnthropicRequestBod
       ? {}
       : {
           tools: request.tools.map((tool) => ({
-            name: tool.name,
+            name: encodeToolName(tool.name),
             description: tool.description,
             input_schema: tool.inputSchema,
           })),
@@ -105,7 +111,10 @@ export function buildAnthropicRequest(request: ChatRequest): AnthropicRequestBod
 }
 
 /** Pure — no network. */
-export function parseAnthropicResponse(body: AnthropicResponseBody): ChatResponse {
+export function parseAnthropicResponse(
+  body: AnthropicResponseBody,
+  decodeToolName: (wire: string) => string = (wire) => wire,
+): ChatResponse {
   const textParts: string[] = []
   const toolCalls: ProviderToolCall[] = []
   for (const block of body.content) {
@@ -113,7 +122,7 @@ export function parseAnthropicResponse(body: AnthropicResponseBody): ChatRespons
     else if (block.type === 'tool_use') {
       toolCalls.push({
         id: block.id,
-        name: block.name,
+        name: decodeToolName(block.name),
         input: (block.input ?? {}) as Readonly<Record<string, unknown>>,
       })
     }
@@ -182,7 +191,7 @@ export function createAnthropicClient(config: AnthropicClientConfig): ProviderCl
       }
 
       const body = (await response.json()) as AnthropicResponseBody
-      return parseAnthropicResponse(body)
+      return parseAnthropicResponse(body, createToolNameDecoder(request))
     },
   }
 }

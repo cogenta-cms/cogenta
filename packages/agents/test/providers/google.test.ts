@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildGoogleRequest, parseGoogleResponse } from '../../src/providers/google.js'
+import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 
 describe('buildGoogleRequest', () => {
@@ -47,7 +48,7 @@ describe('buildGoogleRequest', () => {
       {
         functionDeclarations: [
           {
-            name: 'content.publish',
+            name: 'content__publish',
             description: 'Publish content.',
             parameters: { type: 'object', properties: { id: { type: 'string' } } },
           },
@@ -55,7 +56,10 @@ describe('buildGoogleRequest', () => {
       },
     ])
     expect(built.contents).toEqual([
-      { role: 'model', parts: [{ functionCall: { name: 'content.publish', args: { id: 'e1' } } }] },
+      {
+        role: 'model',
+        parts: [{ functionCall: { name: 'content__publish', args: { id: 'e1' } } }],
+      },
     ])
   })
 
@@ -70,7 +74,7 @@ describe('buildGoogleRequest', () => {
       {
         role: 'user',
         parts: [
-          { functionResponse: { name: 'content.publish', response: { result: '{"ok":true}' } } },
+          { functionResponse: { name: 'content__publish', response: { result: '{"ok":true}' } } },
         ],
       },
     ])
@@ -103,21 +107,29 @@ describe('parseGoogleResponse', () => {
   })
 
   it('extracts functionCall parts as tool calls, synthesising the id from the name', () => {
-    const parsed = parseGoogleResponse({
-      candidates: [
-        {
-          content: {
-            parts: [{ functionCall: { name: 'content.publish', args: { id: 'e1' } } }],
+    const parsed = parseGoogleResponse(
+      {
+        candidates: [
+          {
+            content: {
+              parts: [{ functionCall: { name: 'content__publish', args: { id: 'e1' } } }],
+            },
+            finishReason: 'STOP',
           },
-          finishReason: 'STOP',
-        },
-      ],
-      usageMetadata: { promptTokenCount: 30, candidatesTokenCount: 10 },
-    })
+        ],
+        usageMetadata: { promptTokenCount: 30, candidatesTokenCount: 10 },
+      },
+      createToolNameDecoder({
+        model: 'm',
+        maxTokens: 1,
+        messages: [],
+        tools: [{ name: 'content.publish', description: '', inputSchema: {} }],
+      }),
+    )
 
     expect(parsed.content).toBeNull()
     expect(parsed.toolCalls).toEqual([
-      { id: 'content.publish', name: 'content.publish', input: { id: 'e1' } },
+      { id: 'content__publish', name: 'content.publish', input: { id: 'e1' } },
     ])
   })
 

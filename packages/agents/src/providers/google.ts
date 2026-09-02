@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
   ChatOptions,
@@ -85,7 +86,16 @@ function toGoogleContent(message: ChatMessage): GoogleContent {
     }
     return {
       role: 'user',
-      parts: [{ functionResponse: { name, response: { result: message.content ?? '' } } }],
+      // Encoded like the declaration Gemini matched the call against —
+      // idempotent on a toolCallId that already is the wire name.
+      parts: [
+        {
+          functionResponse: {
+            name: encodeToolName(name),
+            response: { result: message.content ?? '' },
+          },
+        },
+      ],
     }
   }
 
@@ -93,7 +103,7 @@ function toGoogleContent(message: ChatMessage): GoogleContent {
   const parts: GooglePart[] = []
   if (message.content !== undefined) parts.push({ text: message.content })
   for (const call of message.toolCalls ?? []) {
-    parts.push({ functionCall: { name: call.name, args: call.input } })
+    parts.push({ functionCall: { name: encodeToolName(call.name), args: call.input } })
   }
   return { role, parts }
 }
@@ -111,7 +121,7 @@ export function buildGoogleRequest(request: ChatRequest): GoogleRequestBody {
           tools: [
             {
               functionDeclarations: request.tools.map((tool) => ({
-                name: tool.name,
+                name: encodeToolName(tool.name),
                 description: tool.description,
                 parameters: tool.inputSchema,
               })),
@@ -126,7 +136,10 @@ export function buildGoogleRequest(request: ChatRequest): GoogleRequestBody {
 }
 
 /** Pure — no network. */
-export function parseGoogleResponse(body: GoogleResponseBody): ChatResponse {
+export function parseGoogleResponse(
+  body: GoogleResponseBody,
+  decodeToolName: (wire: string) => string = (wire) => wire,
+): ChatResponse {
   const candidate = body.candidates[0]
   if (candidate === undefined) {
     throw new CogentaError({
@@ -145,7 +158,7 @@ export function parseGoogleResponse(body: GoogleResponseBody): ChatResponse {
       // so the name is the closest stable handle the rest of the runtime has.
       toolCalls.push({
         id: part.functionCall.name,
-        name: part.functionCall.name,
+        name: decodeToolName(part.functionCall.name),
         input: part.functionCall.args,
       })
     }
@@ -210,7 +223,7 @@ export function createGoogleClient(config: GoogleClientConfig): ProviderClient {
       }
 
       const body = (await response.json()) as GoogleResponseBody
-      return parseGoogleResponse(body)
+      return parseGoogleResponse(body, createToolNameDecoder(request))
     },
   }
 }

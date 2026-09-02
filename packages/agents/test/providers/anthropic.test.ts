@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildAnthropicRequest, parseAnthropicResponse } from '../../src/providers/anthropic.js'
+import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 
 describe('buildAnthropicRequest', () => {
@@ -41,7 +42,7 @@ describe('buildAnthropicRequest', () => {
     const built = buildAnthropicRequest(request)
     expect(built.tools).toEqual([
       {
-        name: 'content.publish',
+        name: 'content__publish',
         description: 'Publish content.',
         input_schema: { type: 'object', properties: { id: { type: 'string' } } },
       },
@@ -49,7 +50,9 @@ describe('buildAnthropicRequest', () => {
     expect(built.messages).toEqual([
       {
         role: 'assistant',
-        content: [{ type: 'tool_use', id: 'call-1', name: 'content.publish', input: { id: 'e1' } }],
+        content: [
+          { type: 'tool_use', id: 'call-1', name: 'content__publish', input: { id: 'e1' } },
+        ],
       },
     ])
   })
@@ -97,11 +100,21 @@ describe('parseAnthropicResponse', () => {
   })
 
   it('extracts tool_use blocks and reports tool_use, with null content when no text', () => {
-    const parsed = parseAnthropicResponse({
-      content: [{ type: 'tool_use', id: 'call-1', name: 'content.publish', input: { id: 'e1' } }],
-      stop_reason: 'tool_use',
-      usage: { input_tokens: 30, output_tokens: 10 },
-    })
+    const parsed = parseAnthropicResponse(
+      {
+        content: [
+          { type: 'tool_use', id: 'call-1', name: 'content__publish', input: { id: 'e1' } },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 30, output_tokens: 10 },
+      },
+      createToolNameDecoder({
+        model: 'm',
+        maxTokens: 1,
+        messages: [],
+        tools: [{ name: 'content.publish', description: '', inputSchema: {} }],
+      }),
+    )
 
     expect(parsed.content).toBeNull()
     expect(parsed.stopReason).toBe('tool_use')

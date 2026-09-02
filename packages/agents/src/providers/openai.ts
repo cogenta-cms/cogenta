@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
   ChatOptions,
@@ -79,7 +80,7 @@ function toOpenAiMessage(message: ChatMessage): OpenAiMessage {
           tool_calls: toolCalls.map((call) => ({
             id: call.id,
             type: 'function' as const,
-            function: { name: call.name, arguments: JSON.stringify(call.input) },
+            function: { name: encodeToolName(call.name), arguments: JSON.stringify(call.input) },
           })),
         }),
   }
@@ -103,7 +104,7 @@ export function buildOpenAiRequest(request: ChatRequest): OpenAiRequestBody {
           tools: request.tools.map((tool) => ({
             type: 'function' as const,
             function: {
-              name: tool.name,
+              name: encodeToolName(tool.name),
               description: tool.description,
               parameters: tool.inputSchema,
             },
@@ -114,7 +115,10 @@ export function buildOpenAiRequest(request: ChatRequest): OpenAiRequestBody {
 }
 
 /** Pure — no network. */
-export function parseOpenAiResponse(body: OpenAiResponseBody): ChatResponse {
+export function parseOpenAiResponse(
+  body: OpenAiResponseBody,
+  decodeToolName: (wire: string) => string = (wire) => wire,
+): ChatResponse {
   const choice = body.choices[0]
   if (choice === undefined) {
     throw new CogentaError({
@@ -126,7 +130,7 @@ export function parseOpenAiResponse(body: OpenAiResponseBody): ChatResponse {
 
   const toolCalls: ProviderToolCall[] = (choice.message.tool_calls ?? []).map((call) => ({
     id: call.id,
-    name: call.function.name,
+    name: decodeToolName(call.function.name),
     input: parseArguments(call.function.arguments),
   }))
 
@@ -152,6 +156,38 @@ function parseArguments(raw: string): Readonly<Record<string, unknown>> {
       cause,
     })
   }
+}
+
+const MAX_REASON_LENGTH = 300
+
+/**
+ * The human-readable part of an OpenAI-shaped error body
+ * (`{ error: { message } }`), or the first line of a non-JSON body, capped
+ * so a vendor's HTML error page never becomes the message. `undefined` when
+ * there is nothing legible to show.
+ */
+async function readErrorReason(response: Response): Promise<string | undefined> {
+  const text = await response.text().catch(() => '')
+  if (text.trim() === '') return undefined
+  let reason = text
+  try {
+    const parsed: unknown = JSON.parse(text)
+    if (typeof parsed === 'object' && parsed !== null && 'error' in parsed) {
+      const error = (parsed as { error: unknown }).error
+      if (typeof error === 'string') reason = error
+      else if (typeof error === 'object' && error !== null && 'message' in error) {
+        const message = (error as { message: unknown }).message
+        if (typeof message === 'string') reason = message
+      }
+    }
+  } catch {
+    // Not JSON — keep the raw text.
+  }
+  const firstLine = reason.split('\n')[0]?.trim() ?? ''
+  if (firstLine === '') return undefined
+  return firstLine.length > MAX_REASON_LENGTH
+    ? `${firstLine.slice(0, MAX_REASON_LENGTH)}…`
+    : firstLine
 }
 
 export interface OpenAiClientConfig {
@@ -207,16 +243,27 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
         })
       }
       if (!response.ok) {
+        // The vendor's own error text is the only thing that tells a 400
+        // ("model does not exist", "unsupported parameter") from a 401 —
+        // dropping it left an operator staring at a bare status code with
+        // nothing to act on. It never carries the key; it is safe to quote.
+        const reason = await readErrorReason(response)
         throw new CogentaError({
           code: 'PROVIDER_REQUEST_FAILED',
-          message: `"${name}" returned status ${response.status}.`,
-          hint: "Check the request and this provider's saved API key.",
-          details: { status: response.status },
+          message:
+            reason === undefined
+              ? `"${name}" returned status ${response.status}.`
+              : `"${name}" returned status ${response.status}: ${reason}`,
+          hint:
+            response.status === 400
+              ? "Check the model name saved for this provider — it must be one this endpoint actually serves — then the request. The provider's own message above usually names the field."
+              : "Check the request and this provider's saved API key.",
+          details: { status: response.status, ...(reason === undefined ? {} : { reason }) },
         })
       }
 
       const body = (await response.json()) as OpenAiResponseBody
-      return parseOpenAiResponse(body)
+      return parseOpenAiResponse(body, createToolNameDecoder(request))
     },
   }
 }

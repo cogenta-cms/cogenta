@@ -27,8 +27,19 @@ const POLL_INTERVAL_MS = 60_000
 
 const SEVERITIES: readonly NoticeSeverity[] = ['info', 'success', 'warning', 'danger']
 
+/** Fiche 35 audit T05 — the period filter the file's own docstring already claimed. `''` means "no lower bound", never "0 days". */
+const PERIODS = ['7', '30', '90', ''] as const
+type Period = (typeof PERIODS)[number]
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString()
+}
+
+/** The `since` boundary `listNoticeHistory` wants for a period option — `undefined` for "all", never an arbitrary epoch. */
+function sinceFor(period: Period): string | undefined {
+  if (period === '') return undefined
+  const days = Number(period)
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 }
 
 export function NotificationCenter(): JSX.Element | null {
@@ -39,15 +50,20 @@ export function NotificationCenter(): JSX.Element | null {
   const [entries, setEntries] = useState<readonly NoticeHistoryEntry[]>([])
   const [open, setOpen] = useState(false)
   const [severity, setSeverity] = useState<NoticeSeverity | ''>('')
+  const [period, setPeriod] = useState<Period>('')
   const rootRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(() => {
     if (token === null) return
-    listNoticeHistory(token, severity === '' ? {} : { severity }).then(
+    const since = sinceFor(period)
+    listNoticeHistory(token, {
+      ...(severity === '' ? {} : { severity }),
+      ...(since === undefined ? {} : { since }),
+    }).then(
       (found) => setEntries(found),
       () => undefined,
     )
-  }, [token, severity])
+  }, [token, severity, period])
 
   useEffect(() => {
     if (token === null) {
@@ -134,6 +150,20 @@ export function NotificationCenter(): JSX.Element | null {
                     {t(`notifications.severity.${s}`)}
                   </option>
                 ))}
+              </select>
+              <label className="sr-only" htmlFor="notification-center-period">
+                {t('notifications.filterPeriod')}
+              </label>
+              <select
+                id="notification-center-period"
+                value={period}
+                onChange={(event) => setPeriod(event.target.value as Period)}
+                className="rounded-md border border-border bg-background px-1.5 py-1 font-sans text-xs text-foreground"
+              >
+                <option value="7">{t('notifications.period.7')}</option>
+                <option value="30">{t('notifications.period.30')}</option>
+                <option value="90">{t('notifications.period.90')}</option>
+                <option value="">{t('notifications.period.all')}</option>
               </select>
               <button
                 type="button"

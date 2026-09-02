@@ -496,6 +496,13 @@
     "markRead": "Mark read",
     "filterSeverity": "Filter by severity",
     "allSeverities": "All severities",
+    "filterPeriod": "Filter by period",
+    "period": {
+      "7": "Last 7 days",
+      "30": "Last 30 days",
+      "90": "Last 90 days",
+      "all": "All"
+    },
     "severity": {
       "info": "Info",
       "success": "Success",
@@ -3300,6 +3307,30 @@
     "revokeOtherSessions": "Sign out of every other session",
     "sessionsRevokedOthers": "Signed out of {{count}} other session(s). This one stays signed in.",
     "sessionsRevokeOthersError": "Could not sign out the other sessions.",
+    "notificationsHeading": "Notifications",
+    "notificationsIntro": "What each linked channel sends you, and when.",
+    "notificationsNoChannels": "No linked channel yet. Link a Telegram, Slack or Discord account from the Channels screen to choose what it receives.",
+    "notificationsLoadError": "Could not load your notification preferences.",
+    "notificationsSaveError": "Could not save these preferences.",
+    "notificationsMinSeverityLabel": "Minimum severity received",
+    "notificationsSeverity": {
+      "info": "Everything, including info",
+      "warning": "Warnings and critical",
+      "critical": "Critical only"
+    },
+    "notificationsGroupingLabel": "Grouping",
+    "notificationsGrouping": {
+      "immediate": "Immediate",
+      "hourly": "Hourly digest",
+      "daily": "Daily digest"
+    },
+    "notificationsQuietHoursEnable": "Quiet hours",
+    "notificationsQuietHoursStart": "From",
+    "notificationsQuietHoursEnd": "To",
+    "notificationsQuietHoursCriticalNote": "A critical notice always ignores quiet hours.",
+    "notificationsSave": "Save",
+    "notificationsSaving": "Saving…",
+    "notificationsSaved": "Saved.",
     "activityHeading": "My activity",
     "activityIntro": "Your twenty most recent actions, from the site's audit log.",
     "activityEmpty": "No recorded activity yet.",

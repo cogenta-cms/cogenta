@@ -95,6 +95,14 @@ export interface CogentaConfigInput {
     readonly hstsIncludeSubDomains?: boolean
     /** How long a public page may be cached, in seconds. */
     readonly pageMaxAge?: number
+    /**
+     * Audit-log retention (T09-01). Absent — the default — means the log
+     * grows without bound, unchanged from before this field existed. `0` is
+     * the explicit way to say "never purge" rather than leaving it absent.
+     */
+    readonly audit?: {
+      readonly retainDays?: number
+    }
   }
   /**
    * The log of public URLs that answered a 404 (fiche 12 task 1). On by
@@ -291,6 +299,10 @@ export interface CogentaConfig {
     readonly hstsMaxAge: number
     readonly hstsIncludeSubDomains: boolean
     readonly pageMaxAge: number
+    readonly audit: {
+      /** `undefined` (absent) and `0` both mean "never purge" — see the input type's comment. */
+      readonly retainDays: number | undefined
+    }
   }
   /** The log of public URLs that answered a 404 (fiche 12 task 1). Resolved, defaults applied. */
   readonly notFoundLog: {

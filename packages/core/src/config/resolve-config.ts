@@ -162,6 +162,7 @@ export function resolveConfig(
       hstsMaxAge: config.security.hstsMaxAge,
       hstsIncludeSubDomains: config.security.hstsIncludeSubDomains,
       pageMaxAge: config.security.pageMaxAge,
+      audit: Object.freeze({ retainDays: config.security.audit.retainDays }),
     }),
     notFoundLog: Object.freeze({
       enabled: config.notFoundLog.enabled,

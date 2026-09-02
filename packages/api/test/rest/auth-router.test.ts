@@ -864,6 +864,13 @@ describe('POST /api/auth/forgot-password', () => {
     )
     expect(response.status).toBe(429)
     expect((response.body as { error: { code: string } }).error.code).toBe('AUTH_RATE_LIMITED')
+    // T09-02 — a 429 that only says "try again later" in prose gives a
+    // client nothing to poll against; `Retry-After` (in whole seconds,
+    // never the raw `retryAfterMs` from `CogentaError.details`, which
+    // `errorResponse` never puts on the wire) is what makes the backoff
+    // actually actionable.
+    expect(response.headers['retry-after']).toBeDefined()
+    expect(Number(response.headers['retry-after'])).toBeGreaterThan(0)
   })
 
   it('refuses a body with no email', async () => {

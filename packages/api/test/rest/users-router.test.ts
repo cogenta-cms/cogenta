@@ -1,6 +1,7 @@
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
-import type { CollectionDefinition } from '@cogenta/schema'
+import type { CollectionDefinition, ContentStore } from '@cogenta/schema'
+import { createContentStore, createSchemaTables } from '@cogenta/schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RestRequest } from '../../src/rest/http.js'
 import { createUsersRouter, type InvitedUserEvent } from '../../src/rest/users-router.js'
@@ -26,6 +27,7 @@ function router(
   overrides: {
     readonly onInvite?: (event: InvitedUserEvent) => Promise<void>
     readonly collections?: readonly CollectionDefinition[]
+    readonly storeFor?: (collection: CollectionDefinition) => ContentStore
     readonly now?: () => number
   } = {},
 ) {
@@ -285,6 +287,25 @@ describe('POST /api/users', () => {
     expect(response.status).toBe(409)
     expect(errorCodeOf(response)).toBe('AUTH_USER_EXISTS')
   })
+
+  /**
+   * T09-05 — recorded directly by this route (`collectionRoute`'s `POST`
+   * branch), not by `cogenta serve` sniffing the HTTP path afterwards. This
+   * is the router's own test, called with no `serve.ts` in front of it at
+   * all, so it would fail if the direct call were ever removed — there is
+   * no fallback left to make it pass anyway.
+   */
+  it('writes an audit entry for the new account', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const response = await router().handle(
+      request('POST', '/api/users', { email: 'new@example.com', roles: ['editor'] }),
+      actorFor(admin.id, ['admin']),
+    )
+    const { user } = dataOf<{ user: { id: string } }>(response)
+
+    const entries = await auth.audit.list({ actorId: admin.id, action: 'user.create' })
+    expect(entries.some((e) => e.entryId === user.id)).toBe(true)
+  })
 })
 
 describe('PATCH /api/users/{id}', () => {
@@ -446,6 +467,27 @@ describe('POST /api/users/me/password', () => {
     )
   })
 
+  /** T09-05 — direct write in `passwordRoute`, no `cogenta serve` sniffing left to fall back on. */
+  it('writes an audit entry, and it never carries either password', async () => {
+    const editor = await makeUser('ed@example.com', ['editor'], 'correct horse battery staple')
+    await router().handle(
+      request('POST', '/api/users/me/password', {
+        currentPassword: 'correct horse battery staple',
+        newPassword: 'a much longer new passphrase',
+      }),
+      actorFor(editor.id, ['editor']),
+    )
+
+    const entries = await auth.audit.list({
+      actorId: editor.id,
+      action: 'user.password_change',
+    })
+    const entry = entries.find((e) => e.entryId === editor.id)
+    expect(entry).toBeDefined()
+    expect(JSON.stringify(entry)).not.toContain('correct horse battery staple')
+    expect(JSON.stringify(entry)).not.toContain('a much longer new passphrase')
+  })
+
   it('refuses without the current password, and leaves the old one working', async () => {
     const editor = await makeUser('ed@example.com', ['editor'], 'correct horse battery staple')
     const response = await router().handle(
@@ -531,6 +573,23 @@ describe('sessions', () => {
     expect(response.status).toBe(204)
     expect(await auth.sessions.resolve(doomed.token)).toBeNull()
     expect(await auth.sessions.resolve(kept.token)).not.toBeNull()
+  })
+
+  /** T09-05 — direct write in `sessionsRoute`'s `DELETE` branch. */
+  it('writes an audit entry for the revoked session', async () => {
+    const editor = await makeUser('ed@example.com', ['editor'])
+    const doomed = await auth.sessions.create(editor.id)
+
+    await router().handle(
+      request('DELETE', `/api/users/me/sessions/${doomed.id}`),
+      actorFor(editor.id, ['editor']),
+    )
+
+    const entries = await auth.audit.list({
+      actorId: editor.id,
+      action: 'user.session_revoke',
+    })
+    expect(entries.some((e) => e.entryId === editor.id)).toBe(true)
   })
 
   it("refuses to revoke a session id that is not this account's, even under /me", async () => {
@@ -1471,5 +1530,110 @@ describe('POST /api/users/{id}/anonymize (fiche 17 task 5)', () => {
     )
     expect(response.status).toBe(409)
     expect(errorCodeOf(response)).toBe('AUTH_ACCOUNT_ANONYMIZED')
+  })
+})
+
+describe('GET /api/users/{id}/personal-data (T09-04 — the RGPD export finally has a caller)', () => {
+  const ARTICLE: CollectionDefinition = {
+    name: 'personal_data_article',
+    labels: { singular: 'Article', plural: 'Articles' },
+    fields: { title: { kind: 'text', required: true, options: { max: 200 } } },
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'] },
+  }
+
+  async function articleStore(): Promise<ContentStore> {
+    await createSchemaTables(db, [ARTICLE])
+    return createContentStore({ db, collection: ARTICLE, siblings: [ARTICLE] })
+  }
+
+  it('lets an account export its own data, content included', async () => {
+    const self = await makeUser('self@example.com', ['editor'])
+    const store = await articleStore()
+    await store.create({ values: { title: 'Mine' }, createdBy: self.id })
+
+    const response = await router({ collections: [ARTICLE], storeFor: () => store }).handle(
+      request('GET', `/api/users/${self.id}/personal-data`),
+      actorFor(self.id, ['editor']),
+    )
+    expect(response.status).toBe(200)
+    const data = dataOf<{
+      readonly account: { readonly email: string } | null
+      readonly authoredContent: readonly { readonly title: string | null }[]
+    }>(response)
+    expect(data.account?.email).toBe('self@example.com')
+    expect(data.authoredContent.map((entry) => entry.title)).toEqual(['Mine'])
+  })
+
+  it("lets an admin export another account's data", async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const other = await makeUser('other@example.com', ['editor'])
+
+    const response = await router().handle(
+      request('GET', `/api/users/${other.id}/personal-data`),
+      actorFor(admin.id, ['admin']),
+    )
+    expect(response.status).toBe(200)
+    const data = dataOf<{ readonly account: { readonly email: string } | null }>(response)
+    expect(data.account?.email).toBe('other@example.com')
+  })
+
+  it("refuses a non-admin exporting someone else's data", async () => {
+    const editor = await makeUser('ed@example.com', ['editor'])
+    const other = await makeUser('root@example.com', ['admin'])
+
+    const response = await router().handle(
+      request('GET', `/api/users/${other.id}/personal-data`),
+      actorFor(editor.id, ['editor']),
+    )
+    expect(response.status).toBe(403)
+    expect(errorCodeOf(response)).toBe('FORBIDDEN')
+  })
+
+  it('refuses an anonymous caller', async () => {
+    const someone = await makeUser('someone@example.com', ['editor'])
+
+    const response = await router().handle(
+      request('GET', `/api/users/${someone.id}/personal-data`),
+      ANONYMOUS,
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('never leaks a password hash', async () => {
+    const self = await makeUser('secret@example.com', ['editor'], 'a real password here')
+
+    const response = await router().handle(
+      request('GET', `/api/users/${self.id}/personal-data`),
+      actorFor(self.id, ['editor']),
+    )
+    expect(response.status).toBe(200)
+    expect(JSON.stringify(response.body)).not.toContain('a real password here')
+  })
+
+  it('is itself an audit event, naming the requester', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const other = await makeUser('other@example.com', ['editor'])
+
+    await router().handle(
+      request('GET', `/api/users/${other.id}/personal-data`),
+      actorFor(admin.id, ['admin']),
+    )
+
+    const entries = await auth.audit.list({ actorId: admin.id })
+    const entry = entries.find(
+      (e) => e.action === 'user.personal_data_export' && e.entryId === other.id,
+    )
+    expect(entry).toBeDefined()
+  })
+
+  it('404s for an id nobody holds', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+
+    const response = await router().handle(
+      request('GET', '/api/users/does-not-exist/personal-data'),
+      actorFor(admin.id, ['admin']),
+    )
+    expect(response.status).toBe(404)
+    expect(errorCodeOf(response)).toBe('AUTH_USER_NOT_FOUND')
   })
 })

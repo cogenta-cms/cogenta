@@ -468,6 +468,23 @@ export function statusFor(code: ErrorCode): number {
 }
 
 /**
+ * `Retry-After`, in whole seconds, for an error whose `details.retryAfterMs`
+ * names a concrete backoff (T09-02). `AUTH_RATE_LIMITED` (`rate-limit.ts`)
+ * is the first caller, and any future code that reuses the same `details`
+ * field — `FORM_RATE_LIMITED` (fiche 16) has the identical shape of need —
+ * gets the header for free rather than a third copy of this arithmetic.
+ * This is not the `details`-onto-the-wire rule `errorResponse` documents
+ * below breaking: only this one derived integer, computed server-side,
+ * ever leaves this function — never the object itself, and never a caller-
+ * supplied value.
+ */
+function retryAfterSecondsOf(error: CogentaError): number | undefined {
+  const raw = error.details?.retryAfterMs
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return undefined
+  return Math.max(1, Math.ceil(raw / 1000))
+}
+
+/**
  * Turns any thrown value into a response.
  *
  * Two rules are load-bearing here. `details` is **never** serialised: it is the
@@ -487,7 +504,13 @@ export function errorResponse(error: unknown): RestResponse {
         ...(field === undefined ? {} : { field }),
       },
     }
-    return jsonResponse(statusFor(error.code), body)
+    const response = jsonResponse(statusFor(error.code), body)
+    const retryAfterSeconds = retryAfterSecondsOf(error)
+    if (retryAfterSeconds === undefined) return response
+    return {
+      ...response,
+      headers: { ...response.headers, 'retry-after': String(retryAfterSeconds) },
+    }
   }
 
   const internal: RestErrorBody = {

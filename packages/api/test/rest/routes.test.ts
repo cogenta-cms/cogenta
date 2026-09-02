@@ -210,4 +210,70 @@ describe('REST routes', () => {
     expect(response.status).toBe(400)
     expect(errorOf(response).code).toBe('CONTENT_INVALID')
   })
+
+  /**
+   * Fiche 35 audit T03 — `CONTENT_STALE_WRITE` (`store.ts:1216-1240`) is
+   * reached through the real `PATCH` route here, not called on the store
+   * directly — proving the wire shape a client actually depends on
+   * (`expectedUpdatedAt` in, 409 with a stable code and a hint out).
+   * `errorResponse` (`http.ts`) deliberately never puts `CogentaError`'s
+   * `details` on the wire for any code, this one included — the two
+   * timestamps stay a server-side/log concern, not a public API field.
+   */
+  it('answers 409 CONTENT_STALE_WRITE for a PATCH whose expectedUpdatedAt no longer matches', async () => {
+    const id = await createArticle('Original')
+    // `GET` without `?state=working` only ever answers the published face
+    // (see "reads a published entry anonymously…" above) — reading the
+    // draft's own `updatedAt` needs it explicit, same as every write below.
+    const created = await harness.router.handle(
+      request('GET', `/rest_article/${id}`, { query: { state: 'working' } }),
+      asEditor,
+    )
+    const loadedUpdatedAt = String(dataOf(created)['updatedAt'])
+
+    const concurrent = await harness.router.handle(
+      request('PATCH', `/rest_article/${id}`, {
+        body: { values: { title: 'Changed by someone else' } },
+      }),
+      asEditor,
+    )
+    const concurrentUpdatedAt = String(dataOf(concurrent)['updatedAt'])
+    expect(concurrentUpdatedAt).not.toBe(loadedUpdatedAt)
+
+    const stale = await harness.router.handle(
+      request('PATCH', `/rest_article/${id}`, {
+        body: { values: { title: 'My own, now stale, edit' }, expectedUpdatedAt: loadedUpdatedAt },
+      }),
+      asEditor,
+    )
+
+    expect(stale.status).toBe(409)
+    expect(errorOf(stale).code).toBe('CONTENT_STALE_WRITE')
+    expect(errorOf(stale).hint).toBeDefined()
+
+    // Refused, not merely reported: the concurrent write is still what is stored.
+    const after = await harness.router.handle(
+      request('GET', `/rest_article/${id}`, { query: { state: 'working' } }),
+      asEditor,
+    )
+    expect(valuesOf(dataOf(after))['title']).toBe('Changed by someone else')
+  })
+
+  it('a PATCH with no expectedUpdatedAt at all still overwrites — the field is optional, not a new requirement', async () => {
+    const id = await createArticle('Original')
+    await harness.router.handle(
+      request('PATCH', `/rest_article/${id}`, { body: { values: { title: 'Someone else' } } }),
+      asEditor,
+    )
+
+    const response = await harness.router.handle(
+      request('PATCH', `/rest_article/${id}`, {
+        body: { values: { title: 'Overwrites without complaint' } },
+      }),
+      asEditor,
+    )
+
+    expect(response.status).toBe(200)
+    expect(valuesOf(dataOf(response))['title']).toBe('Overwrites without complaint')
+  })
 })

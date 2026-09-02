@@ -791,6 +791,16 @@ interface Site {
     readonly dunningSuspended: number
     readonly renewalNoticesSent: number
   }>
+  /**
+   * Marks every open cart stale past its threshold as abandoned (audit
+   * A1-commerce P2: `CartStore.abandon()` existed since fiche 32 with no
+   * automatic caller). Never `null`: needs nothing but this site's own
+   * commerce tables, already created unconditionally. Ticked by `runServe`
+   * the same way `tickFormsPurge` is.
+   */
+  readonly tickCartAbandon: (options?: {
+    readonly olderThanMs?: number
+  }) => Promise<{ readonly abandoned: number }>
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
@@ -2242,6 +2252,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         renewalNoticesSent: renewal.notified.length,
       }
     },
+    tickCartAbandon: async (tickOptions) => commerceCarts.abandonInactive(tickOptions ?? {}),
     notFoundLog,
     notFoundLogEnabled: options.notFoundLog.enabled,
     notFoundRouter: createNotFoundRouter({ store: notFoundLog }),
@@ -5291,6 +5302,19 @@ export interface ServeOptions {
    */
   readonly commerceBillingTickMs?: number
   /**
+   * Test seam for the abandoned-cart sweep (audit A1-commerce P2) —
+   * production always uses `CART_ABANDON_TICK_MS`.
+   */
+  readonly cartAbandonTickMs?: number
+  /**
+   * How stale an open cart must be before the sweep marks it abandoned.
+   * Not a CLI flag: a shop that wants a different definition of "gave up"
+   * sets it in code, the same way every other tick override here is a test
+   * seam first — production always uses `CartStore`'s own
+   * `DEFAULT_CART_ABANDON_MS` (24h) unless this is set.
+   */
+  readonly cartAbandonAfterMs?: number
+  /**
    * Overrides `ANALYTICS_PURGE_TICK_MS`. Not a CLI flag, same reason as
    * `scheduledPublishTickMs`: a test proves the retention sweep really runs
    * without waiting a day for it.
@@ -5385,6 +5409,18 @@ const COMMERCE_EMAIL_TICK_MS = 60_000
  * subscription renewal the way a scheduled publish is waited on.
  */
 const COMMERCE_BILLING_TICK_MS = 24 * 60 * 60 * 1000
+/**
+ * How often `runServe` runs the abandoned-cart sweep (audit A1-commerce P2):
+ * `CartStore.abandon()` existed since fiche 32 with no automatic caller, so
+ * a cart nobody touched stayed `open` forever on a real site. Idempotent on
+ * its own (a cart this abandons no longer matches `status = 'open'`, so a
+ * rerun before another cart goes stale finds nothing) — this tick is only
+ * the clock. Hourly, not daily: unlike a subscription renewal, "has this
+ * shopper given up" is worth noticing sooner, and unlike scheduled
+ * publication nobody is watching a page load for it either, so a middle
+ * cadence.
+ */
+const CART_ABANDON_TICK_MS = 60 * 60 * 1000
 
 /**
  * How often `runServe` purges analytics events (and their daily salts) past
@@ -6024,6 +6060,22 @@ export async function runServe(options: ServeOptions): Promise<number> {
       }
     },
   })
+  // Audit A1-commerce (P2): `CartStore.abandon()` existed since fiche 32
+  // with no automatic caller — an open cart nobody touched stayed `open`
+  // forever on a real site. Always registered, same reasoning as
+  // `commerce-subscriptions` just above: no email transport needed, only
+  // this site's own unconditionally-created commerce tables.
+  scheduledTaskRegistry.register({
+    name: 'commerce-carts',
+    description: 'Mark every open cart abandoned once it has been inactive past its threshold.',
+    intervalMs: options.cartAbandonTickMs ?? CART_ABANDON_TICK_MS,
+    run: async () => {
+      const result = await site.tickCartAbandon(
+        options.cartAbandonAfterMs === undefined ? {} : { olderThanMs: options.cartAbandonAfterMs },
+      )
+      return { summary: `${result.abandoned} abandoned` }
+    },
+  })
   scheduledTaskRegistry.register({
     name: 'updates-auto-check',
     description:
@@ -6170,8 +6222,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // riding along with it, the 404 log purge, audit integrity, the trash
   // sweep, forms GDPR retention, channel notification flush, analytics
   // retention, updates auto-check, the commerce order-email retry queue
-  // (fiche 52 task 2), and — fiche 53 tasks 3/5, audit T-COM-01 — the
-  // subscription billing/dunning/renewal-notice sweep) are all
+  // (fiche 52 task 2), the subscription billing/dunning/renewal-notice
+  // sweep (fiche 53 tasks 3/5, audit T-COM-01), and — audit A1-commerce
+  // P2 — the abandoned-cart sweep) are all
   // `scheduledTaskRegistry` entries rather
   // than independent `setInterval`s: one heartbeat drives `registry.tick()`,
   // which itself decides which tasks are actually due against the interval
@@ -6193,6 +6246,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     options.updatesAutoCheckTickMs ?? UPDATES_AUTO_CHECK_TICK_MS,
     options.commerceEmailTickMs ?? COMMERCE_EMAIL_TICK_MS,
     options.commerceBillingTickMs ?? COMMERCE_BILLING_TICK_MS,
+    options.cartAbandonTickMs ?? CART_ABANDON_TICK_MS,
   )
   const runScheduledTasksHeartbeat = (): void => {
     // Sequenced, not concurrent: `registry.tick()` already runs its due

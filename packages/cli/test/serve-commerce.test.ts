@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createLogger, createSqliteHandle } from '@cogenta/core'
+import { createLogger, createSqliteHandle, identifier, sql } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runServe } from '../src/commands/serve.js'
 import { createOutput } from '../src/output.js'
@@ -98,7 +98,12 @@ const activeServers: AbortController[] = []
 
 async function startServer(
   root: string,
-  extra: { readonly commerceEmailTickMs?: number; readonly commerceBillingTickMs?: number } = {},
+  extra: {
+    readonly commerceEmailTickMs?: number
+    readonly commerceBillingTickMs?: number
+    readonly cartAbandonTickMs?: number
+    readonly cartAbandonAfterMs?: number
+  } = {},
 ): Promise<{ base: string; stop: () => Promise<void> }> {
   const controller = new AbortController()
   activeServers.push(controller)
@@ -123,6 +128,12 @@ async function startServer(
     ...(extra.commerceBillingTickMs === undefined
       ? {}
       : { commerceBillingTickMs: extra.commerceBillingTickMs }),
+    ...(extra.cartAbandonTickMs === undefined
+      ? {}
+      : { cartAbandonTickMs: extra.cartAbandonTickMs }),
+    ...(extra.cartAbandonAfterMs === undefined
+      ? {}
+      : { cartAbandonAfterMs: extra.cartAbandonAfterMs }),
   })
 
   const bound = await Promise.race([
@@ -609,6 +620,69 @@ describe('the shop, end to end', () => {
     const again = await fetch(detailUrl, { headers: authHeaders })
     const stillOne = (await again.json()) as Detail
     expect(stillOne.cycles).toHaveLength(1)
+  })
+
+  /**
+   * Audit A1-commerce (P2): `CartStore.abandon()` existed since fiche 32
+   * with no automatic caller — an open cart nobody touched stayed `open`
+   * forever on a real site. Proves the `commerce-carts` scheduled task
+   * (always registered, same as `commerce-subscriptions`) actually marks a
+   * stale cart abandoned without a person calling anything, and leaves a
+   * recently-touched cart alone. There is no HTTP route for a cart at all
+   * (no storefront exists yet — `BLOCKERS.md`'s "pont vitrine" gap), so this
+   * seeds and reads the cart directly through the real store, the same
+   * shortcut `seedPaidOrder` above already takes for orders.
+   */
+  it('abandons a cart nobody has touched in a while, once a tick runs, and leaves a fresh one alone', async () => {
+    const root = await project()
+    // Not bound to a variable: nothing in this test calls `server.base` (no
+    // HTTP route exists for a cart at all), and `afterEach` above already
+    // aborts every server `startServer` registers.
+    await startServer(root, {
+      cartAbandonTickMs: 20,
+      cartAbandonAfterMs: 60 * 60 * 1000, // one hour
+    })
+
+    const stores = await import('@cogenta/commerce')
+    const seedDb = await createSqliteHandle({ url: join(root, 'site.db') })
+    const catalog = stores.createCatalogStore(seedDb)
+    const tax = stores.createTaxStore(seedDb)
+    const shipping = stores.createShippingStore(seedDb)
+    const coupons = stores.createCouponStore(seedDb)
+    const carts = stores.createCartStore(seedDb, { catalog, tax, shipping, coupons })
+
+    const stale = await carts.open({ currency: 'EUR', sessionKey: 'stale-shopper' })
+    const fresh = await carts.open({ currency: 'EUR', sessionKey: 'fresh-shopper' })
+
+    const cartsTable = identifier('cogenta_commerce_carts', seedDb.dialect)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    await seedDb.query(
+      sql`update ${cartsTable} set updated_at = ${twoHoursAgo} where id = ${stale.id}`,
+    )
+    await seedDb.close()
+
+    const pollDb = await createSqliteHandle({ url: join(root, 'site.db') })
+    const pollCarts = stores.createCartStore(pollDb, {
+      catalog: stores.createCatalogStore(pollDb),
+      tax: stores.createTaxStore(pollDb),
+      shipping: stores.createShippingStore(pollDb),
+      coupons: stores.createCouponStore(pollDb),
+    })
+
+    const deadline = Date.now() + 5000
+    for (;;) {
+      const found = await pollCarts.read(stale.id)
+      if (found?.status === 'abandoned') break
+      if (Date.now() > deadline) {
+        throw new Error('Expected the stale cart to be abandoned within 5s of ticking.')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    }
+
+    expect((await pollCarts.read(stale.id))?.status).toBe('abandoned')
+    expect((await pollCarts.read(fresh.id))?.status).toBe('open')
+
+    await pollDb.close()
   })
 
   // ---- fiche 19: permission matrix ---------------------------------------

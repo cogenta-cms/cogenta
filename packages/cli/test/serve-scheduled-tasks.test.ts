@@ -83,10 +83,14 @@ const TASK_NAMES = [
   // to be scheduled, only `sendRenewalNotices` itself degrades to a safe
   // no-op (R2) without one.
   'commerce-subscriptions',
+  // Audit A1-commerce P2 — always registered, same reasoning as
+  // `commerce-subscriptions`: no email transport needed, only this site's
+  // own unconditionally-created commerce tables.
+  'commerce-carts',
 ].sort()
 
 describe('cogenta serve — /api/scheduled-tasks', () => {
-  it('lists the ten registered recurring jobs, not a 404', async () => {
+  it('lists the eleven registered recurring jobs, not a 404', async () => {
     const root = await project()
     // Slow every tick way down: this test only cares that the route exists
     // and answers with real registrations, not that a sweep actually fires

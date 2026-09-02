@@ -26,7 +26,13 @@ export type {
   OpenCartInput,
   PricedCart,
 } from './cart/store.js'
-export { CART_STATUSES, CART_TTL_MS, couponRefusal, createCartStore } from './cart/store.js'
+export {
+  CART_STATUSES,
+  CART_TTL_MS,
+  couponRefusal,
+  createCartStore,
+  DEFAULT_CART_ABANDON_MS,
+} from './cart/store.js'
 export type { Totals, TotalsInput, TotalsLine, TotalsLineInput } from './cart/totals.js'
 export { computeTotals } from './cart/totals.js'
 export type {

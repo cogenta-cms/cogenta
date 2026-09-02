@@ -304,3 +304,89 @@ pnpm exec biome check --write packages/admin/test/commerce/commerce-customer-det
 
 **Changeset** : aucun — nouveau fichier de test uniquement, `@cogenta/admin` est privé.
 
+## P2 — Déclenchement automatique de `abandon()` pour les paniers inactifs
+
+**Fait.**
+
+**Constat confirmé** : `CartStore.abandon(cartId)` existe depuis la fiche 32 mais rien
+ne l'appelait jamais automatiquement — un panier ouvert restait `status: 'open'` pour
+toujours, même des semaines après que le client a disparu. Sans conséquence pratique
+aujourd'hui (aucun pont vitrine n'existe, donc aucun vrai panier public n'est créé —
+`BLOCKERS.md`), mais un vrai trou une fois T-COM-04 livrée, exactement comme l'audit le
+notait.
+
+**Changements** :
+- `packages/commerce/src/cart/store.ts` : nouvelle méthode
+  `abandonInactive(options?: { olderThanMs?: number })` sur `CartStore` — un seul
+  `UPDATE ... where status = 'open' and updated_at <= seuil` gardé, la même discipline
+  `rowsAffected`-driven que `takeStock`/`CouponStore.redeem` dans ce même paquet.
+  Nouvelle constante exportée `DEFAULT_CART_ABANDON_MS` (24h). Additif : `abandon()`
+  (par id) reste inchangé, `abandonInactive()` est sa sœur en masse pour un
+  planificateur.
+- `packages/cli/src/commands/serve.ts` : nouvelle tâche planifiée `commerce-carts`
+  (toujours enregistrée, même raisonnement que `commerce-subscriptions` — pas besoin de
+  transport e-mail), cadence horaire par défaut (`CART_ABANDON_TICK_MS`), avec les
+  options de test `cartAbandonTickMs`/`cartAbandonAfterMs` (ce dernier permettant aussi
+  à un opérateur de choisir sa propre définition de « abandonné »). **Le nouvel
+  intervalle de test a été ajouté au `Math.min(...)` de `scheduledTasksHeartbeatMs`**
+  dès l'écriture — la leçon retenue de T-COM-01 — pas de bug à corriger cette fois.
+
+**Tests réels** :
+- `packages/commerce/test/cart-abandon.test.ts` (nouveau, 4 tests, store direct) :
+  seul le panier resté inactif au-delà du seuil est marqué abandonné, un panier récent
+  reste `open` ; un panier déjà `ordered` ou déjà `abandoned` n'est jamais retouché ; un
+  rejeu avant qu'un autre panier ne devienne inactif ne trouve rien de nouveau
+  (idempotence) ; le seuil par défaut de 24h fonctionne sans option.
+- `packages/cli/test/serve-commerce.test.ts` (nouveau test bout en bout) : preuve que
+  la tâche planifiée `commerce-carts` marque réellement un panier périmé comme
+  abandonné après un tick, sans qu'aucun humain n'appelle quoi que ce soit, et laisse
+  un panier récent intact. Comme aucune route HTTP n'existe pour un panier (aucune
+  vitrine — même constat que l'audit), le test sème et relit le panier directement via
+  le vrai store, la même astuce déjà prise par `seedPaidOrder` plus haut dans ce
+  fichier.
+- `packages/cli/test/serve-scheduled-tasks.test.ts` : `TASK_NAMES` mis à jour
+  (`'commerce-carts'` ajouté, dix → onze tâches, libellé du test corrigé).
+
+**Preuve — commandes exécutées** :
+```
+pnpm turbo run typecheck --filter=@cogenta/cli --filter=@cogenta/commerce --force
+                                                             # 27/27 tâches, aucune erreur
+pnpm -F @cogenta/commerce exec vitest run test/cart-abandon.test.ts
+                                                             # 4/4 tests verts
+pnpm -F @cogenta/commerce test                              # 307/307 tests verts (aucun échec cette fois,
+                                                             # y compris le flake payment-stripe.test.ts déjà
+                                                             # documenté plus haut)
+pnpm -F @cogenta/cli exec vitest run test/serve-commerce.test.ts test/serve-scheduled-tasks.test.ts
+                                                             # 25/25 tests verts
+pnpm exec biome check --write packages/commerce/src/cart/store.ts packages/commerce/src/index.ts \
+  packages/commerce/test/cart-abandon.test.ts packages/cli/src/commands/serve.ts \
+  packages/cli/test/serve-commerce.test.ts packages/cli/test/serve-scheduled-tasks.test.ts
+                                                             # 1 avertissement réel (variable `server` non
+                                                             # utilisée dans mon propre nouveau test) — corrigé
+                                                             # en ne liant plus le retour de startServer ;
+                                                             # infos restants préexistants et sans rapport
+```
+
+**Changeset** : `.changeset/audit-a1-commerce-cart-abandon.md` (`@cogenta/commerce`
+minor — nouvelle méthode additive `abandonInactive` + `DEFAULT_CART_ABANDON_MS` exportée
+; `@cogenta/cli` patch — câblage pur du planificateur).
+
+---
+
+## Synthèse — mission A1 (commerce)
+
+Toutes les tâches de la mission sont **faites** : T-COM-01 (P0), T-COM-02 (P1),
+T-COM-03 (P1), le test admin `commerce-customer-detail.tsx` (P1), et l'abandon
+automatique de panier (P2). Cinq commits, un par tâche, sur la branche
+`worktree-agent-aac6f1e0f6cb3a596`. T-COM-04 (le pont vitrine, 10-15 jours, exige une
+ADR tranchée avant tout code) reste explicitement hors périmètre de cette mission, comme
+prévu par l'audit lui-même — c'est son propre chantier.
+
+**Un correctif à l'audit, dans les deux sens** : T-COM-01 et le constat P0 « aucun
+pont vitrine » étaient exacts et confirmés par le code. En revanche, T-COM-02
+(`changeSubscriptionPlan` existait déjà côté client sous un nom différent) et T-COM-03
+(`OrderStore.list` avait déjà `search`/`customerId`/dates, le routeur les lisait déjà)
+étaient partiellement inexacts sur ce qui existait déjà — dans les deux cas le vrai
+trou (l'écran, pas le câblage serveur) était néanmoins bien réel et corrigé.
+
+

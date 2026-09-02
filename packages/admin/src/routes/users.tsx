@@ -21,6 +21,7 @@ import { grantsForRole, knownRoleNames } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { SchemaDocument } from '../schema/types.js'
 import {
+  Badge,
   Button,
   Card,
   CardBody,
@@ -60,6 +61,13 @@ import { ACTION_KEY } from './roles.js'
 const STANDARD_ROLES = ['admin', 'editor', 'author', 'contributor'] as const
 
 const PAGE_SIZE = 25
+
+const STATUS_TONE: Record<AdminUser['status'], 'success' | 'neutral' | 'info' | 'warning'> = {
+  active: 'success',
+  disabled: 'neutral',
+  invited: 'info',
+  anonymized: 'warning',
+}
 
 type SortChoice = 'createdAt:desc' | 'createdAt:asc' | 'lastSignInAt:desc' | 'lastSignInAt:asc'
 
@@ -618,15 +626,23 @@ export function UsersRoute(): JSX.Element {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{user.roles.join(', ')}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {user.roles.map((role) => (
+                        <Badge key={role} tone={role === 'admin' ? 'primary' : 'neutral'}>
+                          {t(`roles.${role}`, { defaultValue: role })}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <span>
+                      <Badge tone={STATUS_TONE[user.status]}>
                         {user.status === 'active' && t('users.active')}
                         {user.status === 'disabled' && t('users.disabled')}
                         {user.status === 'invited' && t('users.invited')}
                         {user.status === 'anonymized' && t('users.anonymized')}
-                      </span>
+                      </Badge>
                       {user.status === 'invited' && (
                         <span className="text-xs text-muted-foreground">
                           {user.invitation !== null
@@ -634,42 +650,51 @@ export function UsersRoute(): JSX.Element {
                             : t('users.invitedUnknownDate')}
                         </span>
                       )}
-                      {user.dormant && (
-                        <span className="inline-flex w-fit items-center gap-1 rounded-sm border border-warning bg-warning/10 px-1.5 py-0.5 text-xs text-warning">
-                          {t('users.dormantBadge')}
-                        </span>
-                      )}
+                      {user.dormant && <Badge tone="warning">{t('users.dormantBadge')}</Badge>}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <span>
+                      <Badge tone={user.mfa.totp || user.mfa.passkeys > 0 ? 'success' : 'neutral'}>
                         {user.mfa.totp || user.mfa.passkeys > 0
                           ? t('users.mfaOn')
                           : t('users.mfaOff')}
-                      </span>
+                      </Badge>
                       {user.mfaRecommended && (
-                        <span className="inline-flex w-fit items-center gap-1 rounded-sm border border-warning bg-warning/10 px-1.5 py-0.5 text-xs text-warning">
-                          {t('users.mfaRecommendedBadge')}
-                        </span>
+                        <Badge tone="warning">{t('users.mfaRecommendedBadge')}</Badge>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{user.lastSignInAt ?? t('users.neverSignedIn')}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {user.lastSignInAt ?? t('users.neverSignedIn')}
+                  </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-2">
+                    {/* Short, generic visible labels — the full email lives
+                        only in `aria-label`, disambiguating the same action
+                        repeated across rows for assistive tech without
+                        forcing every row this wide for sighted users too
+                        (the "catastrophe" this replaces: five buttons per
+                        row, each repeating the full address in plain
+                        text). */}
+                    <div className="flex flex-wrap gap-1.5">
                       {user.status === 'invited' ? (
                         <>
                           <Button
                             variant="secondary"
                             size="sm"
                             disabled={!invitationEmailAvailable}
+                            aria-label={t('users.resendInvite', { email: user.email })}
                             onClick={() => void resend(user)}
                           >
-                            {t('users.resendInvite', { email: user.email })}
+                            {t('users.resendInviteShort')}
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => void cancel(user)}>
-                            {t('users.cancelInvite', { email: user.email })}
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            aria-label={t('users.cancelInvite', { email: user.email })}
+                            onClick={() => void cancel(user)}
+                          >
+                            {t('users.cancelInviteShort')}
                           </Button>
                         </>
                       ) : user.status === 'anonymized' ? (
@@ -681,6 +706,7 @@ export function UsersRoute(): JSX.Element {
                           <Button
                             variant="secondary"
                             size="sm"
+                            aria-label={t('users.changeRoles', { email: user.email })}
                             onClick={() => {
                               setEditing(user)
                               // Every role this account already holds is, by
@@ -691,37 +717,49 @@ export function UsersRoute(): JSX.Element {
                               setEditCustomRole('')
                             }}
                           >
-                            {t('users.changeRoles', { email: user.email })}
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => void openSessions(user)}>
-                            {t('users.viewSessions', { email: user.email })}
+                            {t('users.changeRolesShort')}
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label={t('users.viewSessions', { email: user.email })}
+                            onClick={() => void openSessions(user)}
+                          >
+                            {t('users.viewSessionsShort')}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={t('users.exportData', { email: user.email })}
                             onClick={() => void exportUserData(user)}
                           >
-                            {t('users.exportData', { email: user.email })}
+                            {t('users.exportDataShort')}
                           </Button>
                           <Button
                             variant={user.status === 'active' ? 'destructive' : 'secondary'}
                             size="sm"
+                            aria-label={
+                              user.status === 'active'
+                                ? t('users.disableAccount', { email: user.email })
+                                : t('users.enableAccount', { email: user.email })
+                            }
                             onClick={() => void toggleStatus(user)}
                           >
                             {user.status === 'active'
-                              ? t('users.disableAccount', { email: user.email })
-                              : t('users.enableAccount', { email: user.email })}
+                              ? t('users.disableAccountShort')
+                              : t('users.enableAccountShort')}
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label={t('users.anonymizeAccount', { email: user.email })}
                             onClick={() => {
                               setAnonymizing(user)
                               setAnonymizeConfirm('')
                               setAnonymizeError(null)
                             }}
                           >
-                            {t('users.anonymizeAccount', { email: user.email })}
+                            {t('users.anonymizeAccountShort')}
                           </Button>
                         </>
                       )}

@@ -22,13 +22,12 @@
 | 10 | Coquille / réglages / tableau de bord | `10-coquille-reglages-dashboard.md` | **terminé** (454 lignes) |
 | 11 | Exploitation | `11-exploitation.md` | **terminé** (686 lignes) |
 | 12 | Extensions / marketplace | `12-extensions-marketplace.md` | **terminé** (466 lignes) |
-| 13 | Agents / IA / MCP / canaux | `13-agents-ia-mcp-canaux.md` | vague 2 (Sonnet) en cours |
+| 13 | Agents / IA / MCP / canaux | `13-agents-ia-mcp-canaux.md` | **terminé** (627 lignes) |
 | 14 | Commerce | `14-commerce.md` | **terminé** (410 lignes) |
 | 15 | Installeur / CLI / docs / flotte | `15-installeur-cli-docs-flotte.md` | **terminé** (664 lignes) |
 
 ## Synthèses par domaine (ajoutées à la fin de chaque audit)
 
-## Plan de correction consolidé (rédigé après les 15 synthèses)
 
 ## Journal des corrections lancées
 
@@ -192,12 +191,19 @@ Items prioritaires :
 - T08 (P2, 1 j) CSV/JSON/RSS importables en admin seulement, pas en CLI.
 - T10 (P3, 1-1,5 j) blueprints : `defineTaxonomy()` et champs SEO (confirme audits 04 et 06).
 
+### 13 — Agents, IA, MCP, canaux (terminé 2026-09-02 02:45, 271 k tokens Sonnet)
+Décompte : 78 FAIT, 8 PARTIEL, 5 ABSENT, 4 POINT MORT (~95 critères, 8 fiches toutes réellement fusionnées, `tools@1.4`). Zéro violation R1-R10.
+Deux P0 nouveaux, non documentés ailleurs :
+- **`AgentDeclaration.triggers` (planification cron des agents) totalement inerte** : stocké et renvoyé par l'API, lu par aucun planificateur (~10 tickers réels dans `serve.ts`, aucun pour les agents). Activer un agent ne le fait jamais tourner seul.
+- **Les six agents spécialisés de `@cogenta/agents-builtin`** (content, designer, developer, performance, security, seo) **sont orphelins** : jamais importés par `cli`/`api`/`admin` ; `code.propose_patch` (permission `tools@1.3`) jamais enregistré dans le manifeste réel. 154 tests en vase clos.
+Items prioritaires : T10 (1 j) semer les six agents orphelins ; T01 trancher le sort des `triggers` (planificateur réel) ; T02 notice d'honnêteté sur l'autonomie ; T08 libellés de section du plan de site en anglais en dur (viole ADR-0019) ; T04/T05 ressources MCP et transport HTTP.
+
 ---
 
-## Plan de correction consolidé (rédigé le 2026-09-02 02:45, 14/15 audits rendus ; l'audit 13 sera intégré à sa réception)
+## Plan de correction consolidé (rédigé le 2026-09-02 02:45, 15/15 audits rendus)
 
-### Bilan chiffré (14 domaines)
-FAIT ≈ 555 · PARTIEL ≈ 100 · ABSENT ≈ 70 · POINT MORT ≈ 60. Aucune violation R1-R10 dans le code lu (pas de `any`, `console.log`, contrôle de permission dans un outil, dépendance sauvage). Le motif dominant n'est pas le code manquant mais **le câblage manquant** : des dizaines de fonctions écrites et testées que rien n'appelle.
+### Bilan chiffré (15 domaines)
+FAIT ≈ 633 · PARTIEL ≈ 108 · ABSENT ≈ 75 · POINT MORT ≈ 64. Aucune violation R1-R10 dans le code lu (pas de `any`, `console.log`, contrôle de permission dans un outil, dépendance sauvage). Le motif dominant n'est pas le code manquant mais **le câblage manquant** : des dizaines de fonctions écrites et testées que rien n'appelle.
 
 ### P0 transverses (à corriger en premier)
 | # | Constat | Audits | Effort |
@@ -211,6 +217,8 @@ FAIT ≈ 555 · PARTIEL ≈ 100 · ABSENT ≈ 70 · POINT MORT ≈ 60. Aucune vi
 | P0-7 | Clé i18n FR `richText.imageDropHint` manquante | 01, 10 | 15 min |
 | P0-8 | `@cogenta/fleet` sans aucun point d'entrée | 15 | 3-5 j |
 | P0-9 | Pont vitrine commerce (aucune page publique, panier/checkout/webhook non exposés) | 14 | 10-15 j, ADR |
+| P0-10 | `AgentDeclaration.triggers` inerte : un agent activé ne tourne jamais seul | 13 | 1-2 j |
+| P0-11 | Six agents intégrés orphelins, `code.propose_patch` jamais enregistré | 13 | 1 j |
 
 ### Vagues de correction
 - **Vague A (lancée 02:50)** — P0-1..P0-7 + P1 de câblage sans ADR, six agents en worktree : A1 commerce, A2 RGPD/audit/auth, A3 blueprints+scaffold, A4 rendu public (archives de termes, identité du site, flux RSS, accueil configurable, barre d'admin), A5 médiathèque, A6 finitions admin (badges, relecteur, libellés, notifications, santé, axe).

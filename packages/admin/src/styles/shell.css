@@ -73,7 +73,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  height: 116px;
+  height: 72px;
   padding: 0 var(--space-4);
   border-bottom: 1px solid var(--color-border);
   background: var(--card);
@@ -234,14 +234,14 @@
   gap: var(--space-3);
   width: 100%;
   margin-bottom: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: 0.625rem var(--space-3);
   border: none;
   border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: color 150ms ease;
@@ -284,14 +284,14 @@
   align-items: center;
   width: 100%;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: 0.625rem var(--space-3);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-muted);
   text-decoration: none;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -613,11 +613,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: 0.625rem var(--space-3);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
   text-decoration: none;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   transition:
     background-color 150ms ease,
@@ -645,21 +645,22 @@
 .app-shell__content {
   grid-area: content;
   padding: var(--space-8) var(--space-6);
-  max-width: 72rem;
-}
-
-/* A screen can opt out of the shared 72rem reading-width cap by including
-   an element carrying this marker class anywhere in its subtree — measured
-   (2026-08-28) to be the single largest constraint on the Page Builder's
-   live preview, bigger than the builder's own 20rem detail panel: with the
-   cap in place, a real desktop preview (1440px, viewports.ts) had well
-   under 500px to render into once the app shell's own sidebar, the
-   builder's block-outline column and an open detail panel were all
-   subtracted, scaling the preview down to roughly a third of real size.
-   `:has()` lets `entry-edit.tsx` request this without either reaching into
-   `app-shell.tsx`'s DOM or `app-shell.tsx` threading a per-route prop down
-   for the sake of one screen. */
-.app-shell__content:has(.admin-wants-full-width) {
+  /* No cap by default (2026-09-02, direct feedback: "un espace vide à
+     droite qui ne sert à rien" on every data-heavy screen — the users
+     table, Appearance, the dashboard). This is a console, not a blog: a
+     table or a form legitimately wants the width it's given, and nothing
+     here has ever needed a *narrower* measure of its own — a genuinely
+     prose-only screen (`documentation.css`'s `.doc-content`) already caps
+     itself locally at 65ch, independent of this rule. The old 72rem cap
+     (kept here, struck through in spirit, so the *why* of the change
+     stays legible) was tuned for reading text, then inherited by every
+     screen regardless of content shape; it was also, measured 2026-08-28,
+     the single largest constraint on the Page Builder's live preview —
+     bigger than the builder's own 20rem detail panel — which is why
+     `entry-edit.tsx` still carries an `admin-wants-full-width` marker
+     class: harmless now that there is no cap to lift, kept rather than
+     torn out for one screen while every other screen changes underneath
+     it. */
   max-width: none;
 }
 
@@ -712,7 +713,7 @@
      its header row. Seen live on /admin/users. `30` stays under the modal
      overlay (`z-40`) and the drawer. */
   z-index: 30;
-  /* Pinned under the sticky top bar (116px, `.app-shell__topbar`) so the
+  /* Pinned under the sticky top bar (72px, `.app-shell__topbar`) so the
      navigation never scrolls out of reach on a long screen — WordPress's
      own behaviour. `sticky`, not `fixed`: the rail keeps its grid column,
      so nothing else in the layout has to know about it. `align-self: start`
@@ -721,8 +722,8 @@
      the same reason spelled out on the original rule above: it would clip
      the flyout. */
   position: sticky;
-  top: 116px;
-  height: calc(100vh - 116px);
+  top: 72px;
+  height: calc(100vh - 72px);
   align-self: start;
 }
 

@@ -578,7 +578,7 @@ export function AppShell(): JSX.Element {
     return (
       <li key={item.to} className={className}>
         <NavLink to={item.to} end className="app-shell__nav-group-trigger" title={label}>
-          <Icon className="size-[1.125rem] shrink-0" />
+          <Icon className="size-[1.3125rem] shrink-0" />
           <span className="app-shell__nav-group-label">{label}</span>
         </NavLink>
       </li>
@@ -635,7 +635,7 @@ export function AppShell(): JSX.Element {
                   className="app-shell__nav-group-trigger"
                   title={label}
                 >
-                  <GroupIcon className="size-[1.125rem] shrink-0" />
+                  <GroupIcon className="size-[1.3125rem] shrink-0" />
                   <span className="app-shell__nav-group-label">{label}</span>
                   {badge}
                 </NavLink>
@@ -665,7 +665,7 @@ export function AppShell(): JSX.Element {
                   setOpenFlyoutGroup((current) => (current === group.id ? null : group.id))
                 }}
               >
-                <GroupIcon className="size-[1.125rem] shrink-0" />
+                <GroupIcon className="size-[1.3125rem] shrink-0" />
                 <span className="app-shell__nav-group-label">{label}</span>
                 {badge}
                 <span className="app-shell__nav-group-caret" aria-hidden="true" />
@@ -718,7 +718,7 @@ export function AppShell(): JSX.Element {
                   className="app-shell__nav-group-trigger"
                   title={label}
                 >
-                  <GroupIcon className="size-[1.125rem] shrink-0" />
+                  <GroupIcon className="size-[1.3125rem] shrink-0" />
                   <span className="app-shell__nav-group-label">{label}</span>
                   {badge}
                 </NavLink>
@@ -736,7 +736,7 @@ export function AppShell(): JSX.Element {
                 }}
               >
                 <summary className="app-shell__nav-group-trigger">
-                  <GroupIcon className="size-[1.125rem] shrink-0" />
+                  <GroupIcon className="size-[1.3125rem] shrink-0" />
                   <span className="app-shell__nav-group-label">{label}</span>
                   {badge}
                   <span className="app-shell__nav-group-caret" aria-hidden="true" />

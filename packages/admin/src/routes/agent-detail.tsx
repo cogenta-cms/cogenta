@@ -330,7 +330,7 @@ export function AgentDetailRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="agents-detail-heading" className="flex h-full flex-col gap-3">
+    <section aria-labelledby="agents-detail-heading" className="flex flex-col gap-3">
       <Link to="/agents">{t('agents.detailBack')}</Link>
 
       {error !== null && (
@@ -362,7 +362,15 @@ export function AgentDetailRoute(): JSX.Element {
           now the page itself; every configuration field moved into the
           "Réglages" modal above, opened on demand rather than always taking
           the whole screen. */}
-      <div className="flex min-h-[28rem] flex-1 flex-col gap-2">
+      {/* A self-contained height, not `h-full`/`flex-1` inherited from an
+          ancestor: `.app-shell`'s grid row is only a `min-height` floor
+          (shell.css), so it grows to fit content rather than clamping to
+          the viewport — `h-full` here resolved to `auto` and the message
+          list never had a bounded box to scroll inside, stretching the
+          whole page and stranding everything below it. Same fixed-height
+          pattern `agent-chat-widget.tsx` already uses for its own panel,
+          just roomier for the full page. */}
+      <div className="flex h-[70vh] max-h-[42rem] min-h-[28rem] flex-col gap-2">
         <AgentChatFeed
           conversation={conversation}
           disabled={!selectedAgent.enabled}

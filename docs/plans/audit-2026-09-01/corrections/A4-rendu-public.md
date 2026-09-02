@@ -12,7 +12,7 @@ Commits :
 |---|---|
 | `722fc6b` | `feat(theme-kit)` — identité du site (logo / logo sombre / favicon / image de partage) + `preconnect` polices |
 | `a6530f6` | `feat(cli)` — flux RSS/Atom, barre d'admin, **et** archives de termes (tâche 2, fusionnée dans ce commit) |
-| `<dernier>` | `test(theme-canonical)` — garde `font-display: swap` + rapport |
+| `a2bb80e` | `test(theme-canonical)` — garde `font-display: swap` + rapport |
 
 > Écart assumé : la consigne demandait un commit par tâche. Les tâches 2, 3 et 5
 > touchent toutes `serve.ts`/`theme-render.ts` et ont été développées en parallèle ;

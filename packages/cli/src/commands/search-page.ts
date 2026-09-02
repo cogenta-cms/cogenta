@@ -1,8 +1,14 @@
 import type { AccessContext, ContentGateway, SearchRouter } from '@cogenta/api'
+import type { MediaAsset } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type SearchHit } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { SeoRenderDefaults } from './seo.js'
-import { type BrandingSettings, type PageChromeMenus, renderPageChrome } from './theme-render.js'
+import {
+  type BrandingSettings,
+  type PageChromeMenus,
+  renderPageChrome,
+  type SiteIdentityMedia,
+} from './theme-render.js'
 
 /**
  * `GET /search?q=…` — the public half of L10 task 3.
@@ -44,6 +50,10 @@ export interface SearchPageOptions {
   readonly activeTheme?: () => Promise<string | null>
   /** Same live SEO settings read the rest of the public site uses (`theme-render.ts`) — only the search-verification meta tags apply here (fiche 50 task 2). */
   readonly seo?: () => Promise<SeoRenderDefaults>
+  /** Same live site-identity read every other public page uses (audit T01) — the logo and favicon belong on this page too, or the search results look like a different site. */
+  readonly identity?: () => Promise<SiteIdentityMedia>
+  /** Same batch media loader (`theme-render.ts`). Needed only to resolve the identity above; absent means the site name in text. */
+  readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
 }
 
 interface ResolvedHit {
@@ -186,6 +196,8 @@ ${main}
       ...(options.branding === undefined ? {} : { branding: options.branding }),
       ...(options.activeTheme === undefined ? {} : { activeTheme: options.activeTheme }),
       ...(options.seo === undefined ? {} : { seo: options.seo }),
+      ...(options.identity === undefined ? {} : { identity: options.identity }),
+      ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
     },
     context,
   )

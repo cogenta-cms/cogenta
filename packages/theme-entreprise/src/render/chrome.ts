@@ -4,6 +4,7 @@ import {
   type ChromeResult,
   escapeAttribute,
   escapeText,
+  renderBrandMark,
 } from '@cogenta/theme-kit'
 
 /**
@@ -61,10 +62,14 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const siteNameText = escapeText(input.site.name)
   const headerNav = renderHeaderNav(input.headerNav)
   const footerItems = navItems(input.footerNav)
+  // A B2B header is a corporate identity slot before it is a wordmark slot.
+  // The footer's brand column and legal bottom row keep the company name in
+  // text, which is where a visitor looks for it anyway.
+  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteName
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-    `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${siteName}</a>` +
+    `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `${headerNav === '' ? '' : `<nav class="cg-nav" aria-label="Primary">${headerNav}</nav>`}` +
     `</div></header>`
 

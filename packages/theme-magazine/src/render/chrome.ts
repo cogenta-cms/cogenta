@@ -4,6 +4,7 @@ import {
   type ChromeResult,
   escapeAttribute,
   escapeText,
+  renderBrandMark,
 } from '@cogenta/theme-kit'
 
 /**
@@ -36,6 +37,10 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const headerNav = renderNavLinks(input.headerNav, 'cg-masthead__menu')
   const footerNav = renderNavLinks(input.footerNav, 'cg-colophon__menu')
   const homeHref = escapeAttribute(input.homeHref)
+  // A nameplate is the one place a masthead earns a logo: it replaces the
+  // wordmark on its own row. The colophon keeps the name in text, so the
+  // site is still named in a page whose images never load.
+  const nameplate = renderBrandMark(input.brand, { className: 'cg-masthead__logo' }) ?? siteNameText
 
   const header =
     `<header class="cg-masthead">` +
@@ -43,7 +48,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<span class="cg-masthead__kicker">Dispatches, field notes &amp; long reads</span>` +
     `</div>` +
     `<div class="cg-masthead__nameplate">` +
-    `<a class="cg-masthead__wordmark" href="${homeHref}">${siteNameText}</a>` +
+    `<a class="cg-masthead__wordmark" href="${homeHref}">${nameplate}</a>` +
     `</div>` +
     `${headerNav === '' ? '' : `<nav class="cg-masthead__nav" aria-label="Primary"><div class="cg-masthead__nav-inner">${headerNav}</div></nav>`}` +
     `</header>`

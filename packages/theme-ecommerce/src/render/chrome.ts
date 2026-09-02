@@ -4,6 +4,7 @@ import {
   type ChromeResult,
   escapeAttribute,
   escapeText,
+  renderBrandMark,
 } from '@cogenta/theme-kit'
 
 /**
@@ -46,11 +47,16 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const homeHref = escapeAttribute(input.homeHref)
   const headerNav = renderNavLinks(input.headerNav, 'ce-menu ce-menu--header')
   const footerNav = renderNavLinks(input.footerNav, 'ce-menu ce-menu--footer')
+  // A storefront's header bar is exactly where a retailer expects its logo.
+  // The footer's brand link and the bottom bar keep the name in text: a
+  // shopper landing on a page whose images failed still knows whose shop
+  // this is.
+  const mark = renderBrandMark(input.brand, { className: 'ce-header__logo' }) ?? siteName
 
   const header =
     `<header class="ce-header">` +
     `<div class="ce-header__bar">` +
-    `<a class="ce-header__brand" href="${homeHref}">${siteName}</a>` +
+    `<a class="ce-header__brand" href="${homeHref}">${mark}</a>` +
     `${headerNav === '' ? '' : `<nav class="ce-header__nav" aria-label="Primary">${headerNav}</nav>`}` +
     `</div></header>`
 

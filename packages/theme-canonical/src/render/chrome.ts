@@ -4,6 +4,7 @@ import {
   type ChromeResult,
   escapeAttribute,
   escapeText,
+  renderBrandMark,
 } from '@cogenta/theme-kit'
 
 /**
@@ -39,10 +40,14 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const siteName = escapeAttribute(input.site.name)
   const headerNav = renderNavLinks(input.headerNav)
   const footerNav = renderNavLinks(input.footerNav)
+  // The uploaded logo replaces the wordmark, and only the wordmark: the
+  // footer keeps the site's name in text, so a site whose logo fails to load
+  // is still named somewhere on every page.
+  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteName
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-    `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${siteName}</a>` +
+    `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}` +
     `</div></header>`
 

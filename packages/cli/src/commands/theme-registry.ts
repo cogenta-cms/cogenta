@@ -8,6 +8,7 @@ import type {
   HtmlElement,
   PageContent,
   RenderContext,
+  TermArchiveInput,
 } from '@cogenta/theme-kit'
 
 /**
@@ -37,6 +38,17 @@ export interface ThemeModule {
     registry?: BlockRegistry,
   ) => HtmlElement
   readonly renderChrome: (input: ChromeInput) => ChromeResult
+  /**
+   * The public archive page of one taxonomy term (contract D `theme@1.3`).
+   *
+   * **Optional**, and that is the whole point of it being here rather than
+   * beside `renderPage`: a theme installed before this existed, or a theme
+   * that simply does not want to own this layout, keeps working — the host
+   * renders a plain list inside that theme's own chrome instead. Making it
+   * required would have turned a new capability into a breaking change for
+   * every theme package on the day it shipped.
+   */
+  readonly renderTermArchive?: (input: TermArchiveInput) => HtmlElement
 }
 
 export interface BuiltinTheme {

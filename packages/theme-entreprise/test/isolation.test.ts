@@ -84,6 +84,7 @@ describe('theme isolation', () => {
 
   it('ships the stylesheets it claims to check', () => {
     expect(STYLESHEETS.map(({ path }) => path).sort()).toEqual([
+      'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
       'styles/theme.css',

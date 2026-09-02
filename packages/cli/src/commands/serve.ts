@@ -199,6 +199,7 @@ import {
   type ErrorLog,
   getCoreVersion,
   type HealthReport,
+  identifier,
   isCogentaError,
   type Logger,
   type LogLevel,
@@ -209,6 +210,7 @@ import {
   type RateLimitDriver,
   type SecretHygieneReport,
   type StorageDriver,
+  sql,
 } from '@cogenta/core'
 import { createFormStore, ensureFormsTables, type FormStore } from '@cogenta/forms'
 import {
@@ -252,6 +254,7 @@ import {
   type CollectionDefinition,
   type ContentLifecycleEvent,
   type ContentStore,
+  columnFor,
   createAdminThemeStore,
   createContentStore,
   createMaintenanceStore,
@@ -276,6 +279,7 @@ import {
   ensurePatternTables,
   ensureSearchConsoleConnectionTable,
   ensureSiteSettingsTables,
+  entriesTable,
   type MaintenanceStore,
   type MenuStore,
   type NotFoundLogStore,
@@ -284,6 +288,8 @@ import {
   type RedirectStore,
   type RolePermissionStore,
   registerScheduledPublishing,
+  relationsOf,
+  relationTable,
   type ScheduledTaskRegistry,
   type SchemaDocument,
   type SearchConsoleConnectionStore,
@@ -300,10 +306,14 @@ import {
 } from '@cogenta/schema'
 import {
   canonicalUrl,
+  feedItemsFor,
   indexNowKeyFile,
   llmsTxtSectionsFor,
   pingIndexNow,
+  renderAtomFeed,
   renderLlmsTxt,
+  renderRssFeed,
+  type SitemapUrl,
 } from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
 import type { GraphQLSchema } from 'graphql'
@@ -347,11 +357,13 @@ import {
   seoSiteFor,
 } from './seo.js'
 import { createSitePlanning } from './site-plan.js'
+import { renderTermArchivePage, type TermArchiveResolution } from './term-archive-page.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { availableThemes, DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
   DEFAULT_IMAGE_ENDPOINT,
+  EMPTY_SITE_IDENTITY,
   entryTitle,
   joinStyles,
   loadSkinCss,
@@ -360,6 +372,7 @@ import {
   renderRequestedPage,
   renderThemeGalleryPreview,
   resolveEntry,
+  type SiteIdentityMedia,
   STYLESHEET_PATH,
 } from './theme-render.js'
 import { computeEffectiveStyles, computePreviewStyles, createThemeWiring } from './theme-wiring.js'
@@ -878,6 +891,26 @@ interface Site {
    * field existed.
    */
   readonly activeTheme?: () => Promise<string | null>
+  /**
+   * The site's own logo/dark logo/favicon/share image, read live off the
+   * same theme-overrides row `activeTheme` above already reads (audit
+   * 2026-09-01 §7 T01 — the four settings the appearance screen saved and
+   * nothing ever read). `undefined` under the same condition every other
+   * theme field here is, and `theme-render.ts` then renders exactly as it
+   * did before this existed.
+   */
+  readonly siteIdentity?: () => Promise<SiteIdentityMedia>
+  /**
+   * `/{taxonomy}/{term-slug}` → the term, its lineage and everything
+   * published under it, or `null` when either half names nothing (audit
+   * 2026-09-01, 04-taxonomies-menus.md T01).
+   */
+  readonly resolveTermArchive: (
+    taxonomyName: string,
+    termSlug: string,
+  ) => Promise<TermArchiveResolution | null>
+  /** Every term archive URL worth listing in `/sitemap.xml` — terms with nothing published under them are left out. */
+  readonly termSitemapUrls: () => Promise<readonly SitemapUrl[]>
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -1925,13 +1958,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }
   }
 
-  // Resolves a `taxonomy`-kind menu item to a display label (fiche 09, task
-  // 4). `route` stays `null`: no site in this codebase renders a taxonomy
-  // archive page yet, so there is honestly nowhere for the link to point —
-  // adding that route is future work, not a gap this resolver should paper
-  // over with a guessed URL. The label picks the site's default locale
-  // rather than the visiting locale, since a term's labels carry no request
-  // context of their own the way an entry's own `locale` field does.
+  /** A term's own label in the site's default locale — a term carries no request context of its own the way an entry's `locale` field does. */
+  const termLabel = (term: { labels: Record<string, string>; slug: string }): string =>
+    term.labels[site.defaultLocale] ?? Object.values(term.labels)[0] ?? term.slug
+
+  // Resolves a `taxonomy`-kind menu item to a display label and a real route
+  // (fiche 09 task 4; audit 2026-09-01, 04-taxonomies-menus.md T01).
+  //
+  // `route` was `null` here for as long as the archive page did not exist —
+  // honestly so, with a comment saying no site rendered one. It does now
+  // (`term-archive-page.ts`), so a menu item pointing at a term is finally a
+  // link rather than a dead `<span>`.
   const resolveMenuTerm = async (
     taxonomyName: string,
     termId: string,
@@ -1942,8 +1979,158 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     const term = await taxonomyStoreFor(taxonomy).read(termId)
     if (term === null) return null
 
-    const label = term.labels[site.defaultLocale] ?? Object.values(term.labels)[0] ?? term.slug
-    return { label, route: null }
+    return {
+      label: termLabel(term),
+      route: `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`,
+    }
+  }
+
+  /**
+   * Every published entry filed under one term, newest first, as
+   * `(collection, id)` pairs — the query behind the public term archive.
+   *
+   * Modelled on `countTaxonomyUsage` (`@cogenta/schema`), which asks the same
+   * question one aggregate at a time: one statement per taxonomy field found
+   * across the site's collections, never one per entry. A to-many taxonomy
+   * field lives in its own join table and simply cannot be reached through
+   * `ListOptions.where` (which refuses columnless fields by design), which is
+   * why this is SQL here rather than a gateway filter.
+   *
+   * It deliberately answers **ids only**: every one of them is read back
+   * through the permission-checked gateway before it reaches a page, so this
+   * query never has to know anything about roles (R4 — the check belongs to
+   * the runtime, never to the statement that found the row).
+   *
+   * The result is capped: an archive is a browsing surface, and merging tens
+   * of thousands of rows in memory to show twelve of them would be a
+   * different feature with a different design.
+   */
+  const ARCHIVE_SCAN_CAP = 600
+  const entriesForTerm = async (
+    taxonomyName: string,
+    termId: string,
+  ): Promise<readonly { readonly collection: string; readonly id: string }[]> => {
+    const dialect = db.dialect
+    const idColumn = identifier('id', dialect)
+    const deletedAtColumn = identifier('deleted_at', dialect)
+    const statusColumn = identifier('status', dialect)
+    const createdAtColumn = identifier('created_at', dialect)
+    const found: { collection: string; id: string; createdAt: string }[] = []
+
+    for (const collection of collections) {
+      const relevant = relationsOf(collection).filter(
+        (relation) => relation.kind === 'taxonomy' && relation.to === taxonomyName,
+      )
+      if (relevant.length === 0) continue
+      const entriesTableName = identifier(entriesTable(collection.name), dialect)
+
+      for (const relation of relevant) {
+        if (relation.many) {
+          const join = identifier(relationTable(collection.name, relation.field), dialect)
+          const rows = await db.query<{ id: unknown; created_at: unknown }>(
+            sql`select e.${idColumn} as ${idColumn}, e.${createdAtColumn} as ${createdAtColumn}
+                from ${join} jt
+                join ${entriesTableName} e on e.${idColumn} = jt.${identifier('entry_id', dialect)}
+                where jt.${identifier('target_id', dialect)} = ${termId}
+                  and e.${deletedAtColumn} is null
+                  and e.${statusColumn} = ${'published'}`,
+          )
+          for (const row of rows.rows) {
+            found.push({
+              collection: collection.name,
+              id: String(row.id),
+              createdAt: String(row.created_at),
+            })
+          }
+          continue
+        }
+        const column = identifier(columnFor(relation.field), dialect)
+        const rows = await db.query<{ id: unknown; created_at: unknown }>(
+          sql`select ${idColumn}, ${createdAtColumn}
+              from ${entriesTableName}
+              where ${column} = ${termId}
+                and ${deletedAtColumn} is null
+                and ${statusColumn} = ${'published'}`,
+        )
+        for (const row of rows.rows) {
+          found.push({
+            collection: collection.name,
+            id: String(row.id),
+            createdAt: String(row.created_at),
+          })
+        }
+      }
+    }
+
+    // Newest first, across every collection at once — an archive of a term
+    // that classifies both articles and case studies is one list, not two.
+    // `createdAt` rather than `publishedAt`: the latter is nullable on a
+    // contract A entry, which is exactly why `SortField` excludes it.
+    found.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const unique = new Map<string, { collection: string; id: string }>()
+    for (const row of found) {
+      if (unique.size >= ARCHIVE_SCAN_CAP) break
+      // Two taxonomy fields of one collection can name the same term; the
+      // entry is listed once.
+      if (!unique.has(row.id)) unique.set(row.id, { collection: row.collection, id: row.id })
+    }
+    return [...unique.values()]
+  }
+
+  /**
+   * `/{taxonomy}/{term-slug}` → everything the archive renderer needs, or
+   * `null` when either half of the path names nothing. Tried only after every
+   * real collection route has failed, so it can never shadow one.
+   */
+  const resolveTermArchive = async (
+    taxonomyName: string,
+    termSlug: string,
+  ): Promise<TermArchiveResolution | null> => {
+    const taxonomy = taxonomies.find((candidate) => candidate.name === taxonomyName)
+    if (taxonomy === undefined) return null
+    const store = taxonomyStoreFor(taxonomy)
+    const term = await store.bySlug(termSlug)
+    if (term === null) return null
+
+    // `ancestors` is inclusive of the term itself (`taxonomy-store.ts`), and
+    // a breadcrumb must not repeat the heading right below it.
+    const lineage = await store.ancestors(term.id)
+    const children = await store.list({ parent: term.id })
+
+    return {
+      taxonomyName: taxonomy.name,
+      term: { slug: term.slug, label: termLabel(term) },
+      ancestors: lineage
+        .filter((ancestor) => ancestor.id !== term.id)
+        .map((ancestor) => ({ slug: ancestor.slug, label: termLabel(ancestor) })),
+      children: children.map((child) => ({ slug: child.slug, label: termLabel(child) })),
+      entries: await entriesForTerm(taxonomy.name, term.id),
+    }
+  }
+
+  /**
+   * Every term archive URL a crawler should know about, for `/sitemap.xml`.
+   * A term with nothing published under it is left out: the page answers 200,
+   * but advertising an empty list to a crawler is asking it to spend a
+   * request on nothing.
+   */
+  const termSitemapUrls = async (): Promise<readonly SitemapUrl[]> => {
+    const urls: SitemapUrl[] = []
+    for (const taxonomy of taxonomies) {
+      for (const term of await taxonomyStoreFor(taxonomy).list()) {
+        const entries = await entriesForTerm(taxonomy.name, term.id)
+        if (entries.length === 0) continue
+        urls.push({
+          loc: new URL(
+            `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`,
+            site.url,
+          ).toString(),
+          changefreq: 'weekly',
+          priority: 0.5,
+        })
+      }
+    }
+    return urls
   }
 
   // Contract E (ADR-0024): a whole separate domain, wired the same way the
@@ -2537,6 +2724,21 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           activeTheme: async () =>
             (await (options.theme as ThemeRouterOptions).store.get()).activeTheme,
         }),
+    ...(options.theme === undefined
+      ? {}
+      : {
+          siteIdentity: async (): Promise<SiteIdentityMedia> => {
+            const overrides = await (options.theme as ThemeRouterOptions).store.get()
+            return {
+              logoMediaId: overrides.logoMediaId,
+              logoDarkMediaId: overrides.logoDarkMediaId,
+              faviconMediaId: overrides.faviconMediaId,
+              shareImageMediaId: overrides.shareImageMediaId,
+            }
+          },
+        }),
+    resolveTermArchive,
+    termSitemapUrls,
     security: options.security,
     health: options.health,
     tickScheduledPublishing: () => scheduledPublishQueue.tick(),
@@ -2788,6 +2990,16 @@ async function brandingForSite(site: Site): Promise<BrandingSettings> {
  */
 async function activeThemeForSite(site: Site): Promise<string | null> {
   return site.activeTheme === undefined ? null : site.activeTheme()
+}
+
+/**
+ * The site's identity media, or "nothing chosen" for an instance with no
+ * theme wiring at all — the same shape `activeThemeForSite` above has, for
+ * the same reason: `theme-render.ts` must not have to know which of its
+ * callers built a theme store.
+ */
+async function identityForSite(site: Site): Promise<SiteIdentityMedia> {
+  return site.siteIdentity === undefined ? EMPTY_SITE_IDENTITY : site.siteIdentity()
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
@@ -4182,6 +4394,8 @@ export function createRequestListener(
               menus: { menuRouter: site.menuRouter },
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
+              identity: () => identityForSite(site),
+              loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
               seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             }
             const html =
@@ -4212,6 +4426,8 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            identity: () => identityForSite(site),
+            loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           // A failure on a multi-step form only ever comes from the final
@@ -4581,6 +4797,7 @@ export function createRequestListener(
               return typeof setting?.value === 'string' ? setting.value : null
             },
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
+            identity: () => identityForSite(site),
           },
           context,
         )
@@ -4864,6 +5081,7 @@ export function createRequestListener(
               // everything this preview *does* claim to show.
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
+              identity: () => identityForSite(site),
             },
             context,
           )
@@ -4946,6 +5164,51 @@ export function createRequestListener(
         return
       }
 
+      // `/feed.xml` (RSS 2.0) and `/atom.xml` (Atom 1.0), from the same live
+      // content, read the same `ANONYMOUS` way `sitemap.xml` and `robots.txt`
+      // are: a reader and a signed-in editor must get the same document, or
+      // the feed advertises entries the reader cannot fetch.
+      //
+      // `@cogenta/seo`'s `feedItemsFor`/`renderRssFeed`/`renderAtomFeed` were
+      // written and unit-tested in L3 and never served by any route — the
+      // whole of this change is the two routes (audit 2026-09-01,
+      // 06-redirections-seo.md T03 / 07-apparence-themes-rendu.md T03).
+      //
+      // On by default, unlike IndexNow and llms.txt: a feed publishes only
+      // what is already published, at URLs already in the sitemap, so there
+      // is nothing here for an operator to consent to. `feedItemsFor` drops
+      // drafts itself and takes no option to stop it — a feed is the one
+      // output that cannot be retracted.
+      if (url.pathname === '/feed.xml' || url.pathname === '/atom.xml') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { allow: 'GET' }).end()
+          return
+        }
+        const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
+        const seoSite = seoSiteFor(site.site, seoDefaults)
+        const items = feedItemsFor(
+          seoSite,
+          await collectRoutedResources(site.collections, site.gateway),
+        )
+        const input = {
+          site: seoSite,
+          selfPath: url.pathname,
+          language: site.site.defaultLocale,
+          items,
+          ...(seoDefaults.defaultMetaDescription === ''
+            ? {}
+            : { description: seoDefaults.defaultMetaDescription }),
+        }
+        res.writeHead(200, {
+          'content-type': `${
+            url.pathname === '/feed.xml' ? 'application/rss+xml' : 'application/atom+xml'
+          }; charset=utf-8`,
+          'cache-control': 'public, max-age=600',
+        })
+        res.end(url.pathname === '/feed.xml' ? renderRssFeed(input) : renderAtomFeed(input))
+        return
+      }
+
       // `llms.txt` (fiche 50 task 5) — off by default (`seo.llmsTxtEnabled`),
       // reusing `llmsTxtSectionsFor`/`renderLlmsTxt` (`@cogenta/seo`), written
       // and unit-tested back in L3/L9 but never served by any route until now.
@@ -5002,6 +5265,7 @@ export function createRequestListener(
           seoSite,
           await collectRoutedResources(site.collections, site.gateway),
           seoDefaults.sitemapCollectionSettings,
+          await site.termSitemapUrls(),
         )
         const file = files.find((candidate) => candidate.path === url.pathname)
         if (file !== undefined) {
@@ -5035,6 +5299,8 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            identity: () => identityForSite(site),
+            loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
           context,
@@ -5062,6 +5328,8 @@ export function createRequestListener(
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
+            identity: () => identityForSite(site),
+            loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
           const html =
@@ -5123,12 +5391,74 @@ export function createRequestListener(
           },
           branding: () => brandingForSite(site),
           activeTheme: () => activeThemeForSite(site),
+          identity: () => identityForSite(site),
+          // Fiche 35 task 6's admin bar. Its renderer was written, and this
+          // flag — the one dispatch that is supposed to set it — never was,
+          // so the bar had never appeared on a single page (audit
+          // 2026-09-01). Set only here, never on the builder preview or the
+          // theme preview: the L16 fidelity test asserts the preview's
+          // `<body>` is byte-identical to the published page's, and this is
+          // the one page-GET path an authenticated visitor actually
+          // navigates to. `renderEntryPage` gates it a second time on the
+          // actor really being authenticated, so an anonymous visitor never
+          // carries the markup.
+          adminBar: true,
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
           res.end(html)
           return
+        }
+
+        // The taxonomy term archive, `/{taxonomy}/{term-slug}` (audit
+        // 2026-09-01, 04-taxonomies-menus.md T01).
+        //
+        // Tried **after** every real collection route has already failed,
+        // and that ordering is the whole design: a site with a `/blog/:slug`
+        // route and a `blog` taxonomy cannot have one shadow the other,
+        // because a URL that resolves to a real entry never reaches this
+        // branch at all. It also means a taxonomy needs no `routing` of its
+        // own — which would have been a contract A change (ADR-0022 gives a
+        // `TaxonomyDefinition` no routing, on purpose) for a feature that
+        // does not need one.
+        {
+          const archiveMatch = /^\/([^/]+)\/([^/]+)$/u.exec(url.pathname)
+          if (archiveMatch !== null) {
+            const resolution = await site.resolveTermArchive(
+              decodeURIComponent(archiveMatch[1] as string),
+              decodeURIComponent(archiveMatch[2] as string),
+            )
+            if (resolution !== null) {
+              const requested = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
+              const archive = await renderTermArchivePage(
+                resolution,
+                Number.isFinite(requested) ? requested : 0,
+                {
+                  collections: site.collections,
+                  gateway: site.gateway,
+                  site: site.site,
+                  styles: await site.resolveStyles(),
+                  menus: { menuRouter: site.menuRouter },
+                  branding: () => brandingForSite(site),
+                  activeTheme: () => activeThemeForSite(site),
+                  seo: () => readSeoRenderDefaults(site.siteSettingsStore),
+                  identity: () => identityForSite(site),
+                  loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+                },
+                context,
+              )
+              // `null` means "?page=9 on a two-page archive" — a real 404,
+              // handled by falling through. An *empty* term is not that: it
+              // renders 200 with an empty list, because "this term exists and
+              // classifies nothing published" is a true answer.
+              if (archive !== null) {
+                res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+                res.end(archive)
+                return
+              }
+            }
+          }
         }
 
         // The 404 log (fiche 12 task 1): every public GET that matched no

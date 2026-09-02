@@ -276,6 +276,19 @@ img {
   margin-inline-end: auto;
 }
 
+/* The uploaded site logo, when there is one. Height-constrained rather than
+   width-constrained: a wordmark logo and a square mark have wildly different
+   aspect ratios, and only a fixed height keeps the header bar the same
+   height for both. `max-inline-size` is the guard against a very wide
+   wordmark pushing the navigation off the row. */
+.cg-site-header__logo {
+  display: block;
+  block-size: 2rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+}
+
 .cg-site-footer {
   padding: var(--cg-s12) var(--cg-gutter);
   background: var(--cg-surface-sunken);

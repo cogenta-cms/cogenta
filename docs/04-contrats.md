@@ -600,7 +600,7 @@ defineAgent({
 
 ## Contrat D — Thème
 
-> **Figé en `theme@1.2` le 2026-08-28.** Ajouter une entrée à `ctx` est mineur ; en
+> **Figé en `theme@1.3` le 2026-09-02.** Ajouter une entrée à `ctx` est mineur ; en
 > modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -863,9 +863,80 @@ Un thème déclare `runtime: 'static' | 'server' | 'edge'`. Une cible de build q
 pas satisfaire le besoin d'un thème, d'un bloc ou d'un plugin **échoue** en nommant
 l'élément, la raison et les options. Jamais de dégradation silencieuse.
 
+### Point d'extension « chrome » — `renderChrome(input): ChromeResult`
+
+Ajouté en L23 avec `@cogenta/theme-kit`, jamais décrit ici jusqu'à `theme@1.3`. Un thème
+dessine son propre `<header>`/`<footer>` ; l'hôte (`cogenta serve`) lui passe uniquement
+ce qui lui appartient réellement — la navigation résolue, le fragment de marque Cogenta
+(ou son remplacement en marque blanche), et depuis `theme@1.3` l'identité du site.
+
+```ts
+interface ChromeBrand {
+  readonly name: string                 // le nom du site
+  readonly logo: ImageSource | null     // logo clair, null si aucun
+  readonly logoDark: ImageSource | null // variante sombre, null si aucune
+  readonly faviconUrl: string | null    // rendu par l'hôte, jamais par le thème
+}
+
+interface ChromeInput {
+  readonly site: { readonly name: string }
+  readonly locale: string
+  readonly homeHref: string
+  readonly headerNav: readonly ChromeNavLink[]
+  readonly footerNav: readonly ChromeNavLink[]
+  readonly brandingHtml: string
+  readonly brand?: ChromeBrand          // theme@1.3, optionnel
+}
+```
+
+Trois règles que le contrat impose au thème :
+
+1. `brandingHtml` se **place**, jamais ne s'altère ni ne se supprime.
+2. `brand.logo` remplace le nom en texte, **jamais ne s'y ajoute**, et l'image porte
+   toujours `alt = brand.name` — un logo annoncé par son nom de fichier est l'échec
+   WCAG 1.1.1 que `renderBrandMark()` (`@cogenta/theme-kit`) rend impossible.
+3. Le choix entre `logo` et `logoDark` est une décision du **navigateur**
+   (`prefers-color-scheme`), jamais du serveur : le serveur ignore le schéma du
+   visiteur. `renderBrandMark()` émet un `<picture>` et c'est la forme attendue.
+
+`brand` est optionnel : un thème écrit avant `1.3`, ou un hôte qui ne le renseigne pas,
+garde exactement le rendu antérieur (le nom du site en texte).
+
+### Point d'extension « archive de terme » — `renderTermArchive(input): HtmlElement`
+
+`theme@1.3`, **optionnel**. Rend la page publique listant les entrées classées sous un
+terme de taxonomie (`/{taxonomie}/{slug-du-terme}`). Un thème qui ne l'implémente pas
+n'empêche rien : l'hôte rend alors une liste minimale avec les mêmes classes que le
+reste du thème.
+
+```ts
+interface TermArchiveEntry {
+  readonly title: string
+  readonly href: string | null   // null quand la collection n'a pas de route
+  readonly summary: string | null
+  readonly collection: string
+  readonly publishedAt: string | null
+}
+
+interface TermArchiveInput {
+  readonly term: { readonly label: string; readonly description: string | null }
+  /** Du plus haut ancêtre jusqu'au parent direct — pour un fil d'Ariane. */
+  readonly ancestors: readonly { readonly label: string; readonly href: string }[]
+  /** Sous-termes directs, pour naviguer vers le bas de l'arbre. */
+  readonly children: readonly { readonly label: string; readonly href: string }[]
+  readonly entries: readonly TermArchiveEntry[]
+  readonly page: { readonly current: number; readonly previous: string | null; readonly next: string | null }
+}
+```
+
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
+
+**`theme@1.3` (audit 2026-09-01)** — deux ajouts strictement additifs :
+`ChromeInput.brand` (optionnel) et `ThemeModule.renderTermArchive` (optionnel). Aucune
+signature existante n'est modifiée ; un thème `1.2` continue de valider et de rendre
+sans changement.
 
 ---
 

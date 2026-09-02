@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
+import { expectNoSeriousA11yViolations } from './helpers/axe.js'
 import { installMockFetch, USER, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
@@ -531,5 +532,36 @@ describe('App, signed out', () => {
 
     expect(await screen.findByRole('heading', { name: 'Connexion à Cogenta' })).toBeDefined()
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
+  })
+})
+
+/**
+ * Fiche 35 audit T07 — the axe-core pass this file's own fiche (35) already
+ * required, never actually written. Three states: the normal sidebar, the
+ * icons-only collapsed mode (fiche 72), and the mobile drawer open (an
+ * active focus trap, the state most likely to hide a real violation).
+ */
+describe('App shell accessibility', () => {
+  it('meets the accessibility bar in the normal sidebar', async () => {
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+
+    await expectNoSeriousA11yViolations(container)
+  })
+
+  it('meets the accessibility bar with the sidebar collapsed to icons only', async () => {
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('button', { name: 'Replier la barre latérale' }))
+
+    await expectNoSeriousA11yViolations(container)
+  })
+
+  it('meets the accessibility bar with the mobile drawer open (focus trap active)', async () => {
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir la navigation' }))
+
+    await expectNoSeriousA11yViolations(container)
   })
 })

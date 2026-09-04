@@ -1,4 +1,4 @@
-import type { ImageOptions, MediaReference, RenderContext } from './contract.js'
+import type { ImageOptions, ImageSource, MediaReference, RenderContext } from './contract.js'
 import { type HtmlElement, h } from './html.js'
 
 export interface ImageRenderOptions {
@@ -39,7 +39,19 @@ export function image(
   media: MediaReference,
   options: ImageRenderOptions = {},
 ): HtmlElement {
-  const source = ctx.image(media, options.variant)
+  return renderImageSource(ctx.image(media, options.variant), options)
+}
+
+/**
+ * The same markup `image()` builds, from a source already resolved (by
+ * `entryImage`, say) rather than a raw `MediaReference` — for a caller that
+ * has an `ImageSource` in hand and no `RenderContext.image` to call again
+ * (`renderEntryHeader`'s cover, contract D `theme@1.4`).
+ */
+export function renderImageSource(
+  source: ImageSource,
+  options: Omit<ImageRenderOptions, 'variant'> = {},
+): HtmlElement {
   if (source.kind === 'video') {
     return h('video', {
       class: options.className,

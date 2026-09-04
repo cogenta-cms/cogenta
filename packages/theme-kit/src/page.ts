@@ -8,12 +8,22 @@ import {
   vocabularyRegistry,
 } from '@cogenta/blocks'
 import type { ContentEntry, QueryRequest } from './contract.js'
+import type { PageEntryMeta } from './entry-header.js'
 import type { HtmlElement } from './html.js'
 
 export interface PageContent {
   /** The entry's title. Rendered as the `h1` unless a hero already carries one. */
   readonly title: string
   readonly blocks: readonly VocabularyBlock[]
+  /**
+   * The article furniture a `richText`/blocks entry carries beyond its
+   * blocks — cover image, byline, date, taxonomy terms, reading time
+   * (contract D `theme@1.4`, optional and additive). Absent means the
+   * pre-1.4 page: a bare title and nothing else, exactly as before. See
+   * `renderEntryHeader` for the one shared way a theme turns this into
+   * markup.
+   */
+  readonly entry?: PageEntryMeta
 }
 
 /**

@@ -15,12 +15,17 @@ import {
   type CollectionDefinition,
   type ContentEntry,
   matchPath,
+  relationsOf,
 } from '@cogenta/schema'
 import type { SeoImage } from '@cogenta/seo'
 import {
   type ChromeBrand,
+  type ChromeInput,
+  type ChromeLink,
   type ChromeNavLink,
   buildCollectionListQuery as collectionListQuery,
+  entryExcerpt,
+  entryImage,
   escapeAttribute,
   type FetchedEntries,
   type ImageOptions,
@@ -28,6 +33,8 @@ import {
   type LinkTargetInput,
   type MediaReference,
   type PageContent,
+  type PageEntryMeta,
+  type PageEntryTerm,
   type PublicComment,
   type RenderContext,
   renderCommentsSection,
@@ -298,6 +305,32 @@ export interface ThemeRenderOptions {
    * before: the site name in text, and `DEFAULT_LOGO_PATH` as the favicon.
    */
   readonly identity?: () => Promise<SiteIdentityMedia>
+  /**
+   * `general.tagline`/`general.socialLinks`/`general.footerNote` (contract D
+   * `theme@1.4`, L25 D2), read live per request like `identity`/`seo` above.
+   * Absent renders exactly as a pre-1.4 site did: no tagline, no social
+   * links, no footer note, on every theme.
+   */
+  readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
+  /**
+   * The display name of an entry's author (`entry.createdBy`, contract A),
+   * for `PageContent.entry.author` (contract D `theme@1.4`). Absent means no
+   * author ever reaches a page — the pre-1.4 behaviour, and the honest
+   * answer for a caller with no user store wired at all (a bare test
+   * harness, `renderThemeGalleryPreview`'s synthetic page).
+   */
+  readonly authorFor?: (userId: string) => Promise<{ readonly name: string } | null>
+  /**
+   * One taxonomy term, resolved to a label and a route — the same shape
+   * `resolveMenuTerm` (`serve.ts`) already answers for a menu item pointing
+   * at a term, reused here for `PageContent.entry.terms` (contract D
+   * `theme@1.4`) rather than a second lookup. Absent means no entry ever
+   * carries `terms` — the pre-1.4 behaviour.
+   */
+  readonly resolveTerm?: (
+    taxonomyName: string,
+    termId: string,
+  ) => Promise<{ readonly label: string; readonly route: string | null } | null>
 }
 
 /**
@@ -499,6 +532,82 @@ async function brandingFor(
 async function themeFor(get: (() => Promise<string | null>) | undefined): Promise<ThemeModule> {
   const name = get === undefined ? DEFAULT_THEME_NAME : await get()
   return resolveTheme(name)
+}
+
+/**
+ * `general.tagline`/`general.socialLinks`/`general.footerNote` (contract D
+ * `theme@1.4`, L25 D2), already resolved for one locale — what
+ * `resolveChromeExtras` below folds into a `ChromeInput`.
+ */
+export interface ChromeExtras {
+  readonly tagline: string
+  readonly social: readonly ChromeLink[]
+  readonly footerNote: string
+}
+
+const EMPTY_CHROME_EXTRAS: ChromeExtras = { tagline: '', social: [], footerNote: '' }
+
+async function chromeExtrasFor(
+  get: ((locale: string) => Promise<ChromeExtras>) | undefined,
+  locale: string,
+): Promise<ChromeExtras> {
+  if (get === undefined) return EMPTY_CHROME_EXTRAS
+  return get(locale)
+}
+
+/**
+ * The `location` a menu is assigned to for it to become `ChromeInput.headerAction`
+ * (contract D `theme@1.4`) — a site names its own menu at this location from
+ * the admin's menu screen, exactly the way `header-nav`/`footer-nav` already
+ * work for `headerNav`/`footerNav`.
+ */
+export const HEADER_ACTION_MENU_LOCATION = 'header-action'
+
+/**
+ * The first link of the menu assigned to `HEADER_ACTION_MENU_LOCATION`, or
+ * `undefined` when no menu is assigned there (or it has no menu router
+ * wired at all) — never a legacy-name fallback, unlike
+ * `fetchMenuLinksForSlot`'s header/footer nav: this location is new in L25,
+ * so there is no pre-existing convention it needs to keep working.
+ */
+async function resolveHeaderAction(
+  locale: string,
+  menus: { readonly menuRouter?: MenuRouter } | undefined,
+  context: AccessContext,
+): Promise<ChromeLink | undefined> {
+  if (menus?.menuRouter === undefined) return undefined
+  const links = await fetchMenuLinksByLocation(HEADER_ACTION_MENU_LOCATION, locale, menus, context)
+  const first = links?.[0]
+  if (first === undefined || first.href === null) return undefined
+  return { label: first.label, href: first.href }
+}
+
+/**
+ * The one place every `renderChrome` call resolves the four `theme@1.4`
+ * fields (D2) from — `general.tagline`/`general.socialLinks`/
+ * `general.footerNote` through whichever `chromeExtras` reader the caller
+ * wired (`chromeExtrasForSite`, `@cogenta/cli`'s `serve.ts`), and
+ * `headerAction` from the live menu router right here, since it needs no
+ * database read of its own. Every field is omitted, never emitted as `''`/
+ * `[]`, when it has nothing to say — a theme's own "is this set" check
+ * (`input.tagline !== undefined`, say) stays a plain presence check.
+ */
+async function resolveChromeExtras(
+  getExtras: ((locale: string) => Promise<ChromeExtras>) | undefined,
+  locale: string,
+  menus: { readonly menuRouter?: MenuRouter } | undefined,
+  context: AccessContext,
+): Promise<Pick<ChromeInput, 'tagline' | 'social' | 'footerNote' | 'headerAction'>> {
+  const [extras, headerAction] = await Promise.all([
+    chromeExtrasFor(getExtras, locale),
+    resolveHeaderAction(locale, menus, context),
+  ])
+  return {
+    ...(extras.tagline === '' ? {} : { tagline: extras.tagline }),
+    ...(extras.social.length === 0 ? {} : { social: extras.social }),
+    ...(extras.footerNote === '' ? {} : { footerNote: extras.footerNote }),
+    ...(headerAction === undefined ? {} : { headerAction }),
+  }
 }
 
 /**
@@ -812,6 +921,8 @@ export interface PageChromeOptions {
   readonly identity?: () => Promise<SiteIdentityMedia>
   /** Same batch loader `ThemeRenderOptions.loadMedia` documents. Absent means no logo and no favicon can be resolved, so both fall back. */
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, RenderMediaAsset>>
+  /** Same live read `ThemeRenderOptions.chromeExtras` documents (contract D `theme@1.4`, L25 D2). Absent renders the pre-1.4 chrome. */
+  readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
 }
 
 /**
@@ -861,6 +972,12 @@ export async function renderPageChrome(
   const brandingHtml = renderFooterBranding(branding, DEFAULT_IMAGE_ENDPOINT)
   const theme = await themeFor(options.activeTheme)
   const identity = await resolveIdentity(options.site.name, DEFAULT_IMAGE_ENDPOINT, options)
+  const chromeExtras = await resolveChromeExtras(
+    options.chromeExtras,
+    options.locale,
+    options.menus,
+    context,
+  )
   const chrome = theme.renderChrome({
     site: options.site,
     locale: options.locale,
@@ -872,6 +989,7 @@ export async function renderPageChrome(
     footerNav,
     brandingHtml,
     brand: identity.brand,
+    ...chromeExtras,
   })
   const verificationTags = siteVerificationMetaTags(
     options.seo === undefined ? null : await options.seo(),
@@ -1111,6 +1229,93 @@ export async function renderDraftPage(
   return renderEntryPage(pathname, collection, entry, options, context)
 }
 
+/** ~200 words/minute, rounded up — `PageContent.entry.readingMinutes` (contract D `theme@1.4`). `0` (no text at all) is not a reading time, so it is left unset instead. */
+function richTextWordCount(document: RichTextDocument): number {
+  let words = 0
+  for (const node of document) {
+    if (node._type !== 'block') continue
+    const text = node.children.map((span) => span.text).join(' ')
+    words += text.split(/\s+/u).filter((word) => word.length > 0).length
+  }
+  return words
+}
+
+/**
+ * Every taxonomy term this entry is classified under, resolved to a label
+ * and a route through `options.resolveTerm` — one taxonomy field per
+ * `relationsOf(collection)` entry of `kind: 'taxonomy'`, a to-many field's
+ * value being an array of ids and a to-one field's a single id.
+ *
+ * `undefined` when `options.resolveTerm` was never wired — the pre-1.4
+ * behaviour — never a half-resolved list with some terms silently dropped.
+ */
+async function entryTerms(
+  entry: ContentEntry,
+  collection: CollectionDefinition,
+  resolveTerm: ThemeRenderOptions['resolveTerm'],
+): Promise<readonly PageEntryTerm[] | undefined> {
+  if (resolveTerm === undefined) return undefined
+  const taxonomyFields = relationsOf(collection).filter((relation) => relation.kind === 'taxonomy')
+  if (taxonomyFields.length === 0) return undefined
+
+  const terms: PageEntryTerm[] = []
+  for (const field of taxonomyFields) {
+    const raw = entry.values[field.field]
+    const ids = Array.isArray(raw) ? raw : typeof raw === 'string' && raw !== '' ? [raw] : []
+    for (const id of ids) {
+      if (typeof id !== 'string' || id === '') continue
+      const resolved = await resolveTerm(field.to, id)
+      if (resolved === null) continue
+      terms.push({ taxonomy: field.to, label: resolved.label, href: resolved.route })
+    }
+  }
+  return terms.length === 0 ? undefined : terms
+}
+
+/**
+ * `PageContent.entry` (contract D `theme@1.4`) — every field a theme's
+ * `renderEntryHeader` needs, beyond the blocks a page already carries.
+ * `themeEntry` is the already-flattened theme-shaped entry (`toThemeEntry`),
+ * which is what `entryImage`/`entryExcerpt` read; `entry`/`collection` are
+ * the raw schema shapes, which is what system fields and taxonomy field
+ * declarations live on.
+ */
+async function buildEntryMeta(
+  entry: ContentEntry,
+  collection: CollectionDefinition,
+  themeEntry: ThemeContentEntry,
+  themeContext: RenderContext,
+  options: ThemeRenderOptions,
+): Promise<PageEntryMeta> {
+  const author =
+    options.authorFor === undefined || entry.createdBy === null
+      ? undefined
+      : ((await options.authorFor(entry.createdBy)) ?? undefined)
+
+  const richTextField = Object.entries(collection.fields).find(
+    ([, field]) => field.kind === 'richText',
+  )?.[0]
+  const richTextValue = richTextField === undefined ? undefined : entry.values[richTextField]
+  const words = Array.isArray(richTextValue)
+    ? richTextWordCount(richTextValue as RichTextDocument)
+    : 0
+
+  const image = entryImage(themeEntry, themeContext)
+  const excerpt = entryExcerpt(themeEntry)
+  const terms = await entryTerms(entry, collection, options.resolveTerm)
+
+  return {
+    collection: collection.name,
+    ...(entry.publishedAt === null ? {} : { publishedAt: entry.publishedAt }),
+    updatedAt: entry.updatedAt,
+    ...(image === undefined ? {} : { image }),
+    ...(excerpt === undefined ? {} : { excerpt }),
+    ...(author === undefined ? {} : { author }),
+    ...(terms === undefined ? {} : { terms }),
+    ...(words === 0 ? {} : { readingMinutes: Math.ceil(words / 200) }),
+  }
+}
+
 /**
  * The one page renderer. Both `renderRequestedPage` (published) and
  * `renderDraftPage` (unsaved) end here, having only differed in how they got
@@ -1284,7 +1489,9 @@ async function renderEntryPage(
     },
   }
 
-  const pageContent: PageContent = { title: entryTitle(entry), blocks }
+  const themeEntry = toThemeEntry(entry, collection.name)
+  const entryMeta = await buildEntryMeta(entry, collection, themeEntry, themeContext, options)
+  const pageContent: PageContent = { title: entryTitle(entry), blocks, entry: entryMeta }
   const theme = await themeFor(options.activeTheme)
   const node = theme.renderPage(
     pageContent,
@@ -1430,6 +1637,12 @@ async function renderEntryPage(
     ),
   ])
   const brandingHtml = renderFooterBranding(branding, imageEndpoint)
+  const chromeExtras = await resolveChromeExtras(
+    options.chromeExtras,
+    themeContext.locale,
+    options,
+    context,
+  )
   const chrome = theme.renderChrome({
     site: options.site,
     locale: themeContext.locale,
@@ -1440,6 +1653,7 @@ async function renderEntryPage(
     footerNav: footerMenu ?? [],
     brandingHtml,
     brand: identity.brand,
+    ...chromeExtras,
   })
 
   // The same frame `Base.astro` builds for a real Astro build: a skip link
@@ -1664,6 +1878,23 @@ const GALLERY_PREVIEW_FOOTER_NAV: readonly ChromeNavLink[] = [
   { label: 'Privacy', href: '#', openInNewTab: false, kind: 'url', title: null },
 ]
 
+/**
+ * Synthetic `theme@1.4` chrome (contract D, L25 D2) — this route reads no
+ * database (see `renderThemeGalleryPreview`'s own comment), so a real
+ * `general.socialLinks`/`general.tagline`/`general.footerNote` never reaches
+ * it; fixed demo values instead, the same way the nav above is fixed rather
+ * than empty, so the gallery actually shows what a candidate theme does with
+ * these fields rather than leaving them permanently blank.
+ */
+const GALLERY_PREVIEW_TAGLINE = 'A site that looks like yours'
+const GALLERY_PREVIEW_SOCIAL: readonly ChromeLink[] = [
+  { label: 'X', href: 'https://x.com/cogenta' },
+  { label: 'GitHub', href: 'https://github.com/cogenta-cms' },
+  { label: 'Mastodon', href: 'https://mastodon.social/@cogenta' },
+]
+const GALLERY_PREVIEW_FOOTER_NOTE = 'Built with Cogenta — a CMS that runs itself.'
+const GALLERY_PREVIEW_HEADER_ACTION: ChromeLink = { label: 'Get started', href: '#' }
+
 export interface ThemeGalleryPreviewOptions {
   readonly site: {
     readonly name: string
@@ -1750,6 +1981,10 @@ export async function renderThemeGalleryPreview(
     headerNav: GALLERY_PREVIEW_HEADER_NAV,
     footerNav: GALLERY_PREVIEW_FOOTER_NAV,
     brandingHtml,
+    tagline: GALLERY_PREVIEW_TAGLINE,
+    social: GALLERY_PREVIEW_SOCIAL,
+    footerNote: GALLERY_PREVIEW_FOOTER_NOTE,
+    headerAction: GALLERY_PREVIEW_HEADER_ACTION,
   })
 
   return `<!doctype html>

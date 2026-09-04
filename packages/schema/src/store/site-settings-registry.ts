@@ -49,6 +49,17 @@ export const SITE_SETTING_UI_TYPES = [
    * checking the route exists.
    */
   'media',
+  /**
+   * A short ordered list of `{label, url}` pairs (L25 D2's first and only
+   * user: `general.socialLinks`), rendered as a textarea of one
+   * `Label | https://url` line per entry, converted to/from JSON by the
+   * field component itself — the same "closest shape in the closed set"
+   * reasoning `seo.collectionTitleTemplates` already documents for a `text`
+   * bypass, except this one *is* a real, generic editor (a JSON object map
+   * has no natural line-per-entry form; an ordered list of two short strings
+   * does) rather than a placeholder for a bespoke screen.
+   */
+  'linkList',
 ] as const
 
 export type SiteSettingUiType = (typeof SITE_SETTING_UI_TYPES)[number]
@@ -304,6 +315,26 @@ const sitemapCollectionSettings = z.record(
 )
 
 /**
+ * `general.socialLinks` (L25 D2) — the site's own social profile links, in
+ * the order a footer shows them. Twelve is the footer's own layout budget
+ * (`renderSocialLinks`, `@cogenta/theme-kit`): past a dozen icons a footer
+ * stops reading as a footer, and there is no legitimate reason a real site
+ * needs more distinct platforms than that. `url` must be `http(s)`: a footer
+ * `<a>` is not a place for a `javascript:`/`mailto:` surprise, and a real
+ * social profile is never anything else.
+ */
+const socialLinkEntry = z.object({
+  label: z.string().min(1).max(40),
+  url: z
+    .string()
+    .max(500)
+    .refine((value) => /^https?:\/\//u.test(value), {
+      error: 'Must be an http(s) URL.',
+    }),
+})
+const socialLinksSetting = z.array(socialLinkEntry).max(12)
+
+/**
  * `assistant.indexedCollections` (L22 task 4) — one boolean per collection
  * name, `false` meaning "excluded from the vector index". A collection
  * absent from the map is included: the opt-out shape is what keeps a site
@@ -431,6 +462,40 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
           'A comma-separated list of block type names, e.g. "prose". Empty means no starting blocks.',
       }),
     defaultValue: 'prose',
+    writeRoles: ADMIN_ONLY,
+  },
+  /**
+   * L25 D2 — the site's own social profiles, read by `resolveChromeExtras`
+   * (`@cogenta/cli`) and rendered by `renderSocialLinks`
+   * (`@cogenta/theme-kit`) in every built-in theme's footer. Site-scoped,
+   * unlike `general.tagline`: a Mastodon handle does not change per locale
+   * the way an editorial tagline does.
+   */
+  {
+    key: 'general.socialLinks',
+    group: 'general',
+    order: 7,
+    uiType: 'linkList',
+    scope: 'site',
+    schema: socialLinksSetting,
+    defaultValue: [],
+    writeRoles: ADMIN_ONLY,
+  },
+  /**
+   * L25 D2 — a short line an editor writes once (a legal mention, an
+   * "about" sentence, an address) that a theme's footer shows as its own
+   * short "about" column (`ChromeInput.footerNote`, contract D `theme@1.4`).
+   * Locale-scoped like `general.tagline` right above it: this is prose an
+   * editor writes, not a fixed fact like a social handle.
+   */
+  {
+    key: 'general.footerNote',
+    group: 'general',
+    order: 8,
+    uiType: 'text',
+    scope: 'locale',
+    schema: z.string().max(400),
+    defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },
 

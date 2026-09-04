@@ -3,6 +3,7 @@ import {
   type FetchedEntries,
   type PageContent,
   pageHasOwnHeading,
+  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -34,7 +35,7 @@ import { type HtmlElement, h } from './html.js'
  * before they moved to the package every theme now shares them from.
  */
 export type { FetchedEntries, PageContent }
-export { pageHasOwnHeading, withBlockKey }
+export { pageHasOwnHeading, renderEntryHeader, withBlockKey }
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -119,10 +120,19 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
+  // `theme@1.4` (L25 D2): `renderEntryHeader` already returns `null` for a
+  // page with no `entry` meta *and* for one whose blocks already draw their
+  // own heading (a `hero`), so the bare `<h1 class="cg-page__title">`
+  // fallback below is the right markup in both of those cases and only
+  // those — never a double heading, and never a page with none at all.
+  const entryHeader = renderEntryHeader(page, ctx)
   return h(
     'main',
     { class: 'cg-main', id: 'cg-main' },
-    pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'cg-page__title' }, page.title),
+    entryHeader,
+    entryHeader === null && !pageHasOwnHeading(page.blocks)
+      ? h('h1', { class: 'cg-page__title' }, page.title)
+      : null,
     page.blocks.map((block) =>
       withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
     ),

@@ -316,6 +316,7 @@ import {
   type SitemapUrl,
 } from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
+import type { ChromeLink } from '@cogenta/theme-kit'
 import type { GraphQLSchema } from 'graphql'
 import { sendInviteMail } from '../invite-mail.js'
 import type { Output, Writer } from '../output.js'
@@ -362,6 +363,7 @@ import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { availableThemes, DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
+  type ChromeExtras,
   DEFAULT_IMAGE_ENDPOINT,
   EMPTY_SITE_IDENTITY,
   entryTitle,
@@ -911,6 +913,17 @@ interface Site {
   ) => Promise<TermArchiveResolution | null>
   /** Every term archive URL worth listing in `/sitemap.xml` — terms with nothing published under them are left out. */
   readonly termSitemapUrls: () => Promise<readonly SitemapUrl[]>
+  /**
+   * One taxonomy term, resolved to a label and a route — the same lookup
+   * `resolveMenuTerm` already does for a menu item pointing at a term,
+   * exposed here so `theme-render.ts`'s `ThemeRenderOptions.resolveTerm`
+   * (contract D `theme@1.4`, an entry's classified terms) reuses it rather
+   * than a second lookup path.
+   */
+  readonly resolveTaxonomyTerm: (
+    taxonomyName: string,
+    termId: string,
+  ) => Promise<{ readonly label: string; readonly route: string | null } | null>
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -2739,6 +2752,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           },
         }),
     resolveTermArchive,
+    resolveTaxonomyTerm: resolveMenuTerm,
     termSitemapUrls,
     security: options.security,
     health: options.health,
@@ -3001,6 +3015,65 @@ async function activeThemeForSite(site: Site): Promise<string | null> {
  */
 async function identityForSite(site: Site): Promise<SiteIdentityMedia> {
   return site.siteIdentity === undefined ? EMPTY_SITE_IDENTITY : site.siteIdentity()
+}
+
+/** The stored shape of a `general.socialLinks` entry (`{label, url}`) — `@cogenta/schema`'s own registry, not `ChromeLink` (`{label, href}`), which is contract D's shape. */
+interface StoredSocialLink {
+  readonly label: string
+  readonly url: string
+}
+
+/** A `general.socialLinks` row's value, narrowed — the registry's own schema already refused anything else at write time. */
+function isStoredSocialLinkList(value: unknown): value is readonly StoredSocialLink[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry): entry is StoredSocialLink =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as { label?: unknown }).label === 'string' &&
+        typeof (entry as { url?: unknown }).url === 'string',
+    )
+  )
+}
+
+/**
+ * `general.tagline`/`general.socialLinks`/`general.footerNote` (contract D
+ * `theme@1.4`, L25 D2), read live off the same `SiteSettingsStore` every
+ * other public settings read already uses — same "no restart" contract as
+ * `brandingForSite` above. `tagline`/`footerNote` are locale-scoped, like
+ * `general.tagline` always has been; `socialLinks` is site-scoped, since a
+ * social handle does not change per locale.
+ */
+async function chromeExtrasForSite(site: Site, locale: string): Promise<ChromeExtras> {
+  const [taglineRow, socialRow, footerNoteRow] = await Promise.all([
+    site.siteSettingsStore.get('general.tagline', locale),
+    site.siteSettingsStore.get('general.socialLinks', SITE_SETTINGS_SITE_SCOPE),
+    site.siteSettingsStore.get('general.footerNote', locale),
+  ])
+  const tagline = typeof taglineRow?.value === 'string' ? taglineRow.value : ''
+  const footerNote = typeof footerNoteRow?.value === 'string' ? footerNoteRow.value : ''
+  const social: readonly ChromeLink[] = isStoredSocialLinkList(socialRow?.value)
+    ? socialRow.value.map((entry) => ({ label: entry.label, href: entry.url }))
+    : []
+  return { tagline, social, footerNote }
+}
+
+/**
+ * The display name of an entry's author (contract D `theme@1.4`'s
+ * `PageContent.entry.author`) — the same `users.byId(id)` lookup
+ * `audit-router.ts`'s own `resolveActorLabel` already makes, preferring the
+ * public profile name an account chose for itself over its email (the
+ * `displayName ?? email` fallback `admin-*` screens already use).
+ * `undefined` for an id nobody can find (an account since deleted): a byline
+ * that named nobody is worse than no byline at all.
+ */
+async function authorForSite(
+  site: Site,
+  userId: string,
+): Promise<{ readonly name: string } | null> {
+  const user = await site.auth.users.byId(userId)
+  return user === null ? null : { name: user.displayName ?? user.email }
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
@@ -4807,6 +4880,9 @@ export function createRequestListener(
             },
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             identity: () => identityForSite(site),
+            chromeExtras: (locale) => chromeExtrasForSite(site, locale),
+            authorFor: (userId) => authorForSite(site, userId),
+            resolveTerm: site.resolveTaxonomyTerm,
           },
           context,
         )
@@ -5091,6 +5167,13 @@ export function createRequestListener(
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
               identity: () => identityForSite(site),
+              // Present for the same reason `seo` above is: the fidelity
+              // test compares this preview's `<body>` against the published
+              // page's byte for byte, and `PageContent.entry` (contract D
+              // `theme@1.4`) is part of that body now.
+              chromeExtras: (locale) => chromeExtrasForSite(site, locale),
+              authorFor: (userId) => authorForSite(site, userId),
+              resolveTerm: site.resolveTaxonomyTerm,
             },
             context,
           )
@@ -5401,6 +5484,13 @@ export function createRequestListener(
           branding: () => brandingForSite(site),
           activeTheme: () => activeThemeForSite(site),
           identity: () => identityForSite(site),
+          // `general.tagline`/`general.socialLinks`/`general.footerNote`
+          // (contract D `theme@1.4`, L25 D2) and an entry's classified
+          // terms/author (`PageContent.entry`, same contract bump) — read
+          // fresh, same "no restart" contract as `homePath`/`seo` above.
+          chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+          authorFor: (userId: string) => authorForSite(site, userId),
+          resolveTerm: site.resolveTaxonomyTerm,
           // Fiche 35 task 6's admin bar. Its renderer was written, and this
           // flag — the one dispatch that is supposed to set it — never was,
           // so the bar had never appeared on a single page (audit

@@ -3,6 +3,7 @@ import type { RenderContext } from '../../theme-contract.js'
 import { href } from '../actions.js'
 import { blockHeadingTag, type HeadingTag, heading, nestedHeadingTag } from '../heading.js'
 import { type HtmlElement, h } from '../html.js'
+import { renderIcon } from '../icons.js'
 
 /**
  * The item's title is the link, so the link's accessible name is the feature's
@@ -10,7 +11,11 @@ import { type HtmlElement, h } from '../html.js'
  * WCAG 2.4.4, and the block carries no label field to write one anyway.
  *
  * `icon` names a symbol, never markup: it is exposed as a data attribute for
- * the skin and marked `aria-hidden`, since the title already names the feature.
+ * the skin (and, since L25, the page builder — see `data-icon` below) and,
+ * when the name is one `renderIcon` (`@cogenta/theme-kit`) recognises, a real
+ * inline glyph — `aria-hidden`, since the title already names the feature.
+ * An unrecognised name keeps the pre-L25 behaviour: the bare, empty
+ * `data-icon` span, styled by `.cg-feature__icon` alone.
  */
 function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   const title =
@@ -26,7 +31,11 @@ function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): Htm
     { class: 'cg-feature' },
     item.icon === undefined
       ? null
-      : h('span', { class: 'cg-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' }),
+      : h(
+          'span',
+          { class: 'cg-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
+          renderIcon(item.icon),
+        ),
     title,
     item.text === undefined ? null : h('p', { class: 'cg-feature__text' }, item.text),
   )

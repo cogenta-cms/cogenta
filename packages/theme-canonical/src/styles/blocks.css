@@ -336,17 +336,27 @@
   color: var(--cg-accent);
 }
 
-/* The vocabulary's `icon` names a symbol, never markup, and this theme ships no
-   icon set — so the chip is what the name gets: a tinted, ringed square that
-   holds the space an icon would, rather than a broken glyph or an invented one. */
+/* The vocabulary's `icon` names a symbol — a tinted, ringed square that holds
+   the space an icon would, whether or not `renderIcon` (`@cogenta/theme-kit`,
+   L25) recognises the name: an unrecognised one still gets the chip, empty,
+   exactly the pre-L25 look; a recognised one gets a real glyph, centred and
+   coloured to the same accent as the ring around it. */
 .cg-feature__icon {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   inline-size: var(--cg-s10);
   block-size: var(--cg-s10);
   margin-block-end: var(--cg-s5);
   background: var(--cg-accent-soft);
   border-radius: var(--cg-radius-md);
   box-shadow: var(--cg-ring-accent);
+  color: var(--cg-accent);
+}
+
+.cg-feature__icon svg {
+  inline-size: var(--cg-s6);
+  block-size: var(--cg-s6);
 }
 
 .cg-feature__title {

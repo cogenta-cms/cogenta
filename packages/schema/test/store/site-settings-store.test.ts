@@ -220,6 +220,70 @@ describe('createSiteSettingsStore (sqlite)', () => {
     })
   })
 
+  // L25 D2 — the two new `general` keys a theme's chrome consumes
+  // (`resolveChromeExtras`, `@cogenta/cli`).
+  describe('general.socialLinks and general.footerNote', () => {
+    it('defaults to an empty list until an admin writes one', async () => {
+      expect(await store.get('general.socialLinks', SITE_SETTINGS_SITE_SCOPE)).toBeNull()
+    })
+
+    it('stores an ordered list of label/url pairs', async () => {
+      const written = await store.set(
+        'general.socialLinks',
+        SITE_SETTINGS_SITE_SCOPE,
+        [
+          { label: 'X', url: 'https://x.com/cogenta' },
+          { label: 'GitHub', url: 'https://github.com/cogenta' },
+        ],
+        null,
+      )
+      expect(written.value).toEqual([
+        { label: 'X', url: 'https://x.com/cogenta' },
+        { label: 'GitHub', url: 'https://github.com/cogenta' },
+      ])
+    })
+
+    it('refuses a non-http(s) url', async () => {
+      await expect(
+        store.set(
+          'general.socialLinks',
+          SITE_SETTINGS_SITE_SCOPE,
+          [{ label: 'Bad', url: 'javascript:alert(1)' }],
+          null,
+        ),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+
+    it('refuses more than twelve entries', async () => {
+      const links = Array.from({ length: 13 }, (_, index) => ({
+        label: `Link ${index}`,
+        url: `https://example.com/${index}`,
+      }))
+      await expect(
+        store.set('general.socialLinks', SITE_SETTINGS_SITE_SCOPE, links, null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+
+    it('refuses a locale on this site-scoped key, unlike general.tagline beside it', async () => {
+      await expect(
+        store.set('general.socialLinks', 'fr', [{ label: 'X', url: 'https://x.com/a' }], null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+
+    it('stores footerNote per locale, like general.tagline', async () => {
+      await store.set('general.footerNote', 'en', 'A studio in Paris.', null)
+      await store.set('general.footerNote', 'fr', 'Un studio à Paris.', null)
+      expect((await store.get('general.footerNote', 'en'))?.value).toBe('A studio in Paris.')
+      expect((await store.get('general.footerNote', 'fr'))?.value).toBe('Un studio à Paris.')
+    })
+
+    it('refuses a footerNote longer than 400 characters', async () => {
+      await expect(
+        store.set('general.footerNote', 'en', 'x'.repeat(401), null),
+      ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+    })
+  })
+
   // Update system (L22 task 9) — the auto-update policy is a closed enum,
   // never free text: the scheduled task that reads it only compares it
   // against a fixed `UpdateBump` union, so an unvalidated typo here must be

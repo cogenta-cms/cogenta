@@ -2170,6 +2170,14 @@
         "timeStyle": {
           "label": "Format d'heure",
           "help": ""
+        },
+        "socialLinks": {
+          "label": "Liens sociaux",
+          "help": "Un par ligne, au format « Libellé | https://url » — affichés en liens à icône dans le pied de page de chaque thème natif. 12 maximum."
+        },
+        "footerNote": {
+          "label": "Note de pied de page",
+          "help": "Une courte ligne affichée dans le pied de page de chaque page — mention légale, adresse, courte présentation. 400 caractères maximum."
         }
       },
       "content": {

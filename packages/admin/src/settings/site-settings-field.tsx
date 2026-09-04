@@ -46,6 +46,48 @@ const TEXTAREA_CLASSES =
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
   'disabled:cursor-default disabled:opacity-60'
 
+interface LinkListEntry {
+  readonly label: string
+  readonly url: string
+}
+
+function isLinkListEntry(value: unknown): value is LinkListEntry {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as { readonly label?: unknown; readonly url?: unknown }
+  return typeof candidate.label === 'string' && typeof candidate.url === 'string'
+}
+
+/** The JSON value `uiType: 'linkList'` stores, as one `Label | https://url` line per entry — the textarea encoding of that field. */
+function linkListToText(value: unknown): string {
+  if (!Array.isArray(value)) return ''
+  return value
+    .filter(isLinkListEntry)
+    .map((entry) => `${entry.label} | ${entry.url}`)
+    .join('\n')
+}
+
+/**
+ * The inverse of `linkListToText`. A blank line is dropped; a line with no
+ * `|`, or an empty label/url either side of it, is dropped too rather than
+ * guessed at — an admin sees the line they typed vanish on the next load,
+ * which is a clearer signal that it did not parse than a silently wrong
+ * entry would be.
+ */
+function textToLinkList(text: string): readonly LinkListEntry[] {
+  const entries: LinkListEntry[] = []
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim()
+    if (line === '') continue
+    const separator = line.indexOf('|')
+    if (separator === -1) continue
+    const label = line.slice(0, separator).trim()
+    const url = line.slice(separator + 1).trim()
+    if (label === '' || url === '') continue
+    entries.push({ label, url })
+  }
+  return entries
+}
+
 const DATE_TIME_STYLES = ['full', 'long', 'medium', 'short'] as const
 
 /**
@@ -443,6 +485,34 @@ export function SiteSettingsField({
               disabled={!canEdit || saving}
               defaultValue={typeof value === 'string' ? value : ''}
               onBlur={(event) => void commit(event.target.value)}
+            />
+          )}
+        </Field>
+        {error === null && <FieldStatus saving={saving} saved={saved} />}
+      </div>
+    )
+  }
+
+  // `uiType: 'linkList'` — today only `general.socialLinks` (fiche L25 D2):
+  // an ordered list of `{label, url}` the registry stores as JSON, edited
+  // here as one `Label | https://url` line per entry rather than a raw JSON
+  // textarea, which is what `SITE_SETTINGS_REGISTRY`'s own comment on this
+  // `uiType` promises ("un éditeur générique, pas un espace réservé pour un
+  // écran sur mesure"). A future setting of the same shape needs no change
+  // here, only a new registry entry with this same `uiType`.
+  if (setting.uiType === 'linkList') {
+    return (
+      <div className="flex flex-col gap-1">
+        <Field label={label} description={description} error={error}>
+          {(control) => (
+            <textarea
+              {...control}
+              className={cn(TEXTAREA_CLASSES)}
+              rows={4}
+              placeholder="X | https://x.com/yoursite"
+              disabled={!canEdit || saving}
+              defaultValue={linkListToText(value)}
+              onBlur={(event) => void commit(textToLinkList(event.target.value))}
             />
           )}
         </Field>

@@ -2170,6 +2170,14 @@
         "timeStyle": {
           "label": "Time format",
           "help": ""
+        },
+        "socialLinks": {
+          "label": "Social links",
+          "help": "One per line, as \"Label | https://url\" — shown as icon links in every built-in theme's footer. Up to 12."
+        },
+        "footerNote": {
+          "label": "Footer note",
+          "help": "A short line shown in the footer of every page — a legal mention, an address, a one-line \"about\". Up to 400 characters."
         }
       },
       "content": {

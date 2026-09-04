@@ -600,8 +600,8 @@ defineAgent({
 
 ## Contrat D — Thème
 
-> **Figé en `theme@1.3` le 2026-09-02.** Ajouter une entrée à `ctx` est mineur ; en
-> modifier une est majeur.
+> **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2).**
+> Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
 > manques trouvés en écrivant les consommateurs du contrat, qui rendaient toute vidéo
@@ -888,6 +888,11 @@ interface ChromeBrand {
   readonly faviconUrl: string | null    // rendu par l'hôte, jamais par le thème
 }
 
+interface ChromeLink {
+  readonly label: string
+  readonly href: string
+}
+
 interface ChromeInput {
   readonly site: { readonly name: string }
   readonly locale: string
@@ -896,6 +901,10 @@ interface ChromeInput {
   readonly footerNav: readonly ChromeNavLink[]
   readonly brandingHtml: string
   readonly brand?: ChromeBrand          // theme@1.3, optionnel
+  readonly tagline?: string             // theme@1.4, optionnel — general.tagline
+  readonly social?: readonly ChromeLink[] // theme@1.4, optionnel — general.socialLinks
+  readonly footerNote?: string          // theme@1.4, optionnel — general.footerNote
+  readonly headerAction?: ChromeLink    // theme@1.4, optionnel — 1er lien du menu à l'emplacement header-action
 }
 ```
 
@@ -911,6 +920,24 @@ Trois règles que le contrat impose au thème :
 
 `brand` est optionnel : un thème écrit avant `1.3`, ou un hôte qui ne le renseigne pas,
 garde exactement le rendu antérieur (le nom du site en texte).
+
+**`theme@1.4` (L25 D2)** ajoute quatre champs optionnels : `tagline`, `social`,
+`footerNote`, `headerAction`. Un thème `1.3` qui les ignore, et un hôte qui ne les
+renseigne pas, rendent octet pour octet le chrome antérieur — c'est ce qui fait de la
+montée un ajout mineur plutôt qu'une rupture. `resolveChromeExtras`
+(`@cogenta/cli`, `theme-render.ts`) est le seul endroit qui les résout : les trois
+premiers depuis les réglages `general.*` (`@cogenta/schema`), `headerAction` depuis le
+premier lien du menu assigné à l'emplacement `header-action` (mécanisme générique
+identique à `header-nav`/`footer-nav`, jamais un nom en dur côté `theme-render.ts`).
+
+`@cogenta/theme-kit` fournit `renderSocialLinks(social, options?)` — pas le contrat
+lui-même, une aide partagée : une `<ul>` de liens à icône (X, Facebook, Instagram,
+LinkedIn, YouTube, GitHub, une instance Mastodon détectée par son chemin `/@…`, Bluesky,
+TikTok, Threads, Pinterest, et une icône générique de repli), chaque icône accompagnée
+d'un texte visuellement masqué (`class="cg-visually-hidden"`, convention que chaque thème
+doit définir dans sa propre feuille de style — `@cogenta/theme-kit` n'en livre aucune,
+R5). Un thème est libre de rendre `social` lui-même ; c'est la façon partagée qu'utilise
+chaque thème natif, pour que cinq thèmes ne dessinent pas cinq fois les mêmes glyphes.
 
 ### Point d'extension « archive de terme » — `renderTermArchive(input): HtmlElement`
 
@@ -939,6 +966,59 @@ interface TermArchiveInput {
 }
 ```
 
+### `PageContent.entry` et `renderEntryHeader(page, ctx, options?)` — theme@1.4
+
+Avant `theme@1.4`, `PageContent` ne portait qu'un titre et une liste de blocs — une page
+`richText` (un article de blog, disons) et une page `page` sans blocs de type éditorial
+rendaient donc identiquement en dehors de leur corps : aucune image de couverture, aucune
+date, aucun auteur, aucun terme de taxonomie, aucun temps de lecture n'atteignait jamais
+un thème.
+
+```ts
+interface PageEntryMeta {
+  readonly collection: string
+  readonly publishedAt?: string   // ISO 8601
+  readonly updatedAt?: string     // ISO 8601
+  readonly image?: ImageSource    // déjà résolue par l'hôte (entryImage)
+  readonly excerpt?: string
+  readonly author?: { readonly name: string }
+  readonly terms?: readonly { readonly taxonomy: string; readonly label: string; readonly href: string | null }[]
+  readonly readingMinutes?: number
+}
+
+interface PageContent {
+  readonly title: string
+  readonly blocks: readonly VocabularyBlock[]
+  readonly entry?: PageEntryMeta   // theme@1.4, optionnel
+}
+```
+
+`entry` est résolu par l'hôte (`buildEntryMeta`, `packages/cli/src/commands/theme-render.ts`)
+à partir des champs système de l'entrée, de `entryImage`/`entryExcerpt`
+(`@cogenta/theme-kit`), de l'auteur (`entry.createdBy` résolu via le magasin d'utilisateurs)
+et des champs de taxonomie que la collection déclare — jamais deviné. `readingMinutes` est
+calculé par l'hôte sur le champ `richText` de la collection (~200 mots/minute, arrondi au
+supérieur). Absent quand l'hôte ne l'a jamais renseigné (page `blocks`-only, hôte
+pré-`1.4`) : le rendu redevient exactement celui d'avant.
+
+`renderEntryHeader(page, ctx, options?)` (`@cogenta/theme-kit`, aide partagée, pas un
+point d'extension du contrat) est la façon commune de transformer `PageContent.entry` en
+un `<header>` : fil de termes, `<h1>`, extrait, ligne méta (date, auteur, temps de
+lecture via `ctx.t('entry.readingTime', {minutes})`), image de couverture. Elle renvoie
+`null` dans deux cas — `page.entry` absent, ou `pageHasOwnHeading(page.blocks)` vrai (un
+`hero` dessine déjà son propre `<h1>`) — pour qu'un thème qui l'utilise ne rende jamais un
+second titre. Un thème est libre d'ignorer cette aide et de construire son propre en-tête
+depuis `page.entry` directement ; `theme-canonical` utilise `renderEntryHeader` et son
+`renderPage` a cessé d'émettre le `<h1 class="cg-page__title">` nu quand elle rend
+quelque chose.
+
+`@cogenta/theme-kit` gagne aussi `renderIcon(name, options?)` — une aide, pas un point
+d'extension : le champ `icon` du bloc `featureGrid` (contrat B) nomme un symbole depuis
+toujours, mais jusqu'ici aucun thème natif n'en dessinait le glyphe. Un jeu fermé d'une
+cinquantaine de noms usuels (`check`, `star`, `shield`, `rocket`, …), chacun un `<svg>`
+simple tracé pour ce paquet (aucune bibliothèque, R9/R10) ; un nom hors de cet ensemble
+rend `null`, et un thème garde alors son repli d'avant (le `data-icon` nu).
+
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
@@ -947,6 +1027,15 @@ interface TermArchiveInput {
 `ChromeInput.brand` (optionnel) et `ThemeModule.renderTermArchive` (optionnel). Aucune
 signature existante n'est modifiée ; un thème `1.2` continue de valider et de rendre
 sans changement.
+
+**`theme@1.4` (L25 D2, 2026-09-05)** — strictement additif : quatre champs optionnels sur
+`ChromeInput` (`tagline`, `social`, `footerNote`, `headerAction`) et un champ optionnel
+sur `PageContent` (`entry: PageEntryMeta`). `renderSocialLinks`/`entryImage`/
+`renderEntryHeader`/`renderIcon` sont des aides `@cogenta/theme-kit`, pas le contrat
+lui-même. Un thème `1.3` continue de valider et de rendre sans changement ; un hôte qui
+ne renseigne aucun des nouveaux champs produit un rendu octet pour octet identique à
+`1.3` (test de non-régression : `packages/theme-canonical/test/chrome.test.ts`,
+`entry-header.test.ts`).
 
 ---
 

@@ -214,8 +214,124 @@ plat. C'est le prix de « zéro dépendance et zéro licence », payé en connai
 |---|---|---|
 | Diagnostic et décisions | fait | 2026-09-05 |
 | Nettoyage disque (worktrees fusionnés) | fait | seuls les worktrees sans commit unique et propres |
-| Phase 0 — A0a (theme-kit / contrat D / serve) | à faire | |
-| Phase 0 — A0b (demo-art / ingestion / thème par défaut) | à faire | |
+| Phase 0 — A0a (theme-kit / contrat D / serve) | en cours | agent Sonnet, worktree, lancé 2026-09-05 00:45 |
+| Phase 0 — A0b (demo-art / ingestion / thème par défaut) | en cours | agent Sonnet, worktree, lancé 2026-09-05 00:46 |
 | Phase 1 vague 1 — blog, saas, restaurant, docs, association | à faire | |
 | Phase 1 vague 2 — entreprise, magazine, portfolio, ecommerce (passes pro) | à faire | |
 | Phase 2 — intégration, vérification globale, push | à faire | |
+
+## Annexe — Briefs de la Phase 1 (un agent par ligne du tableau)
+
+Règles communes à tous les briefs, en plus de la section « Ce que tout template partage » :
+le paquet suit le squelette de `@cogenta/theme-entreprise` (même `package.json`,
+`theme.config.ts` avec les dix-sept blocs, `tokens.json`, `src/styles/{tokens,base,blocks,
+archive,theme}.css`, `src/render/{chrome,render-block,term-archive}.ts`, `src/render/blocks/*`,
+`test/*` avec `css-color.ts`, `design-system.test.ts`, `font-display.test.ts`,
+`isolation.test.ts`, `page.test.ts`, `tokens.test.ts`, un test par bloc) ; il consomme
+`theme@1.4` : `renderEntryHeader`/`page.entry` (page d'article), `entryImage` (cartes),
+`renderSocialLinks`/`tagline`/`footerNote`/`headerAction` (chrome), `renderIcon`
+(grilles de fonctionnalités). Le blueprint correspondant déclare `defaultTheme`, sème les
+menus (`header`, `footer`, `header-action`), l'accroche, trois liens sociaux, une note de
+pied de page, les médias via `seedDemoMedia` (compositions `demo-art` avec la palette de
+sa `STARTING_SKINS`), et publie ses entrées de démo. Les collections gagnent un champ
+`coverImage: f.media({ accept: ['image'] })` là où le brief le dit, pour que `entryImage`
+ait quelque chose à rendre. Textes de démo en anglais (comme tous les blueprints), sans
+« lorem ipsum », crédibles et spécifiques au type de site.
+
+### `theme-blog` — blueprint `blog`
+- Identité : blog personnel/professionnel de lecture. Fraunces (titres, `opsz`) + Source Serif
+  4 (corps de lecture) + Inter Tight (UI) via Google Fonts. Palette claire, papier chaud très
+  léger, accent terracotta ou bleu encre ; sombre : encre profonde, jamais du gris inversé.
+- Accueil : `hero` (article vedette : titre, sous-titre, média = couverture) → `collectionList`
+  « Latest » (grille 3 col. de cartes avec couverture, rubrique, date, temps de lecture) →
+  `featureGrid` « Topics » (icônes) → `quote` (citation d'un lecteur, avatar) →
+  `collectionList` « From the archive » (liste éditoriale) → `cta` newsletter (« Get the
+  weekly letter », deux actions) → `logoStrip` « As featured in » → `faq` « About this blog ».
+- Article : `renderEntryHeader` (rubriques, titre, extrait, date longue, auteur, temps de
+  lecture, couverture 16:9), colonne de lecture 65ch, citations soignées, typographie de
+  lecture. (`renderPage` est synchrone : pas de « articles liés » dynamiques dans le thème.)
+- Blueprint : `post.coverImage`, 8 articles publiés avec couvertures (`coverArt`, 8 seeds),
+  `category` avec 4 termes, `tag` avec 8, auteur = admin.
+
+### `theme-saas` — blueprint `saas`
+- Identité : Linear/Stripe/Vercel. Inter Tight ou Manrope + JetBrains Mono. Fond très clair
+  avec halos de dégradé (mesh) derrière le hero ; accent violet-bleu ; sombre quasi noir avec
+  lueurs. Boutons pleins arrondis 10px, bordures 1px translucides.
+- Accueil : `hero` (eyebrow « Now in public beta », titre, sous-titre, média = `heroArt`
+  mesh, 2 actions) → `logoStrip` (« Trusted by ») → `featureGrid` 6 items avec `renderIcon` →
+  `mediaFigure` (visuel produit large, ratio 16:9, légende) → `statCounter` 4 chiffres →
+  `testimonial` ×1 puis `quote` → `pricingTable` 3 paliers (milieu `highlighted`) →
+  `faq` 6 questions → `cta` final pleine largeur sur fond accent.
+- Blueprint : `feature` gagne `icon: f.text` et `coverImage` ; 6 features ; `page` home/pricing/
+  about ; menus : Product, Pricing, Docs, Blog, Company ; `header-action` « Start free ».
+
+### `theme-restaurant` — blueprint `restaurant`
+- Identité : élégance sombre par défaut (Divi/Astra Restaurant), Cormorant Garamond (titres)
+  + Jost (corps). Palette charbon + crème + accent cuivre/vin ; clair : crème chaude.
+- Accueil : `hero` plein cadre (média = composition chaude, `heroArt` variante « warm »,
+  titre du restaurant, action « Reserve a table ») → `prose` court (« Our story ») →
+  `collectionList` « The menu » sur `menu_item` groupé visuellement par `category` (le thème
+  rend `price` aligné à droite avec points de conduite, `description` en italique) →
+  `gallery` 6 images (masonry) → `stats` (« Since 1994 », « 3 chefs », « 120 seats ») →
+  `testimonial` → `accordion` « Hours & location » (horaires, adresse, parking) →
+  `embed` carte (provider `other`, URL OpenStreetMap) → `cta` « Book now / Call us ».
+- Blueprint : `menu_item.photo` (media) ; 12 plats sur 4 catégories ; `header-action`
+  « Reserve ».
+
+### `theme-docs` — blueprint `documentation`
+- Identité : Docusaurus/GitBook. IBM Plex Sans + IBM Plex Mono. Neutre bleu-gris, accent
+  bleu ; sombre ardoise. Densité d'information, lisibilité du code.
+- Accueil : `hero` (titre, sous-titre, actions « Get started » / « API reference ») →
+  `featureGrid` « Start here » 3–6 cartes avec icônes et liens → `collectionList`
+  « Guides » (liste ordonnée par `createdAt asc`, groupée par `section` par le thème) →
+  `prose` « Quick install » avec bloc de code → `faq` → `cta` « Contribute on GitHub ».
+- Page doc : mise en page à deux colonnes **CSS-only** — barre latérale de navigation à
+  gauche construite par le thème depuis une `collectionList` **semée dans chaque page doc**
+  (limite 100, tri `createdAt asc`) que le thème rend en `<nav aria-label="Documentation">`
+  collant ; contenu à droite en 72ch ; fil d'Ariane (section › titre) ; blocs `prose` avec
+  `pre/code` stylés, `kbd`, tableaux. Mobile : la barre devient un `<details>`.
+- Blueprint : 10 pages doc sur 3 sections avec un vrai contenu technique de démo (install,
+  configure, deploy…), `order` cohérent.
+
+### `theme-association` — blueprint `association`
+- Identité : chaleureux, humain (Astra Charity). Nunito (titres, arrondi) + Source Sans 3.
+  Vert profond ou orange soleil en accent, beige clair ; sombre : vert forêt.
+- Accueil : `hero` (cause, média = `heroArt` « warm », actions « Donate » / « Volunteer ») →
+  `stats` chiffres d'impact 4 items → `featureGrid` « What we do » 3 programmes (icônes) →
+  `collectionList` « Upcoming events » sur `event` (cartes avec date en grand bloc
+  jour/mois, lieu, image) → `gallery` 6 → `testimonial` (bénévole) → `logoStrip`
+  « Our partners » → `cta` don pleine largeur → `faq` « How to help ».
+- Blueprint : `event.coverImage` ; 6 événements datés dans le futur (calculés au scaffold :
+  `now + n jours`) ; `header-action` « Donate ».
+
+### `theme-entreprise` — blueprint `vitrine` (passe pro)
+- Garder l'identité (vert forêt, KPI). Ajouter : hero deux colonnes texte/visuel avec
+  `heroArt`, bandeau `logoStrip` sous le hero, cartes de services avec `renderIcon`, section
+  témoignages avec avatars (`avatarArt`), `cta` finale, pied de page 4 colonnes, menu
+  mobile CSS-only, en-tête collant avec `headerAction` « Get a quote ».
+- Blueprint `vitrine` : `service` gagne `icon` + `coverImage`, `testimonial` gagne `avatar`
+  (media) ; accueil 11 blocs : hero, logoStrip, featureGrid (services), stats, mediaFigure,
+  collectionList (services), testimonial, quote, faq, cta, prose (about).
+
+### `theme-magazine` — blueprint `magazine` (passe pro)
+- Garder Fraunces + Public Sans. Ajouter : manchette sombre avec date du jour et rubriques
+  en barre secondaire (les `headerNav`), une « une » = `hero` avec couverture, puis
+  `collectionList` « Top stories » où **la première carte est mise en avant** (grande, image
+  16:9), les suivantes en grille ; `renderEntryHeader` avec rubrique en surtitre rouge
+  journal ; pied de page dense 4 colonnes.
+- Blueprint : `article.coverImage` ; 12 articles sur 4 sections ; accueil 9 blocs.
+
+### `theme-portfolio` — blueprint `portfolio` (passe pro)
+- Garder brutaliste-éditorial violet. Ajouter : grille de projets **avec couvertures** plein
+  cadre (survol : légère montée + révélation), hero display géant avec média, section
+  « Selected work » = `collectionList` (layout `grid`), `stats` (années, projets, prix),
+  `logoStrip` clients, `cta` « Let's talk », page projet avec `renderEntryHeader`
+  (titre, couverture, extrait = `summary`).
+- Blueprint : `project.coverImage` ; 8 projets avec `coverArt` variés.
+
+### `theme-ecommerce` — blueprint `store` (passe pro ; A0b a déjà câblé le blueprint)
+- Ajouter : bannière hero avec `heroArt`, tuiles de catégories (`gallery` avec légendes,
+  `featureGrid` n'ayant pas de média), grille produits avec `entryImage`, prix formaté
+  (`Intl.NumberFormat` avec la locale ; la devise n'est pas accessible au thème : afficher
+  la valeur telle que le blueprint la sème), badge « Out of stock » depuis `inStock`, bande
+  promo `cta`, `logoStrip` badges de confiance, pied de page newsletter/colonnes.

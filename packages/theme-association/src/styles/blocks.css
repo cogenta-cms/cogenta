@@ -592,7 +592,16 @@
 }
 
 .cg-list[data-layout="grid"] .cg-event-cards {
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  /* Never more than three across: the card below stacks its cover over a
+     date + text row, and a fourth column squeezed that row to a few
+     characters per line (seen live at 1280px, every word broken in two). */
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+}
+
+@media (min-width: 64rem) {
+  .cg-list[data-layout="grid"] .cg-event-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .cg-list[data-layout="carousel"] .cg-event-cards {
@@ -600,9 +609,16 @@
   grid-template-columns: none;
 }
 
+/* A stacked card: the cover on top, then a row with the date block beside
+   the text. A single horizontal row (date | cover | text) only works on a
+   wide list; in a grid column it starved the text of width. */
 .cg-event-card {
-  display: flex;
-  gap: var(--cg-s5);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "cover cover"
+    "date body";
+  gap: var(--cg-s4) var(--cg-s4);
   padding: var(--cg-s5);
   background: var(--cg-surface-raised);
   border-radius: var(--cg-radius-lg);
@@ -623,11 +639,12 @@
 }
 
 .cg-event-card__date {
+  grid-area: date;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  align-self: start;
   inline-size: 4.5rem;
   block-size: 4.5rem;
   border-radius: var(--cg-radius-md);
@@ -655,9 +672,8 @@
 }
 
 .cg-event-card__cover {
-  flex-shrink: 0;
-  inline-size: 5rem;
-  block-size: 5rem;
+  grid-area: cover;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: var(--cg-radius-md);
 }
@@ -669,14 +685,10 @@
 }
 
 .cg-event-card__body {
+  grid-area: body;
   min-inline-size: 0;
-  /* `min-inline-size: 0` alone lets this flex item shrink below its content
-     size, but a title with one long unbreakable word ("Neighbourhood…")
-     still overflows it — found on this theme's own scaffolded site at
-     360px, a real card in a narrow grid column. `overflow-wrap: anywhere`
-     (unlike `break-word`) also shrinks the *minimum* content contribution,
-     which is the half of this that `min-inline-size: 0` cannot do alone. */
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .cg-event-card__location {

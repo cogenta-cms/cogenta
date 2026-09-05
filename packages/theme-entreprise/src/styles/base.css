@@ -358,6 +358,67 @@ img {
   flex: none;
 }
 
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`, L26). Sits beside the mobile menu button in `renderChrome`,
+   outside the `<nav>` it does not control — a visitor must be able to flip
+   appearance without opening the collapsed mobile panel first. Sized and
+   squared off like `.cg-nav-toggle-label` right next to it (`--cg-radius-sm`,
+   this theme's structured register — never the pill canonical uses),
+   plain-bordered like `.cg-action[data-emphasis="secondary"]`'s own resting
+   state rather than filled, so it never competes with a real call to action. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border: 1px solid var(--cg-line-soft);
+  border-radius: var(--cg-radius-sm);
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-theme-toggle:hover {
+  background: var(--cg-surface-sunken);
+}
+
+.cg-theme-toggle:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
 /* Below the breakpoint: the toggle button appears, and the nav becomes a
    panel anchored under the header, shown only while the checkbox is
    checked — the whole mechanism is this one selector, no JavaScript. */

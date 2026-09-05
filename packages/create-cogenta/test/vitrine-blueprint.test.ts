@@ -177,7 +177,9 @@ describe('scaffoldSite — vitrine blueprint', () => {
 
         const html = htmlOf(renderPage(pageContent, ctx, entries))
 
-        expect(html).toContain('A consultancy site that shows the work, not just the pitch')
+        expect(html).toContain(
+          'The consultancy growing companies call before their systems fall over',
+        )
         expect(html).toContain('cg-collection')
         expect(html).toContain('Brand strategy')
       } finally {

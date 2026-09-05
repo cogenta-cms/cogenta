@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -124,12 +125,48 @@ describe('renderChrome', () => {
     expect(without.footer).not.toContain('cg-site-footer__note')
   })
 
-  it('renders exactly as it would under theme@1.3 when none of the new fields are set', () => {
+  it('renders exactly as it would under theme@1.3 when none of the new fields are set, but for the theme toggle', () => {
     const { header, footer } = renderChrome(BASE)
     expect(header).not.toContain('cg-site-header__action')
     expect(footer).not.toContain('cg-site-footer__tagline')
     expect(footer).not.toContain('cg-site-footer__social-col')
     expect(footer).not.toContain('cg-site-footer__note')
+  })
+
+  // The manual light/dark/system toggle (L26) is unconditional — every
+  // render carries it, theme@1.4 fields or not. The expectation is built
+  // from `renderThemeToggle` itself, never a hand-copied literal, so it
+  // cannot silently drift from the real markup.
+  it('renders the header byte-identical to theme@1.3 plus exactly the theme toggle, when no theme@1.4 field is set', () => {
+    const { header } = renderChrome(BASE)
+    const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+    const expectedHeader =
+      `<header class="cg-site-header"><div class="cg-site-header__inner">` +
+      `<a class="cg-site-header__home" href="/">Cogenta Advisory</a>` +
+      `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
+      `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
+      `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+      `</label>` +
+      `${themeToggle}` +
+      `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
+      `<ul class="cg-nav__items">` +
+      `<li><a href="/services">Services</a></li>` +
+      `<li><a href="/insights">Insights</a></li>` +
+      `<li><a href="/contact">Contact</a></li>` +
+      `</ul>` +
+      `</nav>` +
+      `</div></header>`
+    expect(header).toBe(expectedHeader)
+  })
+
+  it('places the theme toggle outside the collapsible nav, so it stays visible on a collapsed mobile menu', () => {
+    const { header } = renderChrome(BASE)
+    const labelIndex = header.indexOf('cg-nav-toggle-label')
+    const toggleIndex = header.indexOf('data-cg-theme-toggle')
+    const navIndex = header.indexOf('id="cg-nav"')
+    expect(labelIndex).toBeGreaterThan(-1)
+    expect(toggleIndex).toBeGreaterThan(labelIndex)
+    expect(toggleIndex).toBeLessThan(navIndex)
   })
 
   it('escapes a site name that contains markup-significant characters', () => {

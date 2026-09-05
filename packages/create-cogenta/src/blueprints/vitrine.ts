@@ -112,42 +112,42 @@ export const VITRINE_DEMO_SERVICES: readonly VitrineDemoService[] = [
     name: 'Brand strategy',
     slug: 'brand-strategy',
     description:
-      'Positioning, messaging and visual identity worked out before a single page is built.',
+      'We start every engagement here, because a redesign built on the wrong positioning just ships the confusion faster. Three weeks of interviews with your best customers and closest competitors end in a positioning document, a messaging framework, and a visual identity your team can defend in a board meeting without us in the room.',
     icon: 'tag',
   },
   {
     name: 'Web design & build',
     slug: 'web-design-build',
     description:
-      'A site that says what the business does in the first five seconds, on every screen size.',
+      'Most of the sites we replace took longer to explain than to load. We design and build on Cogenta itself, so your team edits copy and swaps testimonials without filing a ticket — and the finished site still says what you do in the first five seconds, on every screen size.',
     icon: 'code',
   },
   {
     name: 'Growth marketing',
     slug: 'growth-marketing',
     description:
-      'Campaigns measured against pipeline, not impressions — cut the moment they stop paying for themselves.',
+      'We run paid, lifecycle and content programmes against one dashboard tied to closed revenue, not clicks. A channel that stops paying for itself gets cut inside a reporting cycle, not a fiscal quarter — most engagements end with a smaller media budget and a larger pipeline than they started with.',
     icon: 'trending-up',
   },
   {
     name: 'Operations consulting',
     slug: 'operations-consulting',
     description:
-      'The handful of process changes that actually move the metrics leadership is measured on.',
+      'Most operations problems are three broken handoffs, not thirty. We map how work actually moves through your organisation, not how the org chart says it should, and fix the handful of handoffs that are really costing you cycle time — against a metric your leadership already tracks.',
     icon: 'briefcase',
   },
   {
     name: 'Financial advisory',
     slug: 'financial-advisory',
     description:
-      'Forecasts and board decks a CFO can defend in the room, built from the real numbers.',
+      'We build the model your finance team will still be using eighteen months from now, not a one-off deck. Every forecast ties back to the same general-ledger export your controller already trusts, so the numbers survive contact with a real board, and a real audit.',
     icon: 'chart',
   },
   {
     name: 'Security & compliance',
     slug: 'security-compliance',
     description:
-      'A real audit trail and a named owner for every control — not a policy binder nobody reads.',
+      'We inherited more than one compliance programme that was a binder nobody had opened since the last audit. Ours ships with a named owner and a real audit trail for every control, mapped to SOC 2 or ISO 27001 depending on what your customers actually ask for.',
     icon: 'shield',
   },
 ]
@@ -161,18 +161,19 @@ export const VITRINE_DEMO_TESTIMONIALS: readonly [
     authorName: 'Amina Diallo',
     authorRole: 'Founder, Atelier Diallo',
     quote:
-      'The new site paid for itself in the first month — people finally understood what we do before they called.',
+      'Northfield rebuilt our positioning before they touched a single page of the site, and it showed — the new site paid for itself in the first month, because for the first time people understood what we do before they ever called. We still edit it ourselves, weekly, without asking anyone for help.',
   },
   {
     authorName: 'Marco Bellini',
     authorRole: 'Owner, Bellini Consulting',
-    quote: 'Fast, clear, no surprises. Exactly what a small business needs from a web project.',
+    quote:
+      'Fast, clear, no surprises, and a fixed quote that held from the first call to the last invoice — exactly what a small business needs from a consulting engagement and almost never gets. Northfield delivered the brand and the site in five weeks and has been one email away ever since.',
   },
   {
     authorName: 'Priya Chandra',
     authorRole: 'COO, Chandra & Partners',
     quote:
-      'They shipped the operations review in three weeks and the recommendations were still landing a quarter later.',
+      "Northfield's operations review took three weeks and changed how four teams hand off work to each other. We are still finding the recommendations landing a full quarter later, in meetings Northfield was never in the room for — that is the real test of whether a consultant fixed something.",
   },
 ]
 
@@ -184,6 +185,22 @@ function proseParagraph(key: string, text: string): VocabularyBlock {
     _type: 'prose',
     _version: BLOCK_VERSION,
     body: richTextParagraph(`${key}-body`, text),
+  } as VocabularyBlock
+}
+
+/** A multi-paragraph `prose` block — same shape convention as `restaurant.ts`'s own `proseBlock`, for the About page's real founding story rather than one thin paragraph. */
+function proseBlock(key: string, paragraphs: readonly string[]): VocabularyBlock {
+  return {
+    _key: key,
+    _type: 'prose',
+    _version: BLOCK_VERSION,
+    body: paragraphs.map((text, index) => ({
+      _key: `${key}-p${index}`,
+      _type: 'block',
+      style: 'normal',
+      children: [{ _key: `${key}-p${index}-s`, _type: 'span', text, marks: [] }],
+      markDefs: [],
+    })),
   } as VocabularyBlock
 }
 
@@ -243,10 +260,10 @@ export function buildVitrineDemoPages(
           _key: 'demo-home-hero',
           _type: 'hero',
           _version: BLOCK_VERSION,
-          eyebrow: 'Vitrine',
-          title: 'A consultancy site that shows the work, not just the pitch',
+          eyebrow: 'Northfield Consulting · Est. 2011',
+          title: 'The consultancy growing companies call before their systems fall over',
           subtitle:
-            'Scaffolded by create-cogenta from the "vitrine" blueprint, with real services and testimonials already in place.',
+            'We handle the six functions that break first when headcount outpaces process — brand, web, growth, operations, finance and security — each led by a partner who has run it, not just advised on it.',
           ...(media.hero === undefined ? {} : { media: media.hero }),
           actions: [
             { label: 'See our services', target: { href: '#services' }, emphasis: 'primary' },
@@ -302,7 +319,8 @@ export function buildVitrineDemoPages(
                 _type: 'mediaFigure',
                 _version: BLOCK_VERSION,
                 media: media.shot,
-                caption: 'The engagement dashboard the whole team works from.',
+                caption:
+                  'The engagement dashboard every Northfield team works from — the same tracker the client sees.',
                 ratio: '16:9',
                 align: 'wide',
               } as VocabularyBlock,
@@ -311,7 +329,7 @@ export function buildVitrineDemoPages(
           _key: 'demo-home-services-grid',
           _type: 'collectionList',
           _version: BLOCK_VERSION,
-          title: 'Services',
+          title: 'Every service, in detail',
           collection: 'service',
           sort: { field: 'createdAt', direction: 'asc' },
           limit: 10,
@@ -342,12 +360,12 @@ export function buildVitrineDemoPages(
           _type: 'cta',
           _version: BLOCK_VERSION,
           title: 'Ready to get started?',
-          text: 'Every part of this page — the services, the testimonials, this call to action — is normal editable content.',
+          text: 'Book a thirty-minute call and leave with a scoped, fixed-price plan — not a follow-up email promising one.',
           actions: [{ label: 'Get a quote', target: { href: '/contact' }, emphasis: 'primary' }],
         } as VocabularyBlock,
         proseParagraph(
           'demo-home-about-teaser',
-          `This is a demo showcase site, scaffolded by create-cogenta from the "vitrine" blueprint. Its services and testimonials were seeded by the installer, ${testimonial3.authorName} included, so there is real content to look at from the first run.`,
+          `${testimonial3.authorName}'s operations review is one of well over a hundred engagements like it since Northfield opened in 2011. Read the founding story, and the rest of our client list, on the About page.`,
         ),
       ],
     },
@@ -355,27 +373,11 @@ export function buildVitrineDemoPages(
       title: 'About',
       slug: 'about',
       blocks: [
-        {
-          _key: 'demo-about-prose',
-          _type: 'prose',
-          _version: BLOCK_VERSION,
-          body: [
-            {
-              _key: 'demo-about-p1',
-              _type: 'block',
-              style: 'normal',
-              children: [
-                {
-                  _key: 'demo-about-p1-span',
-                  _type: 'span',
-                  text: 'This is a demo showcase site, scaffolded by create-cogenta from the "vitrine" blueprint. Its services and testimonials were seeded by the installer so there is real content to look at from the first run.',
-                  marks: [],
-                },
-              ],
-              markDefs: [],
-            },
-          ],
-        } as VocabularyBlock,
+        proseBlock('demo-about-prose', [
+          'Northfield Consulting opened in 2011 with a simple complaint: growing companies were buying six different kinds of help from six different vendors, none of whom talked to each other, and paying for the seams as much as the work.',
+          'We built one practice instead — brand, web, growth, operations, finance and security — staffed by partners who have actually run each function inside a company, not just advised one from the outside. A single point of contact means the web team knows what the brand team decided, and the finance model reflects what operations actually changed.',
+          'Fifteen years and well over a hundred engagements later, the test we hold ourselves to has not changed: does the client still need us in the room a quarter after we leave? Most of the answers on this page came from clients who told us no, and meant it as a compliment.',
+        ]),
         // Every testimonial from the real, editable collection, mirrored
         // here as `quote` blocks — unlike `service` (routed above, so a
         // link can point at it), a testimonial has no page of its own
@@ -399,7 +401,7 @@ export function buildVitrineDemoPages(
       blocks: [
         proseParagraph(
           'demo-contact-prose',
-          'Tell us what you are trying to get done and we will tell you honestly whether we can help — no discovery deck required for the first call.',
+          'Tell us what you are trying to get done and which of the six practices it touches — brand, web, growth, operations, finance, or security. We will tell you honestly whether we can help on the first call, no discovery deck required.',
         ),
         {
           _key: 'demo-contact-cta',
@@ -424,19 +426,19 @@ function homeFaq(): VocabularyBlock {
   const items = [
     [
       'How long does a typical engagement take?',
-      'Most projects run three to six weeks end to end, scoped and priced before a single hour is billed.',
+      'Most engagements run three to six weeks end to end. We scope and price the whole thing on a single call before a single hour is billed, so there is no discovery-phase invoice waiting at the end.',
     ],
     [
       'Do we own everything once the project ships?',
-      'Yes — the site, the content and the source are yours. There is no retainer required to change a phone number.',
+      'Yes — the site, the brand files, the models and the source are yours outright. Northfield keeps no retainer requirement and no lock-in: change a phone number, swap a testimonial, or walk away entirely, all without calling us first.',
     ],
     [
       'Can we start with just one service?',
-      'Most clients do. Brand strategy and web design are the two most common single-service starting points.',
+      'Most clients do. Brand strategy and web design & build are the two most common starting points, and roughly half of our clients come back for a second service once the first one has paid for itself.',
     ],
     [
       'How do you price a project?',
-      'A fixed quote after a short discovery call — never an open-ended hourly rate with no ceiling.',
+      'A fixed quote after a short discovery call, scoped to the outcome you actually need — never an open-ended hourly rate with no ceiling and no way to budget against it.',
     ],
   ] as const
 

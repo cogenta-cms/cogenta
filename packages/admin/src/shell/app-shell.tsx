@@ -799,13 +799,31 @@ export function AppShell(): JSX.Element {
    * priority order) and only ever adds a version number next to it while
    * `branding.showCogentaBranding` is on — a white-labelled install has no
    * reason to advertise which CMS or which version runs it.
+   *
+   * Cogenta's own mark links to the project (same URL the public site's own
+   * footer already links to, `renderFooterBranding` in `theme-render.ts`) —
+   * absent here until now, the one place in the admin naming Cogenta led
+   * nowhere. A white-labelled logo links to nothing: it names the site
+   * itself, not this project.
    */
   function renderFooter(): JSX.Element {
     const version = chrome.shellStatus.cogentaVersion
+    const brand = branding.showCogentaBranding ? (
+      <a
+        href="https://github.com/cogenta-cms/cogenta"
+        rel="noopener"
+        target="_blank"
+        className="app-shell__footer-brand-link"
+      >
+        {renderBrandMark()}
+      </a>
+    ) : (
+      renderBrandMark()
+    )
     return (
       <div className="app-shell__footer-inner">
         <span className="app-shell__footer-brand">
-          {renderBrandMark()}
+          {brand}
           {branding.showCogentaBranding && version !== '' && (
             <span className="app-shell__footer-version rounded-full border border-border px-2 py-0.5 font-mono">
               v{version}

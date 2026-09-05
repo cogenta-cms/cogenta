@@ -44,6 +44,9 @@ const BRAND_MARK_FALLBACK = '//'
  * name; (3) branding off with nothing uploaded yet: an unlabelled mark,
  * never a hole where a logo should be.
  */
+/** Same target the public site's own footer credit links to (`theme-render.ts`'s `renderFooterBranding`) — one project, one link, never a second URL invented for this screen. */
+const COGENTA_PROJECT_URL = 'https://github.com/cogenta-cms/cogenta'
+
 function LoginBrand({
   version,
   branding,
@@ -52,25 +55,41 @@ function LoginBrand({
   readonly branding: LoginBranding
 }): JSX.Element {
   const { showCogentaBranding, customLogoMediaId, siteTitle } = branding
-  return (
+  const mark = showCogentaBranding ? (
+    <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
+  ) : customLogoMediaId !== null ? (
+    <img
+      src={`/_image?id=${encodeURIComponent(customLogoMediaId)}&w=80`}
+      alt={siteTitle ?? ''}
+      width={40}
+      height={40}
+    />
+  ) : (
+    <span aria-hidden="true" className="text-lg font-semibold text-muted-foreground">
+      {BRAND_MARK_FALLBACK}
+    </span>
+  )
+  const versionChip = showCogentaBranding && version !== null && version !== '' && (
+    <span className="font-mono text-xs text-muted-foreground">v{version}</span>
+  )
+  // Cogenta's own credit links back to the project — the same behaviour the
+  // public site's footer already has (`renderFooterBranding`), missing here
+  // until now: a white-labelled logo links to nothing, since it names a
+  // site the visitor already knows, not this project.
+  return showCogentaBranding ? (
+    <a
+      href={COGENTA_PROJECT_URL}
+      rel="noopener"
+      target="_blank"
+      className="flex flex-col items-center gap-2"
+    >
+      {mark}
+      {versionChip}
+    </a>
+  ) : (
     <div className="flex flex-col items-center gap-2">
-      {showCogentaBranding ? (
-        <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
-      ) : customLogoMediaId !== null ? (
-        <img
-          src={`/_image?id=${encodeURIComponent(customLogoMediaId)}&w=80`}
-          alt={siteTitle ?? ''}
-          width={40}
-          height={40}
-        />
-      ) : (
-        <span aria-hidden="true" className="text-lg font-semibold text-muted-foreground">
-          {BRAND_MARK_FALLBACK}
-        </span>
-      )}
-      {showCogentaBranding && version !== null && version !== '' && (
-        <span className="font-mono text-xs text-muted-foreground">v{version}</span>
-      )}
+      {mark}
+      {versionChip}
     </div>
   )
 }

@@ -58,6 +58,19 @@
   height: 50px;
 }
 
+.app-shell__footer-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell__footer-brand-link:hover,
+.app-shell__footer-brand-link:focus-visible {
+  text-decoration: underline;
+}
+
 .app-shell__footer-version {
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);

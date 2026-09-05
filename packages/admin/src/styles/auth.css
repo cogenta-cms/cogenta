@@ -67,10 +67,6 @@
   text-align: center;
 }
 
-.auth-layout__rail-inner img {
-  filter: drop-shadow(0 0 16px var(--rail-glow));
-}
-
 /* Compact header band below `lg`: brand + version only. */
 .auth-layout__tagline,
 .auth-layout__chips {
@@ -112,18 +108,18 @@
   font-weight: 500;
 }
 
-/* Three soft, blurred glows drifting slowly behind the brand content — the
-   one atmospheric flourish this panel gets, all under the 20s ceiling.
-   `prefers-reduced-motion` is handled globally in `base.css` (every
-   animation-duration collapses to ~0 there), so no per-component override
-   is needed here. */
+/* Three flat geometric accents behind the brand content (D5 — zero gradient,
+   zero decorative blur: a solid ring, a solid disc, a hairline ring, hard
+   edges throughout, the same register the ten site themes' own hero art
+   uses). The gentle drift is a transform-only animation, all under the 20s
+   ceiling; `prefers-reduced-motion` is handled globally in `base.css`
+   (every animation-duration collapses to ~0 there), so no per-component
+   override is needed here. */
 .auth-layout__glow {
   position: absolute;
   z-index: 0;
   border-radius: 999px;
-  filter: blur(56px);
   pointer-events: none;
-  background: radial-gradient(circle, var(--rail-glow), transparent 70%);
 }
 
 .auth-layout__glow--a {
@@ -131,6 +127,7 @@
   left: -8rem;
   width: 26rem;
   height: 26rem;
+  border: 2px solid var(--rail-glow);
   animation: auth-drift-a 18s ease-in-out infinite alternate;
 }
 
@@ -139,6 +136,8 @@
   bottom: -8rem;
   width: 24rem;
   height: 24rem;
+  background: var(--rail-glow);
+  opacity: 0.16;
   animation: auth-drift-b 20s ease-in-out infinite alternate;
 }
 
@@ -147,6 +146,8 @@
   right: 8%;
   width: 16rem;
   height: 16rem;
+  border: 2px solid var(--rail-glow);
+  opacity: 0.5;
   animation: auth-drift-c 15s ease-in-out infinite alternate;
 }
 

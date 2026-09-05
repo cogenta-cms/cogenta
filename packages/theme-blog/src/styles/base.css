@@ -233,9 +233,11 @@ img {
   inset-block-start: 0;
   z-index: 10;
   padding: var(--cg-s3) var(--cg-gutter);
-  background: color-mix(in oklab, var(--cg-canvas) 90%, transparent);
+  /* Flat and fully opaque, not a frosted-glass blur: a sticky header reads
+     as a solid plane sitting above the page, with a hairline marking where
+     it ends. */
+  background: var(--cg-canvas);
   border-block-end: 1px solid var(--cg-line-soft);
-  backdrop-filter: saturate(1.3) blur(10px);
 }
 
 .cg-site-header__inner {

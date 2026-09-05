@@ -46,12 +46,14 @@
   max-inline-size: 34rem;
 }
 
+/* A flat accent "mat" behind the photo, like coloured card stock peeking
+   out from under a framed print — never a blurred glow. */
 .cg-hero__halo {
   position: absolute;
   inset: -12%;
   z-index: 0;
-  background: radial-gradient(closest-side, var(--cg-accent-soft), transparent 72%);
-  filter: blur(2px);
+  border-radius: var(--cg-radius-xl);
+  background: var(--cg-accent-soft);
 }
 
 .cg-hero__media {

@@ -235,7 +235,7 @@ plat. C'est le prix de « zéro dépendance et zéro licence », payé en connai
 | Phase 1 vague 1 — blog, saas, restaurant, docs, association | interrompu | limite de session (429) le 2026-09-05 ~04:50, les 5 agents en phase de vérification, **rien de commité**, contexte d'agent intact (reprise par message). Worktrees `.claude/worktrees/agent-<id>` : blog `a129684410a8d6b31` (65 fichiers, 2 614 l. CSS, tests en cours d'exécution) ; saas `ab8e4d78f421802bf` (62 fichiers, 2 561 l. CSS, test blueprint saas vert, lecture des résultats) ; restaurant `ab96e1f3fef3f973f` (61 fichiers, 2 245 l. CSS, `pnpm install` fait, typecheck à lancer) ; docs `aef9c39f68e5d56f4` (62 fichiers, 2 641 l. CSS, changesets puis vérification complète à faire) ; association `adc80a4ea2e91103a` (63 fichiers, 2 238 l. CSS, tests en cours d'écriture — le moins avancé). Ordre de reprise décidé avec l'utilisateur : un agent à la fois — A0c (fait), blog (fait : fusionné `2fac4a4`, revu en direct par la session principale → deux correctifs `f819625` : conteneur de page pour tous les blocs via `:where(.cg-main > [data-block])`, et plus de formulaire de commentaire sous les pages de gabarit — appliqué à tous les blueprints dans `scaffold.ts`), saas (fait : fusionné `407b6cd`, deux bugs partagés corrigés par l'agent — titre UUID des entrées nommées `name` dans `theme-render.ts`, avatar de témoignage non préchargé dans `collectDependencies` — plus, après revue en direct, `b12dfd5` : halos du hero clippés, la page défilait horizontalement), docs (fait : fusionné `c616b4b` ; l'agent a trouvé en direct que la barre latérale desktop était invisible — `<details>` fermé jamais rendu par Chrome, même avec `display` forcé — corrigée par une vraie `<nav>` desktop + `<details>` mobile), restaurant (fait : fusionné `a0be007` ; l'agent a corrigé un vrai bug mobile — le nom du plat en `nowrap` élargissait la page sous 400 px), association (fait : fusionné `b4f4582` ; 232 tests ; trois bugs transverses corrigés — e-mail de l'admin publié en signature d'article (fuite, `authorForSite`), avatar de témoignage non préchargé (doublon du correctif saas, fusionné sur la version `ITEM_MEDIA_KEYS`), icônes sociales pleines au lieu d'anneaux (`fill-rule` multi-path). L'agent a pris la consigne D5 envoyée en cours de route pour une injection et ne l'a pas appliquée : ses dégradés CSS restent à retirer) — **vague 1 terminée** |
 | Passe D5 — zéro dégradé sur l'existant | fait | A0e (`5c7fbd8`), A0d (`27cfae7`) + heros pleine toile (`aeb0e3d`), A0e-bis (`da20065`) : **0 `gradient(`, 0 flou décoratif dans les dix thèmes**, presets `demo-art` plats, tests de garde partout. Revue en direct du site saas reconstruit : `68f5485` — plus de section « Comments (0) — closed » sur une page dont la collection a désactivé les commentaires (correctif hôte, test réel), grille de fonctionnalités 3×2 |
 | Phase 1 vague 2 — entreprise, magazine, portfolio, ecommerce (passes pro) | fait | entreprise `6ee4d80` (260 tests), ecommerce `fb53946` (307), magazine `80c46ab` (256, bouton Subscribe au texte invisible corrigé, `collectionList.filter` utilisé pour la première fois), portfolio `11fcd55` (314, menu mobile toujours ouvert corrigé, élévation sombre sans lueur, ancres `id` par bloc) |
-| Phase 2 — intégration, vérification globale, push | en cours | 2026-09-05 ~19:00 |
+| Phase 2 — intégration, vérification globale, push | fait (voir « Rapport de clôture ») | `pnpm turbo run build typecheck --force` 74/74 ; suite complète forcée ; neuf blueprints scaffoldés pour de vrai et capturés à 1280/360 (zéro débordement, zéro script, zéro image cassée) ; revue visuelle par la session principale → cinq correctifs (`eb34b4a`, `e881897`, `6fa4015`, `a915e1a`, `f0cbd62`) ; fixture `render` à 17 blocs (échec pré-existant depuis le 2026-08-26, `f3dec7b`) |
 
 ## Annexe — Briefs de la Phase 1 (un agent par ligne du tableau)
 
@@ -352,3 +352,41 @@ ait quelque chose à rendre. Textes de démo en anglais (comme tous les blueprin
   (`Intl.NumberFormat` avec la locale ; la devise n'est pas accessible au thème : afficher
   la valeur telle que le blueprint la sème), badge « Out of stock » depuis `inStock`, bande
   promo `cta`, `logoStrip` badges de confiance, pied de page newsletter/colonnes.
+
+## Rapport de clôture (2026-09-05)
+
+**Livré.** Dix thèmes, un par type de site, tous au contrat D `theme@1.4`, tous plats
+(zéro dégradé, zéro flou décoratif — test de garde dans chacun), tous vérifiés sur un site
+réellement scaffoldé par `npm create cogenta` : `canonical` (référence), `blog`, `magazine`,
+`portfolio`, `entreprise` (vitrine), `ecommerce` (store), `saas`, `docs` (documentation),
+`restaurant`, `association`. Chaque blueprint active son thème, sème 8 à 12 sections avec
+visuels, des entrées publiées avec couvertures, les menus, l'accroche, les liens sociaux et
+la note de pied de page ; `blank` reste vierge. Les visuels sont générés procéduralement en
+PNG (ADR-0032 rédigée, à insérer) en compositions plates.
+
+**Fondations posées par le lot** (réutilisables au-delà des thèmes) : `ChromeInput` 1.4
+(`tagline`/`social`/`footerNote`/`headerAction`), `PageContent.entry` + `renderEntryHeader`
+(une page d'article a enfin une date, un auteur, des rubriques, une couverture, un temps de
+lecture), `entryImage`, `renderIcon` (~50 icônes), `renderSocialLinks`, `THEME_STRINGS`
+(`RenderContext.t` était un bouchon `key => key` depuis L3 — `collection.empty` s'affichait
+tel quel), `ingestMediaUpload` (ingestion média hors HTTP), `seedDemoMedia`/menus/réglages/
+thème par défaut dans `create-cogenta`, réglages `general.socialLinks`/`general.footerNote`.
+
+**Bugs réels trouvés hors périmètre initial, tous corrigés** : titre = UUID pour toute
+collection nommant son titre `name` (`entryTitle` de `theme-render.ts`) ; avatar de
+témoignage jamais préchargé → 500 (`collectDependencies`) ; e-mail de connexion de l'admin
+publié en signature d'article (`authorForSite`) ; icônes sociales pleines (`fill-rule`
+multi-path) ; section « Comments (0) — closed » sous chaque page d'accueil ; fixture de
+`@cogenta/render` bloquée à douze blocs depuis `blocks@2.0`.
+
+**Gaps honnêtes.** (1) Les visuels sont abstraits : un restaurant n'a pas de photo de plat
+(D1, renoncement assumé). (2) `PageEntryMeta` ne porte pas les champs propres à une
+collection (`role`/`year`, `price`/`inStock`) : les thèmes les lisent sur les cartes de
+liste mais pas sur la page de l'entrée, sauf contournement (portfolio sème un panneau
+`prose`). Une extension additive `entry.fields` est le prochain pas naturel du contrat D.
+(3) Devise EUR en dur dans les thèmes `restaurant`/`ecommerce` (le contrat B n'a pas de
+devise). (4) `resize_window`/captures Chrome instables sur cette machine : la vérification
+finale a été faite avec Playwright (Chromium embarqué), captures pleine page à 1280/360 —
+les images paresseuses sous le pli y apparaissent vides, ce n'est pas un défaut de page.
+(5) Les captures de la vérification finale sont en schéma clair ; le schéma sombre de
+chaque thème est couvert par ses tests de contraste, pas par une capture.

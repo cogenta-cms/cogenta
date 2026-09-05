@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -29,6 +30,11 @@ import {
  * `footerNote` — are each rendered only when present; a render with none of
  * them set still produces a complete header/footer, exactly the additive
  * guarantee the contract promises.
+ *
+ * The manual light/dark toggle (`renderThemeToggle`, `@cogenta/theme-kit`,
+ * L26) is unconditional — it sits between the desktop nav and the header
+ * action, outside the `<details>` mobile disclosure so it stays reachable at
+ * every width rather than one tap deep inside the hamburger menu.
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -73,6 +79,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const footerNav = renderNav(input.footerNav, 'cg-site-footer__nav', 'Footer')
   const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
   const headerAction = renderHeaderAction(input.headerAction)
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const mobileToggle =
     headerNavMobile === ''
@@ -86,6 +93,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `${headerNavDesktop}` +
+    `${themeToggle}` +
     `${headerAction}` +
     `${mobileToggle}` +
     `</div></header>`

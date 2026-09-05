@@ -1,10 +1,16 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
 /**
  * `theme@1.4` (L25 D2) — `tagline`/`social`/`footerNote`/`headerAction`, all
  * optional and additive; plus this theme's own CSS-only mobile disclosure.
+ *
+ * The manual light/dark toggle (L26) is unconditional, on every render — the
+ * expectation below is built from `renderThemeToggle` itself rather than a
+ * hand-copied literal that would silently drift the first time either one
+ * changes.
  */
 
 const BASE: ChromeInput = {
@@ -75,6 +81,20 @@ describe('renderChrome — header', () => {
       headerAction: { label: 'Donate', href: '/donate' },
     })
     expect(header).not.toMatch(/<script/i)
+  })
+
+  it('renders the manual light/dark toggle unconditionally, matching renderThemeToggle byte for byte', () => {
+    const { header } = renderChrome(BASE)
+    const expectedToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+    expect(header).toContain(expectedToggle)
+  })
+
+  it('places the toggle outside the mobile <details> disclosure, reachable at every width', () => {
+    const { header } = renderChrome(BASE)
+    const toggleIndex = header.indexOf('data-cg-theme-toggle')
+    const disclosureIndex = header.indexOf('<details class="cg-nav-toggle">')
+    expect(toggleIndex).toBeGreaterThan(-1)
+    expect(toggleIndex).toBeLessThan(disclosureIndex)
   })
 })
 

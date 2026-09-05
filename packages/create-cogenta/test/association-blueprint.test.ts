@@ -36,6 +36,11 @@ describe('scaffoldSite — association blueprint', () => {
     }
   })
 
+  // This blueprint's `scaffoldSite` now renders and ingests 19 real demo
+  // images through the real media pipeline (`seedDemoMedia` — hero, six
+  // event covers, six gallery photos, one avatar, five partner marks) —
+  // measured well past the default 5s, not a hang (see `store-blueprint
+  // .test.ts`'s own note on the same trade-off with 7 images).
   it('writes a schema file loadCollections can load back, with event/page', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-association-'))
     dirs.push(targetDir)
@@ -55,7 +60,7 @@ describe('scaffoldSite — association blueprint', () => {
 
     const collections = await loadCollections(targetDir)
     expect(collections.map((c) => c.name).sort()).toEqual(['event', 'page'])
-  })
+  }, 120_000)
 
   it('seeds real demo events and pages into real SQLite', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-association-'))
@@ -86,11 +91,18 @@ describe('scaffoldSite — association blueprint', () => {
       expect(events.items.length).toBeGreaterThanOrEqual(3)
 
       const pages = await pageStore.list()
-      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(['home', 'mission'])
+      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
+        'about',
+        'events',
+        'get-involved',
+        'home',
+        'privacy',
+        'programmes',
+      ])
     } finally {
       await selection.dispose()
     }
-  })
+  }, 120_000)
 
   it('resolves /events/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(ASSOCIATION_COLLECTIONS, '/events/community-clean-up-day')).toEqual({
@@ -166,7 +178,7 @@ describe('scaffoldSite — association blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  })
+  }, 120_000)
 })
 
 function htmlOf(node: HtmlNode | null): string {
@@ -185,9 +197,18 @@ function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext 
     locale: 'en',
     url: new URL('http://localhost:4000/home'),
     t: (key) => key,
-    image: () => {
-      throw new Error('not used by this test')
-    },
+    // The home page's hero (and gallery/logoStrip/testimonial) now carry a
+    // real ingested media id (`seedDemoMedia`) — a plausible `ImageSource`
+    // in place of one, the same fake `store-blueprint.test.ts` already uses.
+    image: (media) => ({
+      kind: 'image',
+      src: `/_image?id=${media}`,
+      srcset: '',
+      width: 1600,
+      height: 1000,
+      alt: 'association demo image',
+      focal: null,
+    }),
     link: (target) => {
       if (typeof target === 'string') return target
       if ('path' in target) return target.path

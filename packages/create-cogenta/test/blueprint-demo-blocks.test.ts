@@ -1,7 +1,7 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
-import { ASSOCIATION_DEMO_PAGES } from '../src/blueprints/association.js'
+import { buildAssociationDemoPages } from '../src/blueprints/association.js'
 import { BLOG_DEMO_PAGES } from '../src/blueprints/blog.js'
 import { DOCUMENTATION_DEMO_PAGES } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
@@ -16,6 +16,12 @@ import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
+// `association`'s demo pages are also now built from `SeedContext.media`
+// (L25 Phase 1, `association` blueprint) — `buildAssociationDemoPages({})`
+// renders the same pages this test checked before, minus the (now
+// media-dependent) hero image, gallery and partner logo strip, which this
+// test does not exercise.
+const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

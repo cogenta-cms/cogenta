@@ -385,6 +385,59 @@ img {
   }
 }
 
+/* The manual light/dark/system toggle (L26) — a plain circular icon button in
+   the header's own register, the same 2.25rem footprint and hairline border
+   as the footer's social icons, never a filled control (this theme has none
+   in its header). Icon visibility (sun/moon) is swapped by CSS alone, from
+   the same `[data-theme]`/`prefers-color-scheme` signals `tokens.css` already
+   keys the whole palette on — see `theme-canonical`'s identical comment. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 1px solid var(--cg-line-soft);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+  transition: border-color var(--cg-duration-fast) var(--cg-ease);
+}
+
+.cg-theme-toggle:hover {
+  border-color: var(--cg-accent);
+  color: var(--cg-accent);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
 /* The CSS-only mobile menu: a `<details>`/`<summary>` disclosure, shown only
    below the breakpoint the desktop `.cg-nav` appears at. No JavaScript
    anywhere — expanding, focus and keyboard operation all come from the

@@ -94,6 +94,22 @@
   justify-content: center;
 }
 
+/* The secondary action's global rule (`base.css`) hardcodes `--cg-ink` — the
+ * right choice on the plain, light `data-has-media="false"` backdrop below,
+ * but unreadable dark-on-dark once a photograph and its scrim are behind it.
+ * Same fix as `.cg-close`'s own secondary override just below in this file,
+ * scoped to the media case only so the no-media hero keeps its correct ink
+ * text untouched. */
+.cg-hero[data-has-media="true"] .cg-action[data-emphasis="secondary"] {
+  border-color: color-mix(in oklab, var(--cg-canvas) 40%, transparent);
+  color: var(--cg-canvas);
+}
+
+.cg-hero[data-has-media="true"] .cg-action[data-emphasis="secondary"]:hover {
+  border-color: var(--cg-canvas);
+  color: var(--cg-canvas);
+}
+
 /* --------------------------------------------------------------------------
    prose ("Our story") — a short, centred, narrow column
    -------------------------------------------------------------------------- */

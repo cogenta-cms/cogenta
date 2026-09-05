@@ -1,5 +1,161 @@
 # @cogenta/blocks
 
+## 1.0.0
+
+### Major Changes
+
+- 4335296: Widen contract B (the block vocabulary) from twelve to seventeen blocks (`blocks@2.0`,
+  RFC 0001 — `docs/rfc/0001-widen-block-vocabulary.md`), and add a shared, optional
+  per-instance visual variant to every block's envelope (RFC 0002 —
+  `docs/rfc/0002-per-block-visual-variant.md`). Both were decided in direct conversation
+  with the user (fiche 43, Cogenta Page Builder), reopening ADR-0009 ("the vocabulary must
+  stay small") with an explicit renouncement traced in the RFCs themselves.
+  
+  **New blocks**: `testimonial`, `pricingTable`, `accordion`, `statCounter`, `logoStrip`.
+  Each names a `fallback` into the twelve of `blocks@1.0` (`prose`, `featureGrid`,
+  `mediaFigure`), so a theme built before this version still renders them — degraded, never
+  lost — via `BlockRegistry.resolveRenderable`, now actually wired into the render path
+  (`@cogenta/theme-kit`'s new `resolveBlockForRender`). All five in-house themes implement
+  all five directly with their own distinct markup and CSS (never a recolour of another
+  theme's), so this degraded path is a safety net for a third-party theme, not something a
+  site using a built-in theme ever sees in practice.
+  
+  **Why major, not the "adding a block is minor" default this contract stated at
+  `blocks@1.0`**: every theme's `renderBlock` is an exhaustive `switch` over
+  `VocabularyBlock`, `never`-checked at compile time by design — a block added to the
+  vocabulary is therefore a real breaking change for every existing theme's build, even
+  though no content anyone has ever saved is affected (nothing could create these block
+  types before this version). `docs/04-contrats.md` is updated to record this as the
+  precedent for this specific category of change, decided case by case per RFC rather than
+  by a blanket rule.
+  
+  **`variant`** (RFC 0002): an optional `{ background?, spacing?, align?, width? }` on
+  every placed block's envelope — semantic tokens, never CSS or a colour (rule R3 holds).
+  Applied once per theme, in `renderBlock` itself via `@cogenta/theme-kit`'s
+  `withBlockVariant`, rather than by each of the seventeen block renderers individually.
+  Absent on all content written before this version, and rendered byte-for-byte identical:
+  purely additive at the data level, even though it ships in the same major bump as the
+  vocabulary widening above.
+  
+  Each theme resolves the four axes to its own existing design tokens
+  (`[data-block][data-variant-*]` attribute selectors, `--cg-*`/`--ce-*` custom
+  properties already defined by that theme) — no theme gained a background-image
+  mechanism (RFC 0002 adds only the semantic token, not a media field), so
+  `background: 'image'` resolves to each theme's closest tinted-surface approximation
+  rather than doing nothing with a stated author intent.
+  
+  `@cogenta/admin`'s page builder gains a small "Appearance" control (four selects) in the
+  selected block's detail panel, writing through the existing `updateBlockData` — no new
+  mechanism, per the RFC's own decision.
+
+### Minor Changes
+
+- 1995d35: Fiche 42 task 2 — the rich text vocabulary (contract A, ADR-0013) gains a
+  `strikethrough` decorator and an `hr` (thematic break) node, both additive:
+  `RICH_TEXT_DECORATORS` now includes `'strikethrough'` alongside the existing
+  `strong`/`em`/`code`, and `richTextNodeSchema` accepts a third node shape,
+  `{ _key: string, _type: 'hr' }`, carrying nothing beyond its key. No existing
+  document changes shape — a `richText` value stored before this change parses
+  identically after it. A consumer still on the previous minor cannot validate
+  a document that uses either addition, the same one-directional compatibility
+  already accepted for `schema@2.1`'s `reviewState` and `tools@1.1`'s
+  `document.extract`.
+  
+  `@cogenta/blocks`'s own temporary mirror of the richText shape (used to
+  validate a `prose`/`quote`/`testimonial`/`faq`/`accordion` block's body)
+  gains the same `hr` node — its `marks` field was already an open string
+  array, so `strikethrough` needed no change there.
+  
+  `@cogenta/theme-kit`'s `renderRichText` — the single function every theme in
+  this monorepo imports rather than reimplementing (`@cogenta/theme-canonical`
+  and the four site themes' `blocks/prose.ts` all call it directly) — renders
+  `strikethrough` as `<s>` (semantically "no longer accurate", not `<del>`,
+  which would imply an edit-tracking deletion) and a thematic break as a bare
+  `<hr class="cg-prose__rule">`. `@cogenta/theme-canonical` re-exports the
+  same function unchanged; its own `prose` block snapshot fixture now
+  exercises both additions end to end.
+  
+  `@cogenta/admin` (private, no changeset) gains the corresponding editor
+  support: a strikethrough toolbar button, a horizontal-rule insert button and
+  slash-menu entry, Markdown (`~~text~~`, a bare `---` line) and HTML (`<s>`,
+  `<hr>`) source-view round-tripping, and clean-paste recognition of `<s>`/
+  `<strike>`/`<del>` and a pasted `<hr>` (previously dropped outright).
+  
+  Same commit also fixes an unrelated, pre-existing CSS bug (fiche 42 task 1):
+  `.rich-text-editor__surface` had no `min-height` outside fullscreen, so a
+  freshly opened entry's editing area measured exactly one line. `@cogenta/admin`
+  only; no published-package surface involved.
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [a2516aa]
+- Updated dependencies [0e88f30]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [916ef34]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [7b7ec0b]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [e75b23e]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [0dceff3]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [dda55d6]
+- Updated dependencies [befad6d]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [e8061e2]
+- Updated dependencies [fe789cf]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [f47e893]
+- Updated dependencies [2285720]
+- Updated dependencies [46572ba]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [1995d35]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [1cdf7d7]
+- Updated dependencies [745ebd8]
+- Updated dependencies [4bb6ba3]
+- Updated dependencies [960757d]
+- Updated dependencies [2d84729]
+- Updated dependencies [835d736]
+- Updated dependencies [07c0f0a]
+- Updated dependencies [9e67928]
+- Updated dependencies [954460e]
+- Updated dependencies [3824e8e]
+  - @cogenta/core@0.5.0
+  - @cogenta/schema@0.4.0
+
 ## 0.1.4
 
 ### Patch Changes

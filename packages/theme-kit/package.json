@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The shared contract D primitives every Cogenta theme package implements against: RenderContext, the HTML tree, rich text, comments and the twelve-block page shape.",
   "license": "MPL-2.0",
   "type": "module",

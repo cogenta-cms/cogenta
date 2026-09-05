@@ -1,5 +1,91 @@
 # @cogenta/channels
 
+## 0.3.0
+
+### Minor Changes
+
+- af57fa2: L22 task 2: the inbound side of `@cogenta/channels` (L6) is wired for real. Until now, `@cogenta/channels`' identity-linking protocol, command router, and Telegram/Slack/Discord adapters were built and tested but never connected to anything — only outbound notice delivery was live.
+  
+  `@cogenta/channels` gains a plug-in point `createCommandRouter`'s own header comment named as explicitly out of scope for L6: `CommandRouterOptions.chat`. A message that matches no *registered* command name now falls through to this optional handler instead of `{kind: 'unrecognized'}` — same `authorizeInboundCommand` gate as a named command, evaluated against `chat.requiredRoles`. `createAgentChatBridge` builds the handler itself: it resolves an optional `"@Agent Name: message"` mention (falling back to a configured default agent, with a warning, on an unknown name), calls a structural `AgentRunnerLike.run(name, instruction, trigger?)` — deliberately the same three-argument shape `@cogenta/api`'s `agents-router.ts` already declares, not `@cogenta/agents`' raw options-object `AgentRunner['run']` — and replies with the result, truncated and flattened to fit the existing `NotificationChannelMessage` budget (`REPORT_SCREEN_BUDGET_CHARS`) rather than stretching an ill-fitting type. The one rule this whole module exists to keep: a linked channel identity is authorized against the *Cogenta account's own* roles before the runner is ever called, and defaults to requiring `admin` — the same role `POST /api/agents/:name/run` itself requires, so a channel can never grant more access than the linked account's own standing already would over HTTP (R4). Zero changes to any provider adapter (`telegram`/`slack`/`discord` `inbound.ts`) were needed — all three already call `router.route()` uniformly for every linked-identity message.
+  
+  `@cogenta/cli` gains a new, separate command: `cogenta channels`. Telegram long-polling is safe per replica only with exactly one dedicated process; Slack Socket Mode and Discord Gateway are each inherently a single persistent connection. None of the three ever start inside `cogenta serve` — this command is a standalone, optional, single-instance process (built the same way `cogenta mcp` is: a second independent entry point onto the same database and the same `.cogenta/agents-runtime` agent declarations, never a second copy of either) whose only job is connecting configured channels and routing authorized chat messages to a real agent run. Bot credentials are read from the environment only (`COGENTA_CHANNELS_TELEGRAM_BOT_TOKEN`, `COGENTA_CHANNELS_SLACK_BOT_TOKEN`/`COGENTA_CHANNELS_SLACK_APP_TOKEN`, `COGENTA_CHANNELS_DISCORD_BOT_TOKEN`) and never written to `cogenta.config.mjs` (R7); a provider with no token configured is simply not started (R1). `buildAgentRuntime`'s options gain an injectable `approvalQueue` (defaulting to a fresh in-memory one, unchanged behaviour for every existing caller), and `AgentRuntimeAssembly` now exposes the live instance it actually uses — every side-effecting core tool (`content.write_draft` included) is `reversible: false`, so `with-autonomy.ts`'s `forcedApproval` always routes it through this queue regardless of autonomy level; exposing it is what let this lot's own end-to-end test (`packages/cli/test/channels-chat.test.ts`) prove a chat message drives the *correct* contract-C tool through to a real approved, created entry, rather than only proving a tool was proposed.
+  
+  The admin (`@cogenta/admin`, private, no changeset) gains a "Canaux" screen in the IA section (any signed-in role, since linking is personal and used for notices too) — reusing the exact `/api/notices/channels/*` linking endpoints fiche 38 already exposed, no new linking mechanism — and extends the existing "MCP" screen with a "Chat API" key purpose: generates an `admin`-scoped API key (the same mechanism `/api/api-keys` already provides) and documents the `POST /api/agents/:name/run` request/response format, the same single-call-per-turn shape the admin's own new floating chat widget (bottom-right, on every authenticated screen) uses via the existing `runAgent` client function — no second streaming protocol.
+  
+  `@cogenta/core` gains one `ErrorCode`: `CHANNEL_PROVIDER_NOT_CONFIGURED`, thrown by `cogenta channels` when a provider's required environment variables are absent (caught internally and logged as "skipped", never surfaced as a failure — R1).
+  
+  Left honestly open: the approval queue `cogenta channels` (and any future admin approvals screen) would decide a pending write against has no REST surface yet — a real, pre-existing gap this lot's own test works around directly rather than papering over, not something to fix here.
+
+### Patch Changes
+
+- 46572ba: Add the admin notification center (fiche 38): a bell with an unread count, filterable
+  by severity/period, bulk mark-as-read; new notice sources (plugin auto-disabled,
+  scheduled publication failed); channel-bridged notices reusing `@cogenta/channels`'
+  existing message formats, grouping and identity-linking (no second mechanism); and a
+  per-severity channel routing settings screen.
+  
+  `@cogenta/schema` gains `scheduled-publish-failures` store used by the new notice
+  source. `@cogenta/api` gains a real `@cogenta/channels` dependency, new notice-router
+  routes for channel settings and notice history, and a `plugin-disabled`/
+  `scheduled-publish-failed` notice source pair. `@cogenta/plugins` exposes disabled-state
+  data the new notice source reads. `@cogenta/channels`' preference types gain the field
+  the settings screen needs.
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [08e394b]
+- Updated dependencies [d0a3250]
+- Updated dependencies [0e88f30]
+- Updated dependencies [750a10b]
+- Updated dependencies [08e394b]
+- Updated dependencies [edd0787]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [2285720]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [745ebd8]
+- Updated dependencies [960757d]
+- Updated dependencies [835d736]
+- Updated dependencies [cf005d4]
+- Updated dependencies [07c0f0a]
+  - @cogenta/core@0.5.0
+  - @cogenta/agents@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes

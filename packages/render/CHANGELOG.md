@@ -1,5 +1,207 @@
 # @cogenta/render
 
+## 0.2.0
+
+### Minor Changes
+
+- 7a59646: L22 task 7 (documentation refonded — functional, technical, versioned,
+  deployed): `@cogenta/render` gains a small, hand-written Markdown → HTML
+  renderer purpose-built for `docs-site/content/**` (`renderMarkdownToHtml`,
+  `renderMarkdownDocument`, `parseFrontmatter`, `MarkdownDocument`,
+  `MarkdownHeading`) and `adaptDocHtmlForAdmin`/`DocTree`, which retargets the
+  static site's relative page links into `/admin/documentation` routes.
+  
+  Purely additive — no existing export changed shape. Zero new dependency
+  (R9): a second small hand-written scanner in the same spirit as
+  `packages/admin/src/rich-text/markdown.ts`'s existing Markdown↔Slate
+  converter, but for a different, plainer grammar (tables, indentation-driven
+  list nesting, fenced code with a language tag, heading anchors) that
+  documentation prose needs and the rich-text editor's grammar doesn't.
+  
+  This is what lets `docs-site/build/generate.mjs` (the statically published
+  site) and `@cogenta/admin`'s `/admin/documentation` in-admin browser render
+  the identical Markdown source through the identical function — the property
+  the task asked for: never two copies of the documentation that can drift.
+- 562c9c1: Add the "Apparence" admin screen (fiche 14) — the CMS's most-differentiating
+  feature, AI skin generation, was previously exposed only through the CLI.
+  
+  - `@cogenta/render` gains `mergeSkinTokens` (`SkinTokenOverrides`): overlays a
+    partial token tree onto a complete base skin, group by group, key by key.
+  - `@cogenta/schema` gains `createThemeStore`/`ensureThemeTable` — one row of
+    theme overrides (a partial token overlay, additional CSS, and four identity
+    media references), the database half of the two-source-of-truth design
+    task 0 settles on: `theme.tokens.json` stays the versioned file default,
+    the database holds what an `admin` changed from the admin screen.
+  - `@cogenta/plugins`'s `SkinGalleryEntry` now carries the accepted skin's real
+    `tokens` (`null` for a rejected entry) — needed to render a swatch or apply
+    a gallery skin, previously only metadata.
+  - `@cogenta/api` gains `createThemeRouter` (`GET/PUT/DELETE /api/theme[/overrides]`,
+    `GET /api/theme/skins`, `POST /api/theme/skins/:id/apply`,
+    `POST /api/theme/generate`, `POST /api/theme/export`), plus the
+    `SKIN_*`/`THEME_*` error-code → HTTP-status mappings it needs.
+  - `@cogenta/cli` wires it all into `cogenta serve`/`dev`: `resolveStyles()`
+    recomputes the served stylesheet on every request (file tokens merged with
+    saved overrides plus additional CSS), which is what makes a saved change
+    visible on the very next page view instead of only after a restart — the
+    "hot swap" contract D already promised for the file alone. A new
+    `POST /api/theme/preview` route renders the real home page with a candidate
+    overlay nobody has saved yet, the same iframe-on-the-real-render decision
+    L16 made for the page builder. Exporting the merged tokens back into
+    `theme.tokens.json` is gated to `cogenta dev` only, mirroring the
+    ADR-0010 rule L19's site-plan applier already uses for the schema file.
+  
+  R2 verified: without an LLM provider, `GET /api/theme` reports
+  `aiAvailable: false` and the admin's AI section does not render at all — no
+  error, no dead link. R6 verified: an AI-generated candidate or a chosen
+  gallery skin is never applied automatically; a save is always a separate,
+  explicit action.
+- a15b1ae: Theme manifest gains `description`/`author` (`theme@1.2`, additive), and the
+  "Apparence" admin screen splits into a theme gallery and a "Personnaliser"
+  screen reached from it (fiche 48).
+  
+  - `@cogenta/render`'s `ThemeManifest` gains optional `description?: string`
+    and `author?: string` (`theme@1.2`). Both are optional so a manifest
+    written before this version, or a third-party theme that simply omits
+    them, keeps validating unchanged — the appearance gallery falls back to
+    the registry's own `label` when `description` is absent, and shows no
+    author line at all when `author` is absent.
+  - The five built-in themes (`@cogenta/theme-canonical`, `-ecommerce`,
+    `-entreprise`, `-magazine`, `-portfolio`) now declare `description` and
+    `author: 'Cogenta'` in `theme.config.ts`. Patch releases: no rendering
+    behaviour changed, only manifest metadata.
+  - `@cogenta/api`'s `AvailableThemeLike` (and `GET /api/theme`'s
+    `availableThemes`) gains `version: string` and `author: string | null`,
+    read straight from each theme's manifest rather than duplicated by hand —
+    editing a theme's `theme.config.ts` alone now changes what the API
+    returns.
+  - `@cogenta/cli`'s `theme-registry.ts` `availableThemes()` becomes
+    **async** (breaking for any direct caller — it now has to load and cache
+    each theme's manifest, which is an ESM dynamic import): it reads
+    `label` from the registry as before, but now reads `description`,
+    `version` and `author` from the theme's own manifest instead of a
+    hand-duplicated string. Both call sites in `cogenta serve` were updated
+    to `await` it.
+  - The admin's "Apparence" screen (`packages/admin`, unpublished) is split
+    into two screens: a gallery (theme preview, name, description, version,
+    author, and a "Personnaliser" action on whichever theme is active) and a
+    personalization screen (tokens, contrast warnings, additional CSS,
+    identity, skin gallery, AI generation) — previously one dense, continuous
+    screen. Purely a navigation change: every existing action still does
+    exactly what it did before, just behind one more click.
+- 86fc9cf: Fixed the media cache-busting bug audit 05-mediatheque §6 T02 found: replacing an
+  uploaded file (`MediaStore.replace()`, fiche 11 task 4) has recorded a fresh
+  `contentHash` since `theme@1.2`, and `RenderMediaAsset`/`MediaAsset.version` has existed
+  on the type since then too — but `variantUrl()` never actually read it, and
+  `loadRenderMedia()` (`cogenta serve`) never actually set it. The result: a replaced
+  logo kept serving under the exact same `/_image?id=…` query string a year-long
+  `Cache-Control: immutable` response had already cached, everywhere that image was
+  already rendered.
+  
+  `@cogenta/render`'s `variantUrl()` now folds `media.version` into every candidate URL
+  as `&v=` when present, unchanged (no `&v=`) when absent — fully backward compatible for
+  a media entity built without this field. `@cogenta/cli`'s `loadRenderMedia()` now sets
+  `version: asset.contentHash`, so `og:image`, JSON-LD's `image`, and every `srcset`
+  candidate all change URL the moment a file is replaced, which is what actually protects
+  a page a browser or CDN has already cached: an `immutable` response is never
+  revalidated, so the origin's own stored bytes changing is not what breaks the cache —
+  only the URL changing is.
+  
+  Also documents the `version` field on contract D's `MediaReference` (`docs/04-contrats.md`
+  § Contrat D), additive to `theme@1.2`.
+- 54409f3: Media library (fiche 11): tags, usage tracking, in-place replace, and richer
+  listing.
+  
+  **Breaking for a custom `MediaStore` implementation**, written as `minor`
+  following this project's established pre-alpha convention (0.x, no package
+  has ever used `major`, and one here would jump straight to `1.0.0` — which
+  "pre-alpha" contradicts). `@cogenta/core`'s `MediaStore` interface gains two
+  new required methods, `count()` (the total match count ignoring
+  `limit`/`cursor`, so the admin can show "2,000 assets" instead of only "there
+  is another page") and `replace()` (overwrite the bytes behind an existing id
+  in place — every entry and block already holding that id keeps working,
+  unchanged). `MediaAsset` gains two new required fields: `tags` (free-form
+  labels, not a hierarchy — an asset commonly belongs to more than one subject
+  at once) and `contentHash` (a short digest of the stored bytes, folded into
+  `/_image` URLs as `&v=` to bust the year-long immutable cache when an asset
+  is replaced — never a secret, never used for integrity). The only
+  implementation in this repo, `createDatabaseMediaStore`, is updated; a
+  third-party driver is not.
+  
+  Backward-compatible additions: `CreateMediaInput`/`UpdateMediaInput` gain
+  optional `tags`; `ListMediaOptions` gains `tag`, `from`/`to` (created-at
+  range), `sort` (`MediaSortField`: `createdAt`/`filename`/`size`), and
+  `direction`. `@cogenta/render`'s `MediaAsset` gains an optional `version`
+  field (`theme@1.2`) — absent is fully backward compatible, exactly today's
+  behaviour with no `&v=` appended.
+  
+  `@cogenta/api`'s `createMediaRouter` gains real multipart parsing
+  (`packages/api/src/rest/multipart.ts`, zero new dependency — R9/R10), a
+  `POST /api/media/{id}/replace` route, `tag`/`from`/`to`/`sort`/`direction`
+  query parameters on the list route, and EXIF GPS stripping on upload and
+  replace (`stripGps`, opt-out per request, default on — a photo's location is
+  not something an editor usually means to publish).
+  
+  `@cogenta/schema` gains `findMediaUsage` (`packages/schema/src/media-usage.ts`):
+  scans every collection's entries for a media id in a `media`/`richText`/
+  `blocks` field and reports where it is referenced, so the admin can warn
+  before deleting an asset still in use rather than after. `titleOf` (from
+  `search/extract.ts`) is now exported — `findMediaUsage` needed the same
+  "what does an editor call this entry" logic the search indexer already had,
+  and duplicating it would have drifted.
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [0e88f30]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [4335296]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [2285720]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [1995d35]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [745ebd8]
+- Updated dependencies [960757d]
+- Updated dependencies [07c0f0a]
+  - @cogenta/core@0.5.0
+  - @cogenta/blocks@1.0.0
+
 ## 0.1.4
 
 ### Patch Changes

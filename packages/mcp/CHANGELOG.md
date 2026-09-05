@@ -1,5 +1,151 @@
 # @cogenta/mcp
 
+## 0.2.0
+
+### Minor Changes
+
+- b8d307a: Fiche 58: the "MCP" admin screen renamed to "MCP Server" (nav/i18n only, no
+  functional change — task 1), and a real MCP **client**: this site's own agents can
+  now consume external MCP servers, gated by a security review (`security-reviewer`,
+  2026-08-26 — NO-GO as originally written, GO conditional on a sandboxing floor,
+  re-reviewed against this final implementation before merge).
+  
+  **`@cogenta/mcp`**: `createMcpStdioClient` no longer inherits `process.env` —
+  `spawn` receives exactly `options.env ?? {}`, never the host's real environment
+  (the critical finding: the previous default handed a spawned third-party process
+  every secret this server had, `COGENTA_AUTH_SIGNING_KEY` included, before
+  `initialize()` was ever called). `stdio` is always `['pipe', 'pipe', 'pipe']`,
+  never `inherit` — stderr is captured and logged through the structured logger,
+  capped in size. Every JSON-RPC call has a hard timeout that kills the process and
+  rejects every pending call on the connection; `wrapMcpTool`'s `execute` now honours
+  `ctx.signal` too, so a run's own cancellation reaches the remote process the same
+  way. A best-effort memory/CPU watchdog polls the spawned PID (`ps`/PowerShell, no
+  native dependency — R9/R10); the real limit is host-level (cgroup, Job Object),
+  documented as a prerequisite, not a guarantee.
+  
+  New `packages/mcp/src/registry/`: `McpConnectionStore` (table `mcp_connections`,
+  secret encrypted at rest with the same AES-256-GCM/`COGENTA_AUTH_SIGNING_KEY`
+  scheme as `@cogenta/agents`' `ProviderConfigStore` — R7), `discoverMcpConnection`
+  (a real `initialize()` + `tools/list()` probe through the sandboxed client),
+  `buildMcpToolDefinitions` (wires every enabled connection's checked tools into
+  Contract C `ToolDefinition`s). `McpConnectionStore.create()` structurally refuses a
+  `stdio` connection without `confirmUnsandboxed: true` — the mandatory, honest
+  acknowledgement that this binary runs with the Cogenta process's own full OS
+  privileges, unsandboxed beyond this package's floor; a UI can show the warning, but
+  the refusal itself lives here. `setExposedTools()` refuses a remote tool name never
+  actually seen in the connection's last discovered list — "absent, pas refusée": a
+  tool the admin never checked is never wrapped for any agent. `http` is a stored
+  transport (forward-compatible schema) with no working client yet — honestly
+  refused (`discoverMcpConnection`), never silently pretended to work.
+  
+  **Contract C → `tools@1.4`** (`docs/04-contrats.md`): the parameterised permission
+  `mcp.external:<connectionId>.<remoteToolName>` — one permission per checked remote
+  tool, never per connection (`mcp.external.<connexion>` was rejected by the security
+  review: it would grant every checked tool on a connection indifferently of its own
+  risk, contradicting the "case à cocher par outil" principle and weakening R4). No
+  existing tool signature changes — additive to an open taxonomy, the same kind of
+  change `document.extract`/`logs.read`/`redirects.write`/`code.patch` already were.
+  
+  **`@cogenta/core`**: ten new error codes — `MCP_CLIENT_CALL_TIMEOUT`,
+  `MCP_CLIENT_CALL_ABORTED`, `MCP_CLIENT_PROCESS_EXITED`, `MCP_CLIENT_SPAWN_FAILED`,
+  `MCP_CLIENT_CLOSED`, `MCP_CLIENT_RESOURCE_EXCEEDED`, `MCP_CONNECTION_NOT_FOUND`,
+  `MCP_CONNECTION_INVALID`, `MCP_CONNECTION_AUTH_INVALID`,
+  `MCP_CONNECTION_CONFIRMATION_REQUIRED`, `MCP_CONNECTION_TOOL_NOT_DISCOVERED`.
+  
+  **`@cogenta/api`**: new `createMcpConnectionsRouter` (`/api/mcp-connections`,
+  admin-only) — list/create/enable-disable/remove, `POST .../test` (a real discovery
+  probe), `PUT .../exposed-tools` (the admin's checkbox decision). A new direct
+  dependency on `@cogenta/mcp` (internal workspace package, not a third-party
+  addition) for `discoverMcpConnection` and the store's types.
+  
+  **`@cogenta/cli`**: `cogenta serve` creates the connection table and store
+  unconditionally (usable even without an LLM provider configured, same posture as
+  `/api/api-keys`); `packages/cli/src/commands/agent-runtime.ts`'s `buildAgentRuntime`
+  merges every enabled connection's checked tools into the site's real tool registry
+  through a live-swappable wrapper (`createLiveToolRegistry`) — a connection
+  created/tested/exposed from the admin screen becomes callable by an agent on its
+  very next lookup, no `cogenta serve` restart, the same "no restart needed"
+  guarantee `/api/providers` already gives. `AgentRuntimeAssembly` gains
+  `refreshMcpTools()` and `mcpDispose()` (closes every spawned `McpClient` and
+  removes every sandbox working directory on server shutdown). The fiche names
+  `packages/agents/src/runtime/` for this wiring; it lives in `@cogenta/mcp`/
+  `@cogenta/cli` instead — `@cogenta/mcp` already depends on `@cogenta/agents`, so
+  the reverse dependency the fiche's own path would need is a package cycle. Deviation
+  signalled, not silently worked around.
+  
+  Tests: `@cogenta/mcp` — the sandboxing floor (no inherited environment variable
+  proven by inspecting what `spawn` actually receives while a real host secret is
+  set; a hung server killed and rejected under a configured timeout; per-call abort;
+  stderr capture), the connection store (confirmation requirement, encrypted secret,
+  "absent, pas refusée"), discovery, and `buildMcpToolDefinitions` (one client shared
+  across a connection's tools, a failed connection skipped not thrown, an end-to-end
+  call through a fake stdio server). `@cogenta/api` — admin-only, the confirmation
+  refusal, "absent, pas refusée" at the REST boundary. `@cogenta/cli` — a real,
+  spawned `node` process (`test/fixtures/fake-mcp-server.mjs`) driven end to end
+  through a real `cogenta serve`/SQLite/HTTP stack: connection created, tested,
+  exposed, called by a real agent run with a scripted LLM vendor, proving the actual
+  child process received none of the host's real environment
+  (`COGENTA_AUTH_SIGNING_KEY` included) and that disabling a connection removes its
+  tool from what an agent can call without a restart.
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [08e394b]
+- Updated dependencies [d0a3250]
+- Updated dependencies [0e88f30]
+- Updated dependencies [750a10b]
+- Updated dependencies [08e394b]
+- Updated dependencies [edd0787]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [2285720]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [745ebd8]
+- Updated dependencies [960757d]
+- Updated dependencies [835d736]
+- Updated dependencies [cf005d4]
+- Updated dependencies [07c0f0a]
+  - @cogenta/core@0.5.0
+  - @cogenta/agents@0.3.0
+
 ## 0.1.4
 
 ### Patch Changes

@@ -1,5 +1,65 @@
 # @cogenta/fleet
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [0e88f30]
+- Updated dependencies [750a10b]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [257486e]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [c555723]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [2285720]
+- Updated dependencies [46572ba]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [745ebd8]
+- Updated dependencies [960757d]
+- Updated dependencies [07c0f0a]
+  - @cogenta/core@0.5.0
+  - @cogenta/plugins@0.3.0
+  - @cogenta/auth@0.4.0
+  - @cogenta/channels@0.3.0
+  - @cogenta/agents-builtin@0.2.0
+
 ## 0.1.4
 
 ### Patch Changes

@@ -1,5 +1,580 @@
 # create-cogenta
 
+## 0.3.0
+
+### Minor Changes
+
+- 0e88f30: L22 task 1/1bis: the agent runtime is real. `AgentRegistry` used to only enable/disable a fixed, in-memory declaration array — nothing ever executed. `@cogenta/agents` gains a real execution loop wiring (`createAgentRunner`, `agents/orchestrator.ts`) together with everything the loop needed but never had a home for: persistent, editable agent declarations (`createFileAgentDeclarationStore`), a persistent, encrypted-at-rest LLM provider store (`createFileProviderConfigStore`, AES-256-GCM keyed from `COGENTA_AUTH_SIGNING_KEY`, R7), and a "skills" instruction-text library (`createFileAgentSkillStore`, `skills/library.ts` — deliberately distinct from L7's marketplace skill registry). Three built-ins are seeded on first boot: the superagent ("Cogenta Agent", enabled by default, autonomy `propose`) and two disabled examples (a dependency-scanner agent backed by the new `deps.scan` tool, and a content-watch example). Autonomy has a new three-level UI mapping (`report-only`/`co-pilot`/`autopilot`) onto contract C's frozen `AutonomyLevel` vocabulary (`autonomy/levels.ts`) — the contract itself is unchanged.
+  
+  `@cogenta/api`'s `agents-router.ts` gains real `create`/`update`/`remove`/`run` capabilities (all optional on `AgentRegistryLike`, backward compatible with a caller that only ever built a fixed `createAgentRegistry`); two new routers, `providers-router.ts` and `agent-skills-router.ts`. All three routers now correctly `decodeURIComponent` path segments — a pre-existing gap in `agents-router.ts` this lot's own end-to-end test caught (the seeded superagent's name, "Cogenta Agent", contains a space). New `ErrorCode`s (`@cogenta/core`): `AGENT_DUPLICATE`, `AGENT_DISABLED`, `AGENT_NO_PROVIDER` (501, mirrors `SITE_PLAN_NO_PROVIDER` — R2's "no provider configured" is not a failure), `AGENT_BUILTIN_UNDELETABLE`, `PROVIDER_NOT_CONFIGURED`, `AGENT_SKILL_UNKNOWN`/`AGENT_SKILL_DUPLICATE`/`AGENT_SKILL_BUILTIN_UNDELETABLE`, `AGENT_REGISTRY_READ_ONLY` (501), `AGENT_RUNTIME_UNAVAILABLE` (503, mirrors `ASSIST_UNAVAILABLE`).
+  
+  **Breaking, within pre-alpha's existing minor-only convention** (see prior changesets' own note): `createAgentDelegateTool`'s tool name is no longer the fixed `agent.delegate` — it is now `agent.delegate.<slug-of-subagent-name>`, so an orchestrator offering several named sub-agents can expose each as a distinct, nameable tool instead of one ambiguous generic call. The permission stays the single, taxonomy-fixed `agent.delegate` (`tools@1.0`); no contract change.
+  
+  `@cogenta/cli`'s `cogenta serve` now always constructs this runtime (three file stores under `.cogenta/agents-runtime/`) and mounts `/api/agents`, `/api/providers` and `/api/agent-skills` unconditionally — R2 still holds: without a configured provider, every route above works except `POST /api/agents/:name/run`, which refuses with `AGENT_NO_PROVIDER` before any network call (proven end to end in `packages/cli/test/serve-agents.test.ts`, including a real tool-calling loop and an R4 permission-refusal case against a local HTTP double of the Anthropic Messages API). `create-cogenta` seeds the same three built-ins at scaffold time.
+  
+  The admin's "Agents" screen (`packages/admin`, private, no changeset) is genuinely editable now — create/edit/run/delete a sub-agent, per-tool permission checklist, autonomy/budget/skills/sub-agents — and gains two new screens, "Providers" and "Skills".
+- 168ee37: Wires the new `@cogenta/theme-association` package into `cogenta serve`'s
+  theme registry and dependency list (L25, Phase 1) — a site can now select
+  "Association" from the theme gallery, and the `association` blueprint's
+  `defaultTheme` resolves to a real, installed theme instead of falling back
+  to canonical. `create-cogenta` gains the `association` starting skin (a
+  warm off-white ground with a deep-green accent), matching the theme's own
+  default look before any AI-generated skin is chosen.
+  
+  Also fixes a real privacy bug found while verifying this theme end to end:
+  a public entry byline (`PageContent.entry.author`, contract D `theme@1.4`)
+  used to fall back to an author's login email when their account had no
+  display name — exactly the `displayName ?? email` fallback the
+  authenticated `admin-*` screens already use safely in a private context.
+  `create-cogenta` only ever asks for an email, so a freshly scaffolded
+  site's admin account has no display name by default, meaning **every**
+  themed site with author bylines enabled was publishing its own admin's
+  login email on the very first page a visitor could open. The byline is now
+  omitted rather than naming an email; a real display name still shows once
+  one is set.
+- 06d7c1d: The `blog` blueprint (L25 D4) now activates `@cogenta/theme-blog` by default (writes
+  `cogenta_theme.active_theme` and the theme package into the generated site's
+  `package.json`, no admin action needed), seeds a warm-paper/ink-blue starting skin
+  matching that theme's identity (`starting-skins.ts`, new `blog` key), and composes a
+  real eight-block home page (a featured-post hero, a "Latest" grid, a "Topics" icon rail,
+  a reader quote, a "From the archive" list, a newsletter panel, an "As featured in" press
+  strip, and an FAQ) instead of the previous three-block placeholder.
+  
+  Eight published demo posts (up from three), each with a real procedural cover image
+  (`demo-art`, ingested through the real media pipeline) and classified under one of four
+  categories and one or more of eight tags (up from two categories / three tags); header
+  (Home/Writing/About) and footer (About/Archive/RSS) menus plus a "Subscribe" header
+  action; `general.tagline`/`general.socialLinks`/`general.footerNote` seeded.
+  
+  `post` now declares `publishedAt: f.datetime()` (the same field `docs/04-contrats.md`'s
+  own contract-A example shows) — without it, `createContentStore`'s publish-time default
+  never fires (it is conditioned on the collection declaring the field), so every post's
+  `renderEntryHeader` meta line silently had no date, only a byline and reading time.
+  
+  Breaking for anything that imported the blueprint's old fixed exports: `BLOG_DEMO_PAGES`
+  is replaced by `buildBlogDemoPages(media)`, a function of the seeded media map — the
+  same shape the `store` blueprint's `buildStoreDemoPages` already uses, since the home
+  page's hero backdrop and quote avatar are real seeded images now, not literals a static
+  constant could hold. `BLOG_DEMO_POSTS`/`BLOG_DEMO_CATEGORIES`/`BLOG_DEMO_TAGS` keep their
+  previous shape, with new content.
+- cf31bfb: Audit fiche 06/04/15 (2026-09-01), corrections A3 — three real gaps in every
+  blueprint a scaffolded site ships with:
+  
+  **SEO fields, on every routed collection of every blueprint.** The admin's
+  SEO panel (`seo-panel.tsx`) and `@cogenta/seo`'s rendering have always read
+  `seoTitle`/`seoDescription`/`seoImage`/`seoNoindex` by naming convention —
+  but no blueprint declared them, so the panel rendered nothing for any entry
+  of any blueprinted site. All nine real blueprints (`blog`, `magazine`,
+  `portfolio`, `vitrine`, `documentation`, `association`, `restaurant`,
+  `saas`, `store`) now declare the four fields on their routed collection(s),
+  via a new shared `SEO_FIELDS` export (`blueprints/content-pack.ts`) spread
+  into each collection's `fields`. `seoCanonical` is deliberately not
+  included — rarely useful for a brand-new site, left as a field an editor
+  adds by hand if they ever need it.
+  
+  **`blog`'s `category`/`tag` are now real taxonomies, not collections.**
+  `schema@2.0` (ADR-0022) already froze `defineTaxonomy()`/`f.taxonomy()` for
+  exactly this shape — classification with no status, no version, no
+  lifecycle of its own — and the `blog` blueprint, the one every quick-start
+  path reaches for, never adopted it. `post.category`/`post.tags` are now
+  `f.taxonomy()` fields, `category`/`tag` are `defineTaxonomy()` declarations
+  seeded through the real `TaxonomyStore`, and the scaffolded
+  `cogenta.schema.mjs` now carries a `taxonomies` named export alongside its
+  default collections export (`BlueprintContentPack` gains an optional
+  `taxonomies` field, `scaffoldSite`/`resetPlaygroundData` both wire it
+  through `createSchemaTables`/`dropSchemaTables`). A scaffolded blog's
+  Taxonomies admin screen is now populated from the first run, with no manual
+  step. **Behaviour change**: `category` no longer has its own route
+  (`/blog/category/:slug` is gone) — a taxonomy declares no `routing`, unlike
+  the collection it replaces; a themed term-archive page is not part of this
+  fix.
+  
+  **`package.json` gains `scripts.start` (`cogenta serve`) and
+  `engines.node` (`>=22.13`)**, matching the version `cogenta doctor` and the
+  installer itself already require — `npm start` and most PaaS
+  auto-detection now work on a scaffolded site without a manual step.
+  
+  No contract change: `f.taxonomy()`/`defineTaxonomy()` were already part of
+  the frozen `schema@2.0` contract (ADR-0022); this is a blueprint choosing
+  to use them, not a new capability.
+- 5d96717: L25 Phase 1 — new `documentation` blueprint: `@cogenta/theme-docs` as its default
+  theme, a `doc_page` collection (`section`/`order`/`body: f.blocks()`), ten published
+  doc pages across three sections with real technical demo content (install, configure,
+  deploy, content model, themes, plugins, CLI/config/HTTP references — headings, code
+  blocks, lists), a six-block home page (`hero` → `featureGrid` "Start here" →
+  `collectionList` "All guides" → `prose` "Quick install" → `faq` → `cta` "Contribute on
+  GitHub"), header/footer/`header-action` menus, tagline, three social links and a
+  footer note, and a decorative `coverArt` composition for the hero — matching the
+  `documentation` starting skin (`starting-skins.ts`, neutral blue-grey with a blue
+  accent) already present.
+- 5d72083: Add the `restaurant` blueprint (L25 Phase 1): `menu_item`/`page` collections, twelve
+  published dishes across four categories (Starters/Mains/Desserts/Drinks) each with a
+  `photo` field, a rich nine-block home page (hero, story, priced menu, gallery, stats,
+  testimonial, hours accordion, map embed, closing call to action), header/footer/
+  header-action menus, a tagline, three social links, a footer note, and its own starting
+  skin (warm cream/charcoal/copper-wine, matching `@cogenta/theme-restaurant`'s own default
+  palette). `defaultTheme: '@cogenta/theme-restaurant'` is applied to the scaffolded site
+  without any action in the admin. Demo visuals are seeded through the real `demo-art`/
+  media pipeline (L25 task A0b); when no media is seeded (as in a unit test building the
+  demo blocks directly), the gallery block is left out entirely rather than emitted with an
+  empty `items` array, which contract B rejects.
+- 39d4be1: The `saas` blueprint (L25, "templates pro") is now a real, pro-looking
+  starting point rather than a bare features list: it activates
+  `@cogenta/theme-saas` by default, ships that theme's own violet-blue
+  starting skin (`STARTING_SKINS.saas`), and seeds a ten-block home page (hero
+  with a mesh-gradient backdrop, a trust-logo strip, a six-item feature grid,
+  a product shot, usage stats, a testimonial, a second quote, a three-tier
+  pricing table, an FAQ, and a closing call to action), plus real `pricing`
+  and `about` pages, header/footer/header-action menus, a tagline, three
+  social links and a footer note — all seeded through the real content store
+  and the real procedural-media pipeline (`seedDemoMedia`), never mocked.
+  
+  The `feature` collection gains `icon` (a symbol name `@cogenta/theme-kit`'s
+  `renderIcon` recognises) and `coverImage`; six real demo features are
+  seeded (workflow automation, audit log, SSO, integrations, analytics, API),
+  each with a real icon and cover photo, and the home page's feature grid
+  links each item to its own real, routed feature page.
+- f2ceb34: The `store` blueprint (L25, "templates pro" passe pro on
+  `@cogenta/theme-ecommerce`) is now a real, pro-looking storefront rather
+  than a six-product sampler: its starting skin now matches
+  `@cogenta/theme-ecommerce`'s own default (`tokens.json`) — a magenta
+  accent, Archivo/Fraunces — rather than the earlier placeholder teal that
+  never matched what the theme actually ships. The catalogue grows to twelve
+  products across four categories (Apparel, Home, Accessories, Outdoor),
+  three of them `inStock: false` so the new out-of-stock badge has something
+  real to show.
+  
+  The home page grows to the ten-block composition the brief asks for: hero
+  → category tiles (a `gallery`, each tile's picture captioned by its own
+  category name) → "New arrivals" grid → a promo band → a "Why buy from us"
+  feature grid (real icons: `truck`, `refresh`, `shield`, `credit-card`) → a
+  "Best sellers" grid (a different cut of the same catalogue) → a testimonial
+  with an avatar → a trust-badge strip → an FAQ → a newsletter call to
+  action. Four new pages join `home`/`shop`: `new` (a dedicated arrivals
+  page), `categories` (one real filtered grid per category, via
+  `collectionList.filter`), `about`, and `legal` — `shipping-returns` is
+  renamed `help` to match the footer nav the brief asks for
+  (`Shop`/`Help`/`Legal`). Header nav becomes `Shop`/`New`/`Categories`/`About`,
+  with `Shop now` as the header action. A third social link (Pinterest) joins
+  Instagram and X. All seeded through the real content store and the real
+  procedural-media pipeline (`seedDemoMedia`, 23 images total), never mocked.
+- f2cda24: L25 task A0b — procedural demo visuals, real media seeding, and a blueprint's own
+  default theme/menus/settings, wired end to end for the `store` blueprint.
+  
+  - New `create-cogenta/dist/demo-art` module: a zero-dependency PNG encoder
+    (`node:zlib` deflate + a hand-written CRC-32 table, no image library) and a
+    signed-distance-field renderer (soft mesh gradients, anti-aliased geometric
+    shapes, deterministic grain) with presets — `heroArt`, `coverArt`, `avatarArt`,
+    `logoArt`, `productArt` — each taking the same `Palette` shape as a blueprint's
+    `SkinTokens.color`. Deterministic per `seed` (a `mulberry32` PRNG, never
+    `Math.random`). A 1600×1000 hero renders in well under the acceptance bound.
+  - `seedDemoMedia(deps, specs)` (new `blueprints/demo-media.ts`) renders each spec
+    and ingests it through `@cogenta/api`'s newly exported `ingestMediaUpload` — the
+    exact same pipeline (real-type check, GPS scrub, storage write, variants) a
+    human's own upload takes, using the scaffolded site's real storage driver and
+    image processor.
+  - `BlueprintContentPack` gains four optional fields, all additive:
+    `defaultTheme` (an npm theme package `scaffoldSite` activates and adds to the
+    generated `package.json`), `menus` (header/footer/header-action navigation,
+    seeded through the real `MenuStore`), `siteSettings` (seeded through the real
+    `SiteSettingsStore`, tolerant of a key the registry does not yet declare — logs
+    a warning rather than failing the whole scaffold), and `mediaSpecs` (procedural
+    visuals seeded before `seedDemoContent` runs). `SeedDemoContent`'s signature
+    changes from three positional parameters to a single `SeedContext` object
+    (`{ db, defaultLocale, adminId, media }`) — every existing blueprint updated
+    mechanically, `media` unused by all but `store`.
+  - `ScaffoldResult` gains `activeTheme`/`mediaSeeded`/`menusSeeded`/`siteSettingsSeeded`
+    so the installer's own recap can report what was actually seeded.
+  - `store` is the first blueprint wired end to end: `defaultTheme:
+    '@cogenta/theme-ecommerce'`, a hero and six product photos rendered and
+    ingested at scaffold time, a new `shop` catalogue page, header/footer menus and
+    a header call-to-action, and a starting `general.tagline`. `blank` is
+    byte-for-byte unchanged (a new test proves it — no media, no menus, no
+    `active_theme` row, identical `package.json`).
+  
+  Honest cost, measured: seeding `store`'s seven demo images (rendering plus real
+  variant generation) takes roughly 25-30 seconds on a machine with `sharp`
+  available, longer on a WASM-only host — most of that is the same real
+  image-processing cost a human's own upload would pay, not overhead this task
+  added on top of it. Worth knowing before wiring more blueprints with their own
+  image sets in the phase that follows.
+- 5769315: `demo-art`'s procedural visuals (L25 D1) are redesigned to a flat, structured register —
+  D5, a binding product-owner rule handed down after seeing the first generated templates:
+  "zero dégradé... typiquement le style cent pour cent IA". Every hero, cover, avatar,
+  logo, and product composition is now built only from solid colour fields, crisp
+  geometric shapes with a hairline anti-aliased edge, dot/line grids, hard-edged colour
+  bands, a checkerboard, and hard-edged organic blobs (circles fused by a smooth minimum,
+  never blurred) — the register of Basecamp, Notion, GitHub, and Stripe's documentation
+  illustrations, not a "mesh gradient" landing page.
+  
+  `render.ts` gains four new flat layer kinds — `fill` (an honest full-canvas solid,
+  replacing a one-stop `gradient` standing in for a background), `bands` (two or more flat
+  colours tiled edge-to-edge with a hard seam), `checker` (a bounded checkerboard), and
+  `blob` (organic hard-edged silhouettes) — plus an optional bounding box on `dots` so a
+  grid can be confined to part of the canvas. `gradient`/`glow`/`vignette` stay defined and
+  tested in `render.ts` as a capability; nothing in `compositions.ts` emits one anymore
+  (`test/demo-art/flat-design.test.ts` is the gate that holds this line across every
+  variant, seed, and palette).
+  
+  `heroArt`'s `variant` keeps its existing values (`mesh`/`geometric`/`diagonal`/`radial`/
+  `dark`/`warm`) as aliases of six flat families — grid & node, colour blocks, diagonal
+  bands, concentric rings, an editorial mark on ink, and arch & sun — plus clearer new
+  names (`grid`/`blocks`/`bands`/`rings`/`ink`/`sun`) for the same families; a name and its
+  alias always render byte-identical output, so no existing caller needs to change. Every
+  hero variant keeps its left ~55% a single flat colour so a title reads cleanly over it
+  (verified geometrically, not just by eye). `coverArt` picks from nine flat families
+  (colour block, grid & node, stripe band, concentric, editorial mark, isometric stack,
+  arch & sun, checker/half-tone, duotone blobs). New `oklch.ts` (sRGB↔OKLCH, no dependency)
+  derives 2–3 flat "companion tones" from a palette's `accent` by hue rotation, and clamps
+  a dedicated warm background tone into the amber/terracotta arc so the "warm"/"sun" family
+  reads as warm even from a cool accent (a store's teal, say) rather than barely rotating
+  it.
+  
+  Two real bugs found and fixed during visual review (not just unit tests): the "arch &
+  sun" and "isometric stack" cover families never consumed their random stream, so any two
+  seeds landing on the same family rendered byte-identical output — both now vary position,
+  scale, and colour per seed like every other family.
+- fb2aaee: L25 task A0c — a quality overhaul of the procedural demo-art module (A0b) so
+  `heroArt`/`coverArt`/`avatarArt`/`productArt` read as a premium SaaS/agency
+  template rather than an out-of-focus photo of skin.
+  
+  - New `demo-art/oklch.ts`: a zero-dependency sRGB↔OKLCH converter
+    (Björn Ottosson's OKLab, polar form) with `rotateHue`/`withChroma`/
+    `withLightness`/`withMinChroma`. Every "derive a second/third hue from one
+    accent" move in `compositions.ts` now happens in this perceptually uniform
+    space instead of mixing sRGB toward grey or white/black, which desaturates
+    a hue as a side effect rather than moving lightness or chroma on their own.
+  - `render.ts` gains per-shape gradient fills (`linear`/`radial`, computed in
+    world space so "light falls from the top-left" reads consistently across
+    rotated shapes), soft drop shadows, per-shape opacity and blend modes
+    (`screen`/`multiply`), and a compiled bounding box per layer so a small
+    accent shape only costs work over the pixels it can touch.
+  - `heroArt` gains a `variant` parameter (`mesh`/`geometric`/`diagonal`/
+    `radial`/`dark`/`warm`) — every variant keeps its left half calm (low local
+    contrast, close to a flat wash) so a title sits over it legibly, with every
+    mesh point, glow and shape anchored at `x ≳ 0.55`.
+  - `coverArt` gains nine visibly different layout families (translucent
+    screen-blended discs, a gradient-shaded geometric card stack, a diagonal
+    split, offset concentric rings, a wave band, a dot grid with a glowing
+    node, thin crisp lines over a soft blob, an editorial flat field, a dark
+    accent-tinted glow), picked deterministically by seed.
+  - `productArt` gains six gradient-shaded, drop-shadowed, specular-highlighted
+    "object" families (rounded card, capsule, sphere, stacked cards, torus,
+    hexagonal tile) on a grounded backdrop with a contact shadow, so a seeded
+    product photo reads as a stylised 3D render rather than a flat shape.
+  - **Real bug found and fixed while eyeballing a rendered contact sheet, not
+    just reading code**: `meshHues`' "counter" hue used a single fixed −55°
+    rotation. That is safe for a violet/blue-violet accent (this project's own
+    SaaS-flavoured palettes), but the *same* −55° pushes a teal/cyan accent —
+    this project's own `store` starting skin, hue ≈186° — straight into
+    OKLCH's yellow-green "olive" band (≈131°, `#427000`), visible as a dull
+    army-green blob against the accent's own clean teal in `hero-geometric`/
+    `hero-diagonal`/`hero-dark`. `rotateAwayFromMud` now checks the actual
+    candidate hue and flips direction (+55° instead, landing on a clean
+    blue-violet) rather than committing to one sign — correct for both this
+    project's shipped palettes and whatever hue an AI-generated skin (L18/L19)
+    hands it.
+  
+  No new dependency (R9/R10): `oklch.ts` is arithmetic only, same discipline as
+  the rest of `demo-art`. Public signatures unchanged (`renderArt(spec)`,
+  `heroArt(palette, variant?, seed?)`, `coverArt(palette, seed?)`,
+  `avatarArt(palette, seed?)`, `logoArt(seed?)`, `productArt(palette, seed?)`),
+  so `demo-media.ts`'s existing `mediaSpecs` wiring from A0b needs no changes.
+- 88cd685: Richens the `magazine` blueprint to match `@cogenta/theme-magazine`'s L25 pro pass.
+  
+  `article` gains `coverImage: f.media({ accept: ['image'] })`. Twelve published demo
+  articles across four sections (News, Culture, Opinion, Business — three each), credible
+  headlines and copy, each with a real procedural cover image (`coverArt`, via
+  `seedDemoMedia`). `home` grows from 3 to 9 blocks: the lead article's own `hero`, a
+  "Top stories" front-page `collectionList` (`layout: 'grid'`, 7 entries), one rubric-rail
+  `collectionList` per section (`layout: 'list'`, `filter: { section }`, 4 entries each — the
+  first blueprint in this repo to use `collectionList.filter`), a newsletter `cta`, a reader
+  `quote` (with a procedural avatar) and a "Partners" `logoStrip` (5 procedural logo marks).
+  Header/footer/`header-action` menus, `general.tagline`/`socialLinks`/`footerNote`, and
+  `defaultTheme: '@cogenta/theme-magazine'` are all seeded through the real stores, the same
+  pattern every other L25 blueprint uses.
+  
+  `buildMagazineDemoPages(media)` replaces the old `MAGAZINE_DEMO_PAGES` constant (same
+  `media: Readonly<Record<string, string>>` → pages shape every other richened blueprint
+  uses since L25 task A0b) — called with `{}` it still renders a valid `home`/`about`, minus
+  the now-media-dependent hero cover, quote avatar and "Partners" strip (contract B requires
+  at least one item, so an empty logo list is omitted rather than sent empty).
+  
+  Fixes `test/magazine-blueprint.test.ts` and `test/blueprint-demo-blocks.test.ts` to match:
+  updated slugs/titles, the new home-page block keys (`demo-home-top-stories`,
+  `demo-home-rail-<section>`), and a fake `RenderContext.image()` that returns a real
+  `ImageSource` instead of throwing, now that the hero genuinely carries the lead article's
+  own cover.
+- a6220bb: L25 Annexe pro pass on the `portfolio` blueprint, to match
+  `@cogenta/theme-portfolio`'s own pro pass.
+  
+  `project` gains `coverImage` (`f.media`) and an optional `blocks` field (a
+  per-project, auto-built "Role / Year" panel — see the `theme-portfolio`
+  changeset for why). Eight demo projects replace the previous three, each
+  with distinct studio copy and a `coverArt` composition seeded so the eight
+  covers read as genuinely different families, not a repeated palette. The
+  home page grows from three blocks to the full nine of the Annexe brief:
+  `hero` (an "editorial mark on dark" backdrop), `collectionList` "Selected
+  work" (`grid`, 6), `stats`, `featureGrid` "Services" (three real icons),
+  `logoStrip` "Clients" (five marks), `quote`, `collectionList` "The full
+  index" (`list`, all 8), `testimonial`, and a closing `cta`. `about`,
+  `contact` and `legal` pages are added (`about` keeps its existing prose +
+  stats; `contact` and `legal` are new, since the header/footer navigation
+  below links to both). Real menus are seeded — header (Work/Services/About/
+  Contact, the first two as real in-page anchors this theme's own `renderPage`
+  now honours), footer (Work/About/Contact/Legal), and a `headerAction`
+  ("Let's talk" → `/contact`) — plus `general.tagline`, three
+  `general.socialLinks`, and a `general.footerNote`. `defaultTheme` is set to
+  `@cogenta/theme-portfolio`.
+  
+  **A real, verified mismatch found and fixed**: `starting-skins.ts`'s
+  `portfolio` entry was a terracotta, soft-shadow, system-font palette dating
+  from L22 task 10 — written before `@cogenta/theme-portfolio` (a brutalist,
+  violet-accent, hard-offset-shadow, Bricolage Grotesque/Fraunces/JetBrains
+  Mono theme) existed. A freshly scaffolded `portfolio` site therefore ran
+  this theme's real CSS against a palette it was never designed around.
+  Brought into exact alignment with `packages/theme-portfolio/tokens.json`
+  (colour, font stack, scale, radii, motion, shadow) — verified by scaffolding
+  a real site and reading the written `theme.tokens.json` back.
+  
+  `buildPortfolioHomeBlocks`/`buildPortfolioDemoPages` replace the previous
+  `PORTFOLIO_DEMO_PAGES` constant (now built from `SeedContext.media`, the
+  same pattern every other L25-era blueprint already uses) —
+  `test/blueprint-demo-blocks.test.ts`'s portfolio import is updated
+  accordingly (`buildPortfolioDemoPages({})`), unaffected in what it checks.
+  
+  Verified: `typecheck`, `build`, and `test/portfolio-blueprint.test.ts`
+  (11/11, rewritten for the new content and given explicit per-test timeouts
+  — this blueprint now renders/ingests sixteen procedural media compositions
+  per `scaffoldSite` call, above the 5s default on this machine),
+  `test/blueprint-demo-blocks.test.ts` and `test/starting-skins.test.ts`
+  (both green, unaffected in what they assert). A real site was scaffolded
+  with `--config`, served with the workspace's own `cogenta serve`, and
+  inspected in a real browser at 360/768/1280 on the home, a project and the
+  about page — the mobile menu was actually opened and closed.
+- a1b52af: L22 task 10 — real site-type presets at installation, not just an empty content blueprint.
+  
+  - New `store` blueprint (tenth in `BLUEPRINTS`): a `product` collection (name, slug, description, price, category, stock, photo) plus the usual `page` collection, six seeded demo products across three categories, a home page with a live product grid, and a "Shipping & returns" page. Deliberately contract A only — it does not reach into `@cogenta/commerce` (contract E), since that domain has no admin screens or storefront blocks yet (`docs/lots/L10-cms-complet.md` § L15); a product's optional `contentRef` is exactly the seam for wiring the two together later, once `@cogenta/commerce` is.
+  - `blueprintSettings`'s per-site-type page-cache recommendation and `inferBlueprint`'s brief-matching rules both learn `store` (`boutique`, `e-commerce`, `panier`, `checkout`, …).
+  - New: a **starting skin per site type**, for `portfolio`, `magazine` and `store` (`./blueprints/starting-skins.ts`) — fixed, hand-picked `SkinTokens` (not AI-generated, so this holds with no LLM provider configured at all, R2), each validated against the same `validateSkin` gate an AI-generated skin has to clear. `scaffoldSite` now writes a blueprint's own starting skin instead of `@cogenta/theme-canonical`'s generic default when no AI skin was generated or approved. `ScaffoldResult.skinSource` gains a third value, `'preset'`, alongside the existing `'generated'`/`'default'` — additive, but a consumer switching exhaustively on that union should account for it.
+  
+  No change to the LLM-provider question itself (still the site-wide `llm` block in `cogenta.config.mjs`, asked once at install time) — verified it stays the only provider-configuration path this installer offers, so it does not duplicate the admin "Providers" screen a parallel L22 task is adding.
+- 599b4ae: L25 "templates pro" pass on the `vitrine` blueprint: `defaultTheme` is now
+  `@cogenta/theme-entreprise` (a fresh `vitrine` site activates it with no
+  admin action), and the home page grows from six blocks to eleven — hero
+  (procedural flat-geometric backdrop), a five-logo trust strip, a services
+  `featureGrid` with real icons, a four-figure KPI band, a wide engagement-shot
+  `mediaFigure`, the full services `collectionList` with cover photos, a
+  featured `testimonial` with an avatar, a second `quote`, an FAQ, a closing
+  `cta`, and a short about teaser.
+  
+  `service` gains `icon` and `coverImage` fields; `testimonial` gains
+  `avatar`. Six services (was three) and three testimonials (was two) are
+  seeded, published, with real procedural cover art and avatars via the demo-art
+  pipeline. A new `contact` page joins `home`/`about`. Header/footer menus,
+  a `headerAction` ("Get a quote" → `/contact`), a tagline, three social links
+  and a footer address note are seeded through the real `MenuStore`/site
+  settings, matching every other L25 blueprint. `vitrine` gains its own
+  starting skin (`starting-skins.ts`, copied from `theme-entreprise`'s own
+  default tokens) — the last blueprint with a content pack that had none.
+  
+  `VITRINE_DEMO_PAGES` is now built from `buildVitrineDemoPages(media,
+  serviceIdBySlug)`, media- and id-driven like every other L25 blueprint;
+  `VITRINE_DEMO_PAGES` itself stays exported as `buildVitrineDemoPages({})` for
+  any caller that does not need real media.
+
+### Patch Changes
+
+- 2fb2101: Add the editorial site settings screen (fiche 23, ADR-0025's third settings
+  category between `cogenta.config.mjs` — infrastructure, read-only — and
+  `localStorage` — personal preference).
+  
+  - `@cogenta/schema` gains a typed key/value site-settings store
+    (`createSiteSettingsStore`) backed by a closed registry: general (title,
+    tagline, admin email, time zone, date/time style), reading (home path,
+    posts per page), media (max upload size), and privacy (policy path, cookie
+    banner). Every setting has a declared scope (site or per-locale), a default,
+    and a required permission; writing an undeclared key is refused.
+  - `@cogenta/api` gains `createSitePlanRouter`'s sibling `GET|PATCH
+    /api/settings` and extends `GET /api/config-status` with `storage`,
+    `llm`/`embeddings`/`imageGeneration`/`vector`, and `billingConfigured` —
+    never a secret, never a credential.
+  - `@cogenta/cli` wires the new store into `cogenta serve`/`dev`, and
+    `theme-render.ts` now serves the configured home path instead of always
+    falling back to the hardcoded `/home`.
+  - `@cogenta/core` adds `SITE_SETTING_UNKNOWN`/`SITE_SETTING_INVALID` and a
+    `secret-hygiene` module the settings screen uses to detect a
+    `database.url` with embedded credentials, or a `.env` file readable by
+    other users on shared hosting.
+  - `create-cogenta` now writes the generated `.env` (which holds
+    `COGENTA_AUTH_SIGNING_KEY`) with mode `0o600` instead of the default —
+    closing the shared-hosting exposure `docs/hebergement-mutualise.md`
+    already named as a known gap.
+  
+  The admin's old single-control "Paramètres" screen (the signed-in account's
+  own interface language) moves to "My profile"; `/settings` is now the
+  site-wide editorial screen.
+- a915e1a: Fixes from the final live review of every scaffolded blueprint (L25): the association
+  theme's event cards stack their cover over a date + text row and never exceed three
+  columns (a fourth column broke every word in two); embed placeholders name the provider
+  ("Open on YouTube", "Open the original") instead of printing its raw id; cover art walks
+  its flat families by seed so consecutive covers never repeat; the magazine front page no
+  longer opens on the same story twice.
+- f819625: A scaffolded blueprint no longer ends its home page (or any template page) with a
+  "Post comment" form: the `page` collection every blueprint builds through
+  `definePageCollection` is opted out of comments at the collection level — the same switch
+  the admin's Discussion screen exposes — while posts, articles and every other collection
+  keep the site-wide `discussion.enabled` default.
+- 2299569: L20 audit, two real bugs in public-facing pages.
+  
+  **`/search` found nothing, even for words plainly on a freshly scaffolded
+  site's own seeded demo content.** Every blueprint's `seedDemoContent`
+  (`create-cogenta`) and `resetPlaygroundData`'s reseed write straight through
+  `createContentStore`, never through the `withSearchIndexing`-wrapped store
+  `cogenta serve` builds at startup — so the seeded rows existed in the content
+  tables but never reached the search index table. Both now reindex every
+  seeded collection against the site's real search index (`createSearchIndex` +
+  `reindexAll`, the same pair `cogenta`'s own "Reindex search" tool uses)
+  immediately after seeding, so the physical index and the content it describes
+  are never out of step from the moment a site exists.
+  
+  **`/search` and `/forms/{name}` rendered with none of the site's visual
+  chrome**, even though both already linked the site's stylesheet: they built
+  their own thin `<html>` shell rather than the frame every collection page
+  gets (skip link, `color-scheme` meta, header with primary nav, footer with
+  footer nav) — the stylesheet loaded, but the markup its selectors target was
+  never on the page. `@cogenta/cli` extracts that frame into a new
+  `renderPageChrome` (`theme-render.ts`) and both pages now call it, menu
+  wiring included. `renderFormPage`/`renderFormNotFoundPage` are now async and
+  take an `AccessContext`, to match. The comment thread appended after an entry
+  page shared the same gap — `@cogenta/theme-canonical`'s `base.css` gains the
+  missing `.cg-search__*`, `.cg-form__*` and `.cg-comment__*` rules, at the same
+  page-width measure `.cg-page__title` already sets.
+- Updated dependencies [684d743]
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [a2516aa]
+- Updated dependencies [08e394b]
+- Updated dependencies [d0a3250]
+- Updated dependencies [0e88f30]
+- Updated dependencies [750a10b]
+- Updated dependencies [08e394b]
+- Updated dependencies [deece35]
+- Updated dependencies [edd0787]
+- Updated dependencies [2c4de46]
+- Updated dependencies [39d4be1]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [7d80741]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [168ee37]
+- Updated dependencies [0c7ecef]
+- Updated dependencies [e01efae]
+- Updated dependencies [36744d3]
+- Updated dependencies [5463fd0]
+- Updated dependencies [b3ce406]
+- Updated dependencies [4335296]
+- Updated dependencies [722fc6b]
+- Updated dependencies [916ef34]
+- Updated dependencies [af57fa2]
+- Updated dependencies [39d4be1]
+- Updated dependencies [e8296a5]
+- Updated dependencies [33163e6]
+- Updated dependencies [39d4be1]
+- Updated dependencies [4335296]
+- Updated dependencies [5d72083]
+- Updated dependencies [322d1a3]
+- Updated dependencies [7b7ec0b]
+- Updated dependencies [b60b198]
+- Updated dependencies [7a59646]
+- Updated dependencies [3e22108]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [967ec5a]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [e75b23e]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [a15b1ae]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [c555723]
+- Updated dependencies [9bd3042]
+- Updated dependencies [272b606]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [0dceff3]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [29e4982]
+- Updated dependencies [dda55d6]
+- Updated dependencies [befad6d]
+- Updated dependencies [befad6d]
+- Updated dependencies [befad6d]
+- Updated dependencies [68f5485]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [e8061e2]
+- Updated dependencies [fe789cf]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [77c680d]
+- Updated dependencies [86fc9cf]
+- Updated dependencies [3fb9e11]
+- Updated dependencies [54409f3]
+- Updated dependencies [f47e893]
+- Updated dependencies [2285720]
+- Updated dependencies [46572ba]
+- Updated dependencies [a6530f6]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [dd9e9a2]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [8c98093]
+- Updated dependencies [1995d35]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [1cdf7d7]
+- Updated dependencies [745ebd8]
+- Updated dependencies [2299569]
+- Updated dependencies [4bb6ba3]
+- Updated dependencies [960757d]
+- Updated dependencies [2d84729]
+- Updated dependencies [b50f7bb]
+- Updated dependencies [835d736]
+- Updated dependencies [cf005d4]
+- Updated dependencies [07c0f0a]
+- Updated dependencies [a6530f6]
+- Updated dependencies [9e67928]
+- Updated dependencies [06d7c1d]
+- Updated dependencies [19fe157]
+- Updated dependencies [17727db]
+- Updated dependencies [954460e]
+- Updated dependencies [421cf33]
+- Updated dependencies [3824e8e]
+  - @cogenta/theme-canonical@1.0.0
+  - @cogenta/core@0.5.0
+  - @cogenta/schema@0.4.0
+  - @cogenta/api@2.0.0
+  - @cogenta/cli@0.5.0
+  - @cogenta/agents@0.3.0
+  - @cogenta/auth@0.4.0
+  - @cogenta/blocks@1.0.0
+  - @cogenta/render@0.2.0
+  - @cogenta/comments@0.2.0
+
 ## 0.2.1
 
 ### Patch Changes

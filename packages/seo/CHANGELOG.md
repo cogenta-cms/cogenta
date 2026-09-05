@@ -1,5 +1,173 @@
 # @cogenta/seo
 
+## 0.3.0
+
+### Minor Changes
+
+- 967ec5a: Add editorial SEO controls: the conventional `seoTitle`/`seoDescription`/`seoImage`/`seoNoindex`/`seoCanonical` override fields, a title-template option, and an admin-only door onto what `@cogenta/seo` actually computes (fiche 13).
+  
+  - `@cogenta/seo`'s `buildMetaTags` now reads the conventional `seoTitle`, `seoDescription`,
+    `seoImage` and `seoCanonical` fields when a collection declares them — an ordinary field a
+    site's own schema adds, never a contract A change. A collection that declares none of
+    them behaves exactly as it did before this change. `MetadataOptions` gains
+    `titleTemplate`/`collectionTitleTemplates` (`%title% — %site%`-style composition, applied
+    only to a *derived* title, never to an explicit `seoTitle` override). `isIndexable` now
+    also excludes an entry whose collection declares `seoNoindex` and has it switched on, via
+    the new exported `isSeoNoindexed` — this is also what keeps a noindexed page out of
+    `/sitemap.xml` while it still carries `noindex` in its own `<head>`.
+  - `@cogenta/api` gains `createSeoRouter` (`SeoRouter`, `SeoRouterOptions`, `SeoDiagnostics`):
+    `POST /api/seo/preview` computes the real head for one unsaved edit (gated by `update` on
+    the named collection), and `GET /api/seo/diagnostics` is a site-wide, admin-only report —
+    sitemap size and inclusion reasons per collection, `robots.txt`, and content-quality
+    anomalies (missing descriptions, titles over 60 characters, duplicate titles, and the
+    "published but the sitemap would be empty" class of bug this fiche is named for). Both
+    routes call the exact same `buildMetaTags`/`isIndexable`/`isPublished` the public render
+    path calls — neither one re-derives anything. `@cogenta/api` gains a new dependency on
+    `@cogenta/seo`.
+  - `@cogenta/cli` mounts `/api/seo` in `cogenta serve`, next to `/api/redirects` and
+    `/api/search`.
+  
+  All additions are additive and backward compatible: a collection that declares none of the
+  conventional SEO fields, and a caller that never sends `titleTemplate`, see no behaviour
+  change.
+- 4bb6ba3: Fiche 50, tasks 1-5 — direct sitemap/robots.txt links from the Diagnostic tab, Search Console/Bing site verification (meta tag only, no OAuth — R1/R7), a hand-written robots.txt addendum, and wiring the two indexing extras (`indexnow.ts`/`llms-txt.ts`) that were written and unit-tested since L3/L9 but never reachable from any route or setting. Task 6 (RSS/Atom) is explicitly out of scope, per the fiche's own "à confirmer".
+  
+  - **`@cogenta/seo`**: `RobotsOptions` gains `customRules` — an admin's own robots.txt lines, merged in verbatim by `renderRobotsTxt` after the derived group(s) and before the `Sitemap:` directive. New export `robotsRuleDisallowsEverything(text)` — true when `text` contains a bare `Disallow: /`, so a caller (the admin's custom-rules editor, in particular) can confirm before saving a rule that would block every crawler.
+  - **`@cogenta/schema`**: `SITE_SETTINGS_REGISTRY`'s `seo` group gains six settings — `seo.googleSiteVerification`/`seo.bingSiteVerification` (meta-tag verification tokens), `seo.robotsCustomRules` (free text, merged into `/robots.txt`), `seo.indexNowEnabled`/`seo.indexNowKey` (off by default), `seo.llmsTxtEnabled` (off by default). All admin-only, all in the existing `SiteSettingsStore` — no new table.
+  - **`@cogenta/api`**: `SeoRouterOptions` gains `robotsCustomRules` (an async getter, same "read live" contract as `titleDefaults`) — the Diagnostics screen's `robots.content` preview now shows the exact document `/robots.txt` serves, custom rules included, and `disallowsEverything` also flags a custom rule that blocks every crawler.
+  - **`@cogenta/cli`**: `seo.ts`'s `SeoRenderDefaults` gains `googleSiteVerification`/`bingSiteVerification`/`robotsCustomRules`; new export `siteVerificationMetaTags` renders the two `<meta>` tags. New export `SeoOperationalSettings`/`readSeoOperationalSettings` for the two off-by-default extras. `RobotsRenderOptions`/`renderRobots` gain `customRules`. `PageChromeOptions` (`theme-render.ts`) gains `seo`, so `/search` and `/forms/{name}` carry the same verification tags every entry page does. `cogenta serve` gains `GET /llms.txt` (404 unless `seo.llmsTxtEnabled`) and IndexNow's ownership-proof key file at `/<key>.txt` (served only when the requested key matches the configured one), and pings IndexNow on a successful publish/unpublish response when `seo.indexNowEnabled` is on — never blocks or fails the response it follows.
+  
+  Admin (`@cogenta/admin`, private, no changeset): the SEO screen's Général tab gains a search-engine-verification card and an IndexNow/llms.txt card (with a "Generate a key" button); the Diagnostic tab gains "Open sitemap.xml"/"Open robots.txt" links and an editable robots.txt custom-rules field that asks for confirmation before saving a rule containing `Disallow: /`.
+- 960757d: Fiche 70 (SEO platform parity — AIOSEO/The SEO Framework/MonsterInsights/Site
+  Kit) — four tasks closing the gaps a real research pass found against those
+  four tools, which the earlier SEO fiches (13, 50) never looked at.
+  
+  **Task 1 — real-time content score.** `@cogenta/seo` gains `analyseContent`
+  (`content-analysis.ts`): a pure, synchronous TruSEO-style scorer over
+  contract A's rich text — keyword usage in title/description/first sentence,
+  keyword density, sentence length, subheadings, content length. Returns a
+  closed `'red' | 'orange' | 'green'` score, never a numeric percentage. A new
+  conventional field, `seoFocusKeyword`, joins `seoTitle`/`seoDescription`/etc.
+  (contract A untouched). The admin panel keeps its own mirrored copy of the
+  algorithm rather than depending on `@cogenta/seo`/`@cogenta/schema` — the
+  admin is a browser bundle and never takes that dependency.
+  
+  **Task 2 — internal link assistant.** `@cogenta/seo` gains
+  `analyseInternalLinks` (`link-assistant.ts`), reusing `@cogenta/schema`'s
+  existing `extractLinks`: reports entries with no inbound link and, for
+  entries sharing title words, up to five link candidates. `@cogenta/api`'s
+  `createSeoRouter` gains `GET /api/seo/link-suggestions?collection=…`, gated
+  by `update` on the named collection (never `admin`) so an editor can run it
+  on whatever they may already write.
+  
+  **Task 3 — SEO feature grid.** Four new `seo.*` boolean settings
+  (`contentScoreEnabled`, `linkAssistantEnabled`, `searchVerificationEnabled`,
+  `robotsCustomRulesEnabled`) in `@cogenta/schema`'s site settings registry,
+  all defaulting to `true` so an upgrading site's behaviour is unchanged. The
+  last two are gated centrally inside `@cogenta/cli`'s `readSeoRenderDefaults`,
+  so every consumer (public `robots.txt`, verification meta tags, the
+  diagnostics scan) honours the toggle with no per-call-site duplication.
+  
+  **Task 4 — optional Google Search Console connector (ADR-0032).**
+  `@cogenta/seo` gains `search-console.ts`: a fetch-only OAuth client (no
+  `googleapis` SDK) for the authorization URL, token exchange/refresh, and one
+  read-only `searchAnalytics.query` call — structurally incapable of writing
+  anything on the Google side. `@cogenta/schema` gains
+  `createSearchConsoleConnectionStore`: one site-wide connection row,
+  AES-256-GCM at rest via `COGENTA_AUTH_SIGNING_KEY` (same discipline as the
+  LLM provider store), full SQLite/Postgres/MySQL/MariaDB contract suite.
+  `@cogenta/api` gains `createSearchConsoleRouter`
+  (`/api/seo/search-console/*`): `status`/`authorize`/`metrics`/`disconnect`
+  are admin-only; `callback` (Google's own browser redirect target) carries no
+  bearer token by design, proven legitimate instead by an HMAC-signed,
+  ten-minute `state` token keyed by `COGENTA_AUTH_SIGNING_KEY`. `@cogenta/core`
+  gains the `searchConsole` config section (client id/secret, environment-only,
+  refused in the config file like every other secret) and five new error codes
+  (`SEARCH_CONSOLE_NOT_CONFIGURED`/`_NOT_CONNECTED`/`_STATE_INVALID`/
+  `_TOKEN_EXCHANGE_FAILED`/`_QUERY_FAILED`). Absent without both
+  `COGENTA_SEARCH_CONSOLE_CLIENT_ID`/`_CLIENT_SECRET` set — every other SEO
+  feature, including tasks 1-3 above, works identically with or without it
+  (R1/R2), which was the explicit condition the user set when accepting
+  ADR-0032.
+- 2d84729: Fiche 21, task 3 — merge SEO + Redirections into one admin screen, and make sitemap/social/title settings real and admin-editable (previously "read-only by design", a scope choice of a previous lot rather than an ADR).
+  
+  - **`@cogenta/seo`**: `MetadataOptions` gains `fallbackImage` — a site-wide default Open Graph/Twitter Card image, used by `buildMetaTags` only when neither the caller's own `image` nor the resource's `seoImage`/first `media` field resolves to anything. `SitemapOptions` gains `collectionOverrides` (new exported type `SitemapCollectionOverride`) — per-collection `included`/`changefreq`/`priority`, applied by `sitemapUrlsFor`; `included: false` drops every entry of that collection from the sitemap outright.
+  - **`@cogenta/api`**: `SeoRouterOptions.titleTemplate`/`collectionTitleTemplates` (static, and never actually wired to anything — dead since the fields were added) are replaced by `titleDefaults`, an async getter read fresh on every diagnostic scan and SEO preview, mirroring the "read live, never cached at startup" contract `@cogenta/cli`'s `ThemeRenderOptions.homePath` already uses. **Breaking** for any direct caller of `createSeoRouter` passing the old static fields.
+  - **`@cogenta/schema`**: `SITE_SETTINGS_REGISTRY` gains a `seo` group — `seo.titleTemplate`, `seo.collectionTitleTemplates`, `seo.defaultMetaDescription`, `seo.sitemapCollectionSettings`, `seo.twitterHandle`, `seo.defaultSocialImageUrl` — persisted through the same `SiteSettingsStore` `settings.tsx`'s Général/Reading/Discussion tabs already use, no new table or migration.
+  - **`@cogenta/cli`**: `seo.ts` gains `SeoRenderDefaults`/`readSeoRenderDefaults` (reads the six settings above, live); `seoSiteFor` and `HeadOptions`/`renderSeoHead` take an optional `seo`/`SeoRenderDefaults` to apply the title template, per-collection template override, default meta description, Twitter handle and fallback social image; `buildSitemapFiles` takes an optional `collectionOverrides`. `ThemeRenderOptions` gains `seo?: () => Promise<SeoRenderDefaults>`, wired into every render path in `cogenta serve` (published page, page-builder preview, admin SEO preview redirect check, `/sitemap.xml`) so a saved setting shows up on the very next request, no restart.
+  
+  Admin (`@cogenta/admin`, private, no changeset): `/seo` and `/redirects` merge into one nav entry ("SEO") with five tabs — Général, Sitemap, Réseaux sociaux, Redirections (the previous `redirects.tsx` screen, unchanged, now `RedirectsPanel`), Diagnostic (the previous read-only reports, unchanged, now loaded lazily only when that tab is opened). `/redirects` still resolves (redirects to `/seo?tab=redirects`), the same pattern already used for `/site-plan` → `/create-site`.
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [a2516aa]
+- Updated dependencies [0e88f30]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [916ef34]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [7b7ec0b]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [e75b23e]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [0dceff3]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [dda55d6]
+- Updated dependencies [befad6d]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [e8061e2]
+- Updated dependencies [fe789cf]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [f47e893]
+- Updated dependencies [2285720]
+- Updated dependencies [46572ba]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [1995d35]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [1cdf7d7]
+- Updated dependencies [745ebd8]
+- Updated dependencies [4bb6ba3]
+- Updated dependencies [960757d]
+- Updated dependencies [2d84729]
+- Updated dependencies [835d736]
+- Updated dependencies [07c0f0a]
+- Updated dependencies [9e67928]
+- Updated dependencies [954460e]
+- Updated dependencies [3824e8e]
+  - @cogenta/core@0.5.0
+  - @cogenta/schema@0.4.0
+
 ## 0.2.1
 
 ### Patch Changes

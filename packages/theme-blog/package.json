@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-blog",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A reading-first personal/professional blog theme for Cogenta: an editorial cover hero, serif reading typography, and a genuine dark mode — zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

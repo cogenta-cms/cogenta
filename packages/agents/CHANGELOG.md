@@ -1,5 +1,465 @@
 # @cogenta/agents
 
+## 0.3.0
+
+### Minor Changes
+
+- 08e394b: A real, persisted conversation with an agent, and two robustness fixes found by using it live against DeepSeek.
+  
+  **The conversation.** Two chat surfaces — the agent detail page and the floating widget — used to keep their own local transcript, so starting a conversation on one and reopening the other never "loaded" it: there was nothing server-side to load. `@cogenta/agents` gains `AgentConversationStore` (memory + file implementations, one per `(agentName, actorId)` thread) and `RunAgentOptions.history` (real prior turns threaded into the model call, not folded into the instruction text); `@cogenta/api`'s `agents-router.ts` gains `GET/DELETE /api/agents/:name/conversation` and `POST .../conversation/messages`; `@cogenta/cli` wires a file-backed store under `.cogenta/agents-runtime/conversations`. Both admin chat surfaces now read and write through the same thread.
+  
+  **Found while testing it for real:**
+  - A content-generation reply came back empty (`stopReason: 'max_tokens'`) — the default per-call budget (2000 tokens) was tuned for a short reply, not a real draft with a rich-text body. Raised to 8000 (6000 for a sub-agent hop).
+  - A stalled DeepSeek response left the request — and the browser tab awaiting it — hanging for minutes with nothing logged and no way to recover short of killing the process. None of the three provider adapters (OpenAI-compatible, Anthropic, Google) ever bounded a call on their own. Each now falls back to a 180s timeout when the caller supplies no cancellation signal of its own, and reports a named "did not answer in time" error rather than hanging forever.
+  
+  Also: the `content.schema` tool (introspects a collection's field shape and the block vocabulary — closes the gap where the superagent could only guess field names when asked to draft content) is now visible in the admin's own permission checkboxes, and the superagent detail page opens straight on the chat, with every configuration field moved behind a "Réglages" button, and the technical log truncated with a "show all" toggle.
+- d0a3250: Fiche 55 (agent creation, full flow): `AgentIdentity`/`StoredAgentIdentity`/`AgentIdentityFields`
+  gain an optional `systemPrompt`, distinct from `style` — a fourth, additive `## System
+  prompt` section in `renderIdentityMarkdown`/`parseIdentityMarkdown`, included in the
+  assembled context (`identity/context.ts`'s `agentSection`) right after `style` when
+  present. An `identity.md` written before this change (no such section) still parses —
+  `systemPrompt` simply comes back `undefined`.
+  
+  `AgentModelPreference` gains an optional `model`: an explicit model id for one agent,
+  distinct from `preferred`/`fallback` (which name a *provider*). When set,
+  `createAgentRunner`'s `resolveProvider` returns a `ProviderClient` whose `model` is
+  overridden to it; absent means "use whatever the resolved provider is configured with",
+  the behaviour every agent had before this field existed.
+  
+  New tool `assist.generate_agent_identity` (`@cogenta/agents`, permission
+  `content.suggest`, `sideEffects: false`): drafts a `role`/`objectives`/`style`/
+  `systemPrompt` from a short brief and a tool-name list, always as a reviewable draft
+  (`applied: false`, pinned literal — R6). The site owner's purpose and constraints travel
+  through `assembleContext`'s DATA channel exclusively, never interpolated into the
+  instruction text, the same posture L19's `analyseBrief` already takes with an uploaded
+  brief (R8, applied defensively even to this first-party admin-form input). Seeded as a
+  new builtin prompt template ("Generate agent system prompt", fiche 45), editable from
+  the Prompt Settings screen.
+  
+  `@cogenta/api`'s `agents-router.ts`: `AgentWriteInput.identity` and
+  `AgentRegistryLike.readIdentity`'s return type both gain the same optional
+  `systemPrompt`. A non-string `identity.systemPrompt` is refused with
+  `AGENT_DEFINITION_INVALID` (400), same as an invalid `role`.
+  
+  Hardening (security review): `identity/context.ts`'s `agentSection` now escapes
+  `name`/`role`/`objectives`/`style`/`systemPrompt` with the same `escapeForTag` the `data`
+  channel already used, so a literal `<`/`>`/`"` in any of them — most plausibly in a
+  `systemPrompt` a "generate" click filled with raw model output before a human saved it —
+  can no longer forge a fake `</agent><task>…` boundary in the assembled system prompt.
+  Defense in depth, not a fix to an exploitable path: `withAutonomyForManifest` never reads
+  this text, so no permission or autonomy level could ever be affected by it.
+  
+  All additive — no existing field, tool signature, or wire shape changes meaning.
+- 0e88f30: L22 task 1/1bis: the agent runtime is real. `AgentRegistry` used to only enable/disable a fixed, in-memory declaration array — nothing ever executed. `@cogenta/agents` gains a real execution loop wiring (`createAgentRunner`, `agents/orchestrator.ts`) together with everything the loop needed but never had a home for: persistent, editable agent declarations (`createFileAgentDeclarationStore`), a persistent, encrypted-at-rest LLM provider store (`createFileProviderConfigStore`, AES-256-GCM keyed from `COGENTA_AUTH_SIGNING_KEY`, R7), and a "skills" instruction-text library (`createFileAgentSkillStore`, `skills/library.ts` — deliberately distinct from L7's marketplace skill registry). Three built-ins are seeded on first boot: the superagent ("Cogenta Agent", enabled by default, autonomy `propose`) and two disabled examples (a dependency-scanner agent backed by the new `deps.scan` tool, and a content-watch example). Autonomy has a new three-level UI mapping (`report-only`/`co-pilot`/`autopilot`) onto contract C's frozen `AutonomyLevel` vocabulary (`autonomy/levels.ts`) — the contract itself is unchanged.
+  
+  `@cogenta/api`'s `agents-router.ts` gains real `create`/`update`/`remove`/`run` capabilities (all optional on `AgentRegistryLike`, backward compatible with a caller that only ever built a fixed `createAgentRegistry`); two new routers, `providers-router.ts` and `agent-skills-router.ts`. All three routers now correctly `decodeURIComponent` path segments — a pre-existing gap in `agents-router.ts` this lot's own end-to-end test caught (the seeded superagent's name, "Cogenta Agent", contains a space). New `ErrorCode`s (`@cogenta/core`): `AGENT_DUPLICATE`, `AGENT_DISABLED`, `AGENT_NO_PROVIDER` (501, mirrors `SITE_PLAN_NO_PROVIDER` — R2's "no provider configured" is not a failure), `AGENT_BUILTIN_UNDELETABLE`, `PROVIDER_NOT_CONFIGURED`, `AGENT_SKILL_UNKNOWN`/`AGENT_SKILL_DUPLICATE`/`AGENT_SKILL_BUILTIN_UNDELETABLE`, `AGENT_REGISTRY_READ_ONLY` (501), `AGENT_RUNTIME_UNAVAILABLE` (503, mirrors `ASSIST_UNAVAILABLE`).
+  
+  **Breaking, within pre-alpha's existing minor-only convention** (see prior changesets' own note): `createAgentDelegateTool`'s tool name is no longer the fixed `agent.delegate` — it is now `agent.delegate.<slug-of-subagent-name>`, so an orchestrator offering several named sub-agents can expose each as a distinct, nameable tool instead of one ambiguous generic call. The permission stays the single, taxonomy-fixed `agent.delegate` (`tools@1.0`); no contract change.
+  
+  `@cogenta/cli`'s `cogenta serve` now always constructs this runtime (three file stores under `.cogenta/agents-runtime/`) and mounts `/api/agents`, `/api/providers` and `/api/agent-skills` unconditionally — R2 still holds: without a configured provider, every route above works except `POST /api/agents/:name/run`, which refuses with `AGENT_NO_PROVIDER` before any network call (proven end to end in `packages/cli/test/serve-agents.test.ts`, including a real tool-calling loop and an R4 permission-refusal case against a local HTTP double of the Anthropic Messages API). `create-cogenta` seeds the same three built-ins at scaffold time.
+  
+  The admin's "Agents" screen (`packages/admin`, private, no changeset) is genuinely editable now — create/edit/run/delete a sub-agent, per-tool permission checklist, autonomy/budget/skills/sub-agents — and gains two new screens, "Providers" and "Skills".
+- 750a10b: L24 task 4: the admin "Skills" screen (`AgentSkillStore`, L22 task 1bis) now stores each skill the same way L7's marketplace registry already does — `<dir>/<id>/SKILL.md` (frontmatter + body), the exact format a real Claude Code/Codex skill ships as — instead of one JSON file per record. The point is portability: a `SKILL.md` copied verbatim from `.claude/skills/` (or any other standard agent) drops straight into the store's directory and reads back correctly.
+  
+  `@cogenta/agents`: `parseSkillFile` (`skills/frontmatter.ts`) no longer requires a `version` field — a real Claude Code/Codex skill only ever carries `name` and `description`, and requiring a third field it doesn't have refused the exact copy-paste this task exists to support. `SkillMetadata.version` becomes optional (`file-store.ts`'s marketplace registry, which does need one to compare installed-vs-available, still writes it — this only relaxes what a skill *file* is allowed to omit). New `renderSkillFile`, the inverse of `parseSkillFile`, now exported alongside it. `AgentSkillStore`'s own contract (`list`/`get`/`create`/`update`/`remove`, and the shape of `AgentSkillInput`/`AgentSkillPatch`) is unchanged; `AgentSkill` gains a `content` field — the exact `SKILL.md` text the record renders to, always the canonical rendering of the structured fields, never a second independently-edited copy. The `enabledByDefault`/`builtin`/`createdAt`/`updatedAt` bookkeeping a portable `SKILL.md` has no room for lives in a sidecar `.meta.json` next to `SKILL.md`, deliberately kept out of the frontmatter — folding it in would leave every skill this store touches carrying Cogenta-only keys forever, defeating the point of the migration. A `SKILL.md` dropped into the store's directory with no sidecar reads fine, with sensible defaults, rather than failing.
+  
+  `@cogenta/api`: `/api/agent-skills`'s `POST`/`PATCH` now take `{ content: string }` (a raw `SKILL.md`) instead of separate `name`/`description`/`instructions` fields — parsed server-side with the same `parseSkillFile`, so a malformed submission fails with the same `SKILL_DEFINITION_INVALID` a file-based store would raise (newly mapped to HTTP 400 in `statusFor`). Every response now also carries `content`. **Breaking wire change** for any caller of this admin-only route (the admin app is the only one, and is updated in this same change).
+  
+  `@cogenta/cli`: no interface change — `agent-runtime.ts`'s use of `createFileAgentSkillStore`/`ensureBuiltinAgentSkills` is unaffected, since `AgentSkillStore`'s own contract did not change; called out here only because the on-disk format of a site's `.cogenta/agents-runtime/skills/` directory changes on next write (existing sites keep working — nothing migrates old `<id>.json` records automatically, since none exist yet on any real site this project has shipped to).
+  
+  `@cogenta/plugins`: `createSkillRegistry`'s marketplace submission handler (`registries/skills.ts`) now records a submission with no `version` field (a real Claude Code/Codex `SKILL.md`) as `skillVersion: null` instead of failing to compile against the now-optional `SkillMetadata.version` — no behaviour change for a submission that does carry one.
+- 08e394b: Gives an agent a way to learn a collection's actual field shape before writing to it. A live run asked the "Cogenta Agent" superagent "peux-tu générer un template ?" and it answered by asking the human to specify every field itself — `content.write_draft`'s `values` input is deliberately schema-blind (`z.record(z.string(), z.unknown())`), so nothing let the model discover a collection's real field keys short of guessing or reverse-engineering an existing entry, and a fresh collection with zero entries left it nothing to reverse-engineer at all.
+  
+  `@cogenta/agents` gains a new contract-C tool, `content.schema` (`createContentSchemaTool`), read-only under the same `content.read` permission as the existing browse pair (`content.collections`/`content.list`) — describing a collection's shape is not a wider grant than reading one of its entries. It answers two things: one or every readable collection's field shape (key, kind, required, label, kind-specific options), and this site's fixed block vocabulary (contract B's seventeen blocks, each with its own name/version/field shape) — the block half needs no site data at all, it is always present so an agent building a `blocks`-kind field's value never has to guess what a `hero` or `prose` block actually holds. The "Cogenta Agent" seed gains it alongside the existing browse pair, and `ensureBuiltinAgents` grants it to an already-seeded built-in that holds `content.read`, exactly like `content.collections`/`content.list` before it.
+  
+  `@cogenta/agents` gains a new direct dependency, `@cogenta/blocks` (workspace-internal, zero transitive cost) — the same package `@cogenta/theme-canonical`/`@cogenta/theme-kit` already depend on to read the same fixed vocabulary.
+  
+  `@cogenta/cli`'s `agent-runtime.ts` wires the new tool into the site's real tool registry with a `contentSchemaServiceLikeOf` adapter that reuses the exact same `ContentService.summary()` permission check `content.collections` already goes through, so `content.schema` never describes a collection the calling actor could not otherwise read.
+- 23299e9: The assistant's vector index is now explained and manageable, not just a raw
+  count (L22 task 4).
+  
+  - `GET /api/assistant` now reports, per content collection, whether it is
+    included in the index and how many chunks it contributes
+    (`vector.collections`), plus the reserved pseudo-collection name reference
+    documents are stored under (`vector.referenceCollection`).
+  - A new site setting, `assistant.indexedCollections` (`GET|PATCH
+    /api/settings`, `admin` only), lets an operator exclude a collection —
+    published articles included — from the index. The change is read live: it
+    applies on the next content save, with no restart, and the existing
+    "Reindex vectors" tool applies it to already-indexed content.
+  - A document upload flow — `GET/POST /api/assistant/documents` and `DELETE
+    /api/assistant/documents/:id` — lets an admin add reference material (PDF,
+    DOCX, Markdown, plain text) to the same index the site's own content feeds,
+    reusing the existing `document.extract_text` → `chunkDocument` →
+    `EmbeddingProvider.embed` pipeline rather than a second one. Each document
+    tracks its own `pending`/`indexed`/`error` state.
+  - `@cogenta/agents` gains `createReferenceDocumentStore`,
+    `ingestReferenceDocument`/`removeReferenceDocumentVectors`, and the
+    `REFERENCE_DOCUMENT_COLLECTION`/`REFERENCE_DOCUMENT_LOCALE`/`REFERENCE_DOCUMENT_STATUS`
+    constants a caller needs to retrieve them (e.g. via `assist.chat`'s
+    `collections` input).
+  - `@cogenta/core` gains one error code, `ASSIST_DOCUMENT_NOT_FOUND` (404).
+  
+  All of this is additive and degrades the same way the rest of L18 does: a
+  site with no embeddings provider gets none of it, and every other feature
+  works unchanged (R2).
+- 0692713: Fiche 30 — agents and assistant admin:
+  
+  - `@cogenta/core`: adds a resolved `assistant.monthlyTokenLimit` config section (default one million tokens a month) and a new `ASSIST_BUDGET_EXCEEDED` error code.
+  - `@cogenta/agents`: adds `createAssistUsageTracker`, a per-tool, calendar-bucketed token/call counter for the writing assistant (distinct from the existing per-agent `BudgetTracker`), wired into `createAssistToolset` and `createAssistRuntime` (`AssistRuntimeOptions.onUsage`, `AssistRequest.tool`). `AssistToolset` gains optional `model` and `usage` fields.
+  - `@cogenta/api`: `GET /api/assistant` now reports `model`, `usage` (when a tracker is configured) and `vector` (driver/dimensions/count/lastIndexedAt, when a vector store exists). `POST /api/assistant/run` refuses with `ASSIST_BUDGET_EXCEEDED` (429) once the monthly cap is reached, before the provider is called. `createAssistantRouter` gains an optional `vectorInfo` option.
+  - `@cogenta/cli`: `AssistantAssembly` gains `vectorInfo` (vector index visibility) and wires a usage tracker into the assistant toolset from `config.assistant.monthlyTokenLimit`. `withVectorIndexing` gains an optional `onIndexed` callback. `recordContentAudit` now records an accepted assistant suggestion's `field`/`tool` (sent by the admin as `assistApplied` on a content save) distinctly in the audit diff, alongside contract A's existing `provenance`/`provenanceDetail`.
+  
+  All additive — a site with no `assistant` config section gets the same default cap as before, and a site with no AI provider sees no `usage`/`model`/`vector` fields at all.
+- 36744d3: Fiche 21: the audit log gains what the state-of-the-art comparison named as
+  missing — a real entry detail, filters that reach a date range, an export,
+  an actually-scheduled integrity check, and a way to tell a human's action
+  from an agent's.
+  
+  **Task 1 — detail.** `GET /api/audit/{id}` (`@cogenta/api`'s `audit-router.ts`)
+  answers with the entry, its resolved actor kind and label (an email, or an
+  API key's name), and — for a `content.create`/`update`/`restore` action — the
+  same structural diff `GET /{collection}/{id}/diff` already computes, called
+  through rather than recomputed (the fiche's own warning against duplicating
+  it). This needed a place to keep which content version an action produced:
+  `RecordAuditInput`/`AuditEntry` gain `version`, stored in a new nullable
+  `cogenta_audit_log.version` column added with a `try`/`catch` `alter table`
+  (no portable `add column if not exists` across SQLite/Postgres/MySQL) — and
+  **deliberately excluded from the hash `computeHash` chains together**. Adding
+  a field to that canonical list would change what every already-recorded hash
+  means, and every site's existing chain would fail `verify()` the moment this
+  code ran. The fields that matter for accountability — who, when, what
+  action, on what — are untouched; `version` is UI-convenience metadata, not
+  inside the tamper-evidence boundary. A permission refusal on the diff's own
+  collection (an admin who was never granted an authoring role there) degrades
+  to `diffUnavailable`, not a 403 for the whole entry.
+  
+  **Task 2 — dates, export, pagination.** `since`/`until`/`actorKind` filters
+  on `GET /api/audit`, and `GET /api/audit/export?format=csv|json` (bounded to
+  10,000 entries) for the filtered view. The export is itself an audit-worthy
+  event — a personal-data extraction, per the fiche — recorded as
+  `audit.export` (format and count only, never the exported rows) at the same
+  transport-boundary layer `cogenta serve` already records every other
+  mutation at.
+  
+  **Task 3 — scheduled integrity, for real.** `@cogenta/auth` gains
+  `AuditLog.verifyRange`/`get` (a bounded, checkpoint-resuming form of
+  `verify()`) and `createAuditIntegrityStore`, which persists the last
+  check's outcome across a restart. `cogenta serve` runs it once at startup
+  and then on its own `setInterval` (daily by default,
+  `ServeOptions.auditIntegrityTickMs` overridable for tests) — the same
+  accepted trade-off as the scheduled-publication tick. Most runs are
+  incremental (only entries after the last checkpoint); a full replay runs
+  weekly on its own as the backstop the fiche asks for, since an incremental
+  check cannot see tampering in already-checkpointed history. A break sends
+  one signed channel alert (`security.audit_integrity_broken`, only on the run
+  that first finds it — never once per tick) and a non-dismissible, danger-
+  severity admin notice that clears itself once a forced full check reports
+  the chain intact again. `GET`/`POST /api/audit/integrity` expose the status
+  and the "verify now" that persists its result, alongside the untouched,
+  stateless `GET /api/audit/verify`.
+  
+  **Task 4 — distinguishing actors.** `classifyAuditActor` (`@cogenta/auth`)
+  reads signals the log already carried — `actorId === null` is `system`, the
+  `apikey:` prefix `resolveActor` has minted since L13 is `api_key`, the
+  `agent.tool.` prefix `withAudit` has minted since L4 is `agent`, everything
+  else is `human` — no schema change needed. `withAudit` (`@cogenta/agents`)
+  gains optional `model`/`autonomyLevel`, carried into the recorded diff when
+  a caller tracks them. `?actorKind=` filters `GET /api/audit`.
+  
+  **Task 5 — retention, honestly.** No purge is wired into a schedule in this
+  pass — `AuditLog.prune(olderThan)` exists, tested, and safe (it refuses to
+  purge a segment that does not itself verify first, and records a genesis
+  anchor so the surviving chain keeps verifying from a documented truncation
+  point rather than silently going quiet about it), but nothing calls it
+  automatically yet. The admin screen says so plainly: this journal keeps
+  every entry and grows without limit until an operator acts.
+  
+  None of this is a breaking change: `AuditLog.verify()`'s signature and every
+  existing route's response shape are unchanged, and the new column/tables
+  are additive (a fresh `ensureAuthTables` run tolerates them being already
+  there, an existing install picks them up the same way).
+- 656163e: LLM provider catalog (fiche 56): OpenRouter, DeepSeek, Qwen and GLM are now
+  configurable from the admin's "Providers" screen alongside Anthropic, OpenAI
+  and Google, plus an explicit "custom provider" option for any other
+  OpenAI-compatible endpoint (a self-hosted proxy, or a vendor not yet
+  catalogued). No new network code: every OpenAI-compatible entry (OpenRouter,
+  DeepSeek, Qwen, GLM, custom) reuses `createOpenAiClient` unmodified, only
+  pointed at a different `baseUrl`.
+  
+  **`@cogenta/agents`**: `provider` widens from the closed 3-literal union
+  (`'anthropic' | 'openai' | 'google'`) to a plain string, validated at the
+  write boundary instead of by a type — `@cogenta/core`'s own
+  `llmSchema.provider` was already a free string before this fiche. New
+  `providers/catalog.ts`: `KNOWN_PROVIDER_CATALOG` (id/label/wireFormat/
+  defaultBaseUrl/knownModels per vendor) and `findProviderCatalogEntry`.
+  `createProviderRegistry` resolves a name via the catalog when it knows one
+  (dispatching to the right adapter by `wireFormat`), and otherwise requires
+  the entry's own `baseUrl` — that pairing (no catalog entry + a `baseUrl`) is
+  what "custom provider" means structurally, with no separate flag to keep in
+  sync. `createOpenAiClient` gains an optional `name` (defaults to `'openai'`)
+  so a client built for OpenRouter/DeepSeek/Qwen/GLM/a custom endpoint reports
+  its own id via `ProviderClient.name` — needed for the privacy allowlist
+  (`assertProviderAllowed`) to recognise the right vendor rather than every
+  OpenAI-compatible client misreporting itself as literally `'openai'`.
+  `createFileProviderConfigStore.upsert`/`updateSettings` reject a malformed
+  provider id (`PROVIDER_ID_INVALID`) or one outside the catalog with no
+  resolvable `baseUrl` (`PROVIDER_CUSTOM_BASE_URL_REQUIRED`) — the write-time
+  checks that make network-time resolution failures unreachable.
+  
+  **Breaking (`@cogenta/agents`):** `PROVIDER_NAMES` (the fixed 3-name array)
+  is removed — read `KNOWN_PROVIDER_CATALOG` instead, or accept that
+  `ProviderName` is now `string`. `ProviderRegistryConfig`'s value shape gains
+  nothing new but is now keyed by an open string rather than the closed union.
+  
+  **`@cogenta/core`**: two new error codes, `PROVIDER_ID_INVALID` and
+  `PROVIDER_CUSTOM_BASE_URL_REQUIRED` (both 400).
+  
+  **Breaking (`@cogenta/api`):** `providers-router.ts`'s `ProviderRegistryLike`
+  gains a required `catalog: readonly ProviderCatalogEntrySummary[]` — any
+  caller implementing this interface directly (rather than using
+  `@cogenta/cli`'s adapter) must supply it. New route `GET
+  /api/providers/catalog` (admin-only) serves it; `catalog` is a reserved
+  provider id as a result (a provider literally named "catalog" can no longer
+  be created). `POST /api/providers` no longer rejects a provider name outside
+  a fixed 3-name list — it rejects a name outside the catalog **only when no
+  `baseUrl` is given** (`PROVIDER_CUSTOM_BASE_URL_REQUIRED`, still 400, but a
+  different code than the previous generic "not a supported LLM provider"
+  `QUERY_INVALID`). `PATCH`/`DELETE /api/providers/:provider` no longer gate
+  on a fixed name list at all — they resolve against whatever the store
+  actually has saved (a legitimately-saved custom provider used to be
+  unreachable by these two verbs; the store's own `PROVIDER_NOT_CONFIGURED`
+  already covered "this was never saved").
+  
+  **`@cogenta/cli`**: `packages/cli/src/commands/agent-runtime.ts`'s
+  `createProviderRegistryAdapter` now supplies `names`/`catalog` from
+  `KNOWN_PROVIDER_CATALOG` instead of the removed `PROVIDER_NAMES`, and no
+  longer narrows an arbitrary string against a closed `ProviderName` union
+  before trusting the live registry's own `has`/`get`. `assistant.ts`'s single-
+  provider (`cogenta.config.mjs`'s `llm` section) resolution now accepts any
+  provider `createProviderRegistry` itself can resolve — a catalog id, or a
+  custom id paired with a `baseUrl` — rather than duplicating a fixed 3-name
+  allowlist a second time (the exact desynchronisation risk this repo already
+  hit once with `CONTRACT_C_PERMISSIONS`).
+  
+  **`@cogenta/admin`** (unpublished, no changeset entry): the "Providers"
+  screen's "add" form is now catalog-driven — a provider `<select>` populated
+  from `GET /api/providers/catalog`, a known-models picker per selected
+  provider, and an explicit "custom provider" choice (its own id field, and a
+  `baseUrl` the form requires before Save is enabled).
+  
+  Not included, by the fiche's own scope: Replicate (a different, asynchronous
+  prediction-and-polling API, not OpenAI-compatible — a separate adapter, left
+  for a later task).
+- 4d3f3c7: L24 task 1: the agent execution loop (`packages/agents/src/runtime/loop.ts`, `runAgentLoop`) now runs as a two-node LangGraph.js `StateGraph` (`agent` → `tools` → `agent`) instead of a hand-written `for` loop. This was requested directly by the project owner after an earlier refusal of LangGraph in L22 (R9 — the hand-rolled loop was under 300 lines and sufficient at the time); the owner re-requested it for long-term maturity and stability, tracked in ADR-0029 (text ready, awaiting human insertion into `docs/03-decisions.md`).
+  
+  **New direct dependency**: `@langchain/langgraph` (`^1.4.12`). Pure ESM, TypeScript, no native code (R10 n/a — nothing to WASM-fallback). Pulls ~16 transitive packages, including `@langchain/core` (peer dependency, resolved automatically, not added as a direct dependency of `@cogenta/agents` since nothing here imports from it — only `StateGraph`, `Annotation`, `START`, `END`, `GraphRecursionError` are used, never LangChain's message types or its own tool-calling/agent abstractions) and, further down, `langsmith` — LangChain's proprietary tracing SDK. **`langsmith` is never called, configured, or reachable from any code in this repository**; it is a transitive pull with no on/off switch, not a forgotten integration. Flagged here explicitly so a future dependency audit does not mistake silence for an oversight.
+  
+  **What did not change**: `runAgentLoop`'s public signature (`RunAgentLoopInput` in, `RunResult` out) is untouched, so every existing caller — `agents/orchestrator.ts` (`createAgentRunner`), `subagents/run-subagent.ts`, `tools/core/agent-delegate.ts`, `assist/runtime.ts`, `eval/run-suite.ts` — needed no changes at all. All three autonomy levels (`report-only`/`co-pilot`/`autopilot`) and the built-in agents behave identically from the admin's point of view. Contract C (`buildManifest`/`createToolRegistry`) does not change shape.
+  
+  **R4, proven not assumed**: the graph's `tools` node contains zero permission logic — it calls a new exported primitive, `runTool`, which does nothing but look up a tool by name and call `.execute()`. The only thing standing between a model's tool-call request and a real side effect is whether the `ExecutableTool` object the node was handed was wrapped by `withAutonomy` before the graph ever saw it — a decision made entirely in `agents/orchestrator.ts`, outside and above the graph, exactly as before the migration. `packages/agents/test/runtime/loop.test.ts` adds three tests that prove this rather than assume it survived: `runTool` given a *raw* tool executes the real side effect (showing the node itself supplies no gate — if it did, this call would be blocked too); the same primitive given the *same* tool `withAutonomy`-wrapped at `observe` never reaches the side effect; and a full `runAgentLoop` run, with a model that asks for the same "dangerous" tool on three consecutive turns, never triggers it once.
+  
+  `@cogenta/core` gains one new error code, `AGENT_LOOP_RECURSION_LIMIT` — a defensive backstop thrown only if LangGraph's own recursion ceiling were ever hit before `runAgentLoop`'s pre-existing `max_steps` guard fires first (the ceiling is set to `maxSteps * 2 + 10`, comfortably above what the guard needs, so this should be unreachable in practice; it exists to fail loudly rather than silently if that assumption is ever wrong).
+  
+  `deps-auditor` was invoked on this addition before committing, per R9. Verdict: accept — MIT-licensed throughout, ESM, no native code, actively maintained (all four LangChain packages checked were last published within two days of this addition), and the alternative was already weighed and rejected once (L22, R9) before the owner explicitly re-requested it for long-term ecosystem maturity. One additional watch point beyond `langsmith`: the transitive tree carries two non-deduplicated versions of `p-queue` (6.6.2 via `langsmith`, 9.x via `@langchain/langgraph-sdk`) — no measured functional impact, worth revisiting only if `node_modules` size becomes a constraint on shared/mutualised hosting.
+- 3075941: Fiche 45 — Prompt Settings, a shared, editable library for every utility prompt an `assist.*` tool sends the model. Until now, each instruction line (`assist.rewrite`, `assist.proofread`, `assist.summarise`, `assist.translate`, `assist.meta_description`, `assist.titles`, `assist.tags`, `assist.alt_text`, `assist.classify`, `assist.moderate`, `assist.faq_draft`, `assist.schema_org_draft`, `assist.chat`) was a literal string baked into the package.
+  
+  `@cogenta/agents` gains a new `prompts/` module: `PromptTemplateStore` (`createFilePromptTemplateStore` — one JSON file per template, same "real but local" tier as the existing agent/skill/provider stores, R1), `renderPromptTemplate`/`resolveInstruction` (`{{field}}` placeholder substitution that throws `PROMPT_TEMPLATE_PLACEHOLDER_UNRESOLVED` rather than sending a literal unresolved placeholder to the model), and `builtinPromptTemplateSeeds`/`ensureBuiltinPromptTemplates` (thirteen templates reproducing every existing `assist.*` instruction verbatim as editable text, plus two new ones — `generate_text_block` for the future page-builder "Générer" button and `generate_agent_system_prompt` for the future agent-creation flow — written with the same care as a built-in agent's `identity.md`).
+  
+  Every migrated `assist.*` tool constructor now accepts an optional trailing `PromptTemplateStore` argument (`createWritingTools`, `createClassifyTool`, `createModerateTool`, `createFaqTool`, `createSchemaOrgTool`, `createContentChatTool`'s options). Backward compatible: omitting it (or a site whose store has never been seeded) reproduces the exact pre-existing hard-coded instruction, byte for byte — proven by a dedicated non-regression test comparing the seeded-store path against the original inline construction for every migrated tool. A tool's `role`/objectives and the R8 anti-injection rule stay in code, deliberately not migrated — they are the security boundary, not the prompt text an editor should be able to reword from a settings screen.
+  
+  `@cogenta/api` gains `createPromptTemplatesRouter` (`/api/prompt-templates`) — `GET` open to any signed-in actor, `POST`/`PATCH`/`DELETE` restricted to `admin`, mirroring `agent-skills-router.ts`'s shape. New `ErrorCode`s (`@cogenta/core`): `PROMPT_TEMPLATE_UNKNOWN` (404), `PROMPT_TEMPLATE_DUPLICATE` (409), `PROMPT_TEMPLATE_BUILTIN_UNDELETABLE` (409), `PROMPT_TEMPLATE_INVALID` (400), `PROMPT_TEMPLATE_PLACEHOLDER_UNRESOLVED` (400).
+  
+  `@cogenta/cli`'s `cogenta serve` now builds a `PromptTemplateStore` under `.cogenta/agents-runtime/prompt-templates` (seeded on first boot, idempotent) and threads it through both `buildAssistant` (so the writing-assistant tools resolve their instruction text from it) and `buildAgentRuntime` (which mounts `/api/prompt-templates`) — the same directory, two file-store instances, safe because neither caches across calls.
+  
+  The admin's "Prompt Settings" screen (`packages/admin`, private, no changeset) is a new admin-only entry in the AI nav group: list/create/edit/delete a template, with a builtin always editable but never removable.
+- 835d736: L22 task 3: "l'agent qui surveille le site" — the one concrete case the lot's spec asks to ship first, tested end to end against a real `cogenta serve`. A superagent-shaped agent, disabled by default like the other two examples, that reads the public 404 log (never source code, never a request body or an IP — the log itself carries neither), picks a genuinely related, routed page, and proposes or creates a redirect depending on the site's configured autonomy — reusing the runtime `withAutonomyForManifest` already built for L22 task 1, not a bespoke gate.
+  
+  `@cogenta/agents` gains a fourth built-in agent, "Site Monitor" (`SITE_MONITOR_AGENT_NAME`, `builtins.ts`), disabled by default with a daily cron trigger, autonomy `propose` by default — raising it to `autonomous` (autopilot) is what the lot names as the condition for an *applied*, not merely *suggested*, redirect. Four new contract-C tools back it: `logs.read_not_found` (new permission `logs.read`, read-only over `@cogenta/schema`'s `NotFoundLogStore`), `content.collections`/`content.list` (both under the existing `content.read` permission — browsing is the same access as reading one entry, not a wider grant), and `redirects.create` (new permission `redirects.write`, `sideEffects: true`, `reversible: true` — its `revert` removes exactly the redirect it created). Contract C moves to `tools@1.2` (`docs/04-contrats.md`): two permissions added by the bottom to an open taxonomy, no existing tool signature touched — the same kind of change `document.extract` was in `tools@1.1`.
+  
+  `@cogenta/schema`'s `RedirectReason` gains a fourth value, `'agent'` — `redirects.create` always writes it, never `'manual'`, so an admin looking at the Redirections screen can tell which rows a human typed and which one an agent proposed and had applied. Additive to a stored, open list (not a versioned contract enum); a row written by an older build still reads back fine (`toRecord`'s existing fallback to `'manual'`).
+  
+  `@cogenta/api` gains `createMonitoringRedirectSuggestionSource` (`notices/monitoring-redirect-suggestion.ts`) — the dashboard half: a redirect an agent proposed under `co-pilot` autonomy surfaces as an admin notice (from/to, which agent), linking straight to the *existing* Redirections screen rather than a second confirmation UI, and disappears on its own once the redirect exists (created by hand, or later applied under `autopilot`) — never because the underlying `ApprovalQueue` request was "decided" (L22 task 1's queue still has no admin surface to decide anything from).
+  
+  `@cogenta/cli`'s `agent-runtime.ts` wires all four new tools into the site's real tool registry (the real `NotFoundLogStore`/`RedirectStore`/`CollectionDefinition[]` `serve.ts` already builds, never a second instance) and now exposes the runtime's `ApprovalQueue` on `AgentRuntimeAssembly` so `serve.ts` can build the notice source over the exact same queue `co-pilot` autonomy files into. `serve.ts` adds one more entry to the notices sources array — the seam fiche 38 designed this mechanism around — and threads `collections`/`notFoundLog`/`redirects` into `buildAgentRuntime`.
+  
+  R2 holds throughout: with no LLM provider configured, the Site Monitor exists in configuration (seeded, listable, editable) and attempts zero network calls — `AgentRunner.run()`'s existing `AGENT_NO_PROVIDER` guarantee, unchanged, covers this agent the same as every other one.
+  
+  **Deliberately out of scope, named honestly rather than silently promised**: server-error and downtime detection (the lot's own other two example anomalies) are not built — this task ships the one case the spec asks to land first, tested end to end; the other two stay documented ideas for a future lot.
+  
+  No new dependency (R9): every new tool wraps a store or a route this project already had (`NotFoundLogStore`, `RedirectStore`, `ContentService.summary`/`list`, `buildPath`), and `@cogenta/agents` already depended on `@cogenta/schema`.
+- cf005d4: Fiche 60: site plan generation gains conscience of the site it would join. Before this, a plan proposed from the admin on a site with two hundred articles and a live shop looked exactly like a plan proposed on an empty database — the only contact with reality was `site-plan.ts`'s late, defensive "this collection name is already taken" refusal at *apply* time, never an entry of the agent's own reasoning.
+  
+  `@cogenta/agents` gains `describeExistingSite`/`ExistingSiteSnapshot` (`site-plan/site-context.ts`): a plain-data snapshot of a site's declared collections (name, fields, entry/published counts), taxonomies, active theme and configured integrations — built by the caller (no database dependency inside this package), and rendered to text only for `assembleContext`'s tagged `data` channel (R8: the whole rendering goes through escaping uniformly, since a collection's own `labels` are free text an operator or an earlier agent chose).
+  
+  `analyseBrief`, `proposeContentModel` and `generateSkinCandidates` gain an optional `existingSite` parameter, threaded through `proposeSitePlan`. Absent (the installer's own path, on a fresh site) or an empty snapshot, every request stays byte-for-byte what it always was — proven by tests comparing the two paths' requests directly. `generateSkin` (`skin/generate.ts`) gains an optional `context` (tagged data items) it did not have before, used only when `generateSkinCandidates` is given a populated `existingSite`; every existing caller keeps its exact single-message request.
+  
+  Given a populated `existingSite`, `proposeContentModel` switches to "évolution plutôt que premier jet": the prompt asks for complements rather than a redefinition, and — never trusting the model alone, the same discipline `enforce.ts` already applies to explicit constraints — any collection proposed anyway under a name the site already declares is dropped structurally and reported in the new `skippedExisting` result field, surfaced as a plan warning.
+  
+  New deterministic pass `detectStructuralGaps` (`site-plan/structural-gaps.ts`): compares the proposed pages and the existing site against a closed list of pages most sites need (contact, legal notice, privacy policy) and suggests only what neither already covers — never generated automatically (R6). `SitePlanDraft` gains `structuralGaps`, and `summarisePlan`/`resolveApprovedPlan` (`site-plan/approval.ts`) gain a new `structuralGaps` review section between `pages` and `skin`; an accepted suggestion joins the approved plan's `pages`, exactly as reviewable and exactly as unapplied-by-itself as every other item.
+  
+  `@cogenta/cli`'s `site-plan.ts` gains `buildExistingSiteSnapshot`/`ExistingSiteContext`/`detectActiveIntegrations` (all exported for testing) and wires the snapshot into `createPlanner`, read fresh on every proposal — never cached across the process's lifetime, the same discipline `theme-wiring.ts` documents for its own token overlay. `SitePlanningOptions` gains an optional `taxonomies` field; `serve.ts` passes the taxonomies it already loads. The installer entry point (`create-cogenta`) is untouched — on a new site, `existingSite` is empty by construction, so its behaviour is unchanged.
+  
+  Admin: "Créer un site" is renamed "Générer le site" (`nav.createSite`, `sitePlan.heading`, the onboarding guide's step 4) in both locales — the review screen itself needed no code change, since it already renders whatever sections the server returns.
+  
+  No new dependency (R9). No contract touched: this is read access already covered by `PermissionLayer` (R2/R4), consistent with ADR-0023.
+- 07c0f0a: Fiche 57 (Compétences : dossiers de référence standard) — a skill's
+  `references/`, `scripts/` and `assets/` sub-folders, the standard layout a
+  real Claude Code/Anthropic skill uses, are now created automatically and
+  manageable from the admin. No contract A/B/C/D touched; no ADR required
+  (that would only apply to a future `skill.read_resource` tool, which this
+  fiche deliberately does not add).
+  
+  **`@cogenta/agents`**: `AgentSkillStore` gains `listResources`,
+  `addResource` and `removeResource`, plus the exported `SKILL_RESOURCE_DIRS`
+  constant and `SkillResource`/`SkillResourceDir` types.
+  `createFileAgentSkillStore`'s `create()` now also creates the three standard
+  sub-folders, empty, alongside `SKILL.md`/`.meta.json`. Writing or removing a
+  path outside `references/`, `scripts/` or `assets/` — or one that tries to
+  escape the skill's own directory — is refused
+  (`AGENT_SKILL_RESOURCE_INVALID`); a skill created before this fiche, with no
+  sub-folders on disk, lists an empty resource set rather than erroring.
+  
+  **`@cogenta/core`**: two new error codes, `AGENT_SKILL_RESOURCE_INVALID` and
+  `AGENT_SKILL_RESOURCE_UNKNOWN`.
+  
+  **`@cogenta/api`**: `agent-skills-router.ts` gains `GET`/`POST
+  /api/agent-skills/:id/resources` and `DELETE
+  /api/agent-skills/:id/resources/<path>`, all admin-only like the rest of the
+  router. An upload accepts either a real `multipart/form-data` body (`path`
+  field, `file` part — no base64 inflation for a binary asset) or a JSON body
+  `{ path, content }` with `content` as plain UTF-8 text.
+  `AgentSkillRegistryLike` gains the three matching methods; any other
+  implementer of this interface needs to add them.
+  
+  **`@cogenta/cli`**: `agent-runtime.ts`'s `createSkillRegistryAdapter` wires
+  the three new methods straight through to `AgentSkillStore` — no new CLI
+  command or flag.
+  
+  **Admin** (not published, `@cogenta/admin`): the Compétences screen's edit
+  row gains a "Fichiers de référence" panel — three lists (Références,
+  Scripts, Gabarits) with upload and remove, using `FormData` uploads directly
+  rather than the `fileToBase64` path `media-client.ts` still uses, since a
+  resource file (an asset image, in particular) should not pay a ~33% base64
+  inflation when a real `multipart/form-data` transport is already wired on
+  the server side.
+  
+  Nothing here is loaded into an agent's context automatically — deliberately
+  so, per the fiche's own warning against uncontrolled context growth (R7).
+
+### Patch Changes
+
+- edd0787: Fixes every provider call that declares a tool. Contract C tool names carry a dot (`content.read`), and OpenAI-compatible endpoints (OpenAI, DeepSeek, Qwen, OpenRouter…) as well as Anthropic refuse that character in a function name — DeepSeek answered every agent run with `400 Invalid 'tools[0].function.name'` before any model was reached. The adapters now encode tool names on the way out (`content__read`) and decode them on the way back, so no other layer sees a wire name; two tools that would collide once encoded are refused loudly. A provider's own error message is now quoted in `PROVIDER_REQUEST_FAILED` instead of a bare status code.
+  
+  The "Cogenta Agent" seed gains the read-only `content.collections`/`content.list` pair (same permission as `content.read`), and `ensureBuiltinAgents` grants that pair to an already-seeded built-in that holds `content.read` — without them the superagent could only read an entry whose id it already knew, and was seen guessing ids to count a site's posts.
+- 745ebd8: Editorial workflow and owner permission (`schema@2.1`, ADR-0027, fiche 37 + fiche 19
+  task 5).
+  
+  Strictly additive — a site that never declares `workflow: { enabled: true }` on a
+  collection, and never uses the `{ roles, own }` permission form, behaves identically
+  to before this release. Proved by a compatibility test: a client reading only
+  `status` gets byte-identical values.
+  
+  - `reviewState` (`none`/`pending`/`changes-requested`/`approved`) and
+    `assignedReviewer` join the system fields, orthogonal to `status` — the same design
+    ADR-0022 gave `deletedAt`. `approved` is not `published`: approving authorises,
+    `publish` remains the action that makes an entry public.
+  - A closed, server-side transition table (`submit`/`approve`/`requestChanges`), each
+    gated by its own contract A action (`update` for submit, `publish` for the other
+    two) — never duplicated by a client.
+  - New `ContentStore` methods `submitForReview`/`approveReview`/`requestReviewChanges`/
+    `assignReviewer`, and new REST routes `POST .../submit`, `.../approve`,
+    `.../request-changes`, `.../assign-reviewer` — each its own path, never a second
+    meaning for an existing verb (ADR-0022's own lesson for `purge`).
+  - `CollectionPermissionRule` gains the object form `{ roles, own? }` alongside the
+    plain role-name array, which stays valid. `own: true` scopes every listed role to
+    entries the acting account created; `PermissionLayer.can()`/`.assert()` take an
+    optional `ownerId` to check it.
+  - Reversible, non-destructive migration (`schema21Migration`) adding `review_state`
+    (`not null default 'none'`) and a nullable `assigned_reviewer` to every collection.
+  - Admin: a review queue screen (three tabs — assigned to me / all pending / my
+    submissions — aggregated server-side via a new `GET /api/review`), a pending-count
+    nav badge, and an entry editor sidebar showing workflow state, assigned reviewer,
+    and a contextual action button that replaces the absent Publish button with
+    "Submit for review" for an actor without `publish`.
+  
+  Postgres/MySQL/MariaDB integration test files are written
+  (`packages/schema/test/integration/schema-2-1-migration.test.ts`) but not executed
+  this session — Docker unavailable; they skip loudly, naming the missing variable.
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [a2516aa]
+- Updated dependencies [0e88f30]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [4335296]
+- Updated dependencies [916ef34]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [7b7ec0b]
+- Updated dependencies [7a59646]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [e75b23e]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [a15b1ae]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [0dceff3]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [dda55d6]
+- Updated dependencies [befad6d]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [e8061e2]
+- Updated dependencies [fe789cf]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [86fc9cf]
+- Updated dependencies [54409f3]
+- Updated dependencies [f47e893]
+- Updated dependencies [2285720]
+- Updated dependencies [46572ba]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [1995d35]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [1cdf7d7]
+- Updated dependencies [745ebd8]
+- Updated dependencies [4bb6ba3]
+- Updated dependencies [960757d]
+- Updated dependencies [2d84729]
+- Updated dependencies [835d736]
+- Updated dependencies [07c0f0a]
+- Updated dependencies [9e67928]
+- Updated dependencies [954460e]
+- Updated dependencies [3824e8e]
+  - @cogenta/core@0.5.0
+  - @cogenta/schema@0.4.0
+  - @cogenta/blocks@1.0.0
+  - @cogenta/render@0.2.0
+
 ## 0.2.1
 
 ### Patch Changes

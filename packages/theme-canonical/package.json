@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-canonical",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "description": "The reference Cogenta theme: the twelve vocabulary blocks, rendered accessibly, with zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

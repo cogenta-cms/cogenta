@@ -1,5 +1,173 @@
 # @cogenta/plugins
 
+## 0.3.0
+
+### Minor Changes
+
+- 750a10b: L24 task 4: the admin "Skills" screen (`AgentSkillStore`, L22 task 1bis) now stores each skill the same way L7's marketplace registry already does — `<dir>/<id>/SKILL.md` (frontmatter + body), the exact format a real Claude Code/Codex skill ships as — instead of one JSON file per record. The point is portability: a `SKILL.md` copied verbatim from `.claude/skills/` (or any other standard agent) drops straight into the store's directory and reads back correctly.
+  
+  `@cogenta/agents`: `parseSkillFile` (`skills/frontmatter.ts`) no longer requires a `version` field — a real Claude Code/Codex skill only ever carries `name` and `description`, and requiring a third field it doesn't have refused the exact copy-paste this task exists to support. `SkillMetadata.version` becomes optional (`file-store.ts`'s marketplace registry, which does need one to compare installed-vs-available, still writes it — this only relaxes what a skill *file* is allowed to omit). New `renderSkillFile`, the inverse of `parseSkillFile`, now exported alongside it. `AgentSkillStore`'s own contract (`list`/`get`/`create`/`update`/`remove`, and the shape of `AgentSkillInput`/`AgentSkillPatch`) is unchanged; `AgentSkill` gains a `content` field — the exact `SKILL.md` text the record renders to, always the canonical rendering of the structured fields, never a second independently-edited copy. The `enabledByDefault`/`builtin`/`createdAt`/`updatedAt` bookkeeping a portable `SKILL.md` has no room for lives in a sidecar `.meta.json` next to `SKILL.md`, deliberately kept out of the frontmatter — folding it in would leave every skill this store touches carrying Cogenta-only keys forever, defeating the point of the migration. A `SKILL.md` dropped into the store's directory with no sidecar reads fine, with sensible defaults, rather than failing.
+  
+  `@cogenta/api`: `/api/agent-skills`'s `POST`/`PATCH` now take `{ content: string }` (a raw `SKILL.md`) instead of separate `name`/`description`/`instructions` fields — parsed server-side with the same `parseSkillFile`, so a malformed submission fails with the same `SKILL_DEFINITION_INVALID` a file-based store would raise (newly mapped to HTTP 400 in `statusFor`). Every response now also carries `content`. **Breaking wire change** for any caller of this admin-only route (the admin app is the only one, and is updated in this same change).
+  
+  `@cogenta/cli`: no interface change — `agent-runtime.ts`'s use of `createFileAgentSkillStore`/`ensureBuiltinAgentSkills` is unaffected, since `AgentSkillStore`'s own contract did not change; called out here only because the on-disk format of a site's `.cogenta/agents-runtime/skills/` directory changes on next write (existing sites keep working — nothing migrates old `<id>.json` records automatically, since none exist yet on any real site this project has shipped to).
+  
+  `@cogenta/plugins`: `createSkillRegistry`'s marketplace submission handler (`registries/skills.ts`) now records a submission with no `version` field (a real Claude Code/Codex `SKILL.md`) as `skillVersion: null` instead of failing to compile against the now-optional `SkillMetadata.version` — no behaviour change for a submission that does carry one.
+- 562c9c1: Add the "Apparence" admin screen (fiche 14) — the CMS's most-differentiating
+  feature, AI skin generation, was previously exposed only through the CLI.
+  
+  - `@cogenta/render` gains `mergeSkinTokens` (`SkinTokenOverrides`): overlays a
+    partial token tree onto a complete base skin, group by group, key by key.
+  - `@cogenta/schema` gains `createThemeStore`/`ensureThemeTable` — one row of
+    theme overrides (a partial token overlay, additional CSS, and four identity
+    media references), the database half of the two-source-of-truth design
+    task 0 settles on: `theme.tokens.json` stays the versioned file default,
+    the database holds what an `admin` changed from the admin screen.
+  - `@cogenta/plugins`'s `SkinGalleryEntry` now carries the accepted skin's real
+    `tokens` (`null` for a rejected entry) — needed to render a swatch or apply
+    a gallery skin, previously only metadata.
+  - `@cogenta/api` gains `createThemeRouter` (`GET/PUT/DELETE /api/theme[/overrides]`,
+    `GET /api/theme/skins`, `POST /api/theme/skins/:id/apply`,
+    `POST /api/theme/generate`, `POST /api/theme/export`), plus the
+    `SKIN_*`/`THEME_*` error-code → HTTP-status mappings it needs.
+  - `@cogenta/cli` wires it all into `cogenta serve`/`dev`: `resolveStyles()`
+    recomputes the served stylesheet on every request (file tokens merged with
+    saved overrides plus additional CSS), which is what makes a saved change
+    visible on the very next page view instead of only after a restart — the
+    "hot swap" contract D already promised for the file alone. A new
+    `POST /api/theme/preview` route renders the real home page with a candidate
+    overlay nobody has saved yet, the same iframe-on-the-real-render decision
+    L16 made for the page builder. Exporting the merged tokens back into
+    `theme.tokens.json` is gated to `cogenta dev` only, mirroring the
+    ADR-0010 rule L19's site-plan applier already uses for the schema file.
+  
+  R2 verified: without an LLM provider, `GET /api/theme` reports
+  `aiAvailable: false` and the admin's AI section does not render at all — no
+  error, no dead link. R6 verified: an AI-generated candidate or a chosen
+  gallery skin is never applied automatically; a save is always a separate,
+  explicit action.
+- 6e5df34: Fiche 29 — the marketplace gains a real "installed extensions" screen: what
+  runs, in which version, with which permissions, and how it's been behaving.
+  
+  **Breaking, in the pre-alpha sense already established for this project (no
+  package has ever used `major`, and one would jump straight to `1.0.0`,
+  contradicting "pre-alpha"; the breaking shape is called out here instead):**
+  `@cogenta/plugins`' `MarketplaceInstallRecord` gains a required `enabled`
+  field, and `MarketplacePreview` gains required `engineCompatible`,
+  `latestVersion` and `source` fields — anyone constructing these shapes by
+  hand (a test double, a custom `MarketplaceInstaller` implementation) needs
+  those fields too. `MarketplaceInstaller` gains two new required methods,
+  `activate`/`deactivate`, and `uninstall`'s signature grows an optional
+  `{ removeData?: boolean }` second argument. `@cogenta/api`'s
+  `marketplace-router.ts` mirrors the same shapes structurally, as it always
+  has.
+  
+  New, additive:
+  
+  - `@cogenta/plugins`: `createPluginUsageStore` (`permissions/usage.ts`) —
+    accumulates real per-run duration, call count, and outcome (ok / error /
+    timeout / memory / crash) per plugin, fed by `runPlugin` when given a
+    `usageStore` option. `IsolatedRunResult` gains a real, always-present
+    `durationMs`. `PluginGrantStore` gains `revokeAll`. The marketplace
+    installer gains a manual `enabled` toggle (`activate`/`deactivate`,
+    independent of `PluginDisableStore`'s automatic timeout/memory/crash
+    disable), an `engineVersion` option that refuses an incompatible install
+    or update with the new `MARKETPLACE_ENGINE_INCOMPATIBLE` code (only once a
+    caller actually configures a real Cogenta version — the placeholder
+    default never fabricates a refusal), and `uninstall(id, { removeData:
+    true })`, which also revokes grants and clears the disable/usage records.
+    `MarketplaceCatalogEntry` gains an optional `author`, and
+    `MarketplaceChangelogEntry` an optional `releasedAt`.
+  - `@cogenta/api`: `GET /api/marketplace/installed` (capabilities, disabled
+    state, usage, update availability, per item), `GET /api/marketplace/updates`
+    and `POST /api/marketplace/updates/apply` (grouped update that always
+    skips — never silently applies — anything that would widen permissions),
+    `POST /api/marketplace/items/{id}/activate` and `.../deactivate`,
+    `POST .../uninstall` now accepts `{ removeData: boolean }` in its body.
+  - `@cogenta/core`: new `MARKETPLACE_ENGINE_INCOMPATIBLE` error code, mapped
+    to a `422` in `@cogenta/api`'s `statusFor`.
+  
+  Honest limitation, not an oversight: nothing in this repository actually
+  calls `runPlugin` yet (no live `AgentRegistry` exists anywhere, the same
+  R2-honest gap already noted since L5) — the new usage store is real, tested
+  end to end, and wired into `cogenta serve`, but stays empty on a real
+  deployment until a real plugin-execution pipeline lands. The installed
+  extensions screen says "never run yet" rather than inventing a number.
+- 46572ba: Add the admin notification center (fiche 38): a bell with an unread count, filterable
+  by severity/period, bulk mark-as-read; new notice sources (plugin auto-disabled,
+  scheduled publication failed); channel-bridged notices reusing `@cogenta/channels`'
+  existing message formats, grouping and identity-linking (no second mechanism); and a
+  per-severity channel routing settings screen.
+  
+  `@cogenta/schema` gains `scheduled-publish-failures` store used by the new notice
+  source. `@cogenta/api` gains a real `@cogenta/channels` dependency, new notice-router
+  routes for channel settings and notice history, and a `plugin-disabled`/
+  `scheduled-publish-failed` notice source pair. `@cogenta/plugins` exposes disabled-state
+  data the new notice source reads. `@cogenta/channels`' preference types gain the field
+  the settings screen needs.
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [08e394b]
+- Updated dependencies [d0a3250]
+- Updated dependencies [0e88f30]
+- Updated dependencies [750a10b]
+- Updated dependencies [08e394b]
+- Updated dependencies [edd0787]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [7a59646]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [a15b1ae]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [86fc9cf]
+- Updated dependencies [54409f3]
+- Updated dependencies [2285720]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [745ebd8]
+- Updated dependencies [960757d]
+- Updated dependencies [835d736]
+- Updated dependencies [cf005d4]
+- Updated dependencies [07c0f0a]
+  - @cogenta/core@0.5.0
+  - @cogenta/agents@0.3.0
+  - @cogenta/render@0.2.0
+
 ## 0.2.0
 
 ### Minor Changes

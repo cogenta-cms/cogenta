@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-ecommerce",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A confident, product-grid-native storefront theme: the twelve vocabulary blocks styled for retail — shoppable cards, a bold CTA-driven accent, zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

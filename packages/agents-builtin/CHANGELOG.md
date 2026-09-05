@@ -1,5 +1,113 @@
 # @cogenta/agents-builtin
 
+## 0.2.0
+
+### Minor Changes
+
+- 257486e: L24 task 2: a third catalogue agent, "Cogenta Developer" (`developerAgent`,
+  `packages/agents-builtin/src/developer/`), dedicated to extending Cogenta's own
+  codebase at a site operator's request — not a site's content or theme, the CMS
+  itself. Same shape as `content`/`performance`/`security`/`seo`: an `AgentDeclaration`
+  built with `defineAgent`, an `identity.md` describing its role in depth, exported
+  from the package index like its siblings, never auto-registered into any live
+  site's `AgentDeclarationStore` (nothing in this package is — see the comment on
+  `developerAgent` for why that already makes it "disabled by default" in the only
+  sense that applies to a catalogue entry).
+  
+  Its identity document is deliberately long and project-specific rather than a
+  generic "coding agent" prompt: it names the five interface contracts and what each
+  forbids without an RFC/ADR, walks through R1-R10 with a concrete violation drawn
+  from this codebase for each, maps every `packages/*` directory to what it owns, and
+  restates the project's test discipline, commit format and documentation governance
+  verbatim.
+  
+  Its only side-effecting tool, `code.propose_patch` (new permission `code.patch`,
+  Contract C moves to `tools@1.3` — `docs/04-contrats.md`, additive by the bottom like
+  `tools@1.1`/`tools@1.2` before it, no existing tool signature touched), opens a pull
+  request carrying the full content of one or more changed files — it never writes to
+  the repository directly. Built the same way `security`'s `deps.patch` already is,
+  reusing the same `PrClient` capability rather than inventing a second "reach a
+  forge" abstraction; only the input shape is new (arbitrary files instead of one
+  dependency-file bump). `developerAgent.autonomy` pins `default: 'propose'` with no
+  override, ever, for `code.propose_patch` — proven at runtime, not just declared: a
+  new test builds the real manifest and autonomy wrapper (`buildManifest`,
+  `withAutonomyForManifest`) and shows the call only ever queues an approval request,
+  never reaches `PrClient.open`, and that a tool outside the agent's declared list
+  (e.g. `content.publish`) never gets a manifest entry in the first place, so a
+  prompt-injected request to call it has nothing to resolve against.
+  
+  No new dependency (R9): `code.propose_patch` is built with the same `defineTool`
+  and `PrClient` interface `deps-patch-tool.ts` already exports.
+  
+  Alongside it, a fourth catalogue agent, "Cogenta Designer"
+  (`designerAgent`, `packages/agents-builtin/src/designer/`), for theme and template
+  work instead of the CMS's own code — its `identity.md` walks Contract D
+  (`RenderContext`/`SkinTokens`/`ThemeManifest`/`renderChrome`) and Contract B (all
+  twelve blocks, exact fields) in the same depth, names the zero-client-JS/zero-literal-color
+  rules and the `light-dark()`/`oklch(from …)` technique the five shipped themes already
+  use, and declares no write tool at all — no contract-C tool exists anywhere in this
+  repo that writes a theme file, so `designerAgent.tools` stays read-only
+  (`content.read`, `media.read`, `site.config_read`, `http.fetch`, `channel.send`,
+  `build.trigger`) and `autonomy.default` is `propose` with nothing to override.
+
+### Patch Changes
+
+- Updated dependencies [154a751]
+- Updated dependencies [5c5ffbd]
+- Updated dependencies [08e394b]
+- Updated dependencies [d0a3250]
+- Updated dependencies [0e88f30]
+- Updated dependencies [750a10b]
+- Updated dependencies [08e394b]
+- Updated dependencies [edd0787]
+- Updated dependencies [c489fde]
+- Updated dependencies [54ca689]
+- Updated dependencies [23299e9]
+- Updated dependencies [0692713]
+- Updated dependencies [36744d3]
+- Updated dependencies [af57fa2]
+- Updated dependencies [322d1a3]
+- Updated dependencies [0ca8a79]
+- Updated dependencies [c392e24]
+- Updated dependencies [562c9c1]
+- Updated dependencies [edf5623]
+- Updated dependencies [db307e0]
+- Updated dependencies [49815b9]
+- Updated dependencies [122da7a]
+- Updated dependencies [2fb2101]
+- Updated dependencies [0e90b32]
+- Updated dependencies [d0bfa1d]
+- Updated dependencies [95acedf]
+- Updated dependencies [6e5df34]
+- Updated dependencies [bebbab8]
+- Updated dependencies [a8199ea]
+- Updated dependencies [16f63f6]
+- Updated dependencies [1dd9e6f]
+- Updated dependencies [656163e]
+- Updated dependencies [4513a71]
+- Updated dependencies [bdcb563]
+- Updated dependencies [3cbd6d7]
+- Updated dependencies [249eb6f]
+- Updated dependencies [4d3f3c7]
+- Updated dependencies [cb62917]
+- Updated dependencies [5e43b20]
+- Updated dependencies [b8d307a]
+- Updated dependencies [54409f3]
+- Updated dependencies [2285720]
+- Updated dependencies [9b1dae8]
+- Updated dependencies [8a8d873]
+- Updated dependencies [3075941]
+- Updated dependencies [e01efae]
+- Updated dependencies [5de237f]
+- Updated dependencies [2c1af5d]
+- Updated dependencies [745ebd8]
+- Updated dependencies [960757d]
+- Updated dependencies [835d736]
+- Updated dependencies [cf005d4]
+- Updated dependencies [07c0f0a]
+  - @cogenta/core@0.5.0
+  - @cogenta/agents@0.3.0
+
 ## 0.1.4
 
 ### Patch Changes

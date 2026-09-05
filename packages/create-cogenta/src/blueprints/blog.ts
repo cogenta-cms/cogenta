@@ -1,5 +1,4 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
-import type { DatabaseHandle } from '@cogenta/core'
 import {
   type CollectionDefinition,
   createContentStore,
@@ -16,6 +15,7 @@ import {
   type BlueprintContentPack,
   type RecommendedAgentHint,
   SEO_FIELDS,
+  type SeedContext,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -380,11 +380,8 @@ export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
  * — never mocked (house rule) — so a scaffolded blog blueprint has genuine
  * rows to look at, not a claim that it does.
  */
-async function seedBlogDemoContent(
-  db: DatabaseHandle,
-  defaultLocale: string,
-  adminId: string | null,
-): Promise<void> {
+async function seedBlogDemoContent(ctx: SeedContext): Promise<void> {
+  const { db, defaultLocale, adminId } = ctx
   // `category`/`tag` are taxonomies, not collections (T02, ADR-0022) — their
   // demo terms go through `TaxonomyStore`, not `createContentStore`.
   const categoryStore = createTaxonomyStore({ db, taxonomy: category })

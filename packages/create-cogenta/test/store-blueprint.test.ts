@@ -36,84 +36,109 @@ describe('scaffoldSite — store blueprint', () => {
     }
   })
 
-  it('writes a schema file loadCollections can load back, with product/page', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-    dirs.push(targetDir)
+  // `store` now renders and ingests 7 real demo images (one hero, six
+  // products) through the real media pipeline inside `scaffoldSite` (L25
+  // task A0b) — measured at ~25-30s end to end on this machine (sharp
+  // available; slower still on a WASM-only host), split roughly evenly
+  // between the procedural rendering itself and the same real variant
+  // generation a human's own upload would pay. Genuinely slower than
+  // vitest's default 5s, not a hang — a generous bound, not a tight one.
+  const SCAFFOLD_TIMEOUT = 60_000
 
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Store',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'store',
-    })
+  it(
+    'writes a schema file loadCollections can load back, with product/page',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
+      dirs.push(targetDir)
 
-    expect(result.blueprintId).toBe('store')
-    expect(result.fellBackToBlank).toBe(false)
+      const result = await scaffoldSite({
+        targetDir,
+        siteName: 'My Store',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'store',
+      })
 
-    const collections = await loadCollections(targetDir)
-    expect(collections.map((c) => c.name).sort()).toEqual(['page', 'product'])
-  })
+      expect(result.blueprintId).toBe('store')
+      expect(result.fellBackToBlank).toBe(false)
 
-  it('writes its own starting skin, not the canonical default', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-    dirs.push(targetDir)
+      const collections = await loadCollections(targetDir)
+      expect(collections.map((c) => c.name).sort()).toEqual(['page', 'product'])
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Store',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'store',
-    })
+  it(
+    'writes its own starting skin, not the canonical default',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
+      dirs.push(targetDir)
 
-    expect(result.skinSource).toBe('preset')
-    const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
-    expect(tokens.color.accent).toBe('#0f766e')
-  })
+      const result = await scaffoldSite({
+        targetDir,
+        siteName: 'My Store',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'store',
+      })
 
-  it('seeds real demo products and pages into real SQLite', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-    dirs.push(targetDir)
+      expect(result.skinSource).toBe('preset')
+      const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
+      expect(tokens.color.accent).toBe('#0f766e')
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Store',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'store',
-    })
-    expect(result.migrateExitCode).toBe(0)
-    expect(result.usersExitCode).toBe(0)
+  it(
+    'seeds real demo products and pages into real SQLite',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
+      dirs.push(targetDir)
 
-    const logger = createLogger({ level: 'silent' })
-    const selection = await createDatabaseRegistry({ logger }).select({
-      driver: 'sqlite',
-      url: join(targetDir, '.cogenta', 'site.db'),
-    })
-    try {
-      const productStore = createContentStore({ db: selection.instance, collection: product })
-      const pageStore = createContentStore({ db: selection.instance, collection: page })
+      const result = await scaffoldSite({
+        targetDir,
+        siteName: 'My Store',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'store',
+      })
+      expect(result.migrateExitCode).toBe(0)
+      expect(result.usersExitCode).toBe(0)
 
-      const products = await productStore.list()
-      expect(products.items.length).toBeGreaterThanOrEqual(5)
-      expect(products.items.some((entry) => entry.values.inStock === false)).toBe(true)
+      const logger = createLogger({ level: 'silent' })
+      const selection = await createDatabaseRegistry({ logger }).select({
+        driver: 'sqlite',
+        url: join(targetDir, '.cogenta', 'site.db'),
+      })
+      try {
+        const productStore = createContentStore({ db: selection.instance, collection: product })
+        const pageStore = createContentStore({ db: selection.instance, collection: page })
 
-      const pages = await pageStore.list()
-      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
-        'home',
-        'shipping-returns',
-      ])
-    } finally {
-      await selection.dispose()
-    }
-  })
+        const products = await productStore.list()
+        expect(products.items.length).toBeGreaterThanOrEqual(5)
+        expect(products.items.some((entry) => entry.values.inStock === false)).toBe(true)
+        // L25 task A0b: every demo product gets a real procedural cover
+        // photo, ingested through the real media pipeline.
+        expect(products.items.every((entry) => typeof entry.values.photo === 'string')).toBe(true)
+
+        const pages = await pageStore.list()
+        expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
+          'home',
+          'shipping-returns',
+          'shop',
+        ])
+      } finally {
+        await selection.dispose()
+      }
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 
   it('resolves /shop/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(STORE_COLLECTIONS, '/shop/field-jacket')).toEqual({
@@ -128,70 +153,74 @@ describe('scaffoldSite — store blueprint', () => {
     })
   })
 
-  it('renders the seeded home page into real HTML through the real theme-canonical pipeline', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-    dirs.push(targetDir)
+  it(
+    'renders the seeded home page into real HTML through the real theme-canonical pipeline',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
+      dirs.push(targetDir)
 
-    await scaffoldSite({
-      targetDir,
-      siteName: 'My Store',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'store',
-    })
+      await scaffoldSite({
+        targetDir,
+        siteName: 'My Store',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'store',
+      })
 
-    const logger = createLogger({ level: 'silent' })
-    const selection = await createDatabaseRegistry({ logger }).select({
-      driver: 'sqlite',
-      url: join(targetDir, '.cogenta', 'site.db'),
-    })
-    try {
-      const pageStore = createContentStore({ db: selection.instance, collection: page })
-      const productStore = createContentStore({ db: selection.instance, collection: product })
+      const logger = createLogger({ level: 'silent' })
+      const selection = await createDatabaseRegistry({ logger }).select({
+        driver: 'sqlite',
+        url: join(targetDir, '.cogenta', 'site.db'),
+      })
+      try {
+        const pageStore = createContentStore({ db: selection.instance, collection: page })
+        const productStore = createContentStore({ db: selection.instance, collection: product })
 
-      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
-      expect(home).toBeDefined()
-      if (home === undefined) throw new Error('unreachable')
+        const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
+        expect(home).toBeDefined()
+        if (home === undefined) throw new Error('unreachable')
 
-      const pageContent: PageContent = {
-        title: home.values.title as string,
-        blocks: (home.blocks.blocks ?? []).map(
-          (block): VocabularyBlock =>
-            ({
-              _key: block.key,
-              _type: block.type,
-              _version: '1.0.0',
-              ...block.data,
-            }) as VocabularyBlock,
-        ),
+        const pageContent: PageContent = {
+          title: home.values.title as string,
+          blocks: (home.blocks.blocks ?? []).map(
+            (block): VocabularyBlock =>
+              ({
+                _key: block.key,
+                _type: block.type,
+                _version: '1.0.0',
+                ...block.data,
+              }) as VocabularyBlock,
+          ),
+        }
+
+        const products = await productStore.list()
+        const slugById = new Map(
+          products.items.map((entry) => [entry.id, entry.values.slug as string]),
+        )
+        const themeEntries: readonly ThemeContentEntry[] = products.items.map((entry) => ({
+          id: entry.id,
+          collection: 'product',
+          locale: entry.locale,
+          status: entry.status,
+          ...entry.values,
+        }))
+
+        const ctx = fakeThemeContext(slugById)
+        const entries: FetchedEntries = { 'demo-home-products': themeEntries }
+
+        const html = htmlOf(renderPage(pageContent, ctx, entries))
+
+        expect(html).toContain('Made to be used, not shelved')
+        expect(html).toContain('cg-collection')
+        expect(html).toContain('Field jacket')
+      } finally {
+        await selection.dispose()
       }
-
-      const products = await productStore.list()
-      const slugById = new Map(
-        products.items.map((entry) => [entry.id, entry.values.slug as string]),
-      )
-      const themeEntries: readonly ThemeContentEntry[] = products.items.map((entry) => ({
-        id: entry.id,
-        collection: 'product',
-        locale: entry.locale,
-        status: entry.status,
-        ...entry.values,
-      }))
-
-      const ctx = fakeThemeContext(slugById)
-      const entries: FetchedEntries = { 'demo-home-products': themeEntries }
-
-      const html = htmlOf(renderPage(pageContent, ctx, entries))
-
-      expect(html).toContain('Made to be used, not shelved')
-      expect(html).toContain('cg-collection')
-      expect(html).toContain('Field jacket')
-    } finally {
-      await selection.dispose()
-    }
-  })
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 })
 
 function htmlOf(node: HtmlNode | null): string {
@@ -210,9 +239,19 @@ function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext 
     locale: 'en',
     url: new URL('http://localhost:4000/home'),
     t: (key) => key,
-    image: () => {
-      throw new Error('not used by this test')
-    },
+    // The home hero now carries a real `media` id (L25 task A0b), so
+    // `renderHero` calls this for real — a minimal, honest `ImageSource`
+    // stands in for the real image pipeline, which this test does not
+    // otherwise exercise.
+    image: (media) => ({
+      kind: 'image',
+      src: `/_image?id=${media}`,
+      srcset: '',
+      width: 1600,
+      height: 1000,
+      alt: 'store hero',
+      focal: null,
+    }),
     link: (target) => {
       if (typeof target === 'string') return target
       if ('path' in target) return target.path

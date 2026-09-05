@@ -1,5 +1,4 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
-import type { DatabaseHandle } from '@cogenta/core'
 import {
   type CollectionDefinition,
   createContentStore,
@@ -13,6 +12,7 @@ import {
   type RecommendedAgentHint,
   richTextParagraph,
   SEO_FIELDS,
+  type SeedContext,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -249,11 +249,8 @@ export const ASSOCIATION_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
  * Inserts the `association` blueprint's demo content through the real
  * `ContentStore` — never mocked (house rule).
  */
-async function seedAssociationDemoContent(
-  db: DatabaseHandle,
-  defaultLocale: string,
-  adminId: string | null,
-): Promise<void> {
+async function seedAssociationDemoContent(ctx: SeedContext): Promise<void> {
+  const { db, defaultLocale, adminId } = ctx
   const eventStore = createContentStore({ db, collection: event, defaultLocale })
   const pageStore = createContentStore({ db, collection: page, defaultLocale })
 

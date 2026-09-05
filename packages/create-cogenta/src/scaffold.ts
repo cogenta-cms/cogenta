@@ -13,20 +13,25 @@ import {
   type SitePlanDraft,
 } from '@cogenta/agents'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
-import { createOutput, runMigrate, runUsers } from '@cogenta/cli'
-import { createDatabaseRegistry, createLogger } from '@cogenta/core'
+import { createOutput, runMigrate, runUsers, selectMediaImageProcessor } from '@cogenta/cli'
+import { createDatabaseRegistry, createLogger, createStorageRegistry } from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
 import {
   type CollectionDefinition,
   createContentStore,
   createSchemaTables,
   createSearchIndex,
+  createThemeStore,
+  ensureThemeTable,
   reindexAll,
   type TaxonomyDefinition,
   validateCollectionSet,
 } from '@cogenta/schema'
 import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
+import { seedDemoMedia } from './blueprints/demo-media.js'
+import { seedBlueprintMenus } from './blueprints/menus.js'
 import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
+import { seedSiteSettings } from './blueprints/site-settings-seed.js'
 import { STARTING_SKINS } from './blueprints/starting-skins.js'
 
 export interface ScaffoldAnswers {
@@ -93,6 +98,19 @@ export interface ScaffoldResult {
   readonly approvedEntriesSeeded: number
   /** Where an unreviewed proposal was left waiting, when one was. */
   readonly sitePlanPath?: string
+  /**
+   * The npm package name written to `cogenta_theme.active_theme` and to the
+   * generated `package.json` (L25 task A0b, D4) — present only when the
+   * blueprint declares `defaultTheme`. `blank` and every blueprint without
+   * one: absent, `@cogenta/theme-canonical` stays the active theme.
+   */
+  readonly activeTheme?: string
+  /** How many procedural demo images (`seedDemoMedia`) were ingested. `0` for a blueprint with no media specs, or when demo content was skipped. */
+  readonly mediaSeeded: number
+  /** How many navigation items (header + footer + header-action) were seeded. `0` when the blueprint declares no `menus`. */
+  readonly menusSeeded: number
+  /** How many site settings (`general.tagline`, …) were written. `0` when the blueprint declares none, or every key it named was unknown to the registry. */
+  readonly siteSettingsSeeded: number
 }
 
 function capture(): { readonly write: (text: string) => void; text(): string } {
@@ -193,7 +211,14 @@ function schemaFileContents(
   return `export default ${JSON.stringify(collections, null, 2)}\n${taxonomiesExport}`
 }
 
-function packageJsonContents(answers: ScaffoldAnswers): string {
+/**
+ * `defaultTheme` (L25 task A0b, D4): the blueprint's own theme package,
+ * added next to `@cogenta/theme-canonical` at the same version spec
+ * (`latest`) — never *instead* of it, since the canonical theme stays the
+ * fallback `theme-registry.ts` (`@cogenta/cli`) resolves to if the active
+ * theme is ever unset or unknown (R1/R2).
+ */
+function packageJsonContents(answers: ScaffoldAnswers, defaultTheme?: string): string {
   const pkg = {
     name:
       answers.siteName
@@ -219,6 +244,7 @@ function packageJsonContents(answers: ScaffoldAnswers): string {
       '@cogenta/core': 'latest',
       '@cogenta/cli': 'latest',
       '@cogenta/theme-canonical': 'latest',
+      ...(defaultTheme === undefined ? {} : { [defaultTheme]: 'latest' }),
     },
   }
   return `${JSON.stringify(pkg, null, 2)}\n`
@@ -256,13 +282,18 @@ export async function scaffoldSite(
   const { blueprint, fellBackToBlank } = resolveBlueprint(
     answers.blueprintId ?? DEFAULT_BLUEPRINT_ID,
   )
+  const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
 
   await mkdir(answers.targetDir, { recursive: true })
   await mkdir(join(answers.targetDir, '.cogenta'), { recursive: true })
 
   const configPath = join(answers.targetDir, 'cogenta.config.mjs')
   await writeFile(configPath, configFileContents(answers), 'utf8')
-  await writeFile(join(answers.targetDir, 'package.json'), packageJsonContents(answers), 'utf8')
+  await writeFile(
+    join(answers.targetDir, 'package.json'),
+    packageJsonContents(answers, pack?.defaultTheme),
+    'utf8',
+  )
 
   // A real, generated secret, not a manual step: `cogenta serve` refuses to
   // start without `COGENTA_AUTH_SIGNING_KEY`, and asking a brand-new user to
@@ -310,7 +341,6 @@ export async function scaffoldSite(
     createFileAgentSkillStore({ dir: join(agentsRuntimeDir, 'skills') }),
   )
 
-  const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
   // `cogenta serve` (`@cogenta/cli`) hard-requires a `cogenta.schema.*` file
   // to exist next to the config — including for `blank`, whose whole point
   // is an empty collections array, not a missing file. Writing it
@@ -388,6 +418,10 @@ export async function scaffoldSite(
   })
 
   let approvedEntriesSeeded = 0
+  let activeTheme: string | undefined
+  let mediaSeeded = 0
+  let menusSeeded = 0
+  let siteSettingsSeeded = 0
   const needsDatabaseWork = merged.all.length > 0
   if (needsDatabaseWork && migrateExitCode === 0 && usersExitCode === 0) {
     const logger = createLogger({ level: 'silent' })
@@ -399,15 +433,85 @@ export async function scaffoldSite(
       await createSchemaTables(selection.instance, merged.all, taxonomies)
       await ensureAuthTables(selection.instance)
       const admin = await createUserStore(selection.instance).byEmail(answers.adminEmail)
-      if (pack !== undefined && (answers.seedDemoContent ?? true)) {
-        await pack.seedDemoContent(selection.instance, answers.defaultLocale, admin?.id ?? null)
+      const adminId = admin?.id ?? null
+
+      if (pack !== undefined) {
+        // (b) active theme — same store/table `cogenta serve` and the
+        // Appearance screen already read (`theme-store.js`). Written
+        // whether or not demo content is seeded: a blueprint's theme is
+        // part of what the site *is*, not part of its fake demo data.
+        if (pack.defaultTheme !== undefined) {
+          await ensureThemeTable(selection.instance)
+          await createThemeStore({ db: selection.instance }).set({
+            activeTheme: pack.defaultTheme,
+            updatedBy: adminId,
+          })
+          activeTheme = pack.defaultTheme
+        }
+
+        // (c) menus and site settings — same reasoning: real site setup,
+        // not demo content, so seeded regardless of `seedDemoContent`.
+        if (pack.menus !== undefined) {
+          menusSeeded = await seedBlueprintMenus(
+            selection.instance,
+            answers.defaultLocale,
+            pack.menus,
+          )
+        }
+        if (pack.siteSettings !== undefined) {
+          siteSettingsSeeded = await seedSiteSettings(
+            selection.instance,
+            answers.defaultLocale,
+            pack.siteSettings,
+            adminId,
+            logger,
+          )
+        }
       }
+
+      let media: Record<string, string> = {}
+      if (pack !== undefined && (answers.seedDemoContent ?? true)) {
+        // (d) demo media, before demo content, so the pack's own
+        // `seedDemoContent` can reference the ids it seeds. Uses the same
+        // storage driver `cogenta serve` will (`storage.path` in
+        // `cogenta.config.mjs`) and the same image-processing pipeline a
+        // real upload takes, so an installed site's `/_image?id=` URLs work
+        // identically for a demo image and one an editor later uploads.
+        if (pack.mediaSpecs !== undefined && pack.mediaSpecs.length > 0) {
+          const storageSelection = await createStorageRegistry({ logger }).select({
+            path: join(answers.targetDir, '.cogenta', 'media'),
+          })
+          try {
+            const imageSelection = await selectMediaImageProcessor(logger)
+            media = await seedDemoMedia(
+              {
+                db: selection.instance,
+                storage: storageSelection.instance,
+                adminId,
+                ...(imageSelection === null ? {} : { images: imageSelection.processor }),
+              },
+              pack.mediaSpecs,
+            )
+            mediaSeeded = Object.keys(media).length
+          } finally {
+            await storageSelection.dispose()
+          }
+        }
+
+        await pack.seedDemoContent({
+          db: selection.instance,
+          defaultLocale: answers.defaultLocale,
+          adminId,
+          media,
+        })
+      }
+
       approvedEntriesSeeded = await seedApprovedEntries({
         db: selection.instance,
         collections: merged.added,
         entries: answers.approvedDemoContent ?? [],
         defaultLocale: answers.defaultLocale,
-        adminId: admin?.id ?? null,
+        adminId,
         ...(answers.llm === undefined ? {} : { model: answers.llm.model }),
       })
 
@@ -448,6 +552,10 @@ export async function scaffoldSite(
     approvedCollectionNames: merged.added.map((collection) => collection.name),
     approvedEntriesSeeded,
     ...(sitePlanPath === undefined ? {} : { sitePlanPath }),
+    ...(activeTheme === undefined ? {} : { activeTheme }),
+    mediaSeeded,
+    menusSeeded,
+    siteSettingsSeeded,
   }
 }
 

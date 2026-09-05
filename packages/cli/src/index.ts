@@ -33,6 +33,15 @@ export type { LinksOptions, LinksSubcommand } from './commands/links.js'
 export { runLinks } from './commands/links.js'
 export type { McpOptions } from './commands/mcp.js'
 export { runMcp } from './commands/mcp.js'
+export type { MediaImageProcessorOptions } from './commands/media-images.js'
+export {
+  contentTypeOf,
+  createMediaImageProcessor,
+  selectMediaImageProcessor,
+  VARIANT_FORMAT,
+  variantName,
+  variantWidthsFor,
+} from './commands/media-images.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
 export type { RolesOptions, RolesSubcommand } from './commands/roles.js'

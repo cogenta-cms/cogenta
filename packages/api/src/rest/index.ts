@@ -111,6 +111,8 @@ export type {
 export { createMarketplaceRouter } from './marketplace-router.js'
 export type { McpConnectionsRouter, McpConnectionsRouterOptions } from './mcp-connections-router.js'
 export { createMcpConnectionsRouter } from './mcp-connections-router.js'
+export type { IngestMediaUploadDeps, IngestMediaUploadInput } from './media-ingest.js'
+export { DEFAULT_MAX_UPLOAD_BYTES, ingestMediaUpload } from './media-ingest.js'
 export type {
   ImageSize,
   MediaImageProcessor,

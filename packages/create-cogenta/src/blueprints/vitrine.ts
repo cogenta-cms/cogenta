@@ -1,5 +1,4 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
-import type { DatabaseHandle } from '@cogenta/core'
 import {
   type CollectionDefinition,
   createContentStore,
@@ -12,6 +11,7 @@ import {
   definePageCollection,
   type RecommendedAgentHint,
   SEO_FIELDS,
+  type SeedContext,
   toBlockZoneEntry,
 } from './content-pack.js'
 
@@ -268,11 +268,8 @@ export const VITRINE_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
  * Inserts the `vitrine` blueprint's demo content through the real
  * `ContentStore` — never mocked (house rule).
  */
-async function seedVitrineDemoContent(
-  db: DatabaseHandle,
-  defaultLocale: string,
-  adminId: string | null,
-): Promise<void> {
+async function seedVitrineDemoContent(ctx: SeedContext): Promise<void> {
+  const { db, defaultLocale, adminId } = ctx
   const serviceStore = createContentStore({ db, collection: service, defaultLocale })
   const testimonialStore = createContentStore({ db, collection: testimonial, defaultLocale })
   const pageStore = createContentStore({ db, collection: page, defaultLocale })

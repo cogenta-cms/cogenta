@@ -57,4 +57,11 @@ describe('theme registry (fiche L23)', () => {
     // Two genuinely installable themes, not one theme and a placeholder.
     expect(theme).not.toBe(await resolveTheme(DEFAULT_THEME_NAME))
   })
+
+  it('resolves the association theme (L25) with a real renderPage and renderChrome', async () => {
+    const theme = await resolveTheme('@cogenta/theme-association')
+    expect(typeof theme.renderPage).toBe('function')
+    expect(typeof theme.renderChrome).toBe('function')
+    expect(theme).not.toBe(await resolveTheme(DEFAULT_THEME_NAME))
+  })
 })

@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -28,6 +29,12 @@ import {
  * site or a render that predates them gets exactly the `1.3` masthead/footer
  * shape, byte for byte (see `test/chrome.test.ts`'s "without the new
  * fields" case).
+ *
+ * The manual light/dark toggle (`renderThemeToggle`, `@cogenta/theme-kit`) is
+ * unconditional, on every render — placed after both nav renderings
+ * (desktop `<nav>` and the mobile `<details>` disclosure), outside either's
+ * `display: none` breakpoint switch, so it is the one header control always
+ * visible regardless of viewport width.
  */
 
 function renderNavItems(links: readonly ChromeNavLink[]): string {
@@ -89,12 +96,14 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const desktopNav = !hasMenu
     ? ''
     : `<nav class="cg-site-nav" aria-label="Primary">${navItems}${headerAction}</nav>`
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `${desktopNav}` +
     `${mobileMenu}` +
+    `${themeToggle}` +
     `</div></header>`
 
   const tagline =

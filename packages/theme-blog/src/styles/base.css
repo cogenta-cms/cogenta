@@ -244,13 +244,17 @@ img {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--cg-gap);
   max-inline-size: var(--cg-page);
   margin-inline: auto;
 }
 
 .cg-site-header__home {
+  /* Pushes the nav (or hamburger) and the theme toggle into a single
+     right-hand cluster, rather than `justify-content: space-between`
+     spreading three children (home, nav, toggle) into three separate
+     clusters across the header. */
+  margin-inline-end: auto;
   color: var(--cg-ink);
   font-family: var(--cogenta-font-serif);
   font-weight: var(--cg-weight-semibold);
@@ -408,6 +412,57 @@ img {
   .cg-site-nav .cg-menu__action {
     align-self: center;
   }
+}
+
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`) — sized to match `.cg-menu__toggle` (the hamburger it sits
+   beside on narrow viewports), not the block vocabulary's `.cg-action`
+   style, so it never reads as a call-to-action competing with a real one. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: var(--cg-radius-sm);
+  border: 0;
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+}
+
+.cg-theme-toggle:hover {
+  background: var(--cg-surface-sunken);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--moon {
+  display: block;
 }
 
 /* --------------------------------------------------------------------------

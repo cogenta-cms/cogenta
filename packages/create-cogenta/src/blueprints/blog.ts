@@ -204,15 +204,19 @@ export const BLOG_DEMO_CATEGORIES: readonly BlogDemoCategory[] = [
   { name: 'Craft', slug: 'craft' },
 ]
 
+// L26 D1: `name` is the display label shown as-is on a tag archive's <h1>
+// (`renderTermArchive`) — lowercase read as unfinished placeholder text
+// next to `category`'s title-cased labels ("Writing", not "writing").
+// `slug` is untouched: it is the URL and the join-table key.
 export const BLOG_DEMO_TAGS: readonly BlogDemoTag[] = [
-  { name: 'process', slug: 'process' },
-  { name: 'tools', slug: 'tools' },
-  { name: 'habits', slug: 'habits' },
-  { name: 'editors', slug: 'editors' },
-  { name: 'notebooks', slug: 'notebooks' },
-  { name: 'focus', slug: 'focus' },
-  { name: 'drafts', slug: 'drafts' },
-  { name: 'revision', slug: 'revision' },
+  { name: 'Process', slug: 'process' },
+  { name: 'Tools', slug: 'tools' },
+  { name: 'Habits', slug: 'habits' },
+  { name: 'Editors', slug: 'editors' },
+  { name: 'Notebooks', slug: 'notebooks' },
+  { name: 'Focus', slug: 'focus' },
+  { name: 'Drafts', slug: 'drafts' },
+  { name: 'Revision', slug: 'revision' },
 ]
 
 export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
@@ -434,6 +438,19 @@ export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
     spec: avatarArt(blogPalette(), 3),
     alt: 'Abstract avatar mark for a reader quote',
   },
+  // L26 D2/D3: the About page had nothing but two paragraphs of text and no
+  // visual at all — a different seed from `quote-avatar` (7, not 3) so the
+  // two abstract marks read as distinct rather than a copy-pasted image.
+  // No bundled photo fits an author portrait (the nine real photos in
+  // `assets/photos/blog/` are the hero backdrop and eight post covers, all
+  // already spoken for), and there is no image-generation key to make a new
+  // one — the procedural generator is the honest fallback here, exactly as
+  // it already is for `quote-avatar` and the five press logos below.
+  {
+    name: 'about-avatar',
+    spec: avatarArt(blogPalette(), 7),
+    alt: 'Abstract avatar mark for the About page',
+  },
   ...[1, 2, 3, 4, 5].map(
     (n): DemoMediaSpec => ({
       name: `logo-${n}`,
@@ -513,6 +530,7 @@ export function buildBlogDemoPages(
   const logoItems = [1, 2, 3, 4, 5]
     .filter((n) => media[`logo-${n}`] !== undefined)
     .map((n) => ({ _key: `demo-logo-${n}`, media: media[`logo-${n}`] as string }))
+  const aboutAvatar = media['about-avatar']
 
   return [
     {
@@ -655,11 +673,39 @@ export function buildBlogDemoPages(
       title: 'About',
       slug: 'about',
       blocks: [
+        // L26 D2/D3: a small figure above the fold — the page read as bare
+        // with nothing but two short paragraphs and no visual at all.
+        // `align: 'start'` keeps it a modest author-photo size (half the
+        // reading measure, not a full-bleed hero) rather than stretching an
+        // abstract 600×600 mark across the whole page width.
+        ...(aboutAvatar === undefined
+          ? []
+          : [
+              {
+                _key: 'demo-about-avatar',
+                _type: 'mediaFigure',
+                _version: BLOCK_VERSION,
+                media: aboutAvatar,
+                ratio: '1:1',
+                align: 'start',
+              } as VocabularyBlock,
+            ]),
         {
           _key: 'demo-about-prose',
           _type: 'prose',
           _version: BLOCK_VERSION,
           body: [
+            paragraph(
+              'Ink & Paper started as a running list of one idea per book, kept so I would stop forgetting ' +
+                'what I had just read. It grew into a place for the smaller things too: the desk setups that ' +
+                'did not last, the tools that quietly disappeared, the habit that finally stuck after a dozen ' +
+                'that did not.',
+            ),
+            paragraph(
+              'Nothing here is written to sound like advice. Most of it is closer to a lab notebook — what I ' +
+                'tried, what broke, and the one detail that turned out to matter more than the rest. If a post ' +
+                'reads as useful to someone else, that is a bonus I do not plan around.',
+            ),
             paragraph(
               'This is a demo blog, scaffolded by create-cogenta from the "blog" blueprint. Its posts, ' +
                 'categories, tags and this very page were seeded by the installer so there is real content to ' +

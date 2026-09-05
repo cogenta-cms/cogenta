@@ -46,6 +46,7 @@
     "@cogenta/theme-canonical": "workspace:*"
   },
   "devDependencies": {
+    "@cogenta/theme-restaurant": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -6,7 +6,11 @@ import { BLOG_DEMO_PAGES } from '../src/blueprints/blog.js'
 import { DOCUMENTATION_DEMO_PAGES } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
-import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
+// `restaurant`'s demo pages are built from `SeedContext.media` too (L25
+// Phase 1) — `buildRestaurantDemoPages({})` renders the same pages this
+// test checks, minus the (now media-dependent) hero/dish photos, which this
+// test does not exercise.
+import { buildRestaurantDemoPages } from '../src/blueprints/restaurant.js'
 import { SAAS_DEMO_PAGES } from '../src/blueprints/saas.js'
 // `store`'s demo pages are now built from `SeedContext.media` (L25 task
 // A0b) — `buildStoreDemoPages({})` renders the same pages this test checked
@@ -15,6 +19,7 @@ import { SAAS_DEMO_PAGES } from '../src/blueprints/saas.js'
 import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
+const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 
 /**

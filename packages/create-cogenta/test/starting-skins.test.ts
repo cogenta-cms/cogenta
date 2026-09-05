@@ -26,8 +26,13 @@ describe('per-blueprint starting skins', () => {
     }
   })
 
-  it('offers one for each of the three site types this task adds', () => {
-    expect(Object.keys(STARTING_SKINS).sort()).toEqual(['magazine', 'portfolio', 'store'])
+  it('offers one for each site type a starting skin has been built for', () => {
+    expect(Object.keys(STARTING_SKINS).sort()).toEqual([
+      'magazine',
+      'portfolio',
+      'restaurant',
+      'store',
+    ])
   })
 
   it('gives each starting skin a distinct accent colour, not three copies of one palette', () => {
@@ -43,7 +48,7 @@ describe('scaffoldSite — starting skin selection', () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  it.each(['portfolio', 'magazine', 'store'] as const)(
+  it.each(['portfolio', 'magazine', 'store', 'restaurant'] as const)(
     'writes the %s blueprint’s own starting skin, not the theme’s generic default',
     async (blueprintId) => {
       const targetDir = await mkdtemp(join(tmpdir(), `cogenta-scaffold-skin-${blueprintId}-`))
@@ -63,15 +68,16 @@ describe('scaffoldSite — starting skin selection', () => {
       const written = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
       expect(written).toEqual(requiredSkin(blueprintId))
     },
-    // `store` (L25 task A0b) now renders and ingests 7 real demo images
-    // through the real media pipeline during this same `scaffoldSite` call
-    // — measured at ~25-30s end to end (see `store-blueprint.test.ts`'s own
-    // note). Genuinely slower than the default 5s, not a hang.
-    60_000,
+    // `store` (L25 task A0b) renders and ingests 7 real demo images through
+    // the real media pipeline during this same `scaffoldSite` call —
+    // measured at ~25-30s end to end (see `store-blueprint.test.ts`'s own
+    // note). `restaurant` seeds 20 (hero, 12 dish photos, 6 gallery shots,
+    // one avatar), genuinely slower still, not a hang.
+    120_000,
   )
 
   it('keeps using the theme’s generic default for a blueprint with no starting skin of its own', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-skin-restaurant-'))
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-skin-blog-'))
     dirs.push(targetDir)
 
     const result = await scaffoldSite({
@@ -81,7 +87,7 @@ describe('scaffoldSite — starting skin selection', () => {
       defaultLocale: 'en',
       databaseDriver: 'sqlite',
       adminEmail: 'admin@example.com',
-      blueprintId: 'restaurant',
+      blueprintId: 'blog',
     })
 
     expect(result.skinSource).toBe('default')

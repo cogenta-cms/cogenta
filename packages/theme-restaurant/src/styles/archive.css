@@ -1,0 +1,84 @@
+/*
+ * The taxonomy-term archive (contract D `theme@1.3`).
+ *
+ * Only the three things an archive adds beyond what `collectionList`
+ * already styles — a breadcrumb, a sub-term row, a prev/next pager. The
+ * entry list reuses its own `cg-index__*` rules rather than a second set,
+ * so an archive looks like the rest of this theme's reading lists.
+ */
+
+.cg-archive {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+  padding: var(--cg-s10) var(--cg-gutter);
+}
+
+.cg-index__title-heading {
+  margin: 0 0 var(--cg-s8);
+  font-size: var(--cg-text-2xl);
+  text-align: center;
+}
+
+.cg-archive__breadcrumb ol,
+.cg-archive__children {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--cg-s3);
+  margin: 0 0 var(--cg-s4);
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-sm);
+}
+
+.cg-archive__children {
+  margin-block: var(--cg-s4) var(--cg-s8);
+}
+
+.cg-index__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-index__row {
+  display: flex;
+  gap: var(--cg-s4);
+  padding-block: var(--cg-s5);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+.cg-index__date {
+  flex: 0 0 auto;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+}
+
+.cg-index__title {
+  margin: 0 0 var(--cg-s1);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-index__link {
+  color: var(--cg-ink);
+  text-decoration: none;
+}
+
+.cg-index__excerpt {
+  margin: 0;
+  color: var(--cg-ink-muted);
+}
+
+.cg-index__empty {
+  text-align: center;
+  color: var(--cg-ink-muted);
+}
+
+.cg-archive__pager {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cg-s4);
+  margin-block-start: var(--cg-s10);
+  padding-block-start: var(--cg-s5);
+  border-block-start: 1px solid var(--cg-line-soft);
+}

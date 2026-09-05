@@ -503,6 +503,64 @@ img {
   flex: none;
 }
 
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`, L26) — a plain icon button in this theme's own hairline-bordered,
+   sharp-cornered register (`--cg-radius-xs`, not the pill canonical uses),
+   sized to match the mobile-menu toggle beside it (`.cg-nav-toggle-label`)
+   rather than a second, unrelated control size. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 2.5rem;
+  inline-size: 2.5rem;
+  flex-shrink: 0;
+  margin-inline-start: var(--cg-s2);
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-xs);
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-theme-toggle:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-theme-toggle__icon {
+  block-size: 1.1rem;
+  inline-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys this theme's whole (dark-by-default) palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
 /* Below the breakpoint: the toggle button appears, and the real nav becomes
    a full-width panel anchored under the header, shown only while the
    checkbox is checked — one selector, no JavaScript, and the same `<nav>`

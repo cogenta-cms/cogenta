@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -203,6 +204,30 @@ describe('renderChrome', () => {
       })
       expect(footer).toContain('<a href="/">Powered by Cogenta</a>')
       expect(footer).toContain('Studio Cogenta · Lisbon')
+    })
+  })
+
+  describe('the manual light/dark/system toggle (L26)', () => {
+    it('always renders the toggle from theme-kit, byte for byte, unconditionally', () => {
+      const { header } = renderChrome(BASE)
+      const expectedToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+      expect(header).toContain(expectedToggle)
+    })
+
+    it('renders it even when there is no nav and no header action at all', () => {
+      const { header } = renderChrome({ ...BASE, headerNav: [] })
+      expect(header).toContain('cg-theme-toggle')
+    })
+
+    it('renders it after the nav so it is never mistaken for a nav link', () => {
+      const { header } = renderChrome(BASE)
+      expect(header.indexOf('cg-site-header__nav')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+    })
+
+    it('localises its labels to the page locale', () => {
+      const { header } = renderChrome({ ...BASE, locale: 'fr' })
+      const expectedToggle = serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' }))
+      expect(header).toContain(expectedToggle)
     })
   })
 })

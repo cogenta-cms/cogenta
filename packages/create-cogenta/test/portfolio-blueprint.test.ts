@@ -234,7 +234,7 @@ describe('scaffoldSite — portfolio blueprint', () => {
     }
   }, 60000)
 
-  it('every seeded project carries an auto-built Role/Year panel block', async () => {
+  it('every seeded project carries an auto-built Role/Year panel plus a real narrative block (L26 D1)', async () => {
     // Above the 5s default — see the first test in this file.
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-portfolio-'))
     dirs.push(targetDir)
@@ -259,8 +259,13 @@ describe('scaffoldSite — portfolio blueprint', () => {
       const projects = await projectStore.list()
       for (const entry of projects.items) {
         const blocks = entry.blocks.blocks ?? []
-        expect(blocks).toHaveLength(1)
+        // Role/Year panel, then the project's own two-paragraph narrative
+        // (L26 D1) — both `prose` blocks, distinguished by their `_key`
+        // suffix (`-meta` vs `-narrative`) rather than by type.
+        expect(blocks).toHaveLength(2)
         expect(blocks[0]?.type).toBe('prose')
+        expect(blocks[1]?.type).toBe('prose')
+        expect(blocks[1]?.key).toContain('narrative')
       }
     } finally {
       await selection.dispose()

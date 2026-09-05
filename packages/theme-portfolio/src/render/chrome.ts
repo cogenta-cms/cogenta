@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -34,6 +35,13 @@ import {
  * is optional and additive: a host or a site that never sets one gets
  * exactly the `1.3` markup in that spot, byte for byte (`chrome.test.ts`'s
  * "without the new fields" cases).
+ *
+ * The manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/
+ * theme-kit`, L26) is unconditional — every render carries it, `theme@1.4`
+ * or not — placed as its own sibling after the nav/hamburger pair so it
+ * stays visible whether or not the mobile menu is open, styled in this
+ * theme's own hairline-bordered, sharp-cornered register in `base.css`
+ * rather than canonical's pill button.
  */
 
 function renderNavLinks(links: readonly ChromeNavLink[], className: string): string {
@@ -78,6 +86,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const headerNav = renderNavLinks(input.headerNav, 'cg-nav')
   const footerNav = renderNavLinks(input.footerNav, 'cg-nav cg-nav--footer')
   const headerAction = renderHeaderAction(input.headerAction)
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
   // The asterisk glyph is this theme's own typographic mark. It belongs to
   // the *wordmark* treatment, so an uploaded logo replaces both together —
   // an asterisk stapled to somebody else's logo is not a design decision
@@ -98,6 +107,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__mark" href="${home}">${mark}</a>` +
     `${toggle}${nav}` +
+    `${themeToggle}` +
     `</div></header>`
 
   const tagline =

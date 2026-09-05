@@ -84,6 +84,13 @@ export interface PortfolioDemoProject {
   readonly year: string
   /** A `coverArt` seed, distinct per project so the eight covers read as visibly different compositions rather than palette repeats. */
   readonly coverSeed: number
+  /**
+   * Two paragraphs of real project narrative (L26 D1) — rendered on the
+   * project's own page as a `prose` block after {@link roleYearPanelBlock},
+   * so a visitor who clicks through from the grid finds an actual account
+   * of the work, not just a repeated one-line summary and a role/year panel.
+   */
+  readonly narrative: readonly [string, string]
 }
 
 export const PORTFOLIO_DEMO_PROJECTS: readonly PortfolioDemoProject[] = [
@@ -91,68 +98,105 @@ export const PORTFOLIO_DEMO_PROJECTS: readonly PortfolioDemoProject[] = [
     title: 'Northwind rebrand',
     slug: 'northwind-rebrand',
     summary:
-      'A full visual identity refresh for a regional grocery chain, from logotype to packaging.',
+      'A full identity refresh for a 41-store regional grocery chain built by acquisition — one logotype and one packaging system across 340 private-label SKUs, rolled out without closing a single store.',
     role: 'Art direction',
     year: '2025',
     coverSeed: 12,
+    narrative: [
+      'Northwind runs forty-one stores across the Pacific Northwest, most of them acquired rather than built — which meant four legacy logotypes, three shades of the same green, and a private-label range that looked like six different companies. The brief was blunt: make it read as one grocer without asking anyone to repaint a storefront this year.',
+      'We shipped a logotype family with two registers (a plain wordmark for the storefront, a warmer hand for seasonal signage), a 68-page brand guideline, and new packaging for 340 private-label SKUs, phased across three print runs so nothing hit the shelf half-rebranded. Every store kept trading through every stage — no reprint weekend, no relaunch, no closure.',
+    ],
   },
   {
     title: 'Contoso mobile app',
     slug: 'contoso-mobile-app',
     summary:
-      'Interaction design and a component library for a fintech app used by two million people.',
+      'A ground-up component library and interaction redesign for a fintech app used by two million people, rebuilt around one confirmation pattern for every place money moves.',
     role: 'Product design',
     year: '2025',
     coverSeed: 27,
+    narrative: [
+      "Contoso's banking app had grown a screen at a time for six years, and it showed: four different date pickers, three ways to confirm a transfer, and a design team that had never run a full component audit. Two million people used it anyway, mostly out of habit.",
+      'We rebuilt the library from the transaction list outward — forty-two components, one motion language, one confirmation pattern used everywhere money changes hands — and shipped it behind a flag to five percent of accounts before the full rollout. Support tickets about "where did my transfer go" dropped by a third in the first month.',
+    ],
   },
   {
     title: 'Fabrikam annual report',
     slug: 'fabrikam-annual-report',
-    summary: 'Editorial design for a 60-page annual report, printed and interactive.',
+    summary:
+      'Editorial design and typesetting for a 60-page annual report — print and an interactive web edition from the same grid, at a 4,000-copy print run.',
     role: 'Editorial design',
     year: '2024',
     coverSeed: 41,
+    narrative: [
+      "A 60-page annual report is read closely by maybe a hundred people and skimmed by ten thousand more, so it has to work as a spreadsheet and as a piece of writing at the same time. Fabrikam's finance team wrote the copy; we built the grid that lets a dense results table share a page with a proper photo essay without either one losing.",
+      "Print run of 4,000, plus an interactive web edition built from the same InDesign grid so the numbers stay legible on a phone. The typesetting keeps a single serif for every numeral in the book — auditors notice when a table changes font mid-report, and we'd rather they didn't have the chance to.",
+    ],
   },
   {
     title: 'Litware signage system',
     slug: 'litware-signage-system',
     summary:
-      'Wayfinding and environmental graphics for a 12-storey campus, from lobby to loading dock.',
+      'Wayfinding and environmental graphics for a 12-storey, four-wing campus — 214 signs and a lobby directory that updates from a spreadsheet, not a repaint.',
     role: 'Signage & environmental',
     year: '2024',
     coverSeed: 58,
+    narrative: [
+      "Twelve storeys, four wings, one loading dock nobody could find without asking twice. Litware's campus had been designed by three different architecture firms over eight years, and the wayfinding showed it — or rather, the near-total absence of it.",
+      'We proofed every sign on the actual material before a single one went into production: brushed aluminium in daylight reads nothing like the same file on a monitor. 214 signs, one pictogram set, and a lobby directory that updates from a single spreadsheet rather than a repaint every time a department changes floors.',
+    ],
   },
   {
     title: 'Tailspin streaming identity',
     slug: 'tailspin-streaming-identity',
-    summary: 'A motion-first brand system for a live-sports streaming launch across five markets.',
+    summary:
+      'A motion-first brand system for a live-sports streaming launch across five markets — one grid, five market variants, built to survive a jumbotron and a phone screen alike.',
     role: 'Brand & motion',
     year: '2023',
     coverSeed: 63,
+    narrative: [
+      "Tailspin launched live sports streaming in five markets on the same night, which meant the identity had to survive a stadium jumbotron, a phone held sideways and a broadcast truck's colour grading — often all three during the same match.",
+      'The system is built motion-first: the mark only fully resolves once it moves, so every static application — kit, ticket, merchandise — is a single frame pulled from the same animation rather than a logo redrawn to match. Five market-specific colour variants share one grid, and the sixth market that signed on two months after launch needed zero redraws to join it.',
+    ],
   },
   {
     title: 'Adatum publishing house',
     slug: 'adatum-publishing-house',
-    summary: 'Cover systems and typesetting for a twelve-title fiction imprint.',
+    summary:
+      'Cover systems and typesetting for a twelve-title fiction imprint, with one fixed typographic rule and imagery that shifts by genre.',
     role: 'Editorial design',
     year: '2023',
     coverSeed: 79,
+    narrative: [
+      'Twelve titles under one imprint, and a house style that had to hold across a literary novel, a thriller and a story collection without any of the three looking like they belonged on the wrong shelf.',
+      'We built a cover system with one fixed typographic rule — the title always sets in the same face, always in the same position on the spine — and let the imagery vary completely by genre: commissioned illustration for the literary list, photography for the thrillers. Booksellers could tell the imprint from three metres away by the second season.',
+    ],
   },
   {
     title: 'Wingtip terminal wayfinding',
     slug: 'wingtip-terminal-wayfinding',
-    summary: 'Signage, pictograms and a colour-coded terminal map for a regional airport.',
+    summary:
+      'Signage, pictograms and a colour-coded wayfinding system for a regional airport terminal, tested against real foot traffic before fabrication.',
     role: 'Signage & environmental',
     year: '2022',
     coverSeed: 88,
+    narrative: [
+      "A regional airport's wayfinding has about four seconds to work before a traveller who is already late stops trusting it and starts asking a stranger. Wingtip's terminal had grown three extensions since 1994, and its signage had grown with it — six typefaces, and two colour codes that meant different things on different concourses.",
+      'The new system reduces the terminal to three colour-coded zones and one pictogram family, tested against real foot traffic during an actual boarding rush before a single panel was fabricated. Gate-finding complaints at the information desk fell by half in the first reporting quarter.',
+    ],
   },
   {
     title: 'Proseware product launch',
     slug: 'proseware-product-launch',
-    summary: 'Packaging, retail displays and a launch film for a home-audio product line.',
+    summary:
+      'Packaging, retail displays and a launch film for a home-audio product line, shot and shipped in eleven weeks to hit 900 stores on schedule.',
     role: 'Art direction',
     year: '2022',
     coverSeed: 96,
+    narrative: [
+      "Proseware's new speaker line needed to launch retail-ready in eleven weeks — packaging, in-store display and a two-minute film, all built around a product that was still changing in engineering the week we started shooting.",
+      'We designed the packaging to double as its own retail display, so no separate cardboard unit had to be fabricated and shipped, then shot the film against the same modular set the display uses. Assets were delivered in time for the line to hit 900 stores on the date the client had already announced. Nothing slipped.',
+    ],
   },
 ]
 
@@ -197,6 +241,23 @@ function roleYearPanelBlock(project: PortfolioDemoProject): VocabularyBlock {
     _version: BLOCK_VERSION,
     body,
     variant: { background: 'muted' },
+  } as VocabularyBlock
+}
+
+/**
+ * The project's own narrative (L26 D1) — two real paragraphs of process and
+ * outcome, not the one-line `summary` repeated. Placed after
+ * {@link roleYearPanelBlock} on the project's own page.
+ */
+function projectNarrativeBlock(project: PortfolioDemoProject): VocabularyBlock {
+  const body: RichTextDocument = project.narrative.flatMap((paragraph, index) =>
+    richTextParagraph(`${project.slug}-narrative-${index}`, paragraph),
+  )
+  return {
+    _key: `${project.slug}-narrative`,
+    _type: 'prose',
+    _version: BLOCK_VERSION,
+    body,
   } as VocabularyBlock
 }
 
@@ -370,7 +431,35 @@ export function buildPortfolioDemoPages(
                 {
                   _key: 'about-p1-span',
                   _type: 'span',
-                  text: 'We are a small studio working across identity, product and editorial design — usually all three on the same project. We keep the team small on purpose: the person you brief is the person who ships the work.',
+                  text: 'We are a small studio working across identity, product and editorial design — usually all three on the same project, since a brand rarely stays inside one discipline for long. Founded in 2017, the team has stayed under ten people on purpose: the person who takes the brief is the person who ships the work, on every project, every time.',
+                  marks: [],
+                },
+              ],
+              markDefs: [],
+            },
+            {
+              _key: 'about-p2',
+              _type: 'block',
+              style: 'normal',
+              children: [
+                {
+                  _key: 'about-p2-span',
+                  _type: 'span',
+                  text: "Most of what we do starts with an audit, not a mood board — cataloguing what a client already has, good and bad, before proposing anything new. It is slower at the start and faster everywhere after, because nobody discovers six months in that the new identity does not fit the loading dock, the packaging line, or an app's existing component library.",
+                  marks: [],
+                },
+              ],
+              markDefs: [],
+            },
+            {
+              _key: 'about-p3',
+              _type: 'block',
+              style: 'normal',
+              children: [
+                {
+                  _key: 'about-p3-span',
+                  _type: 'span',
+                  text: 'We work from a studio in Lisbon with clients across Europe and North America, in the open where the brief allows it — process notes, working files and the odd dead end, published as we go rather than saved for a polished case study months later.',
                   marks: [],
                 },
               ],
@@ -378,6 +467,19 @@ export function buildPortfolioDemoPages(
             },
           ],
         },
+        ...(media['about-figure'] === undefined
+          ? []
+          : [
+              {
+                _key: 'about-figure',
+                _type: 'mediaFigure',
+                _version: BLOCK_VERSION,
+                media: media['about-figure'],
+                caption: 'The studio floor, mid-review.',
+                ratio: '16:9',
+                align: 'center',
+              } as VocabularyBlock,
+            ]),
         {
           _key: 'about-stats',
           _type: 'stats',
@@ -408,11 +510,51 @@ export function buildPortfolioDemoPages(
                 {
                   _key: 'contact-p1-span',
                   _type: 'span',
-                  text: 'Tell us about the project — timeline, budget range and what "done" looks like. We reply within two working days.',
+                  text: 'Tell us about the project — timeline, budget range and what "done" looks like. We reply within two working days, always with a real person, never a form response.',
                   marks: [],
                 },
               ],
               markDefs: [],
+            },
+            {
+              _key: 'contact-p2',
+              _type: 'block',
+              style: 'normal',
+              children: [
+                {
+                  _key: 'contact-p2-span',
+                  _type: 'span',
+                  text: 'If it looks like a fit, the next step is a short call — thirty minutes, no deck — followed by a written scope within a week. We start most projects with the audit described on the About page, so the first invoice is usually smaller than people expect.',
+                  marks: [],
+                },
+              ],
+              markDefs: [],
+            },
+          ],
+        },
+        {
+          _key: 'contact-features',
+          _type: 'featureGrid',
+          _version: BLOCK_VERSION,
+          title: 'What to expect',
+          items: [
+            {
+              _key: 'contact-feature-1',
+              icon: 'pen',
+              title: 'A real reply',
+              text: 'Two working days, from someone who will actually work on the project — not a scheduling bot.',
+            },
+            {
+              _key: 'contact-feature-2',
+              icon: 'layers',
+              title: 'A written scope',
+              text: 'Timeline, deliverables and price in writing before anything is billed.',
+            },
+            {
+              _key: 'contact-feature-3',
+              icon: 'book',
+              title: 'One point of contact',
+              text: 'The person who takes the brief stays on the project through delivery.',
             },
           ],
         },
@@ -522,6 +664,16 @@ export const PORTFOLIO_MEDIA_SPECS: readonly DemoMediaSpec[] = [
     alt: 'A design studio workspace',
     photo: 'portfolio/hero.jpg',
   },
+  // The About page's own `mediaFigure` (L26 D2) — the same bundled workspace
+  // photograph as the home hero, a second real photo of the studio floor
+  // rather than a literal reuse of the hero's own media id, since a real
+  // studio site frequently shows its own workspace more than once.
+  {
+    name: 'about-figure',
+    spec: heroArt(portfolioPalette(), 'ink', 17),
+    alt: 'The studio floor, mid-review',
+    photo: 'portfolio/hero.jpg',
+  },
   ...PORTFOLIO_DEMO_PROJECTS.map((demo): DemoMediaSpec => {
     const photo = PORTFOLIO_PROJECT_PHOTOS[demo.slug]
     return {
@@ -603,7 +755,9 @@ async function seedPortfolioDemoContent(ctx: SeedContext): Promise<void> {
         year: demo.year,
         ...(coverImage === undefined ? {} : { coverImage }),
       },
-      blocks: { blocks: [roleYearPanelBlock(demo)].map(toBlockZoneEntry) },
+      blocks: {
+        blocks: [roleYearPanelBlock(demo), projectNarrativeBlock(demo)].map(toBlockZoneEntry),
+      },
     })
   }
 

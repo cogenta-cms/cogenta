@@ -67,6 +67,9 @@ export const THEME_STRINGS: Readonly<Record<ThemeLocale, ThemeStrings>> = {
     'entry.readingTime': '{{minutes}} min read',
     'gallery.carousel': 'Image carousel',
     'hero.actions': 'Actions',
+    'theme.toggle.switchToLight': 'Switch to light theme',
+    'theme.toggle.switchToDark': 'Switch to dark theme',
+    'theme.toggle.switchToSystem': 'Use system theme',
   },
   fr: {
     'a11y.skipToContent': 'Aller au contenu',
@@ -83,6 +86,9 @@ export const THEME_STRINGS: Readonly<Record<ThemeLocale, ThemeStrings>> = {
     'entry.readingTime': '{{minutes}} min de lecture',
     'gallery.carousel': 'Carrousel d’images',
     'hero.actions': 'Actions',
+    'theme.toggle.switchToLight': 'Passer au thème clair',
+    'theme.toggle.switchToDark': 'Passer au thème sombre',
+    'theme.toggle.switchToSystem': 'Utiliser le thème du système',
   },
 }
 

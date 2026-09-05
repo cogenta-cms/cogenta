@@ -40,6 +40,7 @@ import {
   type RenderContext,
   renderCommentsSection,
   serialize,
+  THEME_TOGGLE_SCRIPT,
   type ContentEntry as ThemeContentEntry,
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
@@ -1013,6 +1014,7 @@ export async function renderPageChrome(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<script>${THEME_TOGGLE_SCRIPT}</script>
 ${faviconLinkTag(identity.faviconHref, branding, DEFAULT_IMAGE_ENDPOINT)}
 ${feedLinkTags(options.site.name)}
 ${fontPreconnectTags()}
@@ -1686,6 +1688,7 @@ async function renderEntryPage(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<script>${THEME_TOGGLE_SCRIPT}</script>
 ${faviconLinkTag(identity.faviconHref, branding, imageEndpoint)}
 ${feedLinkTags(options.site.name)}
 ${fontPreconnectTags()}
@@ -2012,6 +2015,7 @@ export async function renderThemeGalleryPreview(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<script>${THEME_TOGGLE_SCRIPT}</script>
 <meta name="robots" content="noindex, nofollow">
 <title>${escapeHtml(pageContent.title)}</title>
 ${options.styles === null ? '' : `<style>${options.styles}</style>`}

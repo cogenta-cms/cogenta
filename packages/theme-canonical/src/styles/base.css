@@ -389,6 +389,56 @@ img {
   margin-inline-start: var(--cg-s2);
 }
 
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`) — a plain icon button, not the block vocabulary's `.cg-action`
+   style, so it never reads as a call-to-action competing with a real one. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 2.25rem;
+  inline-size: 2.25rem;
+  flex-shrink: 0;
+  border-radius: var(--cg-radius-pill);
+  border: 1px solid var(--cg-line-soft);
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+}
+
+.cg-theme-toggle:hover {
+  background: var(--cg-surface-sunken);
+}
+
+.cg-theme-toggle__icon {
+  block-size: 1.1rem;
+  inline-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme='dark']) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
 /* `general.tagline`, shown right after the site name in the footer — prose,
    never a heading, so it stays the same visual weight as the credit line
    beside it. */

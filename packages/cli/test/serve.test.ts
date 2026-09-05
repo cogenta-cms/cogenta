@@ -1015,11 +1015,15 @@ describe('a themed page over HTTP', () => {
       expect(html).toContain('class="cg-skip-link"')
       expect(html).toContain('class="cg-site-header"')
       expect(html).toContain('Themed site')
-      // Still no *executable* client JavaScript anywhere on the page — the
-      // one <script> tag present is L10's JSON-LD structured data
-      // (application/ld+json), which a browser never runs.
+      // Two <script> tags, and no more: L10's JSON-LD structured data
+      // (application/ld+json, which a browser never runs) and the shared
+      // light/dark/system toggle script (`THEME_TOGGLE_SCRIPT`,
+      // `@cogenta/theme-kit`) — the one deliberate piece of executable
+      // client JavaScript every theme ships, since a manual override that
+      // survives a navigation cannot exist in CSS alone.
       expect(html).toContain('<script type="application/ld+json">')
-      expect(html).not.toMatch(/<script(?![^>]*application\/ld\+json)/i)
+      expect(html).toContain('<script>(function(){')
+      expect(html.match(/<script/gi)?.length).toBe(2)
     } finally {
       await server.stop()
     }

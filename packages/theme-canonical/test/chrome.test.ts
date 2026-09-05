@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -8,6 +9,12 @@ import { renderChrome } from '../src/render/chrome.js'
  * a render with none of them set is byte-identical to a `1.3` render, so an
  * existing site that never touches these settings is unaffected by this
  * theme accepting them.
+ *
+ * The manual light/dark toggle added afterwards is deliberately *not* part
+ * of that guarantee — it is unconditional, on every render, theme@1.4 or
+ * not, so the "byte-identical" test below builds its expectation from
+ * `renderThemeToggle` itself rather than a hand-copied literal that would
+ * silently drift from the real markup the first time either changes.
  */
 
 const BASE: ChromeInput = {
@@ -22,14 +29,16 @@ const BASE: ChromeInput = {
 }
 
 describe('renderChrome — theme@1.4 fields', () => {
-  it('renders byte-identical header and footer when none of the four new fields is set', () => {
+  it('renders a byte-identical footer, and a header unchanged but for the theme toggle, when none of the four new fields is set', () => {
     const preLot = renderChrome(BASE)
+    const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
 
     const expectedHeader =
       `<header class="cg-site-header"><div class="cg-site-header__inner">` +
       `<a class="cg-site-header__home" href="/">Reference Site</a>` +
       `<nav class="cg-site-header__nav" aria-label="Primary"><ul class="cg-menu">` +
       `<li><a href="/blog">Blog</a></li></ul></nav>` +
+      `${themeToggle}` +
       `</div></header>`
     const expectedFooter =
       `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +

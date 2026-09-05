@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -64,11 +65,13 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   // is still named somewhere on every page.
   const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteName
   const headerAction = renderHeaderAction(input.headerAction)
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `${headerNav === '' ? '' : `<nav class="cg-site-header__nav" aria-label="Primary">${headerNav}</nav>`}` +
+    `${themeToggle}` +
     `${headerAction}` +
     `</div></header>`
 

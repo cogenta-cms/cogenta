@@ -79,84 +79,95 @@ export const RESTAURANT_DEMO_MENU_ITEMS: readonly RestaurantDemoMenuItem[] = [
   {
     name: 'Roasted beet salad',
     slug: 'roasted-beet-salad',
-    description: 'Beets, goat cheese, walnuts, a light citrus dressing.',
+    description:
+      'Beets from the Tuesday market stalls, roasted slowly, with whipped goat cheese, toasted walnuts and a citrus dressing sharpened with a little sherry vinegar.',
     price: 9.5,
     category: 'Starters',
   },
   {
     name: 'Soup of the day',
     slug: 'soup-of-the-day',
-    description: 'Changes with the season, made from scratch every morning.',
+    description:
+      'Whatever the stalls had this morning, simmered down to something simple — ask the server which vegetable won today.',
     price: 7,
     category: 'Starters',
   },
   {
     name: 'Charred octopus',
     slug: 'charred-octopus',
-    description: 'Smoked paprika, potato purée, a thread of olive oil.',
+    description:
+      'Octopus charred hard over the grill for a smoky edge, smoked paprika, a potato purée finished with a thread of olive oil and a squeeze of lemon.',
     price: 13,
     category: 'Starters',
   },
   {
     name: 'Pan-seared trout',
     slug: 'pan-seared-trout',
-    description: 'Local trout, brown butter, seasonal vegetables.',
+    description:
+      'Trout from the Saône, pan-seared skin-side down until it crackles, brown butter, capers, and whatever root vegetables the market had that week.',
     price: 22,
     category: 'Mains',
   },
   {
     name: 'Wild mushroom risotto',
     slug: 'wild-mushroom-risotto',
-    description: 'Arborio rice, a mix of wild mushrooms, parmesan.',
+    description:
+      'Arborio rice cooked slowly with a mix of wild mushrooms bought that week, finished with parmesan and a knob of butter off the heat.',
     price: 18,
     category: 'Mains',
   },
   {
     name: 'Slow-roast duck leg',
     slug: 'slow-roast-duck-leg',
-    description: 'Duck confit, braised red cabbage, a juniper jus.',
+    description:
+      'Duck leg confit overnight in its own fat, braised red cabbage with apple, and a juniper and red wine jus.',
     price: 26,
     category: 'Mains',
   },
   {
     name: 'Chocolate tart',
     slug: 'chocolate-tart',
-    description: 'Dark chocolate, sea salt, a short pastry crust.',
+    description:
+      'Dark chocolate ganache set in a short, buttery pastry crust, with a pinch of sea salt to cut the sweetness.',
     price: 8,
     category: 'Desserts',
   },
   {
     name: 'Poached pear',
     slug: 'poached-pear',
-    description: 'Red wine, cinnamon, a mascarpone cream.',
+    description:
+      'A whole pear poached slowly in red wine and cinnamon, served with a spoon of mascarpone cream.',
     price: 7.5,
     category: 'Desserts',
   },
   {
     name: 'Crème brûlée',
     slug: 'creme-brulee',
-    description: 'Vanilla bean custard, a caramelised sugar crust.',
+    description:
+      'Vanilla bean custard set overnight, with a caramelised sugar crust cracked at the table.',
     price: 7,
     category: 'Desserts',
   },
   {
     name: 'House red, glass',
     slug: 'house-red-glass',
-    description: 'A Rhône blend, poured from the barrel.',
+    description:
+      'A Rhône blend poured straight from the barrel — ask which producer is pouring this month.',
     price: 6,
     category: 'Drinks',
   },
   {
     name: 'House white, glass',
     slug: 'house-white-glass',
-    description: 'Crisp, dry, chilled by the glass.',
+    description:
+      'Crisp and dry, chilled to the glass, changes with what is drinking well this season.',
     price: 6,
     category: 'Drinks',
   },
   {
     name: 'Sparkling water',
     slug: 'sparkling-water',
-    description: 'Still or sparkling, a shared bottle.',
+    description: 'Still or sparkling, brought to the table in a shared bottle.',
     price: 3,
     category: 'Drinks',
   },
@@ -225,7 +236,9 @@ export function buildRestaurantHomeBlocks(
     } as VocabularyBlock,
     proseBlock('home-story', [
       'Amaranthe opened in 1994, two streets from the market, with a kitchen built around what the stalls had that morning rather than a fixed idea of what a restaurant menu should say.',
-      'Thirty years on, the room still seats thirty-two, the walk to the market is still five minutes, and the menu is still written after buying, never before.',
+      "The idea was simple, and at the time unfashionable: no set menu printed a season in advance, no dish held hostage to a supplier's contract. Three chefs walk to the market before the ovens are even lit, buy what looks right, and write the day's menu on the way back.",
+      "Thirty years on, the room still seats thirty-two, the walk to the market is still five minutes, and the menu is still written after buying, never before. A handful of dishes — the crème brûlée, the duck confit — have stayed close to their first version for a reason: some things, once right, don't need reinventing.",
+      "What changes is what's on the plate. A hard frost one October meant three weeks of nothing but root vegetables, and no apology for it; a good mushroom season means the risotto changes weekly. The market decides the menu, not the other way around, and that is still the only rule in the kitchen.",
     ]),
     {
       _key: 'home-menu',
@@ -259,7 +272,7 @@ export function buildRestaurantHomeBlocks(
       items: [
         { _key: 'home-stats-1', value: '1994', label: 'Serving since' },
         { _key: 'home-stats-2', value: '3', label: 'Chefs' },
-        { _key: 'home-stats-3', value: '120', label: 'Seats' },
+        { _key: 'home-stats-3', value: '32', label: 'Seats' },
         { _key: 'home-stats-4', value: '1', label: 'Michelin mention' },
       ],
     },
@@ -351,7 +364,9 @@ export function buildRestaurantDemoPages(
       slug: 'privacy',
       blocks: [
         proseBlock('privacy-body', [
-          'Amaranthe collects only what a reservation needs: a name, a phone number, and a party size. Nothing is sold, and nothing is kept once the table has come and gone.',
+          'Amaranthe collects only what a reservation needs: a name, a phone number, and a party size. Nothing is sold, shared, or used for anything beyond confirming your table.',
+          'That information is kept only as long as it takes to seat you — reservation records are cleared at the end of each service, not archived into a mailing list you never asked to join.',
+          'This site sets no tracking cookies and runs no advertising. If you have a question about what we hold, or want it removed sooner, ask any member of staff or write to reservations@amaranthe.example.',
         ]),
       ],
     },

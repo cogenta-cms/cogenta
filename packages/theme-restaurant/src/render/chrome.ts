@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -22,6 +23,12 @@ import {
  * the browser, at zero bytes of JavaScript. It carries the *same* links as
  * the desktop nav plus the header action — never a second, drifting list —
  * and is shown only below the breakpoint `base.css` sets for `.cg-nav`.
+ *
+ * The manual light/dark toggle (L26) sits right after the desktop nav, before
+ * the header action — `renderThemeToggle` (`@cogenta/theme-kit`) returns
+ * markup only, this theme styles `.cg-theme-toggle` itself in `base.css`. It
+ * is unconditional (rendered on every page, `theme@1.4` fields or not),
+ * unlike the header/footer additions above it.
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -79,6 +86,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   // footer keeps the site's name in text, so a site whose logo fails to
   // load is still named somewhere on every page.
   const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
   const headerAction = renderHeaderAction(input.headerAction)
   const mobileNav = renderMobileNav(input)
 
@@ -90,6 +98,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
         ? ''
         : `<nav class="cg-nav" aria-label="Primary"><ul class="cg-nav__items">${headerNav}</ul></nav>`
     }` +
+    `${themeToggle}` +
     `${headerAction}` +
     `${mobileNav}` +
     `</div></header>`

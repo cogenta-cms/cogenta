@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -173,5 +174,25 @@ describe('renderChrome', () => {
     const { header, footer } = renderChrome(BASE)
     expect(header).not.toMatch(/<script/i)
     expect(footer).not.toMatch(/<script/i)
+  })
+
+  it('renders the manual light/dark toggle in the header, between the desktop nav and the header action', () => {
+    const { header } = renderChrome(BASE)
+    const expectedToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+    expect(header).toContain(expectedToggle)
+    expect(header.indexOf('cg-theme-toggle')).toBeLessThan(header.indexOf('cg-nav__cta'))
+    expect(header.indexOf('cg-nav')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+  })
+
+  it('renders the toggle unconditionally, even with no theme@1.4 fields set at all', () => {
+    const { header } = renderChrome({
+      site: BASE.site,
+      locale: BASE.locale,
+      homeHref: BASE.homeHref,
+      headerNav: BASE.headerNav,
+      footerNav: BASE.footerNav,
+      brandingHtml: BASE.brandingHtml,
+    })
+    expect(header).toContain('data-cg-theme-toggle')
   })
 })

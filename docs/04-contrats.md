@@ -495,6 +495,22 @@ un défaut silencieux.
 > le câblage runtime (`@cogenta/mcp`'s `buildMcpToolDefinitions`) à partir de l'id de
 > connexion et du nom d'outil distant que l'admin a explicitement coché.
 
+> **`tools@1.5` le 2026-09-06** (L26 tâche 5, l'agent « Cogenta Theme Creator ») :
+> ajout de la permission `theme.customize`, pour l'outil `theme.propose_theme`.
+> Même règle que toutes les montées précédentes : aucune signature d'outil
+> existante ne change. `theme.propose_theme` est `sideEffects: false` — il ne
+> modifie jamais rien, quel que soit le niveau d'autonomie : il lit une
+> description en texte libre et, éventuellement, des pièces jointes (documents
+> via `document.extract_text`, images via un bloc de contenu multimodal si le
+> fournisseur configuré le supporte — `ChatMessage.content` accepte désormais un
+> tableau de `ChatContentPart` texte/image, additif, `@cogenta/agents`), choisit
+> un thème parmi les paquets réellement installés (jamais un thème inventé),
+> produit des jetons de style contrat D par la boucle de génération/correction
+> déjà existante (`generateSkinCandidates`), et rend un ou plusieurs candidats.
+> **Aucun candidat n'est jamais appliqué par cet outil** : l'application reste
+> l'action humaine déjà existante (`PUT /api/theme/overrides`), exactement comme
+> choisir un skin de la galerie l'était déjà avant ce lot.
+
 ```ts
 defineTool({
   name: 'content.publish',
@@ -544,6 +560,7 @@ document.extract
 logs.read · redirects.write
 code.patch
 mcp.external:<connexionId>.<nomOutilDistant>
+theme.customize
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -571,6 +588,13 @@ au mieux, et une confirmation explicite obligatoire à la création de toute con
 n'est jamais exposé implicitement : l'admin coche chaque outil un par un depuis
 l'écran « MCP Clients », et le nom d'un outil jamais vu dans le dernier `tools/list`
 réel est refusé.
+
+`theme.customize` (ajoutée en `tools@1.5`, L26 tâche 5) autorise un agent à
+*proposer* un thème et des jetons de style contrat D à partir d'une description et
+de pièces jointes optionnelles — jamais à en générer le HTML/CSS lui-même (contrat D
+reste des paquets TypeScript typés) et jamais à appliquer quoi que ce soit sur le
+site : choisir un candidat reste l'action humaine existante sur
+`PUT /api/theme/overrides`.
 
 ### Définition d'un agent
 

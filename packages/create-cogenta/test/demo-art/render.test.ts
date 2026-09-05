@@ -181,12 +181,190 @@ describe('renderArt', () => {
         { kind: 'wave', baseline: 0.7, amplitude: 0.05, frequency: 2, color: RED, alpha: 0.4 },
         { kind: 'stripes', angle: 30, spacing: 0.1, thickness: 0.02, color: BLUE, alpha: 0.2 },
         { kind: 'dots', spacing: 0.08, radius: 0.01, color: RED, alpha: 0.2 },
+        {
+          kind: 'dots',
+          spacing: 0.08,
+          radius: 0.01,
+          color: RED,
+          alpha: 0.2,
+          center: [0.7, 0.3],
+          width: 0.3,
+          height: 0.3,
+        },
         { kind: 'vignette', strength: 0.3 },
+        { kind: 'fill', color: { r: 0.9, g: 0.9, b: 0.9 } },
+        { kind: 'bands', angle: 30, colors: [RED, BLUE, { r: 1, g: 1, b: 0 }], count: 3 },
+        {
+          kind: 'checker',
+          center: [0.6, 0.5],
+          width: 0.6,
+          height: 0.6,
+          cell: 0.05,
+          rotation: 10,
+          color: BLUE,
+          alpha: 0.7,
+        },
+        {
+          kind: 'blob',
+          points: [
+            { at: [0.3, 0.3], radius: 0.15 },
+            { at: [0.4, 0.4], radius: 0.12 },
+          ],
+          smoothing: 0.05,
+          color: RED,
+        },
         { kind: 'grain', amount: 0.02 },
       ],
     }
     expect(() => renderArt(spec)).not.toThrow()
     expect(sniffImageFormat(renderArt(spec))).toBe('png')
+  })
+
+  describe('the D5 flat primitives (fill, bands, checker, blob)', () => {
+    it('fill paints every pixel the same flat colour, with nothing else on top', () => {
+      const spec: ArtSpec = {
+        width: 12,
+        height: 12,
+        seed: 1,
+        layers: [{ kind: 'fill', color: { r: 0.2, g: 0.4, b: 0.6 } }],
+      }
+      const manual = renderArt({
+        width: 12,
+        height: 12,
+        seed: 1,
+        layers: [
+          {
+            kind: 'gradient',
+            stops: [
+              { at: 0, color: { r: 0.2, g: 0.4, b: 0.6 } },
+              { at: 1, color: { r: 0.2, g: 0.4, b: 0.6 } },
+            ],
+          },
+        ],
+      })
+      expect(Buffer.from(renderArt(spec)).equals(Buffer.from(manual))).toBe(true)
+    })
+
+    it('bands tiles hard-edged colours across the whole canvas, in order', () => {
+      const spec: ArtSpec = {
+        width: 30,
+        height: 10,
+        seed: 1,
+        layers: [{ kind: 'bands', angle: 0, colors: [RED, BLUE], count: 2 }],
+      }
+      const png = renderArt(spec)
+      expect(sniffImageFormat(png)).toBe('png')
+      // Two vertical bands over a wider-than-tall canvas produce far more
+      // distinct byte patterns per row than a single flat fill would —
+      // proof there are really two regions, without depending on a pixel
+      // decoder.
+      const solid = renderArt({ ...spec, layers: [{ kind: 'fill', color: RED }] })
+      expect(Buffer.from(png).equals(Buffer.from(solid))).toBe(false)
+    })
+
+    it('a 1-count bands layer is indistinguishable from a flat fill of its only colour', () => {
+      const spec: ArtSpec = {
+        width: 10,
+        height: 10,
+        seed: 1,
+        layers: [{ kind: 'bands', angle: 90, colors: [{ r: 0.3, g: 0.5, b: 0.7 }], count: 1 }],
+      }
+      const fill = renderArt({
+        width: 10,
+        height: 10,
+        seed: 1,
+        layers: [{ kind: 'fill', color: { r: 0.3, g: 0.5, b: 0.7 } }],
+      })
+      expect(Buffer.from(renderArt(spec)).equals(Buffer.from(fill))).toBe(true)
+    })
+
+    it('checker leaves a corner outside its bounding box exactly as the layer below it', async () => {
+      const width = 40
+      const height = 40
+      const base = { r: 0.1, g: 0.1, b: 0.1 }
+      const painted = renderArt({
+        width,
+        height,
+        seed: 1,
+        layers: [
+          { kind: 'fill', color: base },
+          {
+            kind: 'checker',
+            center: [0.8, 0.8],
+            width: 0.2,
+            height: 0.2,
+            cell: 0.05,
+            color: RED,
+            alpha: 1,
+          },
+        ],
+      })
+      const baseline = renderArt({
+        width,
+        height,
+        seed: 1,
+        layers: [{ kind: 'fill', color: base }],
+      })
+      expect(Buffer.from(painted).equals(Buffer.from(baseline))).toBe(false) // the checker did paint something
+
+      const vips = await loadVips()
+      const paintedImage = vips.Image.newFromBuffer(painted)
+      const baselineImage = vips.Image.newFromBuffer(baseline)
+      try {
+        // The checker's box sits around pixel (32, 32); the opposite top-left
+        // corner is well outside it and must come through unchanged.
+        const paintedCorner = paintedImage.crop(0, 0, 5, 5).writeToBuffer('.png')
+        const baselineCorner = baselineImage.crop(0, 0, 5, 5).writeToBuffer('.png')
+        expect(Buffer.from(paintedCorner).equals(Buffer.from(baselineCorner))).toBe(true)
+      } finally {
+        paintedImage.delete()
+        baselineImage.delete()
+      }
+    })
+
+    it('blob fuses overlapping circles into one continuous, hard-edged silhouette', () => {
+      const fused: ArtSpec = {
+        width: 60,
+        height: 60,
+        seed: 1,
+        layers: [
+          { kind: 'fill', color: { r: 1, g: 1, b: 1 } },
+          {
+            kind: 'blob',
+            points: [
+              { at: [0.4, 0.5], radius: 0.2 },
+              { at: [0.6, 0.5], radius: 0.2 },
+            ],
+            smoothing: 0.1,
+            color: RED,
+          },
+        ],
+      }
+      expect(() => renderArt(fused)).not.toThrow()
+      expect(sniffImageFormat(renderArt(fused))).toBe('png')
+    })
+
+    it('a single-point blob is the same shape as a disc of that radius', () => {
+      const blob = renderArt({
+        width: 20,
+        height: 20,
+        seed: 1,
+        layers: [
+          { kind: 'fill', color: { r: 1, g: 1, b: 1 } },
+          { kind: 'blob', points: [{ at: [0.5, 0.5], radius: 0.3 }], color: RED },
+        ],
+      })
+      const disc = renderArt({
+        width: 20,
+        height: 20,
+        seed: 1,
+        layers: [
+          { kind: 'fill', color: { r: 1, g: 1, b: 1 } },
+          { kind: 'disc', center: [0.5, 0.5], radius: 0.3, color: RED },
+        ],
+      })
+      expect(Buffer.from(blob).equals(Buffer.from(disc))).toBe(true)
+    })
   })
 
   it('renders a 1600x1000 hero composition in well under the acceptance bound', () => {

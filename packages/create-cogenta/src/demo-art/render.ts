@@ -139,6 +139,15 @@ export interface DotsLayer {
   readonly radius: number
   readonly color: ColorRGB
   readonly alpha: number
+  /**
+   * Optional bounding box (fractions of the shorter canvas side, like
+   * {@link RectLayer}) — omit for a full-canvas grid. Confining the grid is
+   * what lets a hero composition keep its calm left zone untouched while
+   * still using a dot grid on the right (D5's "grid & node" family).
+   */
+  readonly center?: Vec2
+  readonly width?: number
+  readonly height?: number
 }
 
 export interface GrainLayer {
@@ -154,6 +163,72 @@ export interface VignetteLayer {
   readonly color?: ColorRGB
 }
 
+/** A single flat colour covering the whole canvas — the honest "solid background" primitive (D5: never a one-stop `gradient` standing in for a fill). */
+export interface FillLayer {
+  readonly kind: 'fill'
+  readonly color: ColorRGB
+}
+
+/**
+ * Two or more flat colours tiled edge-to-edge across the *whole* canvas as
+ * hard-edged bands (a "colour block"/"stripe band" composition, D5) — never
+ * a blend between them, only a crisp ~1px anti-aliased seam at each
+ * boundary. Distinct from {@link StripesLayer}, which paints a repeating
+ * pattern *over* whatever is beneath at partial alpha; a `bands` layer
+ * replaces every pixel it covers (the whole canvas) with one of its own
+ * colours.
+ */
+export interface BandsLayer {
+  readonly kind: 'bands'
+  /** Degrees; 0 = vertical bands (left→right), 90 = horizontal bands (top→bottom). Defaults to 90. */
+  readonly angle?: number
+  readonly colors: readonly ColorRGB[]
+  /** Total number of bands across the canvas. Defaults to `colors.length` (each colour once); a higher count repeats the palette. */
+  readonly count?: number
+  /** 0–1 fraction of one band's width to shift the whole sequence by — seed-driven variety without changing the band count. */
+  readonly phase?: number
+}
+
+/**
+ * A coarse checkerboard of flat cells, bounded to a rectangular region —
+ * "a coarse pattern block partially covering a solid field" (D5's
+ * checker/half-tone family). Cells outside the region are left untouched,
+ * so this is meant to sit *over* a {@link FillLayer} or another shape, not
+ * to replace the whole canvas.
+ */
+export interface CheckerLayer {
+  readonly kind: 'checker'
+  readonly center: Vec2
+  /** Fraction of the shorter canvas side. */
+  readonly width: number
+  /** Fraction of the shorter canvas side. */
+  readonly height: number
+  /** Cell size, fraction of the shorter canvas side. */
+  readonly cell: number
+  /** Degrees. Defaults to 0. */
+  readonly rotation?: number
+  readonly color: ColorRGB
+  readonly alpha?: number
+}
+
+/**
+ * An organic, hard-edged blob: one or more circles fused by a smooth
+ * minimum of their signed distances (Ottosson/Quilez's `smoothMin`), so
+ * overlapping circles read as one continuous silhouette rather than two
+ * discs — the "duotone photo-like abstraction" family (D5). The join
+ * between circles is organic; the *outer* edge stays the same crisp ~1px
+ * anti-aliased boundary as every other flat shape here — there is no blur
+ * anywhere in this layer.
+ */
+export interface BlobLayer {
+  readonly kind: 'blob'
+  readonly points: readonly { readonly at: Vec2; readonly radius: number }[]
+  /** How far apart two circles can be and still fuse into one organic silhouette, fraction of the shorter canvas side. Defaults to 0.05. */
+  readonly smoothing?: number
+  readonly color: ColorRGB
+  readonly alpha?: number
+}
+
 export type ArtLayer =
   | GradientLayer
   | GlowLayer
@@ -167,6 +242,10 @@ export type ArtLayer =
   | DotsLayer
   | GrainLayer
   | VignetteLayer
+  | FillLayer
+  | BandsLayer
+  | CheckerLayer
+  | BlobLayer
 
 export interface ArtSpec {
   readonly width: number
@@ -486,7 +565,22 @@ function compileDots(layer: DotsLayer, width: number, height: number): PixelOp {
   const spacingPx = Math.max(layer.spacing * s, 1)
   const radiusPx = layer.radius * s
   const { color, alpha: alphaMul } = layer
+  const bounds =
+    layer.center !== undefined && layer.width !== undefined && layer.height !== undefined
+      ? {
+          cx: layer.center[0] * width,
+          cy: layer.center[1] * height,
+          halfW: (layer.width * s) / 2,
+          halfH: (layer.height * s) / 2,
+        }
+      : undefined
   return (pixel, px, py) => {
+    if (
+      bounds &&
+      (Math.abs(px - bounds.cx) > bounds.halfW || Math.abs(py - bounds.cy) > bounds.halfH)
+    ) {
+      return
+    }
     const cellX = Math.floor(px / spacingPx)
     const cellY = Math.floor(py / spacingPx)
     const centerX = (cellX + 0.5) * spacingPx
@@ -494,6 +588,118 @@ function compileDots(layer: DotsLayer, width: number, height: number): PixelOp {
     const dx = px - centerX
     const dy = py - centerY
     const d = Math.sqrt(dx * dx + dy * dy) - radiusPx
+    blendOver(pixel, color, coverage(d) * alphaMul)
+  }
+}
+
+function compileFill(layer: FillLayer): PixelOp {
+  const { color } = layer
+  return (pixel) => {
+    pixel[0] = color.r
+    pixel[1] = color.g
+    pixel[2] = color.b
+  }
+}
+
+function compileBands(layer: BandsLayer, width: number, height: number): PixelOp {
+  const angleRad = (((layer.angle ?? 90) * Math.PI) / 180) as number
+  const cosA = Math.cos(angleRad)
+  const sinA = Math.sin(angleRad)
+
+  const corners: readonly Vec2[] = [
+    [0, 0],
+    [width, 0],
+    [0, height],
+    [width, height],
+  ]
+  let lo = Number.POSITIVE_INFINITY
+  let hi = Number.NEGATIVE_INFINITY
+  for (const [cx, cy] of corners) {
+    const t = cx * cosA + cy * sinA
+    if (t < lo) lo = t
+    if (t > hi) hi = t
+  }
+  const range = Math.max(hi - lo, 1)
+  const colors = layer.colors
+  const bandCount = Math.max(Math.floor(layer.count ?? colors.length), 1)
+  const spacing = range / bandCount
+  const phasePx = (layer.phase ?? 0) * spacing
+  const aa = 1.25
+
+  function pick(index: number): ColorRGB {
+    const n = colors.length
+    return colors[((index % n) + n) % n] as ColorRGB
+  }
+
+  return (pixel, px, py) => {
+    const t = px * cosA + py * sinA - lo + phasePx
+    const pos = t / spacing
+    const index = Math.floor(pos)
+    const frac = pos - index
+    const distNext = (1 - frac) * spacing
+    const distPrev = frac * spacing
+    let color = pick(index)
+    if (distNext < aa) {
+      color = lerpColor(color, pick(index + 1), coverage(distNext, aa))
+    } else if (distPrev < aa) {
+      color = lerpColor(color, pick(index - 1), coverage(distPrev, aa))
+    }
+    pixel[0] = color.r
+    pixel[1] = color.g
+    pixel[2] = color.b
+  }
+}
+
+function compileChecker(layer: CheckerLayer, width: number, height: number): PixelOp {
+  const cx = layer.center[0] * width
+  const cy = layer.center[1] * height
+  const s = Math.min(width, height)
+  const halfW = (layer.width * s) / 2
+  const halfH = (layer.height * s) / 2
+  const rot = (-(layer.rotation ?? 0) * Math.PI) / 180
+  const cosA = Math.cos(rot)
+  const sinA = Math.sin(rot)
+  const cellPx = Math.max(layer.cell * s, 1)
+  const alphaMul = layer.alpha ?? 1
+  const { color } = layer
+  return (pixel, px, py) => {
+    const dx0 = px - cx
+    const dy0 = py - cy
+    const dx = dx0 * cosA - dy0 * sinA
+    const dy = dx0 * sinA + dy0 * cosA
+    if (Math.abs(dx) > halfW || Math.abs(dy) > halfH) return
+    const cellX = Math.floor((dx + halfW) / cellPx)
+    const cellY = Math.floor((dy + halfH) / cellPx)
+    if ((cellX + cellY) % 2 !== 0) return
+    blendOver(pixel, color, alphaMul)
+  }
+}
+
+/** iq's polynomial smooth minimum — the organic join between two circles that still leaves a hard (non-blurred) final silhouette edge. */
+function smoothMin(a: number, b: number, k: number): number {
+  if (k <= 0) return Math.min(a, b)
+  const h = clamp01(0.5 + (0.5 * (b - a)) / k)
+  return lerp(b, a, h) - k * h * (1 - h)
+}
+
+function compileBlob(layer: BlobLayer, width: number, height: number): PixelOp {
+  const s = Math.min(width, height)
+  const k = Math.max((layer.smoothing ?? 0.05) * s, 0.0001)
+  const points = layer.points.map((point) => ({
+    cx: point.at[0] * width,
+    cy: point.at[1] * height,
+    r: point.radius * s,
+  }))
+  const alphaMul = layer.alpha ?? 1
+  const { color } = layer
+  return (pixel, px, py) => {
+    let d = Number.POSITIVE_INFINITY
+    for (const point of points) {
+      const dx = px - point.cx
+      const dy = py - point.cy
+      const dPoint = Math.sqrt(dx * dx + dy * dy) - point.r
+      d = d === Number.POSITIVE_INFINITY ? dPoint : smoothMin(d, dPoint, k)
+    }
     blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
@@ -549,6 +755,14 @@ function compileLayer(layer: ArtLayer, width: number, height: number, seed: numb
       return compileGrain(layer, seed)
     case 'vignette':
       return compileVignette(layer, width, height)
+    case 'fill':
+      return compileFill(layer)
+    case 'bands':
+      return compileBands(layer, width, height)
+    case 'checker':
+      return compileChecker(layer, width, height)
+    case 'blob':
+      return compileBlob(layer, width, height)
     /* c8 ignore next 2 -- exhaustive switch over a closed union */
     default:
       return () => undefined

@@ -85,20 +85,31 @@ img {
 }
 
 /* The entrance animation the blocks opt into — scroll-driven, so a card
-   arrives as it comes into view rather than firing eleven at once on load.
-   Wrapped in a feature query because the starting state is `opacity: 0`: a
-   browser without `animation-timeline` must never be left holding an
-   invisible page. */
+   settles into place as it comes into view rather than firing eleven at
+   once on load. Motion only, never opacity (L26): the original version
+   started every block below the fold at `opacity: 0`, `animation-fill-mode:
+   both` applying that starting keyframe from first paint — with a home
+   page running nine-plus sections deep, that left a screen-heights-tall
+   stretch of the page fully blank until a visitor actually scrolled that
+   far, on *every* browser that implements `animation-timeline: view()`
+   (Chromium, no flag needed), not only in a headless capture. A visitor who
+   never scrolls, a crawler, a link-preview screenshotter, and this very
+   project's own Playwright-driven visual QA (`docs/lots/L26-…md` — the
+   method this fix was found with) all rendered the same "broken" mostly
+   empty page. Restricting the animation to `transform` keeps the tasteful
+   settle-in effect for a browser that supports the feature, with every
+   block fully opaque and readable regardless of scroll position, capture
+   method, or `animation-timeline` support at all — which is also why the
+   `@supports` guard below is now a pure enhancement, not a correctness
+   requirement the way the opacity version needed it to be. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     @keyframes ce-rise {
       from {
-        opacity: 0;
         transform: translateY(var(--ce-s5)) scale(0.98);
       }
 
       to {
-        opacity: 1;
         transform: none;
       }
     }
@@ -538,6 +549,65 @@ img {
 
 .ce-header__action {
   flex: none;
+}
+
+/* The manual light/dark/system control (L26) — `@cogenta/theme-kit`'s
+   `renderThemeToggle` ships no CSS of its own, so every theme styles
+   `.cg-theme-toggle` in its own register. This one matches the storefront's
+   own circular icon buttons (the footer's social links, same 2.5rem/pill
+   sizing and `--ce-ring` hairline) rather than `theme-canonical`'s square
+   outline button. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--ce-radius-pill);
+  background: var(--ce-surface-raised);
+  color: var(--ce-ink-muted);
+  box-shadow: var(--ce-ring);
+  cursor: pointer;
+  transition:
+    color var(--ce-duration) var(--ce-ease),
+    box-shadow var(--ce-duration) var(--ce-ease);
+}
+
+.cg-theme-toggle:hover {
+  color: var(--ce-accent);
+  box-shadow: var(--ce-ring-accent);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
 }
 
 /* --------------------------------------------------------------------------

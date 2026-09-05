@@ -47,7 +47,8 @@ function perDirectionClient(): ProviderClient {
     name: 'fake',
     model: 'fake-model',
     async chat(request: ChatRequest): Promise<ChatResponse> {
-      const prompt = request.messages[0]?.content ?? ''
+      const rawContent = request.messages[0]?.content
+      const prompt = typeof rawContent === 'string' ? rawContent : ''
       const label =
         Object.keys(ACCENT_BY_DIRECTION).find((name) => prompt.includes(name)) ??
         'Warm and editorial'

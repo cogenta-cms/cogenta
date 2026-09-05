@@ -1027,6 +1027,104 @@ describe('a themed page over HTTP', () => {
 })
 
 /**
+ * A real privacy bug, found by hand while verifying a scaffolded site's
+ * public pages (L25): `create-cogenta` only ever asks for an email, so a
+ * fresh site's admin account has no display name — and `authorForSite`
+ * (this file) used to fall back to that account's login email, exactly the
+ * same `displayName ?? email` an *authenticated* admin screen can safely
+ * show. A public byline is not that screen: it is the very first thing a
+ * visitor can read, on the very first page, with no login of their own.
+ */
+describe('a public entry byline (privacy)', () => {
+  it('never publishes an author email — omits the byline when the account has no display name', async () => {
+    const root = await themedProject()
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const { createUserStore, ensureAuthTables } = await import('@cogenta/auth')
+    const page = defineCollection({
+      name: 'page',
+      labels: { singular: 'Page', plural: 'Pages' },
+      routing: { pattern: '/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+        blocks: f.blocks({ required: true }),
+      },
+      indexes: [['slug']],
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await ensureAuthTables(db)
+    await createSchemaTables(db, [page])
+    const admin = await createUserStore(db).create({ email: 'admin@example.com', roles: ['admin'] })
+    await createContentStore({ db, collection: page, defaultLocale: 'en' }).create({
+      status: 'published',
+      createdBy: admin.id,
+      values: { title: 'No display name yet', slug: 'no-display-name' },
+      blocks: { blocks: [] },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/no-display-name`)
+      const html = await response.text()
+      expect(html).not.toContain('admin@example.com')
+      expect(html).not.toContain('cg-entry-header__author')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('shows the account’s own display name once it has set one', async () => {
+    const root = await themedProject()
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const { createUserStore, ensureAuthTables } = await import('@cogenta/auth')
+    const page = defineCollection({
+      name: 'page',
+      labels: { singular: 'Page', plural: 'Pages' },
+      routing: { pattern: '/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+        blocks: f.blocks({ required: true }),
+      },
+      indexes: [['slug']],
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await ensureAuthTables(db)
+    await createSchemaTables(db, [page])
+    const users = createUserStore(db)
+    const admin = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+    await users.updateProfile(admin.id, { displayName: 'Riverside Editor' })
+    await createContentStore({ db, collection: page, defaultLocale: 'en' }).create({
+      status: 'published',
+      createdBy: admin.id,
+      values: { title: 'Has a display name', slug: 'has-display-name' },
+      blocks: { blocks: [] },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/has-display-name`)
+      const html = await response.text()
+      expect(html).toContain('cg-entry-header__author')
+      expect(html).toContain('Riverside Editor')
+      expect(html).not.toContain('admin@example.com')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
+/**
  * A `slug` field is not `required` (contract A): a routed collection can hold
  * a published entry with no slug at all — a draft published without one, for
  * instance. `theme-render.ts`'s `link()` used to let `buildPath` throw

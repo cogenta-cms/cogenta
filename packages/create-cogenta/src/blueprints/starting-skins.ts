@@ -223,4 +223,32 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     motion: { duration: '220ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
     shadow: { sm: '0 1px 3px rgba(35, 27, 22, 0.14)', md: '0 16px 40px rgba(35, 27, 22, 0.22)' },
   },
+  /**
+   * A nonprofit/community site (L25, `@cogenta/theme-association`): warm,
+   * human, trustworthy — a deep-green accent on a light warm off-white
+   * (rather than the canonical blue's corporate read), generously rounded
+   * corners for big, friendly buttons and event cards.
+   */
+  association: {
+    color: {
+      bg: '#fdfbf6',
+      fg: '#1f2a20',
+      accent: '#1f6b4a',
+      accentFg: '#ffffff',
+      muted: '#f3ede0',
+      mutedFg: '#4a4137',
+      border: '#e6dcc8',
+    },
+    font: {
+      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.25,
+      baseSize: '1rem',
+    },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0.5rem', md: '1rem', lg: '1.5rem' },
+    motion: { duration: '200ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 3px rgba(31, 42, 32, 0.08)', md: '0 10px 28px rgba(31, 42, 32, 0.12)' },
+  },
 }

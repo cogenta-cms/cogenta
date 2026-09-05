@@ -1,7 +1,7 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
-import { ASSOCIATION_DEMO_PAGES } from '../src/blueprints/association.js'
+import { buildAssociationDemoPages } from '../src/blueprints/association.js'
 // `blog`'s demo pages are now built from `SeedContext.media` too (L25 D4) —
 // `buildBlogDemoPages({})` renders the same pages this test checked before,
 // minus the (now media-dependent) hero backdrop/quote avatar/press logos,
@@ -29,6 +29,7 @@ const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
+const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

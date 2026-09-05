@@ -1,0 +1,129 @@
+/*
+ * The taxonomy-term archive (contract D `theme@1.3`) — a card grid in the
+ * same warm, dated-card register the home page's "Upcoming events" block
+ * uses, so a visitor who lands on a term archive from a search engine still
+ * recognises the site.
+ */
+
+.cg-archive {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding: var(--cg-s10) var(--cg-gutter);
+}
+
+.cg-archive__title {
+  margin: 0 0 var(--cg-s8);
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  text-wrap: balance;
+}
+
+.cg-archive__breadcrumb ol,
+.cg-archive__children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: 0 0 var(--cg-s4);
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-sm);
+}
+
+.cg-archive__children {
+  margin-block: var(--cg-s4) var(--cg-s8);
+}
+
+.cg-archive__grid {
+  display: grid;
+  gap: var(--cg-s5);
+  grid-template-columns: 1fr;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 46rem) {
+  .cg-archive__grid {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+}
+
+.cg-archive-card {
+  display: flex;
+  gap: var(--cg-s5);
+  padding: var(--cg-s5);
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cogenta-shadow-sm);
+}
+
+.cg-archive-card__date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 4rem;
+  block-size: 4rem;
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+.cg-archive-card__day {
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-bold);
+  line-height: 1;
+}
+
+.cg-archive-card__month {
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-archive-card__body {
+  min-inline-size: 0;
+}
+
+.cg-archive-card__title {
+  margin: 0;
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-archive-card__link {
+  color: var(--cg-ink);
+  text-decoration: none;
+}
+
+.cg-archive-card__link:hover {
+  color: var(--cg-accent);
+}
+
+.cg-archive-card__excerpt {
+  margin: var(--cg-s1) 0 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-archive__empty {
+  padding: var(--cg-s10);
+  color: var(--cg-ink-muted);
+  text-align: center;
+  background: var(--cg-surface-sunken);
+  border-radius: var(--cg-radius-lg);
+}
+
+.cg-archive__pager {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cg-s4);
+  margin-block-start: var(--cg-s10);
+  padding-block-start: var(--cg-s5);
+  border-block-start: 1px solid var(--cg-line-soft);
+  font-weight: var(--cg-weight-semibold);
+}

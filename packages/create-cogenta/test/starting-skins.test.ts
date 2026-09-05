@@ -28,6 +28,7 @@ describe('per-blueprint starting skins', () => {
 
   it('offers one for each site type that has claimed a starting skin so far', () => {
     expect(Object.keys(STARTING_SKINS).sort()).toEqual([
+      'association',
       'blog',
       'documentation',
       'magazine',
@@ -59,6 +60,7 @@ describe('scaffoldSite — starting skin selection', () => {
     'saas',
     'documentation',
     'restaurant',
+    'association',
   ] as const)(
     'writes the %s blueprint’s own starting skin, not the theme’s generic default',
     async (blueprintId) => {

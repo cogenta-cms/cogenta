@@ -1,0 +1,787 @@
+/*
+ * Document, accessibility floor, page frame, chrome (header/footer/nav) and
+ * the one control the theme ships (an action link). Everything here reads
+ * the design system from `tokens.css`; nothing here reads a `--cogenta-*`
+ * token directly.
+ */
+
+/* --------------------------------------------------------------------------
+   Document
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-normal);
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--cg-font-display);
+  font-weight: var(--cg-weight-bold);
+}
+
+::selection {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+img,
+video,
+iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+img {
+  display: block;
+  object-fit: cover;
+}
+
+:where(a) {
+  color: var(--cg-accent);
+  text-decoration-color: color-mix(in oklab, var(--cg-accent) 40%, transparent);
+  transition:
+    color var(--cg-duration-fast) var(--cg-ease),
+    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+}
+
+:where(a:hover) {
+  color: var(--cg-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+:where(hr) {
+  block-size: 1px;
+  border: 0;
+  margin-block: var(--cg-s10);
+  background: var(--cg-line);
+}
+
+/* A visually hidden label — `renderSocialLinks` (`@cogenta/theme-kit`) needs
+   this class to exist, and this is the standard clip-to-1px technique. */
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Focus, targets, motion
+   -------------------------------------------------------------------------- */
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+  border-radius: var(--cg-radius-xs);
+}
+
+:where(.cg-action, .cg-faq__question, .cg-accordion__question, .cg-nav-toggle__button) {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes cg-settle {
+      from {
+        opacity: 0;
+        transform: translateY(var(--cg-s3));
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .cg-block {
+      animation: cg-settle linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 20%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.cg-skip-link {
+  position: absolute;
+  inset-inline-start: var(--cg-s3);
+  inset-block-start: calc(var(--cg-s3) * -8);
+  z-index: 10;
+  padding: var(--cg-s2) var(--cg-s4);
+  background: var(--cg-ink);
+  color: var(--cg-canvas);
+  border-radius: var(--cg-radius-sm);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration: none;
+  transition: inset-block-start var(--cg-duration) var(--cg-ease);
+}
+
+.cg-skip-link:focus-visible {
+  inset-block-start: var(--cg-s3);
+  outline-color: var(--cg-canvas);
+}
+
+/* --------------------------------------------------------------------------
+   Page frame
+   -------------------------------------------------------------------------- */
+
+.cg-main {
+  display: flow-root;
+  /* Contains decorative bleed (the hero's own negative-inset halo) so it
+     never contributes to the document's horizontal scroll extent — found on
+     this theme's own scaffolded site at 360px. */
+  overflow-x: clip;
+}
+
+.cg-block {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y);
+  padding-inline: var(--cg-gutter);
+}
+
+/* --- per-block visual variant (blocks@2.0, RFC 0002) ---------------------- */
+
+[data-block][data-variant-background="muted"],
+[data-block][data-variant-background="image"] {
+  padding-block: var(--cg-s10);
+  border-radius: var(--cg-radius-lg);
+}
+
+[data-block][data-variant-background="muted"] {
+  background: var(--cg-surface-sunken);
+}
+
+[data-block][data-variant-background="image"] {
+  background: var(--cg-surface-tinted);
+}
+
+[data-block][data-variant-spacing="compact"] {
+  margin-block: calc(var(--cg-section-y) / 2);
+}
+
+[data-block][data-variant-spacing="spacious"] {
+  margin-block: calc(var(--cg-section-y) * 1.6);
+}
+
+[data-block][data-variant-align="start"] {
+  text-align: start;
+}
+
+[data-block][data-variant-align="center"] {
+  text-align: center;
+}
+
+[data-block][data-variant-align="end"] {
+  text-align: end;
+}
+
+[data-block][data-variant-width="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-page__title {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s6);
+  padding-inline: var(--cg-gutter);
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  text-wrap: balance;
+}
+
+/* --------------------------------------------------------------------------
+   Chrome — sticky header, pill nav, CSS-only mobile disclosure
+   -------------------------------------------------------------------------- */
+
+.cg-site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 5;
+  padding: var(--cg-s4) var(--cg-gutter);
+  background: color-mix(in oklab, var(--cg-canvas) 90%, transparent);
+  border-block-end: 1px solid var(--cg-line-soft);
+  backdrop-filter: saturate(1.3) blur(10px);
+}
+
+.cg-site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-gap);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+}
+
+.cg-site-header__home {
+  display: flex;
+  align-items: center;
+  color: var(--cg-ink);
+  font-family: var(--cg-font-display);
+  font-weight: var(--cg-weight-bold);
+  font-size: var(--cg-text-lg);
+  text-decoration: none;
+  margin-inline-end: auto;
+}
+
+.cg-site-header__logo {
+  display: block;
+  block-size: 2.25rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+}
+
+/* The desktop row is hidden by default (mobile-first) and shown from the
+   breakpoint the toggle disappears at — the two are never both visible, so
+   the hidden one drops out of the accessibility tree along with its
+   `display: none`. */
+.cg-nav--desktop {
+  display: none;
+}
+
+.cg-nav__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-nav__items a,
+.cg-nav__items span {
+  color: var(--cg-ink-muted);
+  text-decoration: none;
+  border-radius: var(--cg-radius-pill);
+  padding: var(--cg-s2) var(--cg-s3);
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-nav__items a:hover {
+  color: var(--cg-ink);
+  background: var(--cg-surface-sunken);
+}
+
+/* The mobile disclosure — `<details>`/`<summary>`, zero JavaScript. */
+.cg-nav-toggle {
+  position: relative;
+}
+
+.cg-nav-toggle__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.cg-nav-toggle__button::-webkit-details-marker {
+  display: none;
+}
+
+.cg-nav-toggle__icon {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.cg-nav--mobile {
+  /* Explicit, not left to the browser's own closed-`<details>` suppression:
+     that suppression stops *painting* the content, but an absolutely
+     positioned panel this far off its own toggle can still be measured into
+     the document's horizontal extent, producing a real, scrollable overflow
+     with no visible cause — found on this theme's own scaffolded site at
+     360px. `display: none` here removes the box outright; the toggle's own
+     `[open]` rule below is the only thing that ever shows it again. */
+  display: none;
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--cg-s2));
+  z-index: 6;
+  min-inline-size: 13rem;
+  padding: var(--cg-s3);
+  background: var(--cg-surface-raised);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cogenta-shadow-md);
+}
+
+.cg-nav--mobile .cg-nav__items {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--cg-s1);
+}
+
+.cg-nav-toggle[open] .cg-nav--mobile {
+  display: block;
+}
+
+.cg-nav--mobile .cg-nav__items a,
+.cg-nav--mobile .cg-nav__items span {
+  display: block;
+  border-radius: var(--cg-radius-sm);
+}
+
+@media (min-width: 56rem) {
+  .cg-nav--desktop {
+    display: flex;
+  }
+
+  .cg-nav-toggle {
+    display: none;
+  }
+}
+
+.cg-site-header__action {
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Chrome — footer, four columns on a warm tinted band
+   -------------------------------------------------------------------------- */
+
+.cg-site-footer {
+  padding: var(--cg-s16) var(--cg-gutter) var(--cg-s8);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  border-block-start: 1px solid var(--cg-line-soft);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer__grid {
+  display: grid;
+  gap: var(--cg-gap-loose);
+  grid-template-columns: 1fr;
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-block-end: var(--cg-s10);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+@media (min-width: 48rem) {
+  .cg-site-footer__grid {
+    grid-template-columns: 1.3fr 1fr 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.cg-site-footer__brand-link {
+  color: var(--cg-ink);
+  font-family: var(--cg-font-display);
+  font-weight: var(--cg-weight-bold);
+  font-size: var(--cg-text-lg);
+  text-decoration: none;
+}
+
+.cg-site-footer__tagline {
+  margin: var(--cg-s2) 0 0;
+}
+
+.cg-site-footer__col {
+  min-inline-size: 0;
+}
+
+.cg-nav__items.cg-site-footer__nav .cg-nav__items,
+.cg-site-footer__nav .cg-nav__items {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-s3);
+  font-weight: var(--cg-weight-regular);
+}
+
+.cg-site-footer__nav .cg-nav__items a {
+  padding: 0;
+  border-radius: 0;
+}
+
+.cg-site-footer__social {
+  display: flex;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__social-item a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-surface-raised);
+  color: var(--cg-ink-muted);
+  box-shadow: var(--cg-ring);
+}
+
+.cg-site-footer__social-item a:hover {
+  color: var(--cg-accent);
+}
+
+.cg-social__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-site-footer__note {
+  margin: 0;
+}
+
+.cg-site-footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s3);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-block-start: var(--cg-s6);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cg-ink-subtle);
+}
+
+/* --------------------------------------------------------------------------
+   Actions — big, friendly, rounded buttons
+   -------------------------------------------------------------------------- */
+
+.cg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: var(--cg-s8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s2);
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 0;
+  border-radius: var(--cg-radius-pill);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-snug);
+  line-height: var(--cg-leading-snug);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration-fast) var(--cg-ease);
+}
+
+.cg-action[data-emphasis="primary"] {
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  box-shadow: var(--cogenta-shadow-sm);
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-accent-hover);
+  box-shadow: var(--cogenta-shadow-md);
+  transform: translateY(-1px);
+}
+
+.cg-action[data-emphasis="secondary"] {
+  background: var(--cg-surface-raised);
+  color: var(--cg-ink);
+  box-shadow: var(--cg-ring-strong);
+}
+
+.cg-action[data-emphasis="secondary"]:hover {
+  color: var(--cg-accent);
+  box-shadow: var(--cg-ring-accent);
+}
+
+.cg-action:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* The eyebrow pill (hero's "cause" tag). */
+.cg-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--cg-s1) var(--cg-s4);
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   Shared block furniture
+   -------------------------------------------------------------------------- */
+
+.cg-features__title,
+.cg-cta__title,
+.cg-faq__title,
+.cg-impact__title,
+.cg-logos__title,
+.cg-list__title-heading,
+.cg-pricing__title,
+.cg-accordion__title,
+.cg-stat-counters__title {
+  margin: 0 0 var(--cg-s10);
+  font-size: var(--cg-text-2xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  text-wrap: balance;
+}
+
+.cg-features__items,
+.cg-logos__items,
+.cg-gallery__items,
+.cg-list__items,
+.cg-faq__items,
+.cg-accordion__items,
+.cg-pricing__tiers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-gallery__viewport,
+.cg-list__viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cg-line-strong) transparent;
+  padding-block: var(--cg-s2);
+  margin-block: calc(var(--cg-s2) * -1);
+}
+
+/* --------------------------------------------------------------------------
+   Search, forms, comments — public utility pages and post-content furniture.
+   -------------------------------------------------------------------------- */
+
+.cg-search__form,
+.cg-search__results,
+.cg-search__empty,
+.cg-search__error,
+.cg-form,
+.cg-form__confirmation,
+.cg-comments {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-search__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--cg-s3);
+  margin-block-end: var(--cg-s8);
+}
+
+.cg-search__form label {
+  display: block;
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-search__form input[type="search"] {
+  flex: 1 1 16rem;
+}
+
+.cg-search__results {
+  margin: 0 auto;
+  padding-inline-start: var(--cg-gutter);
+  display: grid;
+  gap: var(--cg-s4);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-search__empty,
+.cg-comments__empty,
+.cg-comments__closed {
+  color: var(--cg-ink-muted);
+}
+
+.cg-search__error,
+.cg-form__error,
+.cg-form__field-error {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
+}
+
+.cg-search__form input,
+.cg-form__field input,
+.cg-form__field select,
+.cg-form__field textarea,
+.cg-comment__form input,
+.cg-comment__form textarea {
+  inline-size: 100%;
+  padding: var(--cg-s3) var(--cg-s4);
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-sm);
+  background: var(--cg-surface);
+  color: var(--cg-ink);
+  font: inherit;
+}
+
+.cg-form__field input[aria-invalid="true"],
+.cg-form__field select[aria-invalid="true"],
+.cg-form__field textarea[aria-invalid="true"] {
+  border-width: 2px;
+  border-color: var(--cg-line-strong);
+}
+
+.cg-search__form button,
+.cg-form button[type="submit"],
+.cg-comment__form button[type="submit"] {
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 0;
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  font-weight: var(--cg-weight-bold);
+  cursor: pointer;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-search__form button:hover,
+.cg-form button[type="submit"]:hover,
+.cg-comment__form button[type="submit"]:hover {
+  background: var(--cg-accent-hover);
+}
+
+.cg-form__field,
+.cg-comment__form p {
+  display: block;
+  margin-block-end: var(--cg-s5);
+}
+
+.cg-form__field label,
+.cg-comment__form label {
+  display: block;
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-form__help {
+  margin: var(--cg-s2) 0 0;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+}
+
+.cg-form__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-s2);
+  margin-inline-end: var(--cg-s4);
+  font-weight: normal;
+}
+
+.cg-form__honeypot,
+.cg-comment__honeypot {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  inset-inline-start: -9999px;
+}
+
+.cg-comments {
+  margin-block-start: var(--cg-section-y);
+  padding-block-start: var(--cg-s8);
+  padding-block-end: var(--cg-section-y);
+  border-block-start: 1px solid var(--cg-line-soft);
+}
+
+.cg-comments__list,
+.cg-comment__replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-comment {
+  padding-block: var(--cg-s5);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+.cg-comment__replies {
+  padding-block-start: var(--cg-s5);
+}
+
+.cg-comment__replies .cg-comment {
+  padding-inline-start: var(--cg-s6);
+  border-inline-start: 2px solid var(--cg-line-soft);
+  border-block-end: 0;
+}
+
+.cg-comment__meta {
+  display: flex;
+  gap: var(--cg-s3);
+  align-items: baseline;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-comment__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+.cg-comment__body {
+  margin: 0;
+}

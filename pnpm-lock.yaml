@@ -535,6 +535,9 @@ importers:
       '@cogenta/seo':
         specifier: workspace:*
         version: link:../seo
+      '@cogenta/theme-association':
+        specifier: workspace:*
+        version: link:../theme-association
       '@cogenta/theme-blog':
         specifier: workspace:*
         version: link:../theme-blog
@@ -923,6 +926,28 @@ importers:
         specifier: workspace:*
         version: link:../schema
     devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(jsdom@27.4.0)(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/theme-association:
+    dependencies:
+      '@cogenta/blocks':
+        specifier: workspace:*
+        version: link:../blocks
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
+      '@cogenta/theme-kit':
+        specifier: workspace:*
+        version: link:../theme-kit
+    devDependencies:
+      astro:
+        specifier: 'catalog:'
+        version: 7.2.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@22.20.1)(ioredis@5.11.1)(jiti@2.7.0)(yaml@2.9.0)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

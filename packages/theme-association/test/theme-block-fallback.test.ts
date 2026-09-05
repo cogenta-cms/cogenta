@@ -1,0 +1,68 @@
+import {
+  createBlockRegistry,
+  defineBlock,
+  f,
+  type UnknownPlacedBlock,
+  VOCABULARY,
+  type VocabularyBlock,
+} from '@cogenta/blocks'
+import { serialize } from '@cogenta/theme-kit'
+import { describe, expect, it } from 'vitest'
+import { renderBlock, renderPage } from '../src/render/render-block.js'
+import { makeContext } from './fixtures.js'
+
+/**
+ * Fiche 43, sous-chantier C(ii): a block a theme ships of its own — not one
+ * of the shared vocabulary this theme implements directly — must render as
+ * its declared `fallback` when the active theme does not implement it,
+ * never as a silently blank slot. The resolution logic lives once in
+ * `@cogenta/theme-kit`'s `resolveBlockForRender`; this only proves this
+ * theme's `renderBlock`/`renderPage` actually reach it.
+ */
+const themePullQuote = defineBlock({
+  name: 'themePullQuote',
+  version: '1.0.0',
+  runtime: 'static',
+  fallback: 'quote',
+  a11y: { headingLevel: 'none' },
+  schema: { text: f.text({ required: true, max: 1000 }) },
+})
+
+const registry = createBlockRegistry([...VOCABULARY, themePullQuote])
+const ctx = makeContext()
+
+function asStored(block: UnknownPlacedBlock): VocabularyBlock {
+  return block as unknown as VocabularyBlock
+}
+
+describe('a theme-private block this theme does not implement', () => {
+  it('renders as its declared fallback rather than a blank slot', () => {
+    const placed = asStored({
+      _key: 'pull-1',
+      _type: 'themePullQuote',
+      _version: '1.0.0',
+      text: 'Come once, and see if it suits you.',
+    })
+    const node = renderBlock(placed, ctx, {}, registry)
+    expect(node).not.toBeNull()
+    const html = serialize(node as NonNullable<typeof node>)
+    expect(html).toContain('Come once, and see if it suits you.')
+  })
+
+  it('renders as part of a full page, never leaving a null gap between blocks', () => {
+    const placed = asStored({
+      _key: 'pull-2',
+      _type: 'themePullQuote',
+      _version: '1.0.0',
+      text: 'Come once, and see if it suits you.',
+    })
+    const html = serialize(renderPage({ title: 'Page', blocks: [placed] }, ctx, {}, registry))
+    expect(html).toContain('data-block-key="pull-2"')
+    expect(html).toContain('Come once, and see if it suits you.')
+  })
+
+  it('renders as null, not a thrown error, when nothing was registered for it', () => {
+    const placed = asStored({ _key: 'x', _type: 'neverRegistered', _version: '1.0.0' })
+    expect(renderBlock(placed, ctx)).toBeNull()
+  })
+})

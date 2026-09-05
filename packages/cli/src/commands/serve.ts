@@ -3063,17 +3063,25 @@ async function chromeExtrasForSite(site: Site, locale: string): Promise<ChromeEx
  * The display name of an entry's author (contract D `theme@1.4`'s
  * `PageContent.entry.author`) — the same `users.byId(id)` lookup
  * `audit-router.ts`'s own `resolveActorLabel` already makes, preferring the
- * public profile name an account chose for itself over its email (the
- * `displayName ?? email` fallback `admin-*` screens already use).
- * `undefined` for an id nobody can find (an account since deleted): a byline
- * that named nobody is worse than no byline at all.
+ * public profile name an account chose for itself.
+ *
+ * Unlike `admin-*` screens' own `displayName ?? email` fallback — a private,
+ * authenticated view where showing an email is a reasonable identifier of
+ * last resort — this is a **public** byline, rendered on every visited page
+ * for anyone to read. A scaffolded site's admin account has no display name
+ * by default (`create-cogenta` only ever asks for an email), so reusing that
+ * fallback here would publish the site owner's login email on the very
+ * first page a visitor opens. `null` both for an id nobody can find (an
+ * account since deleted) and for one with no display name set: a byline
+ * that names nobody, or that would have to name an email, is worse than no
+ * byline at all.
  */
 async function authorForSite(
   site: Site,
   userId: string,
 ): Promise<{ readonly name: string } | null> {
   const user = await site.auth.users.byId(userId)
-  return user === null ? null : { name: user.displayName ?? user.email }
+  return user === null || user.displayName === null ? null : { name: user.displayName }
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {

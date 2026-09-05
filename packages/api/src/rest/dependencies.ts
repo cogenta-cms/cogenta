@@ -160,13 +160,16 @@ function walkBlock(
     // A list field carries raw item objects: contract B's item shapes are plain
     // zod schemas, so there is no declared kind to read here the way there is
     // for a block's own fields. The vocabulary names the media reference of an
-    // item `media` (gallery items, logo items), and that name is what this
-    // follows — structurally, and only inside a list of a known block.
+    // item `media` (gallery items, logo items) or `avatar` (testimonial's
+    // grouped `attribution`, `blocks@2.0` RFC 0001) — both property names are
+    // what this follows, structurally, and only inside a known block's field.
     if (field.kind === 'json' || Array.isArray(value)) {
       addItemMedia(value, found.media, MAX_ITEM_DEPTH)
     }
   }
 }
+
+const ITEM_MEDIA_KEYS = ['media', 'avatar'] as const
 
 function addItemMedia(value: unknown, into: Set<string>, depth: number): void {
   if (depth <= 0) return
@@ -177,14 +180,8 @@ function addItemMedia(value: unknown, into: Set<string>, depth: number): void {
   }
   if (typeof value !== 'object' || value === null) return
 
-  const candidate = value as { media?: unknown; avatar?: unknown }
-  // `media` is the vocabulary's usual name for an item's media reference
-  // (gallery items, logo items); `testimonial`'s `attribution` (blocks@2.0)
-  // is the one nested `json` shape that instead calls it `avatar` (matching
-  // `quote`'s own top-level field of the same name) — followed here for the
-  // same structural reason the comment above names `media`.
-  addStrings(into, candidate.media)
-  addStrings(into, candidate.avatar)
+  const record = value as Record<string, unknown>
+  for (const key of ITEM_MEDIA_KEYS) addStrings(into, record[key])
 }
 
 function addStrings(into: Set<string>, value: unknown): void {

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-docs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A dense, reference-first documentation theme for Cogenta: a sticky sidebar-navigated doc layout, real code blocks, and a genuine dark mode — zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

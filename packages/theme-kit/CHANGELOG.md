@@ -1,5 +1,11 @@
 # @cogenta/theme-kit
 
+## 0.3.0
+
+### Minor Changes
+
+- [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `renderThemeToggle` and `THEME_TOGGLE_SCRIPT`: a shared, zero-dependency light/dark/system control every built-in theme can wire into its own chrome. Every theme's `tokens.css` already carried the full tri-state CSS pattern (`:root`, `prefers-color-scheme`, `[data-theme="dark"]`) — nothing ever set the attribute, so dark mode was invisible without changing the OS preference. `THEME_STRINGS` gains three new keys (`theme.toggle.switchToLight/Dark/System`, en/fr).
+
 ## 0.2.0
 
 ### Minor Changes

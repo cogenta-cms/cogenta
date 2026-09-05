@@ -1,5 +1,16 @@
 # @cogenta/theme-canonical
 
+## 1.1.0
+
+### Minor Changes
+
+- [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the new `renderThemeToggle` into the header, styled as `.cg-theme-toggle`. Every page now offers a manual light/dark/system control; the CSS to support it already existed.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+
 ## 1.0.0
 
 ### Major Changes

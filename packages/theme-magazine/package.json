@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-magazine",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An editorial magazine theme for Cogenta: print-inspired typography, a lead-story listing grid, zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

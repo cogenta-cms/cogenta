@@ -1,5 +1,12 @@
 # @cogenta/theme-saas
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

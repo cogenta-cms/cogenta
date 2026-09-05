@@ -1,5 +1,23 @@
 # @cogenta/cli
 
+## 0.5.1
+
+### Patch Changes
+
+- [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` now emits the shared theme-toggle script once in `<head>`, right after the `color-scheme` meta tag, on every page shell (entry pages, generic pages, the theme gallery preview) — the host's job per contract D, not a theme's.
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61), [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-canonical@1.1.0
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/theme-association@0.2.1
+  - @cogenta/theme-blog@0.2.1
+  - @cogenta/theme-docs@0.2.1
+  - @cogenta/theme-ecommerce@1.0.1
+  - @cogenta/theme-entreprise@1.0.1
+  - @cogenta/theme-magazine@1.0.1
+  - @cogenta/theme-portfolio@1.0.1
+  - @cogenta/theme-restaurant@0.2.1
+  - @cogenta/theme-saas@0.2.1
+
 ## 0.5.0
 
 ### Minor Changes

@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { textOnlyContent } from './content-parts.js'
 import { requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
@@ -19,9 +20,13 @@ interface OpenAiToolCall {
   readonly function: { readonly name: string; readonly arguments: string }
 }
 
+type OpenAiContentPart =
+  | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'image_url'; readonly image_url: { readonly url: string } }
+
 interface OpenAiMessage {
   readonly role: 'system' | 'user' | 'assistant' | 'tool'
-  readonly content: string | null
+  readonly content: string | readonly OpenAiContentPart[] | null
   readonly tool_calls?: readonly OpenAiToolCall[]
   readonly tool_call_id?: string
 }
@@ -59,6 +64,28 @@ const STOP_REASON: Record<OpenAiResponseBody['choices'][number]['finish_reason']
   content_filter: 'stop_sequence',
 }
 
+/**
+ * A plain string is passed through unchanged (byte-for-byte identical wire
+ * shape to before this adapter supported images); an array of
+ * `ChatContentPart` becomes OpenAI's multimodal content-part array, with
+ * each image re-encoded as a `data:` URL — the only form the Chat
+ * Completions API accepts for an inline image.
+ */
+function toOpenAiContent(
+  content: ChatMessage['content'],
+): string | readonly OpenAiContentPart[] | null {
+  if (content === undefined) return null
+  if (typeof content === 'string') return content
+  return content.map((part) =>
+    part.type === 'text'
+      ? { type: 'text' as const, text: part.text }
+      : {
+          type: 'image_url' as const,
+          image_url: { url: `data:${part.mediaType};base64,${part.data}` },
+        },
+  )
+}
+
 function toOpenAiMessage(message: ChatMessage): OpenAiMessage {
   if (message.role === 'tool') {
     if (message.toolCallId === undefined) {
@@ -68,13 +95,17 @@ function toOpenAiMessage(message: ChatMessage): OpenAiMessage {
         hint: "Set toolCallId to the id the model's tool call carried.",
       })
     }
-    return { role: 'tool', content: message.content ?? '', tool_call_id: message.toolCallId }
+    return {
+      role: 'tool',
+      content: textOnlyContent(message.content) ?? '',
+      tool_call_id: message.toolCallId,
+    }
   }
 
   const toolCalls = message.toolCalls ?? []
   return {
     role: message.role,
-    content: message.content ?? null,
+    content: toOpenAiContent(message.content),
     ...(toolCalls.length === 0
       ? {}
       : {
@@ -218,6 +249,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
   return {
     name,
     model: config.model,
+    supportsVision: true,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const signal = requestSignalWithTimeout(options?.signal)
       const response = await doFetch(url, {

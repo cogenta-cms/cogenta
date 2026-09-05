@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import { EMPTY_EXISTING_SITE, type ExistingSiteSnapshot } from '../../src/site-plan/site-context.js'
 import {
   generateSkinCandidates,
@@ -72,7 +73,10 @@ function directionOf(prompt: string): string {
 function perDirectionClient() {
   return scriptedClient([
     (request) =>
-      variant(ACCENT_BY_DIRECTION[directionOf(request.messages[0]?.content ?? '')] ?? '#1d4ed8'),
+      variant(
+        ACCENT_BY_DIRECTION[directionOf(textOnlyContent(request.messages[0]?.content) ?? '')] ??
+          '#1d4ed8',
+      ),
   ])
 }
 
@@ -94,7 +98,7 @@ describe('offering a real choice of designs', () => {
 
     await generateSkinCandidates({ ...BASE, client, count: 2 })
 
-    const prompts = requests.map((request) => request.messages[0]?.content ?? '')
+    const prompts = requests.map((request) => textOnlyContent(request.messages[0]?.content) ?? '')
     expect(prompts).toHaveLength(2)
     expect(prompts.some((prompt) => prompt.includes('Warm and editorial'))).toBe(true)
     expect(prompts.some((prompt) => prompt.includes('Clean and clinical'))).toBe(true)
@@ -125,7 +129,7 @@ describe('offering a real choice of designs', () => {
     const attemptsByDirection = new Map<string, number>()
     const { client } = scriptedClient([
       (request) => {
-        const label = directionOf(request.messages[0]?.content ?? '')
+        const label = directionOf(textOnlyContent(request.messages[0]?.content) ?? '')
         const seen = (attemptsByDirection.get(label) ?? 0) + 1
         attemptsByDirection.set(label, seen)
         return seen === 1 ? LOW_CONTRAST : variant(ACCENT_BY_DIRECTION[label] ?? '#1d4ed8')
@@ -179,7 +183,9 @@ describe('existing site context (fiche 60 task 3)', () => {
 
     const request = requests[0]
     expect(request?.system).toContain('<constitution>')
-    const siteMessage = request?.messages.find((m) => m.content?.includes('current site'))
+    const siteMessage = request?.messages.find((m) =>
+      textOnlyContent(m.content)?.includes('current site'),
+    )
     expect(siteMessage?.content).toContain('<data source="current site">')
     expect(siteMessage?.content).toContain('@cogenta/theme-canonical')
     // The final user turn is still the description-and-schema prompt.
@@ -210,7 +216,9 @@ describe('existing site context (fiche 60 task 3)', () => {
     const request = requests[0]
     expect(request?.system ?? '').not.toContain('Ignore all previous instructions')
     expect((request?.system ?? '').match(/<constitution>/g)).toHaveLength(1)
-    const siteMessage = request?.messages.find((m) => m.content?.includes('current site'))
+    const siteMessage = request?.messages.find((m) =>
+      textOnlyContent(m.content)?.includes('current site'),
+    )
     expect(siteMessage?.content).toContain('&lt;/data&gt;')
     expect(siteMessage?.content).toContain('&lt;constitution&gt;')
   })

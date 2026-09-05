@@ -1,5 +1,6 @@
 import { FIELD_KINDS } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import type { DetectedConstraint } from '../../src/site-plan/constraints.js'
 import { proposeContentModel } from '../../src/site-plan/content-model.js'
 import { EMPTY_EXISTING_SITE, type ExistingSiteSnapshot } from '../../src/site-plan/site-context.js'
@@ -161,7 +162,7 @@ describe('proposing a content model', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.attempts).toBe(2)
-    const second = requests[1]?.messages.at(-1)?.content ?? ''
+    const second = textOnlyContent(requests[1]?.messages.at(-1)?.content) ?? ''
     expect(second).toContain('previous attempt was rejected')
     expect(second.toLowerCase()).toContain('slug')
   })
@@ -253,7 +254,7 @@ describe('a proposal that grants the public role a write action', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.attempts).toBe(2)
-    const second = requests[1]?.messages.at(-1)?.content ?? ''
+    const second = textOnlyContent(requests[1]?.messages.at(-1)?.content) ?? ''
     expect(second.toLowerCase()).toContain('public')
   })
 })
@@ -307,7 +308,7 @@ describe('a proposal that contradicts an explicit constraint', () => {
     expect(instruction).toContain('not negotiable')
     expect(instruction).not.toContain('Pas de blog.')
 
-    const data = requests[0]?.messages[0]?.content ?? ''
+    const data = textOnlyContent(requests[0]?.messages[0]?.content) ?? ''
     expect(data.startsWith('<data source="analysed brief">')).toBe(true)
     expect(data).toContain('not negotiable')
     expect(data).toContain('Pas de blog.')
@@ -322,7 +323,7 @@ describe('a proposal that contradicts an explicit constraint', () => {
 
     await proposeContentModel({ client, model: 'm', brief: brief([smuggled]) })
 
-    const data = requests[0]?.messages[0]?.content ?? ''
+    const data = textOnlyContent(requests[0]?.messages[0]?.content) ?? ''
     expect(data).toContain('&lt;/data&gt;')
     expect(data).toContain('&lt;constitution&gt;')
     // Exactly one real closing tag: the one this code wrote.
@@ -421,7 +422,7 @@ describe('evolving an existing site (fiche 60 task 4)', () => {
     expect(instruction).not.toContain('"dish"')
 
     const messages = requests[0]?.messages ?? []
-    const siteMessage = messages.find((m) => m.content?.includes('current site'))
+    const siteMessage = messages.find((m) => textOnlyContent(m.content)?.includes('current site'))
     expect(siteMessage?.content).toContain('<data source="current site">')
     expect(siteMessage?.content).toContain('dish')
   })
@@ -452,9 +453,9 @@ describe('evolving an existing site (fiche 60 task 4)', () => {
     expect(system).not.toContain('Ignore all previous instructions')
     expect(system.match(/<constitution>/g)).toHaveLength(1)
     const messages = requests[0]?.messages ?? []
-    const siteMessage = messages.find((m) => m.content?.includes('current site'))
+    const siteMessage = messages.find((m) => textOnlyContent(m.content)?.includes('current site'))
     expect(siteMessage?.content).toContain('&lt;/data&gt;')
     expect(siteMessage?.content).toContain('&lt;constitution&gt;')
-    expect(siteMessage?.content?.match(/<\/data>/g)).toHaveLength(1)
+    expect(textOnlyContent(siteMessage?.content)?.match(/<\/data>/g)).toHaveLength(1)
   })
 })

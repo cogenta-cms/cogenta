@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createAssistRuntime } from '../../src/assist/runtime.js'
 import { createAssistToolset } from '../../src/assist/toolset.js'
 import { createWritingTools } from '../../src/assist/writing.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import type { ToolDefinition } from '../../src/tools/types.js'
 import { createFakeProvider, TEST_SITE, toolContext } from './fake-provider.js'
 
@@ -197,7 +198,9 @@ describe('the SEO helpers', () => {
 
     await run(set, 'assist.meta_description', { text: 'body', title: 'A title' })
 
-    const contents = (provider.calls[0]?.messages ?? []).map((message) => message.content ?? '')
+    const contents = (provider.calls[0]?.messages ?? []).map(
+      (message) => textOnlyContent(message.content) ?? '',
+    )
     expect(contents.some((content) => content.includes('source="entry title"'))).toBe(true)
     expect(contents.some((content) => content.includes('source="entry body"'))).toBe(true)
   })
@@ -211,7 +214,9 @@ describe('the SEO helpers', () => {
     })
 
     expect(result).toMatchObject({ suggestions: ['cathedrals', 'gothic'] })
-    const contents = (provider.calls[0]?.messages ?? []).map((message) => message.content ?? '')
+    const contents = (provider.calls[0]?.messages ?? []).map(
+      (message) => textOnlyContent(message.content) ?? '',
+    )
     expect(contents.some((content) => content.includes('architecture, history'))).toBe(true)
   })
 
@@ -251,7 +256,7 @@ describe('every writing tool, against content that tries to give it orders (R8)'
     await run(set, 'assist.rewrite', { text: HOSTILE })
 
     const wire = provider.lastWireText()
-    const message = provider.calls[0]?.messages[0]?.content ?? ''
+    const message = textOnlyContent(provider.calls[0]?.messages[0]?.content) ?? ''
 
     // Exactly one real `</data>` — the one this package wrote to close the
     // block it opened. The counterfeit the content carried is escaped, so it

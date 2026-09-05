@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { type ExtractedDocument, extractDocumentText } from '../../src/documents/extract-text.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import { analyseBrief } from '../../src/site-plan/analyse-brief.js'
 import { detectConstraints } from '../../src/site-plan/constraints.js'
 import { enforceOnContentModel, enforceOnPages } from '../../src/site-plan/enforce.js'
@@ -74,7 +75,7 @@ describe('a document that tries to redirect the agent', () => {
 
     await analyseBrief({ client, model: 'm', documents: [document] })
 
-    const dataMessage = requests[0]?.messages[0]?.content ?? ''
+    const dataMessage = textOnlyContent(requests[0]?.messages[0]?.content) ?? ''
     expect(dataMessage.startsWith('<data source="injection-brief.md">')).toBe(true)
     // The payload's own tags survive only as escaped text.
     expect(dataMessage).toContain('&lt;/data&gt;')

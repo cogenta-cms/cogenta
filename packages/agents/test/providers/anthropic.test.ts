@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildAnthropicRequest, parseAnthropicResponse } from '../../src/providers/anthropic.js'
+import {
+  buildAnthropicRequest,
+  createAnthropicClient,
+  parseAnthropicResponse,
+} from '../../src/providers/anthropic.js'
 import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 
@@ -80,6 +84,57 @@ describe('buildAnthropicRequest', () => {
     }
 
     expect(() => buildAnthropicRequest(request)).toThrowError(/toolCallId/)
+  })
+
+  it('maps a text-only content-part array to the exact same string content a plain string would produce', () => {
+    const stringRequest: ChatRequest = {
+      model: 'claude-sonnet-5',
+      messages: [{ role: 'user', content: 'Describe this image.' }],
+      maxTokens: 100,
+    }
+    const partsRequest: ChatRequest = {
+      model: 'claude-sonnet-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Describe this image.' }] }],
+      maxTokens: 100,
+    }
+
+    expect(buildAnthropicRequest(partsRequest)).toEqual(buildAnthropicRequest(stringRequest))
+  })
+
+  it('maps an image content part to an Anthropic base64 image block alongside text', () => {
+    const request: ChatRequest = {
+      model: 'claude-sonnet-5',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image', mediaType: 'image/png', data: 'aGVsbG8=' },
+          ],
+        },
+      ],
+      maxTokens: 100,
+    }
+
+    expect(buildAnthropicRequest(request).messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is in this image?' },
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' },
+          },
+        ],
+      },
+    ])
+  })
+})
+
+describe('createAnthropicClient', () => {
+  it('reports supportsVision: true', () => {
+    const client = createAnthropicClient({ apiKey: 'k', model: 'claude-sonnet-5' })
+    expect(client.supportsVision).toBe(true)
   })
 })
 

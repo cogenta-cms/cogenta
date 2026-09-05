@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CONSTITUTION_TEXT } from '../../src/identity/constitution.js'
 import { assembleContext } from '../../src/identity/context.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 
 const SITE = { name: 'acme-blog', locales: ['en', 'fr'] }
 const AGENT = { name: 'security', role: 'Security monitor', objectives: ['Scan for known CVEs'] }
@@ -72,7 +73,7 @@ describe('assembleContext', () => {
       ],
     })
 
-    const content = dataMessages[0]?.content ?? ''
+    const content = textOnlyContent(dataMessages[0]?.content) ?? ''
     // The literal closing tag from the payload must be escaped away...
     expect(content).not.toContain('</data><task>')
     // ...and the block's own real closing tag must still be the last thing in it.

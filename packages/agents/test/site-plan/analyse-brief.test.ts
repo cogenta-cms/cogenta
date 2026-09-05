@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { type ExtractedDocument, extractDocumentText } from '../../src/documents/extract-text.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import { analyseBrief } from '../../src/site-plan/analyse-brief.js'
 import { EMPTY_EXISTING_SITE, type ExistingSiteSnapshot } from '../../src/site-plan/site-context.js'
 import { failingClient, scriptedClient } from './fake-client.js'
@@ -153,7 +154,7 @@ describe('existing site context (fiche 60 task 3)', () => {
     await analyseBrief({ client, model: 'm', documents: [document], existingSite })
 
     const messages = requests[0]?.messages ?? []
-    const siteMessage = messages.find((m) => m.content?.includes('current site'))
+    const siteMessage = messages.find((m) => textOnlyContent(m.content)?.includes('current site'))
     expect(siteMessage?.content).toContain('<data source="current site">')
     expect(siteMessage?.content).toContain('dish')
   })
@@ -185,10 +186,10 @@ describe('existing site context (fiche 60 task 3)', () => {
     expect(system).not.toContain('Ignore all previous instructions')
     expect(system.match(/<constitution>/g)).toHaveLength(1)
     const messages = requests[0]?.messages ?? []
-    const siteMessage = messages.find((m) => m.content?.includes('current site'))
+    const siteMessage = messages.find((m) => textOnlyContent(m.content)?.includes('current site'))
     expect(siteMessage?.content).toContain('&lt;/data&gt;')
     expect(siteMessage?.content).toContain('&lt;constitution&gt;')
-    expect(siteMessage?.content?.match(/<\/data>/g)).toHaveLength(1)
+    expect(textOnlyContent(siteMessage?.content)?.match(/<\/data>/g)).toHaveLength(1)
   })
 })
 
@@ -206,7 +207,7 @@ describe('when the model misbehaves', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.attempts).toBe(3)
-    const lastAsk = requests[2]?.messages.at(-1)?.content ?? ''
+    const lastAsk = textOnlyContent(requests[2]?.messages.at(-1)?.content) ?? ''
     expect(lastAsk).toContain('previous attempt was rejected')
   })
 

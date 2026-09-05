@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildOpenAiRequest, parseOpenAiResponse } from '../../src/providers/openai.js'
+import {
+  buildOpenAiRequest,
+  createOpenAiClient,
+  parseOpenAiResponse,
+} from '../../src/providers/openai.js'
 import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 
@@ -83,6 +87,63 @@ describe('buildOpenAiRequest', () => {
     }
 
     expect(() => buildOpenAiRequest(request)).toThrowError(/toolCallId/)
+  })
+
+  it('leaves a plain string message untouched — the byte-for-byte-identical path this adapter had before images', () => {
+    const request: ChatRequest = {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Describe this image.' }],
+      maxTokens: 100,
+    }
+
+    expect(buildOpenAiRequest(request).messages).toEqual([
+      { role: 'user', content: 'Describe this image.' },
+    ])
+  })
+
+  it('maps a text-only content-part array to the OpenAI text content-part shape', () => {
+    const request: ChatRequest = {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Describe this image.' }] }],
+      maxTokens: 100,
+    }
+
+    expect(buildOpenAiRequest(request).messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Describe this image.' }] },
+    ])
+  })
+
+  it('maps an image content part to an OpenAI image_url data URL alongside text', () => {
+    const request: ChatRequest = {
+      model: 'gpt-5',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image', mediaType: 'image/png', data: 'aGVsbG8=' },
+          ],
+        },
+      ],
+      maxTokens: 100,
+    }
+
+    expect(buildOpenAiRequest(request).messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is in this image?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aGVsbG8=' } },
+        ],
+      },
+    ])
+  })
+})
+
+describe('createOpenAiClient', () => {
+  it('reports supportsVision: true', () => {
+    const client = createOpenAiClient({ apiKey: 'k', model: 'gpt-5' })
+    expect(client.supportsVision).toBe(true)
   })
 })
 

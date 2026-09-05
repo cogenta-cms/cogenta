@@ -81,6 +81,21 @@ de thème aux dépendances du site généré, sème 8 à 12 blocs sur la page d'
 entrées de démo avec image de couverture, les menus d'en-tête/pied de page, l'accroche et
 les liens sociaux de démo. `blank` reste vierge (canonical, aucune démo).
 
+### D5 — Zéro dégradé (retour utilisateur du 2026-09-05, contraignant)
+
+Après avoir vu les premiers templates : « beaucoup de dégradés, c'est typiquement le
+style cent pour cent IA, il faut absolument éviter ça […] zéro dégradé, des templates
+pros, vraiment structurés, vraiment designés, modernes ». Règle appliquée à **tout** :
+aucun `linear-gradient`/`radial-gradient`/`conic-gradient` dans un CSS de thème, aucun
+halo/lueur en pseudo-élément, aucune bordure en dégradé, aucun voile en dégradé sur une
+image (un voile uni semi-transparent à la place), et **les visuels générés (`demo-art`)
+sont refaits en compositions plates** : aplats de couleur, formes géométriques nettes,
+grilles, filets, trames de points, duotone — jamais de mesh ni de glow. Un test par thème
+refuse `gradient(` dans les feuilles de style ; un test de `demo-art` refuse qu'un preset
+émette une couche `gradient`/`glow`. Le registre visuel visé : le design éditorial suisse
+et le flat design structuré (Basecamp, Notion, GitHub, la documentation Stripe, Apple),
+pas le « mesh violet » des landing pages générées.
+
 ## Références de design (inspiration, jamais copie)
 
 | Type | Thème | Inspiration WordPress | Signature visuelle |

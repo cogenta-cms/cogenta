@@ -2,7 +2,11 @@ import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
 import { ASSOCIATION_DEMO_PAGES } from '../src/blueprints/association.js'
-import { BLOG_DEMO_PAGES } from '../src/blueprints/blog.js'
+// `blog`'s demo pages are now built from `SeedContext.media` too (L25 D4) —
+// `buildBlogDemoPages({})` renders the same pages this test checked before,
+// minus the (now media-dependent) hero backdrop/quote avatar/press logos,
+// none of which this test exercises.
+import { buildBlogDemoPages } from '../src/blueprints/blog.js'
 import { DOCUMENTATION_DEMO_PAGES } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
@@ -16,6 +20,7 @@ import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
+const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

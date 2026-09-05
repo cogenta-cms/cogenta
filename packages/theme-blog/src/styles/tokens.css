@@ -1,0 +1,320 @@
+/*
+ * `@cogenta/theme-blog`'s design system.
+ *
+ * Contract D fixes a *closed* skin token set — seven colours, five type
+ * tokens, two spacing tokens, three radii, three motion tokens, two shadows
+ * — and refuses any skin that adds one. This layer derives everything else
+ * from `--cogenta-*` by composition (`calc`, `color-mix`, relative colour
+ * syntax): a skin swap rewrites the generated `--cogenta-*` sheet and this
+ * whole system follows, with no build step.
+ *
+ * Two rules hold everywhere in this file and the two that import it:
+ *
+ * 1. **No colour literal.** Not one hex, `rgb()`, `hsl()` or bare `oklch()`.
+ *    Every colour is either a skin token or a function *of* a skin token.
+ * 2. **No second scale.** The type steps come from `--cogenta-font-size-*`
+ *    and the spacing multiplier from `--cogenta-space-scale`.
+ *
+ * One deliberate exception to "derived from the skin, nothing literal":
+ * `--cg-font-reading` below names Source Serif 4 directly rather than
+ * through a `--cogenta-font-*` slot. Contract D's skin carries only three
+ * font roles (`sans`/`serif`/`mono`), and this theme's identity genuinely
+ * needs three distinct typefaces — Fraunces for display headings (the
+ * skin's own `serif` token, `tokens.json`), Inter Tight for UI/meta (the
+ * skin's own `sans`), and Source Serif 4 for the reading column itself,
+ * which is this theme's single most deliberate typographic choice and not
+ * meant to change on an ordinary palette swap. It is not a colour, so the
+ * "no literal" rule above — checked by `test/isolation.test.ts` — does not
+ * apply to it; `test/font-display.test.ts` still requires its `@import`
+ * (`theme.css`) to carry `display=swap`.
+ *
+ * The default skin (`tokens.json`) is warm and paper-light: a very light
+ * warm off-white ground, near-black warm ink, and a deep ink-blue accent —
+ * deliberately not the terracotta another Cogenta theme already uses for a
+ * warm palette. Dark mode is designed on its own terms (see the colour
+ * section below), never a mechanical inversion: "deep ink", not inverted
+ * grey.
+ */
+
+:where(:root) {
+  color-scheme: light dark;
+}
+
+:where(:root[data-theme="dark"]) {
+  color-scheme: dark;
+}
+
+:where(:root[data-theme="light"]) {
+  color-scheme: light;
+}
+
+/* --------------------------------------------------------------------------
+   Space — generous, reading-first rhythm: the gutter and section rhythm are
+   spent on the reading column's margins and the space around a cover image,
+   not on cramming more into the viewport.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-density: var(--cogenta-space-scale, 1);
+  --cg-unit: calc(var(--cogenta-space-unit) * var(--cg-density));
+
+  --cg-s1: calc(var(--cg-unit) * 1);
+  --cg-s2: calc(var(--cg-unit) * 2);
+  --cg-s3: calc(var(--cg-unit) * 3);
+  --cg-s4: calc(var(--cg-unit) * 4);
+  --cg-s5: calc(var(--cg-unit) * 5);
+  --cg-s6: calc(var(--cg-unit) * 6);
+  --cg-s8: calc(var(--cg-unit) * 8);
+  --cg-s10: calc(var(--cg-unit) * 10);
+  --cg-s12: calc(var(--cg-unit) * 12);
+  --cg-s16: calc(var(--cg-unit) * 16);
+  --cg-s20: calc(var(--cg-unit) * 20);
+  --cg-s28: calc(var(--cg-unit) * 28);
+
+  --cg-gutter: var(--cg-s5);
+  --cg-gap-tight: var(--cg-s2);
+  --cg-gap: var(--cg-s5);
+  --cg-gap-loose: var(--cg-s10);
+  --cg-section-y: var(--cg-s16);
+
+  /* The reading column: 65ch, exactly the width the brief names for the
+     post body. `--cg-measure-wide` is the page's own outer width — the
+     grid/list of cards and the chrome, never the running text. */
+  --cg-measure: 65ch;
+  --cg-measure-narrow: 42ch;
+  --cg-page: 76rem;
+  --cg-page-narrow: 46rem;
+}
+
+:where([data-density="compact"]) {
+  --cg-density: 0.75;
+}
+
+:where([data-density="comfortable"]) {
+  --cg-density: 1;
+}
+
+:where([data-density="spacious"]) {
+  --cg-density: 1.25;
+}
+
+/* --------------------------------------------------------------------------
+   Type
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-text-xs: var(--cogenta-font-size-xs, 0.72rem);
+  --cg-text-sm: var(--cogenta-font-size-sm, 0.86rem);
+  --cg-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1rem));
+  --cg-text-lg: var(--cogenta-font-size-lg, 1.2rem);
+  --cg-text-xl: var(--cogenta-font-size-xl, 1.44rem);
+  --cg-text-2xl: var(--cogenta-font-size-2xl, 1.8rem);
+  --cg-text-3xl: var(--cogenta-font-size-3xl, 2.4rem);
+
+  --cg-leading-tight: 1.1;
+  --cg-leading-snug: 1.3;
+  --cg-leading-normal: 1.5;
+  --cg-leading-relaxed: 1.72;
+  /* The reading column earns its own, more generous leading: a serif body
+     face at 65ch wants more vertical air than the UI sans does. */
+  --cg-leading-reading: 1.78;
+
+  --cg-tracking-tight: -0.015em;
+  --cg-tracking-snug: -0.006em;
+  --cg-tracking-normal: 0em;
+  --cg-tracking-wide: 0.11em;
+
+  --cg-weight-regular: 400;
+  --cg-weight-medium: 500;
+  --cg-weight-semibold: 600;
+  --cg-weight-bold: 700;
+
+  /* The one literal, non-colour exception this file makes — see the module
+     comment above. `--cogenta-font-serif` (Fraunces) stays the display/
+     heading face; this is the running-text face for the reading column,
+     excerpts and pull-quotes. */
+  --cg-font-reading: "Source Serif 4", ui-serif, Georgia, Cambria, "Times New Roman", serif;
+}
+
+/* --------------------------------------------------------------------------
+   Radius — a touch softer than a corporate theme's sharp edges: a printed
+   card has a trimmed, not knife-edge, corner.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-radius-xs: calc(var(--cogenta-radius-sm) / 1.5);
+  --cg-radius-sm: var(--cogenta-radius-sm);
+  --cg-radius-md: var(--cogenta-radius-md);
+  --cg-radius-lg: var(--cogenta-radius-lg);
+  --cg-radius-xl: calc(var(--cogenta-radius-lg) * 1.4);
+  --cg-radius-pill: 999rem;
+}
+
+/* --------------------------------------------------------------------------
+   Motion
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-duration-fast: calc(var(--cogenta-motion-duration) * 0.65);
+  --cg-duration: var(--cogenta-motion-duration);
+  --cg-duration-slow: calc(var(--cogenta-motion-duration) * 3);
+  --cg-ease: var(--cogenta-motion-easing);
+}
+
+/* --------------------------------------------------------------------------
+   Colour — one palette per scheme, both derived from the same seven tokens.
+
+   The light palette below is declared in plain terms; the scheme-aware
+   values live in the `@supports` block after it, guarded so a browser that
+   cannot parse `light-dark()`/relative `oklch()` still gets a usable light
+   palette rather than an `unset` custom property.
+
+   **Dark mode, designed on its own terms — five decisions, each the
+   opposite of what a mechanical `bg`/`fg` swap would produce:**
+
+   1. *Elevation is a hairline ring, both schemes* — a raised card is a
+      border, never a drop shadow floating over ink.
+   2. *The accent is lifted and desaturated*, not just brightened — an ink-
+      blue pushed to a mechanical-swap lightness reads as a highlighter;
+      this palette lifts it to roughly L 0.72 and pulls chroma back a third,
+      the "still the same considered blue" read.
+   3. *The accent's foreground flips to ink* once the accent itself is
+      light — white text on a lifted accent fails contrast.
+   4. *Text is never pure light and never fully desaturated* — a trace of
+      the accent's own hue at low chroma, an off-white that belongs to this
+      palette rather than a generic dark-mode grey.
+   5. *A border lightens against its surface in dark, and darkens in light*
+      — a darker line on dark ink is invisible.
+
+   Known limit (recorded in every Cogenta theme that uses this technique):
+   the derivation assumes a light-first skin (`bg` lighter than `fg`).
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-canvas: var(--cogenta-color-bg);
+  --cg-surface: var(--cogenta-color-bg);
+  --cg-surface-raised: var(--cogenta-color-bg);
+  --cg-surface-sunken: var(--cogenta-color-muted);
+  --cg-surface-tinted: color-mix(in oklab, var(--cogenta-color-accent) 6%, var(--cogenta-color-bg));
+
+  --cg-ink: var(--cogenta-color-fg);
+  --cg-ink-muted: var(--cogenta-color-muted-fg);
+  --cg-ink-subtle: color-mix(in oklab, var(--cogenta-color-muted-fg) 82%, var(--cogenta-color-bg));
+
+  --cg-accent: var(--cogenta-color-accent);
+  --cg-accent-fg: var(--cogenta-color-accent-fg);
+  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 85%, var(--cogenta-color-fg));
+  --cg-accent-soft: color-mix(in oklab, var(--cogenta-color-accent) 10%, var(--cogenta-color-bg));
+  --cg-accent-soft-fg: color-mix(
+    in oklab,
+    var(--cogenta-color-accent) 72%,
+    var(--cogenta-color-fg)
+  );
+
+  --cg-line: var(--cogenta-color-border);
+  --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg));
+  --cg-line-strong: color-mix(in oklab, var(--cogenta-color-border) 62%, var(--cogenta-color-fg));
+
+  --cg-scrim: color-mix(in oklab, var(--cogenta-color-fg) 60%, transparent);
+}
+
+@supports (color: light-dark(currentColor, currentColor)) and
+  (color: oklch(from currentColor l c h)) {
+  :where(:root) {
+    --cg-canvas: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.15 calc(c * 0.6) h)
+    );
+    --cg-surface: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.15 calc(c * 0.6) h)
+    );
+    --cg-surface-raised: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.22 calc(c * 0.55) h)
+    );
+    --cg-surface-sunken: light-dark(
+      var(--cogenta-color-muted),
+      oklch(from var(--cogenta-color-fg) 0.11 calc(c * 0.7) h)
+    );
+    --cg-surface-tinted: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 6%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.24 calc(c * 0.5) h)
+    );
+
+    --cg-ink: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-accent) 0.94 0.012 h)
+    );
+    --cg-ink-muted: light-dark(
+      var(--cogenta-color-muted-fg),
+      oklch(from var(--cogenta-color-accent) 0.77 0.018 h)
+    );
+    --cg-ink-subtle: light-dark(
+      color-mix(in oklab, var(--cogenta-color-muted-fg) 82%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.64 0.015 h)
+    );
+
+    --cg-accent: light-dark(
+      var(--cogenta-color-accent),
+      oklch(from var(--cogenta-color-accent) 0.72 calc(c * 0.68) h)
+    );
+    --cg-accent-fg: light-dark(
+      var(--cogenta-color-accent-fg),
+      oklch(from var(--cogenta-color-accent) 0.15 calc(c * 0.5) h)
+    );
+    --cg-accent-hover: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 85%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.8 calc(c * 0.64) h)
+    );
+    --cg-accent-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 10%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.29 calc(c * 0.42) h)
+    );
+    --cg-accent-soft-fg: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 72%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.88 calc(c * 0.38) h)
+    );
+
+    --cg-line: light-dark(
+      var(--cogenta-color-border),
+      oklch(from var(--cogenta-color-accent) 0.33 calc(c * 0.18) h)
+    );
+    --cg-line-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.26 calc(c * 0.16) h)
+    );
+    --cg-line-strong: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 62%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.54 calc(c * 0.2) h)
+    );
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Elevation — a hairline ring by default, both schemes; a real shadow is
+   spent only on hover.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cg-ring: inset 0 0 0 1px var(--cg-line);
+  --cg-ring-accent: inset 0 0 0 1px var(--cg-accent);
+  --cg-ring-strong: inset 0 0 0 1px var(--cg-line-strong);
+
+  --cg-elevation-0: none;
+  --cg-elevation-1: var(--cg-ring);
+  --cg-elevation-2: var(--cogenta-shadow-sm), var(--cg-ring);
+  --cg-elevation-3: var(--cogenta-shadow-md), var(--cg-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) {
+    --cg-elevation-2: var(--cg-ring-strong);
+    --cg-elevation-3: var(--cg-ring-strong), var(--cogenta-shadow-md);
+  }
+}
+
+:where(:root[data-theme="dark"]) {
+  --cg-elevation-2: var(--cg-ring-strong);
+  --cg-elevation-3: var(--cg-ring-strong), var(--cogenta-shadow-md);
+}

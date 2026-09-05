@@ -106,6 +106,38 @@ describe('what a response declares it was built from', () => {
     expect(dependenciesOf(response).media).toEqual(['media-hero', 'media-shot-1', 'media-shot-2'])
   })
 
+  it('declares the media inside a nested json field named differently than "media"', async () => {
+    // `testimonial.attribution` (blocks@2.0) is a `json` field whose own
+    // media reference is named `avatar`, matching `quote`'s top-level field
+    // of the same name rather than the `media` name every list item uses.
+    await harness.store(ARTICLE).create({
+      id: 'article-testimonial',
+      status: 'published',
+      values: { title: 'Testimonial page' },
+      blocks: {
+        zone: [
+          {
+            key: 'b-testimonial',
+            type: 'testimonial',
+            data: {
+              quote: [
+                { _type: 'block', _key: 'p1', children: [{ _type: 'span', text: 'Great.' }] },
+              ],
+              attribution: { name: 'Ada', avatar: 'media-avatar-1' },
+            },
+          },
+        ],
+      },
+    })
+
+    const response = await harness.router.handle(
+      request('GET', '/rest_article/article-testimonial'),
+      asPublic,
+    )
+
+    expect(dependenciesOf(response).media).toEqual(['media-avatar-1'])
+  })
+
   it('declares the collection of a list, so that a first entry still invalidates it', async () => {
     const response = await harness.router.handle(request('GET', '/rest_page'), asPublic)
 

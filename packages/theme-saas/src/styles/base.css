@@ -1,0 +1,843 @@
+/*
+ * Document, accessibility floor, page frame, chrome (header/footer/nav) and
+ * the one control the theme ships (an action link). Everything here reads
+ * the design system from `tokens.css`; nothing here reads a `--cogenta-*`
+ * token directly.
+ */
+
+/* --------------------------------------------------------------------------
+   Document
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-normal);
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
+  -webkit-text-size-adjust: 100%;
+}
+
+::selection {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+img,
+video,
+iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+img {
+  display: block;
+  object-fit: cover;
+}
+
+:where(a) {
+  color: var(--cg-accent);
+  text-decoration-color: color-mix(in oklab, var(--cg-accent) 40%, transparent);
+  transition:
+    color var(--cg-duration-fast) var(--cg-ease),
+    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+}
+
+:where(a:hover) {
+  color: var(--cg-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+:where(hr) {
+  block-size: 1px;
+  border: 0;
+  margin-block: var(--cg-s10);
+  background: var(--cg-line);
+}
+
+/* --------------------------------------------------------------------------
+   Focus, targets, motion
+   -------------------------------------------------------------------------- */
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+  border-radius: var(--cg-radius-xs);
+}
+
+:where(.cg-action, .cg-faq__question, .cg-clients__link, .cg-nav__cta) {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+/* A restrained entrance: blocks settle upward a few pixels as they enter
+   the viewport, scroll-driven so it plays once per block rather than firing
+   for all of them on load. Wrapped in a feature query because the starting
+   state is `opacity: 0` — a browser without `animation-timeline` must never
+   be left holding an invisible page. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes cg-settle {
+      from {
+        opacity: 0;
+        transform: translateY(var(--cg-s3));
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .cg-block {
+      animation: cg-settle linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 20%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The `motion.reduced` token says the skin's motion may be removed.
+     Nothing here conveys meaning through movement, so removing all of it,
+     including the smooth scroll of a carousel, is safe. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.cg-skip-link {
+  position: absolute;
+  inset-inline-start: var(--cg-s3);
+  inset-block-start: calc(var(--cg-s3) * -8);
+  z-index: 10;
+  padding: var(--cg-s2) var(--cg-s4);
+  background: var(--cg-ink);
+  color: var(--cg-canvas);
+  border-radius: var(--cg-radius-sm);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration: none;
+  transition: inset-block-start var(--cg-duration) var(--cg-ease);
+}
+
+.cg-skip-link:focus-visible {
+  inset-block-start: var(--cg-s3);
+  outline-color: var(--cg-canvas);
+}
+
+/* The standard clip-to-1px technique — visible to assistive tech, invisible
+   on screen, unlike `display:none` (which removes it from both). Every
+   social icon link's own text label (`renderSocialLinks`,
+   `@cogenta/theme-kit`) depends on this class existing here: theme-kit ships
+   no CSS of its own (contract D, R5 — a theme owns its own stylesheet). */
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Page frame
+   -------------------------------------------------------------------------- */
+
+.cg-main {
+  display: flow-root;
+}
+
+.cg-block {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y);
+  padding-inline: var(--cg-gutter);
+}
+
+/* Every block is a page-width, gutter-padded section by default — `:where()`
+   keeps this at zero specificity so a block that sets its own narrower
+   measure (`.cg-hero__copy`, `.cg-quote`, `.cg-prose`…) still wins, while a
+   block that never set one (`.cg-hero`, `.cg-features`) no longer sits flush
+   against the viewport edge on a wide screen. `data-variant-width="full"`
+   below opts a block back out. */
+:where(.cg-main > [data-block]) {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+/* --- per-block visual variant (blocks@2.0, RFC 0002) ----------------------
+   `withBlockVariant` (`@cogenta/theme-kit`) stamps one `data-variant-<axis>`
+   attribute per axis an author actually set — never all four, never one this
+   theme does not resolve. Two attribute selectors give every rule here the
+   same specificity, (0,2,0), which is what lets it override `.cg-block`
+   above regardless of source order, without `!important` anywhere.
+
+   `background: 'image'` has no theme mechanism to attach an actual image to
+   a block instance (RFC 0002 adds only the semantic token, not a media
+   field) — resolved to the same tinted surface as the closest honest
+   approximation this theme has, rather than silently doing nothing with a
+   stated author intent.
+   ------------------------------------------------------------------------- */
+
+[data-block][data-variant-background="muted"],
+[data-block][data-variant-background="image"] {
+  padding-block: var(--cg-s10);
+  border-radius: var(--cg-radius-lg);
+}
+
+[data-block][data-variant-background="muted"] {
+  background: var(--cg-surface-sunken);
+}
+
+[data-block][data-variant-background="image"] {
+  background: var(--cg-surface-tinted);
+}
+
+[data-block][data-variant-spacing="compact"] {
+  margin-block: calc(var(--cg-section-y) / 2);
+}
+
+/* No rule for "comfortable": it names this theme's existing default, so an
+   author who picks it explicitly gets exactly what an absent `variant`
+   already gave them — the whole point of "theme default" being a real,
+   selectable option and not only the absence of a choice. */
+
+[data-block][data-variant-spacing="spacious"] {
+  margin-block: calc(var(--cg-section-y) * 1.6);
+}
+
+[data-block][data-variant-align="start"] {
+  text-align: start;
+}
+
+[data-block][data-variant-align="center"] {
+  text-align: center;
+}
+
+[data-block][data-variant-align="end"] {
+  text-align: end;
+}
+
+[data-block][data-variant-width="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-page__title {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s6);
+  padding-inline: var(--cg-gutter);
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+/* --------------------------------------------------------------------------
+   Chrome — header, with a CSS-only mobile menu
+   -------------------------------------------------------------------------- */
+
+.cg-site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 5;
+  padding: var(--cg-s4) var(--cg-gutter);
+  background: color-mix(in oklab, var(--cg-canvas) 82%, transparent);
+  border-block-end: 1px solid var(--cg-line-soft);
+  backdrop-filter: saturate(1.4) blur(12px);
+}
+
+.cg-site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-gap);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+}
+
+.cg-site-header__home {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
+  font-size: var(--cg-text-lg);
+  letter-spacing: var(--cg-tracking-tight);
+  text-decoration: none;
+  margin-inline-end: auto;
+}
+
+/* The uploaded corporate logo. Height-constrained so the header bar keeps a
+   constant height whatever aspect ratio the company's mark has. */
+.cg-site-header__logo {
+  display: block;
+  block-size: 2rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+}
+
+/* The mobile-menu checkbox: visually hidden the accessible way (still in
+   the tab order, still Space-operable) rather than `display: none` (which
+   would remove it from the tab order entirely) or `left: -9999px` (which
+   some assistive technology and "find in page" treat as content, not
+   chrome). */
+.cg-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cg-nav-toggle-label {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.28rem;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0.5rem;
+  border-radius: var(--cg-radius-sm);
+  cursor: pointer;
+}
+
+.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cg-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 2px;
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-ink);
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-header__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s5);
+}
+
+.cg-menu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-menu a,
+.cg-menu span {
+  color: var(--cg-ink-muted);
+  text-decoration: none;
+  transition: color var(--cg-duration-fast) var(--cg-ease);
+}
+
+.cg-menu a:hover {
+  color: var(--cg-ink);
+}
+
+/* Below the breakpoint: the toggle button appears, and the nav becomes a
+   panel anchored under the header, shown only while the checkbox is
+   checked — the whole mechanism is this one selector, no JavaScript. */
+@media (max-width: 56rem) {
+  .cg-nav-toggle-label {
+    display: flex;
+    margin-inline-start: auto;
+  }
+
+  .cg-site-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--cg-s5);
+    padding: var(--cg-s6) var(--cg-gutter);
+    background: var(--cg-canvas);
+    border-block-end: 1px solid var(--cg-line-soft);
+    box-shadow: var(--cogenta-shadow-md);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
+    display: flex;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
+    transform: translateY(0.42rem) rotate(45deg);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
+    opacity: 0;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(3) {
+    transform: translateY(-0.42rem) rotate(-45deg);
+  }
+
+  .cg-site-header__nav .cg-menu {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--cg-s4);
+  }
+}
+
+.cg-site-header__action {
+  flex: none;
+}
+
+/* --------------------------------------------------------------------------
+   Chrome — footer, a real four-column layout
+   -------------------------------------------------------------------------- */
+
+.cg-site-footer {
+  padding: var(--cg-s16) var(--cg-gutter) var(--cg-s8);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  border-block-start: 1px solid var(--cg-line-soft);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer__grid {
+  display: grid;
+  gap: var(--cg-gap-loose);
+  grid-template-columns: 1fr;
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-block-end: var(--cg-s10);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+@media (min-width: 56rem) {
+  .cg-site-footer__grid {
+    grid-template-columns: 1.3fr 1fr 0.8fr 1fr;
+    align-items: start;
+  }
+}
+
+.cg-site-footer__brand a {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
+  font-size: var(--cg-text-lg);
+  letter-spacing: var(--cg-tracking-tight);
+  text-decoration: none;
+}
+
+.cg-site-footer__tagline {
+  margin: var(--cg-s3) 0 0;
+  max-inline-size: 22ch;
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+}
+
+.cg-site-footer__nav .cg-menu {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-s3);
+}
+
+.cg-site-footer__social {
+  display: flex;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-pill);
+  color: var(--cg-ink-muted);
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-footer__social-item a:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-social__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-site-footer__note {
+  margin: 0 0 var(--cg-s4);
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-normal);
+}
+
+.cg-site-footer__branding {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+@media (min-width: 56rem) {
+  .cg-site-footer__branding {
+    align-items: flex-end;
+    text-align: end;
+  }
+}
+
+.cg-site-footer__branding a {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  opacity: 0.75;
+  transition: opacity var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-footer__branding a:hover,
+.cg-site-footer__branding a:focus-visible {
+  opacity: 1;
+}
+
+.cg-site-footer__brand-logo {
+  display: block;
+  /* Explicit pixels, not `em`: relative sizing cascaded from the footer's
+     own small font-size and made the credit mark unreadably tiny. */
+  block-size: 25px;
+  inline-size: auto;
+}
+
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9em;
+}
+
+.cg-site-footer__bottom {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-block-start: var(--cg-s6);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cg-ink-subtle);
+}
+
+/* --------------------------------------------------------------------------
+   Actions — the theme's only control
+   -------------------------------------------------------------------------- */
+
+.cg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: var(--cg-s8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Filled, 10px radius (`--cg-radius-md`, `tokens.json`), a subtle inner
+   highlight on the primary button — the Linear/Stripe/Vercel button
+   language. */
+.cg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s2);
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 1px solid transparent;
+  border-radius: var(--cg-radius-md);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-snug);
+  line-height: var(--cg-leading-snug);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    box-shadow var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration-fast) var(--cg-ease);
+}
+
+.cg-action[data-emphasis="primary"] {
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--cg-accent-fg) 35%, transparent);
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-accent-hover);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--cg-accent-fg) 35%, transparent),
+    var(--cogenta-shadow-sm);
+  transform: translateY(-1px);
+}
+
+.cg-action[data-emphasis="secondary"] {
+  background: transparent;
+  color: var(--cg-ink);
+  border-color: color-mix(in oklab, var(--cg-line-strong) 70%, transparent);
+}
+
+.cg-action[data-emphasis="secondary"]:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-action:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   Shared block furniture
+   -------------------------------------------------------------------------- */
+
+.cg-features__title,
+.cg-banner__title,
+.cg-faq__title,
+.cg-metrics__title,
+.cg-clients__title,
+.cg-list__title-heading {
+  margin: 0 0 var(--cg-s10);
+  font-size: var(--cg-text-xl);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-features__items,
+.cg-clients__items,
+.cg-gallery__items,
+.cg-list__items,
+.cg-faq__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-gallery__viewport,
+.cg-list__viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cg-line-strong) transparent;
+  padding-block: var(--cg-s2);
+  margin-block: calc(var(--cg-s2) * -1);
+}
+
+/* --------------------------------------------------------------------------
+   Search, forms, comments — public utility pages and post-content furniture,
+   styled with the same restrained, structured language as the seventeen blocks.
+   -------------------------------------------------------------------------- */
+
+.cg-search__form,
+.cg-search__results,
+.cg-search__empty,
+.cg-search__error,
+.cg-form,
+.cg-form__confirmation,
+.cg-comments {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-search__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--cg-s3);
+  margin-block-end: var(--cg-s8);
+}
+
+.cg-search__form label {
+  display: block;
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-search__form input[type="search"] {
+  flex: 1 1 16rem;
+}
+
+.cg-search__results {
+  margin: 0 auto;
+  padding-inline-start: var(--cg-gutter);
+  display: grid;
+  gap: var(--cg-s4);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-search__empty,
+.cg-comments__empty,
+.cg-comments__closed {
+  color: var(--cg-ink-muted);
+}
+
+.cg-search__error,
+.cg-form__error,
+.cg-form__field-error {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
+}
+
+.cg-search__form input,
+.cg-form__field input,
+.cg-form__field select,
+.cg-form__field textarea,
+.cg-comment__form input,
+.cg-comment__form textarea {
+  inline-size: 100%;
+  padding: var(--cg-s3) var(--cg-s4);
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-sm);
+  background: var(--cg-surface);
+  color: var(--cg-ink);
+  font: inherit;
+}
+
+.cg-form__field input[aria-invalid="true"],
+.cg-form__field select[aria-invalid="true"],
+.cg-form__field textarea[aria-invalid="true"] {
+  border-width: 2px;
+  border-color: var(--cg-line-strong);
+}
+
+.cg-search__form button,
+.cg-form button[type="submit"],
+.cg-comment__form button[type="submit"] {
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 0;
+  border-radius: var(--cg-radius-sm);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-search__form button:hover,
+.cg-form button[type="submit"]:hover,
+.cg-comment__form button[type="submit"]:hover {
+  background: var(--cg-accent-hover);
+}
+
+.cg-form__field,
+.cg-comment__form p {
+  display: block;
+  margin-block-end: var(--cg-s5);
+}
+
+.cg-form__field label,
+.cg-comment__form label {
+  display: block;
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-form__help {
+  margin: var(--cg-s2) 0 0;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+}
+
+.cg-form__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-s2);
+  margin-inline-end: var(--cg-s4);
+  font-weight: normal;
+}
+
+.cg-form__honeypot,
+.cg-comment__honeypot {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  inset-inline-start: -9999px;
+}
+
+.cg-comments {
+  margin-block-start: var(--cg-section-y);
+  padding-block-start: var(--cg-s8);
+  padding-block-end: var(--cg-section-y);
+  border-block-start: 1px solid var(--cg-line-soft);
+}
+
+.cg-comments__list,
+.cg-comment__replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-comment {
+  padding-block: var(--cg-s5);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+.cg-comment__replies {
+  padding-block-start: var(--cg-s5);
+}
+
+.cg-comment__replies .cg-comment {
+  padding-inline-start: var(--cg-s6);
+  border-inline-start: 2px solid var(--cg-line-soft);
+  border-block-end: 0;
+}
+
+.cg-comment__meta {
+  display: flex;
+  gap: var(--cg-s3);
+  align-items: baseline;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-comment__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+.cg-comment__body {
+  margin: 0;
+}

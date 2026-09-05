@@ -131,4 +131,34 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     motion: { duration: '180ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
     shadow: { sm: '0 1px 2px rgba(33, 28, 23, 0.07)', md: '0 14px 34px rgba(33, 28, 23, 0.14)' },
   },
+  /**
+   * A SaaS marketing site (L25): the Linear/Stripe/Vercel register — a
+   * confident violet-blue accent on a near-white ground, and a rounder,
+   * friendlier button radius (10px) than any of the other presets above,
+   * matching `@cogenta/theme-saas`'s own default `tokens.json` exactly (its
+   * `defaultTheme`) so a freshly scaffolded site's applied skin and its
+   * active theme's own design system agree from the first render.
+   */
+  saas: {
+    color: {
+      bg: '#f8f8fc',
+      fg: '#15131f',
+      accent: '#5a4aeb',
+      accentFg: '#ffffff',
+      muted: '#eeedf9',
+      mutedFg: '#4b4763',
+      border: '#e2e0f0',
+    },
+    font: {
+      sans: "'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.25,
+      baseSize: '1rem',
+    },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0.5rem', md: '0.625rem', lg: '1.25rem' },
+    motion: { duration: '150ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    shadow: { sm: '0 1px 2px rgba(21, 19, 31, 0.06)', md: '0 16px 40px rgba(21, 19, 31, 0.16)' },
+  },
 }

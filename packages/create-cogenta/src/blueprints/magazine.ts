@@ -378,12 +378,16 @@ export const MAGAZINE_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
 export function buildMagazineDemoPages(
   media: Readonly<Record<string, string>>,
 ): readonly MagazineDemoPage[] {
-  const lead = MAGAZINE_DEMO_ARTICLES[0]
+  // The front page opens on the *editor's pick* — the Culture feature —
+  // while "Top stories" below leads with the newest article: with both
+  // pointing at the same story the home page opened on the same headline
+  // and cover twice in a row (seen live at 1280px).
+  const lead = MAGAZINE_DEMO_ARTICLES.find((article) => article.section === 'Culture')
   if (lead === undefined) {
     throw new CogentaError({
       code: 'BLUEPRINT_REGISTRY_CORRUPT',
       message: 'MAGAZINE_DEMO_ARTICLES is empty.',
-      hint: 'The magazine blueprint needs at least one demo article to lead its front page with.',
+      hint: 'The magazine blueprint needs a Culture demo article to lead its front page with.',
     })
   }
 

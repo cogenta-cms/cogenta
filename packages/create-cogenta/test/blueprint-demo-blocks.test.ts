@@ -3,19 +3,20 @@ import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
 import { ASSOCIATION_DEMO_PAGES } from '../src/blueprints/association.js'
 import { BLOG_DEMO_PAGES } from '../src/blueprints/blog.js'
-import { DOCUMENTATION_DEMO_PAGES } from '../src/blueprints/documentation.js'
+import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
 import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
 import { SAAS_DEMO_PAGES } from '../src/blueprints/saas.js'
-// `store`'s demo pages are now built from `SeedContext.media` (L25 task
-// A0b) — `buildStoreDemoPages({})` renders the same pages this test checked
-// before, minus the (now media-dependent) hero image, which this test does
-// not exercise.
+// `store` and `documentation`'s demo pages are built from `SeedContext.media`
+// (L25 task A0b / Phase 1 `theme-docs`) — calling each builder with `{}`
+// renders the same pages this test checked before, minus the (now
+// media-dependent) hero image, which this test does not exercise.
 import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
+const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

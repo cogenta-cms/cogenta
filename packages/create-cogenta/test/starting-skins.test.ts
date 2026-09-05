@@ -26,8 +26,13 @@ describe('per-blueprint starting skins', () => {
     }
   })
 
-  it('offers one for each of the three site types this task adds', () => {
-    expect(Object.keys(STARTING_SKINS).sort()).toEqual(['magazine', 'portfolio', 'store'])
+  it('offers one for each site type that ships a starting skin', () => {
+    expect(Object.keys(STARTING_SKINS).sort()).toEqual([
+      'documentation',
+      'magazine',
+      'portfolio',
+      'store',
+    ])
   })
 
   it('gives each starting skin a distinct accent colour, not three copies of one palette', () => {
@@ -43,7 +48,7 @@ describe('scaffoldSite — starting skin selection', () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  it.each(['portfolio', 'magazine', 'store'] as const)(
+  it.each(['portfolio', 'magazine', 'store', 'documentation'] as const)(
     'writes the %s blueprint’s own starting skin, not the theme’s generic default',
     async (blueprintId) => {
       const targetDir = await mkdtemp(join(tmpdir(), `cogenta-scaffold-skin-${blueprintId}-`))

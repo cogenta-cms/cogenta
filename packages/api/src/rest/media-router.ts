@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import {
   CogentaError,
   describeContainer,
@@ -26,8 +26,23 @@ import {
   type RestRequest,
   type RestResponse,
 } from './http.js'
+import {
+  type ImageSize,
+  ingestMediaUpload,
+  type MediaImageProcessor,
+  type UploadedImageVariant,
+  variantKeyFor,
+} from './media-ingest.js'
 import { isMultipartFormData, type MultipartFile, type MultipartFormData } from './multipart.js'
 import { single } from './query.js'
+
+// `ImageSize`/`MediaImageProcessor`/`UploadedImageVariant`/`variantKeyFor` now
+// live in `media-ingest.js` (L25 task A0b's extraction) — re-exported here so
+// `@cogenta/api`'s public surface (this router's own module and `index.ts`)
+// is unchanged for every existing consumer (`@cogenta/cli`'s
+// `media-images.ts` imports these three types from `@cogenta/api` by name).
+export type { ImageSize, MediaImageProcessor, UploadedImageVariant }
+export { variantKeyFor }
 
 /**
  * `/api/media` — upload, list, read, edit, replace, tag and delete media
@@ -48,49 +63,6 @@ import { single } from './query.js'
  * a breaking change this rewrite does not need to make. `upload()` tells
  * the two apart structurally (`isMultipartFormData`), not by header.
  */
-
-/** The intrinsic size of an image, in its own pixels. */
-export interface ImageSize {
-  readonly width: number
-  readonly height: number
-}
-
-/** One derived rendition, ready to be written next to the original. */
-export interface UploadedImageVariant {
-  /** Suffix under the asset's variant prefix — `640.webp`. Never a full key. */
-  readonly name: string
-  readonly bytes: Uint8Array
-  readonly contentType: string
-}
-
-/**
- * Image processing at upload time, injected rather than imported.
- *
- * `@cogenta/render` owns the pipeline (sharp or WASM libvips, `planTransform`,
- * the `srcset` ladder) and this package must not depend on it: a REST
- * transport has no business pulling a 12 MB WebAssembly dependency into its
- * tree. So the router takes this interface and `@cogenta/cli` supplies the
- * implementation built from the real driver registry — the same shape rule
- * every other driver in the project follows.
- *
- * Absent means "no image processing": uploads still work, they simply carry
- * no dimensions and no variants. Rule R2's shape, applied to images.
- */
-export interface MediaImageProcessor {
-  /** Intrinsic size, or null when the bytes cannot be read as an image. */
-  probe(bytes: Uint8Array): Promise<ImageSize | null>
-  /** The renditions to store beside the original, for an image of this size. */
-  variants(bytes: Uint8Array, intrinsic: ImageSize): Promise<readonly UploadedImageVariant[]>
-  /**
-   * The names `variants()` would produce for this size.
-   *
-   * Deleting needs it: `StorageDriver` has no `list`, so the only way to
-   * clean up an asset's renditions is to know what they were called. Keeping
-   * it deterministic — a fixed ladder, not a per-upload decision — is what
-   * makes that possible at all.
-   */
-  variantNames(intrinsic: ImageSize): readonly string[]
-}
 
 /**
  * What `GET /api/media/{id}/usage` and the bulk-delete warning need: a
@@ -361,17 +333,9 @@ function storageKeyFor(id: string, filename: string): string {
   return `media/${id}/${sanitiseFilename(filename)}`
 }
 
-/**
- * Where a derived rendition lives.
- *
- * Under the asset's own prefix, in a `variants/` folder of its own, so that
- * "everything belonging to this asset" stays one path prefix on every storage
- * driver — and so that a variant name can never collide with the original
- * filename however the uploader named it.
- */
-export function variantKeyFor(id: string, name: string): string {
-  return `media/${id}/variants/${sanitiseFilename(name)}`
-}
+// `variantKeyFor` is re-exported from `./media-ingest.js` at the top of this
+// file (same name, same behaviour) — `replace()` below still calls it for
+// the derived renditions of a replaced original.
 
 /** What every upload path (multipart or legacy JSON) converges on before the shared write logic runs. */
 interface NormalisedUpload {
@@ -738,89 +702,43 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     }
   }
 
+  /**
+   * A thin adapter over {@link ingestMediaUpload} (`media-ingest.js`, L25
+   * task A0b): decode the two upload transports into
+   * `NormalisedUpload`/`legacyJsonUpload` above, then hand the actual
+   * ingestion — real-type check, GPS scrub, storage write, variants, asset
+   * row — to the shared function `create-cogenta`'s `seedDemoMedia` also
+   * calls. Behaviour is byte-for-byte the same as before this extraction;
+   * this router's own test suite, unedited, is the proof.
+   */
   async function finishUpload(
     input: NormalisedUpload,
     actor: Actor,
     maxBytes: number,
   ): Promise<RestResponse> {
-    if (input.bytes.length > maxBytes) throw tooLargeError(maxBytes)
-
-    // For an image this is the type the *bytes* say, not the one the uploader
-    // typed — the asset record and every response built from it use it, so a
-    // disguised type cannot travel back out as a `Content-Type`.
-    const mimeType = verifyRealType(input.kind, input.bytes) ?? input.mimeType
-
-    // GPS scrub, before anything else touches the bytes (fiche 11 task 6):
-    // the stored original and every variant derived from it must carry
-    // neither, and this is the one point every upload path passes through.
-    let bytes = input.bytes
-    if (
-      input.stripGps &&
-      input.kind === 'image' &&
-      sniffImageFormat(bytes) === 'jpeg' &&
-      hasGpsData(bytes)
-    ) {
-      bytes = Buffer.from(stripGpsFromJpeg(bytes))
-    }
-
-    const id = randomUUID()
-    const storageKey = storageKeyFor(id, input.filename)
-
-    await storage.put(storageKey, bytes, { contentType: mimeType })
-
-    // Dimensions and renditions, once, at upload — not on every request
-    // (L10 task 5). A failure here must not lose the upload: the original is
-    // already stored and the asset is what the editor asked for, so a missing
-    // variant degrades to "served at full size", never to "upload refused".
-    const written: string[] = []
-    let intrinsic: ImageSize | null = null
-    if (options.images !== undefined && input.kind === 'image') {
-      try {
-        intrinsic = await options.images.probe(bytes)
-        if (intrinsic !== null) {
-          for (const variant of await options.images.variants(bytes, intrinsic)) {
-            const key = variantKeyFor(id, variant.name)
-            await storage.put(key, Buffer.from(variant.bytes), {
-              contentType: variant.contentType,
-            })
-            written.push(key)
-          }
-        }
-      } catch {
-        for (const key of written) await storage.delete(key).catch(() => undefined)
-        written.length = 0
-      }
-    }
-
-    let asset: MediaAsset
-    try {
-      asset = await store.create({
-        id,
+    const asset = await ingestMediaUpload(
+      {
+        store,
+        storage,
+        ...(options.images === undefined ? {} : { images: options.images }),
+        limits: { maxUploadBytes: maxBytes },
+      },
+      {
         kind: input.kind,
         filename: input.filename,
-        mimeType,
-        size: bytes.length,
-        ...(intrinsic === null ? {} : { width: intrinsic.width, height: intrinsic.height }),
+        mimeType: input.mimeType,
+        bytes: input.bytes,
+        actorId: actor.id,
         alt: input.alt,
         decorative: input.decorative,
         ...(input.decorativeJustification === undefined
           ? {}
           : { decorativeJustification: input.decorativeJustification }),
         ...(input.focal === undefined ? {} : { focal: input.focal }),
-        storageKey,
         tags: input.tags,
-        contentHash: hashBytes(bytes),
-        createdBy: actor.id,
-      })
-    } catch (error) {
-      // The asset row is what makes the upload real; if it is refused (an
-      // invalid alt-text/decorative combination), the blob must not become
-      // an orphan nothing ever lists or cleans up. Its variants neither.
-      await storage.delete(storageKey).catch(() => undefined)
-      for (const key of written) await storage.delete(key).catch(() => undefined)
-      throw error
-    }
-
+        stripGps: input.stripGps,
+      },
+    )
     return jsonResponse(201, { data: asset })
   }
 

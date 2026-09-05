@@ -1,105 +1,116 @@
 import type { ColorRGB } from './render.js'
 
 /**
- * A minimal sRGB↔OKLCH converter (Björn Ottosson's OKLab, in its polar
- * form) — zero dependency (R9/R10), the same "arithmetic only" discipline as
- * the rest of `demo-art`. This is what lets `compositions.ts` derive a
- * second and third hue from one palette accent by *rotating hue in a
- * perceptually uniform space* — an analogous hue, a cool counterpoint, a
- * lightness step — instead of the old trick of mixing toward grey, which is
- * what made the first `mesh` hero read as a muddy, desaturated blur: mixing
- * two saturated sRGB colours together, or toward white/black, drags the
- * *hue* toward grey as a side effect, not just the lightness or chroma.
+ * A tiny, self-contained sRGB↔OKLCH conversion (Björn Ottosson's published
+ * OKLab matrices — https://bottosson.github.io/posts/oklab/), used to derive
+ * a handful of flat *companion tones* from a palette's `accent` (D5,
+ * `docs/lots/L25-templates-pro.md`): a hue rotation in a perceptually even
+ * space, so a rotated tone reads as "clearly related, clearly distinct"
+ * rather than the muddy result a naive RGB hue shift gives on a saturated
+ * accent. No dependency: this is arithmetic, not a colour library.
  *
- * Reference: https://bottosson.github.io/posts/oklab/
+ * Every function here returns a single, flat `ColorRGB` — never a gradient
+ * or an interpolation across two colours. Composing *two or three* of these
+ * flat outputs (in `compositions.ts`) is what D5 calls "companion tones",
+ * not a smooth colour ramp.
  */
 
-function clamp01(x: number): number {
-  return x < 0 ? 0 : x > 1 ? 1 : x
-}
-
-function srgbToLinear(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-}
-
-function linearToSrgb(c: number): number {
-  if (c <= 0) return 0
-  return c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055
-}
-
-/** A colour in OKLCH: `l` (0–1 lightness), `c` (chroma, unbounded but typically 0–0.4 for sRGB), `h` (hue, degrees 0–360). */
-export interface OklchColor {
+export interface Oklch {
   readonly l: number
   readonly c: number
+  /** Degrees, 0–360. */
   readonly h: number
 }
 
-/** Converts an sRGB colour (each channel 0–1) to OKLCH. */
-export function rgbToOklch(rgb: ColorRGB): OklchColor {
+function srgbToLinear(value: number): number {
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+}
+
+function linearToSrgb(value: number): number {
+  const clamped = value < 0 ? 0 : value
+  return clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * clamped ** (1 / 2.4) - 0.055
+}
+
+function clamp01(value: number): number {
+  return value < 0 ? 0 : value > 1 ? 1 : value
+}
+
+/** sRGB (0–1 per channel) → OKLCH. */
+export function rgbToOklch(rgb: ColorRGB): Oklch {
   const r = srgbToLinear(rgb.r)
   const g = srgbToLinear(rgb.g)
   const b = srgbToLinear(rgb.b)
 
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
 
-  const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s
-  const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
-  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  const l_ = Math.cbrt(l)
+  const m_ = Math.cbrt(m)
+  const s_ = Math.cbrt(s)
 
-  const chroma = Math.sqrt(a * a + bb * bb)
-  let hue = (Math.atan2(bb, a) * 180) / Math.PI
-  if (hue < 0) hue += 360
-  return { l: L, c: chroma, h: hue }
+  const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_
+  const a = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_
+  const bComponent = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_
+
+  const c = Math.sqrt(a * a + bComponent * bComponent)
+  let h = (Math.atan2(bComponent, a) * 180) / Math.PI
+  if (h < 0) h += 360
+  return { l: L, c, h }
 }
 
-/** Converts an OKLCH colour back to sRGB (each channel clamped to 0–1: an out-of-gamut chroma/lightness combination is clipped, never left to overflow a PNG byte). */
-export function oklchToRgb(color: OklchColor): ColorRGB {
-  const hRad = (color.h * Math.PI) / 180
-  const a = color.c * Math.cos(hRad)
-  const b = color.c * Math.sin(hRad)
+/** OKLCH → sRGB (0–1 per channel, clamped — an out-of-gamut request degrades to the nearest displayable colour rather than throwing). */
+export function oklchToRgb(oklch: Oklch): ColorRGB {
+  const hRad = (oklch.h * Math.PI) / 180
+  const a = oklch.c * Math.cos(hRad)
+  const b = oklch.c * Math.sin(hRad)
 
-  const l = color.l + 0.3963377774 * a + 0.2158037573 * b
-  const m = color.l - 0.1055613458 * a - 0.0638541728 * b
-  const s = color.l - 0.0894841775 * a - 1.291485548 * b
+  const l_ = oklch.l + 0.3963377774 * a + 0.2158037573 * b
+  const m_ = oklch.l - 0.1055613458 * a - 0.0638541728 * b
+  const s_ = oklch.l - 0.0894841775 * a - 1.291485548 * b
 
-  const l3 = l * l * l
-  const m3 = m * m * m
-  const s3 = s * s * s
+  const l = l_ ** 3
+  const m = m_ ** 3
+  const s = s_ ** 3
 
-  const r = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3
-  const g = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3
-  const bChannel = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3
+  const r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+  const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+  const bLinear = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
 
   return {
     r: clamp01(linearToSrgb(r)),
     g: clamp01(linearToSrgb(g)),
-    b: clamp01(linearToSrgb(bChannel)),
+    b: clamp01(linearToSrgb(bLinear)),
   }
 }
 
-/** Rotates a colour's hue by `degrees` in OKLCH, keeping its lightness and chroma — the "analogous hue" / "complementary" move `compositions.ts` uses to derive extra mesh hues from one accent. */
+/** Rotates a colour's hue by `degrees` in OKLCH, keeping its lightness and chroma — the flat "same family, different colour" move. */
 export function rotateHue(rgb: ColorRGB, degrees: number): ColorRGB {
   const oklch = rgbToOklch(rgb)
-  const hue = (((oklch.h + degrees) % 360) + 360) % 360
-  return oklchToRgb({ ...oklch, h: hue })
+  const h = (((oklch.h + degrees) % 360) + 360) % 360
+  return oklchToRgb({ ...oklch, h })
 }
 
-/** Scales a colour's chroma by `factor` (0 desaturates to grey at the same lightness; >1 boosts saturation). */
+/** Returns the same hue and chroma at a different lightness (0–1). */
+export function withLightness(rgb: ColorRGB, l: number): ColorRGB {
+  const oklch = rgbToOklch(rgb)
+  return oklchToRgb({ ...oklch, l: clamp01(l) })
+}
+
+/** Scales chroma by `factor` (0 desaturates fully to grey, 1 leaves it unchanged). */
 export function withChroma(rgb: ColorRGB, factor: number): ColorRGB {
   const oklch = rgbToOklch(rgb)
-  return oklchToRgb({ ...oklch, c: Math.max(0, oklch.c * factor) })
+  return oklchToRgb({ ...oklch, c: Math.max(oklch.c * factor, 0) })
 }
 
-/** Nudges a colour's lightness by `delta` (−1..1), keeping hue and chroma — a lightness *step*, not a mix toward white/black, which is what keeps a "lighter" or "darker" mesh hue from drifting toward grey. */
-export function withLightness(rgb: ColorRGB, delta: number): ColorRGB {
-  const oklch = rgbToOklch(rgb)
-  return oklchToRgb({ ...oklch, l: clamp01(oklch.l + delta) })
-}
-
-/** Sets a colour's chroma to an absolute floor (never *less* saturated than `min`) — used to guarantee a derived hue reads as a real colour, not a pastel near-grey, regardless of how muted the source accent was. */
-export function withMinChroma(rgb: ColorRGB, min: number): ColorRGB {
-  const oklch = rgbToOklch(rgb)
-  return oklchToRgb({ ...oklch, c: Math.max(oklch.c, min) })
+/**
+ * Two or three flat tones related to `rgb` by hue rotation — never a
+ * gradient between them. Used to build a "colour block"/"duotone" family
+ * from nothing but a palette's `accent`, so every blueprint's demo art has
+ * more than one flat colour to work with without inventing a second accent.
+ */
+export function companionTones(rgb: ColorRGB, count: 2 | 3 = 3): readonly ColorRGB[] {
+  const spread = 34
+  if (count === 2) return [rotateHue(rgb, spread), rotateHue(rgb, -spread)]
+  return [rotateHue(rgb, spread), rotateHue(rgb, -spread), rotateHue(rgb, 150)]
 }

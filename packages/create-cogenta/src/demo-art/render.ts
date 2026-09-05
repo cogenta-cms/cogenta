@@ -2,25 +2,17 @@ import { encodePng } from './png.js'
 
 /**
  * A signed-distance-field renderer for `demo-art`'s procedural compositions
- * (D1, `docs/lots/L25-templates-pro.md`): soft mesh gradients, gradient-filled
- * geometric accents with drop shadows and specular highlights, subtle grain
- * — the abstract visual register of a modern SaaS/agency/portfolio template,
- * built with nothing beyond arithmetic (no canvas library, no WASM, R9/R10).
- * Every shape is evaluated per pixel through a distance function with a
- * ~1px `smoothstep` edge, so a small composition and a large one look
- * equally crisp.
+ * (D1, `docs/lots/L25-templates-pro.md`): soft mesh gradients, anti-aliased
+ * geometric accents, subtle grain — the abstract visual register of a modern
+ * SaaS/agency/portfolio template, built with nothing beyond arithmetic (no
+ * canvas library, no WASM, R9/R10). Every shape is evaluated per pixel
+ * through a distance function with a ~1px `smoothstep` edge, so a small
+ * composition and a large one look equally crisp.
  *
  * Coordinates on an `ArtLayer` are fractions of the canvas (0–1 for
  * position, roughly 0–1 for size relative to the *shorter* side), which is
  * what lets one `ArtSpec` render at 1600×1000 or at 400×250 without a second
  * definition.
- *
- * Every local shape (disc/ring/rect/line/polygon) and radius-bounded effect
- * (glow) is compiled with its own bounding box, so a small accent shape only
- * costs work over the pixels it can possibly touch — this is what keeps a
- * hero with a dozen shadowed, gradient-filled shapes comfortably inside the
- * performance bound even though it now does noticeably more work per shape
- * than the original flat-colour renderer did.
  */
 
 /** A colour expressed as three 0–1 floats — never a CSS string in this module (that parsing lives in `compositions.ts`, next to the palettes it reads). */
@@ -65,61 +57,12 @@ export interface GlowLayer {
   readonly falloff?: number
 }
 
-/**
- * How a shape's interior is coloured: a flat colour, or a gradient computed
- * across the shape's own world-space bounding box. A gradient's direction
- * (`linear`) or hotspot (`radial`'s `focus`) is always in *world* space, not
- * the shape's own rotated local frame — which is what makes "light falls
- * from the top-left" read consistently across a scene even when the shapes
- * themselves are rotated at different angles, exactly like a real light
- * source would.
- */
-export type Fill =
-  | { readonly type: 'solid'; readonly color: ColorRGB }
-  | {
-      readonly type: 'linear'
-      readonly from: ColorRGB
-      readonly to: ColorRGB
-      /** Degrees; 0 = left→right, 90 = top→bottom. Defaults to 135 (top-left → bottom-right). */
-      readonly angle?: number
-    }
-  | {
-      readonly type: 'radial'
-      readonly from: ColorRGB
-      readonly to: ColorRGB
-      /** Hotspot position within the shape's bounding box, `[0,0]` = top-left corner, `[0.5,0.5]` = centre. Defaults to `[0.35, 0.3]` — an upper-left highlight, the classic "sunlit sphere" placement. */
-      readonly focus?: Vec2
-    }
-
-/**
- * A soft drop shadow cast by a shape — approximated by evaluating the same
- * signed distance at an offset with a much wider anti-alias band, never a
- * real gaussian blur (no canvas library, R9/R10). Rendered *before* the
- * shape itself, so the shape's own fill paints over the part of the shadow
- * that would fall directly underneath it.
- */
-export interface ShapeShadow {
-  /** Fraction of the shorter canvas side. */
-  readonly offset: Vec2
-  /** Blur radius, fraction of the shorter canvas side — the width of the soft edge. */
-  readonly blur: number
-  readonly alpha: number
-  /** Defaults to near-black. */
-  readonly color?: ColorRGB
-}
-
-/** How a shape composites onto what is already painted. `screen` is what makes overlapping translucent discs look like they glow where they overlap, rather than just look like flat, muddier discs. */
-export type BlendMode = 'normal' | 'screen' | 'multiply'
-
 export interface DiscLayer {
   readonly kind: 'disc'
   readonly center: Vec2
   readonly radius: number
   readonly color: ColorRGB
   readonly alpha?: number
-  readonly fill?: Fill
-  readonly shadow?: ShapeShadow
-  readonly blend?: BlendMode
 }
 
 export interface RingLayer {
@@ -129,9 +72,6 @@ export interface RingLayer {
   readonly outerRadius: number
   readonly color: ColorRGB
   readonly alpha?: number
-  readonly fill?: Fill
-  readonly shadow?: ShapeShadow
-  readonly blend?: BlendMode
 }
 
 export interface RectLayer {
@@ -139,15 +79,12 @@ export interface RectLayer {
   readonly center: Vec2
   readonly width: number
   readonly height: number
-  /** Corner radius, fraction of the shorter side. Defaults to 0. A radius equal to half the shorter dimension gives a "stadium"/pill shape — the stand-in this module uses for a capsule body or a squashed contact-shadow ellipse, rather than adding a second shape primitive for it. */
+  /** Corner radius, fraction of the shorter side. Defaults to 0. */
   readonly radius?: number
   /** Degrees. Defaults to 0. */
   readonly rotation?: number
   readonly color: ColorRGB
   readonly alpha?: number
-  readonly fill?: Fill
-  readonly shadow?: ShapeShadow
-  readonly blend?: BlendMode
 }
 
 export interface LineLayer {
@@ -169,9 +106,6 @@ export interface PolygonLayer {
   readonly rotation?: number
   readonly color: ColorRGB
   readonly alpha?: number
-  readonly fill?: Fill
-  readonly shadow?: ShapeShadow
-  readonly blend?: BlendMode
 }
 
 export interface WaveLayer {
@@ -205,6 +139,15 @@ export interface DotsLayer {
   readonly radius: number
   readonly color: ColorRGB
   readonly alpha: number
+  /**
+   * Optional bounding box (fractions of the shorter canvas side, like
+   * {@link RectLayer}) — omit for a full-canvas grid. Confining the grid is
+   * what lets a hero composition keep its calm left zone untouched while
+   * still using a dot grid on the right (D5's "grid & node" family).
+   */
+  readonly center?: Vec2
+  readonly width?: number
+  readonly height?: number
 }
 
 export interface GrainLayer {
@@ -220,6 +163,72 @@ export interface VignetteLayer {
   readonly color?: ColorRGB
 }
 
+/** A single flat colour covering the whole canvas — the honest "solid background" primitive (D5: never a one-stop `gradient` standing in for a fill). */
+export interface FillLayer {
+  readonly kind: 'fill'
+  readonly color: ColorRGB
+}
+
+/**
+ * Two or more flat colours tiled edge-to-edge across the *whole* canvas as
+ * hard-edged bands (a "colour block"/"stripe band" composition, D5) — never
+ * a blend between them, only a crisp ~1px anti-aliased seam at each
+ * boundary. Distinct from {@link StripesLayer}, which paints a repeating
+ * pattern *over* whatever is beneath at partial alpha; a `bands` layer
+ * replaces every pixel it covers (the whole canvas) with one of its own
+ * colours.
+ */
+export interface BandsLayer {
+  readonly kind: 'bands'
+  /** Degrees; 0 = vertical bands (left→right), 90 = horizontal bands (top→bottom). Defaults to 90. */
+  readonly angle?: number
+  readonly colors: readonly ColorRGB[]
+  /** Total number of bands across the canvas. Defaults to `colors.length` (each colour once); a higher count repeats the palette. */
+  readonly count?: number
+  /** 0–1 fraction of one band's width to shift the whole sequence by — seed-driven variety without changing the band count. */
+  readonly phase?: number
+}
+
+/**
+ * A coarse checkerboard of flat cells, bounded to a rectangular region —
+ * "a coarse pattern block partially covering a solid field" (D5's
+ * checker/half-tone family). Cells outside the region are left untouched,
+ * so this is meant to sit *over* a {@link FillLayer} or another shape, not
+ * to replace the whole canvas.
+ */
+export interface CheckerLayer {
+  readonly kind: 'checker'
+  readonly center: Vec2
+  /** Fraction of the shorter canvas side. */
+  readonly width: number
+  /** Fraction of the shorter canvas side. */
+  readonly height: number
+  /** Cell size, fraction of the shorter canvas side. */
+  readonly cell: number
+  /** Degrees. Defaults to 0. */
+  readonly rotation?: number
+  readonly color: ColorRGB
+  readonly alpha?: number
+}
+
+/**
+ * An organic, hard-edged blob: one or more circles fused by a smooth
+ * minimum of their signed distances (Ottosson/Quilez's `smoothMin`), so
+ * overlapping circles read as one continuous silhouette rather than two
+ * discs — the "duotone photo-like abstraction" family (D5). The join
+ * between circles is organic; the *outer* edge stays the same crisp ~1px
+ * anti-aliased boundary as every other flat shape here — there is no blur
+ * anywhere in this layer.
+ */
+export interface BlobLayer {
+  readonly kind: 'blob'
+  readonly points: readonly { readonly at: Vec2; readonly radius: number }[]
+  /** How far apart two circles can be and still fuse into one organic silhouette, fraction of the shorter canvas side. Defaults to 0.05. */
+  readonly smoothing?: number
+  readonly color: ColorRGB
+  readonly alpha?: number
+}
+
 export type ArtLayer =
   | GradientLayer
   | GlowLayer
@@ -233,6 +242,10 @@ export type ArtLayer =
   | DotsLayer
   | GrainLayer
   | VignetteLayer
+  | FillLayer
+  | BandsLayer
+  | CheckerLayer
+  | BlobLayer
 
 export interface ArtSpec {
   readonly width: number
@@ -277,9 +290,7 @@ function clamp01(x: number): number {
 /**
  * Anti-aliased coverage from a signed distance: negative `d` is inside the
  * shape (coverage → 1), positive is outside (coverage → 0), with a soft
- * transition band at the edge (`aa`, in pixels — the default is a crisp
- * ~1px edge; a shadow pass calls this with a much wider `aa` to approximate
- * blur).
+ * ~1px transition band at the edge (`aa`, in pixels).
  */
 function coverage(d: number, aa = 1.25): number {
   return clamp01(0.5 - d / aa)
@@ -304,131 +315,20 @@ function sdRoundBox(x: number, y: number, halfW: number, halfH: number, radius: 
   )
 }
 
-type DistanceFn = (px: number, py: number) => number
-type FillFn = (px: number, py: number) => ColorRGB
-
-/** A pixel-integer bounding box, `[x0, y0, x1, y1)` — `x1`/`y1` exclusive, always clamped to the canvas. */
-type BBox = readonly [number, number, number, number]
-
-function clampBox(
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  width: number,
-  height: number,
-  extraMargin = 0,
-): BBox {
-  const left = Math.max(0, Math.floor(x0 - extraMargin))
-  const top = Math.max(0, Math.floor(y0 - extraMargin))
-  const right = Math.min(width, Math.ceil(x1 + extraMargin))
-  const bottom = Math.min(height, Math.ceil(y1 + extraMargin))
-  return [left, top, Math.max(left, right), Math.max(top, bottom)]
-}
-
-/** A layer compiled to a bounding box (the only pixels it can possibly affect) and a function that paints one pixel of the shared framebuffer. */
-interface CompiledOp {
-  readonly bbox: BBox
-  readonly apply: (fb: Float32Array, idx: number, px: number, py: number) => void
-}
-
 // ---------------------------------------------------------------- pixel ops
 
-function blendOver(
-  fb: Float32Array,
-  idx: number,
-  color: ColorRGB,
-  alpha: number,
-  mode: BlendMode = 'normal',
-): void {
+/** Mutates `pixel` (RGB, mutable 3-length array) in place — the compiled per-pixel effect of one layer. */
+type PixelOp = (pixel: Float32Array, px: number, py: number) => void
+
+function blendOver(pixel: Float32Array, color: ColorRGB, alpha: number): void {
   const a = clamp01(alpha)
   if (a <= 0) return
-  const baseR = fb[idx] as number
-  const baseG = fb[idx + 1] as number
-  const baseB = fb[idx + 2] as number
-  let r = color.r
-  let g = color.g
-  let b = color.b
-  if (mode === 'screen') {
-    r = 1 - (1 - baseR) * (1 - r)
-    g = 1 - (1 - baseG) * (1 - g)
-    b = 1 - (1 - baseB) * (1 - b)
-  } else if (mode === 'multiply') {
-    r = baseR * r
-    g = baseG * g
-    b = baseB * b
-  }
-  fb[idx] = baseR * (1 - a) + r * a
-  fb[idx + 1] = baseG * (1 - a) + g * a
-  fb[idx + 2] = baseB * (1 - a) + b * a
+  pixel[0] = (pixel[0] as number) * (1 - a) + color.r * a
+  pixel[1] = (pixel[1] as number) * (1 - a) + color.g * a
+  pixel[2] = (pixel[2] as number) * (1 - a) + color.b * a
 }
 
-/**
- * Builds the per-pixel colour function for a shape's `fill`. `halfW`/`halfH`
- * are the shape's *world-space* bounding-box half-extents (not its local,
- * possibly-rotated half-size) — see {@link Fill}'s own doc comment for why
- * a gradient is computed in world space rather than the shape's own frame.
- */
-function makeFillFn(
-  fill: Fill | undefined,
-  flatColor: ColorRGB,
-  cx: number,
-  cy: number,
-  halfW: number,
-  halfH: number,
-): FillFn {
-  if (fill === undefined) return () => flatColor
-  if (fill.type === 'solid') {
-    const { color } = fill
-    return () => color
-  }
-  if (fill.type === 'linear') {
-    const angleRad = (((fill.angle ?? 135) * Math.PI) / 180) as number
-    const dirX = Math.cos(angleRad)
-    const dirY = Math.sin(angleRad)
-    const span = Math.max(Math.abs(halfW * dirX) + Math.abs(halfH * dirY), 1e-6)
-    const { from, to } = fill
-    return (px, py) => {
-      const t = clamp01(0.5 + ((px - cx) * dirX + (py - cy) * dirY) / (2 * span))
-      return lerpColor(from, to, t)
-    }
-  }
-  const focus = fill.focus ?? [0.35, 0.3]
-  const fx = cx + (focus[0] * 2 - 1) * halfW
-  const fy = cy + (focus[1] * 2 - 1) * halfH
-  const maxDist = Math.max(Math.sqrt(halfW * halfW + halfH * halfH), 1e-6)
-  const { from, to } = fill
-  return (px, py) => {
-    const dx = px - fx
-    const dy = py - fy
-    const t = clamp01(Math.sqrt(dx * dx + dy * dy) / maxDist)
-    return lerpColor(from, to, t)
-  }
-}
-
-/** Compiles a shape's optional drop shadow into its own paint pass — `undefined` when the shape has none, so the caller skips it entirely (never a zero-alpha no-op pass). */
-function compileShadowFor(
-  shadow: ShapeShadow | undefined,
-  distanceFn: DistanceFn,
-  shorterSide: number,
-): { readonly margin: number; readonly apply: CompiledOp['apply'] } | undefined {
-  if (shadow === undefined) return undefined
-  const offX = shadow.offset[0] * shorterSide
-  const offY = shadow.offset[1] * shorterSide
-  const blurPx = Math.max(shadow.blur * shorterSide, 1)
-  const color = shadow.color ?? { r: 0.03, g: 0.02, b: 0.02 }
-  const { alpha } = shadow
-  const margin = Math.abs(offX) + Math.abs(offY) + blurPx * 2
-  return {
-    margin,
-    apply: (fb, idx, px, py) => {
-      const d = distanceFn(px - offX, py - offY)
-      blendOver(fb, idx, color, coverage(d, blurPx) * alpha)
-    },
-  }
-}
-
-function compileGradient(layer: GradientLayer, width: number, height: number): CompiledOp {
+function compileGradient(layer: GradientLayer, width: number, height: number): PixelOp {
   const angleRad = (((layer.angle ?? 90) * Math.PI) / 180) as number
   const dirX = Math.cos(angleRad)
   const dirY = Math.sin(angleRad)
@@ -458,151 +358,92 @@ function compileGradient(layer: GradientLayer, width: number, height: number): C
     color: point.color,
   }))
 
-  return {
-    bbox: [0, 0, width, height],
-    apply: (fb, idx, px, py) => {
-      const u = px / width
-      const v = py / height
-      const t = clamp01(0.5 + ((u - 0.5) * dirX + (v - 0.5) * dirY))
-      const base = colorAt(t)
-      let r = base.r
-      let g = base.g
-      let b = base.b
+  return (pixel, px, py) => {
+    const u = px / width
+    const v = py / height
+    const t = clamp01(0.5 + ((u - 0.5) * dirX + (v - 0.5) * dirY))
+    const base = colorAt(t)
+    let r = base.r
+    let g = base.g
+    let b = base.b
 
-      if (meshPoints.length > 0) {
-        let sumW = 0
-        let mr = 0
-        let mg = 0
-        let mb = 0
-        for (const point of meshPoints) {
-          const dx = px - point.cx
-          const dy = py - point.cy
-          const d2 = dx * dx + dy * dy
-          const s2 = point.sigma * point.sigma
-          const w = Math.exp(-d2 / (2 * s2))
-          sumW += w
-          mr += w * point.color.r
-          mg += w * point.color.g
-          mb += w * point.color.b
-        }
-        if (sumW > 0.0005) {
-          const mixT = clamp01(sumW)
-          const meshR = mr / sumW
-          const meshG = mg / sumW
-          const meshB = mb / sumW
-          r = r * (1 - mixT) + meshR * mixT
-          g = g * (1 - mixT) + meshG * mixT
-          b = b * (1 - mixT) + meshB * mixT
-        }
+    if (meshPoints.length > 0) {
+      let sumW = 0
+      let mr = 0
+      let mg = 0
+      let mb = 0
+      for (const point of meshPoints) {
+        const dx = px - point.cx
+        const dy = py - point.cy
+        const d2 = dx * dx + dy * dy
+        const s2 = point.sigma * point.sigma
+        const w = Math.exp(-d2 / (2 * s2))
+        sumW += w
+        mr += w * point.color.r
+        mg += w * point.color.g
+        mb += w * point.color.b
       }
+      if (sumW > 0.0005) {
+        const mixT = clamp01(sumW)
+        const meshR = mr / sumW
+        const meshG = mg / sumW
+        const meshB = mb / sumW
+        r = r * (1 - mixT) + meshR * mixT
+        g = g * (1 - mixT) + meshG * mixT
+        b = b * (1 - mixT) + meshB * mixT
+      }
+    }
 
-      fb[idx] = r
-      fb[idx + 1] = g
-      fb[idx + 2] = b
-    },
+    pixel[0] = r
+    pixel[1] = g
+    pixel[2] = b
   }
 }
 
-function compileGlow(layer: GlowLayer, width: number, height: number): CompiledOp {
+function compileGlow(layer: GlowLayer, width: number, height: number): PixelOp {
   const cx = layer.center[0] * width
   const cy = layer.center[1] * height
   const radiusPx = layer.radius * Math.min(width, height)
   const falloff = layer.falloff ?? 2
   const { color, alpha } = layer
-  const margin = 1
-  return {
-    bbox: clampBox(
-      cx - radiusPx,
-      cy - radiusPx,
-      cx + radiusPx,
-      cy + radiusPx,
-      width,
-      height,
-      margin,
-    ),
-    apply: (fb, idx, px, py) => {
-      const dx = px - cx
-      const dy = py - cy
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      const t = clamp01(1 - dist / radiusPx)
-      if (t <= 0) return
-      blendOver(fb, idx, color, alpha * t ** falloff)
-    },
+  return (pixel, px, py) => {
+    const dx = px - cx
+    const dy = py - cy
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const t = clamp01(1 - dist / radiusPx)
+    if (t <= 0) return
+    blendOver(pixel, color, alpha * t ** falloff)
   }
 }
 
-function compileDisc(layer: DiscLayer, width: number, height: number): CompiledOp {
+function compileDisc(layer: DiscLayer, width: number, height: number): PixelOp {
   const cx = layer.center[0] * width
   const cy = layer.center[1] * height
   const radiusPx = layer.radius * Math.min(width, height)
   const alphaMul = layer.alpha ?? 1
-  const blend = layer.blend ?? 'normal'
   const { color } = layer
-  const fillFn = makeFillFn(layer.fill, color, cx, cy, radiusPx, radiusPx)
-  const distanceFn: DistanceFn = (px, py) => {
+  return (pixel, px, py) => {
     const dx = px - cx
     const dy = py - cy
-    return Math.sqrt(dx * dx + dy * dy) - radiusPx
-  }
-  const shadow = compileShadowFor(layer.shadow, distanceFn, Math.min(width, height))
-  const margin = 3
-  return {
-    bbox: clampBox(
-      cx - radiusPx,
-      cy - radiusPx,
-      cx + radiusPx,
-      cy + radiusPx,
-      width,
-      height,
-      margin + (shadow?.margin ?? 0),
-    ),
-    apply: (fb, idx, px, py) => {
-      if (shadow) shadow.apply(fb, idx, px, py)
-      const d = distanceFn(px, py)
-      blendOver(fb, idx, fillFn(px, py), coverage(d) * alphaMul, blend)
-    },
+    const d = Math.sqrt(dx * dx + dy * dy) - radiusPx
+    blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
 
-function compileRing(layer: RingLayer, width: number, height: number): CompiledOp {
+function compileRing(layer: RingLayer, width: number, height: number): PixelOp {
   const cx = layer.center[0] * width
   const cy = layer.center[1] * height
   const s = Math.min(width, height)
   const inner = layer.innerRadius * s
   const outer = layer.outerRadius * s
   const alphaMul = layer.alpha ?? 1
-  const blend = layer.blend ?? 'normal'
   const { color } = layer
-  const fillFn = makeFillFn(layer.fill, color, cx, cy, outer, outer)
-  // The shadow follows the ring's outer silhouette only — a torus's cast
-  // shadow is dominated by its outer edge, and approximating the hole too
-  // would need a second, subtractive pass for a detail no one will notice
-  // in an abstract product shot.
-  const shadowDistanceFn: DistanceFn = (px, py) => {
+  return (pixel, px, py) => {
     const dx = px - cx
     const dy = py - cy
-    return Math.sqrt(dx * dx + dy * dy) - outer
-  }
-  const shadow = compileShadowFor(layer.shadow, shadowDistanceFn, s)
-  const margin = 3
-  return {
-    bbox: clampBox(
-      cx - outer,
-      cy - outer,
-      cx + outer,
-      cy + outer,
-      width,
-      height,
-      margin + (shadow?.margin ?? 0),
-    ),
-    apply: (fb, idx, px, py) => {
-      if (shadow) shadow.apply(fb, idx, px, py)
-      const dx = px - cx
-      const dy = py - cy
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      const alpha = Math.min(coverage(dist - outer), coverage(inner - dist)) * alphaMul
-      blendOver(fb, idx, fillFn(px, py), alpha, blend)
-    },
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const alpha = Math.min(coverage(dist - outer), coverage(inner - dist)) * alphaMul
+    blendOver(pixel, color, alpha)
   }
 }
 
@@ -616,12 +457,7 @@ function compileRoundedBox(
   alphaMul: number,
   width: number,
   height: number,
-  extra?: {
-    readonly fill?: Fill | undefined
-    readonly shadow?: ShapeShadow | undefined
-    readonly blend?: BlendMode | undefined
-  },
-): CompiledOp {
+): PixelOp {
   const cx = center[0] * width
   const cy = center[1] * height
   const s = Math.min(width, height)
@@ -631,39 +467,17 @@ function compileRoundedBox(
   const rot = (-rotationDeg * Math.PI) / 180
   const cosA = Math.cos(rot)
   const sinA = Math.sin(rot)
-  const distanceFn: DistanceFn = (px, py) => {
+  return (pixel, px, py) => {
     const dx0 = px - cx
     const dy0 = py - cy
     const dx = dx0 * cosA - dy0 * sinA
     const dy = dx0 * sinA + dy0 * cosA
-    return sdRoundBox(dx, dy, halfW, halfH, radius)
-  }
-  // AABB of a rotated box — world-space half-extents, also what a world-space fill gradient is computed across.
-  const extentX = Math.abs(halfW * cosA) + Math.abs(halfH * sinA)
-  const extentY = Math.abs(halfW * sinA) + Math.abs(halfH * cosA)
-  const blend = extra?.blend ?? 'normal'
-  const fillFn = makeFillFn(extra?.fill, color, cx, cy, extentX, extentY)
-  const shadow = compileShadowFor(extra?.shadow, distanceFn, s)
-  const margin = 3
-  return {
-    bbox: clampBox(
-      cx - extentX,
-      cy - extentY,
-      cx + extentX,
-      cy + extentY,
-      width,
-      height,
-      margin + (shadow?.margin ?? 0),
-    ),
-    apply: (fb, idx, px, py) => {
-      if (shadow) shadow.apply(fb, idx, px, py)
-      const d = distanceFn(px, py)
-      blendOver(fb, idx, fillFn(px, py), coverage(d) * alphaMul, blend)
-    },
+    const d = sdRoundBox(dx, dy, halfW, halfH, radius)
+    blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
 
-function compileRect(layer: RectLayer, width: number, height: number): CompiledOp {
+function compileRect(layer: RectLayer, width: number, height: number): PixelOp {
   return compileRoundedBox(
     layer.center,
     layer.width,
@@ -674,11 +488,10 @@ function compileRect(layer: RectLayer, width: number, height: number): CompiledO
     layer.alpha ?? 1,
     width,
     height,
-    { fill: layer.fill, shadow: layer.shadow, blend: layer.blend },
   )
 }
 
-function compileLine(layer: LineLayer, width: number, height: number): CompiledOp {
+function compileLine(layer: LineLayer, width: number, height: number): PixelOp {
   return compileRoundedBox(
     layer.center,
     layer.length,
@@ -692,7 +505,7 @@ function compileLine(layer: LineLayer, width: number, height: number): CompiledO
   )
 }
 
-function compilePolygon(layer: PolygonLayer, width: number, height: number): CompiledOp {
+function compilePolygon(layer: PolygonLayer, width: number, height: number): PixelOp {
   const cx = layer.center[0] * width
   const cy = layer.center[1] * height
   const radiusPx = layer.radius * Math.min(width, height)
@@ -701,38 +514,19 @@ function compilePolygon(layer: PolygonLayer, width: number, height: number): Com
   const angleStep = (2 * Math.PI) / sides
   const apothem = radiusPx * Math.cos(Math.PI / sides)
   const alphaMul = layer.alpha ?? 1
-  const blend = layer.blend ?? 'normal'
   const { color } = layer
-  const fillFn = makeFillFn(layer.fill, color, cx, cy, radiusPx, radiusPx)
-  const distanceFn: DistanceFn = (px, py) => {
+  return (pixel, px, py) => {
     const dx = px - cx
     const dy = py - cy
     let a = Math.atan2(dy, dx) - rot
     a -= angleStep * Math.round(a / angleStep)
     const r = Math.sqrt(dx * dx + dy * dy)
-    return r * Math.cos(a) - apothem
-  }
-  const shadow = compileShadowFor(layer.shadow, distanceFn, Math.min(width, height))
-  const margin = 3
-  return {
-    bbox: clampBox(
-      cx - radiusPx,
-      cy - radiusPx,
-      cx + radiusPx,
-      cy + radiusPx,
-      width,
-      height,
-      margin + (shadow?.margin ?? 0),
-    ),
-    apply: (fb, idx, px, py) => {
-      if (shadow) shadow.apply(fb, idx, px, py)
-      const d = distanceFn(px, py)
-      blendOver(fb, idx, fillFn(px, py), coverage(d) * alphaMul, blend)
-    },
+    const d = r * Math.cos(a) - apothem
+    blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
 
-function compileWave(layer: WaveLayer, width: number, height: number): CompiledOp {
+function compileWave(layer: WaveLayer, width: number, height: number): PixelOp {
   const s = Math.min(width, height)
   const baselinePx = layer.baseline * height
   const amplitudePx = layer.amplitude * s
@@ -741,18 +535,15 @@ function compileWave(layer: WaveLayer, width: number, height: number): CompiledO
   const direction = layer.direction ?? 'down'
   const alphaMul = layer.alpha ?? 1
   const { color } = layer
-  return {
-    bbox: [0, 0, width, height],
-    apply: (fb, idx, px, py) => {
-      const u = px / width
-      const edgeY = baselinePx + amplitudePx * Math.sin(2 * Math.PI * frequency * u + phase)
-      const d = direction === 'down' ? edgeY - py : py - edgeY
-      blendOver(fb, idx, color, coverage(d) * alphaMul)
-    },
+  return (pixel, px, py) => {
+    const u = px / width
+    const edgeY = baselinePx + amplitudePx * Math.sin(2 * Math.PI * frequency * u + phase)
+    const d = direction === 'down' ? edgeY - py : py - edgeY
+    blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
 
-function compileStripes(layer: StripesLayer, width: number, height: number): CompiledOp {
+function compileStripes(layer: StripesLayer, width: number, height: number): PixelOp {
   const s = Math.min(width, height)
   const angleRad = (((layer.angle ?? 45) * Math.PI) / 180) as number
   const spacingPx = Math.max(layer.spacing * s, 1)
@@ -760,70 +551,185 @@ function compileStripes(layer: StripesLayer, width: number, height: number): Com
   const cosA = Math.cos(angleRad)
   const sinA = Math.sin(angleRad)
   const { color, alpha: alphaMul } = layer
-  return {
-    bbox: [0, 0, width, height],
-    apply: (fb, idx, px, py) => {
-      const t = px * cosA + py * sinA
-      let phase = t % spacingPx
-      if (phase < 0) phase += spacingPx
-      const d = Math.abs(phase - spacingPx / 2) - thicknessPx / 2
-      blendOver(fb, idx, color, coverage(d) * alphaMul)
-    },
+  return (pixel, px, py) => {
+    const t = px * cosA + py * sinA
+    let phase = t % spacingPx
+    if (phase < 0) phase += spacingPx
+    const d = Math.abs(phase - spacingPx / 2) - thicknessPx / 2
+    blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
 
-function compileDots(layer: DotsLayer, width: number, height: number): CompiledOp {
+function compileDots(layer: DotsLayer, width: number, height: number): PixelOp {
   const s = Math.min(width, height)
   const spacingPx = Math.max(layer.spacing * s, 1)
   const radiusPx = layer.radius * s
   const { color, alpha: alphaMul } = layer
-  return {
-    bbox: [0, 0, width, height],
-    apply: (fb, idx, px, py) => {
-      const cellX = Math.floor(px / spacingPx)
-      const cellY = Math.floor(py / spacingPx)
-      const centerX = (cellX + 0.5) * spacingPx
-      const centerY = (cellY + 0.5) * spacingPx
-      const dx = px - centerX
-      const dy = py - centerY
-      const d = Math.sqrt(dx * dx + dy * dy) - radiusPx
-      blendOver(fb, idx, color, coverage(d) * alphaMul)
-    },
+  const bounds =
+    layer.center !== undefined && layer.width !== undefined && layer.height !== undefined
+      ? {
+          cx: layer.center[0] * width,
+          cy: layer.center[1] * height,
+          halfW: (layer.width * s) / 2,
+          halfH: (layer.height * s) / 2,
+        }
+      : undefined
+  return (pixel, px, py) => {
+    if (
+      bounds &&
+      (Math.abs(px - bounds.cx) > bounds.halfW || Math.abs(py - bounds.cy) > bounds.halfH)
+    ) {
+      return
+    }
+    const cellX = Math.floor(px / spacingPx)
+    const cellY = Math.floor(py / spacingPx)
+    const centerX = (cellX + 0.5) * spacingPx
+    const centerY = (cellY + 0.5) * spacingPx
+    const dx = px - centerX
+    const dy = py - centerY
+    const d = Math.sqrt(dx * dx + dy * dy) - radiusPx
+    blendOver(pixel, color, coverage(d) * alphaMul)
   }
 }
 
-function compileGrain(layer: GrainLayer, width: number, height: number, seed: number): CompiledOp {
+function compileFill(layer: FillLayer): PixelOp {
+  const { color } = layer
+  return (pixel) => {
+    pixel[0] = color.r
+    pixel[1] = color.g
+    pixel[2] = color.b
+  }
+}
+
+function compileBands(layer: BandsLayer, width: number, height: number): PixelOp {
+  const angleRad = (((layer.angle ?? 90) * Math.PI) / 180) as number
+  const cosA = Math.cos(angleRad)
+  const sinA = Math.sin(angleRad)
+
+  const corners: readonly Vec2[] = [
+    [0, 0],
+    [width, 0],
+    [0, height],
+    [width, height],
+  ]
+  let lo = Number.POSITIVE_INFINITY
+  let hi = Number.NEGATIVE_INFINITY
+  for (const [cx, cy] of corners) {
+    const t = cx * cosA + cy * sinA
+    if (t < lo) lo = t
+    if (t > hi) hi = t
+  }
+  const range = Math.max(hi - lo, 1)
+  const colors = layer.colors
+  const bandCount = Math.max(Math.floor(layer.count ?? colors.length), 1)
+  const spacing = range / bandCount
+  const phasePx = (layer.phase ?? 0) * spacing
+  const aa = 1.25
+
+  function pick(index: number): ColorRGB {
+    const n = colors.length
+    return colors[((index % n) + n) % n] as ColorRGB
+  }
+
+  return (pixel, px, py) => {
+    const t = px * cosA + py * sinA - lo + phasePx
+    const pos = t / spacing
+    const index = Math.floor(pos)
+    const frac = pos - index
+    const distNext = (1 - frac) * spacing
+    const distPrev = frac * spacing
+    let color = pick(index)
+    if (distNext < aa) {
+      color = lerpColor(color, pick(index + 1), coverage(distNext, aa))
+    } else if (distPrev < aa) {
+      color = lerpColor(color, pick(index - 1), coverage(distPrev, aa))
+    }
+    pixel[0] = color.r
+    pixel[1] = color.g
+    pixel[2] = color.b
+  }
+}
+
+function compileChecker(layer: CheckerLayer, width: number, height: number): PixelOp {
+  const cx = layer.center[0] * width
+  const cy = layer.center[1] * height
+  const s = Math.min(width, height)
+  const halfW = (layer.width * s) / 2
+  const halfH = (layer.height * s) / 2
+  const rot = (-(layer.rotation ?? 0) * Math.PI) / 180
+  const cosA = Math.cos(rot)
+  const sinA = Math.sin(rot)
+  const cellPx = Math.max(layer.cell * s, 1)
+  const alphaMul = layer.alpha ?? 1
+  const { color } = layer
+  return (pixel, px, py) => {
+    const dx0 = px - cx
+    const dy0 = py - cy
+    const dx = dx0 * cosA - dy0 * sinA
+    const dy = dx0 * sinA + dy0 * cosA
+    if (Math.abs(dx) > halfW || Math.abs(dy) > halfH) return
+    const cellX = Math.floor((dx + halfW) / cellPx)
+    const cellY = Math.floor((dy + halfH) / cellPx)
+    if ((cellX + cellY) % 2 !== 0) return
+    blendOver(pixel, color, alphaMul)
+  }
+}
+
+/** iq's polynomial smooth minimum — the organic join between two circles that still leaves a hard (non-blurred) final silhouette edge. */
+function smoothMin(a: number, b: number, k: number): number {
+  if (k <= 0) return Math.min(a, b)
+  const h = clamp01(0.5 + (0.5 * (b - a)) / k)
+  return lerp(b, a, h) - k * h * (1 - h)
+}
+
+function compileBlob(layer: BlobLayer, width: number, height: number): PixelOp {
+  const s = Math.min(width, height)
+  const k = Math.max((layer.smoothing ?? 0.05) * s, 0.0001)
+  const points = layer.points.map((point) => ({
+    cx: point.at[0] * width,
+    cy: point.at[1] * height,
+    r: point.radius * s,
+  }))
+  const alphaMul = layer.alpha ?? 1
+  const { color } = layer
+  return (pixel, px, py) => {
+    let d = Number.POSITIVE_INFINITY
+    for (const point of points) {
+      const dx = px - point.cx
+      const dy = py - point.cy
+      const dPoint = Math.sqrt(dx * dx + dy * dy) - point.r
+      d = d === Number.POSITIVE_INFINITY ? dPoint : smoothMin(d, dPoint, k)
+    }
+    blendOver(pixel, color, coverage(d) * alphaMul)
+  }
+}
+
+function compileGrain(layer: GrainLayer, seed: number): PixelOp {
   const { amount } = layer
-  return {
-    bbox: [0, 0, width, height],
-    apply: (fb, idx, px, py) => {
-      const delta = hashNoise(Math.floor(px), Math.floor(py), seed) * amount
-      fb[idx] = (fb[idx] as number) + delta
-      fb[idx + 1] = (fb[idx + 1] as number) + delta
-      fb[idx + 2] = (fb[idx + 2] as number) + delta
-    },
+  return (pixel, px, py) => {
+    const delta = hashNoise(Math.floor(px), Math.floor(py), seed) * amount
+    pixel[0] = (pixel[0] as number) + delta
+    pixel[1] = (pixel[1] as number) + delta
+    pixel[2] = (pixel[2] as number) + delta
   }
 }
 
-function compileVignette(layer: VignetteLayer, width: number, height: number): CompiledOp {
+function compileVignette(layer: VignetteLayer, width: number, height: number): PixelOp {
   const cx = width / 2
   const cy = height / 2
   const maxDist = Math.sqrt(cx * cx + cy * cy)
   const { strength } = layer
   const color = layer.color ?? { r: 0, g: 0, b: 0 }
-  return {
-    bbox: [0, 0, width, height],
-    apply: (fb, idx, px, py) => {
-      const dx = px - cx
-      const dy = py - cy
-      const t = clamp01(Math.sqrt(dx * dx + dy * dy) / maxDist)
-      const smooth = t * t * (3 - 2 * t)
-      blendOver(fb, idx, color, strength * smooth)
-    },
+  return (pixel, px, py) => {
+    const dx = px - cx
+    const dy = py - cy
+    const t = clamp01(Math.sqrt(dx * dx + dy * dy) / maxDist)
+    const smooth = t * t * (3 - 2 * t)
+    blendOver(pixel, color, strength * smooth)
   }
 }
 
-function compileLayer(layer: ArtLayer, width: number, height: number, seed: number): CompiledOp {
+function compileLayer(layer: ArtLayer, width: number, height: number, seed: number): PixelOp {
   switch (layer.kind) {
     case 'gradient':
       return compileGradient(layer, width, height)
@@ -846,12 +752,20 @@ function compileLayer(layer: ArtLayer, width: number, height: number, seed: numb
     case 'dots':
       return compileDots(layer, width, height)
     case 'grain':
-      return compileGrain(layer, width, height, seed)
+      return compileGrain(layer, seed)
     case 'vignette':
       return compileVignette(layer, width, height)
+    case 'fill':
+      return compileFill(layer)
+    case 'bands':
+      return compileBands(layer, width, height)
+    case 'checker':
+      return compileChecker(layer, width, height)
+    case 'blob':
+      return compileBlob(layer, width, height)
     /* c8 ignore next 2 -- exhaustive switch over a closed union */
     default:
-      return { bbox: [0, 0, 0, 0], apply: () => undefined }
+      return () => undefined
   }
 }
 
@@ -860,58 +774,28 @@ function toByte(value: number): number {
   return Math.round(clamped * 255)
 }
 
-/**
- * Renders an `ArtSpec` to a linear RGB framebuffer (each channel an
- * unclamped float — grain and additive glows can legitimately push a value
- * outside 0–1 mid-render, clamped only once, at the very end). Every layer
- * is painted over only the pixels its own bounding box says it can reach,
- * in declaration order, onto a framebuffer that starts fully black — the
- * same "paint in order" semantics the original always-full-canvas loop had,
- * just without paying for pixels a small shape can never touch.
- */
-function renderToFramebuffer(spec: ArtSpec): {
-  readonly width: number
-  readonly height: number
-  readonly fb: Float32Array
-} {
+/** Renders an `ArtSpec` to a PNG buffer. Deterministic: the same spec always produces the same bytes. */
+export function renderArt(spec: ArtSpec): Uint8Array {
   const { width, height, seed } = spec
-  const fb = new Float32Array(width * height * 3)
-  const compiled = spec.layers.map((layer) => compileLayer(layer, width, height, seed))
+  const ops = spec.layers.map((layer) => compileLayer(layer, width, height, seed))
+  const rgb = new Uint8Array(width * height * 3)
+  const pixel = new Float32Array(3)
 
-  for (const { bbox, apply } of compiled) {
-    const [x0, y0, x1, y1] = bbox
-    for (let y = y0; y < y1; y++) {
-      const py = y + 0.5
-      const rowOffset = y * width * 3
-      for (let x = x0; x < x1; x++) {
-        const px = x + 0.5
-        apply(fb, rowOffset + x * 3, px, py)
-      }
+  for (let y = 0; y < height; y++) {
+    const py = y + 0.5
+    const rowOffset = y * width * 3
+    for (let x = 0; x < width; x++) {
+      const px = x + 0.5
+      pixel[0] = 0
+      pixel[1] = 0
+      pixel[2] = 0
+      for (const op of ops) op(pixel, px, py)
+      const idx = rowOffset + x * 3
+      rgb[idx] = toByte(pixel[0] as number)
+      rgb[idx + 1] = toByte(pixel[1] as number)
+      rgb[idx + 2] = toByte(pixel[2] as number)
     }
   }
 
-  return { width, height, fb }
-}
-
-/**
- * Renders an `ArtSpec` to raw, byte-clamped RGB — exposed (alongside the PNG
- * path) so a test can measure real pixel statistics — e.g. "is the left
- * half of this hero calm enough to put a title on" — without round-tripping
- * through a PNG decoder that this package has no other reason to depend on.
- */
-export function renderRgb(spec: ArtSpec): {
-  readonly width: number
-  readonly height: number
-  readonly rgb: Uint8Array
-} {
-  const { width, height, fb } = renderToFramebuffer(spec)
-  const rgb = new Uint8Array(width * height * 3)
-  for (let i = 0; i < rgb.length; i++) rgb[i] = toByte(fb[i] as number)
-  return { width, height, rgb }
-}
-
-/** Renders an `ArtSpec` to a PNG buffer. Deterministic: the same spec always produces the same bytes. */
-export function renderArt(spec: ArtSpec): Uint8Array {
-  const { width, height, rgb } = renderRgb(spec)
   return encodePng(width, height, rgb)
 }

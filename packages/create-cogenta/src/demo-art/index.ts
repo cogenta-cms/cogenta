@@ -3,13 +3,26 @@ export type {
   Palette,
 } from './compositions.js'
 export { avatarArt, coverArt, heroArt, logoArt, productArt } from './compositions.js'
+export type { Oklch } from './oklch.js'
+export {
+  companionTones,
+  oklchToRgb,
+  rgbToOklch,
+  rotateHue,
+  withChroma,
+  withLightness,
+} from './oklch.js'
 export { encodePng, PNG_SIGNATURE } from './png.js'
 export type {
   ArtLayer,
   ArtSpec,
+  BandsLayer,
+  BlobLayer,
+  CheckerLayer,
   ColorRGB,
   DiscLayer,
   DotsLayer,
+  FillLayer,
   GlowLayer,
   GradientLayer,
   GradientStop,

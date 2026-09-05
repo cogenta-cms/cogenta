@@ -1,37 +1,23 @@
 import type { SkinTokens } from '@cogenta/render'
-import { rgbToOklch, rotateHue, withLightness, withMinChroma } from './oklch.js'
-import type { ArtLayer, ArtSpec, ColorRGB, Fill } from './render.js'
-import { mulberry32 } from './render.js'
+import { companionTones, oklchToRgb, rgbToOklch, withChroma, withLightness } from './oklch.js'
+import { type ArtLayer, type ArtSpec, type ColorRGB, mulberry32, type Vec2 } from './render.js'
 
 /**
- * Ready-made compositions for `demo-art` (D1, `docs/lots/L25-templates-pro.md`).
+ * Ready-made compositions for `demo-art` (D1/D5, `docs/lots/L25-templates-pro.md`).
  * Each preset takes a `palette` — the same shape as `SkinTokens.color`
  * (`packages/create-cogenta/src/blueprints/starting-skins.ts`), so any
  * blueprint's starting skin is a valid palette with no translation step —
  * and returns an {@link ArtSpec} `render.ts` can turn into a PNG.
  *
- * The visual register throughout is deliberately abstract: saturated mesh
- * gradients, gradient-filled geometric accents with real shading, subtle
- * grain — the register of a modern SaaS/agency/portfolio template, never
- * "clip art" and never a fake photograph (ADR-0032's renunciation, made in
- * full).
- *
- * Two rules apply across every preset here, learned from a first pass that
- * looked like an out-of-focus photo of skin rather than a premium gradient:
- *
- * 1. **Derive extra hues in OKLCH, never by mixing toward grey.** Two
- *    saturated sRGB colours mixed together — or mixed toward white/black —
- *    desaturate as a side effect, because sRGB mixing does not preserve
- *    perceptual chroma. `oklch.ts`'s `rotateHue`/`withChroma`/`withLightness`
- *    move hue, chroma and lightness independently, so a "lighter" or
- *    "analogous" colour stays a real colour instead of drifting to mud.
- * 2. **Every hero keeps its left-hand text zone calm.** A title sits over
- *    the left half of a hero in every reference template this lot names
- *    (Astra, Kadence, Linear, Stripe…), so every hero variant below keeps
- *    its mesh points, glows and geometric accents anchored at `x ≳ 0.55` and
- *    keeps the base gradient's own contrast low across the left half —
- *    verified by `test/demo-art/compositions.test.ts`'s "text zone is calm"
- *    check, not just asserted here.
+ * D5 (2026-09-05, binding): **zero gradients, zero glow, zero blur.** Every
+ * composition below is built only from flat, opaque shapes — solid colour
+ * fields, crisp geometric marks, dot/line grids, hard-edged bands, a
+ * checkerboard, and hard-edged organic blobs — the register of Swiss/
+ * editorial flat design (Basecamp, Notion, Stripe's docs illustrations,
+ * Apple's marketing graphics), never a "mesh gradient" landing-page look.
+ * `render.ts`'s `gradient`/`glow`/`vignette` layer kinds stay defined and
+ * tested there (a capability, not a ban) — nothing in this file ever emits
+ * one; `test/demo-art/flat-design.test.ts` holds that line.
  */
 
 export type Palette = SkinTokens['color']
@@ -52,7 +38,6 @@ function mix(a: ColorRGB, b: ColorRGB, t: number): ColorRGB {
 
 const WHITE: ColorRGB = { r: 1, g: 1, b: 1 }
 const BLACK: ColorRGB = { r: 0, g: 0, b: 0 }
-const NEAR_BLACK: ColorRGB = { r: 0.05, g: 0.045, b: 0.055 }
 
 function lighten(color: ColorRGB, amount: number): ColorRGB {
   return mix(color, WHITE, amount)
@@ -66,7 +51,9 @@ interface Rgb {
   readonly bg: ColorRGB
   readonly fg: ColorRGB
   readonly accent: ColorRGB
+  readonly accentFg: ColorRGB
   readonly muted: ColorRGB
+  readonly mutedFg: ColorRGB
   readonly border: ColorRGB
 }
 
@@ -75,314 +62,347 @@ function toRgb(palette: Palette): Rgb {
     bg: hexToRgb(palette.bg),
     fg: hexToRgb(palette.fg),
     accent: hexToRgb(palette.accent),
+    accentFg: hexToRgb(palette.accentFg),
     muted: hexToRgb(palette.muted),
+    mutedFg: hexToRgb(palette.mutedFg),
     border: hexToRgb(palette.border),
   }
 }
 
-/** OKLCH's yellow-green band — where even a chroma-floored colour reads as
- * murky "olive"/"army green"/"khaki" rather than vivid, especially at the
- * lower lightness this module's `dark` variants and glow layers often use
- * (`#427000`, the exact byte value a naive −55° rotation of this project's
- * own `store` starting skin's teal accent lands on, is a textbook example).
- * `rotateAwayFromMud` is what keeps a derived hue out of it. */
-const MUDDY_HUE_MIN = 80
-const MUDDY_HUE_MAX = 150
-
-function isMuddyHue(hueDeg: number): boolean {
-  return hueDeg >= MUDDY_HUE_MIN && hueDeg <= MUDDY_HUE_MAX
+/**
+ * 2–3 flat "companion tones" derived from a palette's own colours (D5) —
+ * never a gradient between them, just discrete, related flat colours a
+ * composition can pick from so it isn't limited to `accent` alone.
+ */
+interface Tones {
+  /** `accent` rotated ~34° in OKLCH — a related but clearly distinct flat tone. */
+  readonly hue1: ColorRGB
+  /** `accent` rotated ~34° the other way. */
+  readonly hue2: ColorRGB
+  /** A darker `accent`, for a shadow or a deep panel. */
+  readonly deep: ColorRGB
+  /** A very light neutral, close to `muted` — a calm flat field. */
+  readonly pale: ColorRGB
+  /** A pale, warm-shifted tone — the base for the "arch & sun" family. */
+  readonly warm: ColorRGB
+  /** A dark, tinted "ink" — the base for the "editorial mark on dark" family. Not literal black: it keeps a trace of the accent's hue. */
+  readonly ink: ColorRGB
 }
 
 /**
- * Rotates `accentHue` by `degrees` — unless that lands in the muddy
- * yellow-green band (see {@link isMuddyHue}), in which case it rotates the
- * *other* direction by the same magnitude instead.
- *
- * A true 180° complement was tried first and rejected: for a violet or
- * blue-violet accent the antipodal hue sits in the middle of that band —
- * exactly the muddy "olive" a premium gradient must never show, no matter
- * how much chroma is floored under it. A single fixed analogous rotation
- * doesn't generalise either: −55° keeps a violet accent's derived "counter"
- * hue safely out of the band, but the *same* −55° pushes a teal/cyan accent
- * (this project's own `store` starting skin, hue ≈186°) straight into it
- * (≈131°), while +55° lands it at a clean blue-violet (≈241°) instead. Since
- * which direction is safe depends on where the source hue already sits —
- * and an AI-generated skin (L18/L19) can hand this module any hue at all —
- * this checks the actual candidate rather than committing to one sign.
+ * Pulls a hue (degrees) into the amber/terracotta arc used for "warm"
+ * compositions, leaving it alone if it's already there. A small rotation of
+ * the accent's *own* hue (as `rotateHue` alone would do) keeps a cool accent
+ * — a store's teal, say — cool; the "arch & sun"/"warm" family needs its
+ * backdrop to read as warm regardless of the palette it was built from, so
+ * this clamps to the nearer edge of the warm arc instead of rotating by a
+ * fixed offset.
  */
-function rotateAwayFromMud(accentHue: number, degrees: number): number {
-  const candidate = (((accentHue + degrees) % 360) + 360) % 360
-  return isMuddyHue(candidate) ? -degrees : degrees
+function clampHueToWarmArc(hueDegrees: number): number {
+  const warmLow = 25
+  const warmHigh = 70
+  if (hueDegrees >= warmLow && hueDegrees <= warmHigh) return hueDegrees
+  const circularDistance = (a: number, b: number) =>
+    Math.min(Math.abs(a - b), 360 - Math.abs(a - b))
+  return circularDistance(hueDegrees, warmLow) <= circularDistance(hueDegrees, warmHigh)
+    ? warmLow
+    : warmHigh
+}
+
+function buildTones(c: Rgb): Tones {
+  const spread = companionTones(c.accent, 2)
+  const hue1 = spread[0] ?? c.accent
+  const hue2 = spread[1] ?? c.accent
+  const accentOklch = rgbToOklch(c.accent)
+  const warmHue = clampHueToWarmArc(accentOklch.h)
+  return {
+    hue1,
+    hue2,
+    deep: darken(c.accent, 0.22),
+    pale: lighten(c.muted, 0.06),
+    warm: oklchToRgb({ l: 0.86, c: Math.max(accentOklch.c, 0.08), h: warmHue }),
+    ink: withLightness(withChroma(c.accent, 0.4), 0.15),
+  }
 }
 
 /**
- * Three saturated hues derived from one accent, in OKLCH — the palette
- * behind every "mesh"-style composition in this file. `bright` boosts the
- * accent itself; `analogous` rotates ~±36° for a neighbouring hue that
- * still reads as "the same family"; `counter` rotates ~∓55° the *other*
- * way for a cooler contrast — both steered away from the muddy band by
- * {@link rotateAwayFromMud} rather than fixed to one sign. Each hue also
- * has its chroma floored, so a muted starting palette (e.g. a desaturated
- * corporate blue) still produces a genuinely colourful mesh rather than
- * three shades of the same near-grey.
+ * A straight, hairline-thin flat segment between two fractional points —
+ * used for grid connectors, editorial rules, and floor lines. `render.ts`
+ * only offers a length+rotation `LineLayer`, so this does the point-to-point
+ * trigonometry once, in one place, for every composition below.
  */
-function meshHues(accent: ColorRGB): {
-  readonly bright: ColorRGB
-  readonly analogous: ColorRGB
-  readonly counter: ColorRGB
-} {
-  const accentHue = rgbToOklch(accent).h
-  const analogousDeg = rotateAwayFromMud(accentHue, 36)
-  const counterDeg = rotateAwayFromMud(accentHue, -55)
-  const bright = withMinChroma(withLightness(accent, 0.05), 0.16)
-  const analogous = withMinChroma(withLightness(rotateHue(accent, analogousDeg), 0.08), 0.14)
-  const counter = withMinChroma(withLightness(rotateHue(accent, counterDeg), -0.02), 0.14)
-  return { bright, analogous, counter }
+function segment(
+  from: Vec2,
+  to: Vec2,
+  canvasWidth: number,
+  canvasHeight: number,
+  thickness: number,
+  color: ColorRGB,
+  alpha = 1,
+): ArtLayer {
+  const shorter = Math.min(canvasWidth, canvasHeight)
+  const x1 = from[0] * canvasWidth
+  const y1 = from[1] * canvasHeight
+  const x2 = to[0] * canvasWidth
+  const y2 = to[1] * canvasHeight
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const lengthPx = Math.max(Math.sqrt(dx * dx + dy * dy), 1)
+  const rotation = (Math.atan2(dy, dx) * 180) / Math.PI
+  const center: Vec2 = [(x1 + x2) / 2 / canvasWidth, (y1 + y2) / 2 / canvasHeight]
+  return {
+    kind: 'line',
+    center,
+    length: lengthPx / shorter,
+    thickness,
+    rotation,
+    color,
+    alpha,
+  }
 }
 
 // ---------------------------------------------------------------- hero
 
-export type HeroVariant = 'mesh' | 'geometric' | 'diagonal' | 'radial' | 'dark' | 'warm'
+/**
+ * `mesh`/`geometric`/`diagonal`/`radial`/`dark`/`warm` are the names every
+ * existing caller compiles against; `grid`/`blocks`/`bands`/`rings`/`ink`/
+ * `sun` are the same six families under names that describe what they
+ * actually render now that D5 removed the gradients the old names referred
+ * to. Both spellings of a given family always render identically.
+ */
+export type HeroVariant =
+  | 'mesh'
+  | 'geometric'
+  | 'diagonal'
+  | 'radial'
+  | 'dark'
+  | 'warm'
+  | 'grid'
+  | 'blocks'
+  | 'bands'
+  | 'rings'
+  | 'ink'
+  | 'sun'
+
+type HeroFamily = 'grid' | 'blocks' | 'bands' | 'rings' | 'ink' | 'sun'
+
+const HERO_FAMILY: Readonly<Record<HeroVariant, HeroFamily>> = {
+  mesh: 'grid',
+  grid: 'grid',
+  geometric: 'blocks',
+  blocks: 'blocks',
+  diagonal: 'bands',
+  bands: 'bands',
+  radial: 'rings',
+  rings: 'rings',
+  dark: 'ink',
+  ink: 'ink',
+  warm: 'sun',
+  sun: 'sun',
+}
 
 const HERO_WIDTH = 1600
 const HERO_HEIGHT = 1000
 
 /**
- * A 1600×1000 hero background. `variant` lets neighbouring blueprints (e.g.
- * two SaaS-flavoured themes) look distinct from the same palette family.
- *
- * Every variant keeps its **left half calm** — low local contrast, close to
- * a flat wash of the palette's own background — so a title and subtitle sit
- * legibly over it; all the "drama" (mesh blobs, glows, shapes, rings) is
- * anchored at `x ≳ 0.55` and fades out well before the centre line.
+ * Everything a hero variant draws lives inside this box (fractions of the
+ * shorter canvas side, like every other bounded shape) — the right ~44% of
+ * the frame. The left ~55% never receives anything but the base flat
+ * `fill`, which is what keeps it calm enough for a title to sit on
+ * (`test/demo-art/flat-design.test.ts`'s calm-left-zone check).
  */
+const HERO_ZONE_CENTER: Vec2 = [0.77, 0.5]
+const HERO_ZONE_WIDTH = 0.5
+const HERO_ZONE_HEIGHT = 0.72
+
+function buildGridHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const layers: ArtLayer[] = [
+    { kind: 'fill', color: c.bg },
+    {
+      kind: 'dots',
+      center: HERO_ZONE_CENTER,
+      width: HERO_ZONE_WIDTH,
+      height: HERO_ZONE_HEIGHT,
+      spacing: 0.045,
+      radius: 0.006,
+      color: c.border,
+      alpha: 0.65,
+    },
+  ]
+
+  const nodes: Vec2[] = [
+    [0.68 + rng() * 0.06, 0.3 + rng() * 0.1],
+    [0.78 + rng() * 0.08, 0.46 + rng() * 0.08],
+    [0.7 + rng() * 0.1, 0.64 + rng() * 0.1],
+  ]
+  for (let i = 0; i < nodes.length - 1; i++) {
+    layers.push(
+      segment(
+        nodes[i] as Vec2,
+        nodes[i + 1] as Vec2,
+        HERO_WIDTH,
+        HERO_HEIGHT,
+        0.0035,
+        c.mutedFg,
+        0.45,
+      ),
+    )
+  }
+  nodes.forEach((node, i) => {
+    layers.push({
+      kind: 'disc',
+      center: node,
+      radius: i === 1 ? 0.05 : 0.022,
+      color: i === 1 ? c.accent : tones.hue1,
+      alpha: 1,
+    })
+  })
+
+  return layers
+}
+
+function buildBlocksHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const flip = rng() < 0.5
+  return [
+    { kind: 'fill', color: c.bg },
+    {
+      kind: 'rect',
+      center: [0.7, 0.5],
+      width: 0.26,
+      height: HERO_ZONE_HEIGHT,
+      radius: 0.015,
+      color: tones.pale,
+      alpha: 1,
+    },
+    {
+      kind: 'rect',
+      center: [0.855, 0.35],
+      width: 0.2,
+      height: 0.34,
+      radius: 0.02,
+      rotation: flip ? -5 : 5,
+      color: c.accent,
+      alpha: 1,
+    },
+    {
+      kind: 'rect',
+      center: [0.86, 0.68],
+      width: 0.16,
+      height: 0.22,
+      radius: 0.02,
+      rotation: flip ? 6 : -6,
+      color: tones.deep,
+      alpha: 1,
+    },
+    { kind: 'disc', center: [0.895, 0.5], radius: 0.028, color: tones.hue1, alpha: 1 },
+  ]
+}
+
+function buildBandsHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const angle = 22 + rng() * 8
+  const colors = [tones.hue1, c.accent, tones.deep]
+  const rows = [0.2, 0.35, 0.5, 0.65, 0.8]
+  const layers: ArtLayer[] = [{ kind: 'fill', color: c.bg }]
+  rows.forEach((y, i) => {
+    layers.push({
+      kind: 'rect',
+      center: [0.83, y],
+      width: 0.46,
+      height: 0.17,
+      rotation: angle,
+      color: colors[i % colors.length] as ColorRGB,
+      alpha: 1,
+    })
+  })
+  return layers
+}
+
+function buildRingsHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const center: Vec2 = [0.78 + (rng() - 0.5) * 0.04, 0.46 + (rng() - 0.5) * 0.1]
+  return [
+    { kind: 'fill', color: c.bg },
+    { kind: 'disc', center, radius: 0.05, color: c.accent, alpha: 1 },
+    { kind: 'ring', center, innerRadius: 0.09, outerRadius: 0.105, color: tones.hue1, alpha: 1 },
+    { kind: 'ring', center, innerRadius: 0.14, outerRadius: 0.152, color: tones.deep, alpha: 1 },
+    { kind: 'ring', center, innerRadius: 0.185, outerRadius: 0.195, color: c.border, alpha: 1 },
+  ]
+}
+
+function buildInkHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const markCenter: Vec2 = [0.8 + rng() * 0.04, 0.56 + rng() * 0.08]
+  const markColor = rng() < 0.5 ? tones.hue1 : tones.hue2
+  return [
+    { kind: 'fill', color: tones.ink },
+    segment([0.64, 0.26], [0.9, 0.26], HERO_WIDTH, HERO_HEIGHT, 0.004, tones.pale, 0.85),
+    {
+      kind: 'polygon',
+      center: markCenter,
+      radius: 0.14,
+      sides: 3,
+      rotation: 0,
+      color: markColor,
+      alpha: 1,
+    },
+    { kind: 'disc', center: [0.68, 0.74], radius: 0.03, color: c.accent, alpha: 1 },
+  ]
+}
+
+function buildSunHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const center: Vec2 = [0.78 + (rng() - 0.5) * 0.04, 0.6 + rng() * 0.06]
+  const radius = 0.15 + rng() * 0.03
+  const layers: ArtLayer[] = [
+    { kind: 'fill', color: tones.warm },
+    { kind: 'disc', center, radius, color: c.accent, alpha: 1 },
+    {
+      kind: 'ring',
+      center,
+      innerRadius: radius + 0.04,
+      outerRadius: radius + 0.048,
+      color: tones.hue1,
+      alpha: 0.6,
+    },
+  ]
+  // The ground band is drawn last so it crops the sun's lower half into an arch.
+  const groundHeight = 0.5
+  const horizonY = center[1] + radius * 0.6
+  layers.push({
+    kind: 'rect',
+    center: [0.78, horizonY + groundHeight / 2],
+    width: 0.5,
+    height: groundHeight,
+    color: tones.deep,
+    alpha: 1,
+  })
+  return layers
+}
+
+/** A 1600×1000 hero background. `variant` lets neighbouring blueprints look distinct from the same palette family — every variant keeps its left ~55% a single flat colour (D5's calm-left-zone requirement) so a title reads cleanly over it. */
 export function heroArt(palette: Palette, variant: HeroVariant = 'mesh', seed = 1): ArtSpec {
   const c = toRgb(palette)
-  const hues = meshHues(c.accent)
+  const tones = buildTones(c)
   const rng = mulberry32(seed)
+  const family = HERO_FAMILY[variant]
 
-  const layers: ArtLayer[] = []
-
-  if (variant === 'dark') {
-    const deepBg = mix(NEAR_BLACK, c.accent, 0.08)
-    layers.push(
-      {
-        kind: 'gradient',
-        angle: 110,
-        stops: [
-          { at: 0, color: lighten(deepBg, 0.02) },
-          { at: 1, color: darken(deepBg, 0.12) },
-        ],
-      },
-      {
-        kind: 'glow',
-        center: [0.86, 0.22],
-        radius: 0.55,
-        color: hues.bright,
-        alpha: 0.55,
-        falloff: 1.5,
-      },
-      {
-        kind: 'glow',
-        center: [0.72, 0.78],
-        radius: 0.5,
-        color: hues.counter,
-        alpha: 0.4,
-        falloff: 1.7,
-      },
-      {
-        kind: 'ring',
-        center: [0.84, 0.24],
-        innerRadius: 0.15,
-        outerRadius: 0.153,
-        color: lighten(hues.bright, 0.3),
-        alpha: 0.5,
-      },
-      { kind: 'vignette', strength: 0.32, color: BLACK },
-    )
-  } else if (variant === 'warm') {
-    const cream = mix(WHITE, withMinChroma(rotateHue(c.accent, -8), 0.05), 0.1)
-    const warmBlobA = withMinChroma(withLightness(rotateHue(c.accent, -18), 0.08), 0.13)
-    const warmBlobB = withMinChroma(withLightness(rotateHue(c.accent, 14), -0.02), 0.14)
-    layers.push(
-      {
-        kind: 'gradient',
-        angle: 100,
-        stops: [
-          { at: 0, color: lighten(cream, 0.03) },
-          { at: 1, color: darken(cream, 0.03) },
-        ],
-        mesh: [
-          { at: [0.72, 0.28], color: warmBlobA, radius: 0.4 },
-          { at: [0.86, 0.74], color: warmBlobB, radius: 0.38 },
-        ],
-      },
-      {
-        kind: 'disc',
-        center: [0.9, 0.16],
-        radius: 0.16,
-        color: lighten(warmBlobA, 0.15),
-        alpha: 0.5,
-      },
-      { kind: 'vignette', strength: 0.1 },
-    )
-  } else {
-    // mesh / geometric / diagonal / radial all share the same calm base: a
-    // gentle, mostly-flat wash that leans toward the palette's own bg on
-    // the left and only tints toward the accent on the right.
-    layers.push({
-      kind: 'gradient',
-      angle: 0,
-      stops: [
-        { at: 0, color: lighten(c.bg, 0.015) },
-        { at: 0.55, color: c.bg },
-        { at: 1, color: mix(c.bg, hues.analogous, 0.14) },
-      ],
-      mesh:
-        variant === 'mesh'
-          ? [
-              { at: [0.68, 0.22], color: hues.bright, radius: 0.32 },
-              { at: [0.9, 0.62], color: hues.counter, radius: 0.34 },
-              { at: [0.62, 0.86], color: hues.analogous, radius: 0.3 },
-            ]
-          : [
-              {
-                at: [0.72 + (rng() - 0.5) * 0.12, 0.5 + (rng() - 0.5) * 0.3],
-                color: hues.bright,
-                radius: 0.3,
-              },
-            ],
-    })
-
-    if (variant === 'mesh') {
-      // The crisp anchor the flat mesh was missing: a thin ring gives the
-      // eye a hard edge to land on amid the soft blobs.
-      layers.push(
-        {
-          kind: 'ring',
-          center: [0.78, 0.32],
-          innerRadius: 0.22,
-          outerRadius: 0.224,
-          color: WHITE,
-          alpha: 0.4,
-        },
-        {
-          kind: 'ring',
-          center: [0.78, 0.32],
-          innerRadius: 0.3,
-          outerRadius: 0.303,
-          color: WHITE,
-          alpha: 0.2,
-        },
-      )
-    } else if (variant === 'geometric') {
-      layers.push(
-        {
-          kind: 'glow',
-          center: [0.82, 0.22],
-          radius: 0.5,
-          color: hues.bright,
-          alpha: 0.45,
-          falloff: 1.6,
-        },
-        {
-          kind: 'ring',
-          center: [0.86, 0.2],
-          innerRadius: 0.16,
-          outerRadius: 0.192,
-          color: hues.bright,
-          alpha: 0.6,
-        },
-        {
-          kind: 'rect',
-          center: [0.7, 0.78],
-          width: 0.22,
-          height: 0.22,
-          radius: 0.03,
-          rotation: 18,
-          color: hues.analogous,
-          fill: {
-            type: 'linear',
-            from: lighten(hues.analogous, 0.15),
-            to: darken(hues.analogous, 0.1),
-            angle: 130,
-          },
-          shadow: { offset: [0.012, 0.014], blur: 0.02, alpha: 0.3 },
-          alpha: 0.9,
-        },
-        {
-          kind: 'disc',
-          center: [0.6, 0.68],
-          radius: 0.12,
-          color: hues.counter,
-          fill: { type: 'radial', from: lighten(hues.counter, 0.2), to: darken(hues.counter, 0.1) },
-          alpha: 0.5,
-        },
-        {
-          kind: 'line',
-          center: [0.72, 0.06],
-          length: 0.5,
-          thickness: 0.004,
-          rotation: 0,
-          color: hues.bright,
-          alpha: 0.25,
-        },
-      )
-    } else if (variant === 'diagonal') {
-      layers.push(
-        {
-          kind: 'glow',
-          center: [0.8, 0.26],
-          radius: 0.55,
-          color: hues.bright,
-          alpha: 0.6,
-          falloff: 1.4,
-        },
-        { kind: 'stripes', angle: 32, spacing: 0.09, thickness: 0.022, color: c.fg, alpha: 0.06 },
-        { kind: 'disc', center: [0.68, 0.82], radius: 0.15, color: hues.counter, alpha: 0.32 },
-      )
-    } else {
-      // radial
-      layers.push(
-        {
-          kind: 'glow',
-          center: [0.68, 0.42],
-          radius: 0.5,
-          color: hues.bright,
-          alpha: 0.65,
-          falloff: 1.15,
-        },
-        {
-          kind: 'ring',
-          center: [0.68, 0.42],
-          innerRadius: 0.24,
-          outerRadius: 0.244,
-          color: hues.bright,
-          alpha: 0.5,
-        },
-        {
-          kind: 'ring',
-          center: [0.68, 0.42],
-          innerRadius: 0.34,
-          outerRadius: 0.343,
-          color: hues.bright,
-          alpha: 0.28,
-        },
-        {
-          kind: 'ring',
-          center: [0.68, 0.42],
-          innerRadius: 0.42,
-          outerRadius: 0.423,
-          color: hues.bright,
-          alpha: 0.14,
-        },
-      )
-    }
-
-    layers.push({ kind: 'vignette', strength: 0.16 })
+  let layers: ArtLayer[]
+  switch (family) {
+    case 'grid':
+      layers = buildGridHero(c, tones, rng)
+      break
+    case 'blocks':
+      layers = buildBlocksHero(c, tones, rng)
+      break
+    case 'bands':
+      layers = buildBandsHero(c, tones, rng)
+      break
+    case 'rings':
+      layers = buildRingsHero(c, tones, rng)
+      break
+    case 'ink':
+      layers = buildInkHero(c, tones, rng)
+      break
+    default:
+      layers = buildSunHero(c, tones, rng)
   }
-
-  layers.push({ kind: 'grain', amount: 0.014 })
 
   return { width: HERO_WIDTH, height: HERO_HEIGHT, seed, layers }
 }
@@ -392,311 +412,243 @@ export function heroArt(palette: Palette, variant: HeroVariant = 'mesh', seed = 
 const COVER_WIDTH = 1200
 const COVER_HEIGHT = 800
 
-const COVER_PATTERNS: readonly ((
-  c: Rgb,
-  hues: ReturnType<typeof meshHues>,
-  rng: () => number,
-) => ArtLayer[])[] = [
-  // 0 — layered translucent discs, screen-blended so overlaps read as glow.
-  // Always painted on a deep dark base — screen blending against a light
-  // background (most starting palettes) has almost no headroom to lighten
-  // toward, so the discs would wash out to near-invisible pastels; against
-  // near-black they read as the intended glowing, additive overlaps.
-  (c, hues, rng) => [
+function colourBlockCover(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const angle = rng() < 0.5 ? 0 : 90
+  const threeTone = rng() < 0.5
+  const colors = threeTone ? [tones.pale, c.accent, tones.hue2] : [tones.pale, c.accent]
+  const accentCenter: Vec2 = [0.24 + rng() * 0.1, 0.72 + rng() * 0.06]
+  const accentIsDisc = rng() < 0.5
+  return [
+    { kind: 'bands', angle, colors, count: colors.length },
+    accentIsDisc
+      ? { kind: 'disc', center: accentCenter, radius: 0.09, color: tones.deep, alpha: 1 }
+      : {
+          kind: 'rect',
+          center: accentCenter,
+          width: 0.16,
+          height: 0.16,
+          radius: 0.02,
+          color: tones.deep,
+          alpha: 1,
+        },
+  ]
+}
+
+function gridNodeCover(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const a: Vec2 = [0.28 + rng() * 0.08, 0.32 + rng() * 0.08]
+  const b: Vec2 = [0.6 + rng() * 0.08, 0.5]
+  const d: Vec2 = [0.46 + rng() * 0.08, 0.76 + rng() * 0.06]
+  return [
+    { kind: 'fill', color: c.bg },
+    { kind: 'dots', spacing: 0.05, radius: 0.006, color: c.border, alpha: 0.55 },
+    segment(a, b, COVER_WIDTH, COVER_HEIGHT, 0.004, c.mutedFg, 0.45),
+    segment(b, d, COVER_WIDTH, COVER_HEIGHT, 0.004, c.mutedFg, 0.45),
+    { kind: 'disc', center: b, radius: 0.045, color: c.accent, alpha: 1 },
+    { kind: 'disc', center: a, radius: 0.02, color: tones.hue1, alpha: 1 },
+    { kind: 'disc', center: d, radius: 0.02, color: tones.deep, alpha: 1 },
+  ]
+}
+
+function stripeBandCover(_c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const angles = [0, 45, 90, 135] as const
+  const angle = angles[Math.floor(rng() * angles.length) % angles.length] ?? 0
+  return [
     {
-      kind: 'gradient',
-      angle: 100,
-      stops: [
-        { at: 0, color: mix(NEAR_BLACK, c.accent, 0.05) },
-        { at: 1, color: darken(NEAR_BLACK, 0.15) },
-      ],
+      kind: 'bands',
+      angle,
+      colors: [tones.hue2, tones.hue1, tones.deep],
+      count: 3 + Math.floor(rng() * 2),
     },
+  ]
+}
+
+function concentricCover(_c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const center: Vec2 = [0.62 + rng() * 0.08, 0.42 + rng() * 0.08]
+  return [
+    { kind: 'fill', color: tones.pale },
+    { kind: 'ring', center, innerRadius: 0.16, outerRadius: 0.176, color: tones.deep, alpha: 1 },
+    { kind: 'ring', center, innerRadius: 0.23, outerRadius: 0.242, color: tones.hue1, alpha: 1 },
     {
       kind: 'disc',
-      center: [0.32 + rng() * 0.1, 0.42],
-      radius: 0.32,
-      color: hues.bright,
-      alpha: 0.7,
-      blend: 'screen',
+      center: [0.24 + rng() * 0.08, 0.74],
+      radius: 0.07,
+      color: tones.deep,
+      alpha: 1,
     },
-    {
-      kind: 'disc',
-      center: [0.58, 0.36],
-      radius: 0.28,
-      color: hues.analogous,
-      alpha: 0.65,
-      blend: 'screen',
-    },
-    {
-      kind: 'disc',
-      center: [0.5, 0.66],
-      radius: 0.3,
-      color: hues.counter,
-      alpha: 0.6,
-      blend: 'screen',
-    },
-  ],
-  // 1 — geometric stack, now gradient-filled with real shadows. The
-  // underlay "card" is tinted *toward the foreground ink*, not toward
-  // white — mixing toward white is invisible against a light palette's own
-  // near-white background, which is exactly the palette family most
-  // blueprints start from.
-  (c) => [
-    {
-      kind: 'gradient',
-      angle: 90,
-      stops: [
-        { at: 0, color: c.bg },
-        { at: 1, color: darken(c.bg, 0.05) },
-      ],
-    },
-    {
-      kind: 'rect',
-      center: [0.5, 0.62],
-      width: 0.9,
-      height: 0.55,
-      radius: 0.02,
-      color: mix(c.muted, c.fg, 0.1),
-      alpha: 0.9,
-    },
-    {
-      kind: 'rect',
-      center: [0.32, 0.4],
-      width: 0.42,
-      height: 0.32,
-      radius: 0.03,
-      rotation: -6,
-      color: c.accent,
-      fill: {
-        type: 'linear',
-        from: lighten(c.accent, 0.18),
-        to: darken(c.accent, 0.12),
-        angle: 130,
-      },
-      shadow: { offset: [0.012, 0.016], blur: 0.02, alpha: 0.3 },
-      alpha: 0.9,
-    },
-    {
-      kind: 'rect',
-      center: [0.68, 0.34],
-      width: 0.3,
-      height: 0.24,
-      radius: 0.03,
-      rotation: 8,
-      color: darken(c.accent, 0.1),
-      fill: {
-        type: 'linear',
-        from: lighten(c.accent, 0.05),
-        to: darken(c.accent, 0.2),
-        angle: 130,
-      },
-      shadow: { offset: [0.01, 0.014], blur: 0.018, alpha: 0.26 },
-      alpha: 0.9,
-    },
-  ],
-  // 2 — diagonal split: gradient half + solid half + a small accent shape
-  (c) => [
-    {
-      kind: 'gradient',
-      angle: 45,
-      stops: [
-        { at: 0, color: lighten(c.accent, 0.1) },
-        { at: 0.5, color: c.accent },
-        { at: 0.5, color: c.muted },
-        { at: 1, color: c.muted },
-      ],
-    },
-    { kind: 'stripes', angle: 45, spacing: 0.1, thickness: 0.02, color: c.bg, alpha: 0.06 },
-    {
+  ]
+}
+
+function editorialMarkCover(c: Rgb, _tones: Tones, rng: () => number): ArtLayer[] {
+  const markKind = Math.floor(rng() * 3) % 3
+  let mark: ArtLayer
+  if (markKind === 0) {
+    mark = {
       kind: 'polygon',
-      center: [0.28, 0.7],
-      radius: 0.06,
-      sides: 6,
-      rotation: 12,
-      color: darken(c.muted, 0.1),
-      alpha: 0.8,
-    },
-  ],
-  // 3 — concentric rings, offset to a corner rather than centred
-  (c, hues, rng) => [
-    {
-      kind: 'gradient',
-      angle: 90,
-      stops: [
-        { at: 0, color: lighten(c.bg, 0.02) },
-        { at: 1, color: c.muted },
-      ],
-    },
-    {
+      center: [0.7, 0.62],
+      radius: 0.18,
+      sides: 3,
+      rotation: 0,
+      color: c.accent,
+      alpha: 1,
+    }
+  } else if (markKind === 1) {
+    // Centred exactly on the bottom edge: only the top half of the disc is on-canvas — a semicircle for free.
+    mark = { kind: 'disc', center: [0.72, 1], radius: 0.32, color: c.accent, alpha: 1 }
+  } else {
+    // Centred exactly on a corner: only one quarter of the disc is on-canvas.
+    mark = { kind: 'disc', center: [1, 1], radius: 0.4, color: c.accent, alpha: 1 }
+  }
+  return [
+    { kind: 'fill', color: c.bg },
+    segment([0.12, 0.18], [0.5, 0.18], COVER_WIDTH, COVER_HEIGHT, 0.004, c.fg, 0.8),
+    mark,
+  ]
+}
+
+function isometricStackCover(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const shadow = mix(c.fg, tones.pale, 0.7)
+  const originX = 0.4 + rng() * 0.06
+  const originY = 0.4 + rng() * 0.06
+  const step = 0.12 + rng() * 0.03
+  const tilt = rng() < 0.5 ? 1 : -1
+  const positions: readonly Vec2[] = [
+    [originX, originY],
+    [originX + step, originY + step * 0.85],
+    [originX + step * 2, originY + step * 1.7],
+  ]
+  const palette = [tones.hue2, c.accent, tones.deep]
+  // A seed-driven rotation of which colour lands on which card, so two
+  // seeds landing on this family don't just shift position — they read as
+  // genuinely different stacks.
+  const shift = Math.floor(rng() * palette.length)
+  const colors = palette.map((_, i) => palette[(i + shift) % palette.length] ?? c.accent)
+  const layers: ArtLayer[] = [{ kind: 'fill', color: tones.pale }]
+  positions.forEach((pos, i) => {
+    const rotation = tilt * (i - 1) * (4 + rng() * 4)
+    layers.push(
+      {
+        kind: 'rect',
+        center: [pos[0] + 0.015, pos[1] + 0.02],
+        width: 0.34,
+        height: 0.22,
+        radius: 0.02,
+        rotation,
+        color: shadow,
+        alpha: 0.3,
+      },
+      {
+        kind: 'rect',
+        center: pos,
+        width: 0.34,
+        height: 0.22,
+        radius: 0.02,
+        rotation,
+        color: colors[i] ?? c.accent,
+        alpha: 1,
+      },
+    )
+  })
+  return layers
+}
+
+function archSunCover(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
+  const center: Vec2 = [0.42 + rng() * 0.16, 0.5 + rng() * 0.12]
+  const radius = 0.18 + rng() * 0.08
+  const sunColor = rng() < 0.5 ? c.accent : tones.hue1
+
+  const layers: ArtLayer[] = [
+    { kind: 'fill', color: tones.warm },
+    { kind: 'disc', center, radius, color: sunColor, alpha: 1 },
+  ]
+  if (rng() < 0.7) {
+    layers.push({
       kind: 'ring',
-      center: [0.8, 0.2],
-      innerRadius: 0.16,
-      outerRadius: 0.172,
-      color: hues.bright,
+      center,
+      innerRadius: radius + 0.04,
+      outerRadius: radius + 0.05,
+      color: tones.deep,
       alpha: 0.6,
-    },
+    })
+  }
+  // The ground band crops the sun at ~60% of its radius below centre —
+  // enough of an arch to read as sunrise/sunset, never the full disc.
+  const groundHeight = 0.5
+  const horizonY = center[1] + radius * 0.6
+  layers.push({
+    kind: 'rect',
+    center: [0.5, horizonY + groundHeight / 2],
+    width: 1.6,
+    height: groundHeight,
+    color: tones.deep,
+    alpha: 1,
+  })
+  return layers
+}
+
+function checkerCover(c: Rgb, rng: () => number): ArtLayer[] {
+  return [
+    { kind: 'fill', color: c.bg },
     {
-      kind: 'ring',
-      center: [0.8, 0.2],
-      innerRadius: 0.24,
-      outerRadius: 0.249,
-      color: hues.bright,
-      alpha: 0.35,
+      kind: 'checker',
+      center: [0.66, 0.5],
+      width: 0.9,
+      height: 1.05,
+      cell: 0.045,
+      rotation: rng() < 0.5 ? 0 : 8,
+      color: c.accent,
+      alpha: 0.85,
     },
+  ]
+}
+
+function duotoneBlobCover(tones: Tones, rng: () => number): ArtLayer[] {
+  const jitter = () => (rng() - 0.5) * 0.05
+  return [
+    { kind: 'fill', color: tones.pale },
     {
-      kind: 'ring',
-      center: [0.8, 0.2],
-      innerRadius: 0.32,
-      outerRadius: 0.326,
-      color: hues.bright,
-      alpha: 0.18,
-    },
-    {
-      kind: 'disc',
-      center: [0.24 + rng() * 0.1, 0.76],
-      radius: 0.1,
-      color: darken(c.accent, 0.1),
-      alpha: 0.7,
-    },
-  ],
-  // 4 — wave band
-  (c) => [
-    {
-      kind: 'gradient',
-      angle: 90,
-      stops: [
-        { at: 0, color: lighten(c.muted, 0.1) },
-        { at: 1, color: c.muted },
+      kind: 'blob',
+      points: [
+        { at: [0.32 + jitter(), 0.38 + jitter()], radius: 0.28 },
+        { at: [0.5 + jitter(), 0.3 + jitter()], radius: 0.22 },
+        { at: [0.4 + jitter(), 0.55 + jitter()], radius: 0.2 },
       ],
+      smoothing: 0.09,
+      color: tones.hue1,
+      alpha: 1,
     },
-    { kind: 'wave', baseline: 0.62, amplitude: 0.07, frequency: 1.4, color: c.accent, alpha: 0.5 },
     {
-      kind: 'wave',
-      baseline: 0.78,
-      amplitude: 0.05,
-      frequency: 1.9,
-      phase: 1.2,
-      color: darken(c.accent, 0.15),
-      alpha: 0.35,
-    },
-  ],
-  // 5 — grid + a single glowing node
-  (c, hues) => [
-    {
-      kind: 'gradient',
-      angle: 110,
-      stops: [
-        { at: 0, color: c.bg },
-        { at: 1, color: lighten(c.muted, 0.04) },
+      kind: 'blob',
+      points: [
+        { at: [0.68 + jitter(), 0.62 + jitter()], radius: 0.26 },
+        { at: [0.82 + jitter(), 0.7 + jitter()], radius: 0.2 },
       ],
+      smoothing: 0.08,
+      color: tones.deep,
+      alpha: 1,
     },
-    { kind: 'dots', spacing: 0.055, radius: 0.006, color: c.fg, alpha: 0.14 },
-    {
-      kind: 'glow',
-      center: [0.7, 0.32],
-      radius: 0.42,
-      color: hues.bright,
-      alpha: 0.75,
-      falloff: 1.4,
-    },
-    {
-      kind: 'disc',
-      center: [0.7, 0.32],
-      radius: 0.02,
-      color: lighten(hues.bright, 0.3),
-      alpha: 0.9,
-    },
-  ],
-  // 6 — a big soft blob behind thin crisp lines
-  (c, hues) => [
-    {
-      kind: 'gradient',
-      angle: 100,
-      stops: [
-        { at: 0, color: lighten(c.muted, 0.06) },
-        { at: 1, color: c.muted },
-      ],
-      mesh: [{ at: [0.62, 0.5], color: hues.analogous, radius: 0.5 }],
-    },
-    {
-      kind: 'line',
-      center: [0.5, 0.3],
-      length: 1.3,
-      thickness: 0.006,
-      rotation: 8,
-      color: c.fg,
-      alpha: 0.15,
-    },
-    {
-      kind: 'line',
-      center: [0.5, 0.5],
-      length: 1.3,
-      thickness: 0.006,
-      rotation: 8,
-      color: c.fg,
-      alpha: 0.2,
-    },
-    {
-      kind: 'line',
-      center: [0.5, 0.7],
-      length: 1.3,
-      thickness: 0.006,
-      rotation: 8,
-      color: c.fg,
-      alpha: 0.15,
-    },
-  ],
-  // 7 — editorial: a flat colour field, one thin rule, one small mark
-  (c) => [
-    {
-      kind: 'gradient',
-      angle: 90,
-      stops: [
-        { at: 0, color: c.accent },
-        { at: 1, color: c.accent },
-      ],
-    },
-    {
-      kind: 'line',
-      center: [0.5, 0.72],
-      length: 0.7,
-      thickness: 0.006,
-      color: darken(c.accent, 0.3),
-      alpha: 0.6,
-    },
-    { kind: 'disc', center: [0.22, 0.28], radius: 0.03, color: lighten(c.accent, 0.4), alpha: 0.9 },
-  ],
-  // 8 — dark: deep accent-tinted near-black with a glow
-  (c, hues) => [
-    {
-      kind: 'gradient',
-      angle: 100,
-      stops: [
-        { at: 0, color: mix(NEAR_BLACK, c.accent, 0.1) },
-        { at: 1, color: darken(NEAR_BLACK, 0.1) },
-      ],
-    },
-    {
-      kind: 'glow',
-      center: [0.62, 0.4],
-      radius: 0.55,
-      color: hues.bright,
-      alpha: 0.6,
-      falloff: 1.5,
-    },
-    { kind: 'vignette', strength: 0.3, color: BLACK },
-  ],
+  ]
+}
+
+const COVER_FAMILIES: readonly ((c: Rgb, tones: Tones, rng: () => number) => ArtLayer[])[] = [
+  colourBlockCover,
+  gridNodeCover,
+  stripeBandCover,
+  concentricCover,
+  editorialMarkCover,
+  isometricStackCover,
+  archSunCover,
+  (c, _tones, rng) => checkerCover(c, rng),
+  (_c, tones, rng) => duotoneBlobCover(tones, rng),
 ]
 
-/** A family of nine visibly different layouts from one palette, picked deterministically by `seed`. */
+/** A family of ≥8 visibly different, flat layouts from one palette, picked deterministically by `seed` (D5: colour blocks, grid & node, stripe bands, concentric rings, editorial marks, isometric stacks, arch & sun, checker/half-tone, duotone blobs). */
 export function coverArt(palette: Palette, seed = 1): ArtSpec {
   const c = toRgb(palette)
-  const hues = meshHues(c.accent)
+  const tones = buildTones(c)
   const rng = mulberry32(seed)
-  const patternIndex = Math.floor(rng() * COVER_PATTERNS.length) % COVER_PATTERNS.length
-  const build = COVER_PATTERNS[patternIndex] as (typeof COVER_PATTERNS)[number]
-  const layers = build(c, hues, rng)
-  layers.push({ kind: 'grain', amount: 0.01 })
+  const familyIndex = Math.floor(rng() * COVER_FAMILIES.length) % COVER_FAMILIES.length
+  const build = COVER_FAMILIES[familyIndex] as (typeof COVER_FAMILIES)[number]
+  const layers = build(c, tones, rng)
   return { width: COVER_WIDTH, height: COVER_HEIGHT, seed, layers }
 }
 
@@ -704,62 +656,30 @@ export function coverArt(palette: Palette, seed = 1): ArtSpec {
 
 const AVATAR_SIZE = 600
 
-/**
- * A 600×600 abstract "person" mark: a disc (head) over an arc (shoulders) —
- * never a real photo of a person. Across 8 seeds the backdrop and mark hue
- * rotate through even 45° steps in OKLCH, so a roster of demo authors reads
- * as eight distinct people rather than eight recolours of the same grey.
- */
+/** A 600×600 abstract "person" mark: a disc (head) over a disc (shoulders, cropped by the frame edge) on a flat companion-tone field — never a real photo of a person. */
 export function avatarArt(palette: Palette, seed = 1): ArtSpec {
   const c = toRgb(palette)
-  const hueStep = ((seed - 1) * 45) % 360
-  const mark = withMinChroma(withLightness(rotateHue(c.accent, hueStep), 0.02), 0.14)
-  const backdropA = withMinChroma(withLightness(rotateHue(c.accent, hueStep - 20), 0.28), 0.08)
-  const backdropB = withMinChroma(withLightness(rotateHue(c.accent, hueStep + 25), 0.05), 0.1)
+  const tones = buildTones(c)
+  const rng = mulberry32(seed)
+
+  const field = rng() < 0.5 ? tones.pale : mix(c.muted, tones.hue2, 0.25)
+  const mark = rng() < 0.5 ? c.accent : tones.deep
 
   const layers: ArtLayer[] = [
-    {
-      kind: 'gradient',
-      angle: 115,
-      stops: [
-        { at: 0, color: backdropA },
-        { at: 1, color: backdropB },
-      ],
-    },
-    {
-      kind: 'disc',
-      center: [0.5, 0.5],
-      radius: 0.62,
-      color: lighten(c.bg, 0.02),
-      alpha: 0.85,
-      fill: { type: 'radial', from: lighten(backdropA, 0.15), to: backdropB, focus: [0.5, 0.5] },
-    },
-    // Shoulders: the bottom half of a large disc, clipped by the frame edge.
-    {
-      kind: 'disc',
-      center: [0.5, 1.05],
-      radius: 0.5,
-      color: mark,
-      alpha: 1,
-      fill: { type: 'linear', from: lighten(mark, 0.08), to: darken(mark, 0.1), angle: 90 },
-    },
-    // Head.
-    {
-      kind: 'disc',
-      center: [0.5, 0.4],
-      radius: 0.19,
-      color: mark,
-      alpha: 1,
-      fill: {
-        type: 'radial',
-        from: lighten(mark, 0.18),
-        to: darken(mark, 0.08),
-        focus: [0.35, 0.3],
-      },
-    },
-    { kind: 'vignette', strength: 0.2 },
-    { kind: 'grain', amount: 0.015 },
+    { kind: 'fill', color: field },
+    { kind: 'disc', center: [0.5, 1.08], radius: 0.52, color: mark, alpha: 1 },
+    { kind: 'disc', center: [0.5, 0.4], radius: 0.2, color: mark, alpha: 1 },
   ]
+  if (rng() < 0.5) {
+    layers.push({
+      kind: 'ring',
+      center: [0.5, 0.5],
+      innerRadius: 0.42,
+      outerRadius: 0.432,
+      color: c.border,
+      alpha: 0.7,
+    })
+  }
 
   return { width: AVATAR_SIZE, height: AVATAR_SIZE, seed, layers }
 }
@@ -769,145 +689,102 @@ export function avatarArt(palette: Palette, seed = 1): ArtSpec {
 const LOGO_WIDTH = 400
 const LOGO_HEIGHT = 160
 
-const LOGO_MARK_COUNT = 8
-
-function buildLogoMark(kind: number, grey: ColorRGB, rng: () => number): readonly ArtLayer[] {
-  const center: readonly [number, number] = [0.16, 0.5]
-  switch (kind) {
-    case 0: {
-      // Circle-in-square: a filled square with a white circle "cut" from its centre.
-      return [
-        { kind: 'rect', center, width: 0.32, height: 0.32, radius: 0.05, color: grey, alpha: 0.85 },
-        { kind: 'disc', center, radius: 0.11, color: WHITE, alpha: 1 },
-      ]
-    }
-    case 1: {
-      // Three stacked bars.
-      return [0, 1, 2].map((i) => ({
-        kind: 'rect' as const,
-        center: [center[0], center[1] - 0.14 + i * 0.14] as const,
-        width: 0.3,
-        height: 0.07,
-        radius: 0.02,
-        color: grey,
-        alpha: 0.85 - i * 0.08,
-      }))
-    }
-    case 2: {
-      // A chevron: two thick diagonal strokes forming "<".
-      return [
-        {
-          kind: 'line',
-          center: [0.19, 0.38],
-          length: 0.22,
-          thickness: 0.045,
-          rotation: 55,
-          color: grey,
-          alpha: 0.85,
-        },
-        {
-          kind: 'line',
-          center: [0.19, 0.62],
-          length: 0.22,
-          thickness: 0.045,
-          rotation: -55,
-          color: grey,
-          alpha: 0.85,
-        },
-      ]
-    }
-    case 3: {
-      return [
-        { kind: 'polygon', center, radius: 0.22, sides: 6, rotation: 0, color: grey, alpha: 0.85 },
-      ]
-    }
-    case 4: {
-      // Two overlapping discs, Venn-diagram style. Plain alpha, not
-      // `screen`: a logo strip sits on a near-white card, and screen
-      // blending a grey disc onto white is a no-op — it stays white.
-      return [
-        {
-          kind: 'disc',
-          center: [center[0] - 0.06, center[1]],
-          radius: 0.16,
-          color: grey,
-          alpha: 0.5,
-        },
-        {
-          kind: 'disc',
-          center: [center[0] + 0.06, center[1]],
-          radius: 0.16,
-          color: grey,
-          alpha: 0.5,
-        },
-      ]
-    }
-    case 5: {
-      // A slash: one thick diagonal stroke.
-      return [
-        {
-          kind: 'line',
-          center,
-          length: 0.38,
-          thickness: 0.06,
-          rotation: 35,
-          color: grey,
-          alpha: 0.85,
-        },
-      ]
-    }
-    case 6: {
-      // A dot grid: nine individual discs, bounded to the mark's own area
-      // (never a canvas-tiling `dots` layer, which would spill across the
-      // whole wordmark).
-      const layers: ArtLayer[] = []
-      for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 3; col++) {
-          layers.push({
-            kind: 'disc',
-            center: [center[0] - 0.09 + col * 0.09, center[1] - 0.09 + row * 0.09],
-            radius: 0.025,
-            color: grey,
-            alpha: 0.8,
-          })
-        }
-      }
-      return layers
-    }
-    default: {
-      // A triangle — anti-aliased edges stand in for "rounded" corners; a
-      // true rounded-corner polygon SDF is out of scope for this module.
-      return [
-        {
-          kind: 'polygon',
-          center,
-          radius: 0.24,
-          sides: 3,
-          rotation: Math.floor(rng() * 3) * 5,
-          color: grey,
-          alpha: 0.85,
-        },
-      ]
-    }
-  }
-}
-
-/** A 400×160 neutral, abstract wordmark stand-in — a geometric mark plus two bars, always in neutral greys so it reads as a client logo in a logo strip, never a real brand. Eight distinct mark shapes across seeds. */
+/** A 400×160 neutral, abstract wordmark stand-in — a geometric mark plus two bars, always in flat mid-grey so it reads as a client logo in a logo strip, never a real brand. 8 distinct marks across seeds. */
 export function logoArt(seed = 1): ArtSpec {
   const rng = mulberry32(seed)
   const grey: ColorRGB = { r: 0.42, g: 0.44, b: 0.47 }
-  const markKind = Math.floor(rng() * LOGO_MARK_COUNT) % LOGO_MARK_COUNT
+  const markKind = Math.floor(rng() * 8) % 8
+  const center: Vec2 = [0.16, 0.5]
 
-  const layers: ArtLayer[] = [
-    {
-      kind: 'gradient',
-      angle: 90,
-      stops: [
-        { at: 0, color: WHITE },
-        { at: 1, color: WHITE },
-      ],
-    },
-    ...buildLogoMark(markKind, grey, rng),
+  let mark: ArtLayer
+  switch (markKind) {
+    case 0:
+      mark = {
+        kind: 'polygon',
+        center,
+        radius: 0.24,
+        sides: 3,
+        rotation: 0,
+        color: grey,
+        alpha: 0.85,
+      }
+      break
+    case 1:
+      mark = {
+        kind: 'ring',
+        center,
+        innerRadius: 0.16,
+        outerRadius: 0.24,
+        color: grey,
+        alpha: 0.85,
+      }
+      break
+    case 2:
+      mark = {
+        kind: 'rect',
+        center,
+        width: 0.32,
+        height: 0.32,
+        radius: 0.06,
+        rotation: 8,
+        color: grey,
+        alpha: 0.85,
+      }
+      break
+    case 3:
+      mark = {
+        kind: 'polygon',
+        center,
+        radius: 0.24,
+        sides: 6,
+        rotation: 0,
+        color: grey,
+        alpha: 0.85,
+      }
+      break
+    case 4:
+      mark = {
+        kind: 'rect',
+        center,
+        width: 0.3,
+        height: 0.3,
+        radius: 0.02,
+        rotation: 45,
+        color: grey,
+        alpha: 0.85,
+      }
+      break
+    case 5:
+      mark = { kind: 'disc', center, radius: 0.22, color: grey, alpha: 0.85 }
+      break
+    case 6:
+      mark = {
+        kind: 'polygon',
+        center,
+        radius: 0.24,
+        sides: 3,
+        rotation: 90,
+        color: grey,
+        alpha: 0.85,
+      }
+      break
+    default:
+      mark = { kind: 'disc', center, radius: 0.22, color: grey, alpha: 0.85 }
+  }
+
+  const layers: ArtLayer[] = [{ kind: 'fill', color: WHITE }, mark]
+  if (markKind === 7) {
+    // A white bar crops the disc into a "circle + bar" mark distinct from case 5's plain disc.
+    layers.push({
+      kind: 'rect',
+      center,
+      width: 0.07,
+      height: 0.32,
+      color: WHITE,
+      alpha: 1,
+    })
+  }
+  layers.push(
     {
       kind: 'rect',
       center: [0.52, 0.42],
@@ -926,7 +803,7 @@ export function logoArt(seed = 1): ArtSpec {
       color: grey,
       alpha: 0.35,
     },
-  ]
+  )
 
   return { width: LOGO_WIDTH, height: LOGO_HEIGHT, seed, layers }
 }
@@ -934,268 +811,205 @@ export function logoArt(seed = 1): ArtSpec {
 // ---------------------------------------------------------------- product
 
 const PRODUCT_SIZE = 1000
-const PRODUCT_OBJECT_COUNT = 6
 
-/** A pill/"stadium" rect — `radius` equal to half the shorter dimension — the module's stand-in for a capsule body or a squashed contact-shadow ellipse. */
-function stadium(
-  center: readonly [number, number],
-  width: number,
-  height: number,
-  color: ColorRGB,
-  extra: Partial<
-    Pick<Extract<ArtLayer, { kind: 'rect' }>, 'fill' | 'shadow' | 'alpha' | 'rotation'>
-  > = {},
-): ArtLayer {
-  return {
-    kind: 'rect',
-    center,
-    width,
-    height,
-    radius: height / 2,
-    color,
-    ...extra,
-  }
-}
+/** A 1000×1000 centred, flat stylised object — a store's demo catalogue. Hard offset shadows (a darker solid shape, never blurred), a solid or two-tone backdrop, a floor line, one flat highlight shape per object. 6 shapes across seeds. */
+export function productArt(palette: Palette, seed = 1): ArtSpec {
+  const c = toRgb(palette)
+  const tones = buildTones(c)
+  const rng = mulberry32(seed)
 
-function buildProductObject(
-  shape: number,
-  objectColor: ColorRGB,
-  rng: () => number,
-): {
-  readonly object: readonly ArtLayer[]
-  readonly specular: ArtLayer
-  readonly contactWidth: number
-} {
-  const lit: Fill = {
-    type: 'linear',
-    from: lighten(objectColor, 0.22),
-    to: darken(objectColor, 0.16),
-    angle: 128,
-  }
-  const shadow = { offset: [0.014, 0.018] as const, blur: 0.03, alpha: 0.32 }
+  const objectColor = rng() < 0.5 ? c.accent : tones.deep
+  const shape = Math.floor(rng() * 6) % 6
+  const backdrop = rng() < 0.5 ? c.muted : tones.pale
+  const twoTone = rng() < 0.5
+  const shadowColor = mix(c.fg, backdrop, 0.55)
+
+  const layers: ArtLayer[] = twoTone
+    ? [{ kind: 'bands', angle: 90, colors: [backdrop, darken(backdrop, 0.06)], count: 2 }]
+    : [{ kind: 'fill', color: backdrop }]
+
+  layers.push(segment([0.14, 0.78], [0.86, 0.78], PRODUCT_SIZE, PRODUCT_SIZE, 0.004, c.border, 0.8))
 
   switch (shape) {
     case 0: {
-      // Rounded card / box.
-      const object: ArtLayer = {
-        kind: 'rect',
-        center: [0.5, 0.5],
-        width: 0.44,
-        height: 0.5,
-        radius: 0.07,
-        rotation: -4,
-        color: objectColor,
-        fill: lit,
-        shadow,
-      }
-      const specular: ArtLayer = {
-        kind: 'glow',
-        center: [0.36, 0.3],
-        radius: 0.22,
-        color: WHITE,
-        alpha: 0.35,
-        falloff: 1.8,
-      }
-      return { object: [object], specular, contactWidth: 0.4 }
+      // Bottle/capsule.
+      layers.push(
+        {
+          kind: 'rect',
+          center: [0.52, 0.55],
+          width: 0.22,
+          height: 0.58,
+          radius: 0.11,
+          color: shadowColor,
+          alpha: 0.3,
+        },
+        {
+          kind: 'rect',
+          center: [0.5, 0.53],
+          width: 0.22,
+          height: 0.58,
+          radius: 0.11,
+          color: objectColor,
+          alpha: 1,
+        },
+        {
+          kind: 'rect',
+          center: [0.5, 0.22],
+          width: 0.09,
+          height: 0.1,
+          radius: 0.02,
+          color: objectColor,
+          alpha: 1,
+        },
+      )
+      break
     }
     case 1: {
-      // Capsule / bottle: a stadium body with a narrower stadium neck.
-      const body = stadium([0.5, 0.56], 0.32, 0.42, objectColor, { fill: lit, shadow })
-      const neck = stadium([0.5, 0.28], 0.14, 0.16, darken(objectColor, 0.1), {
-        fill: {
-          type: 'linear',
-          from: lighten(objectColor, 0.1),
-          to: darken(objectColor, 0.2),
-          angle: 90,
+      // Box.
+      layers.push(
+        {
+          kind: 'rect',
+          center: [0.53, 0.55],
+          width: 0.42,
+          height: 0.42,
+          radius: 0.03,
+          color: shadowColor,
+          alpha: 0.3,
         },
-      })
-      const specular: ArtLayer = {
-        kind: 'glow',
-        center: [0.4, 0.4],
-        radius: 0.16,
-        color: WHITE,
-        alpha: 0.3,
-        falloff: 2,
-      }
-      return { object: [body, neck], specular, contactWidth: 0.3 }
+        {
+          kind: 'rect',
+          center: [0.5, 0.52],
+          width: 0.42,
+          height: 0.42,
+          radius: 0.03,
+          color: objectColor,
+          alpha: 1,
+        },
+        segment(
+          [0.5, 0.31],
+          [0.5, 0.73],
+          PRODUCT_SIZE,
+          PRODUCT_SIZE,
+          0.006,
+          lighten(objectColor, 0.3),
+          0.6,
+        ),
+      )
+      break
     }
     case 2: {
-      // Sphere with radial shading.
-      const object: ArtLayer = {
-        kind: 'disc',
-        center: [0.5, 0.5],
-        radius: 0.28,
-        color: objectColor,
-        fill: {
-          type: 'radial',
-          from: lighten(objectColor, 0.3),
-          to: darken(objectColor, 0.22),
-          focus: [0.32, 0.28],
+      // Sphere, flattened, with a crescent highlight (a lighter disc partly re-covered by an object-coloured disc).
+      const radius = 0.28
+      layers.push(
+        { kind: 'disc', center: [0.53, 0.55], radius, color: shadowColor, alpha: 0.3 },
+        { kind: 'disc', center: [0.5, 0.52], radius, color: objectColor, alpha: 1 },
+        {
+          kind: 'disc',
+          center: [0.5 - radius * 0.35, 0.52 - radius * 0.35],
+          radius: radius * 0.36,
+          color: lighten(objectColor, 0.4),
+          alpha: 1,
         },
-        shadow,
-      }
-      const specular: ArtLayer = {
-        kind: 'glow',
-        center: [0.4, 0.36],
-        radius: 0.13,
-        color: WHITE,
-        alpha: 0.55,
-        falloff: 2.2,
-      }
-      return { object: [object], specular, contactWidth: 0.42 }
+        {
+          kind: 'disc',
+          center: [0.5 - radius * 0.22, 0.52 - radius * 0.22],
+          radius: radius * 0.3,
+          color: objectColor,
+          alpha: 1,
+        },
+      )
+      break
     }
     case 3: {
-      // Stacked cards, fanned slightly.
-      const back: ArtLayer = {
-        kind: 'rect',
-        center: [0.54, 0.56],
-        width: 0.4,
-        height: 0.46,
-        radius: 0.05,
-        rotation: 10,
-        color: darken(objectColor, 0.18),
-        fill: {
-          type: 'linear',
-          from: lighten(objectColor, 0.02),
-          to: darken(objectColor, 0.26),
-          angle: 128,
+      // Ring.
+      layers.push(
+        {
+          kind: 'ring',
+          center: [0.53, 0.55],
+          innerRadius: 0.2,
+          outerRadius: 0.3,
+          color: shadowColor,
+          alpha: 0.3,
         },
-      }
-      const mid: ArtLayer = {
-        kind: 'rect',
-        center: [0.49, 0.53],
-        width: 0.4,
-        height: 0.46,
-        radius: 0.05,
-        rotation: -3,
-        color: darken(objectColor, 0.06),
-        fill: {
-          type: 'linear',
-          from: lighten(objectColor, 0.1),
-          to: darken(objectColor, 0.14),
-          angle: 128,
+        {
+          kind: 'ring',
+          center: [0.5, 0.52],
+          innerRadius: 0.2,
+          outerRadius: 0.3,
+          color: objectColor,
+          alpha: 1,
         },
-      }
-      const front: ArtLayer = {
-        kind: 'rect',
-        center: [0.47, 0.5],
-        width: 0.4,
-        height: 0.46,
-        radius: 0.05,
-        rotation: -12,
-        color: objectColor,
-        fill: lit,
-        shadow,
-      }
-      const specular: ArtLayer = {
-        kind: 'glow',
-        center: [0.34, 0.32],
-        radius: 0.16,
-        color: WHITE,
-        alpha: 0.35,
-        falloff: 2,
-      }
-      return { object: [back, mid, front], specular, contactWidth: 0.5 }
+      )
+      break
     }
     case 4: {
-      // Torus / ring with shading.
-      const object: ArtLayer = {
-        kind: 'ring',
-        center: [0.5, 0.5],
-        innerRadius: 0.16,
-        outerRadius: 0.3,
-        color: objectColor,
-        fill: {
-          type: 'linear',
-          from: lighten(objectColor, 0.2),
-          to: darken(objectColor, 0.18),
-          angle: 128,
-        },
-        shadow,
-      }
-      const specular: ArtLayer = {
-        kind: 'glow',
-        center: [0.38, 0.32],
-        radius: 0.1,
-        color: WHITE,
-        alpha: 0.4,
-        falloff: 2.4,
-      }
-      return { object: [object], specular, contactWidth: 0.44 }
+      // Stacked cards.
+      const positions: readonly Vec2[] = [
+        [0.44, 0.62],
+        [0.5, 0.52],
+        [0.56, 0.42],
+      ]
+      const colors = [tones.hue2, tones.hue1, objectColor]
+      positions.forEach((pos, i) => {
+        const rotation = (i - 1) * 6
+        layers.push(
+          {
+            kind: 'rect',
+            center: [pos[0] + 0.02, pos[1] + 0.03],
+            width: 0.34,
+            height: 0.22,
+            radius: 0.02,
+            rotation,
+            color: shadowColor,
+            alpha: 0.25,
+          },
+          {
+            kind: 'rect',
+            center: pos,
+            width: 0.34,
+            height: 0.22,
+            radius: 0.02,
+            rotation,
+            color: colors[i] ?? objectColor,
+            alpha: 1,
+          },
+        )
+      })
+      break
     }
     default: {
       // Hexagonal tile.
-      const object: ArtLayer = {
-        kind: 'polygon',
-        center: [0.5, 0.5],
-        radius: 0.3,
-        sides: 6,
-        rotation: 10 + rng() * 10,
-        color: objectColor,
-        fill: lit,
-        shadow,
-      }
-      const specular: ArtLayer = {
-        kind: 'glow',
-        center: [0.38, 0.32],
-        radius: 0.14,
-        color: WHITE,
-        alpha: 0.32,
-        falloff: 2,
-      }
-      return { object: [object], specular, contactWidth: 0.4 }
+      layers.push(
+        {
+          kind: 'polygon',
+          center: [0.53, 0.55],
+          radius: 0.28,
+          sides: 6,
+          rotation: 0,
+          color: shadowColor,
+          alpha: 0.3,
+        },
+        {
+          kind: 'polygon',
+          center: [0.5, 0.52],
+          radius: 0.28,
+          sides: 6,
+          rotation: 0,
+          color: objectColor,
+          alpha: 1,
+        },
+        {
+          kind: 'polygon',
+          center: [0.5, 0.52],
+          radius: 0.12,
+          sides: 6,
+          rotation: 0,
+          color: lighten(objectColor, 0.3),
+          alpha: 1,
+        },
+      )
     }
   }
-}
-
-/**
- * A 1000×1000 centred abstract "object" on a soft backdrop, for a store's
- * demo catalogue — six object families in rotation across seeds (rounded
- * card, capsule, sphere, stacked cards, torus, hexagonal tile), each
- * gradient-shaded, drop-shadowed, and lifted by a specular highlight so it
- * reads as a stylised 3D product render rather than a flat coloured shape.
- */
-export function productArt(palette: Palette, seed = 1): ArtSpec {
-  const c = toRgb(palette)
-  const rng = mulberry32(seed)
-  const objectColor = withMinChroma(mix(c.accent, c.fg, rng() * 0.15), 0.1)
-  const shape = Math.floor(rng() * PRODUCT_OBJECT_COUNT) % PRODUCT_OBJECT_COUNT
-  const { object, specular, contactWidth } = buildProductObject(shape, objectColor, rng)
-
-  const layers: ArtLayer[] = [
-    {
-      kind: 'gradient',
-      angle: 90,
-      stops: [
-        { at: 0, color: lighten(c.muted, 0.12) },
-        { at: 1, color: darken(c.muted, 0.04) },
-      ],
-    },
-    // Horizon: a thin line grounding the backdrop as a floor rather than an infinite void.
-    {
-      kind: 'line',
-      center: [0.5, 0.78],
-      length: 1,
-      thickness: 0.002,
-      rotation: 0,
-      color: darken(c.muted, 0.18),
-      alpha: 0.35,
-    },
-    {
-      kind: 'glow',
-      center: [0.5, 0.38],
-      radius: 0.55,
-      color: lighten(c.bg, 0.06),
-      alpha: 0.45,
-      falloff: 1.7,
-    },
-    // Contact shadow: a squashed stadium, not a disc, under the object's base.
-    stadium([0.5, 0.79], contactWidth, contactWidth * 0.14, darken(c.muted, 0.16), { alpha: 0.4 }),
-    ...object,
-    specular,
-    { kind: 'vignette', strength: 0.14 },
-    { kind: 'grain', amount: 0.012 },
-  ]
 
   return { width: PRODUCT_SIZE, height: PRODUCT_SIZE, seed, layers }
 }

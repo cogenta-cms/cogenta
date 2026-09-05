@@ -22,7 +22,13 @@ import { buildSaasDemoPages } from '../src/blueprints/saas.js'
 // before, minus the (now media-dependent) hero image, which this test does
 // not exercise.
 import { buildStoreDemoPages } from '../src/blueprints/store.js'
-import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
+// `vitrine`'s demo pages are now built from `SeedContext.media` and the
+// real service ids assigned at seed time (L25 pro pass) — like `saas` and
+// `store` above, `buildVitrineDemoPages({})` renders the same pages this
+// test checked before, minus the (now media-dependent) hero/logo-strip/
+// media-figure images and the featureGrid-to-service links, none of which
+// this test exercises.
+import { buildVitrineDemoPages } from '../src/blueprints/vitrine.js'
 
 const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
@@ -30,6 +36,7 @@ const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
 const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
+const VITRINE_DEMO_PAGES = buildVitrineDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

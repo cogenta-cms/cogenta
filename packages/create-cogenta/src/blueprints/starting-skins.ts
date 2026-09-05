@@ -224,6 +224,39 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     shadow: { sm: '0 1px 3px rgba(35, 27, 22, 0.14)', md: '0 16px 40px rgba(35, 27, 22, 0.22)' },
   },
   /**
+   * A B2B showcase site (L25, `@cogenta/theme-entreprise`'s pro pass): a
+   * confident, premium consultancy register — `packages/theme-entreprise/
+   * tokens.json`, copied here rather than referenced (the same independent-
+   * copy discipline `restaurant`'s own entry below already follows), so a
+   * freshly scaffolded `vitrine` site's applied skin and its active theme's
+   * own design system agree from the first render. A deep forest-green
+   * accent rather than the more expected "corporate blue", near-square
+   * radii and a comfortable density matching the theme's own
+   * "structured and edged" elevation language.
+   */
+  vitrine: {
+    color: {
+      bg: '#fbfaf7',
+      fg: '#14201a',
+      accent: '#1f5f45',
+      accentFg: '#ffffff',
+      muted: '#eef1ec',
+      mutedFg: '#42493f',
+      border: '#d7ddd2',
+    },
+    font: {
+      sans: "'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      serif: "'Source Serif 4', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.2,
+      baseSize: '1rem',
+    },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0.125rem', md: '0.25rem', lg: '0.5rem' },
+    motion: { duration: '160ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    shadow: { sm: '0 1px 2px rgba(20, 32, 26, 0.06)', md: '0 12px 32px rgba(20, 32, 26, 0.14)' },
+  },
+  /**
    * A nonprofit/community site (L25, `@cogenta/theme-association`): warm,
    * human, trustworthy — a deep-green accent on a light warm off-white
    * (rather than the canonical blue's corporate read), generously rounded

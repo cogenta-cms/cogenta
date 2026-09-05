@@ -18,6 +18,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { page, service, VITRINE_COLLECTIONS } from '../src/blueprints/vitrine.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
+// The pro-pass blueprint (L25) now seeds sixteen real procedural images
+// (hero, engagement shot, five trust-strip logos, three testimonial
+// avatars, six service covers) through the real media pipeline — the same
+// order of magnitude as `restaurant`'s own scaffold, which documents this
+// exact timeout for the same reason.
+const SCAFFOLD_TIMEOUT = 120_000
+
 describe('scaffoldSite — vitrine blueprint', () => {
   const dirs: string[] = []
 
@@ -38,61 +45,73 @@ describe('scaffoldSite — vitrine blueprint', () => {
     }
   })
 
-  it('writes a schema file loadCollections can load back, with service/testimonial/page', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
-    dirs.push(targetDir)
+  it(
+    'writes a schema file loadCollections can load back, with service/testimonial/page',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
+      dirs.push(targetDir)
 
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Business',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'vitrine',
-    })
+      const result = await scaffoldSite({
+        targetDir,
+        siteName: 'My Business',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'vitrine',
+      })
 
-    expect(result.blueprintId).toBe('vitrine')
-    expect(result.fellBackToBlank).toBe(false)
+      expect(result.blueprintId).toBe('vitrine')
+      expect(result.fellBackToBlank).toBe(false)
 
-    const collections = await loadCollections(targetDir)
-    expect(collections.map((c) => c.name).sort()).toEqual(['page', 'service', 'testimonial'])
-  })
+      const collections = await loadCollections(targetDir)
+      expect(collections.map((c) => c.name).sort()).toEqual(['page', 'service', 'testimonial'])
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 
-  it('seeds real demo services, testimonials and pages into real SQLite', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
-    dirs.push(targetDir)
+  it(
+    'seeds real demo services, testimonials and pages into real SQLite',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
+      dirs.push(targetDir)
 
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Business',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'vitrine',
-    })
-    expect(result.migrateExitCode).toBe(0)
-    expect(result.usersExitCode).toBe(0)
+      const result = await scaffoldSite({
+        targetDir,
+        siteName: 'My Business',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'vitrine',
+      })
+      expect(result.migrateExitCode).toBe(0)
+      expect(result.usersExitCode).toBe(0)
 
-    const logger = createLogger({ level: 'silent' })
-    const selection = await createDatabaseRegistry({ logger }).select({
-      driver: 'sqlite',
-      url: join(targetDir, '.cogenta', 'site.db'),
-    })
-    try {
-      const serviceStore = createContentStore({ db: selection.instance, collection: service })
-      const pageStore = createContentStore({ db: selection.instance, collection: page })
+      const logger = createLogger({ level: 'silent' })
+      const selection = await createDatabaseRegistry({ logger }).select({
+        driver: 'sqlite',
+        url: join(targetDir, '.cogenta', 'site.db'),
+      })
+      try {
+        const serviceStore = createContentStore({ db: selection.instance, collection: service })
+        const pageStore = createContentStore({ db: selection.instance, collection: page })
 
-      const services = await serviceStore.list()
-      expect(services.items.length).toBeGreaterThanOrEqual(3)
+        const services = await serviceStore.list()
+        expect(services.items.length).toBeGreaterThanOrEqual(6)
 
-      const pages = await pageStore.list()
-      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(['about', 'home'])
-    } finally {
-      await selection.dispose()
-    }
-  })
+        const pages = await pageStore.list()
+        expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
+          'about',
+          'contact',
+          'home',
+        ])
+      } finally {
+        await selection.dispose()
+      }
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 
   it('resolves /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(VITRINE_COLLECTIONS, '/about')).toEqual({
@@ -102,67 +121,71 @@ describe('scaffoldSite — vitrine blueprint', () => {
     })
   })
 
-  it('renders the seeded home page into real HTML through the real theme-canonical pipeline', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
-    dirs.push(targetDir)
+  it(
+    'renders the seeded home page into real HTML through the real theme-canonical pipeline',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-vitrine-'))
+      dirs.push(targetDir)
 
-    await scaffoldSite({
-      targetDir,
-      siteName: 'My Business',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'vitrine',
-    })
+      await scaffoldSite({
+        targetDir,
+        siteName: 'My Business',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+        blueprintId: 'vitrine',
+      })
 
-    const logger = createLogger({ level: 'silent' })
-    const selection = await createDatabaseRegistry({ logger }).select({
-      driver: 'sqlite',
-      url: join(targetDir, '.cogenta', 'site.db'),
-    })
-    try {
-      const pageStore = createContentStore({ db: selection.instance, collection: page })
-      const serviceStore = createContentStore({ db: selection.instance, collection: service })
+      const logger = createLogger({ level: 'silent' })
+      const selection = await createDatabaseRegistry({ logger }).select({
+        driver: 'sqlite',
+        url: join(targetDir, '.cogenta', 'site.db'),
+      })
+      try {
+        const pageStore = createContentStore({ db: selection.instance, collection: page })
+        const serviceStore = createContentStore({ db: selection.instance, collection: service })
 
-      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
-      expect(home).toBeDefined()
-      if (home === undefined) throw new Error('unreachable')
+        const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
+        expect(home).toBeDefined()
+        if (home === undefined) throw new Error('unreachable')
 
-      const pageContent: PageContent = {
-        title: home.values.title as string,
-        blocks: (home.blocks.blocks ?? []).map(
-          (block): VocabularyBlock =>
-            ({
-              _key: block.key,
-              _type: block.type,
-              _version: '1.0.0',
-              ...block.data,
-            }) as VocabularyBlock,
-        ),
+        const pageContent: PageContent = {
+          title: home.values.title as string,
+          blocks: (home.blocks.blocks ?? []).map(
+            (block): VocabularyBlock =>
+              ({
+                _key: block.key,
+                _type: block.type,
+                _version: '1.0.0',
+                ...block.data,
+              }) as VocabularyBlock,
+          ),
+        }
+
+        const services = await serviceStore.list()
+        const themeEntries: readonly ThemeContentEntry[] = services.items.map((entry) => ({
+          id: entry.id,
+          collection: 'service',
+          locale: entry.locale,
+          status: entry.status,
+          ...entry.values,
+        }))
+
+        const ctx = fakeThemeContext()
+        const entries: FetchedEntries = { 'demo-home-services-grid': themeEntries }
+
+        const html = htmlOf(renderPage(pageContent, ctx, entries))
+
+        expect(html).toContain('A consultancy site that shows the work, not just the pitch')
+        expect(html).toContain('cg-collection')
+        expect(html).toContain('Brand strategy')
+      } finally {
+        await selection.dispose()
       }
-
-      const services = await serviceStore.list()
-      const themeEntries: readonly ThemeContentEntry[] = services.items.map((entry) => ({
-        id: entry.id,
-        collection: 'service',
-        locale: entry.locale,
-        status: entry.status,
-        ...entry.values,
-      }))
-
-      const ctx = fakeThemeContext()
-      const entries: FetchedEntries = { 'demo-home-services': themeEntries }
-
-      const html = htmlOf(renderPage(pageContent, ctx, entries))
-
-      expect(html).toContain('A showcase site that says what you do')
-      expect(html).toContain('cg-collection')
-      expect(html).toContain('Brand strategy')
-    } finally {
-      await selection.dispose()
-    }
-  })
+    },
+    SCAFFOLD_TIMEOUT,
+  )
 })
 
 function htmlOf(node: HtmlNode | null): string {
@@ -181,9 +204,18 @@ function fakeThemeContext(): RenderContext {
     locale: 'en',
     url: new URL('http://localhost:4000/home'),
     t: (key) => key,
-    image: () => {
-      throw new Error('not used by this test')
-    },
+    // The home hero now carries a real `media` id (L25's demo-art pipeline)
+    // — a minimal, honest `ImageSource` stands in for the real image
+    // pipeline, which this test does not otherwise exercise.
+    image: (media) => ({
+      kind: 'image',
+      src: `/_image?id=${media}`,
+      srcset: '',
+      width: 1600,
+      height: 1000,
+      alt: 'vitrine demo art',
+      focal: null,
+    }),
     link: (target) => {
       if (typeof target === 'string') return target
       if ('path' in target) return target.path

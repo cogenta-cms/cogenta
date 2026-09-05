@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -31,6 +32,14 @@ import {
  * (`theme@1.4`) above Cogenta's own credit (or its white-label replacement).
  * `brandingHtml` is placed exactly once, inside the footer, exactly as
  * received: never altered, never dropped.
+ *
+ * The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+ * theme-kit`, L26) sits beside the mobile menu button, outside the `<nav>`
+ * it controls the collapse of — the `<nav>` panel is hidden under the
+ * breakpoint until the checkbox is checked, but a visitor must be able to
+ * flip appearance without opening that panel first, on desktop or mobile.
+ * This module ships no CSS of its own for it (`base.css` owns
+ * `.cg-theme-toggle`, in this theme's own visual register, not canonical's).
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -68,6 +77,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const footerNavList = renderNavList(input.footerNav)
   // A B2B header is a corporate identity slot before it is a wordmark slot.
   const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
@@ -76,6 +86,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
     `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
     `</label>` +
+    `${themeToggle}` +
     `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
     `${headerNavList}${headerAction}` +
     `</nav>` +

@@ -6,6 +6,7 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
+  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -108,9 +109,26 @@ function renderKnownBlock(
  * mandatory — it is what lets the visual page builder, L16, map a clicked
  * element back to the block that produced it, whatever theme is installed).
  *
- * `pageHasOwnHeading` (a `hero` present) decides whether a second `<h1>` is
- * needed: without one, nothing else on the page renders a heading at that
- * level, and the page would have no `h1` at all.
+ * `renderEntryHeader` (`theme@1.4`) draws the eyebrow/title/excerpt/meta/
+ * cover furniture for a page backed by a real content entry — the store's
+ * own `product` collection routes each item to its own page but declares
+ * neither a `blocks` nor a `richText` field, so it reaches here with an
+ * empty block list and `page.entry` is the *only* furniture such a page has:
+ * a product's photo (`entryImage`'s `photo` convention) and its
+ * `description` (`entryExcerpt`'s convention) both surface automatically.
+ * It already returns `null` for a page with no `entry` meta *and* for one
+ * whose blocks draw their own heading (a `hero`), so the bare
+ * `<h1 class="ce-page__title">` fallback below is the right markup in both
+ * of those cases and only those — never a double heading, and never a page
+ * with none at all.
+ *
+ * `PageEntryMeta` has no room for a schema-specific field, so a product's
+ * own page cannot show its `price`/`inStock`/`category` without a contract D
+ * change (out of scope here, and not needed): every one of those already
+ * has a real, prominent home on the product grid card
+ * (`blocks/collection-list.ts`), which is where a shopper compares them
+ * across products anyway — this is the theme's honest limit, not an
+ * oversight.
  */
 export function renderPage(
   page: PageContent,
@@ -118,10 +136,14 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
+  const entryHeader = renderEntryHeader(page, ctx)
   return h(
     'main',
     { class: 'ce-main', id: 'cg-main' },
-    pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'ce-page__title' }, page.title),
+    entryHeader,
+    entryHeader === null && !pageHasOwnHeading(page.blocks)
+      ? h('h1', { class: 'ce-page__title' }, page.title)
+      : null,
     page.blocks.map((block) =>
       withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
     ),

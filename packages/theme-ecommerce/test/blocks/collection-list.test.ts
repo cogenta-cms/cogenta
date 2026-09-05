@@ -27,22 +27,68 @@ describe('collectionList', () => {
     expect(html).not.toContain('<ul')
   })
 
-  it('renders the publish date as a badge, formatted for the locale', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('class="ce-entry__badge"')
-    expect(html).toContain('datetime="2026-02-11T09:00:00.000Z"')
-  })
-
-  it('renders no badge when the entry carries no usable date', () => {
-    const undated = [{ ...ENTRIES[0], publishedAt: undefined } as (typeof ENTRIES)[number]]
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, undated))
-    expect(html).not.toContain('ce-entry__badge')
-  })
-
-  it('renders the excerpt when the entry carries one', () => {
+  it('renders the excerpt when the entry has no price', () => {
     const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
     expect(html).toContain('class="ce-entry__excerpt"')
     expect(html).toContain('Why the render process holds neither the secrets nor the database.')
+  })
+
+  it('renders a formatted price instead of the excerpt when the entry has one (raw contract-A data, read by convention)', () => {
+    const priced = [{ ...ENTRIES[0], price: 168 } as (typeof ENTRIES)[number]]
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, priced))
+    expect(html).toContain('class="ce-entry__price"')
+    expect(html).not.toContain('ce-entry__excerpt')
+    // `makeContext()`'s locale is `en`: `Intl.NumberFormat('en', { style: 'currency', currency: 'EUR' })`.
+    expect(html).toMatch(/class="ce-entry__price">€168\.00</)
+  })
+
+  it('omits the price entirely when the field is not a finite number', () => {
+    const invalid = [{ ...ENTRIES[0], price: 'a lot' } as unknown as (typeof ENTRIES)[number]]
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, invalid))
+    expect(html).not.toContain('ce-entry__price')
+  })
+
+  it('renders an "Out of stock" badge over the image only when inStock is literally false', () => {
+    const outOfStock = [
+      { ...ENTRIES[0], photo: 'media-hero', inStock: false } as unknown as (typeof ENTRIES)[number],
+    ]
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, outOfStock))
+    expect(html).toContain('class="ce-entry__stock">Out of stock<')
+  })
+
+  it('renders no stock badge when inStock is absent or true', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+    expect(html).not.toContain('ce-entry__stock')
+    const inStock = [
+      { ...ENTRIES[0], photo: 'media-hero', inStock: true } as unknown as (typeof ENTRIES)[number],
+    ]
+    expect(serialize(renderCollectionList(BLOCKS.collectionList, ctx, inStock))).not.toContain(
+      'ce-entry__stock',
+    )
+  })
+
+  it('renders a category chip when the entry carries one', () => {
+    const categorised = [
+      { ...ENTRIES[0], category: 'Apparel' } as unknown as (typeof ENTRIES)[number],
+    ]
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, categorised))
+    expect(html).toContain('class="ce-entry__category">Apparel<')
+  })
+
+  it('renders no category chip when the field is absent', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+    expect(html).not.toContain('ce-entry__category')
+  })
+
+  it("renders the entry's own image via entryImage, and no media wrapper when it has none", () => {
+    const withPhoto = [
+      { ...ENTRIES[0], photo: 'media-hero' } as unknown as (typeof ENTRIES)[number],
+    ]
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, withPhoto))
+    expect(html).toContain('class="ce-entry__media"')
+    expect(html).toContain('class="ce-entry__image"')
+    const withoutPhoto = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+    expect(withoutPhoto).not.toContain('ce-entry__media')
   })
 
   it('renders the whole card as a single covering link via the title anchor', () => {

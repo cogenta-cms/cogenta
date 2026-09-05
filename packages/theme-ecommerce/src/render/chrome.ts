@@ -5,20 +5,33 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderSocialLinks,
+  serialize,
 } from '@cogenta/theme-kit'
 
 /**
  * The storefront's header and footer — real HTML strings, built independently
- * of the twelve block renderers (contract D's chrome extension point is a
+ * of the seventeen block renderers (contract D's chrome extension point is a
  * separate door from `renderPage`, and this theme uses it to look like a
  * retail site rather than a document).
  *
- * The header commits to more visual weight than a blog masthead: a taller
- * bar, a bold wordmark, an accent rule along the top edge. The footer reads
- * as a real storefront foot — a brand column beside the site's own
- * navigation, then a bottom bar carrying `brandingHtml` untouched (Cogenta's
- * credit or its white-label replacement — placed, never altered or
- * dropped).
+ * `theme@1.4` (L25 "templates pro") adds four fields, all optional: a
+ * `headerAction` button ("Shop now"), a CSS-only mobile menu (a checkbox +
+ * `<label>`, the same zero-JS mechanism `theme-saas` ships — not
+ * `<details>`/`<summary>`: a *closed* `<details>` cannot render its
+ * non-`<summary>` content at all in current Chrome, verified against a real
+ * browser while building `theme-docs`, and the fix there was to stop using
+ * `<details>` for the always-visible desktop nav; here there is only ever
+ * one nav panel, shown or hidden by a sibling selector, so the checkbox
+ * avoids that failure mode outright rather than working around it), and a
+ * real four-column footer: brand + `tagline`, the site's own footer nav,
+ * `social` (via `renderSocialLinks`), and a fourth column carrying
+ * `footerNote` above `brandingHtml` — placed exactly once, exactly as
+ * received, never altered or dropped.
+ *
+ * A site or a render that predates `1.4` gets exactly the `1.1` header/footer
+ * shape, byte for byte (`test/chrome.test.ts`'s "without the new fields"
+ * case) — every one of the four fields is rendered only when present.
  *
  * No cart icon, no search box, no "sign in" link is drawn here: this theme
  * ships no such feature (`@cogenta/commerce` is a separate backend this
@@ -27,7 +40,6 @@ import {
  */
 
 function renderNavLinks(links: readonly ChromeNavLink[], listClass: string): string {
-  if (links.length === 0) return ''
   const items = links
     .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
     .map((link) => {
@@ -42,35 +54,89 @@ function renderNavLinks(links: readonly ChromeNavLink[], listClass: string): str
   return items === '' ? '' : `<ul class="${listClass}">${items}</ul>`
 }
 
+/** The header's own call-to-action link (`theme@1.4`) — a filled button, the loudest single control in the bar. */
+function renderHeaderAction(action: ChromeInput['headerAction']): string {
+  if (action === undefined) return ''
+  return (
+    `<a class="cg-action ce-header__action" data-emphasis="primary" ` +
+    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
+  )
+}
+
+/** A hamburger mark drawn from three stacked bars — no icon font, no glyph a font might not ship. */
+function toggleGlyph(): string {
+  return (
+    '<span class="ce-nav-toggle-bar"></span>' +
+    '<span class="ce-nav-toggle-bar"></span>' +
+    '<span class="ce-nav-toggle-bar"></span>'
+  )
+}
+
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteName = escapeText(input.site.name)
   const homeHref = escapeAttribute(input.homeHref)
   const headerNav = renderNavLinks(input.headerNav, 'ce-menu ce-menu--header')
   const footerNav = renderNavLinks(input.footerNav, 'ce-menu ce-menu--footer')
+  const headerAction = renderHeaderAction(input.headerAction)
   // A storefront's header bar is exactly where a retailer expects its logo.
   // The footer's brand link and the bottom bar keep the name in text: a
   // shopper landing on a page whose images failed still knows whose shop
   // this is.
   const mark = renderBrandMark(input.brand, { className: 'ce-header__logo' }) ?? siteName
 
+  // One nav panel, not two: below the breakpoint (`base.css`) it becomes a
+  // dropdown under the checkbox toggle; above it, the sibling selector shows
+  // it inline in the bar. Nothing at all is rendered — no toggle, no empty
+  // `<nav>` — when there is neither a real link nor a header action, which is
+  // what keeps `ce-header__nav`'s absence a true signal in `chrome.test.ts`.
+  const hasMenu = headerNav !== '' || headerAction !== ''
+  const toggle = !hasMenu
+    ? ''
+    : `<input type="checkbox" id="ce-nav-toggle" class="ce-nav-toggle-input" aria-label="Menu">` +
+      `<label for="ce-nav-toggle" class="ce-nav-toggle-label" aria-hidden="true">${toggleGlyph()}</label>`
+  const nav = !hasMenu
+    ? ''
+    : `<nav class="ce-header__nav" id="ce-nav" aria-label="Primary">${headerNav}${headerAction}</nav>`
+
   const header =
     `<header class="ce-header">` +
     `<div class="ce-header__bar">` +
     `<a class="ce-header__brand" href="${homeHref}">${mark}</a>` +
-    `${headerNav === '' ? '' : `<nav class="ce-header__nav" aria-label="Primary">${headerNav}</nav>`}` +
+    `${toggle}` +
+    `${nav}` +
     `</div></header>`
+
+  const tagline =
+    input.tagline === undefined
+      ? ''
+      : `<p class="ce-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
+  const social =
+    input.social === undefined
+      ? ''
+      : serialize(
+          renderSocialLinks(input.social, {
+            className: 'ce-footer__social',
+            itemClassName: 'ce-footer__social-item',
+          }) ?? { kind: 'text', value: '' },
+        )
+  const footerNote =
+    input.footerNote === undefined
+      ? ''
+      : `<p class="ce-footer__note">${escapeText(input.footerNote)}</p>`
 
   const footer =
     `<footer class="ce-footer">` +
     `<div class="ce-footer__top">` +
     `<div class="ce-footer__brand">` +
     `<a class="ce-footer__brand-link" href="${homeHref}">${siteName}</a>` +
+    `${tagline}` +
     `</div>` +
     `${footerNav === '' ? '' : `<nav class="ce-footer__nav" aria-label="Footer">${footerNav}</nav>`}` +
+    `${social === '' ? '' : `<div class="ce-footer__social-col">${social}</div>`}` +
+    `<div class="ce-footer__meta">${footerNote}${input.brandingHtml}</div>` +
     `</div>` +
     `<div class="ce-footer__bottom">` +
     `<span class="ce-footer__copy">${siteName}</span>` +
-    `${input.brandingHtml}` +
     `</div></footer>`
 
   return { header, footer }

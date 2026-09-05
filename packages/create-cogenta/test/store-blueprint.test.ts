@@ -36,14 +36,16 @@ describe('scaffoldSite — store blueprint', () => {
     }
   })
 
-  // `store` now renders and ingests 7 real demo images (one hero, six
-  // products) through the real media pipeline inside `scaffoldSite` (L25
-  // task A0b) — measured at ~25-30s end to end on this machine (sharp
-  // available; slower still on a WASM-only host), split roughly evenly
-  // between the procedural rendering itself and the same real variant
-  // generation a human's own upload would pay. Genuinely slower than
-  // vitest's default 5s, not a hang — a generous bound, not a tight one.
-  const SCAFFOLD_TIMEOUT = 60_000
+  // `store` now renders and ingests 23 real demo images (one hero, four
+  // category covers, twelve products, one avatar, five trust-badge marks)
+  // through the real media pipeline inside `scaffoldSite` (L25 task A0b,
+  // widened by the "templates pro" passe pro) — comparable in scale to
+  // `restaurant`'s own 20-image scaffold (`starting-skins.test.ts`), split
+  // roughly evenly between the procedural rendering itself and the same
+  // real variant generation a human's own upload would pay. Genuinely
+  // slower than vitest's default 5s, not a hang — a generous bound, not a
+  // tight one.
+  const SCAFFOLD_TIMEOUT = 120_000
 
   it(
     'writes a schema file loadCollections can load back, with product/page',
@@ -88,7 +90,11 @@ describe('scaffoldSite — store blueprint', () => {
 
       expect(result.skinSource).toBe('preset')
       const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
-      expect(tokens.color.accent).toBe('#0f766e')
+      // L25 "templates pro": the starting skin now matches
+      // `@cogenta/theme-ecommerce`'s own default (`tokens.json`) — a bold
+      // magenta accent, not the earlier placeholder teal that never matched
+      // what the theme actually ships.
+      expect(tokens.color.accent).toBe('#d6006d')
     },
     SCAFFOLD_TIMEOUT,
   )
@@ -127,10 +133,17 @@ describe('scaffoldSite — store blueprint', () => {
         // photo, ingested through the real media pipeline.
         expect(products.items.every((entry) => typeof entry.values.photo === 'string')).toBe(true)
 
-        const pages = await pageStore.list()
+        const pages = await pageStore.list({ limit: 20 })
+        // L25 "templates pro": the header/footer nav the passe pro asks for
+        // (Shop/New/Categories/About, Shop/Help/Legal) each need a real page
+        // to point at.
         expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
+          'about',
+          'categories',
+          'help',
           'home',
-          'shipping-returns',
+          'legal',
+          'new',
           'shop',
         ])
       } finally {
@@ -146,10 +159,10 @@ describe('scaffoldSite — store blueprint', () => {
       locale: null,
       params: { slug: 'field-jacket' },
     })
-    expect(matchPath(STORE_COLLECTIONS, '/shipping-returns')).toEqual({
+    expect(matchPath(STORE_COLLECTIONS, '/help')).toEqual({
       collection: 'page',
       locale: null,
-      params: { slug: 'shipping-returns' },
+      params: { slug: 'help' },
     })
   })
 
@@ -208,7 +221,10 @@ describe('scaffoldSite — store blueprint', () => {
         }))
 
         const ctx = fakeThemeContext(slugById)
-        const entries: FetchedEntries = { 'demo-home-products': themeEntries }
+        // L25 "templates pro": the home page's product grid is now the
+        // "New arrivals" section (`demo-home-new-arrivals`), one of several
+        // `collectionList` blocks on the redesigned home page.
+        const entries: FetchedEntries = { 'demo-home-new-arrivals': themeEntries }
 
         const html = htmlOf(renderPage(pageContent, ctx, entries))
 

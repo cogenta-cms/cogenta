@@ -7,7 +7,14 @@ import {
   f,
   validateCollectionSet,
 } from '@cogenta/schema'
-import { heroArt, type Palette, productArt } from '../demo-art/compositions.js'
+import {
+  avatarArt,
+  coverArt,
+  heroArt,
+  logoArt,
+  type Palette,
+  productArt,
+} from '../demo-art/compositions.js'
 import {
   type BlueprintContentPack,
   definePageCollection,
@@ -22,10 +29,9 @@ import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
 
 /**
- * The `store` blueprint's content model (L22 task 10): an online store's
- * public catalogue — a `product` collection, grouped by `category` the same
- * restrained way `restaurant`'s `menuItem` and `magazine`'s `article` group
- * (one field, not a second collection).
+ * The `store` blueprint's content model (L22 task 10, L25 "templates pro"
+ * passe pro): an online store's public catalogue — a `product` collection,
+ * grouped by `category`.
  *
  * **Deliberately contract A only, not `@cogenta/commerce` (contract E,
  * ADR-0024).** A blueprint here writes `cogenta.schema.mjs` and seeds demo
@@ -44,6 +50,9 @@ import { STARTING_SKINS } from './starting-skins.js'
  * it does not require one to already exist.
  */
 
+const CATEGORIES = ['Apparel', 'Home', 'Accessories', 'Outdoor'] as const
+type ProductCategory = (typeof CATEGORIES)[number]
+
 export const product = defineCollection({
   name: 'product',
   labels: { singular: 'Product', plural: 'Products' },
@@ -53,7 +62,7 @@ export const product = defineCollection({
     slug: f.slug({ from: 'name', unique: true }),
     description: f.text({ max: 300, multiline: true }),
     price: f.number({ required: true, min: 0 }),
-    category: f.select({ options: ['Apparel', 'Home', 'Accessories'], required: true }),
+    category: f.select({ options: [...CATEGORIES], required: true }),
     inStock: f.boolean(),
     photo: f.media({ accept: ['image'] }),
     ...SEO_FIELDS,
@@ -79,11 +88,20 @@ export interface StoreDemoProduct {
   readonly slug: string
   readonly description: string
   readonly price: number
-  readonly category: 'Apparel' | 'Home' | 'Accessories'
+  readonly category: ProductCategory
   readonly inStock: boolean
 }
 
+/**
+ * Twelve products, three per category, real prices, real (if brief)
+ * copy — the "New arrivals"/"Best sellers" home sections and the `/shop`,
+ * `/new` and `/categories` pages all read from this one list rather than
+ * three divergent ones. Three are `inStock: false`, spread across three
+ * different categories, so the out-of-stock badge (`theme-ecommerce`'s
+ * `collection-list.ts`) is exercised on more than one card in the demo.
+ */
 export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
+  // Apparel
   {
     name: 'Field jacket',
     slug: 'field-jacket',
@@ -101,6 +119,15 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
     inStock: true,
   },
   {
+    name: 'Wool overshirt',
+    slug: 'wool-overshirt',
+    description: 'Brushed merino, a shirt-jacket cut for the coldest half of the year.',
+    price: 98,
+    category: 'Apparel',
+    inStock: false,
+  },
+  // Home
+  {
     name: 'Ceramic pour-over set',
     slug: 'ceramic-pour-over-set',
     description: 'A dripper, a server and two cups, thrown by the same hand.',
@@ -117,6 +144,15 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
     inStock: false,
   },
   {
+    name: 'Cast-iron skillet',
+    slug: 'cast-iron-skillet',
+    description: 'Pre-seasoned, ten inches, the one pan that outlasts the kitchen it started in.',
+    price: 56,
+    category: 'Home',
+    inStock: true,
+  },
+  // Accessories
+  {
     name: 'Canvas tote',
     slug: 'canvas-tote',
     description: 'Fourteen-ounce canvas, a base wide enough for a week of groceries.',
@@ -132,6 +168,39 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
     category: 'Accessories',
     inStock: true,
   },
+  {
+    name: 'Wool beanie',
+    slug: 'wool-beanie',
+    description: 'Ribbed merino, one size, blocked so it keeps its shape past the first wash.',
+    price: 24,
+    category: 'Accessories',
+    inStock: false,
+  },
+  // Outdoor
+  {
+    name: 'Camp blanket',
+    slug: 'camp-blanket',
+    description: 'A dense wool weave, wide enough for two, tight enough to block the wind.',
+    price: 64,
+    category: 'Outdoor',
+    inStock: true,
+  },
+  {
+    name: 'Enamel mug',
+    slug: 'enamel-mug',
+    description: 'Chip-resistant steel core, the mug that survives the bottom of a pack.',
+    price: 18,
+    category: 'Outdoor',
+    inStock: true,
+  },
+  {
+    name: 'Trail tote',
+    slug: 'trail-tote',
+    description: 'Ripstop nylon, a roll-top closure, light enough to forget you brought it.',
+    price: 42,
+    category: 'Outdoor',
+    inStock: true,
+  },
 ]
 
 const BLOCK_VERSION = '1.0.0'
@@ -142,19 +211,72 @@ export interface StoreDemoPage {
   readonly blocks: readonly VocabularyBlock[]
 }
 
+function richProse(key: string, text: string): VocabularyBlock {
+  return {
+    _key: key,
+    _type: 'prose',
+    _version: BLOCK_VERSION,
+    body: richTextParagraph(`${key}-body`, text),
+  } as VocabularyBlock
+}
+
 /**
- * `home` (hero + a live grid of the catalogue + a trust-signal `featureGrid`),
- * `shop` (the full catalogue, what "Shop" in the header/footer/header-action
- * actually links to), and `shipping-returns` (the two questions every new
- * shop's visitors ask before they ask anything else).
+ * A category's own filtered grid — `filter: { category }` (contract B's
+ * `collectionList.filter`, a flat field/value record `cogenta serve`
+ * resolves to a real equality query, `theme-render.ts`'s `toApiFilter`) —
+ * so `/categories` is a genuine browse-by-category page, not a second copy
+ * of `/shop`.
+ */
+function categoryGrid(key: string, category: ProductCategory): VocabularyBlock {
+  return {
+    _key: key,
+    _type: 'collectionList',
+    _version: BLOCK_VERSION,
+    title: category,
+    collection: 'product',
+    filter: { category },
+    sort: { field: 'createdAt', direction: 'desc' },
+    limit: 6,
+    layout: 'grid',
+  } as VocabularyBlock
+}
+
+/**
+ * `home` (the ten-block composition the L25 brief asks for: hero → category
+ * tiles → new arrivals → promo → why-buy-from-us → best sellers →
+ * testimonial → trust badges → faq → newsletter), `shop` (the full
+ * catalogue), `new` (a dedicated arrivals page — what the header's "New"
+ * link actually goes to), `categories` (one filtered grid per category),
+ * `about`, `help` (the shipping/returns questions, what the footer's "Help"
+ * link and the header's old "Shipping & Returns" item both point at now),
+ * and `legal` (a short, honest placeholder — this is a demo store, not a
+ * real merchant, and a footer link that goes nowhere is worse than one that
+ * says so).
  *
  * A function of `media` (`SeedContext.media`, L25 task A0b), not a static
- * const: the hero's `media` field needs the id `seedDemoMedia` only knows at
- * scaffold time, well after this module is first evaluated.
+ * const: the hero's `media`, the category tiles and the testimonial avatar
+ * all need ids only `seedDemoMedia` knows at scaffold time.
  */
 export function buildStoreDemoPages(
   media: Readonly<Record<string, string>>,
 ): readonly StoreDemoPage[] {
+  // `gallery` (blocks@2.0) requires at least one item — a media map with no
+  // `category-*` entries (a scaffold with no demo-art seeded, or this
+  // function called directly, as the blueprint test does) must therefore
+  // omit the whole block rather than emit an empty, contract-invalid one.
+  const categoryTiles = CATEGORIES.map((category, index) => ({
+    category,
+    media: media[`category-${index}`],
+  })).filter(
+    (item): item is { category: ProductCategory; media: string } => item.media !== undefined,
+  )
+
+  // `logoStrip` (blocks@2.0) requires at least one logo — same reasoning.
+  const logoItems = [0, 1, 2, 3, 4]
+    .map((index) => media[`logo-${index}`])
+    .filter((id): id is string => id !== undefined)
+    .map((id, index) => ({ _key: `demo-logo-${index}`, media: id }))
+
   return [
     {
       title: 'Home',
@@ -169,44 +291,160 @@ export function buildStoreDemoPages(
           subtitle:
             'Scaffolded by create-cogenta from the "store" blueprint, with a real demo catalogue already in place.',
           ...(media.hero === undefined ? {} : { media: media.hero }),
-          actions: [{ label: 'Browse the shop', target: { href: '/shop' }, emphasis: 'primary' }],
+          actions: [{ label: 'Shop now', target: { href: '/shop' }, emphasis: 'primary' }],
         } as VocabularyBlock,
+        ...(categoryTiles.length === 0
+          ? []
+          : [
+              {
+                _key: 'demo-home-categories',
+                _type: 'gallery',
+                _version: BLOCK_VERSION,
+                layout: 'grid',
+                items: categoryTiles.map((tile, index) => ({
+                  _key: `demo-category-${index}`,
+                  media: tile.media,
+                })),
+              } as VocabularyBlock,
+            ]),
         {
-          _key: 'demo-home-products',
+          _key: 'demo-home-new-arrivals',
           _type: 'collectionList',
           _version: BLOCK_VERSION,
-          title: 'From the shop',
+          title: 'New arrivals',
           collection: 'product',
           sort: { field: 'createdAt', direction: 'desc' },
-          limit: 10,
+          limit: 8,
           layout: 'grid',
-        },
+        } as VocabularyBlock,
+        {
+          _key: 'demo-home-promo',
+          _type: 'cta',
+          _version: BLOCK_VERSION,
+          title: 'Free shipping over $75',
+          text: 'No code needed — it applies automatically at checkout on every order that qualifies.',
+          actions: [{ label: 'Browse the shop', target: { href: '/shop' }, emphasis: 'primary' }],
+        } as VocabularyBlock,
         {
           _key: 'demo-home-trust',
           _type: 'featureGrid',
           _version: BLOCK_VERSION,
-          title: 'Why people order twice',
+          title: 'Why buy from us',
           items: [
             {
               _key: 'demo-trust-1',
-              icon: 'package',
-              title: 'Made in small runs',
-              text: 'Every item here is restocked in batches, not held in a warehouse for a season.',
+              icon: 'truck',
+              title: 'Fast, tracked shipping',
+              text: 'Two to four business days on every in-stock order, a tracking number the moment it leaves.',
             },
             {
               _key: 'demo-trust-2',
-              icon: 'return',
+              icon: 'refresh',
               title: 'Thirty-day returns',
               text: "If it doesn't fit or isn't right, send it back — no restocking fee, no questions.",
             },
             {
               _key: 'demo-trust-3',
-              icon: 'craft',
+              icon: 'shield',
               title: 'Made to be repaired',
               text: 'Torn a seam or lost a strap? We fix what we sell, at cost, for as long as we sell it.',
             },
+            {
+              _key: 'demo-trust-4',
+              icon: 'credit-card',
+              title: 'Secure checkout',
+              text: 'Encrypted payment, every time — your card details never touch our own servers.',
+            },
           ],
-        },
+        } as VocabularyBlock,
+        {
+          _key: 'demo-home-best-sellers',
+          _type: 'collectionList',
+          _version: BLOCK_VERSION,
+          title: 'Best sellers',
+          collection: 'product',
+          // Deliberately a different sort from "New arrivals" above — not a
+          // real popularity signal (no such field exists in contract A, and
+          // `SortField` is closed to `id`/`createdAt`/`updatedAt`), but a
+          // visibly distinct cut of the same catalogue rather than a
+          // reshuffled duplicate of the section above it.
+          sort: { field: 'createdAt', direction: 'asc' },
+          limit: 4,
+          layout: 'grid',
+        } as VocabularyBlock,
+        {
+          _key: 'demo-home-testimonial',
+          _type: 'testimonial',
+          _version: BLOCK_VERSION,
+          quote: richTextParagraph(
+            'demo-testimonial-quote',
+            'Ordered the field jacket on a Tuesday, wore it hiking that Saturday. Still my favourite thing I own a year on.',
+          ),
+          attribution: {
+            name: 'Rosa Ibarra',
+            role: 'Verified buyer',
+            ...(media.avatar === undefined ? {} : { avatar: media.avatar }),
+          },
+        } as VocabularyBlock,
+        ...(logoItems.length === 0
+          ? []
+          : [
+              {
+                _key: 'demo-home-logos',
+                _type: 'logoStrip',
+                _version: BLOCK_VERSION,
+                logos: logoItems,
+                caption: 'As seen in',
+              } as VocabularyBlock,
+            ]),
+        {
+          _key: 'demo-home-faq',
+          _type: 'faq',
+          _version: BLOCK_VERSION,
+          title: 'Before you order',
+          items: [
+            {
+              _key: 'demo-home-faq-1',
+              question: 'How long does shipping take?',
+              answer: richTextParagraph(
+                'demo-home-faq-1-a',
+                'Two to four business days for in-stock items. An item marked out of stock ships as soon as the next batch is ready — the product page says when.',
+              ),
+            },
+            {
+              _key: 'demo-home-faq-2',
+              question: 'Can I return something?',
+              answer: richTextParagraph(
+                'demo-home-faq-2-a',
+                'Yes, within thirty days, unworn and with its tag on. Return shipping is on us for a wrong size.',
+              ),
+            },
+            {
+              _key: 'demo-home-faq-3',
+              question: 'How do I know what size to order?',
+              answer: richTextParagraph(
+                'demo-home-faq-3-a',
+                'Every product page lists true-to-size guidance; when in doubt, size up — exchanges are free within thirty days.',
+              ),
+            },
+            {
+              _key: 'demo-home-faq-4',
+              question: 'What payment methods do you accept?',
+              answer: richTextParagraph(
+                'demo-home-faq-4-a',
+                'Every major card, plus the wallet your browser already offers at checkout — no account required to buy.',
+              ),
+            },
+          ],
+        } as VocabularyBlock,
+        {
+          _key: 'demo-home-newsletter',
+          _type: 'cta',
+          _version: BLOCK_VERSION,
+          title: 'Get 10% off your first order',
+          text: 'Sign up for restock alerts and the occasional sale — no spam, unsubscribe in one click.',
+          actions: [{ label: 'Sign up', target: { href: '/shop' }, emphasis: 'primary' }],
+        } as VocabularyBlock,
       ],
     },
     {
@@ -226,61 +464,107 @@ export function buildStoreDemoPages(
           sort: { field: 'createdAt', direction: 'desc' },
           limit: 24,
           layout: 'grid',
-        },
+        } as VocabularyBlock,
       ],
     },
     {
-      title: 'Shipping & returns',
-      slug: 'shipping-returns',
+      title: 'New Arrivals',
+      slug: 'new',
+      blocks: [
+        richProse('demo-new-prose', 'The latest additions to the catalogue, newest first.'),
+        {
+          _key: 'demo-new-products',
+          _type: 'collectionList',
+          _version: BLOCK_VERSION,
+          title: 'New in',
+          collection: 'product',
+          sort: { field: 'createdAt', direction: 'desc' },
+          limit: 12,
+          layout: 'grid',
+        } as VocabularyBlock,
+      ],
+    },
+    {
+      title: 'Categories',
+      slug: 'categories',
+      blocks: [
+        richProse('demo-categories-prose', 'Browse the catalogue by category.'),
+        ...CATEGORIES.map((category, index) => categoryGrid(`demo-categories-${index}`, category)),
+      ],
+    },
+    {
+      title: 'About',
+      slug: 'about',
       blocks: [
         richProse(
-          'demo-shipping-prose',
+          'demo-about-prose',
+          'This is a demo store, scaffolded by create-cogenta from the "store" blueprint. Its catalogue and this page were seeded by the installer so there is real content to look at from the first run — every word of it is normal, editable content.',
+        ),
+        {
+          _key: 'demo-about-testimonial',
+          _type: 'testimonial',
+          _version: BLOCK_VERSION,
+          quote: richTextParagraph(
+            'demo-about-testimonial-quote',
+            'A real person answered my email about a sizing question within the hour, on a Sunday.',
+          ),
+          attribution: { name: 'Devon Marsh', role: 'Verified buyer' },
+        } as VocabularyBlock,
+      ],
+    },
+    {
+      title: 'Help',
+      slug: 'help',
+      blocks: [
+        richProse(
+          'demo-help-prose',
           'This is a demo store, scaffolded by create-cogenta from the "store" blueprint. Its catalogue and this page were seeded by the installer so there is real content to look at from the first run.',
         ),
         {
-          _key: 'demo-shipping-faq',
+          _key: 'demo-help-faq',
           _type: 'faq',
           _version: BLOCK_VERSION,
-          title: 'Before you order',
+          title: 'Shipping & returns',
           items: [
             {
-              _key: 'demo-shipping-faq-1',
+              _key: 'demo-help-faq-1',
               question: 'How long does shipping take?',
               answer: richTextParagraph(
-                'demo-shipping-faq-1-a',
+                'demo-help-faq-1-a',
                 'Two to four business days for in-stock items. An item marked out of stock ships as soon as the next batch is ready — the product page says when.',
               ),
             },
             {
-              _key: 'demo-shipping-faq-2',
+              _key: 'demo-help-faq-2',
               question: 'Can I return something?',
               answer: richTextParagraph(
-                'demo-shipping-faq-2-a',
+                'demo-help-faq-2-a',
                 'Yes, within thirty days, unworn and with its tag on. Return shipping is on us for a wrong size.',
               ),
             },
             {
-              _key: 'demo-shipping-faq-3',
+              _key: 'demo-help-faq-3',
               question: 'Do you ship internationally?',
               answer: richTextParagraph(
-                'demo-shipping-faq-3-a',
+                'demo-help-faq-3-a',
                 'To most countries, at checkout-calculated rates. Duties are the buyer’s, and we say so before payment, not after.',
               ),
             },
           ],
-        },
+        } as VocabularyBlock,
+      ],
+    },
+    {
+      title: 'Legal',
+      slug: 'legal',
+      blocks: [
+        richProse(
+          'demo-legal-prose',
+          'This is a demo store, scaffolded by create-cogenta from the "store" blueprint — there is no real merchant, no real transaction, and no real terms of sale behind it. A real store publishes its own terms, privacy notice and returns policy here before taking a single order.',
+        ),
       ],
     },
   ]
-}
-
-function richProse(key: string, text: string): VocabularyBlock {
-  return {
-    _key: key,
-    _type: 'prose',
-    _version: BLOCK_VERSION,
-    body: richTextParagraph(`${key}-body`, text),
-  } as VocabularyBlock
 }
 
 /**
@@ -304,23 +588,48 @@ function storePalette(): Palette {
 }
 
 /**
- * Procedural visuals this blueprint seeds (L25 task A0b): a hero backdrop
- * and one product photo per demo product, all from the same starting-skin
- * palette (`starting-skins.js`) this blueprint already ships, keyed by the
- * product's own slug so `seedStoreDemoContent` can look each one up without
+ * Procedural visuals this blueprint seeds (L25 task A0b, extended by the L25
+ * "templates pro" passe pro): a flat hero backdrop, one cover image per
+ * category (the gallery tiles' own caption is that category's picture's
+ * `alt` text — `gallery`'s item has no caption field of its own), one
+ * product photo per demo product, one avatar for the testimonial and five
+ * neutral marks for the trust-badge strip — all from the same starting-skin
+ * palette (`starting-skins.js`) this blueprint already ships, keyed so
+ * `seedStoreDemoContent`/`buildStoreDemoPages` can look each one up without
  * caring what id the media store assigned it.
  */
 export const STORE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
-    spec: heroArt(storePalette(), 'geometric', 11),
+    // A flat family (D5): geometric colour blocks, not a mesh/gradient
+    // backdrop — this storefront's own identity, kept flat.
+    spec: heroArt(storePalette(), 'blocks', 11),
     alt: 'Abstract geometric backdrop for the store hero',
   },
+  ...CATEGORIES.map(
+    (category, index): DemoMediaSpec => ({
+      name: `category-${index}`,
+      spec: coverArt(storePalette(), 50 + index),
+      alt: category,
+    }),
+  ),
   ...STORE_DEMO_PRODUCTS.map(
     (demo, index): DemoMediaSpec => ({
       name: `product-${demo.slug}`,
       spec: productArt(storePalette(), index + 1),
       alt: `${demo.name} product photo`,
+    }),
+  ),
+  {
+    name: 'avatar',
+    spec: avatarArt(storePalette(), 60),
+    alt: 'Abstract avatar mark for the testimonial',
+  },
+  ...[0, 1, 2, 3, 4].map(
+    (index): DemoMediaSpec => ({
+      name: `logo-${index}`,
+      spec: logoArt(70 + index),
+      alt: `Press or payment mark ${index + 1}`,
     }),
   ),
 ]
@@ -330,26 +639,29 @@ export const STORE_MENUS: BlueprintMenus = {
   header: [
     { label: 'Home' },
     { label: 'Shop', url: '/shop' },
-    { label: 'Shipping & Returns', url: '/shipping-returns' },
+    { label: 'New', url: '/new' },
+    { label: 'Categories', url: '/categories' },
+    { label: 'About', url: '/about' },
   ],
   footer: [
     { label: 'Shop', url: '/shop' },
-    { label: 'Shipping & Returns', url: '/shipping-returns' },
+    { label: 'Help', url: '/help' },
+    { label: 'Legal', url: '/legal' },
   ],
   headerAction: { label: 'Shop now', url: '/shop' },
 }
 
 /**
  * `general.tagline` is already a declared registry key. `general.socialLinks`
- * and `general.footerNote` are being added to the registry by a parallel
- * task (Phase 0 — A0a) — until that lands (or if the value shape it settles
- * on differs from this guess), `seedSiteSettings` logs a warning and skips
- * them rather than failing the whole scaffold.
+ * and `general.footerNote` are seeded by Phase 0 (task A0a) — three links
+ * (L25 "templates pro" passe pro: Instagram, Pinterest, X — a lookbook-style
+ * shop leans on visual channels first).
  */
 export const STORE_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
   'general.tagline': 'Made to be used, not shelved.',
   'general.socialLinks': [
     { label: 'Instagram', url: 'https://instagram.com/example' },
+    { label: 'Pinterest', url: 'https://pinterest.com/example' },
     { label: 'X', url: 'https://x.com/example' },
   ],
   'general.footerNote': 'A demo store, scaffolded by create-cogenta.',
@@ -371,7 +683,7 @@ export const STORE_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
 /**
  * Inserts the `store` blueprint's demo content through the real
  * `ContentStore` — never mocked (house rule). Each product's `photo` and the
- * home/shop hero's `media` come from `ctx.media`
+ * home hero's `media` come from `ctx.media`
  * (`seedDemoMedia`/`STORE_MEDIA_SPECS`) — absent (e.g. a blueprint seeded
  * with `seedDemoContent: false`, or a caller that never ran
  * `seedDemoMedia`) simply leaves those fields unset, since neither is

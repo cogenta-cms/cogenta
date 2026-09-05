@@ -30,6 +30,10 @@ afterEach(async () => {
 
 describe('the blog blueprint’s seoTitle field reaches the real rendered page', () => {
   it('overrides the <title> of the public /blog/:slug page once set', async () => {
+    // A real scaffold (migrations + demo-art media generation + ingest for
+    // eight demo posts) plus a real `runServe` + HTTP round trip regularly
+    // exceeds Vitest's 5s default on this machine; this is a genuine e2e
+    // budget, not a hung test.
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-seo-e2e-'))
     dirs.push(targetDir)
 
@@ -61,7 +65,7 @@ describe('the blog blueprint’s seoTitle field reaches the real rendered page',
         defaultLocale: 'en',
       })
       const welcome = (await postStore.list()).items.find(
-        (entry) => entry.values.slug === 'welcome-to-cogenta',
+        (entry) => entry.values.slug === 'plain-text-editor',
       )
       if (welcome === undefined) throw new Error('seeded demo post not found')
       await postStore.update(welcome.id, { values: { seoTitle: customTitle } })
@@ -97,15 +101,15 @@ describe('the blog blueprint’s seoTitle field reaches the real rendered page',
     if (address === undefined) throw new Error('server never started listening')
 
     try {
-      const response = await fetch(`http://${address.host}:${address.port}/blog/welcome-to-cogenta`)
+      const response = await fetch(`http://${address.host}:${address.port}/blog/plain-text-editor`)
       expect(response.status).toBe(200)
       const html = await response.text()
       expect(html).toContain(`<title>${customTitle}</title>`)
       // The unmodified post title must not have leaked through instead.
-      expect(html).not.toContain('<title>Welcome to Cogenta</title>')
+      expect(html).not.toContain('<title>Why I still write in a plain-text editor</title>')
     } finally {
       controller.abort()
       await done
     }
-  })
+  }, 30000)
 })

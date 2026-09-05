@@ -78,7 +78,7 @@ describe('resetPlaygroundData', () => {
     await resetPlaygroundData({ db, blueprintId: 'blog', defaultLocale: 'en' })
 
     const index = await createSearchIndex({ db })
-    const results = await index.search({ text: 'Cogenta', locale: 'en' })
+    const results = await index.search({ text: 'drafts', locale: 'en' })
     expect(results.hits.length).toBeGreaterThan(0)
     expect(results.hits.some((hit) => hit.collection === 'post')).toBe(true)
   })

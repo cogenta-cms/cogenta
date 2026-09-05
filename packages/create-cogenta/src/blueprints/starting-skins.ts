@@ -100,4 +100,35 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     motion: { duration: '180ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
     shadow: { sm: '0 1px 3px rgba(15, 23, 22, 0.08)', md: '0 8px 24px rgba(15, 23, 22, 0.12)' },
   },
+
+  /**
+   * A reading-first personal/professional blog (L25 D4): warm paper-light
+   * ground, an ink-blue accent rather than another warm palette's terracotta,
+   * matching `@cogenta/theme-blog`'s own default skin (`tokens.json`) so the
+   * installer's first render already carries this theme's real identity —
+   * Fraunces for headings and Source Serif 4 for the reading column are named
+   * here too, not left to a later "Personalise colours" skin swap.
+   */
+  blog: {
+    color: {
+      bg: '#fbf6ee',
+      fg: '#211c17',
+      accent: '#2f4c73',
+      accentFg: '#ffffff',
+      muted: '#f1e7d6',
+      mutedFg: '#4b4238',
+      border: '#e3d5be',
+    },
+    font: {
+      sans: "'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      serif: "'Fraunces', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.25,
+      baseSize: '1.0625rem',
+    },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0.1875rem', md: '0.375rem', lg: '0.625rem' },
+    motion: { duration: '180ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    shadow: { sm: '0 1px 2px rgba(33, 28, 23, 0.07)', md: '0 14px 34px rgba(33, 28, 23, 0.14)' },
+  },
 }

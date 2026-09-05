@@ -1,4 +1,5 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
+import { CogentaError } from '@cogenta/core'
 import {
   type CollectionDefinition,
   createContentStore,
@@ -11,6 +12,7 @@ import {
   validateCollectionSet,
   validateTaxonomySet,
 } from '@cogenta/schema'
+import { avatarArt, coverArt, heroArt, logoArt, type Palette } from '../demo-art/compositions.js'
 import {
   type BlueprintContentPack,
   type RecommendedAgentHint,
@@ -18,9 +20,12 @@ import {
   type SeedContext,
   toBlockZoneEntry,
 } from './content-pack.js'
+import type { DemoMediaSpec } from './demo-media.js'
+import type { BlueprintMenus } from './menus.js'
+import { STARTING_SKINS } from './starting-skins.js'
 
 /**
- * The `blog` blueprint's content model (L9 task 3).
+ * The `blog` blueprint's content model (L9 task 3, richened for L25 D4).
  *
  * `post` reuses `SystemFields.status`/`createdAt` for publish state and
  * publish date rather than declaring its own — contract A already carries
@@ -29,14 +34,8 @@ import {
  * collection this blueprint would have to invent and keep in sync.
  *
  * `category`/`tag` are `defineTaxonomy()` declarations, not collections
- * (audit fiche 04, T02/T10 — `schema@2.0`, ADR-0022, already figé; using it
- * here is a plain application of a frozen contract, not a new decision). A
- * blog post's category and tags are classification, not content: they have
- * no status, no version, no translation family of their own, which is
- * exactly what a taxonomy term already refuses to have and a collection
- * never did. `category` stays hierarchical (its default — a blog may want
- * "Guides > Tutorials" one day); `tag` is declared flat, matching the
- * "tags never nest" convention `defineTaxonomy`'s own doc comment names.
+ * (audit fiche 04, T02/T10 — `schema@2.0`, ADR-0022, already figé). `category`
+ * stays hierarchical (its default); `tag` is declared flat.
  */
 
 export const category: TaxonomyDefinition = defineTaxonomy({
@@ -76,20 +75,25 @@ export const post = defineCollection({
   fields: {
     title: f.text({ required: true, max: 200 }),
     slug: f.slug({ from: 'title', unique: true }),
-    // `body` before `excerpt` (fiche 44 task 1): the editor reads and writes
-    // the excerpt *from* the body, so the form now shows them in that same
-    // order — the excerpt field used to render first, above the text it
-    // summarises. Purely a blueprint ordering choice, not contract A: field
-    // declaration order has no meaning to `@cogenta/schema` beyond "the order
-    // `EntryForm` renders them in".
     body: f.richText({ required: true }),
     excerpt: f.text({ max: 300, multiline: true }),
+    // L25 D4: a cover image, read by `entryImage` (`@cogenta/theme-kit`)
+    // for the "Latest"/"From the archive" cards and the post's own
+    // `renderEntryHeader` cover.
     coverImage: f.media({ accept: ['image'] }),
     category: f.taxonomy({ of: 'category', many: false }),
     tags: f.taxonomy({ of: 'tag', many: true }),
+    // Declared (contract A's own `docs/04-contrats.md` example does the
+    // same on its `article` collection) so `createContentStore`'s own
+    // publish-time default (`store.ts`: only set when the collection
+    // declares this field) actually fires — without it every post's
+    // `renderEntryHeader` meta line silently drops the "date lisible" the
+    // brief asks for, since `theme-render.ts` only forwards `publishedAt`
+    // when it is non-null.
+    publishedAt: f.datetime(),
     ...SEO_FIELDS,
   },
-  indexes: [['slug']],
+  indexes: [['publishedAt', 'desc'], ['slug']],
   permissions: {
     read: ['public'],
     create: ['editor', 'admin'],
@@ -99,16 +103,6 @@ export const post = defineCollection({
   },
 })
 
-/**
- * The blueprint's "page types" (L9 task 4): standalone pages composed of
- * vocabulary blocks rather than a bespoke template each — the same
- * title-plus-block-zone shape `theme-canonical`'s own test fixtures already
- * use for `{ collection: 'page', id: … }` internal-link targets, formalised
- * here as a real `CollectionDefinition` for the first time. `blocks` uses
- * `f.blocks()` (contract A), the field kind a `BlockZone` — an ordered list of
- * vocabulary blocks — is stored under; `renderPage` (`@cogenta/theme-canonical`)
- * takes exactly a title plus that list.
- */
 export const page = defineCollection({
   name: 'page',
   labels: { singular: 'Page', plural: 'Pages' },
@@ -128,28 +122,11 @@ export const page = defineCollection({
   },
 })
 
-/**
- * Also the export written into the scaffolded site's `cogenta.schema.mjs`
- * (`scaffold.ts`), so `loadCollections` (`@cogenta/cli`) reads back exactly
- * these two collections — `category`/`tag` are no longer collections
- * (`BLOG_TAXONOMIES` below), so they no longer belong in this list.
- */
 export const BLOG_COLLECTIONS: readonly CollectionDefinition[] = [post, page]
 
-/**
- * The blueprint's declared taxonomies, written into the scaffolded site's
- * `cogenta.schema.mjs` as its named `taxonomies` export (`loadCollections`,
- * `@cogenta/cli`, reads exactly that name).
- */
 export const BLOG_TAXONOMIES: readonly TaxonomyDefinition[] = [category, tag]
 
-// Cross-collection checks (duplicate names, dangling relation targets) run
-// at import time, same as `defineCollection` itself: a mistake here costs a
-// restart, not a database.
 validateCollectionSet(BLOG_COLLECTIONS)
-// Same idea for taxonomy fields (`post.category`/`post.tags`): a `f.taxonomy`
-// pointing at an undeclared taxonomy is caught here, not the first time a
-// site tries to save a post.
 validateTaxonomySet(BLOG_TAXONOMIES, BLOG_COLLECTIONS)
 
 export interface BlogDemoCategory {
@@ -177,83 +154,227 @@ let paragraphKey = 0
 function paragraph(text: string): RichTextDocument[number] {
   paragraphKey += 1
   return {
-    _key: `demo-${paragraphKey}`,
+    _key: `demo-p-${paragraphKey}`,
     _type: 'block',
     style: 'normal',
-    children: [{ _key: `demo-${paragraphKey}-span`, _type: 'span', text, marks: [] }],
+    children: [{ _key: `demo-p-${paragraphKey}-span`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
+}
+
+function heading2(text: string): RichTextDocument[number] {
+  paragraphKey += 1
+  return {
+    _key: `demo-h-${paragraphKey}`,
+    _type: 'block',
+    style: 'h2',
+    children: [{ _key: `demo-h-${paragraphKey}-span`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
+}
+
+function bulletItem(text: string): RichTextDocument[number] {
+  paragraphKey += 1
+  return {
+    _key: `demo-l-${paragraphKey}`,
+    _type: 'block',
+    style: 'normal',
+    listItem: 'bullet',
+    level: 1,
+    children: [{ _key: `demo-l-${paragraphKey}-span`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
+}
+
+function quoteLine(text: string): RichTextDocument[number] {
+  paragraphKey += 1
+  return {
+    _key: `demo-q-${paragraphKey}`,
+    _type: 'block',
+    style: 'blockquote',
+    children: [{ _key: `demo-q-${paragraphKey}-span`, _type: 'span', text, marks: [] }],
     markDefs: [],
   }
 }
 
 export const BLOG_DEMO_CATEGORIES: readonly BlogDemoCategory[] = [
-  { name: 'Announcements', slug: 'announcements' },
-  { name: 'Guides', slug: 'guides' },
+  { name: 'Reading', slug: 'reading' },
+  { name: 'Building', slug: 'building' },
+  { name: 'Writing', slug: 'writing' },
+  { name: 'Craft', slug: 'craft' },
 ]
 
 export const BLOG_DEMO_TAGS: readonly BlogDemoTag[] = [
-  { name: 'cms', slug: 'cms' },
-  { name: 'open source', slug: 'open-source' },
-  { name: 'agents', slug: 'agents' },
+  { name: 'process', slug: 'process' },
+  { name: 'tools', slug: 'tools' },
+  { name: 'habits', slug: 'habits' },
+  { name: 'editors', slug: 'editors' },
+  { name: 'notebooks', slug: 'notebooks' },
+  { name: 'focus', slug: 'focus' },
+  { name: 'drafts', slug: 'drafts' },
+  { name: 'revision', slug: 'revision' },
 ]
 
 export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
-    title: 'Welcome to Cogenta',
-    slug: 'welcome-to-cogenta',
-    excerpt:
-      'Cogenta is an open-source, agentic CMS: a site that monitors, patches and optimises itself, and reports what it did.',
+    title: 'Why I still write in a plain-text editor',
+    slug: 'plain-text-editor',
+    excerpt: 'Ten years of trying every tool that promised to make writing easier.',
+    categorySlug: 'writing',
+    tagSlugs: ['tools', 'editors'],
     body: [
       paragraph(
-        'Cogenta is a content management system built around a simple idea: a site should be able to run ' +
-          'itself. Under the hood it is a normal, dependable CMS — content types, drafts, versioning, media, ' +
-          'multi-locale entries — with an agent runtime as a first-class part of the core rather than a ' +
-          'bolted-on plugin.',
+        'I have paid for at least nine different writing apps since 2016. Each one promised the same ' +
+          'thing: a calmer place to think, fewer distractions, a nicer font. Every single one eventually ' +
+          'added a sidebar, a sync indicator, and a subscription reminder, and I went back to a plain-text ' +
+          'editor within a month.',
+      ),
+      heading2('What a plain file actually gives you'),
+      bulletItem('It opens instantly, every time, on every machine I own.'),
+      bulletItem('It will still open in twenty years — the format is the text itself.'),
+      bulletItem('Nothing about the tool is trying to keep my attention.'),
+      paragraph(
+        'None of that is a complaint about design. It is a complaint about incentives: a writing tool that ' +
+          'has to grow a business ends up optimising for engagement, and engagement is the opposite of what ' +
+          'a first draft needs.',
+      ),
+      quoteLine(
+        'The best writing tool is the one that gets out of the way and stays out of the way.',
       ),
       paragraph(
-        'This post, and this blog, were scaffolded by create-cogenta as part of the "blog" blueprint: a ready ' +
-          'content model, a skin, and a few real demo posts to look at instead of an empty admin screen.',
+        'So the editor I actually finish drafts in has no plugins, no themes, and no update notifications. ' +
+          'It has a cursor and a blinking line, and that turns out to be enough.',
       ),
     ],
-    categorySlug: 'announcements',
-    tagSlugs: ['cms', 'open-source'],
   },
   {
-    title: 'What a blueprint actually gives you',
-    slug: 'what-a-blueprint-gives-you',
+    title: 'The desk setup that finally stuck',
+    slug: 'desk-setup-that-stuck',
     excerpt:
-      'A blueprint is not a theme. It is a content model, a skin, recommended agents and demo content, all at once — and every part of it can still be changed afterwards.',
+      'Every previous version of this desk lasted about six weeks. This one is two years old.',
+    categorySlug: 'craft',
+    tagSlugs: ['tools', 'habits'],
     body: [
       paragraph(
-        'Picking the "blog" blueprint during setup creates three collections — post, category and tag — wires ' +
-          "up routing for a post list, a post page and a category archive, and applies the canonical theme's " +
-          'default skin.',
+        'I used to rebuild my desk setup every time I read a good "how I work" post. New monitor arm, new ' +
+          'keyboard, new lamp, new chair — a little dopamine hit, a week of feeling productive, and then back ' +
+          'to the same problems.',
       ),
       paragraph(
-        'None of that is a cage. The schema is a normal cogenta.schema.mjs file, the skin is a normal ' +
-          'tokens.json, and both are meant to be edited the moment the defaults stop fitting.',
+        'What actually fixed it was removing things rather than adding them: one monitor instead of three, a ' +
+          'closed door instead of noise-cancelling headphones, and a chair I stopped noticing entirely. The ' +
+          'setup that stuck is the one I stopped thinking about.',
       ),
     ],
-    categorySlug: 'guides',
-    tagSlugs: ['cms'],
   },
   {
-    title: 'Agents recommended for a blog',
-    slug: 'agents-recommended-for-a-blog',
-    excerpt:
-      'The blog blueprint names two agents worth turning on — it does not turn them on for you.',
+    title: 'What ten years of reading nonfiction taught me',
+    slug: 'ten-years-reading-nonfiction',
+    excerpt: 'Mostly that I was reading for the wrong reason for most of it.',
+    categorySlug: 'reading',
+    tagSlugs: ['habits', 'notebooks'],
     body: [
       paragraph(
-        'No site in Cogenta runs a live agent scheduler by default (R2: the CMS works with zero AI configured). ' +
-          'What the "blog" blueprint does instead is record a recommendation: seoAgent and contentAgent, both ' +
-          'shipped in @cogenta/agents-builtin, are a reasonable pair to enable for a content-heavy site once an ' +
-          'LLM provider is configured.',
+        'For the first several years I read to be able to say I had read the book. I finished things I ' +
+          'disliked out of a sense of obligation, and I remembered almost none of them a month later.',
       ),
+      heading2('The one change that mattered'),
       paragraph(
-        'Turning them on is a deliberate, separate step — not something a scaffold should decide on your behalf.',
+        'I started keeping a single notebook — not a book journal, just a running list of the one idea from ' +
+          'each book that changed how I thought about something. The books I remember now are the ones that ' +
+          'earned a line in that notebook, and nothing else.',
       ),
     ],
-    categorySlug: 'guides',
-    tagSlugs: ['agents', 'open-source'],
+  },
+  {
+    title: 'A small tool I built to stop losing drafts',
+    slug: 'tool-to-stop-losing-drafts',
+    excerpt: 'It is ugly, it has no users but me, and it has saved three articles this year alone.',
+    categorySlug: 'building',
+    tagSlugs: ['tools', 'drafts'],
+    body: [
+      paragraph(
+        'Every text editor I have used eventually loses a draft — a crash, a sync conflict, a laptop that ' +
+          'died mid-sentence. After the third time it happened to something I actually cared about, I wrote a ' +
+          'forty-line script that copies whatever is in my drafts folder to a second disk every five minutes.',
+      ),
+      paragraph(
+        'It has no interface, no settings, and no name beyond `backup.sh`. It is the single most useful piece ' +
+          'of software I have ever written, and it took less time to build than writing this post did.',
+      ),
+    ],
+  },
+  {
+    title: 'The one habit that fixed my writing schedule',
+    slug: 'habit-that-fixed-my-schedule',
+    excerpt: 'Not a morning routine. Not a word-count goal. Something much smaller.',
+    categorySlug: 'writing',
+    tagSlugs: ['habits', 'focus'],
+    body: [
+      paragraph(
+        'I tried the 5am wake-up. I tried a 1,000-word daily minimum. Both worked for about a week and then ' +
+          'collapsed the first time life got in the way, which made me feel worse than not trying at all.',
+      ),
+      paragraph(
+        'What actually stuck was absurdly small: open the draft file before doing anything else on the ' +
+          'computer, even if I only read the last paragraph and close it again. Some days that is all that ' +
+          'happens. Most days, once the file is open, I keep going.',
+      ),
+    ],
+  },
+  {
+    title: 'Notebooks I have actually finished',
+    slug: 'notebooks-actually-finished',
+    excerpt: 'A short, honest list, after a drawer full of notebooks with four used pages each.',
+    categorySlug: 'reading',
+    tagSlugs: ['notebooks', 'habits'],
+    body: [
+      paragraph(
+        'I own a drawer of notebooks that got four pages of enthusiastic notes and then nothing. The ones I ' +
+          'actually filled share one property: they were too plain and too cheap to feel precious.',
+      ),
+      bulletItem('A notebook I am afraid to ruin is a notebook I will not open.'),
+      bulletItem('Grid paper beats lined paper for anything that is not a diary.'),
+      bulletItem('A pen that writes badly is worse for the habit than no pen at all.'),
+    ],
+  },
+  {
+    title: 'Building a blog that runs itself',
+    slug: 'blog-that-runs-itself',
+    excerpt: 'What I actually automated, and — more importantly — what I deliberately did not.',
+    categorySlug: 'building',
+    tagSlugs: ['tools', 'process'],
+    body: [
+      paragraph(
+        'This blog is a static content model with a scheduler that checks for broken links, a spellchecker ' +
+          'that flags anything odd before it publishes, and a script that reminds me when a post has not been ' +
+          'revisited in two years.',
+      ),
+      paragraph(
+        'What it does not do is write anything, choose what to publish, or decide when a draft is ready. The ' +
+          'automation handles the boring parts so the writing stays mine.',
+      ),
+    ],
+  },
+  {
+    title: 'Editing is where the writing happens',
+    slug: 'editing-is-where-writing-happens',
+    excerpt: 'A first draft is raw material. The real writing starts on the second pass.',
+    categorySlug: 'writing',
+    tagSlugs: ['revision', 'drafts'],
+    body: [
+      paragraph(
+        'I used to think of editing as cleanup — fixing typos, tightening a sentence here and there. Every ' +
+          'post that actually worked was rebuilt at least once, sometimes from a completely different opening.',
+      ),
+      heading2('What I look for on a second pass'),
+      bulletItem('The paragraph that is doing the least work — usually the second one.'),
+      bulletItem('A claim I made without an example to back it up.'),
+      bulletItem('The sentence I am proudest of, which is often the one that should go.'),
+      quoteLine(
+        'A draft is a question. An edit is the answer you are actually willing to publish.',
+      ),
+    ],
   },
 ]
 
@@ -266,101 +387,80 @@ export interface BlogDemoPage {
 const BLOCK_VERSION = '1.0.0'
 
 /**
- * `home` and `about` — the two demo pages a freshly scaffolded blog needs so
- * its front page is not the empty admin screen. `home` pairs a `hero` with a
- * `collectionList` scoped to `post`, both part of the frozen block vocabulary
- * (contract B) and both already rendered generically by
- * `@cogenta/theme-canonical`'s `renderPage`/`renderBlock` — no bespoke
- * "home page" or "about page" template is needed for either.
+ * The blueprint's own starting skin (`starting-skins.js`) — asserted present
+ * with a real check, not a `!`, the same guard `store.ts`'s `storePalette`
+ * uses: `STARTING_SKINS` is keyed by blueprint id and TypeScript cannot see
+ * that this particular key is always populated.
  */
-export const BLOG_DEMO_PAGES: readonly BlogDemoPage[] = [
+function blogPalette(): Palette {
+  const skin = STARTING_SKINS.blog
+  if (skin === undefined) {
+    throw new CogentaError({
+      code: 'BLUEPRINT_REGISTRY_CORRUPT',
+      message: 'STARTING_SKINS.blog is missing.',
+      hint: 'The "blog" entry must stay declared in starting-skins.ts for this blueprint to render its demo art.',
+    })
+  }
+  return skin.color
+}
+
+/**
+ * Procedural visuals this blueprint seeds (L25 D4): a magazine-cover hero
+ * backdrop, one cover per demo post (keyed by the post's own slug), a reader
+ * avatar for the "reader's words" quote block, and five neutral wordmark
+ * stand-ins for the "As featured in" strip.
+ */
+export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
-    title: 'Home',
-    slug: 'home',
-    blocks: [
-      {
-        _key: 'demo-home-hero',
-        _type: 'hero',
-        _version: BLOCK_VERSION,
-        eyebrow: 'Cogenta',
-        title: 'A blog that runs itself',
-        subtitle:
-          'Scaffolded by create-cogenta with real demo posts, categories and tags — every one of them editable the moment you sign in.',
-        actions: [
-          {
-            label: 'Read the latest post',
-            target: { href: '/blog/welcome-to-cogenta' },
-            emphasis: 'primary',
-          },
-        ],
-      },
-      {
-        _key: 'demo-home-recent-posts',
-        _type: 'collectionList',
-        _version: BLOCK_VERSION,
-        title: 'Latest posts',
-        collection: 'post',
-        // `publishedAt` is nullable (a draft has none) and was never in the
-        // real, frozen `SortField` union (`id`/`createdAt`/`updatedAt` only —
-        // cursor pagination needs a column that is never null). This block
-        // asked for it anyway and nothing exercised the query until
-        // `cogenta serve`'s theme-render fallback did, surfacing a real
-        // QUERY_INVALID on every request for the seeded home page.
-        sort: { field: 'createdAt', direction: 'desc' },
-        limit: 10,
-        layout: 'list',
-      },
-      {
-        _key: 'demo-home-what',
-        _type: 'featureGrid',
-        _version: BLOCK_VERSION,
-        title: 'What you are looking at',
-        items: [
-          {
-            _key: 'demo-what-1',
-            icon: 'blocks',
-            title: 'Blocks, not HTML',
-            text: 'Every section of this page is a block storing plain data. The theme decides what it looks like, so a new skin restyles all of it at once.',
-          },
-          {
-            _key: 'demo-what-2',
-            icon: 'content',
-            title: 'Real content, from the first run',
-            text: 'The posts, categories and tags below were seeded by the installer. Rename them, delete them — nothing here is special.',
-          },
-          {
-            _key: 'demo-what-3',
-            icon: 'zero-js',
-            title: 'No client JavaScript',
-            text: 'The accordion, the carousel and the dark mode are all CSS. There is no bundle to wait for on a slow connection.',
-          },
-        ],
-      },
-    ],
+    name: 'hero',
+    spec: heroArt(blogPalette(), 'radial', 7),
+    alt: 'Abstract warm-toned backdrop for the featured post',
   },
   {
-    title: 'About',
-    slug: 'about',
-    blocks: [
-      {
-        _key: 'demo-about-prose',
-        _type: 'prose',
-        _version: BLOCK_VERSION,
-        body: [
-          paragraph(
-            'This is a demo blog, scaffolded by create-cogenta from the "blog" blueprint. Its posts, ' +
-              'categories, tags and this very page were seeded by the installer so there is real content to ' +
-              'look at from the first run, not an empty admin screen.',
-          ),
-          paragraph(
-            'Everything here — the schema, the content, the skin — is a normal part of the site and is meant ' +
-              'to be edited, renamed or deleted the moment the defaults stop fitting.',
-          ),
-        ],
-      },
-    ],
+    name: 'quote-avatar',
+    spec: avatarArt(blogPalette(), 3),
+    alt: 'Abstract avatar mark for a reader quote',
   },
+  ...[1, 2, 3, 4, 5].map(
+    (n): DemoMediaSpec => ({
+      name: `logo-${n}`,
+      spec: logoArt(n),
+      alt: `Neutral wordmark placeholder ${n}`,
+    }),
+  ),
+  ...BLOG_DEMO_POSTS.map(
+    (demo, index): DemoMediaSpec => ({
+      name: `post-${demo.slug}`,
+      spec: coverArt(blogPalette(), index + 1),
+      alt: `Cover art for "${demo.title}"`,
+    }),
+  ),
 ]
+
+/** Header/footer navigation and the header call-to-action button (L25 D4). */
+export const BLOG_MENUS: BlueprintMenus = {
+  header: [
+    { label: 'Home' },
+    { label: 'Writing', url: '/blog' },
+    { label: 'About', url: '/about' },
+  ],
+  footer: [
+    { label: 'About', url: '/about' },
+    { label: 'Archive', url: '/archive' },
+    { label: 'RSS', url: '/feed.xml' },
+  ],
+  headerAction: { label: 'Subscribe', url: '/#newsletter' },
+}
+
+export const BLOG_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
+  'general.tagline': 'Notes on reading, building and writing things down.',
+  'general.socialLinks': [
+    { label: 'Mastodon', url: 'https://mastodon.social/@example' },
+    { label: 'X', url: 'https://x.com/example' },
+    { label: 'GitHub', url: 'https://github.com/example' },
+  ],
+  'general.footerNote': 'A personal blog, scaffolded by create-cogenta.',
+}
 
 export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
@@ -376,14 +476,197 @@ export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
 ]
 
 /**
+ * `home` (the featured-post hero, a live "Latest" grid, the topics rail, a
+ * reader quote, an editorial "From the archive" list, a newsletter panel, a
+ * press strip and an FAQ — eight blocks, the brief's own order) and `about`.
+ * `media` (`SeedContext.media`, L25 task A0b) supplies the hero backdrop and
+ * the quote avatar; a function of it rather than a static const for the same
+ * reason `store.ts`'s `buildStoreDemoPages` is.
+ */
+export function buildBlogDemoPages(
+  media: Readonly<Record<string, string>>,
+): readonly BlogDemoPage[] {
+  const featured = BLOG_DEMO_POSTS[0]
+  if (featured === undefined) {
+    throw new CogentaError({
+      code: 'BLUEPRINT_REGISTRY_CORRUPT',
+      message: 'BLOG_DEMO_POSTS is empty.',
+      hint: 'The blog blueprint needs at least one demo post to feature on its home page.',
+    })
+  }
+
+  const logoItems = [1, 2, 3, 4, 5]
+    .filter((n) => media[`logo-${n}`] !== undefined)
+    .map((n) => ({ _key: `demo-logo-${n}`, media: media[`logo-${n}`] as string }))
+
+  return [
+    {
+      title: 'Home',
+      slug: 'home',
+      blocks: [
+        {
+          _key: 'demo-home-hero',
+          _type: 'hero',
+          _version: BLOCK_VERSION,
+          eyebrow: 'Featured',
+          title: featured.title,
+          subtitle: featured.excerpt,
+          ...(media.hero === undefined ? {} : { media: media.hero }),
+          actions: [{ label: 'Read the story', target: { href: `/blog/${featured.slug}` } }],
+        } as VocabularyBlock,
+        {
+          _key: 'demo-home-latest',
+          _type: 'collectionList',
+          _version: BLOCK_VERSION,
+          title: 'Latest',
+          collection: 'post',
+          sort: { field: 'createdAt', direction: 'desc' },
+          limit: 6,
+          layout: 'grid',
+        },
+        {
+          _key: 'demo-home-topics',
+          _type: 'featureGrid',
+          _version: BLOCK_VERSION,
+          title: 'Topics',
+          items: [
+            {
+              _key: 'demo-topic-1',
+              icon: 'book',
+              title: 'Reading',
+              text: 'What I read, and why it stuck.',
+            },
+            {
+              _key: 'demo-topic-2',
+              icon: 'code',
+              title: 'Building',
+              text: 'Small tools, made to be used once.',
+            },
+            {
+              _key: 'demo-topic-3',
+              icon: 'pen',
+              title: 'Writing',
+              text: 'How a draft becomes a post.',
+            },
+            {
+              _key: 'demo-topic-4',
+              icon: 'coffee',
+              title: 'Craft',
+              text: 'The unglamorous parts of making things.',
+            },
+          ],
+        },
+        {
+          _key: 'demo-home-quote',
+          _type: 'quote',
+          _version: BLOCK_VERSION,
+          text: 'I started reading this blog for the writing advice and stayed for everything else.',
+          author: 'A. Reader',
+          role: 'Subscriber since issue one',
+          ...(media['quote-avatar'] === undefined ? {} : { avatar: media['quote-avatar'] }),
+        },
+        {
+          _key: 'demo-home-archive',
+          _type: 'collectionList',
+          _version: BLOCK_VERSION,
+          title: 'From the archive',
+          collection: 'post',
+          sort: { field: 'createdAt', direction: 'asc' },
+          limit: 5,
+          layout: 'list',
+        },
+        {
+          _key: 'demo-home-newsletter',
+          _type: 'cta',
+          _version: BLOCK_VERSION,
+          title: 'Get the weekly letter',
+          text: 'One email, every Thursday, no more than five minutes to read.',
+          actions: [
+            { label: 'Subscribe', target: { href: '/#newsletter' }, emphasis: 'primary' },
+            { label: 'See a past issue', target: { href: '/archive' } },
+          ],
+        },
+        // Omitted entirely, rather than sent with an empty `logos` array,
+        // when no logo mark was actually ingested (e.g. `seedDemoContent`
+        // called with `media: {}`) — contract B requires at least one item.
+        ...(logoItems.length === 0
+          ? []
+          : [
+              {
+                _key: 'demo-home-featured-in',
+                _type: 'logoStrip',
+                _version: BLOCK_VERSION,
+                caption: 'As featured in',
+                logos: logoItems,
+              } as VocabularyBlock,
+            ]),
+        {
+          _key: 'demo-home-faq',
+          _type: 'faq',
+          _version: BLOCK_VERSION,
+          title: 'About this blog',
+          items: [
+            {
+              _key: 'demo-faq-1',
+              question: 'How often do you publish?',
+              answer: [
+                paragraph(
+                  'Every other Thursday, with the occasional extra when something is urgent.',
+                ),
+              ],
+            },
+            {
+              _key: 'demo-faq-2',
+              question: 'Do you accept guest posts?',
+              answer: [
+                paragraph('Not currently — everything here is written and edited by one person.'),
+              ],
+            },
+            {
+              _key: 'demo-faq-3',
+              question: 'Is there an RSS feed?',
+              answer: [paragraph('Yes — the link is in the footer of every page.')],
+            },
+            {
+              _key: 'demo-faq-4',
+              question: 'Can I republish a post?',
+              answer: [paragraph('With attribution and a link back, always — just ask first.')],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'About',
+      slug: 'about',
+      blocks: [
+        {
+          _key: 'demo-about-prose',
+          _type: 'prose',
+          _version: BLOCK_VERSION,
+          body: [
+            paragraph(
+              'This is a demo blog, scaffolded by create-cogenta from the "blog" blueprint. Its posts, ' +
+                'categories, tags and this very page were seeded by the installer so there is real content to ' +
+                'look at from the first run, not an empty admin screen.',
+            ),
+            paragraph(
+              'Everything here — the schema, the content, the skin — is a normal part of the site and is ' +
+                'meant to be edited, renamed or deleted the moment the defaults stop fitting.',
+            ),
+          ],
+        },
+      ],
+    },
+  ]
+}
+
+/**
  * Inserts the `blog` blueprint's demo content through the real `ContentStore`
- * — never mocked (house rule) — so a scaffolded blog blueprint has genuine
- * rows to look at, not a claim that it does.
+ * — never mocked (house rule).
  */
 async function seedBlogDemoContent(ctx: SeedContext): Promise<void> {
-  const { db, defaultLocale, adminId } = ctx
-  // `category`/`tag` are taxonomies, not collections (T02, ADR-0022) — their
-  // demo terms go through `TaxonomyStore`, not `createContentStore`.
+  const { db, defaultLocale, adminId, media } = ctx
   const categoryStore = createTaxonomyStore({ db, taxonomy: category })
   const tagStore = createTaxonomyStore({ db, taxonomy: tag })
   const postStore = createContentStore({ db, collection: post, defaultLocale })
@@ -408,6 +691,7 @@ async function seedBlogDemoContent(ctx: SeedContext): Promise<void> {
   }
 
   for (const demo of BLOG_DEMO_POSTS) {
+    const cover = media[`post-${demo.slug}`]
     await postStore.create({
       status: 'published',
       createdBy: adminId,
@@ -418,11 +702,12 @@ async function seedBlogDemoContent(ctx: SeedContext): Promise<void> {
         body: demo.body,
         category: categoryIdBySlug.get(demo.categorySlug) ?? null,
         tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
+        ...(cover === undefined ? {} : { coverImage: cover }),
       },
     })
   }
 
-  for (const demo of BLOG_DEMO_PAGES) {
+  for (const demo of buildBlogDemoPages(media)) {
     await pageStore.create({
       status: 'published',
       createdBy: adminId,
@@ -437,4 +722,8 @@ export const blogContentPack: BlueprintContentPack = {
   taxonomies: BLOG_TAXONOMIES,
   recommendedAgents: BLOG_RECOMMENDED_AGENTS,
   seedDemoContent: seedBlogDemoContent,
+  defaultTheme: '@cogenta/theme-blog',
+  menus: BLOG_MENUS,
+  siteSettings: BLOG_SITE_SETTINGS,
+  mediaSpecs: BLOG_MEDIA_SPECS,
 }

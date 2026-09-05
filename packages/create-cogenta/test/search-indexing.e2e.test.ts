@@ -31,6 +31,10 @@ afterEach(async () => {
 
 describe('a scaffolded site indexes its own seeded demo content', () => {
   it('finds a seeded blog post over the real /api/search route', async () => {
+    // A real scaffold (migrations + demo-art media generation + ingest for
+    // eight demo posts) plus a real `runServe` + HTTP round trip regularly
+    // exceeds Vitest's 5s default on this machine; this is a genuine e2e
+    // budget, not a hung test.
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-search-e2e-'))
     dirs.push(targetDir)
 
@@ -70,7 +74,7 @@ describe('a scaffolded site indexes its own seeded demo content', () => {
 
     try {
       const response = await fetch(
-        `http://${address.host}:${address.port}/api/search?q=${encodeURIComponent('Cogenta')}`,
+        `http://${address.host}:${address.port}/api/search?q=${encodeURIComponent('drafts')}`,
       )
       expect(response.status).toBe(200)
       const body = (await response.json()) as { readonly data: readonly { collection: string }[] }
@@ -80,5 +84,5 @@ describe('a scaffolded site indexes its own seeded demo content', () => {
       controller.abort()
       await done
     }
-  })
+  }, 30000)
 })

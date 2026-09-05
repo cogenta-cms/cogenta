@@ -102,6 +102,12 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
     load: () => import('@cogenta/theme-magazine'),
     loadManifest: () => import('@cogenta/theme-magazine/theme.config'),
   },
+  {
+    name: '@cogenta/theme-blog',
+    label: 'Blog',
+    load: () => import('@cogenta/theme-blog'),
+    loadManifest: () => import('@cogenta/theme-blog/theme.config'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

@@ -10,7 +10,7 @@ import { buildBlogDemoPages } from '../src/blueprints/blog.js'
 import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
-import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
+import { buildRestaurantDemoPages } from '../src/blueprints/restaurant.js'
 // `saas`'s demo pages are now built from `SeedContext.media` and the real
 // feature ids assigned at seed time (L25) — `buildSaasDemoPages({}, new
 // Map())` renders the same pages this test checked before, minus the
@@ -24,6 +24,7 @@ import { buildSaasDemoPages } from '../src/blueprints/saas.js'
 import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
+const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())

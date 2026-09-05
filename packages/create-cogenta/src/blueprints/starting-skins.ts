@@ -190,4 +190,37 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     motion: { duration: '150ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
     shadow: { sm: '0 1px 2px rgba(21, 19, 31, 0.06)', md: '0 16px 40px rgba(21, 19, 31, 0.16)' },
   },
+  /**
+   * A restaurant (L25 D4): warm cream and charcoal ink, with a deep
+   * copper/wine accent — `@cogenta/theme-restaurant`'s own default palette
+   * (`packages/theme-restaurant/tokens.json`), copied here rather than
+   * referenced, since a blueprint's starting skin and a theme's own default
+   * skin are two independent pieces of data the contract keeps separate
+   * (a site can change either one without the other, `theme.renderChrome`
+   * neither reads nor writes `tokens.json`). Close to square radii and a
+   * spacious density match the theme's own "hairlines, not rounded
+   * corners" elegance.
+   */
+  restaurant: {
+    color: {
+      bg: '#f5ecdc',
+      fg: '#231b16',
+      accent: '#7a2a2c',
+      accentFg: '#ffffff',
+      muted: '#ece0cb',
+      mutedFg: '#4a3d33',
+      border: '#ddccae',
+    },
+    font: {
+      sans: "'Jost', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+      serif: "'Cormorant Garamond', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.25,
+      baseSize: '1rem',
+    },
+    space: { unit: '0.25rem', density: 'spacious' },
+    radius: { sm: '0.0625rem', md: '0.125rem', lg: '0.25rem' },
+    motion: { duration: '220ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    shadow: { sm: '0 1px 3px rgba(35, 27, 22, 0.14)', md: '0 16px 40px rgba(35, 27, 22, 0.22)' },
+  },
 }

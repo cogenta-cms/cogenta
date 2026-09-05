@@ -1,0 +1,868 @@
+/*
+ * Document, accessibility floor, page frame, chrome (header/footer/nav, the
+ * CSS-only mobile menu) and the one control the theme ships (an action
+ * link). Everything here reads the design system from `tokens.css`; nothing
+ * here reads a `--cogenta-*` token directly.
+ */
+
+/* --------------------------------------------------------------------------
+   Document
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-normal);
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* The display serif, everywhere a heading appears — light weight, generous
+   tracking at large sizes, the opposite instinct from a grotesque display
+   face. Every custom class below inherits this rather than restating it. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--cogenta-font-serif);
+  font-weight: var(--cg-weight-light);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  text-wrap: balance;
+}
+
+/* The small-caps, letter-spaced label this theme uses for every eyebrow/
+   kicker — one utility rather than five near-identical declarations. */
+.cg-kicker {
+  display: inline-block;
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+}
+
+::selection {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+img,
+video,
+iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+img {
+  display: block;
+  object-fit: cover;
+}
+
+:where(a) {
+  color: var(--cg-accent);
+  text-decoration-color: color-mix(in oklab, var(--cg-accent) 40%, transparent);
+  transition:
+    color var(--cg-duration-fast) var(--cg-ease),
+    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+}
+
+:where(a:hover) {
+  color: var(--cg-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+:where(hr) {
+  block-size: 1px;
+  border: 0;
+  margin-block: var(--cg-s10);
+  background: var(--cg-line);
+}
+
+/* --------------------------------------------------------------------------
+   Focus, targets, motion
+   -------------------------------------------------------------------------- */
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+  border-radius: var(--cg-radius-xs);
+}
+
+:where(
+  .cg-action,
+  .cg-faq__question,
+  .cg-hours__question,
+  .cg-press__link,
+  .cg-nav__cta,
+  .cg-mobile-nav__toggle
+) {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes cg-settle {
+      from {
+        opacity: 0;
+        transform: translateY(var(--cg-s3));
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    [data-block] {
+      animation: cg-settle linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 20%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.cg-skip-link {
+  position: absolute;
+  inset-inline-start: var(--cg-s3);
+  inset-block-start: calc(var(--cg-s3) * -8);
+  z-index: 20;
+  padding: var(--cg-s2) var(--cg-s4);
+  background: var(--cg-ink);
+  color: var(--cg-canvas);
+  border-radius: var(--cg-radius-sm);
+  font-weight: var(--cg-weight-medium);
+  text-decoration: none;
+  transition: inset-block-start var(--cg-duration) var(--cg-ease);
+}
+
+.cg-skip-link:focus-visible {
+  inset-block-start: var(--cg-s3);
+  outline-color: var(--cg-canvas);
+}
+
+/* --------------------------------------------------------------------------
+   Page frame
+   -------------------------------------------------------------------------- */
+
+.cg-main {
+  display: flow-root;
+}
+
+[data-block] {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y);
+  padding-inline: var(--cg-gutter);
+}
+
+/* The hero and the closing CTA are full-bleed by design — the "full-cadre"
+   dining-room photograph and the dark closing band both run edge to edge. */
+[data-block="hero"],
+[data-block="cta"] {
+  max-inline-size: none;
+  padding-inline: 0;
+  margin-block: 0;
+}
+
+/* --- per-block visual variant (blocks@2.0, RFC 0002) ---------------------- */
+
+[data-block][data-variant-background="muted"],
+[data-block][data-variant-background="image"] {
+  padding-block: var(--cg-s10);
+}
+
+[data-block][data-variant-background="muted"] {
+  background: var(--cg-surface-sunken);
+}
+
+[data-block][data-variant-background="image"] {
+  background: var(--cg-surface-tinted);
+}
+
+[data-block][data-variant-spacing="compact"] {
+  margin-block: calc(var(--cg-section-y) / 2);
+}
+
+[data-block][data-variant-spacing="spacious"] {
+  margin-block: calc(var(--cg-section-y) * 1.6);
+}
+
+[data-block][data-variant-align="start"] {
+  text-align: start;
+}
+
+[data-block][data-variant-align="center"] {
+  text-align: center;
+}
+
+[data-block][data-variant-align="end"] {
+  text-align: end;
+}
+
+[data-block][data-variant-width="full"] {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-page__title {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s6);
+  padding-inline: var(--cg-gutter);
+  font-size: var(--cg-text-3xl);
+  text-align: center;
+}
+
+/* `renderEntryHeader` (`@cogenta/theme-kit`, contract D `theme@1.4`) — the
+   shared entry furniture a routed collection with no `blocks` field of its
+   own (this theme's `menu_item`) still gets: title, excerpt, meta line,
+   cover photo, all centred like the rest of this theme's reading pages. */
+.cg-entry-header {
+  max-inline-size: var(--cg-page-narrow);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s8);
+  padding-inline: var(--cg-gutter);
+  text-align: center;
+}
+
+.cg-entry-header__terms {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--cg-s3);
+  margin: 0 0 var(--cg-s3);
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+  color: var(--cg-accent);
+}
+
+.cg-entry-header__title {
+  margin: 0 0 var(--cg-s4);
+  font-size: var(--cg-text-3xl);
+}
+
+.cg-entry-header__excerpt {
+  margin: 0 0 var(--cg-s4);
+  font-style: italic;
+  color: var(--cg-ink-muted);
+}
+
+.cg-entry-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--cg-s3);
+  margin: 0 0 var(--cg-s8);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-subtle);
+}
+
+.cg-entry-header__cover {
+  margin: 0;
+  border-radius: var(--cg-radius-md);
+  overflow: hidden;
+}
+
+.cg-entry-header__cover img {
+  inline-size: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Chrome — header, sticky, centred wordmark, CSS-only mobile menu
+   -------------------------------------------------------------------------- */
+
+.cg-site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  padding: var(--cg-s4) var(--cg-gutter);
+  background: color-mix(in oklab, var(--cg-canvas) 90%, transparent);
+  border-block-end: 1px solid var(--cg-line-soft);
+  backdrop-filter: saturate(1.2) blur(10px);
+}
+
+.cg-site-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-gap);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+}
+
+.cg-site-header__home {
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-serif);
+  font-weight: var(--cg-weight-regular);
+  font-size: var(--cg-text-lg);
+  letter-spacing: var(--cg-tracking-wide);
+  text-decoration: none;
+  margin-inline-end: auto;
+}
+
+.cg-site-header__logo {
+  display: block;
+  block-size: 2.25rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+}
+
+.cg-nav {
+  display: none;
+}
+
+@media (min-width: 56rem) {
+  .cg-nav {
+    display: flex;
+    align-items: center;
+  }
+}
+
+.cg-nav__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-sm);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-nav__items a,
+.cg-nav__items span {
+  color: var(--cg-ink-muted);
+  text-decoration: none;
+}
+
+.cg-nav__items a:hover {
+  color: var(--cg-ink);
+}
+
+.cg-nav__cta {
+  display: none;
+  margin-inline-start: var(--cg-s5);
+}
+
+@media (min-width: 56rem) {
+  .cg-nav__cta {
+    display: inline-flex;
+  }
+}
+
+/* The CSS-only mobile menu: a `<details>`/`<summary>` disclosure, shown only
+   below the breakpoint the desktop `.cg-nav` appears at. No JavaScript
+   anywhere — expanding, focus and keyboard operation all come from the
+   browser's own `<details>` behaviour. */
+.cg-mobile-nav {
+  position: relative;
+  display: inline-flex;
+}
+
+@media (min-width: 56rem) {
+  .cg-mobile-nav {
+    display: none;
+  }
+}
+
+.cg-mobile-nav__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--cg-ink);
+  list-style: none;
+}
+
+.cg-mobile-nav__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.cg-mobile-nav__glyph {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+}
+
+.cg-mobile-nav__panel {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--cg-s3));
+  z-index: 30;
+  min-inline-size: 14rem;
+  padding: var(--cg-s4);
+  background: var(--cg-surface);
+  box-shadow: var(--cogenta-shadow-md), var(--cg-ring);
+  border-radius: var(--cg-radius-md);
+}
+
+.cg-mobile-nav__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-sm);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-mobile-nav__items a,
+.cg-mobile-nav__items span {
+  color: var(--cg-ink);
+  text-decoration: none;
+}
+
+.cg-mobile-nav__items .cg-nav__cta {
+  display: inline-flex;
+}
+
+/* --------------------------------------------------------------------------
+   Chrome — footer, columns
+   -------------------------------------------------------------------------- */
+
+.cg-site-footer {
+  padding: var(--cg-s16) var(--cg-gutter) var(--cg-s8);
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink-muted);
+  border-block-start: 1px solid var(--cg-line-soft);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer__grid {
+  display: grid;
+  gap: var(--cg-gap-loose);
+  grid-template-columns: 1fr;
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-block-end: var(--cg-s10);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+@media (min-width: 48rem) {
+  .cg-site-footer__grid {
+    grid-template-columns: 1.2fr 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.cg-site-footer__brand-name {
+  display: block;
+  color: var(--cg-ink);
+  font-family: var(--cogenta-font-serif);
+  font-size: var(--cg-text-xl);
+  letter-spacing: var(--cg-tracking-wide);
+  text-decoration: none;
+  margin-block-end: var(--cg-s3);
+}
+
+.cg-site-footer__tagline {
+  margin: 0 0 var(--cg-s4);
+}
+
+.cg-site-footer__social {
+  display: flex;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: 50%;
+  box-shadow: var(--cg-ring);
+  color: var(--cg-ink-muted);
+}
+
+.cg-site-footer__social-item a:hover {
+  color: var(--cg-accent);
+  box-shadow: var(--cg-ring-accent);
+}
+
+.cg-social__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cg-site-footer__nav .cg-nav__items {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-s3);
+  text-transform: none;
+  letter-spacing: var(--cg-tracking-normal);
+}
+
+.cg-site-footer__about {
+  font-style: italic;
+}
+
+.cg-site-footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cg-s4);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-block-start: var(--cg-s6);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cg-ink-subtle);
+}
+
+.cg-site-footer__branding {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  opacity: 0.8;
+  transition: opacity var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-footer__branding a {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.cg-site-footer__branding a:hover,
+.cg-site-footer__branding a:focus-visible {
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Actions — the theme's only control
+   -------------------------------------------------------------------------- */
+
+.cg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s4);
+  margin: var(--cg-s8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s2);
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 1px solid transparent;
+  border-radius: var(--cg-radius-sm);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  line-height: var(--cg-leading-snug);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration-fast) var(--cg-ease);
+}
+
+.cg-action[data-emphasis="primary"] {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-accent-hover);
+  border-color: var(--cg-accent-hover);
+  transform: translateY(-1px);
+}
+
+.cg-action[data-emphasis="secondary"] {
+  background: transparent;
+  border-color: var(--cg-line-strong);
+  color: var(--cg-ink);
+}
+
+.cg-action[data-emphasis="secondary"]:hover {
+  border-color: var(--cg-accent);
+  color: var(--cg-accent);
+}
+
+.cg-action:active {
+  transform: translateY(0);
+}
+
+/* --------------------------------------------------------------------------
+   Shared block furniture — every custom title class this theme's seventeen
+   blocks declare, kept to one typographic rule so a page mixing all of them
+   reads as one system.
+   -------------------------------------------------------------------------- */
+
+.cg-craft__title-heading,
+.cg-close__title,
+.cg-faq__title,
+.cg-figures__title,
+.cg-press__title,
+.cg-set-menu__title,
+.cg-tallies__title,
+.cg-hours__title,
+.cg-menu__title {
+  margin: 0 0 var(--cg-s10);
+  font-size: var(--cg-text-2xl);
+  text-align: center;
+}
+
+.cg-craft__items,
+.cg-press__items,
+.cg-press-strip__items,
+.cg-gallery__items,
+.cg-faq__items,
+.cg-hours__items,
+.cg-set-menu__tiers,
+.cg-menu__dishes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-gallery__viewport,
+.cg-menu__viewport {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cg-line-strong) transparent;
+  padding-block: var(--cg-s2);
+  margin-block: calc(var(--cg-s2) * -1);
+}
+
+/* --------------------------------------------------------------------------
+   Search, forms, comments — public utility pages and post-content
+   furniture, styled with the same restrained, elegant language as the
+   seventeen blocks.
+   -------------------------------------------------------------------------- */
+
+.cg-search__form,
+.cg-search__results,
+.cg-search__empty,
+.cg-search__error,
+.cg-form,
+.cg-form__confirmation,
+.cg-comments {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-search__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--cg-s3);
+  margin-block-end: var(--cg-s8);
+}
+
+.cg-search__form label {
+  display: block;
+  font-size: var(--cg-text-sm);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-search__form input[type="search"] {
+  flex: 1 1 16rem;
+}
+
+.cg-search__results {
+  margin: 0 auto;
+  padding-inline-start: var(--cg-gutter);
+  display: grid;
+  gap: var(--cg-s4);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-search__empty,
+.cg-comments__empty,
+.cg-comments__closed {
+  color: var(--cg-ink-muted);
+}
+
+.cg-search__error,
+.cg-form__error,
+.cg-form__field-error {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-search__form input,
+.cg-form__field input,
+.cg-form__field select,
+.cg-form__field textarea,
+.cg-comment__form input,
+.cg-comment__form textarea {
+  inline-size: 100%;
+  padding: var(--cg-s3) var(--cg-s4);
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-sm);
+  background: var(--cg-surface);
+  color: var(--cg-ink);
+  font: inherit;
+}
+
+.cg-form__field input[aria-invalid="true"],
+.cg-form__field select[aria-invalid="true"],
+.cg-form__field textarea[aria-invalid="true"] {
+  border-width: 2px;
+  border-color: var(--cg-line-strong);
+}
+
+.cg-search__form button,
+.cg-form button[type="submit"],
+.cg-comment__form button[type="submit"] {
+  padding: var(--cg-s3) var(--cg-s6);
+  border: 0;
+  border-radius: var(--cg-radius-sm);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-search__form button:hover,
+.cg-form button[type="submit"]:hover,
+.cg-comment__form button[type="submit"]:hover {
+  background: var(--cg-accent-hover);
+}
+
+.cg-form__field,
+.cg-comment__form p {
+  display: block;
+  margin-block-end: var(--cg-s5);
+}
+
+.cg-form__field label,
+.cg-comment__form label {
+  display: block;
+  font-size: var(--cg-text-sm);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-form__help {
+  margin: var(--cg-s2) 0 0;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+}
+
+.cg-form__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-s2);
+  margin-inline-end: var(--cg-s4);
+  font-weight: normal;
+}
+
+.cg-form__honeypot,
+.cg-comment__honeypot {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  inset-inline-start: -9999px;
+}
+
+.cg-comments {
+  margin-block-start: var(--cg-section-y);
+  padding-block-start: var(--cg-s8);
+  padding-block-end: var(--cg-section-y);
+  border-block-start: 1px solid var(--cg-line-soft);
+}
+
+.cg-comments__list,
+.cg-comment__replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-comment {
+  padding-block: var(--cg-s5);
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+.cg-comment__replies {
+  padding-block-start: var(--cg-s5);
+}
+
+.cg-comment__replies .cg-comment {
+  padding-inline-start: var(--cg-s6);
+  border-inline-start: 2px solid var(--cg-line-soft);
+  border-block-end: 0;
+}
+
+.cg-comment__meta {
+  display: flex;
+  gap: var(--cg-s3);
+  align-items: baseline;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-comment__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+.cg-comment__body {
+  margin: 0;
+}

@@ -120,6 +120,12 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
     load: () => import('@cogenta/theme-docs'),
     loadManifest: () => import('@cogenta/theme-docs/theme.config'),
   },
+  {
+    name: '@cogenta/theme-restaurant',
+    label: 'Restaurant',
+    load: () => import('@cogenta/theme-restaurant'),
+    loadManifest: () => import('@cogenta/theme-restaurant/theme.config'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

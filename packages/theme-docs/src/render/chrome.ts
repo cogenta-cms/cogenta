@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -71,6 +72,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
 
   const desktopNav = renderNav(input.headerNav, 'cg-site-header__nav', 'Primary')
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
   const desktopAction = renderHeaderAction(input.headerAction, 'cg-site-header__action')
 
   const mobileNavItems = navItems(input.headerNav)
@@ -90,7 +92,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
-    `${desktopNav}${desktopAction}${toggle}` +
+    `${desktopNav}${themeToggle}${desktopAction}${toggle}` +
     `</div></header>`
 
   const footerNav = renderNav(input.footerNav, 'cg-site-footer__nav', 'Footer')

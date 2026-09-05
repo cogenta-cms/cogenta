@@ -314,11 +314,13 @@ kbd {
 .cg-site-header__home {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   color: var(--cg-ink);
   font-weight: var(--cg-weight-bold);
   font-size: var(--cg-text-lg);
   letter-spacing: var(--cg-tracking-tight);
   text-decoration: none;
+  white-space: nowrap;
   margin-inline-end: var(--cg-s6);
 }
 
@@ -359,6 +361,59 @@ kbd {
 .cg-site-header__action {
   margin-inline-start: var(--cg-s3);
   white-space: nowrap;
+}
+
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`) — a plain icon button matching `.cg-nav-toggle__button`'s own
+   sizing and radius, not `.cg-action`'s call-to-action look, so it never
+   competes visually with the header action. Always visible, at every
+   viewport width — unlike the nav links, it needs no mobile disclosure. */
+.cg-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 2.25rem;
+  inline-size: 2.25rem;
+  flex-shrink: 0;
+  margin-inline-start: var(--cg-s2);
+  border-radius: var(--cg-radius-md);
+  border: 1px solid var(--cg-line-soft);
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+}
+
+.cg-theme-toggle:hover {
+  background: var(--cg-surface-sunken);
+}
+
+.cg-theme-toggle__icon {
+  block-size: 1.1rem;
+  inline-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
 }
 
 /* The mobile disclosure — hidden entirely above the sidebar breakpoint, so
@@ -415,8 +470,19 @@ kbd {
 }
 
 @media (max-width: 56rem) {
-  .cg-site-header__nav,
-  .cg-site-header__action {
+  .cg-site-header__nav {
+    display: none;
+  }
+
+  /* Equal-specificity `.cg-action { display: inline-flex }` (Actions,
+     below) is declared later in this file, so a bare `.cg-site-header__
+     action` selector here would lose the cascade tie despite the narrower
+     viewport matching — the desktop action stayed visible next to the
+     hamburger's own copy, cramping the site name into wrapping onto the
+     sticky header and overlapping the page content beneath it. Chaining the
+     parent class raises specificity above `.cg-action`'s, independent of
+     source order. */
+  .cg-site-header__inner .cg-site-header__action {
     display: none;
   }
 

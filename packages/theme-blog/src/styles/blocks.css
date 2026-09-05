@@ -182,6 +182,12 @@
 .cg-prose {
   max-inline-size: var(--cg-measure);
   margin-inline: auto;
+  /* A reading column never inherits a stray float from a preceding
+     `mediaFigure[data-align="start"|"end"]` in the same page (e.g. a small
+     author photo above an "About" page's body) — without this, an
+     auto-centered box beside a float wraps unpredictably instead of
+     starting clear below it. */
+  clear: both;
   font-family: var(--cg-font-reading);
   font-size: var(--cg-text-lg);
   line-height: var(--cg-leading-reading);

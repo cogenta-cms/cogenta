@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -177,5 +178,38 @@ describe('renderChrome', () => {
     const { header, footer } = renderChrome(BASE)
     expect(header).not.toMatch(/<script/i)
     expect(footer).not.toMatch(/<script/i)
+  })
+
+  describe('manual light/dark toggle', () => {
+    // Unconditional on every render — never gated behind theme@1.4 fields —
+    // and built here from `renderThemeToggle` itself, not a hand-typed
+    // literal, so this assertion cannot silently drift from the real markup.
+    it('renders the toggle button, byte-identical to renderThemeToggle', () => {
+      const { header } = renderChrome(BASE)
+      const expectedToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+      expect(header).toContain(expectedToggle)
+    })
+
+    it('still renders the toggle when there is no nav at all', () => {
+      const { header } = renderChrome({ ...BASE, headerNav: [] })
+      expect(header).toContain('data-cg-theme-toggle')
+    })
+
+    it('places the toggle after both nav renderings, never inside either', () => {
+      const { header } = renderChrome(BASE)
+      const toggleIndex = header.indexOf('data-cg-theme-toggle')
+      const detailsCloseIndex = header.indexOf('</details>')
+      const desktopNavCloseIndex = header.lastIndexOf('</nav>', toggleIndex)
+      expect(toggleIndex).toBeGreaterThan(-1)
+      expect(toggleIndex).toBeGreaterThan(detailsCloseIndex)
+      expect(header.indexOf('cg-menu__panel')).toBeLessThan(toggleIndex)
+      expect(desktopNavCloseIndex).toBeLessThan(toggleIndex)
+    })
+
+    it('reflects the locale passed to renderChrome', () => {
+      const { header } = renderChrome({ ...BASE, locale: 'fr' })
+      const expectedToggle = serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' }))
+      expect(header).toContain(expectedToggle)
+    })
   })
 })

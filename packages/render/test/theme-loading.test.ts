@@ -82,7 +82,7 @@ describe('loading the active theme from the configuration', () => {
     })
 
     expect(theme.manifest.version).toBe('1.0.0')
-    expect(theme.manifest.implements).toHaveLength(12)
+    expect(theme.manifest.implements).toHaveLength(17)
   })
 
   it('resolves a theme by name, without an explicit root', async () => {

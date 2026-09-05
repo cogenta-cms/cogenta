@@ -1521,21 +1521,28 @@ async function renderEntryPage(
   let commentsHtml = ''
   if (commentsOptions !== undefined) {
     const data = await commentsOptions.forEntry(collection.name, entry.id, entry.locale)
-    commentsHtml = serialize(
-      renderCommentsSection({
-        comments: data.items,
-        open: data.open,
-        action: commentsOptions.action,
-        collection: collection.name,
-        entryId: entry.id,
-        locale: entry.locale,
-        pagePath: pathname,
-        ...(commentsOptions.honeypotField === undefined
-          ? {}
-          : { honeypotField: commentsOptions.honeypotField }),
-        renderedAt: Date.now(),
-      }),
-    )
+    // Closed and empty means "this page has no discussion", not "here is a
+    // discussion you may not join": a home page whose collection opted out
+    // of comments (every blueprint's `page` collection, L25) used to end on
+    // a "Comments (0) — closed" section anyway. A closed thread that already
+    // holds approved comments still shows them, read-only.
+    const hasThread = data.open || data.items.length > 0
+    if (hasThread)
+      commentsHtml = serialize(
+        renderCommentsSection({
+          comments: data.items,
+          open: data.open,
+          action: commentsOptions.action,
+          collection: collection.name,
+          entryId: entry.id,
+          locale: entry.locale,
+          pagePath: pathname,
+          ...(commentsOptions.honeypotField === undefined
+            ? {}
+            : { honeypotField: commentsOptions.honeypotField }),
+          renderedAt: Date.now(),
+        }),
+      )
   }
 
   // The head is `@cogenta/seo`'s, not this file's: title, description,

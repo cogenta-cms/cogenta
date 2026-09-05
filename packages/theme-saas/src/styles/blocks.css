@@ -327,7 +327,16 @@
 .cg-features__items {
   display: grid;
   gap: var(--cg-gap);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  /* Capped at three columns: with `auto-fit` alone a six-item grid became
+     four columns plus two orphans on a wide screen — a 3×2 grid is what a
+     six-feature section is designed to be. */
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+}
+
+@media (min-width: 64rem) {
+  .cg-features__items {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .cg-feature {

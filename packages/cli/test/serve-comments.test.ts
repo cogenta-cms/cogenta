@@ -163,6 +163,48 @@ describe('cogenta serve — POST /api/comments (fiche 15, ADR-0025)', () => {
     }
   })
 
+  it('renders no comments section at all on a page whose collection opted out (closed and empty)', async () => {
+    // Every blueprint's `page` collection is opted out at scaffold time
+    // (L25): a home page must not end on "Comments (0) — closed".
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const adminToken = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const pageId = await create(server.base, token, 'page', {
+        title: 'Quiet page',
+        slug: 'quiet-page',
+      })
+      await publish(server.base, token, 'page', pageId)
+
+      const before = await (await fetch(`${server.base}/quiet-page`)).text()
+      expect(before).toContain('cg-comments')
+
+      const optOut = await fetch(`${server.base}/api/comments/settings/collection`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ collection: 'page', enabled: false }),
+      })
+      expect(optOut.status).toBe(200)
+
+      const after = await (await fetch(`${server.base}/quiet-page`)).text()
+      expect(after).not.toContain('cg-comments')
+      expect(after).not.toContain('Comments are closed')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('never lets a submitted <script> reach the rendered page — refused before it is even stored', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

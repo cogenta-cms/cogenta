@@ -7,7 +7,7 @@ import { ASSOCIATION_DEMO_PAGES } from '../src/blueprints/association.js'
 // minus the (now media-dependent) hero backdrop/quote avatar/press logos,
 // none of which this test exercises.
 import { buildBlogDemoPages } from '../src/blueprints/blog.js'
-import { DOCUMENTATION_DEMO_PAGES } from '../src/blueprints/documentation.js'
+import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
 import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
@@ -27,6 +27,7 @@ import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
+const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

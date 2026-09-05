@@ -56,6 +56,7 @@
     "@cogenta/seo": "workspace:*",
     "@cogenta/theme-blog": "workspace:*",
     "@cogenta/theme-canonical": "workspace:*",
+    "@cogenta/theme-docs": "workspace:*",
     "@cogenta/theme-ecommerce": "workspace:*",
     "@cogenta/theme-entreprise": "workspace:*",
     "@cogenta/theme-kit": "workspace:*",

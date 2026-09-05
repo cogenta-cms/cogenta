@@ -74,6 +74,35 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   },
 
   /**
+   * A documentation site: cool blue-grey neutrals and one confident blue
+   * accent — the Docusaurus/GitBook register — with a compact density and
+   * restrained radii, since a reference site reads a line at a time rather
+   * than as a marketing page.
+   */
+  documentation: {
+    color: {
+      bg: '#ffffff',
+      fg: '#0f172a',
+      accent: '#1d4ed8',
+      accentFg: '#ffffff',
+      muted: '#f1f5f9',
+      mutedFg: '#475569',
+      border: '#e2e8f0',
+    },
+    font: {
+      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.15,
+      baseSize: '1rem',
+    },
+    space: { unit: '0.25rem', density: 'compact' },
+    radius: { sm: '0.25rem', md: '0.375rem', lg: '0.625rem' },
+    motion: { duration: '150ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 2px rgba(15, 23, 42, 0.06)', md: '0 10px 28px rgba(15, 23, 42, 0.12)' },
+  },
+
+  /**
    * An online store: a teal accent (trust, not urgency — the canonical
    * blue's commerce-adjacent cousin), comfortably rounded corners that read
    * as approachable product cards rather than an admin table.

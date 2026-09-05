@@ -1,3 +1,4 @@
+import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
 import { ASSOCIATION_DEMO_PAGES } from '../src/blueprints/association.js'
@@ -7,8 +8,14 @@ import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
 import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
 import { SAAS_DEMO_PAGES } from '../src/blueprints/saas.js'
-import { STORE_DEMO_PAGES } from '../src/blueprints/store.js'
+// `store`'s demo pages are now built from `SeedContext.media` (L25 task
+// A0b) — `buildStoreDemoPages({})` renders the same pages this test checked
+// before, minus the (now media-dependent) hero image, which this test does
+// not exercise.
+import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
+
+const STORE_DEMO_PAGES = buildStoreDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B
@@ -24,7 +31,13 @@ import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
  * `parseBlocks` is the same function the admin and the content store use, and
  * it refuses duplicate keys as well as invalid fields.
  */
-const BLUEPRINTS = {
+/** The shape every blueprint's `*_DEMO_PAGES` shares. `store`'s is now the return of a function (`buildStoreDemoPages`, L25 task A0b) rather than an `as const` literal, so this record is typed explicitly instead of inferred — a mix of literal and widened array types otherwise defeats `Object.entries`' own inference below. */
+interface DemoPage {
+  readonly slug: string
+  readonly blocks: readonly VocabularyBlock[]
+}
+
+const BLUEPRINTS: Readonly<Record<string, readonly DemoPage[]>> = {
   association: ASSOCIATION_DEMO_PAGES,
   blog: BLOG_DEMO_PAGES,
   documentation: DOCUMENTATION_DEMO_PAGES,
@@ -34,7 +47,7 @@ const BLUEPRINTS = {
   saas: SAAS_DEMO_PAGES,
   store: STORE_DEMO_PAGES,
   vitrine: VITRINE_DEMO_PAGES,
-} as const
+}
 
 describe('the demo content every blueprint seeds', () => {
   for (const [name, pages] of Object.entries(BLUEPRINTS)) {

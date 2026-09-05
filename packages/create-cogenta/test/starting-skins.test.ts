@@ -63,6 +63,11 @@ describe('scaffoldSite — starting skin selection', () => {
       const written = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
       expect(written).toEqual(requiredSkin(blueprintId))
     },
+    // `store` (L25 task A0b) now renders and ingests 7 real demo images
+    // through the real media pipeline during this same `scaffoldSite` call
+    // — measured at ~25-30s end to end (see `store-blueprint.test.ts`'s own
+    // note). Genuinely slower than the default 5s, not a hang.
+    60_000,
   )
 
   it('keeps using the theme’s generic default for a blueprint with no starting skin of its own', async () => {

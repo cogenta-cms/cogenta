@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@cogenta/agents": "workspace:*",
+    "@cogenta/api": "workspace:*",
     "@cogenta/auth": "workspace:*",
     "@cogenta/blocks": "workspace:*",
     "@cogenta/cli": "workspace:*",

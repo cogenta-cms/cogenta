@@ -57,7 +57,12 @@ export async function resetPlaygroundData(options: ResetPlaygroundDataOptions): 
       : ((await createUserStore(options.db).byEmail(options.adminEmail))?.id ?? null)
 
   const defaultLocale = options.defaultLocale ?? 'en'
-  await pack.seedDemoContent(options.db, defaultLocale, adminId)
+  // No storage/image driver is wired here (fiche 12 task 12's reset has
+  // never touched media) — `media: {}` is exactly the shape a blueprint
+  // that ignores it already handles, and one that references a `media[…]`
+  // key (`store`, L25 task A0b) simply leaves that field unset (nothing on
+  // its collections/blocks requires it).
+  await pack.seedDemoContent({ db: options.db, defaultLocale, adminId, media: {} })
 
   // Same gap as the installer's own seed path (L20 audit, point 2): the pack
   // writes straight through `createContentStore`, never through the

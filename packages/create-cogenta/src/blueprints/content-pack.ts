@@ -6,6 +6,8 @@ import {
   f,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
+import type { DemoMediaSpec } from './demo-media.js'
+import type { BlueprintMenus } from './menus.js'
 
 /**
  * One paragraph, as the structured rich-text document contract A stores (never
@@ -42,11 +44,24 @@ export interface RecommendedAgentHint {
   readonly reason: string
 }
 
-export type SeedDemoContent = (
-  db: DatabaseHandle,
-  defaultLocale: string,
-  adminId: string | null,
-) => Promise<void>
+/**
+ * What every `SeedDemoContent` function receives (L25 task A0b — previously
+ * three positional parameters, `db`/`defaultLocale`/`adminId`; widened to
+ * carry `media` so a blueprint's demo content can reference the images
+ * `seedDemoMedia` (`./demo-media.js`) already ingested — `hero.media`,
+ * `product.photo`, an article's `coverImage`, and so on). Every blueprint
+ * that predates this task takes the same three fields it always did and
+ * simply ignores `media`; nothing about their existing content changes.
+ */
+export interface SeedContext {
+  readonly db: DatabaseHandle
+  readonly defaultLocale: string
+  readonly adminId: string | null
+  /** `{ [DemoMediaSpec.name]: mediaId }` — see `./demo-media.js`. Empty for a blueprint that seeds no media. */
+  readonly media: Readonly<Record<string, string>>
+}
+
+export type SeedDemoContent = (ctx: SeedContext) => Promise<void>
 
 /**
  * "Un blueprint = modèle de contenu + skin + agents préconfigurés + contenu
@@ -55,6 +70,12 @@ export type SeedDemoContent = (
  * differs per blueprint: its collections, the agents it recommends, and how
  * it seeds its own demo content (including template pages, via
  * `f.blocks()`) through the real `ContentStore`.
+ *
+ * L25 task A0b adds four optional fields, all additive: `defaultTheme` (an
+ * npm package name — `scaffold.ts` writes it to `cogenta_theme.active_theme`
+ * and to the generated site's `package.json`), `menus`/`siteSettings` (seeded
+ * before `seedDemoContent` runs), and (unchanged) `taxonomies`. A blueprint
+ * that declares none of them behaves exactly as it did before this task.
  */
 export interface BlueprintContentPack {
   readonly collections: readonly CollectionDefinition[]
@@ -62,6 +83,19 @@ export interface BlueprintContentPack {
   readonly taxonomies?: readonly TaxonomyDefinition[]
   readonly recommendedAgents: readonly RecommendedAgentHint[]
   readonly seedDemoContent: SeedDemoContent
+  /** An npm package name (e.g. `@cogenta/theme-ecommerce`) this blueprint activates by default. Absent: the canonical theme, unchanged. */
+  readonly defaultTheme?: string
+  /** Header/footer/header-action navigation, seeded through the real `MenuStore`. Absent: no menus seeded. */
+  readonly menus?: BlueprintMenus
+  /** Site settings this blueprint seeds (`general.tagline`, `general.socialLinks`, …), keyed by their registry key. Absent: none seeded. */
+  readonly siteSettings?: Readonly<Record<string, unknown>>
+  /**
+   * Procedural demo visuals (`demo-art`), rendered and ingested through the
+   * real media pipeline (`seedDemoMedia`) *before* `seedDemoContent` runs —
+   * the resulting `{ name: mediaId }` map is what `SeedContext.media`
+   * carries. Absent: no media seeded, `media` stays `{}`.
+   */
+  readonly mediaSpecs?: readonly DemoMediaSpec[]
 }
 
 /**

@@ -349,8 +349,8 @@ export const STORE_MENUS: BlueprintMenus = {
 export const STORE_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
   'general.tagline': 'Made to be used, not shelved.',
   'general.socialLinks': [
-    { label: 'Instagram', href: 'https://instagram.com/example' },
-    { label: 'X', href: 'https://x.com/example' },
+    { label: 'Instagram', url: 'https://instagram.com/example' },
+    { label: 'X', url: 'https://x.com/example' },
   ],
   'general.footerNote': 'A demo store, scaffolded by create-cogenta.',
 }

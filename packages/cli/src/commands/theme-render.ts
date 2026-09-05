@@ -756,9 +756,20 @@ function collectRichTextAssets(blocks: readonly VocabularyBlock[]): RichTextAsse
   return { media: [...media], links }
 }
 
+// A collection is free to call its title field anything (`vitrine`'s
+// `service`, `restaurant`'s `menu_item`, `store`'s `product` and `saas`'s
+// `feature` all use `name`, never `title`) — the same fallback chain
+// `@cogenta/theme-kit`'s own `entryTitle` already follows for a theme's
+// cards and lists, so a page's `<title>`/`<h1>` reads the same name rather
+// than falling back to the entry's raw id.
+const TITLE_FIELDS = ['title', 'name', 'label'] as const
+
 export function entryTitle(entry: ContentEntry): string {
-  const value = entry.values.title
-  return typeof value === 'string' && value.trim() !== '' ? value : entry.id
+  for (const field of TITLE_FIELDS) {
+    const value = entry.values[field]
+    if (typeof value === 'string' && value.trim() !== '') return value
+  }
+  return entry.id
 }
 
 interface ResolvedMenuLink {

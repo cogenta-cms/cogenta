@@ -7,7 +7,12 @@ import { DOCUMENTATION_DEMO_PAGES } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
 import { RESTAURANT_DEMO_PAGES } from '../src/blueprints/restaurant.js'
-import { SAAS_DEMO_PAGES } from '../src/blueprints/saas.js'
+// `saas`'s demo pages are now built from `SeedContext.media` and the real
+// feature ids assigned at seed time (L25) — `buildSaasDemoPages({}, new
+// Map())` renders the same pages this test checked before, minus the
+// (now media-dependent) hero/product/logo images and the feature-entry
+// links, neither of which this test exercises.
+import { buildSaasDemoPages } from '../src/blueprints/saas.js'
 // `store`'s demo pages are now built from `SeedContext.media` (L25 task
 // A0b) — `buildStoreDemoPages({})` renders the same pages this test checked
 // before, minus the (now media-dependent) hero image, which this test does
@@ -16,6 +21,7 @@ import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
+const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

@@ -60,6 +60,7 @@
     "@cogenta/theme-kit": "workspace:*",
     "@cogenta/theme-magazine": "workspace:*",
     "@cogenta/theme-portfolio": "workspace:*",
+    "@cogenta/theme-saas": "workspace:*",
     "graphql": "catalog:"
   },
   "devDependencies": {

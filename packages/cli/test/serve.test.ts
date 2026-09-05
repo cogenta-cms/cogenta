@@ -1082,6 +1082,95 @@ export default [
   return root
 }
 
+/**
+ * `vitrine`'s `service`, `restaurant`'s `menu_item`, `store`'s `product` and
+ * `saas`'s `feature` (L25) all name their title field `name`, never `title`
+ * — a collection is free to, contract A does not fix it. `entryTitle`
+ * (`theme-render.ts`) used to read only `entry.values.title`, so a page for
+ * one of these fell back to the entry's raw id as its `<h1>` and `<title>`.
+ */
+async function themedProjectWithNamedCollection(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'cogenta-theme-named-'))
+  await writeFile(
+    join(root, 'cogenta.config.mjs'),
+    `export default {
+  site: { name: 'Themed site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+}
+`,
+    'utf8',
+  )
+  await writeFile(
+    join(root, 'cogenta.schema.mjs'),
+    `import { defineCollection, f } from '@cogenta/schema'
+
+export default [
+  defineCollection({
+    name: 'feature',
+    labels: { singular: 'Feature', plural: 'Features' },
+    routing: { pattern: '/features/:slug' },
+    fields: {
+      name: f.text({ required: true, max: 120 }),
+      slug: f.slug({ from: 'name', unique: true }),
+    },
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  }),
+]
+`,
+    'utf8',
+  )
+  return root
+}
+
+describe('a themed entry page whose title field is not named "title"', () => {
+  it("shows the entry's own name, never its raw id", async () => {
+    const root = await themedProjectWithNamedCollection()
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const feature = defineCollection({
+      name: 'feature',
+      labels: { singular: 'Feature', plural: 'Features' },
+      routing: { pattern: '/features/:slug' },
+      fields: {
+        name: f.text({ required: true, max: 120 }),
+        slug: f.slug({ from: 'name', unique: true }),
+      },
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await createSchemaTables(db, [feature])
+    await createContentStore({
+      db,
+      collection: feature,
+      defaultLocale: 'en',
+    }).create({
+      status: 'published',
+      createdBy: null,
+      values: { name: 'Workflow automation', slug: 'workflow-automation' },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const response = await fetch(`${server.base}/features/workflow-automation`)
+      expect(response.status).toBe(200)
+      const html = await response.text()
+      // The raw id is legitimately present elsewhere on the page (the
+      // comment form's hidden `entryId` field) — it is specifically the
+      // `<title>` and the entry header's `<h1>` that must never fall back to
+      // it, which is what these two assertions check.
+      expect(html).toContain('<title>Workflow automation</title>')
+      expect(html).toContain('cg-entry-header__title">Workflow automation<')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
 describe('a collectionList block linking to an entry with no slug', () => {
   it('still renders the page, with a "#" link for the entry it cannot route', async () => {
     const root = await themedProjectWithPosts()

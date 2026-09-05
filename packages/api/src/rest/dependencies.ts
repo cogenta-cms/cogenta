@@ -177,8 +177,14 @@ function addItemMedia(value: unknown, into: Set<string>, depth: number): void {
   }
   if (typeof value !== 'object' || value === null) return
 
-  const media = (value as { media?: unknown }).media
-  addStrings(into, media)
+  const candidate = value as { media?: unknown; avatar?: unknown }
+  // `media` is the vocabulary's usual name for an item's media reference
+  // (gallery items, logo items); `testimonial`'s `attribution` (blocks@2.0)
+  // is the one nested `json` shape that instead calls it `avatar` (matching
+  // `quote`'s own top-level field of the same name) — followed here for the
+  // same structural reason the comment above names `media`.
+  addStrings(into, candidate.media)
+  addStrings(into, candidate.avatar)
 }
 
 function addStrings(into: Set<string>, value: unknown): void {

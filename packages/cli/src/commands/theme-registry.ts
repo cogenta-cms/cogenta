@@ -102,6 +102,12 @@ export const BUILTIN_THEMES: readonly BuiltinTheme[] = [
     load: () => import('@cogenta/theme-magazine'),
     loadManifest: () => import('@cogenta/theme-magazine/theme.config'),
   },
+  {
+    name: '@cogenta/theme-saas',
+    label: 'SaaS',
+    load: () => import('@cogenta/theme-saas'),
+    loadManifest: () => import('@cogenta/theme-saas/theme.config'),
+  },
 ]
 
 export const DEFAULT_THEME_NAME = '@cogenta/theme-canonical'

@@ -83,6 +83,18 @@ img {
   background: var(--cg-rule);
 }
 
+/* `renderSocialLinks` (`@cogenta/theme-kit`) hides each platform's own text
+   label behind its icon with this class — the standard clip-to-1px
+   technique, kept the accessible name without duplicating it visibly. */
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 /* --------------------------------------------------------------------------
    Focus, targets, motion
    -------------------------------------------------------------------------- */
@@ -240,11 +252,108 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   The masthead — a nameplate row, then a quiet navigation row beneath it,
-   the way a print front page separates the title from the contents strip.
+   The article header — `renderEntryHeader` (`@cogenta/theme-kit`): a
+   classification eyebrow set in the masthead's own journal-red accent, the
+   big serif headline, a dek, an editorial meta line (date, byline, reading
+   time) between two hairlines, and the cover last, full-bleed.
+   -------------------------------------------------------------------------- */
+
+.cg-entry-header {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s10);
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-entry-header__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s2) var(--cg-s5);
+  margin: 0 0 var(--cg-s3);
+  padding: 0;
+  list-style: none;
+  color: var(--cg-accent);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-wider);
+  text-transform: uppercase;
+}
+
+.cg-entry-header__terms a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cg-entry-header__terms a:hover {
+  text-decoration: underline;
+}
+
+.cg-entry-header__title {
+  font-size: var(--cg-text-3xl);
+  text-wrap: balance;
+}
+
+@media (min-width: 48rem) {
+  .cg-entry-header__title {
+    font-size: calc(var(--cg-text-3xl) * 1.15);
+  }
+}
+
+.cg-entry-header__excerpt {
+  margin: var(--cg-s5) 0 0;
+  max-inline-size: var(--cg-measure);
+  color: var(--cg-ink-soft);
+  font-family: var(--cogenta-font-serif);
+  font-style: italic;
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
+}
+
+.cg-entry-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s2) var(--cg-s5);
+  margin: var(--cg-s6) 0 0;
+  padding-block: var(--cg-s3);
+  border-block: 1px solid var(--cg-rule-soft);
+  color: var(--cg-ink-faint);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-entry-header__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink-soft);
+}
+
+.cg-entry-header__cover {
+  margin: var(--cg-s8) 0 0;
+}
+
+.cg-entry-header__cover img {
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  box-shadow: var(--cg-elevation-2);
+}
+
+/* --------------------------------------------------------------------------
+   The masthead — a nameplate row, then a quiet rubric row beneath it, the
+   way a print front page separates the title from the contents strip.
+
+   L25 pro pass: the rubric row is a real desktop `<nav>` above `56rem` and a
+   CSS-only `<details>` disclosure below it — never one `<details>` forced
+   open at width (see `chrome.ts`'s file-level comment for why that fails in
+   a real browser).
    -------------------------------------------------------------------------- */
 
 .cg-masthead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 5;
   border-block-end: 3px double var(--cg-rule-heavy);
   background: var(--cg-paper);
 }
@@ -255,7 +364,7 @@ img {
   border-block-end: 1px solid var(--cg-rule-soft);
 }
 
-.cg-masthead__kicker {
+.cg-masthead__date {
   font-family: var(--cogenta-font-sans);
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-semibold);
@@ -265,8 +374,11 @@ img {
 }
 
 .cg-masthead__nameplate {
-  padding: var(--cg-s5) var(--cg-gutter) var(--cg-s4);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cg-s4);
+  padding: var(--cg-s4) var(--cg-gutter);
 }
 
 .cg-masthead__wordmark {
@@ -274,10 +386,16 @@ img {
   color: var(--cg-ink);
   font-family: var(--cogenta-font-serif);
   font-weight: var(--cg-weight-black);
-  font-size: var(--cg-text-3xl);
+  font-size: var(--cg-text-2xl);
   letter-spacing: var(--cg-tracking-tight);
   line-height: 1;
   text-decoration: none;
+}
+
+@media (min-width: 32rem) {
+  .cg-masthead__wordmark {
+    font-size: var(--cg-text-3xl);
+  }
 }
 
 /* The uploaded site logo, set at nameplate scale — a masthead's logo is the
@@ -285,11 +403,16 @@ img {
    height borrowed from another theme. */
 .cg-masthead__logo {
   display: block;
-  margin-inline: auto;
-  block-size: 3rem;
+  block-size: 2.5rem;
   inline-size: auto;
-  max-inline-size: min(100%, 26rem);
+  max-inline-size: min(60vw, 22rem);
   object-fit: contain;
+}
+
+@media (min-width: 32rem) {
+  .cg-masthead__logo {
+    block-size: 3rem;
+  }
 }
 
 .cg-masthead__wordmark:hover {
@@ -297,14 +420,25 @@ img {
 }
 
 .cg-masthead__nav {
+  display: none;
   border-block-start: 1px solid var(--cg-rule-soft);
   padding-block: var(--cg-s3);
-  overflow-x: auto;
+}
+
+@media (min-width: 56rem) {
+  .cg-masthead__nav {
+    display: block;
+  }
 }
 
 .cg-masthead__nav-inner {
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: var(--cg-s6);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
 }
 
 .cg-masthead__menu {
@@ -333,10 +467,113 @@ img {
   color: var(--cg-accent);
 }
 
+/*
+ * Higher specificity than the shared `.cg-action[data-emphasis="primary"]`
+ * rule below (Actions section, which sets `color: var(--cg-accent)` — a
+ * text-forward link on the page's own paper background) is required here,
+ * not optional: this button sits on a solid accent fill, so it needs the
+ * *foreground* token instead. Without the extra specificity the shared rule
+ * wins regardless of source order (both are 0,2,0) — confirmed live: the
+ * button rendered as a solid red rectangle with its own "Subscribe" label
+ * painted the same red as the fill, and the shared rule's arrow glyph showed
+ * through a `content: none` that lost the same tie.
+ */
+.cg-masthead__action.cg-action[data-emphasis="primary"] {
+  color: var(--cg-accent-ink);
+  background: var(--cg-accent);
+  padding: var(--cg-s2) var(--cg-s4);
+  border-block-end-width: 0;
+}
+
+.cg-masthead__action.cg-action::after {
+  content: none;
+}
+
+.cg-masthead__action.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-accent-hover);
+  color: var(--cg-accent-ink);
+}
+
+/* The mobile disclosure — hidden above the desktop breakpoint, shown below it. */
+.cg-masthead__disclosure {
+  display: block;
+}
+
+@media (min-width: 56rem) {
+  .cg-masthead__disclosure {
+    display: none;
+  }
+}
+
+.cg-masthead__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 44px;
+  block-size: 44px;
+  border: 1px solid var(--cg-rule);
+  border-radius: var(--cg-radius-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.cg-masthead__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.cg-masthead__bars {
+  position: relative;
+  display: block;
+  inline-size: 18px;
+  block-size: 2px;
+  background: var(--cg-ink);
+}
+
+.cg-masthead__bars::before,
+.cg-masthead__bars::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inline-size: 18px;
+  block-size: 2px;
+  background: var(--cg-ink);
+}
+
+.cg-masthead__bars::before {
+  inset-block-start: -6px;
+}
+
+.cg-masthead__bars::after {
+  inset-block-start: 6px;
+}
+
+.cg-masthead__panel {
+  position: absolute;
+  inset-inline: var(--cg-gutter);
+  margin-block-start: var(--cg-s3);
+  padding: var(--cg-s5);
+  background: var(--cg-paper-raised);
+  border: 1px solid var(--cg-rule);
+  box-shadow: var(--cg-elevation-3);
+  border-radius: var(--cg-radius-md);
+}
+
+.cg-masthead__panel .cg-masthead__menu {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-s3);
+}
+
+.cg-masthead__panel .cg-masthead__action {
+  display: inline-flex;
+  margin-block-start: var(--cg-s3);
+}
+
 /* --------------------------------------------------------------------------
-   The colophon — the print magazine's inside-back-cover imprint: an about
-   column, a section index in real newspaper columns, and the branding
-   fragment last, never dropped, never restyled beyond the theme's palette.
+   The colophon — the print magazine's inside-back-cover imprint, in a dense
+   four-column layout: brand + tagline, a section index, social icons, and
+   a closing note with the branding fragment last, never dropped, never
+   restyled beyond the theme's palette.
    -------------------------------------------------------------------------- */
 
 .cg-colophon {
@@ -357,9 +594,15 @@ img {
   grid-template-columns: 1fr;
 }
 
-@media (min-width: 55rem) {
+@media (min-width: 40rem) {
   .cg-colophon__grid {
-    grid-template-columns: 1.1fr 1.4fr auto;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 68rem) {
+  .cg-colophon__grid {
+    grid-template-columns: 1.3fr 1fr 0.8fr 1fr;
     align-items: start;
   }
 }
@@ -393,13 +636,9 @@ img {
   margin: 0;
   padding: 0;
   list-style: none;
-  columns: 2 12rem;
-  column-gap: var(--cg-s8);
-  column-rule: 1px solid var(--cg-rule-soft);
 }
 
 .cg-colophon__menu li {
-  break-inside: avoid;
   margin-block-end: var(--cg-s2);
 }
 
@@ -413,10 +652,50 @@ img {
   color: var(--cg-accent);
 }
 
+/* The social-icon column — `renderSocialLinks` (`@cogenta/theme-kit`) emits
+   a bare `<ul>`; this theme styles the icons into a quiet row of circles. */
+.cg-colophon__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-colophon__social-item a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 1px solid var(--cg-rule);
+  border-radius: 50%;
+  color: var(--cg-ink-soft);
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-colophon__social-item a:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-social__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-colophon__note {
+  margin: 0 0 var(--cg-s4);
+  max-inline-size: 32ch;
+  line-height: var(--cg-leading-relaxed);
+}
+
 .cg-colophon__branding {
   display: flex;
   align-items: flex-start;
-  justify-content: flex-end;
 }
 
 /* The fixed branding fragment (`cg-site-footer__branding`, emitted by

@@ -8,6 +8,7 @@ import { buildPath, createContentStore, matchPath } from '@cogenta/schema'
 import {
   type FetchedEntries,
   type HtmlNode,
+  type ImageSource,
   type PageContent,
   type RenderContext,
   renderPage,
@@ -36,6 +37,15 @@ describe('scaffoldSite — magazine blueprint', () => {
     }
   })
 
+  // These three scaffold a real site and seed twelve articles plus eighteen
+  // procedural media assets through the real image pipeline (`seedDemoMedia`)
+  // — genuinely more work than a lighter blueprint's default-timeout scaffold
+  // test. 60s, not a smaller round number: measured live against this exact
+  // suite under `pnpm turbo run test --force` (every package's typecheck and
+  // test running at once, no concurrency cap) on a shared machine —
+  // `restaurant-blueprint.test.ts`'s own slowest case took 63.8s and
+  // `blog-blueprint.test.ts`'s took 36.8s with no override at all, so a
+  // smaller margin here would still be tight under the same conditions.
   it('writes a schema file loadCollections can load back, with article/page', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
     dirs.push(targetDir)
@@ -55,7 +65,7 @@ describe('scaffoldSite — magazine blueprint', () => {
 
     const collections = await loadCollections(targetDir)
     expect(collections.map((c) => c.name).sort()).toEqual(['article', 'page'])
-  })
+  }, 60000)
 
   it('seeds real demo articles and pages into real SQLite', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
@@ -90,13 +100,15 @@ describe('scaffoldSite — magazine blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  })
+  }, 60000)
 
   it('resolves /articles/:slug and /:slug generically through @cogenta/schema routing', () => {
-    expect(matchPath(MAGAZINE_COLLECTIONS, '/articles/a-new-season-a-new-lineup')).toEqual({
+    expect(
+      matchPath(MAGAZINE_COLLECTIONS, '/articles/transit-line-approved-after-a-decade'),
+    ).toEqual({
       collection: 'article',
       locale: null,
-      params: { slug: 'a-new-season-a-new-lineup' },
+      params: { slug: 'transit-line-approved-after-a-decade' },
     })
     expect(matchPath(MAGAZINE_COLLECTIONS, '/about')).toEqual({
       collection: 'page',
@@ -158,17 +170,25 @@ describe('scaffoldSite — magazine blueprint', () => {
       }))
 
       const ctx = fakeThemeContext(slugById)
-      const entries: FetchedEntries = { 'demo-home-articles': themeEntries }
+      const entries: FetchedEntries = {
+        'demo-home-top-stories': themeEntries,
+        'demo-home-rail-news': themeEntries,
+        'demo-home-rail-culture': themeEntries,
+        'demo-home-rail-opinion': themeEntries,
+        'demo-home-rail-business': themeEntries,
+      }
 
       const html = htmlOf(renderPage(pageContent, ctx, entries))
 
-      expect(html).toContain('Stories worth your time')
+      // The lead article — `MAGAZINE_DEMO_ARTICLES[0]` — becomes both the
+      // hero's own title and (via the "Top stories" collectionList) a card.
+      expect(html).toContain('City council approves the transit line after a decade of delay')
       expect(html).toContain('cg-collection')
-      expect(html).toContain('A new season, a new lineup')
+      expect(html).toContain('The bakery that turned down three buyout offers')
     } finally {
       await selection.dispose()
     }
-  })
+  }, 60000)
 })
 
 function htmlOf(node: HtmlNode | null): string {
@@ -187,9 +207,18 @@ function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext 
     locale: 'en',
     url: new URL('http://localhost:4000/home'),
     t: (key) => key,
-    image: () => {
-      throw new Error('not used by this test')
-    },
+    // The lead article's own cover is now the hero's `media` (L25 pro pass),
+    // so this fake context needs a real answer rather than the "not used by
+    // this test" throw that was correct before the hero carried an image.
+    image: (): ImageSource => ({
+      kind: 'image',
+      src: '/img/lead-1200.avif',
+      srcset: '',
+      width: 1200,
+      height: 630,
+      alt: '',
+      focal: null,
+    }),
     link: (target) => {
       if (typeof target === 'string') return target
       if ('path' in target) return target.path

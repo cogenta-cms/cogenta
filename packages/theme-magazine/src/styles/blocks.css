@@ -708,7 +708,13 @@
   opacity: 1;
 }
 
-/* --- collectionList: the issue's front page -------------------------------- */
+/* --- collectionList: the issue's front page --------------------------------
+   L25 pro pass: `layout: 'grid'` ("Top stories") is a full-width lead — big
+   16:9 cover, kicker, headline, excerpt — followed by the rest of the
+   entries as a 3-column card grid; `layout: 'list'` is a rubric rail of
+   compact rows, each with a small square thumbnail when the entry has a
+   cover and a numbered index otherwise; `layout: 'carousel'` stays a
+   horizontal-scroll row of uniform, image-led frames. */
 
 .cg-issue__link {
   color: inherit;
@@ -719,36 +725,8 @@
   color: var(--cg-accent);
 }
 
-.cg-issue__spread {
-  display: grid;
-  gap: var(--cg-s12);
-}
-
-@media (min-width: 58rem) {
-  .cg-issue__spread {
-    grid-template-columns: 1.4fr 1px 1fr;
-    align-items: start;
-    column-gap: var(--cg-s10);
-  }
-
-  .cg-issue__spread::before {
-    content: "";
-    grid-row: 1;
-    grid-column: 2;
-    align-self: stretch;
-    background: var(--cg-rule-heavy);
-  }
-
-  .cg-issue__lead {
-    grid-column: 1;
-  }
-
-  .cg-issue__rest {
-    grid-column: 3;
-  }
-}
-
-.cg-issue__kicker {
+.cg-issue__kicker,
+.cg-issue__card-eyebrow {
   margin: 0 0 var(--cg-s3);
   color: var(--cg-accent);
   font-family: var(--cogenta-font-sans);
@@ -758,8 +736,41 @@
   text-transform: uppercase;
 }
 
+/* --- grid: the lead + a 3-column card grid --------------------------------- */
+
+.cg-issue__spread {
+  display: grid;
+  gap: var(--cg-s12);
+}
+
+.cg-issue__lead {
+  display: block;
+}
+
+.cg-issue__lead-cover-link {
+  display: block;
+}
+
+.cg-issue__lead-cover {
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  box-shadow: var(--cg-elevation-2);
+}
+
+.cg-issue__lead-body {
+  margin-block-start: var(--cg-s6);
+  max-inline-size: var(--cg-page-narrow);
+}
+
 .cg-issue__lead-title {
   font-size: var(--cg-text-2xl);
+}
+
+@media (min-width: 48rem) {
+  .cg-issue__lead-title {
+    font-size: var(--cg-text-3xl);
+  }
 }
 
 .cg-issue__lead-excerpt {
@@ -783,10 +794,60 @@
   text-transform: uppercase;
 }
 
+.cg-issue__cards {
+  margin: 0;
+  padding: var(--cg-s8) 0 0;
+  border-block-start: 3px double var(--cg-rule-heavy);
+  list-style: none;
+  display: grid;
+  gap: var(--cg-s8);
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+.cg-issue__card {
+  display: flex;
+  flex-direction: column;
+}
+
+.cg-issue__card-cover-link {
+  display: block;
+  margin-block-end: var(--cg-s4);
+}
+
+.cg-issue__card-cover {
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.cg-issue__card-title {
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-issue__card-date {
+  display: block;
+  margin-block-start: var(--cg-s2);
+  color: var(--cg-ink-faint);
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* --- list: the rubric rail -------------------------------------------------- */
+
+.cg-issue__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .cg-issue__row {
   display: flex;
+  align-items: center;
   gap: var(--cg-s4);
-  padding-block: var(--cg-s5);
+  padding-block: var(--cg-s4);
   border-block-end: 1px solid var(--cg-rule-soft);
 }
 
@@ -800,6 +861,21 @@
   font-family: var(--cogenta-font-serif);
   font-weight: var(--cg-weight-bold);
   font-size: var(--cg-text-sm);
+}
+
+.cg-issue__row-thumb-link {
+  flex: none;
+  display: block;
+}
+
+.cg-issue__row-thumb {
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  object-fit: cover;
+}
+
+.cg-issue__row-body {
+  min-inline-size: 0;
 }
 
 .cg-issue__row-title {
@@ -816,25 +892,31 @@
   text-transform: uppercase;
 }
 
-/* The carousel/plain-grid layout that opts out of the lead/rest split. */
+/* --- carousel: a horizontal-scroll row of uniform, image-led frames ------- */
+
 .cg-issue__frames {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: grid;
   gap: var(--cg-s8);
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-}
-
-.cg-issue[data-layout="carousel"] .cg-issue__frames {
   grid-auto-flow: column;
   grid-auto-columns: minmax(16rem, 40%);
 }
 
-.cg-issue[data-layout="carousel"] .cg-issue__frame {
+.cg-issue__frame {
   scroll-snap-align: start;
 }
 
-.cg-issue__frame {
-  padding-block-start: var(--cg-s4);
-  border-block-start: 3px double var(--cg-rule-heavy);
+.cg-issue__frame-cover-link {
+  display: block;
+  margin-block-end: var(--cg-s4);
+}
+
+.cg-issue__frame-cover {
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
 }
 
 .cg-issue__frame-title {

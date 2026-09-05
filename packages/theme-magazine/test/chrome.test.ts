@@ -107,3 +107,68 @@ describe('renderChrome', () => {
     expect(header + footer).not.toMatch(/\son[a-z]+="/i)
   })
 })
+
+/** `theme@1.4`'s four optional fields — additive, each rendered only when present. */
+describe('renderChrome — theme@1.4', () => {
+  it("names today's date in the masthead's top strip, in the page's own locale", () => {
+    const { header } = renderChrome(BASE)
+    expect(header).toContain('cg-masthead__date')
+    // A real, formatted date — not the raw ISO the fallback would use.
+    expect(header).not.toMatch(/cg-masthead__date">\d{4}-\d{2}-\d{2}</)
+  })
+
+  it('renders the header-action link as a filled button in both the desktop and mobile nav', () => {
+    const withAction = { ...BASE, headerAction: { label: 'Subscribe', href: '/en/subscribe' } }
+    const { header } = renderChrome(withAction)
+    const matches = [...header.matchAll(/cg-masthead__action/g)]
+    expect(matches.length).toBeGreaterThanOrEqual(2)
+    expect(header).toContain('href="/en/subscribe"')
+    expect(header).toContain('>Subscribe<')
+  })
+
+  it('renders a mobile disclosure even when there is only a header action and no nav', () => {
+    const onlyAction = {
+      ...BASE,
+      headerNav: [],
+      headerAction: { label: 'Subscribe', href: '/en/subscribe' },
+    }
+    const { header } = renderChrome(onlyAction)
+    expect(header).toContain('cg-masthead__disclosure')
+    expect(header).toContain('Subscribe')
+  })
+
+  it('renders no rubric row, desktop or mobile, when there is neither a nav nor a header action', () => {
+    const { header } = renderChrome({ ...BASE, headerNav: [] })
+    expect(header).not.toContain('cg-masthead__disclosure')
+    expect(header).not.toContain('cg-masthead__nav-inner')
+  })
+
+  it('places the tagline in the colophon, escaped, tagged for the page builder', () => {
+    const { footer } = renderChrome({ ...BASE, tagline: '<b>Evil</b> since 1990' })
+    expect(footer).toContain('data-field="tagline"')
+    expect(footer).toContain('&lt;b&gt;Evil&lt;/b&gt; since 1990')
+    expect(footer).not.toContain('<b>Evil</b>')
+  })
+
+  it('renders social links as icon links with a real accessible name, in the colophon', () => {
+    const { footer } = renderChrome({
+      ...BASE,
+      social: [{ label: 'Mastodon', href: 'https://mastodon.social/@example' }],
+    })
+    expect(footer).toContain('cg-colophon__social')
+    expect(footer).toContain('href="https://mastodon.social/@example"')
+    expect(footer).toContain('Mastodon')
+  })
+
+  it('renders the footer note as plain text in the colophon', () => {
+    const { footer } = renderChrome({ ...BASE, footerNote: 'Printed on recycled paper.' })
+    expect(footer).toContain('Printed on recycled paper.')
+  })
+
+  it('renders none of the four theme@1.4 fields when a site has never set them', () => {
+    const { header, footer } = renderChrome(BASE)
+    expect(header).not.toContain('cg-masthead__action')
+    expect(footer).not.toContain('data-field="tagline"')
+    expect(footer).not.toContain('cg-colophon__social')
+  })
+})

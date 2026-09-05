@@ -1,3 +1,4 @@
+import type { PageEntryMeta } from '@cogenta/theme-kit'
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderCollectionList } from '../src/render/blocks/collection-list.js'
@@ -104,5 +105,48 @@ describe('the identity a rendered page carries back to its blocks', () => {
     const html = serialize(renderBlock(BLOCKS.stats, ctx) ?? { kind: 'text', value: '' })
     expect(html.match(/data-field="/gu)).toHaveLength(1)
     expect(html).toContain('data-field="title"')
+  })
+})
+
+/**
+ * `renderEntryHeader` (`@cogenta/theme-kit`, contract D `theme@1.4`) — a page
+ * carrying an `entry` gets this masthead-styled furniture (classification
+ * eyebrow in the accent, byline/date/reading-time meta between hairlines,
+ * cover) instead of the bare `<h1>` every other page falls back to.
+ */
+describe('the article header (theme@1.4)', () => {
+  it("renders renderEntryHeader's furniture, its terms styled in the masthead's accent, instead of the bare title", () => {
+    const entry: PageEntryMeta = {
+      collection: 'article',
+      publishedAt: '2026-02-11T09:00:00.000Z',
+      author: { name: 'A. Writer' },
+      readingMinutes: 4,
+      excerpt: 'What it takes to keep a Linotype running when no one makes the parts any more.',
+      terms: [{ taxonomy: 'section', label: 'News', href: '/en/section/news' }],
+    }
+    const html = serialize(
+      renderPage(
+        { title: 'The last hot-metal shop in the county', blocks: [BLOCKS.prose], entry },
+        ctx,
+      ),
+    )
+    expect(html).toContain('cg-entry-header')
+    expect(html).toContain('cg-entry-header__terms')
+    expect(html).toContain('News')
+    expect(html).toContain('cg-entry-header__reading-time')
+    expect(html).not.toContain('cg-page__title')
+  })
+
+  it('falls back to the bare page title when the page carries no entry (e.g. "about")', () => {
+    const html = serialize(renderPage({ title: 'About', blocks: [BLOCKS.prose] }, ctx))
+    expect(html).toContain('<h1 class="cg-page__title">About</h1>')
+    expect(html).not.toContain('cg-entry-header')
+  })
+
+  it('never draws a second h1 when the entry page also opens with a hero', () => {
+    const entry: PageEntryMeta = { collection: 'article' }
+    const html = serialize(renderPage({ title: 'A story', blocks: [BLOCKS.hero], entry }, ctx))
+    expect(html).not.toContain('cg-entry-header')
+    expect((html.match(/<h1[\s>]/g) ?? []).length).toBe(1)
   })
 })

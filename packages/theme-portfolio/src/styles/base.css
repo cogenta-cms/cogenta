@@ -146,6 +146,27 @@ img {
      other numbered list (`featureGrid`, `gallery`) resets its own counter
      locally in `blocks.css`, since those numbers restart per list. */
   counter-reset: cg-figure;
+  /* The hero's negative-margin media overlap (`.cg-hero__media`) and a
+     full-bleed grid card's own offset-on-hover both read past the page's
+     own edge by design; `clip` — not `hidden` — cuts them at the viewport
+     without turning `<main>` into a scroll container of its own. */
+  overflow-x: clip;
+}
+
+/* The standard clip-to-1px technique — visible to assistive tech, invisible
+   on screen, unlike `display:none` (which removes it from both). Every
+   social icon link's own text label (`renderSocialLinks`, `@cogenta/
+   theme-kit`) depends on this class existing here: theme-kit ships no CSS
+   of its own (contract D, R5 — a theme owns its own stylesheet). */
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .cg-block {
@@ -227,6 +248,102 @@ img {
 }
 
 /* --------------------------------------------------------------------------
+   Entry header (`renderEntryHeader`, `@cogenta/theme-kit`, `theme@1.4`) — a
+   project page's own furniture: the display title at the same scale as
+   `.cg-page__title`, the excerpt (`summary`) in the reading measure, and a
+   full-bleed cover with a hard, flat frame — no scrim, this theme never
+   overlays text on an image.
+   -------------------------------------------------------------------------- */
+
+.cg-entry-header {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s10);
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-entry-header__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s4);
+  margin: 0 0 var(--cg-s5);
+  padding: 0;
+  list-style: none;
+  color: var(--cg-ink-muted);
+  font-family: var(--cogenta-font-mono);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-entry-header__terms a {
+  color: var(--cg-accent);
+  text-decoration: none;
+}
+
+.cg-entry-header__terms a:hover {
+  text-decoration: underline;
+}
+
+.cg-entry-header__title {
+  margin: 0;
+  font-family: var(--cogenta-font-sans);
+  font-size: var(--cg-text-hero);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tighter);
+  font-weight: var(--cg-weight-black);
+  text-wrap: balance;
+}
+
+.cg-entry-header__excerpt {
+  margin: var(--cg-s6) 0 0;
+  max-inline-size: var(--cg-measure-narrow);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  color: var(--cg-ink-muted);
+  text-wrap: pretty;
+}
+
+.cg-entry-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s4);
+  margin: var(--cg-s6) 0 0;
+  padding-block-start: var(--cg-s4);
+  border-block-start: 1px solid var(--cg-line);
+  color: var(--cg-ink-subtle);
+  font-family: var(--cogenta-font-mono);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-entry-header__author {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-entry-header__reading-time::before {
+  content: "·";
+  margin-inline-end: var(--cg-s4);
+  color: var(--cg-line-strong);
+}
+
+.cg-entry-header__cover {
+  margin: var(--cg-s10) 0 0;
+  border: 1px solid var(--cg-line);
+}
+
+.cg-entry-header__cover img,
+.cg-entry-header__cover video {
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+/* --------------------------------------------------------------------------
    Chrome — a thin index bar and a footer that becomes a second headline.
    -------------------------------------------------------------------------- */
 
@@ -283,6 +400,48 @@ img {
   transform: rotate(90deg);
 }
 
+/* The mobile-menu checkbox: visually hidden the accessible way (still in
+   the tab order, still Space-operable) rather than `display: none` (which
+   would remove it from the tab order entirely). */
+.cg-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cg-nav-toggle-label {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0.5rem;
+  margin-inline-start: auto;
+  cursor: pointer;
+}
+
+.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+  border-radius: var(--cg-radius-xs);
+}
+
+.cg-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 2px;
+  background: var(--cg-ink);
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+/* Shared by the header's nav list and the footer's own (`.cg-site-footer__row
+   .cg-nav`) — declared here, ahead of the chrome media query below, so a
+   later, more specific override (`.cg-site-header__nav .cg-nav` inside it)
+   never has to fight a same-or-lower-specificity rule declared after it. */
 .cg-nav {
   display: flex;
   flex-wrap: wrap;
@@ -324,6 +483,73 @@ img {
 .cg-nav__index {
   color: var(--cg-accent);
   opacity: 0.85;
+}
+
+/* The desktop shape — a real, always-visible `<nav>` — declared *before* the
+   media query below, on purpose: both rules below share this selector's
+   exact specificity (0,1,0), so with equal specificity the later one in the
+   file wins regardless of which media query is active. Declaring the
+   override after the default is what makes "hidden below the breakpoint"
+   actually win at narrow widths, rather than this unconditional rule
+   silently overriding the media query's own `display: none` at every width
+   because it happened to be declared later in the file. */
+.cg-site-header__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s6);
+}
+
+.cg-site-header__action {
+  flex: none;
+}
+
+/* Below the breakpoint: the toggle button appears, and the real nav becomes
+   a full-width panel anchored under the header, shown only while the
+   checkbox is checked — one selector, no JavaScript, and the same `<nav>`
+   desktop uses, never a second copy of the links. */
+@media (max-width: 56rem) {
+  .cg-nav-toggle-label {
+    display: flex;
+  }
+
+  .cg-site-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--cg-s6);
+    padding: var(--cg-s6) var(--cg-gutter);
+    background: var(--cg-canvas);
+    border-block-end: 1px solid var(--cg-line);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
+    display: flex;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
+    transform: translateY(0.45rem) rotate(45deg);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
+    opacity: 0;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(3) {
+    transform: translateY(-0.45rem) rotate(-45deg);
+  }
+
+  .cg-site-header__nav .cg-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--cg-s5);
+  }
+
+  .cg-site-header__action {
+    align-self: flex-start;
+  }
 }
 
 .cg-site-footer {
@@ -372,6 +598,79 @@ img {
 
 .cg-site-footer__row .cg-nav__index {
   color: var(--cg-accent);
+}
+
+/* `general.tagline` (`theme@1.4`) — the second line of the closing
+   statement, in the same reading measure the hero's own subtitle uses. */
+.cg-site-footer__tagline {
+  margin: var(--cg-s4) 0 0;
+  max-inline-size: var(--cg-measure-narrow);
+  color: color-mix(in oklab, var(--cg-surface-inverted-fg) 70%, transparent);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  text-wrap: pretty;
+}
+
+/* `general.socialLinks` (`theme@1.4`), rendered by `renderSocialLinks` as a
+   row of flat, hairline-ringed icon buttons — never a filled chip, so the
+   row reads as a set of quiet exits rather than a second set of actions. */
+.cg-site-footer__social {
+  display: flex;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border: 1px solid color-mix(in oklab, var(--cg-surface-inverted-fg) 30%, transparent);
+  border-radius: var(--cg-radius-xs);
+  color: inherit;
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    transform var(--cg-duration-fast) var(--cg-ease);
+}
+
+.cg-site-footer__social-item a:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+  transform: translate(-2px, -2px);
+}
+
+.cg-social__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-site-footer__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-s3);
+}
+
+@media (min-width: 48rem) {
+  .cg-site-footer__meta {
+    align-items: flex-end;
+    text-align: end;
+  }
+}
+
+/* `general.footerNote` (`theme@1.4`) — a short site-wide line, set quietly
+   above the branding credit rather than as a fourth headline. */
+.cg-site-footer__note {
+  margin: 0;
+  max-inline-size: 32ch;
+  color: color-mix(in oklab, var(--cg-surface-inverted-fg) 70%, transparent);
+  font-family: var(--cogenta-font-mono);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
 }
 
 .cg-site-footer__branding {

@@ -123,4 +123,86 @@ describe('renderChrome', () => {
     })
     expect(header).toContain('title="Selected projects"')
   })
+
+  describe('theme@1.4 — without the new fields', () => {
+    it('renders no header action, no tagline, no social, no footer note', () => {
+      const { header, footer } = renderChrome(BASE)
+      expect(header).not.toContain('cg-site-header__action')
+      expect(footer).not.toContain('cg-site-footer__tagline')
+      expect(footer).not.toContain('cg-site-footer__social')
+      expect(footer).not.toContain('cg-site-footer__note')
+    })
+
+    it('renders no mobile-menu toggle at all when there is no nav and no action', () => {
+      const { header } = renderChrome({ ...BASE, headerNav: [] })
+      expect(header).not.toContain('cg-nav-toggle-input')
+    })
+  })
+
+  describe('theme@1.4 — the header action', () => {
+    const action = { label: "Let's talk", href: '/en/contact' }
+    const withAction: ChromeInput = { ...BASE, headerAction: action }
+
+    it('renders it as a filled action button inside the primary nav', () => {
+      const { header } = renderChrome(withAction)
+      expect(header).toContain('class="cg-action cg-site-header__action" data-emphasis="primary"')
+      expect(header).toContain('href="/en/contact"')
+      expect(header).toContain(">Let's talk<")
+    })
+
+    it('still shows a mobile-menu toggle for a header with only an action and no nav', () => {
+      const { header } = renderChrome({ ...BASE, headerAction: action })
+      expect(header).toContain('cg-nav-toggle-input')
+    })
+  })
+
+  describe('theme@1.4 — the mobile-menu toggle', () => {
+    it('appears once a header nav exists, pointing at the same real nav desktop uses', () => {
+      const { header } = renderChrome(BASE)
+      expect(header).toContain('id="cg-nav-toggle"')
+      expect(header).toContain('for="cg-nav-toggle"')
+      expect(header).toContain('id="cg-nav"')
+      expect((header.match(/<nav /g) ?? []).length).toBe(1)
+    })
+  })
+
+  describe('theme@1.4 — footer extras', () => {
+    const rich: ChromeInput = {
+      ...BASE,
+      tagline: 'Design, motion and code, made in the open.',
+      social: [
+        { label: 'Instagram', href: 'https://instagram.com/example' },
+        { label: 'LinkedIn', href: 'https://linkedin.com/company/example' },
+      ],
+      footerNote: 'Studio Cogenta · Lisbon',
+    }
+
+    it('renders the tagline beneath the closing statement', () => {
+      const { footer } = renderChrome(rich)
+      expect(footer).toContain(
+        '<p class="cg-site-footer__tagline" data-field="tagline">Design, motion and code, made in the open.</p>',
+      )
+    })
+
+    it('renders the social links through the shared theme-kit helper', () => {
+      const { footer } = renderChrome(rich)
+      expect(footer).toContain('cg-site-footer__social')
+      expect(footer).toContain('href="https://instagram.com/example"')
+      expect(footer).toContain('cg-visually-hidden')
+    })
+
+    it('renders the footer note', () => {
+      const { footer } = renderChrome(rich)
+      expect(footer).toContain('<p class="cg-site-footer__note">Studio Cogenta · Lisbon</p>')
+    })
+
+    it('keeps the branding fragment alongside the note rather than replacing it', () => {
+      const { footer } = renderChrome({
+        ...rich,
+        brandingHtml: '<a href="/">Powered by Cogenta</a>',
+      })
+      expect(footer).toContain('<a href="/">Powered by Cogenta</a>')
+      expect(footer).toContain('Studio Cogenta · Lisbon')
+    })
+  })
 })

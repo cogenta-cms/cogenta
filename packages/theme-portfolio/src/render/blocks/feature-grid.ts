@@ -8,6 +8,7 @@ import {
   href,
   nestedHeadingTag,
   type RenderContext,
+  renderIcon,
 } from '@cogenta/theme-kit'
 
 /**
@@ -16,11 +17,13 @@ import {
  * classic failure of WCAG 2.4.4, and the block carries no label field to
  * write one anyway.
  *
- * `icon` names a symbol, never markup: rather than a generic square chip it
- * becomes a large, decorative index numeral drawn from a CSS counter
- * (`aria-hidden`) — the vocabulary already forbids an icon set that ships
- * markup, and an oversized running number reads as confidently editorial
- * without inventing a glyph this theme does not have.
+ * `icon` names a symbol (`renderIcon`, `theme@1.4`) — drawn small and
+ * accent-coloured, decorative (`aria-hidden`, the title already carries the
+ * accessible name) — sitting *above* the running index numeral this theme
+ * has always drawn from a CSS counter, never replacing it: the numeral is
+ * this theme's own editorial device, the icon is the shared vocabulary's.
+ * An item with no icon, or one whose name this theme does not recognise,
+ * keeps exactly the pre-1.4 numeral-only card.
  */
 function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   const title =
@@ -31,9 +34,12 @@ function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): Htm
           { class: 'cg-feature__title' },
           h('a', { class: 'cg-feature__link', href: href(ctx, item.link) }, item.title),
         )
+  const icon =
+    item.icon === undefined ? null : renderIcon(item.icon, { className: 'cg-feature__icon' })
   return h(
     'li',
     { class: 'cg-feature', 'data-icon': item.icon },
+    icon,
     h('span', { class: 'cg-feature__index', 'aria-hidden': 'true' }),
     title,
     item.text === undefined ? null : h('p', { class: 'cg-feature__text' }, item.text),

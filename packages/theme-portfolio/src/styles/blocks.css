@@ -115,6 +115,21 @@
   color: var(--cg-accent);
 }
 
+/* Found by looking at a real screenshot: the portfolio blueprint's own
+   auto-built "Role / Year" panel (a `prose` block with `variant.background:
+   "muted"`, `@cogenta/create-cogenta`'s `portfolio.ts`) inherited this same
+   editorial drop cap on its own first word ("Role"), reading as a giant "R"
+   rather than a small spec-sheet label. A `prose` block given a background
+   variant is a utility panel, not a piece of body copy, so it opts out of
+   the editorial capital — same reasoning as the two-value list below.
+   `[data-variant-background]` covers both "muted" and "image". */
+.cg-prose[data-variant-background] > p:first-child::first-letter {
+  float: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
 .cg-prose h2,
 .cg-prose h3,
 .cg-prose h4 {
@@ -338,6 +353,12 @@
 }
 
 .cg-feature:hover .cg-feature__link {
+  color: var(--cg-accent);
+}
+
+.cg-feature__icon {
+  display: block;
+  margin-block-end: var(--cg-s4);
   color: var(--cg-accent);
 }
 
@@ -778,6 +799,13 @@
    ------------------------------------------------------------------------- */
 
 .cg-collection__items {
+  margin: 0;
+  padding: 0;
+  /* Found by looking at a real screenshot: without this, the browser's own
+     `<ol>` decimal marker ("1.") sat right beside this theme's own
+     `.cg-entry__index` badge ("01") — two numbering systems stacked, on
+     every layout, since this rule predates L25. */
+  list-style: none;
   border-block-start: 1px solid var(--cg-line);
 }
 
@@ -867,46 +895,116 @@
   text-align: center;
 }
 
-/* Tiled layouts retile the same rows into cards, index and date moving atop
-   the title instead of flanking it. */
+/* Tiled layouts (`grid`/`carousel`) retile the same entries into full-bleed
+   project cards — a cover, the index, the title in display type, and the
+   entry's own raw `role`/`year` meta line when the collection behind it has
+   them. `grid`: one column at 360, two full-bleed columns from 1280
+   (`--cg-page` is wide enough that "full-bleed" here means "no gutter
+   between the two", not "past the viewport edge"). `carousel`: the same
+   card, horizontally scroll-snapped. */
 .cg-collection[data-layout="grid"] .cg-collection__items,
 .cg-collection[data-layout="carousel"] .cg-collection__items {
   display: grid;
-  gap: 1px;
-  background: var(--cg-line);
+  gap: var(--cg-gap-loose);
   border-block-start: 0;
 }
 
 .cg-collection[data-layout="grid"] .cg-collection__items {
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 80rem) {
+  .cg-collection[data-layout="grid"] .cg-collection__items {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .cg-collection[data-layout="carousel"] .cg-collection__items {
   grid-auto-flow: column;
-  grid-auto-columns: minmax(18rem, 45%);
+  grid-auto-columns: minmax(20rem, 80%);
+}
+
+@media (min-width: 48rem) {
+  .cg-collection[data-layout="carousel"] .cg-collection__items {
+    grid-auto-columns: minmax(22rem, 45%);
+  }
 }
 
 .cg-collection[data-layout="carousel"] .cg-entry {
   scroll-snap-align: start;
 }
 
-.cg-collection[data-layout="grid"] .cg-entry,
-.cg-collection[data-layout="carousel"] .cg-entry {
+.cg-entry--card {
   border-block-end: 0;
-  background: var(--cg-surface);
-  padding: var(--cg-s6);
 }
 
-.cg-collection[data-layout="grid"] .cg-entry__body,
-.cg-collection[data-layout="carousel"] .cg-entry__body {
-  display: flex;
-  flex-direction: column;
+.cg-entry--card .cg-entry__body {
+  display: block;
   padding-block: 0;
 }
 
-.cg-collection[data-layout="grid"] .cg-entry__index,
-.cg-collection[data-layout="carousel"] .cg-entry__index {
-  margin-block-end: var(--cg-s3);
+/* A flat offset shadow on hover/focus, never a blur — `translate` is the
+   only motion, gated by `prefers-reduced-motion` in `base.css`'s global
+   rule. */
+.cg-entry--card .cg-entry__cover-link {
+  display: block;
+  position: relative;
+  margin-block-end: var(--cg-s5);
+  border: 1px solid var(--cg-line);
+  transition:
+    transform var(--cg-duration) var(--cg-ease),
+    box-shadow var(--cg-duration) var(--cg-ease);
+}
+
+.cg-entry--card:hover .cg-entry__cover-link,
+.cg-entry--card:focus-within .cg-entry__cover-link {
+  transform: translate(-0.3rem, -0.3rem);
+  box-shadow: var(--cg-elevation-2);
+}
+
+.cg-entry__cover,
+.cg-entry__cover-empty {
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.cg-entry__cover-empty {
+  background: var(--cg-surface-tinted);
+}
+
+.cg-entry--card .cg-entry__index {
+  display: block;
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-entry--card .cg-entry__title {
+  font-size: var(--cg-text-2xl);
+}
+
+.cg-entry--card .cg-entry__link::after {
+  /* The card link target is the cover, not this second copy of `::after` —
+     the base rule would otherwise stretch a second full-card hit target on
+     top of it and swallow the cover's own link. */
+  content: none;
+}
+
+.cg-collection__meta {
+  display: flex;
+  gap: var(--cg-s3);
+  margin: var(--cg-s2) 0 0;
+  color: var(--cg-ink-subtle);
+  font-family: var(--cogenta-font-mono);
+  font-size: var(--cg-text-xs);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-collection__meta-role::after {
+  content: "·";
+  margin-inline-start: var(--cg-s3);
+  color: var(--cg-line-strong);
 }
 
 .cg-collection[data-layout="grid"] .cg-entry__date,

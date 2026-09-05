@@ -177,15 +177,17 @@
    **The dark palette is designed, not inverted — this theme's own five
    decisions, not a restatement of any other theme's:**
 
-   1. *Elevation changes shape, not just colour.* In light, this is a
-      brutalist system: a raised surface carries a hard, unblurred offset
-      shadow straight from the skin's own `shadow.sm`/`shadow.md` tokens — a
-      shape that reads as "cut paper laid on paper". A shadow like that is
-      invisible on a dark ground, so dark elevation does not dim or blur that
-      shadow — it *replaces the mechanism*: a hairline ring plus a soft glow
-      tinted with the accent's own hue (`--cg-elevation-*` below), which is
-      the theme's own "backlit" language rather than a shadow with the
-      opacity turned down.
+   1. *Elevation changes colour, never shape (L25 D5, binding: no glow).* In
+      light, this is a brutalist system: a raised surface carries a hard,
+      unblurred offset shadow straight from the skin's own `shadow.sm`/
+      `shadow.md` tokens — a shape that reads as "cut paper laid on paper".
+      A near-black shadow is invisible on a dark ground, so dark elevation
+      keeps the *exact same* hard, zero-blur offset geometry and only
+      recolours it in `--cg-line-strong` — the same brighter-than-surface
+      line this palette already uses for depth (decision 5, below). An
+      earlier version of this system read that shadow as a soft accent glow
+      instead; that is precisely the generic "AI-generated" register the
+      product owner ruled out, so elevation now stays flat in both schemes.
    2. *The accent is pushed toward neon, not merely lifted.* Dark ink makes a
       mid-saturation accent read as merely "lighter"; this palette both lifts
       *and* re-saturates it (`calc(c * 1.05)` against light mode's own
@@ -235,7 +237,6 @@
     var(--cogenta-color-accent) 70%,
     var(--cogenta-color-fg)
   );
-  --cg-accent-glow: color-mix(in oklab, var(--cogenta-color-accent) 32%, transparent);
 
   --cg-line: var(--cogenta-color-border);
   --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg));
@@ -309,15 +310,6 @@
       color-mix(in oklab, var(--cogenta-color-accent) 70%, var(--cogenta-color-fg)),
       oklch(from var(--cogenta-color-accent) 0.92 calc(c * 0.5) h)
     );
-    --cg-accent-glow: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 32%, transparent),
-      color-mix(
-        in oklab,
-        oklch(from var(--cogenta-color-accent) 0.78 calc(c * 1.05) h) 55%,
-        transparent
-      )
-    );
-
     --cg-line: light-dark(
       var(--cogenta-color-border),
       oklch(from var(--cogenta-color-accent) 0.4 calc(c * 0.24) h)
@@ -334,10 +326,16 @@
 }
 
 /* --------------------------------------------------------------------------
-   Elevation — a hard offset shadow in light, an accent-tinted glow in dark.
-   Neither is a colour `light-dark()` can carry (a shadow list is not a single
-   colour value), so both branches are written out, under a media query and
-   under the explicit toggle.
+   Elevation — a hard, zero-blur offset shadow in both schemes (L25 D5,
+   binding: "never glows"). Light reads it in the skin's own near-black
+   `--cogenta-shadow-sm`/`-md`; dark cannot reuse those (a near-black shadow
+   is invisible on a near-black surface), so it draws the *same* offset
+   geometry in `--cg-line-strong` instead — the brighter-than-surface line
+   colour this file already uses to do elevation's job in dark mode (see the
+   colour system's own decision 5, above). Two literal card corners stacking
+   behind one another, never a halo: this replaces what used to be an
+   accent-tinted `blur()` glow, which is exactly the "100% AI" look the
+   product owner ruled out.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
@@ -352,14 +350,14 @@
 
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) {
-    --cg-elevation-1: var(--cg-ring), 0 0 0.75rem var(--cg-accent-glow);
-    --cg-elevation-2: var(--cg-ring), 0 0 1.5rem var(--cg-accent-glow);
-    --cg-elevation-3: var(--cg-ring), 0 0 2.5rem var(--cg-accent-glow);
+    --cg-elevation-1: var(--cg-ring), 0.125rem 0.125rem 0 var(--cg-line-strong);
+    --cg-elevation-2: var(--cg-ring), 0.25rem 0.25rem 0 var(--cg-line-strong);
+    --cg-elevation-3: var(--cg-ring), 0.4rem 0.4rem 0 var(--cg-line-strong);
   }
 }
 
 :where(:root[data-theme="dark"]) {
-  --cg-elevation-1: var(--cg-ring), 0 0 0.75rem var(--cg-accent-glow);
-  --cg-elevation-2: var(--cg-ring), 0 0 1.5rem var(--cg-accent-glow);
-  --cg-elevation-3: var(--cg-ring), 0 0 2.5rem var(--cg-accent-glow);
+  --cg-elevation-1: var(--cg-ring), 0.125rem 0.125rem 0 var(--cg-line-strong);
+  --cg-elevation-2: var(--cg-ring), 0.25rem 0.25rem 0 var(--cg-line-strong);
+  --cg-elevation-3: var(--cg-ring), 0.4rem 0.4rem 0 var(--cg-line-strong);
 }

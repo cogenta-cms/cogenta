@@ -28,3 +28,9 @@ name, which is a theme's signal to keep whatever fallback it drew before.
 
 Every addition is optional; a theme built against `1.3`, and a host that never wires any
 of the new fields, both keep rendering exactly as before.
+
+Also adds `THEME_STRINGS`/`createThemeTranslator()`: the dozen visitor-facing strings the
+block vocabulary asks for through `RenderContext.t` (`collection.empty`, `embed.open`,
+`entry.readingTime`, …), in English and French with `{{placeholder}}` interpolation and a
+per-theme override hook. Until now `cogenta serve` passed `t: (key) => key`, so an empty
+list printed the literal text `collection.empty` on the public page.

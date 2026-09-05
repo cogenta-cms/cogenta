@@ -24,6 +24,7 @@ import {
   type ChromeLink,
   type ChromeNavLink,
   buildCollectionListQuery as collectionListQuery,
+  createThemeTranslator,
   entryExcerpt,
   entryImage,
   escapeAttribute,
@@ -1435,7 +1436,7 @@ async function renderEntryPage(
     site: options.site,
     locale: entry.locale,
     url: new URL(pathname, options.site.url),
-    t: (key) => key,
+    t: createThemeTranslator(entry.locale),
     // The real `srcset`, from `@cogenta/render`'s own `describeMedia` (L10
     // task 5). Pure and synchronous, as contract D requires: the asset was
     // loaded before this render started, and this only builds URLs against
@@ -1954,7 +1955,7 @@ export async function renderThemeGalleryPreview(
     site: options.site,
     locale,
     url: new URL('/', options.site.url),
-    t: (key) => key,
+    t: createThemeTranslator(locale),
     image,
     link,
     content: {

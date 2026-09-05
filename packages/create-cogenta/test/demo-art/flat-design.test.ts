@@ -147,38 +147,41 @@ function leftFraction(layer: ArtLayer, width: number, height: number): number | 
   }
 }
 
-describe('D5 — every hero variant keeps its left ~55% a single flat colour', () => {
+describe('D5 — every hero variant is a full-canvas flat poster, not a mostly blank frame', () => {
   const HERO_WIDTH = 1600
   const HERO_HEIGHT = 1000
-  // A little slack under 0.55 for the ~1.25px anti-aliasing band render.ts
-  // applies at a shape's own edge — this is about the *authored* geometry,
-  // not a pixel-sampling approximation of it.
-  const CALM_BOUNDARY = 0.54
 
-  it('no shape in any variant, seed, or palette reaches left of the calm boundary', () => {
+  it('at least one shape in every variant, seed and palette reaches into the left half of the frame', () => {
+    // Themes frame the hero's media beside the title, so an image whose left
+    // half is a single flat colour renders as an empty picture — the exact
+    // regression an earlier "calm left zone" rule produced on every home page.
     for (const palette of PALETTES) {
       for (const variant of HERO_VARIANTS) {
         for (const seed of [1, 2, 3, 9]) {
           const { layers } = heroArt(palette, variant, seed)
-          for (const layer of layers) {
-            if (layer.kind === 'fill') continue // the calm base itself
-            const left = leftFraction(layer, HERO_WIDTH, HERO_HEIGHT)
-            if (left === null) continue
-            expect(
-              left,
-              `heroArt(${variant}, seed=${seed}): a "${layer.kind}" layer reaches x=${left.toFixed(3)}, left of the calm boundary ${CALM_BOUNDARY}`,
-            ).toBeGreaterThanOrEqual(CALM_BOUNDARY)
-          }
+          const lefts = layers
+            .filter((layer) => layer.kind !== 'fill')
+            .map((layer) => leftFraction(layer, HERO_WIDTH, HERO_HEIGHT))
+            .filter((left): left is number => left !== null)
+          const reaches = layers.some(
+            (layer) => layer.kind === 'bands' || layer.kind === 'checker' || layer.kind === 'dots',
+          )
+          expect(
+            reaches || lefts.some((left) => left < 0.5),
+            `heroArt(${variant}, seed=${seed}) leaves the left half empty`,
+          ).toBe(true)
         }
       }
     }
   })
 
-  it('the first layer of every hero variant is a full-canvas flat fill (the calm base itself)', () => {
+  it('the first layer of every hero variant is a full-canvas flat colour field', () => {
+    // A poster family may open with a solid `fill` or with edge-to-edge
+    // `bands` — either way the canvas is covered before any shape is placed.
     for (const palette of PALETTES) {
       for (const variant of HERO_VARIANTS) {
         const { layers } = heroArt(palette, variant, 1)
-        expect(layers[0]?.kind).toBe('fill')
+        expect(['fill', 'bands']).toContain(layers[0]?.kind)
       }
     }
   })

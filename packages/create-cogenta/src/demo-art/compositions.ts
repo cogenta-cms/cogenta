@@ -205,178 +205,15 @@ const HERO_WIDTH = 1600
 const HERO_HEIGHT = 1000
 
 /**
- * Everything a hero variant draws lives inside this box (fractions of the
- * shorter canvas side, like every other bounded shape) — the right ~44% of
- * the frame. The left ~55% never receives anything but the base flat
- * `fill`, which is what keeps it calm enough for a title to sit on
- * (`test/demo-art/flat-design.test.ts`'s calm-left-zone check).
+ * A 1600×1000 hero visual. Every theme frames the hero's media beside the
+ * title — a picture next to the text, never a backdrop under it — so the
+ * composition fills the whole canvas like a poster: an early version kept
+ * the left half a single flat colour "for the title" and rendered as a
+ * mostly blank frame on every home page. `variant` names one of the flat
+ * poster families (the same builders `coverArt` picks from, at hero size);
+ * the older names (`mesh`, `geometric`, `diagonal`, `radial`, `dark`, `warm`)
+ * stay as aliases so no blueprint needs to change.
  */
-const HERO_ZONE_CENTER: Vec2 = [0.77, 0.5]
-const HERO_ZONE_WIDTH = 0.5
-const HERO_ZONE_HEIGHT = 0.72
-
-function buildGridHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
-  const layers: ArtLayer[] = [
-    { kind: 'fill', color: c.bg },
-    {
-      kind: 'dots',
-      center: HERO_ZONE_CENTER,
-      width: HERO_ZONE_WIDTH,
-      height: HERO_ZONE_HEIGHT,
-      spacing: 0.045,
-      radius: 0.006,
-      color: c.border,
-      alpha: 0.65,
-    },
-  ]
-
-  const nodes: Vec2[] = [
-    [0.68 + rng() * 0.06, 0.3 + rng() * 0.1],
-    [0.78 + rng() * 0.08, 0.46 + rng() * 0.08],
-    [0.7 + rng() * 0.1, 0.64 + rng() * 0.1],
-  ]
-  for (let i = 0; i < nodes.length - 1; i++) {
-    layers.push(
-      segment(
-        nodes[i] as Vec2,
-        nodes[i + 1] as Vec2,
-        HERO_WIDTH,
-        HERO_HEIGHT,
-        0.0035,
-        c.mutedFg,
-        0.45,
-      ),
-    )
-  }
-  nodes.forEach((node, i) => {
-    layers.push({
-      kind: 'disc',
-      center: node,
-      radius: i === 1 ? 0.05 : 0.022,
-      color: i === 1 ? c.accent : tones.hue1,
-      alpha: 1,
-    })
-  })
-
-  return layers
-}
-
-function buildBlocksHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
-  const flip = rng() < 0.5
-  return [
-    { kind: 'fill', color: c.bg },
-    {
-      kind: 'rect',
-      center: [0.7, 0.5],
-      width: 0.26,
-      height: HERO_ZONE_HEIGHT,
-      radius: 0.015,
-      color: tones.pale,
-      alpha: 1,
-    },
-    {
-      kind: 'rect',
-      center: [0.855, 0.35],
-      width: 0.2,
-      height: 0.34,
-      radius: 0.02,
-      rotation: flip ? -5 : 5,
-      color: c.accent,
-      alpha: 1,
-    },
-    {
-      kind: 'rect',
-      center: [0.86, 0.68],
-      width: 0.16,
-      height: 0.22,
-      radius: 0.02,
-      rotation: flip ? 6 : -6,
-      color: tones.deep,
-      alpha: 1,
-    },
-    { kind: 'disc', center: [0.895, 0.5], radius: 0.028, color: tones.hue1, alpha: 1 },
-  ]
-}
-
-function buildBandsHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
-  const angle = 22 + rng() * 8
-  const colors = [tones.hue1, c.accent, tones.deep]
-  const rows = [0.2, 0.35, 0.5, 0.65, 0.8]
-  const layers: ArtLayer[] = [{ kind: 'fill', color: c.bg }]
-  rows.forEach((y, i) => {
-    layers.push({
-      kind: 'rect',
-      center: [0.83, y],
-      width: 0.46,
-      height: 0.17,
-      rotation: angle,
-      color: colors[i % colors.length] as ColorRGB,
-      alpha: 1,
-    })
-  })
-  return layers
-}
-
-function buildRingsHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
-  const center: Vec2 = [0.78 + (rng() - 0.5) * 0.04, 0.46 + (rng() - 0.5) * 0.1]
-  return [
-    { kind: 'fill', color: c.bg },
-    { kind: 'disc', center, radius: 0.05, color: c.accent, alpha: 1 },
-    { kind: 'ring', center, innerRadius: 0.09, outerRadius: 0.105, color: tones.hue1, alpha: 1 },
-    { kind: 'ring', center, innerRadius: 0.14, outerRadius: 0.152, color: tones.deep, alpha: 1 },
-    { kind: 'ring', center, innerRadius: 0.185, outerRadius: 0.195, color: c.border, alpha: 1 },
-  ]
-}
-
-function buildInkHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
-  const markCenter: Vec2 = [0.8 + rng() * 0.04, 0.56 + rng() * 0.08]
-  const markColor = rng() < 0.5 ? tones.hue1 : tones.hue2
-  return [
-    { kind: 'fill', color: tones.ink },
-    segment([0.64, 0.26], [0.9, 0.26], HERO_WIDTH, HERO_HEIGHT, 0.004, tones.pale, 0.85),
-    {
-      kind: 'polygon',
-      center: markCenter,
-      radius: 0.14,
-      sides: 3,
-      rotation: 0,
-      color: markColor,
-      alpha: 1,
-    },
-    { kind: 'disc', center: [0.68, 0.74], radius: 0.03, color: c.accent, alpha: 1 },
-  ]
-}
-
-function buildSunHero(c: Rgb, tones: Tones, rng: () => number): ArtLayer[] {
-  const center: Vec2 = [0.78 + (rng() - 0.5) * 0.04, 0.6 + rng() * 0.06]
-  const radius = 0.15 + rng() * 0.03
-  const layers: ArtLayer[] = [
-    { kind: 'fill', color: tones.warm },
-    { kind: 'disc', center, radius, color: c.accent, alpha: 1 },
-    {
-      kind: 'ring',
-      center,
-      innerRadius: radius + 0.04,
-      outerRadius: radius + 0.048,
-      color: tones.hue1,
-      alpha: 0.6,
-    },
-  ]
-  // The ground band is drawn last so it crops the sun's lower half into an arch.
-  const groundHeight = 0.5
-  const horizonY = center[1] + radius * 0.6
-  layers.push({
-    kind: 'rect',
-    center: [0.78, horizonY + groundHeight / 2],
-    width: 0.5,
-    height: groundHeight,
-    color: tones.deep,
-    alpha: 1,
-  })
-  return layers
-}
-
-/** A 1600×1000 hero background. `variant` lets neighbouring blueprints look distinct from the same palette family — every variant keeps its left ~55% a single flat colour (D5's calm-left-zone requirement) so a title reads cleanly over it. */
 export function heroArt(palette: Palette, variant: HeroVariant = 'mesh', seed = 1): ArtSpec {
   const c = toRgb(palette)
   const tones = buildTones(c)
@@ -386,22 +223,22 @@ export function heroArt(palette: Palette, variant: HeroVariant = 'mesh', seed = 
   let layers: ArtLayer[]
   switch (family) {
     case 'grid':
-      layers = buildGridHero(c, tones, rng)
+      layers = gridNodeCover(c, tones, rng)
       break
     case 'blocks':
-      layers = buildBlocksHero(c, tones, rng)
+      layers = colourBlockCover(c, tones, rng)
       break
     case 'bands':
-      layers = buildBandsHero(c, tones, rng)
+      layers = stripeBandCover(c, tones, rng)
       break
     case 'rings':
-      layers = buildRingsHero(c, tones, rng)
+      layers = concentricCover(c, tones, rng)
       break
     case 'ink':
-      layers = buildInkHero(c, tones, rng)
+      layers = editorialMarkCover(c, tones, rng)
       break
     default:
-      layers = buildSunHero(c, tones, rng)
+      layers = archSunCover(c, tones, rng)
   }
 
   return { width: HERO_WIDTH, height: HERO_HEIGHT, seed, layers }

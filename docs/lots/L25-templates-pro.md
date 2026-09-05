@@ -214,7 +214,7 @@ plat. C'est le prix de « zéro dépendance et zéro licence », payé en connai
 |---|---|---|
 | Diagnostic et décisions | fait | 2026-09-05 |
 | Nettoyage disque (worktrees fusionnés) | fait | seuls les worktrees sans commit unique et propres |
-| Phase 0 — A0a (theme-kit / contrat D / serve) | en cours | agent Sonnet, worktree, lancé 2026-09-05 00:45 |
+| Phase 0 — A0a (theme-kit / contrat D / serve) | fait | fusionné dans `main` (`2f0056d`) ; + correctif `THEME_STRINGS` (`6c97591`) : `t` était un bouchon `key => key` pré-existant |
 | Phase 0 — A0b (demo-art / ingestion / thème par défaut) | en cours | agent Sonnet, worktree, lancé 2026-09-05 00:46 |
 | Phase 1 vague 1 — blog, saas, restaurant, docs, association | à faire | |
 | Phase 1 vague 2 — entreprise, magazine, portfolio, ecommerce (passes pro) | à faire | |

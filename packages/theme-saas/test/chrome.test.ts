@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -125,6 +126,41 @@ describe('renderChrome', () => {
     expect(footer).not.toContain('cg-site-footer__tagline')
     expect(footer).not.toContain('cg-site-footer__social-col')
     expect(footer).not.toContain('cg-site-footer__note')
+  })
+
+  // L26 — the manual light/dark/system toggle is unconditional (every
+  // render carries it, `theme@1.4` or not), unlike the four fields above.
+  // The expectation is built from `renderThemeToggle` itself rather than a
+  // hand-typed literal, so it can never silently drift from the real
+  // markup the first time either changes.
+  describe('the manual light/dark/system toggle (L26)', () => {
+    it('renders unconditionally, as the last element of the header, after the nav', () => {
+      const { header } = renderChrome(BASE)
+      const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+      expect(header).toContain(themeToggle)
+      expect(header.indexOf('id="cg-nav"')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+      expect(header.endsWith(`${themeToggle}</div></header>`)).toBe(true)
+    })
+
+    it('localises the toggle from the chrome input locale', () => {
+      const { header } = renderChrome({ ...BASE, locale: 'fr' })
+      const themeToggleFr = serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' }))
+      expect(header).toContain(themeToggleFr)
+    })
+
+    it('still renders the toggle when headerNav is empty', () => {
+      const { header } = renderChrome({ ...BASE, headerNav: [] })
+      expect(header).toContain('cg-theme-toggle')
+    })
+
+    it('still renders the toggle alongside a headerAction', () => {
+      const { header } = renderChrome({
+        ...BASE,
+        headerAction: { label: 'Start free', href: '/signup' },
+      })
+      expect(header).toContain('cg-theme-toggle')
+      expect(header.indexOf('Start free')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+    })
   })
 
   it('escapes a site name that contains markup-significant characters', () => {

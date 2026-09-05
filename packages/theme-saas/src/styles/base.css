@@ -423,6 +423,65 @@ img {
   flex: none;
 }
 
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`, L26) — a plain pill icon button in this theme's own register
+   (matching `.cg-nav-toggle-label`'s footprint and `.cg-site-footer__
+   social-item a`'s pill/border language), never `.cg-action`'s filled
+   button style, so it never competes with a real call to action. Always
+   the last child of `.cg-site-header__inner`'s flex row, so it stays
+   flush right of the nav on desktop and next to the hamburger on mobile. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-pill);
+  background: transparent;
+  color: var(--cg-ink-muted);
+  cursor: pointer;
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-theme-toggle:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
 /* --------------------------------------------------------------------------
    Chrome — footer, a real four-column layout
    -------------------------------------------------------------------------- */

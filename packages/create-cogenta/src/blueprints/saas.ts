@@ -88,54 +88,66 @@ export const SAAS_DEMO_FEATURES: readonly SaasDemoFeature[] = [
     name: 'Workflow automation',
     slug: 'workflow-automation',
     description:
-      'Trigger multi-step approvals, notifications and handoffs the moment a status changes — no script to maintain, no cron job to babysit.',
+      'Trigger multi-step approvals, notifications and handoffs the moment a status changes — no script to maintain, no cron job to babysit. Build the flow once in a visual editor, watch every run in real time, and route exceptions to a human without losing your place in the queue.',
     icon: 'bolt',
   },
   {
     name: 'Audit log',
     slug: 'audit-log',
     description:
-      'Every change is written once, in order, and never edited after the fact — the same ledger your own compliance review reads from.',
+      'Every change is written once, in order, and never edited after the fact — the same ledger your own compliance review reads from. Filter by actor, resource or time window, and export the result as a signed record that satisfies an external auditor without a follow-up email.',
     icon: 'shield',
   },
   {
     name: 'Single sign-on',
     slug: 'single-sign-on',
     description:
-      'SAML and OIDC out of the box, provisioned through your identity provider — an offboarded employee loses access everywhere in one step, not six.',
+      'SAML and OIDC out of the box, provisioned through your identity provider in minutes, not a support ticket. An offboarded employee loses access everywhere in one step, not six, and group membership synced from your directory keeps roles correct without anyone updating them by hand.',
     icon: 'users',
   },
   {
     name: 'Integrations',
     slug: 'integrations',
     description:
-      'Two-way sync with the tools already in the stack, plus outbound webhooks for the ones that aren’t — nothing here is a walled garden.',
+      'Two-way sync with the tools already in the stack — calendar, chat, storage and the usual project trackers — plus outbound webhooks and a documented API for anything bespoke. Nothing here is a walled garden: what comes in stays in sync, and what goes out is never trapped behind a paywall tier.',
     icon: 'globe',
   },
   {
     name: 'Analytics',
     slug: 'analytics',
     description:
-      'Real usage numbers, not vanity counters: active seats this week, the features nobody opens, and the exports someone actually downloads.',
+      'Real usage numbers, not vanity counters: active seats this week, the features nobody opens, and the reports someone actually downloads. Every chart is a saved, shareable view, so the number quoted in a leadership meeting is the same one the team is already looking at.',
     icon: 'chart',
   },
   {
     name: 'API',
     slug: 'api',
     description:
-      'A typed, versioned REST API with a sandbox key on day one — everything the product does in the browser, a script can do too.',
+      'A typed, versioned REST API with a sandbox key on day one and rate limits generous enough for a real integration, not just a demo. Everything the product does in the browser, a script can do too — through the same permission model and the same audit trail behind it.',
     icon: 'sparkles',
   },
 ]
 
 const BLOCK_VERSION = '1.0.0'
 
-function proseParagraph(key: string, text: string): VocabularyBlock {
+/**
+ * One `prose` block, whose `body` (contract B rich text) can hold more than
+ * one paragraph — `text` may be a single string (one paragraph, the
+ * original shape every call site but `about` still uses) or an array of
+ * strings (one `richTextParagraph` block per entry, concatenated). Real
+ * "about" copy reads as more than one paragraph; forcing it into one would
+ * have meant either a wall of run-on sentences or losing the paragraph
+ * break entirely.
+ */
+function proseParagraph(key: string, text: string | readonly string[]): VocabularyBlock {
+  const paragraphs = typeof text === 'string' ? [text] : text
   return {
     _key: key,
     _type: 'prose',
     _version: BLOCK_VERSION,
-    body: richTextParagraph(`${key}-body`, text),
+    body: paragraphs.flatMap((paragraph, index) =>
+      richTextParagraph(`${key}-body-${index}`, paragraph),
+    ),
   } as VocabularyBlock
 }
 
@@ -156,8 +168,9 @@ export interface SaasDemoPage {
  * A function of `media`/`featureIds` (`SeedContext.media`, and the ids
  * `seedSaasDemoContent` assigns its own features before this runs), not a
  * static const: the hero's `media`, the product shot, the trust strip's
- * logos and the testimonial's avatar all need ids only the scaffold knows
- * at seed time, and the feature grid links to each feature's own real page.
+ * logos and both testimonials' avatars all need ids only the scaffold
+ * knows at seed time, and the feature grid links to each feature's own
+ * real page.
  */
 export function buildSaasDemoPages(
   media: Readonly<Record<string, string>>,
@@ -191,7 +204,7 @@ export function buildSaasDemoPages(
           eyebrow: 'Now in public beta',
           title: 'Ship faster, with less friction',
           subtitle:
-            'One workspace for the whole team to plan, automate and ship — scaffolded by create-cogenta from the "saas" blueprint, with real demo features already in place.',
+            'One workspace for the whole team to plan, automate and ship, without the pile of spreadsheets and shared inboxes it usually takes to get there. This page and the six features below it were scaffolded by create-cogenta from the "saas" blueprint — real demo content, ready to edit from the first run.',
           ...(media.hero === undefined ? {} : { media: media.hero }),
           actions: [
             { label: 'Start free', target: { href: '/pricing' }, emphasis: 'primary' },
@@ -259,7 +272,7 @@ export function buildSaasDemoPages(
           _version: BLOCK_VERSION,
           quote: richTextParagraph(
             'demo-testimonial-quote',
-            'We replaced four spreadsheets and a shared inbox with one workspace. Approvals that used to take a week now close the same afternoon.',
+            'We replaced four spreadsheets and a shared inbox with one workspace. Approvals that used to take a week now close the same afternoon, and for the first time our finance team can see exactly where a request is stuck without pinging three people to ask.',
           ),
           attribution: {
             name: 'Priya Nandakumar',
@@ -271,7 +284,7 @@ export function buildSaasDemoPages(
           _key: 'demo-home-quote',
           _type: 'quote',
           _version: BLOCK_VERSION,
-          text: 'The audit log alone is why our compliance review took an afternoon instead of a month.',
+          text: 'The audit log alone is why our compliance review took an afternoon instead of a month. Every question the auditor asked, we answered by filtering one screen instead of hunting through six systems for a paper trail that may or may not have existed.',
           author: 'Marcus Webb',
           role: 'IT Director, Fenwick & Rowe',
         } as VocabularyBlock,
@@ -307,7 +320,7 @@ export function buildSaasDemoPages(
           eyebrow: 'Pricing',
           title: 'One plan for every team, billed on active seats',
           subtitle:
-            'No setup fee, no annual lock-in required, and a real person to talk to before you commit to Enterprise.',
+            'No setup fee, no annual lock-in required, and a real person to talk to before you commit to Enterprise. Every plan includes the full feature set below — Pro adds SSO and priority support, and moving between tiers takes effect immediately, prorated to the day.',
           actions: [{ label: 'Start free', target: { href: '#' }, emphasis: 'primary' }],
         } as VocabularyBlock,
         {
@@ -327,7 +340,7 @@ export function buildSaasDemoPages(
               question: 'What happens when the trial ends?',
               answer: richTextParagraph(
                 'demo-pricing-faq-1-a',
-                'The workspace goes read-only rather than being deleted. Everything is still there, and still exportable, whether you subscribe that week or six months later.',
+                'The workspace goes read-only rather than being deleted. Everything is still there, and still exportable, whether you subscribe that week or six months later — nothing is purged on a timer.',
               ),
             },
             {
@@ -335,7 +348,7 @@ export function buildSaasDemoPages(
               question: 'Do you charge for people who barely log in?',
               answer: richTextParagraph(
                 'demo-pricing-faq-2-a',
-                'No. A seat counts in a month only if it was actually used that month, and the invoice shows which ones did.',
+                'No. A seat counts in a month only if it was actually used that month, and the invoice itemises exactly which ones did, so finance never has to take our word for it.',
               ),
             },
             {
@@ -343,7 +356,7 @@ export function buildSaasDemoPages(
               question: 'Can we pay by invoice instead of card?',
               answer: richTextParagraph(
                 'demo-pricing-faq-3-a',
-                'From five seats up, yearly, on thirty-day terms. Below that the card flow costs everyone less than the paperwork would.',
+                'From five seats up, billed yearly, on thirty-day terms with a PO number on the invoice if you need one. Below that the card flow costs everyone less than the paperwork would.',
               ),
             },
             {
@@ -351,7 +364,7 @@ export function buildSaasDemoPages(
               question: 'Can we change plans mid-cycle?',
               answer: richTextParagraph(
                 'demo-pricing-faq-4-a',
-                'Yes, immediately, with a prorated charge or credit for the days remaining — never a silent rollover to next month.',
+                'Yes, immediately, with a prorated charge or credit for the days remaining, shown on the invoice before it is charged — never a silent rollover to next month.',
               ),
             },
           ],
@@ -362,19 +375,23 @@ export function buildSaasDemoPages(
       title: 'About',
       slug: 'about',
       blocks: [
-        proseParagraph(
-          'demo-about-prose',
-          'This is a demo SaaS site, scaffolded by create-cogenta from the "saas" blueprint. Its features and this page were seeded by the installer so there is real content to look at from the first run — every word of it is normal, editable content.',
-        ),
+        proseParagraph('demo-about-prose', [
+          'We started building this after watching a team lose a week to an approval that should have taken an hour — not because anyone was slow, but because the request lived in an inbox, the sign-off lived in a spreadsheet, and nobody could see both at once. So we built one workspace where the request, the approval and the record of what happened are the same object, not three.',
+          'This is a demo SaaS site, scaffolded by create-cogenta from the "saas" blueprint. Its features and this page were seeded by the installer so there is real content to look at from the first run — every word of it is normal, editable content, not placeholder copy waiting to be swapped out.',
+        ]),
         {
           _key: 'demo-about-testimonial',
           _type: 'testimonial',
           _version: BLOCK_VERSION,
           quote: richTextParagraph(
             'demo-about-testimonial-quote',
-            'Support answered inside the hour, on a Sunday, before we’d even finished writing up the incident.',
+            'Support answered inside the hour, on a Sunday, before we’d even finished writing up the incident. Three months later the same person who took that first ticket is still the one who replies — no hand-off, no repeating the whole story from scratch.',
           ),
-          attribution: { name: 'Dana Osei', role: 'Engineering Manager, Vaultline' },
+          attribution: {
+            name: 'Dana Osei',
+            role: 'Engineering Manager, Vaultline',
+            ...(media['avatar-about'] === undefined ? {} : { avatar: media['avatar-about'] }),
+          },
         } as VocabularyBlock,
       ],
     },
@@ -425,27 +442,27 @@ function homeFaq(): VocabularyBlock {
   const items = [
     [
       'How long does it take to get started?',
-      'Most teams are running real workflows the same afternoon they sign up — there is no migration step to complete first.',
+      'Most teams are running real workflows the same afternoon they sign up — there is no migration step to complete first. Import a spreadsheet, invite the team, and the first approval can go out before lunch.',
     ],
     [
       'Does it work with the tools we already use?',
-      'Yes — two-way sync with the usual suspects, plus outbound webhooks and a documented API for anything bespoke.',
+      'Yes — two-way sync with the usual suspects, plus outbound webhooks and a documented API for anything bespoke. If it has an API, it can talk to this one; if it does not, the webhook still fires.',
     ],
     [
       'Is our data ours if we leave?',
-      'A full export, in a format something else can actually read, is one click away at any time — there is no lock-in by file format.',
+      'A full export, in a format something else can actually read, is one click away at any time — there is no lock-in by file format, no support ticket required, and no waiting period.',
     ],
     [
       'How is data secured in transit and at rest?',
-      'Everything is encrypted in transit and at rest, and every access is written to the audit log described above.',
+      'Everything is encrypted in transit and at rest, and every access is written to the audit log described above. Backups are tested by restoring them, not just taking them, on a schedule a security review can ask to see.',
     ],
     [
       'Can we bring our own identity provider?',
-      'Yes, SAML and OIDC are supported on every paid plan, provisioned in minutes from the settings screen.',
+      'Yes, SAML and OIDC are supported on every paid plan, provisioned in minutes from the settings screen — no support ticket, no waiting on a callback from us.',
     ],
     [
       'What kind of support do we get?',
-      'Every plan includes email support; Pro and Enterprise add priority response times and a named contact.',
+      'Every plan includes email support with a same-day response on business days; Pro and Enterprise add priority response times, a named contact, and a shared channel for anything urgent.',
     ],
   ] as const
 
@@ -498,8 +515,10 @@ function saasPalette(): Palette {
 /**
  * Procedural visuals this blueprint seeds (L25): a mesh-gradient hero
  * backdrop, a wide product screenshot stand-in, six neutral client logos
- * for the trust strip, one avatar for the testimonial, and one cover photo
- * per demo feature — all from the same starting-skin palette
+ * for the trust strip, one avatar per testimonial (L26: the "about" page's
+ * testimonial went unillustrated before this — a second, distinct avatar
+ * fixes that rather than reusing the home page's), and one cover photo per
+ * demo feature — all from the same starting-skin palette
  * (`starting-skins.js`) this blueprint already ships.
  */
 export const SAAS_MEDIA_SPECS: readonly DemoMediaSpec[] = [
@@ -519,6 +538,15 @@ export const SAAS_MEDIA_SPECS: readonly DemoMediaSpec[] = [
     spec: avatarArt(saasPalette(), 23),
     alt: 'Portrait of the testimonial’s author',
     photo: 'saas/avatar-1.jpg',
+  },
+  {
+    name: 'avatar-about',
+    // No second bundled photo exists for this blueprint (only
+    // `hero.jpg`/`avatar-1.jpg`, see `assets/photos/saas/`) — reusing
+    // `avatar-1.jpg` under a different name would put the same face on two
+    // different people, which is worse than an honest procedural portrait.
+    spec: avatarArt(saasPalette(), 24),
+    alt: 'Portrait of the "about" page testimonial’s author',
   },
   ...[0, 1, 2, 3, 4, 5].map(
     (index): DemoMediaSpec => ({

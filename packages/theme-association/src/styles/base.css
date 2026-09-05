@@ -382,6 +382,59 @@ img {
   flex-shrink: 0;
 }
 
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`) — a plain icon button matching this theme's own pill-shaped
+   mobile-menu button (`.cg-nav-toggle__button`) in size and treatment, so it
+   reads as this theme's own chrome rather than a borrowed control. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: var(--cg-radius-pill);
+  border: 0;
+  background: var(--cg-surface-sunken);
+  color: var(--cg-ink);
+  cursor: pointer;
+  transition: background-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-theme-toggle:hover {
+  background: var(--cg-accent-soft);
+  color: var(--cg-accent-soft-fg);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.2rem;
+  block-size: 1.2rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
 /* --------------------------------------------------------------------------
    Chrome — footer, four columns on a warm tinted band
    -------------------------------------------------------------------------- */

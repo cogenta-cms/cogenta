@@ -501,18 +501,18 @@
 .cg-impact__items {
   display: grid;
   gap: var(--cg-s8);
-  grid-template-columns: repeat(2, 1fr);
+  /* `auto-fit`, not a fixed column count: this block is also reused, with
+     only two items, for an event's own "When / Where" panel — a fixed
+     `repeat(4, 1fr)` at desktop widths left two ghost columns of empty
+     space beside those two items (seen live on an event's own page).
+     `auto-fit` collapses the tracks nothing was placed in, so two items
+     stretch to fill the row exactly as four items already did. */
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   margin: 0;
   padding: var(--cg-s10) var(--cg-s6);
   background: var(--cg-surface-sunken);
   border-radius: var(--cg-radius-xl);
   text-align: center;
-}
-
-@media (min-width: 42rem) {
-  .cg-impact__items {
-    grid-template-columns: repeat(4, 1fr);
-  }
 }
 
 .cg-impact-stat {

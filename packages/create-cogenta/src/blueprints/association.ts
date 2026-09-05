@@ -40,6 +40,10 @@ import { STARTING_SKINS } from './starting-skins.js'
  * with the same date/location the blueprint already computed keeps the
  * panel real, dated correctly, and rendered by ordinary block code — no
  * theme-kit/`cogenta serve` change, which is out of this task's scope.
+ * The same `blocks` zone also carries a second, longer `prose` paragraph
+ * (`AssociationDemoEvent.whatToExpect`, L26) — without it an event's own
+ * page was only its one-line `description`, a photo and the When/Where
+ * panel, which read as bare next to the rest of the site.
  */
 
 export const event = defineCollection({
@@ -80,6 +84,13 @@ export interface AssociationDemoEvent {
   readonly minute: number
   readonly location: string
   readonly description: string
+  /**
+   * A second, longer paragraph seeded as a `prose` block on the event's own
+   * page (see `seedAssociationDemoContent`) — `description` alone is a
+   * one-line subtitle shown under the title; without this an event's own
+   * page was only that subtitle, a photo and the "When / Where" panel.
+   */
+  readonly whatToExpect: string
 }
 
 /**
@@ -96,7 +107,9 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     minute: 0,
     location: 'Community Hall, Room 2',
     description:
-      'A short, friendly session for anyone new to volunteering with us — no commitment, just questions.',
+      'A short, friendly session for anyone new to volunteering with us — what a Thursday shift actually involves, where the van keys live, and who to ask when something breaks. No commitment, just questions, and tea while you ask them.',
+    whatToExpect:
+      'Expect about forty-five minutes: a walk through the four programmes, who runs each one, and which evenings and afternoons have space right now. Bring nothing and commit to nothing — most people leave with one shift pencilled in for the following week, and a couple of names to ask for when they turn up.',
   },
   {
     title: 'Community clean-up day',
@@ -106,7 +119,9 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     minute: 0,
     location: 'Riverside Park, main entrance',
     description:
-      'A morning of raking, planting bulbs and clearing the riverbank trail. Gloves and tools provided.',
+      'A morning of raking, planting spring bulbs and clearing last winter’s debris from the riverbank trail, working in pairs along the towpath as far as the old mill. Gloves, bags and tools are all provided — just bring boots you don’t mind getting muddy.',
+    whatToExpect:
+      'We split into pairs at the main entrance and work outward along the towpath, meeting back for sandwiches around midday. Council collects what we bag by the Monday after, so nothing sits by the river over a weekend. Wellingtons help more than the weather forecast usually suggests.',
   },
   {
     title: 'Harvest food drive',
@@ -116,7 +131,9 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     minute: 0,
     location: 'Community Hall car park',
     description:
-      'Drop off tinned and dried goods, or come sort donations for an hour — every crate makes a difference.',
+      'Drop off tinned and dried goods at the collection point, or come for an hour to sort what arrives into family-sized crates ready for Thursday’s distribution. Last year this single morning restocked the pantry for six weeks — every tin really does make a difference.',
+    whatToExpect:
+      'A folding table goes up in the car park from nine, with a second team sorting inside the hall — tins by type, dried goods by weight, anything close to its date used first. No sign-up needed for either job; if the table looks busy, the sorting team inside can always use another pair of hands.',
   },
   {
     title: 'Winter coat collection',
@@ -126,7 +143,9 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     minute: 0,
     location: 'Main Street Fire Station',
     description:
-      'Clean, wearable coats of any size go straight to families at the shelter before the cold sets in.',
+      'Clean, wearable coats of any size — children’s especially short this year — go straight to families at the winter shelter before the cold sets in properly. The fire crew lets us use their car park and their kettle, so it doubles as a good chat with the neighbours.',
+    whatToExpect:
+      'Drop coats at the station forecourt any time between eleven and two — someone is always there to take them, no need to stay. Everything is checked for zips and buttons on the spot and sorted by size, so what leaves for the shelter that same afternoon is already ready to wear.',
   },
   {
     title: 'Annual fundraising dinner',
@@ -136,7 +155,9 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     minute: 30,
     location: 'Grand Ballroom, Town Hall',
     description:
-      "This year's proceeds go directly to the winter shelter programme — tickets include dinner and a raffle.",
+      "This year's proceeds go directly to the winter shelter programme, matched pound for pound by two local businesses up to £5,000. Tickets include a three-course dinner, a raffle with prizes donated by shops on Main Street, and a short word from the families the shelter has housed this year.",
+    whatToExpect:
+      'Doors at six thirty for drinks, dinner at seven, and the raffle drawn between courses so nobody has to wait until the end. Smart casual, and the Town Hall car park is free after six for anyone driving in. Tickets are limited to two hundred, so this is the one date worth booking ahead for.',
   },
   {
     title: 'Neighbourhood garden planting day',
@@ -146,7 +167,9 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     minute: 30,
     location: 'Elm Street Community Garden',
     description:
-      'Plant the spring beds with us — seedlings, soil and a flask of coffee all provided.',
+      'Plant the spring beds with us — seedlings, soil and a flask of coffee all provided, no gardening experience needed. Whatever grows in the shared beds is free for anyone to pick once it comes in, which by June is usually more courgettes than the street knows what to do with.',
+    whatToExpect:
+      'Kneeling pads and tools are laid out by nine thirty, with one of the garden’s regular volunteers showing anyone new what goes where. Children are welcome alongside a parent — there is always a bed of easy, fast-growing things kept aside for smaller hands.',
   },
 ]
 
@@ -401,11 +424,32 @@ export function buildAssociationDemoPages(
       blocks: [
         proseParagraph(
           'demo-about-1',
-          'Riverside Community Fund started in 1994 as three neighbours sharing a van and a spare room. Thirty years later we still answer to the same neighbourhood, one street at a time.',
+          'Riverside Community Fund started in 1994 as three neighbours — a retired teacher, a bus driver and a nurse finishing night shifts — sharing a rented van and a spare room over the hardware shop on Elm Street. That winter they drove hot meals to eleven households who had nowhere else to turn. Thirty years later we still answer to the same neighbourhood, one street at a time, from the same stretch of road.',
         ),
         proseParagraph(
           'demo-about-2',
-          'Everything here — the schema, the content, the skin — is a normal part of this site and is meant to be edited, renamed or deleted the moment the defaults stop fitting.',
+          'The hall came in 2001, bought outright with money raised over six years of jumble sales and sponsored walks, so that no landlord could ever end the food distribution with a rent notice. The homework club followed in 2009, started by a parent who noticed the hall sat empty on weekday afternoons while her own children had nowhere quiet to do their reading. The community garden — three raised beds when it began — now runs the length of the car park behind the hall.',
+        ),
+        // `mediaFigure.media` is contract-B `required: true` — omit the whole
+        // block rather than emit one with no image, the same rule
+        // `gallery`/`logoStrip` already follow above when media wasn't seeded
+        // (e.g. this function's own `{}` call in `blueprint-demo-blocks
+        // .test.ts`).
+        ...(media['event-volunteer-orientation-evening'] === undefined
+          ? []
+          : [
+              {
+                _key: 'demo-about-orientation',
+                _type: 'mediaFigure',
+                _version: BLOCK_VERSION,
+                ...mediaField('event-volunteer-orientation-evening'),
+                caption:
+                  'New volunteers meet around this table on their first evening — no forms, just introductions.',
+              } as VocabularyBlock,
+            ]),
+        proseParagraph(
+          'demo-about-3',
+          'Today four programmes run entirely on volunteer hours and neighbour donations: weekly food distribution, the homework club, the community garden, and a neighbour-to-neighbour scheme for shopping and paperwork. None of them means-test anyone who turns up — the founders’ own rule, kept without exception since 1994, is that asking someone to prove their need is worse than the cost of occasionally helping someone who didn’t strictly need it.',
         ),
         {
           _key: 'demo-about-since',
@@ -417,6 +461,10 @@ export function buildAssociationDemoPages(
             { _key: 'c2', value: '4', label: 'programmes running today' },
           ],
         },
+        proseParagraph(
+          'demo-about-4',
+          'Everything on this page — the schema, the content, the skin — is a normal part of this site and is meant to be edited, renamed or deleted the moment the defaults stop fitting your own organisation’s history.',
+        ),
         {
           _key: 'demo-about-testimonial',
           _type: 'quote',
@@ -433,7 +481,7 @@ export function buildAssociationDemoPages(
       blocks: [
         proseParagraph(
           'demo-programmes-intro',
-          'Four programmes, all volunteer-run, all funded by the gifts and hours neighbours give directly.',
+          'Four programmes, all volunteer-run, all funded by the gifts and hours neighbours give directly — no council grant and no corporate sponsor pays for any of what follows. Each one started because someone here noticed a specific gap, not because a template said a community fund should run four things.',
         ),
         {
           _key: 'demo-programmes-grid',
@@ -444,28 +492,49 @@ export function buildAssociationDemoPages(
               _key: 'p1',
               icon: 'heart',
               title: 'Weekly food distribution',
-              text: 'Thursday evenings, from the hall. No paperwork, no means test — just turn up.',
+              text: 'Every Thursday from 6pm, from the hall — no referral, no paperwork, no means test, just turn up with a bag. We buy fresh bread and vegetables to fill whatever tinned donations don’t cover, so a family leaves with a proper week’s worth of meals, not just what happened to be given.',
             },
             {
               _key: 'p2',
               icon: 'book',
               title: 'Homework club',
-              text: 'Two afternoons a week for children in years 6 to 9, run entirely by volunteers.',
+              text: 'Tuesday and Thursday afternoons, 3:30 to 5:30, for children in years 6 to 9. Run entirely by volunteers — two retired teachers and a rotating group of university students home for the holidays — with quiet space, real supervision, and biscuits, for anyone whose house isn’t quiet enough to concentrate in.',
             },
             {
               _key: 'p3',
               icon: 'leaf',
               title: 'Community garden',
-              text: 'Raised beds anyone in the neighbourhood can plant, tend and harvest from.',
+              text: 'Raised beds anyone in the neighbourhood can plant, tend and harvest from, no allotment waiting list required. What grows there in summer — usually more courgettes and runner beans than anyone expects — goes straight into Thursday’s food distribution alongside the tinned goods.',
             },
             {
               _key: 'p4',
               icon: 'users',
               title: 'Neighbour to neighbour',
-              text: 'Shopping, paperwork and a bit of company for people who cannot easily get out.',
+              text: 'Shopping runs, help with council paperwork, and a bit of company for people who cannot easily get out — mostly older neighbours living alone. Volunteers are matched to the same person each fortnight wherever possible, so it becomes a friendship rather than a rota.',
             },
           ],
         },
+        // `mediaFigure.media` is contract-B `required: true` — omit the whole
+        // block rather than emit one with no image, the same rule
+        // `gallery`/`logoStrip` already follow on the home page above when
+        // media wasn't seeded (e.g. this function's own `{}` call in
+        // `blueprint-demo-blocks.test.ts`).
+        ...(media['event-neighbourhood-garden-planting-day'] === undefined
+          ? []
+          : [
+              {
+                _key: 'demo-programmes-garden',
+                _type: 'mediaFigure',
+                _version: BLOCK_VERSION,
+                ...mediaField('event-neighbourhood-garden-planting-day'),
+                caption:
+                  'The community garden on a planting weekend — three beds in 2009, twelve today.',
+              } as VocabularyBlock,
+            ]),
+        proseParagraph(
+          'demo-programmes-outro',
+          'None of the four is means-tested and none asks a question it doesn’t need the answer to. If you’d like to fund an hour of any of them, or spend one yourself, the Get involved page has both a donation and a sign-up sheet.',
+        ),
       ],
     },
     {
@@ -474,7 +543,7 @@ export function buildAssociationDemoPages(
       blocks: [
         proseParagraph(
           'demo-events-intro',
-          'Every upcoming date, in one place — come to one, or come to all of them.',
+          'Every upcoming date, in one place — come to one, or come to all of them. Most take an hour or two, need no booking beyond turning up, and end with tea back at the hall for anyone who wants to stay and talk.',
         ),
         {
           _key: 'demo-events-list',
@@ -496,19 +565,28 @@ export function buildAssociationDemoPages(
           _type: 'cta',
           _version: BLOCK_VERSION,
           title: 'Every gift counts',
-          text: 'A one-off gift keeps the lights on for a week. A monthly one lets us plan.',
+          text: 'A one-off gift keeps the lights on for a week. A monthly one lets us plan — and every euro goes to a named programme, never to overheads we don’t have.',
           actions: [
             {
               label: 'Donate now',
               target: { href: 'https://example.org/donate' },
               emphasis: 'primary',
             },
-            { label: 'Volunteer instead', target: { href: '#membership' } },
+            // A real, working page rather than an in-page `#membership`
+            // fragment: no block in this theme's vocabulary ever renders an
+            // `id`, so a same-page anchor here was a dead link on every
+            // theme — found on this page's own audit. The volunteer
+            // orientation evening is the concrete next step for "I'd rather
+            // give time than money", and it is a real routed entry.
+            {
+              label: 'Volunteer instead',
+              target: { href: '/events/volunteer-orientation-evening' },
+            },
           ],
         },
         proseParagraph(
           'demo-involved-volunteer',
-          'No experience needed for any shift — a returning volunteer is always paired with someone new, and every task is named before you arrive, not discovered on the day.',
+          'No experience needed for any shift — a returning volunteer is always paired with someone new, and every task is named before you arrive, not discovered on the day. Most people start at a monthly orientation evening (see the Events page for the next date), then pick one recurring slot — Thursday food distribution, homework club, or the garden — that fits around their own week.',
         ),
         {
           _key: 'demo-involved-membership',
@@ -543,6 +621,23 @@ export function buildAssociationDemoPages(
             },
           ],
         },
+        // `mediaFigure.media` is contract-B `required: true` — omit the
+        // whole block rather than emit one with no image, the same rule
+        // `gallery`/`logoStrip` already follow on the home page above when
+        // media wasn't seeded (e.g. this function's own `{}` call in
+        // `blueprint-demo-blocks.test.ts`).
+        ...(media['event-harvest-food-drive'] === undefined
+          ? []
+          : [
+              {
+                _key: 'demo-involved-sorting',
+                _type: 'mediaFigure',
+                _version: BLOCK_VERSION,
+                ...mediaField('event-harvest-food-drive'),
+                caption:
+                  'Sorting a Saturday’s donations into family-sized crates before Thursday’s distribution.',
+              } as VocabularyBlock,
+            ]),
         {
           _key: 'demo-involved-hours',
           _type: 'accordion',
@@ -554,7 +649,7 @@ export function buildAssociationDemoPages(
               question: 'Do I have to commit to a regular slot?',
               answer: richTextParagraph(
                 'hours-1-a',
-                'No — some people come every week for years, some come twice. Both are genuinely useful.',
+                'No — some people come every week for years, some come twice a year. Both are genuinely useful, and nobody keeps score.',
               ),
             },
             {
@@ -562,7 +657,23 @@ export function buildAssociationDemoPages(
               question: 'What should I bring?',
               answer: richTextParagraph(
                 'hours-2-a',
-                'Closed shoes and clothes you do not mind getting dirty. Gloves and tools are provided for every outdoor shift.',
+                'Closed shoes and clothes you do not mind getting dirty. Gloves and tools are provided for every outdoor shift, and the hall has a kettle for everyone else.',
+              ),
+            },
+            {
+              _key: 'hours-3',
+              question: 'Can under-16s help?',
+              answer: richTextParagraph(
+                'hours-3-a',
+                'Yes, alongside a parent or guardian, on the garden and food-drive days — those two are the ones we can supervise safely for younger volunteers. The homework club and food distribution are adult shifts.',
+              ),
+            },
+            {
+              _key: 'hours-4',
+              question: 'Is there parking?',
+              answer: richTextParagraph(
+                'hours-4-a',
+                'The hall’s own car park is small — cycling or walking is easier on a Thursday evening. For the clean-up and garden days, Riverside Park and Elm Street both have free parking within a few minutes’ walk.',
               ),
             },
           ],
@@ -579,6 +690,10 @@ export function buildAssociationDemoPages(
         ),
         proseParagraph(
           'demo-privacy-2',
+          'Donation records are kept for six years, the minimum our accountant asks for at tax time. Volunteer contact details are kept only while you are an active volunteer, and removed within a month of your last shift unless you ask us to keep them for a specific reason — an upcoming DBS check, for instance.',
+        ),
+        proseParagraph(
+          'demo-privacy-3',
           'This page is a real, honest starting point — replace it with your own policy once you know exactly what your site collects.',
         ),
       ],
@@ -735,7 +850,12 @@ async function seedAssociationDemoContent(ctx: SeedContext): Promise<void> {
         description: demo.description,
         ...(cover === undefined ? {} : { coverImage: cover }),
       },
-      blocks: { blocks: [whenWhereBlock(iso, demo.location)].map(toBlockZoneEntry) },
+      blocks: {
+        blocks: [
+          whenWhereBlock(iso, demo.location),
+          proseParagraph(`${demo.slug}-expect`, demo.whatToExpect),
+        ].map(toBlockZoneEntry),
+      },
     })
   }
 

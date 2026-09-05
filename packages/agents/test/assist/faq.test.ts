@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createFaqTool, createSchemaOrgTool } from '../../src/assist/faq.js'
 import { createAssistRuntime } from '../../src/assist/runtime.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import { createFakeProvider, TEST_SITE, toolContext } from './fake-provider.js'
 
 function runtimeWith(reply: string) {
@@ -92,7 +93,9 @@ describe('the Schema.org draft tool', () => {
       toolContext(),
     )
 
-    const contents = (provider.calls[0]?.messages ?? []).map((message) => message.content ?? '')
+    const contents = (provider.calls[0]?.messages ?? []).map(
+      (message) => textOnlyContent(message.content) ?? '',
+    )
     expect(contents.some((content) => content.includes('source="entry title"'))).toBe(true)
     expect(contents.some((content) => content.includes('source="entry url"'))).toBe(true)
     expect(contents.some((content) => content.includes('source="entry body"'))).toBe(true)

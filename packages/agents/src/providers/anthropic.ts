@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { textOnlyContent } from './content-parts.js'
 import { requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
@@ -16,6 +17,14 @@ const DEFAULT_BASE_URL = 'https://api.anthropic.com/v1/messages'
 
 type AnthropicContentBlock =
   | { readonly type: 'text'; readonly text: string }
+  | {
+      readonly type: 'image'
+      readonly source: {
+        readonly type: 'base64'
+        readonly media_type: string
+        readonly data: string
+      }
+    }
   | {
       readonly type: 'tool_use'
       readonly id: string
@@ -67,14 +76,31 @@ function toAnthropicMessage(message: ChatMessage): AnthropicMessage {
     return {
       role: 'user',
       content: [
-        { type: 'tool_result', tool_use_id: message.toolCallId, content: message.content ?? '' },
+        {
+          type: 'tool_result',
+          tool_use_id: message.toolCallId,
+          content: textOnlyContent(message.content) ?? '',
+        },
       ],
     }
   }
 
   const role = message.role === 'assistant' ? 'assistant' : 'user'
   const blocks: AnthropicContentBlock[] = []
-  if (message.content !== undefined) blocks.push({ type: 'text', text: message.content })
+  if (typeof message.content === 'string') {
+    blocks.push({ type: 'text', text: message.content })
+  } else if (message.content !== undefined) {
+    for (const part of message.content) {
+      blocks.push(
+        part.type === 'text'
+          ? { type: 'text', text: part.text }
+          : {
+              type: 'image',
+              source: { type: 'base64', media_type: part.mediaType, data: part.data },
+            },
+      )
+    }
+  }
   for (const call of message.toolCalls ?? []) {
     blocks.push({
       type: 'tool_use',
@@ -156,6 +182,7 @@ export function createAnthropicClient(config: AnthropicClientConfig): ProviderCl
   return {
     name: 'anthropic',
     model: config.model,
+    supportsVision: true,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const signal = requestSignalWithTimeout(options?.signal)
       const response = await doFetch(url, {

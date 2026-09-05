@@ -16,10 +16,36 @@ export interface ProviderToolCall {
   readonly input: Readonly<Record<string, unknown>>
 }
 
+/** A plain-text segment of a multimodal message. */
+export interface ChatTextPart {
+  readonly type: 'text'
+  readonly text: string
+}
+
+/**
+ * An inline image segment of a multimodal message. `data` is raw base64 —
+ * no `data:` URI prefix — so each adapter can format it however its own
+ * wire protocol wants it (a data URL for OpenAI, a bare base64 field for
+ * Anthropic and Google).
+ */
+export interface ChatImagePart {
+  readonly type: 'image'
+  readonly mediaType: string
+  readonly data: string
+}
+
+export type ChatContentPart = ChatTextPart | ChatImagePart
+
 export interface ChatMessage {
   readonly role: ChatRole
-  /** Absent (not empty-string) when a turn is tool calls with no accompanying text. */
-  readonly content?: string
+  /**
+   * Absent (not empty-string) when a turn is tool calls with no accompanying
+   * text. A plain `string` is the common case and every existing caller
+   * keeps compiling and behaving identically; an array of `ChatContentPart`
+   * lets a caller attach images alongside text (e.g. the Theme Creator
+   * agent handing a model a screenshot a user uploaded).
+   */
+  readonly content?: string | readonly ChatContentPart[]
   /** Set on an `assistant` message that requested tool calls. */
   readonly toolCalls?: readonly ProviderToolCall[]
   /** Set on a `tool` message: which call this is the result of. */
@@ -68,5 +94,12 @@ export interface ChatOptions {
 export interface ProviderClient {
   readonly name: string
   readonly model: string
+  /**
+   * Whether this client can accept a `ChatImagePart` in a message's content.
+   * Absent means "unknown, assume no" — a caller building a multimodal
+   * message should check this before attaching an image, and degrade
+   * (text-only, with an explicit note) when it is not `true`.
+   */
+  readonly supportsVision?: boolean
   chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse>
 }

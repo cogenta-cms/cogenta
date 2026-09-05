@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildGoogleRequest, parseGoogleResponse } from '../../src/providers/google.js'
+import {
+  buildGoogleRequest,
+  createGoogleClient,
+  parseGoogleResponse,
+} from '../../src/providers/google.js'
 import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 
@@ -88,6 +92,54 @@ describe('buildGoogleRequest', () => {
     }
 
     expect(() => buildGoogleRequest(request)).toThrowError(/toolName/)
+  })
+
+  it('maps a text-only content-part array to the exact same parts a plain string would produce', () => {
+    const stringRequest: ChatRequest = {
+      model: 'gemini-3-pro',
+      messages: [{ role: 'user', content: 'Describe this image.' }],
+      maxTokens: 100,
+    }
+    const partsRequest: ChatRequest = {
+      model: 'gemini-3-pro',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Describe this image.' }] }],
+      maxTokens: 100,
+    }
+
+    expect(buildGoogleRequest(partsRequest)).toEqual(buildGoogleRequest(stringRequest))
+  })
+
+  it('maps an image content part to a Gemini inlineData part alongside text', () => {
+    const request: ChatRequest = {
+      model: 'gemini-3-pro',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image', mediaType: 'image/png', data: 'aGVsbG8=' },
+          ],
+        },
+      ],
+      maxTokens: 100,
+    }
+
+    expect(buildGoogleRequest(request).contents).toEqual([
+      {
+        role: 'user',
+        parts: [
+          { text: 'What is in this image?' },
+          { inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } },
+        ],
+      },
+    ])
+  })
+})
+
+describe('createGoogleClient', () => {
+  it('reports supportsVision: true', () => {
+    const client = createGoogleClient({ apiKey: 'k', model: 'gemini-3-pro' })
+    expect(client.supportsVision).toBe(true)
   })
 })
 

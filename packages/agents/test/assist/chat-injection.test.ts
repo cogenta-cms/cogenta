@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createContentChatTool } from '../../src/assist/chat.js'
 import { createAssistRuntime } from '../../src/assist/runtime.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import { createOpenAiClient } from '../../src/providers/openai.js'
 import { createHashingEmbeddingProvider } from '../../src/rag/embeddings/hashing-provider.js'
 import { createSemanticSearch } from '../../src/rag/semantic/search.js'
@@ -127,7 +128,9 @@ describe('chat over the site content, with a real injection sitting in the index
 
     await tool.execute(tool.input.parse(ASK), toolContext())
 
-    const messages = (provider.calls[0]?.messages ?? []).map((message) => message.content ?? '')
+    const messages = (provider.calls[0]?.messages ?? []).map(
+      (message) => textOnlyContent(message.content) ?? '',
+    )
     const poisoned = messages.find((content) => content.includes('Ignore all previous')) ?? ''
 
     // Every real tag in this message was written by `assembleContext`. The

@@ -1,4 +1,5 @@
 import { CogentaError } from '@cogenta/core'
+import { textOnlyContent } from './content-parts.js'
 import { requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
@@ -15,6 +16,7 @@ const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/model
 
 type GooglePart =
   | { readonly text: string }
+  | { readonly inlineData: { readonly mimeType: string; readonly data: string } }
   | {
       readonly functionCall: {
         readonly name: string
@@ -93,7 +95,7 @@ function toGoogleContent(message: ChatMessage): GoogleContent {
         {
           functionResponse: {
             name: encodeToolName(name),
-            response: { result: message.content ?? '' },
+            response: { result: textOnlyContent(message.content) ?? '' },
           },
         },
       ],
@@ -102,7 +104,17 @@ function toGoogleContent(message: ChatMessage): GoogleContent {
 
   const role = message.role === 'assistant' ? 'model' : 'user'
   const parts: GooglePart[] = []
-  if (message.content !== undefined) parts.push({ text: message.content })
+  if (typeof message.content === 'string') {
+    parts.push({ text: message.content })
+  } else if (message.content !== undefined) {
+    for (const part of message.content) {
+      parts.push(
+        part.type === 'text'
+          ? { text: part.text }
+          : { inlineData: { mimeType: part.mediaType, data: part.data } },
+      )
+    }
+  }
   for (const call of message.toolCalls ?? []) {
     parts.push({ functionCall: { name: encodeToolName(call.name), args: call.input } })
   }
@@ -192,6 +204,7 @@ export function createGoogleClient(config: GoogleClientConfig): ProviderClient {
   return {
     name: 'google',
     model: config.model,
+    supportsVision: true,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const signal = requestSignalWithTimeout(options?.signal)
       const response = await doFetch(url, {

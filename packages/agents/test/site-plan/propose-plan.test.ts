@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { type ExtractedDocument, extractDocumentText } from '../../src/documents/extract-text.js'
+import { textOnlyContent } from '../../src/providers/content-parts.js'
 import type { ChatRequest } from '../../src/providers/types.js'
 import { resolveApprovedPlan, summarisePlan } from '../../src/site-plan/approval.js'
 import { createMemorySitePlanStore } from '../../src/site-plan/draft-store.js'
@@ -108,7 +109,7 @@ const SKIN_ACCENTS: Readonly<Record<string, string>> = {
 function planner() {
   return scriptedClient([
     (request: ChatRequest) => {
-      const prompt = request.messages.at(-1)?.content ?? ''
+      const prompt = textOnlyContent(request.messages.at(-1)?.content) ?? ''
       if (prompt.includes('visual design tokens')) {
         const label =
           Object.keys(SKIN_ACCENTS).find((name) => prompt.includes(name)) ?? 'Warm and editorial'
@@ -258,7 +259,7 @@ describe('a plan proposed on a site that already exists (fiche 60)', () => {
   function evolvedPlanner() {
     return scriptedClient([
       (request: ChatRequest) => {
-        const prompt = request.messages.at(-1)?.content ?? ''
+        const prompt = textOnlyContent(request.messages.at(-1)?.content) ?? ''
         if (prompt.includes('visual design tokens')) {
           const label =
             Object.keys(SKIN_ACCENTS).find((name) => prompt.includes(name)) ?? 'Warm and editorial'

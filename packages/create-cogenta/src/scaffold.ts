@@ -14,6 +14,7 @@ import {
 } from '@cogenta/agents'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createOutput, runMigrate, runUsers, selectMediaImageProcessor } from '@cogenta/cli'
+import { createCommentSettingsStore, ensureCommentsTables } from '@cogenta/comments'
 import { createDatabaseRegistry, createLogger, createStorageRegistry } from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
 import {
@@ -33,6 +34,9 @@ import { seedBlueprintMenus } from './blueprints/menus.js'
 import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 import { seedSiteSettings } from './blueprints/site-settings-seed.js'
 import { STARTING_SKINS } from './blueprints/starting-skins.js'
+
+/** The collection `definePageCollection` builds in every blueprint — template pages, never discussion threads. */
+const PAGE_COLLECTION_NAME = 'page'
 
 export interface ScaffoldAnswers {
   readonly targetDir: string
@@ -466,6 +470,20 @@ export async function scaffoldSite(
             adminId,
             logger,
           )
+        }
+
+        // (c') no comment thread under a template page. Comments are on by
+        // default site-wide (`discussion.enabled`), which is right for a post
+        // and wrong for a home page or an about page — no professional
+        // template ends its landing page with "Post comment". A blueprint's
+        // `page` collection (the one `definePageCollection` builds) is opted
+        // out at the collection level, the same switch the admin exposes;
+        // every other collection keeps the site default.
+        if (pack.collections.some((collection) => collection.name === PAGE_COLLECTION_NAME)) {
+          await ensureCommentsTables(selection.instance)
+          await createCommentSettingsStore(selection.instance).setCollection(PAGE_COLLECTION_NAME, {
+            enabled: false,
+          })
         }
       }
 

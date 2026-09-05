@@ -158,6 +158,18 @@ img {
   padding-inline: var(--cg-gutter);
 }
 
+/* Every block is a page-width, gutter-padded section by default — `:where()`
+   keeps this at zero specificity so a block that sets its own narrower
+   measure (`.cg-letter`, `.cg-quote`, `.cg-prose`…) still wins, while a block
+   that never set one (`.cg-hero`, `.cg-topics`) no longer sits flush against
+   the viewport edge on a wide screen. `data-variant-width="full"` below opts
+   a block back out. */
+:where(.cg-main > [data-block]) {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
 /* --- per-block visual variant (blocks@2.0, RFC 0002) --------------------- */
 
 [data-block][data-variant-background="muted"],

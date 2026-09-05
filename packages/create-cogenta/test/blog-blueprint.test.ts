@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
+import { createCommentSettingsStore } from '@cogenta/comments'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import {
   buildPath,
@@ -188,6 +189,13 @@ describe('scaffoldSite — blog blueprint', () => {
         const plainText = posts.items.find((entry) => entry.values.slug === 'plain-text-editor')
         expect(plainText).toBeDefined()
         expect(plainText?.createdBy).not.toBeNull()
+
+        // No "Post comment" form under the home page: template pages opt out
+        // of comments at the collection level (L25), posts keep the site
+        // default (`null` here — nothing written for them).
+        const commentSettings = createCommentSettingsStore(selection.instance)
+        expect((await commentSettings.getCollection('page')).enabled).toBe(false)
+        expect((await commentSettings.getCollection('post')).enabled).toBeNull()
       } finally {
         await selection.dispose()
       }

@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -27,6 +28,16 @@ import {
  * (`theme@1.4`) above Cogenta's own credit (or its white-label
  * replacement). `brandingHtml` is placed exactly once, inside the footer,
  * exactly as received: never altered, never dropped.
+ *
+ * The manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/
+ * theme-kit`, L26) is unconditional — every render carries it, `theme@1.4`
+ * or not. It sits after the collapsible `<nav>`, as the last child of
+ * `.cg-site-header__inner`'s flex row: on desktop that reads as "nav, then
+ * toggle"; on the mobile breakpoint the nav becomes an absolutely
+ * positioned off-canvas panel (out of flow when open, `display: none`
+ * when closed), so the toggle stays in the header bar next to the
+ * hamburger button either way, rather than hidden inside the collapsed
+ * menu.
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -63,6 +74,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const footerNavList = renderNavList(input.footerNav)
   const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
   const headerAction = renderHeaderAction(input.headerAction)
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
@@ -74,6 +86,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
     `${headerNavList}${headerAction}` +
     `</nav>` +
+    `${themeToggle}` +
     `</div></header>`
 
   const tagline =

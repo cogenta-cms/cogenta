@@ -18,31 +18,41 @@ import type { SkinTokens } from '@cogenta/render'
  */
 export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   /**
-   * A creative/freelance portfolio: warm, uncluttered, spacious enough that
-   * the work (not the chrome) reads first. A terracotta accent instead of
-   * the canonical blue, sharper corners than the default's rounded ones.
+   * A creative/freelance portfolio: brutalist-editorial, an electric violet
+   * accent, hard zero-blur offset shadows. L25 pro pass: this entry used to
+   * be a terracotta, soft-shadow palette from before `@cogenta/theme-
+   * portfolio` existed (L22 task 10 predates the L23 theme it now names) —
+   * a scaffolded `portfolio` site rendered the theme's own brutalist CSS
+   * against a palette the theme was never designed around. Brought into
+   * exact alignment with `packages/theme-portfolio/tokens.json` (colour,
+   * font stack — Bricolage Grotesque/Fraunces/JetBrains Mono — scale, radii,
+   * motion and the theme's own hard offset shadow), so day one matches the
+   * theme's real identity rather than fighting it.
    */
   portfolio: {
     color: {
-      bg: '#ffffff',
-      fg: '#1a1a1a',
-      accent: '#b8452f',
+      bg: '#fafaf7',
+      fg: '#0a0a0b',
+      accent: '#6d28d9',
       accentFg: '#ffffff',
-      muted: '#f5f0eb',
-      mutedFg: '#55504a',
-      border: '#e0d8cf',
+      muted: '#efede7',
+      mutedFg: '#4a4640',
+      border: '#dad7ce',
     },
     font: {
-      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-      scale: 1.2,
+      sans: "'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif",
+      serif: "'Fraunces', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      scale: 1.333,
       baseSize: '1rem',
     },
-    space: { unit: '0.25rem', density: 'spacious' },
+    space: { unit: '0.25rem', density: 'comfortable' },
     radius: { sm: '0.125rem', md: '0.25rem', lg: '0.5rem' },
-    motion: { duration: '200ms', easing: 'cubic-bezier(0.4, 0, 0.2, 1)', reduced: true },
-    shadow: { sm: '0 1px 2px rgba(26, 26, 26, 0.06)', md: '0 8px 30px rgba(26, 26, 26, 0.10)' },
+    motion: { duration: '180ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    shadow: {
+      sm: '0.125rem 0.125rem 0 rgba(10, 10, 11, 0.9)',
+      md: '0.4rem 0.4rem 0 rgba(10, 10, 11, 0.9)',
+    },
   },
 
   /**

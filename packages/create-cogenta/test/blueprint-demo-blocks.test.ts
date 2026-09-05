@@ -9,7 +9,11 @@ import { buildAssociationDemoPages } from '../src/blueprints/association.js'
 import { buildBlogDemoPages } from '../src/blueprints/blog.js'
 import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
-import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
+// `portfolio`'s demo pages are now built from `SeedContext.media` too (L25
+// pro pass) — `buildPortfolioDemoPages({})` renders the same pages this test
+// checked before, minus the (now media-dependent) hero backdrop, client logo
+// strip and quote/testimonial avatars, none of which this test exercises.
+import { buildPortfolioDemoPages } from '../src/blueprints/portfolio.js'
 import { buildRestaurantDemoPages } from '../src/blueprints/restaurant.js'
 // `saas`'s demo pages are now built from `SeedContext.media` and the real
 // feature ids assigned at seed time (L25) — `buildSaasDemoPages({}, new
@@ -25,6 +29,7 @@ import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { VITRINE_DEMO_PAGES } from '../src/blueprints/vitrine.js'
 
 const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
+const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages({})
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())

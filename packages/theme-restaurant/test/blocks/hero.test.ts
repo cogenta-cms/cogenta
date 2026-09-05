@@ -42,7 +42,7 @@ describe('hero', () => {
     expect(html).not.toMatch(/<img[^>]*loading="lazy"/)
   })
 
-  it('renders a gradient scrim over the media, never over bare text', () => {
+  it('renders a flat scrim over the media, never over bare text', () => {
     const html = serialize(renderHero(BLOCKS.hero, ctx))
     expect(html).toContain('cg-hero__scrim')
     const { media: _media, ...withoutMedia } = BLOCKS.hero

@@ -207,10 +207,10 @@
   --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg));
   --cg-line-strong: color-mix(in oklab, var(--cogenta-color-border) 60%, var(--cogenta-color-fg));
 
-  /* The hero's own gradient scrim — a function of ink, never a literal
-     black wash, so a lighter-ink skin gets a lighter scrim too. */
-  --cg-scrim: color-mix(in oklab, var(--cogenta-color-fg) 72%, transparent);
-  --cg-scrim-soft: color-mix(in oklab, var(--cogenta-color-fg) 32%, transparent);
+  /* The hero's own flat scrim — a single semi-transparent veil over the
+     whole image (D5: no gradient fade), a function of ink rather than a
+     literal black wash, so a lighter-ink skin gets a lighter scrim too. */
+  --cg-scrim: color-mix(in oklab, var(--cogenta-color-fg) 55%, transparent);
 }
 
 @supports (color: light-dark(currentColor, currentColor)) and
@@ -285,12 +285,8 @@
     );
 
     --cg-scrim: light-dark(
-      color-mix(in oklab, var(--cogenta-color-fg) 72%, transparent),
-      color-mix(in oklab, var(--cogenta-color-fg) 80%, transparent)
-    );
-    --cg-scrim-soft: light-dark(
-      color-mix(in oklab, var(--cogenta-color-fg) 32%, transparent),
-      color-mix(in oklab, var(--cogenta-color-fg) 40%, transparent)
+      color-mix(in oklab, var(--cogenta-color-fg) 55%, transparent),
+      color-mix(in oklab, var(--cogenta-color-fg) 62%, transparent)
     );
   }
 }

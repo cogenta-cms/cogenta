@@ -7,7 +7,7 @@ import {
   f,
   validateCollectionSet,
 } from '@cogenta/schema'
-import { avatarArt, coverArt, logoArt, type Palette } from '../demo-art/compositions.js'
+import { avatarArt, coverArt, heroArt, logoArt, type Palette } from '../demo-art/compositions.js'
 import {
   type BlueprintContentPack,
   definePageCollection,
@@ -135,6 +135,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
       proseParagraph(
         'Residents along the corridor have heard this before. A 2019 version of the plan died in committee; a 2021 version lost its federal match. What changed this time, according to two council members who spoke on background, was less about the merits of the route and more about a construction firm willing to fix the price for five years.',
       ),
+      proseParagraph(
+        "The three no votes came from the same three council members who blocked the 2021 attempt, all citing the same worry: a fixed-price contract protects the budget but locks the city into a single contractor with no real competition once ground is broken. The city's own transportation office estimates the corridor will lose roughly forty parking spaces to construction staging by next summer, with a phased schedule meant to keep at least one traffic lane open in each direction for the length of the project.",
+      ),
+      proseParagraph(
+        'For the businesses along the route, the news landed as a mix of relief and dread. Rosa Delgado, who has run the hardware store on the corner of 4th and Vine for eleven years, said she remembers the first version of the plan well enough to have kept the original public notice taped inside a drawer. "I\'ll believe the ribbon-cutting when I\'m standing at it," she said, "but at least now there\'s a date to not believe."',
+      ),
+      proseParagraph(
+        'Construction is scheduled to begin in April, with the first phase — utility relocation along the northern half of the corridor — expected to run through the following winter. City engineers say the line itself will not carry passengers until at least 2029, a timeline three council members quietly noted is already three years behind the one voters were shown in 2019.',
+      ),
     ],
   },
   {
@@ -146,6 +155,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
       proseParagraph(
         'The easy version of this story is that young families are fleeing for cheaper suburbs. The numbers, read closely, tell a stranger and more specific story: it is renters in their sixties, not families with children, who left in the largest numbers this year.',
       ),
+      proseParagraph(
+        "The city's own planning department pulled the figures from the latest American Community Survey release and cross-referenced them against utility hookups, the more reliable of the two datasets for tracking actual moves rather than mailing-address changes. Of the roughly 2,400 households that left the city core between the two survey years, just under a third were headed by someone sixty or older — nearly double their share of the overall population.",
+      ),
+      proseParagraph(
+        'Grace Tanaka, a demographer at the regional planning council who reviewed the numbers at The Ledger\'s request, said the pattern tracks with something planners have quietly worried about for years: older renters priced out not by rising rents alone, but by buildings converting from long-term rental to short-term and corporate leasing. "The families-fleeing-to-suburbs story is real somewhere," she said. "It just isn\'t the dominant story here, and chasing it means missing the one that is."',
+      ),
+      proseParagraph(
+        "None of the three council members who cited affordability in this week's transit vote (see above) mentioned the renter numbers specifically, though two have co-sponsored a tenant-protection ordinance aimed at buildings converting out of long-term rental — a bill that has sat in committee since March.",
+      ),
     ],
   },
   {
@@ -155,7 +173,16 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
     section: 'News',
     body: [
       proseParagraph(
-        'This is a demo magazine, scaffolded by create-cogenta from the "magazine" blueprint. Its articles were seeded by the installer so there is real content to look at from the first run.',
+        'For the first time since the pandemic, the overnight slot at WKLR-LP has a name attached to it. Marcus Webb, a night-shift nurse who has been filling in unannounced for two years whenever the automated playlist glitched, was offered the 1 a.m. to 5 a.m. slot on a real schedule this month — four hours a week, unpaid like every other slot at the station, but his.',
+      ),
+      proseParagraph(
+        'The overnight assignment is the smallest change in a season that is otherwise dropping three long-running shows: the Tuesday jazz hour, a decade-old classic-rock request line, and a call-in sports show that station manager Priya Anand said had not taken a caller in eleven months. "We kept it on the schedule out of loyalty to the host," Anand said, "and loyalty does not pay for the transmitter."',
+      ),
+      proseParagraph(
+        "In their place: a Spanish-language news roundup produced by two students from the community college's journalism program, a Thursday slot dedicated entirely to local bands who send in their own recordings, an hour of first-generation-immigrant oral histories, and Webb's overnight shift, which he plans to fill mostly with the vinyl collection a retired DJ donated to the station in 2019 that nobody has had time to catalogue since.",
+      ),
+      proseParagraph(
+        'The station, which broadcasts from a converted storage room above the community center, runs on a budget just under forty thousand dollars a year, most of it from a single annual pledge drive. Anand said the new lineup was built around one rule: no show gets a slot unless at least one other volunteer is trained to cover it. "We lost two shows the hard way, when the only person who knew how to run them left town," she said. "This season we\'re not doing that again."',
       ),
     ],
   },
@@ -167,7 +194,16 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
     section: 'Culture',
     body: [
       proseParagraph(
-        'Articles are grouped by "section", a normal editable field on the article, not a fixed navigation menu — rename it, add a fifth section, or drop it entirely from the schema editor and the site follows.',
+        "At the university gallery, a retrospective of the printmaker Odette Marchetti closes at the end of the month, and it is worth crossing town for even if her name means nothing to you. The show's strongest room is its smallest: eleven studies she made in the final year of her life, hung at the height she worked at them — in a wheelchair, after a stroke took the use of her right hand.",
+      ),
+      proseParagraph(
+        "Downtown, the photography co-op's group show on the old textile mills is less polished but more urgent — a dozen photographers, most of them under thirty, documenting buildings the city has scheduled for demolition next spring. Half the images are already the only record of interiors that no longer exist; the mill on Canal Street burned in an unrelated fire three weeks after it was photographed for the show.",
+      ),
+      proseParagraph(
+        'The third recommendation is the one most people will skip: a single-room installation at the small nonprofit space behind the co-op grocery, built entirely from donated household objects and sound recordings collected from residents of the senior living complex two blocks over. It runs only on weekends, carries no wall text beyond a hand-lettered sign at the door, and is the most quietly devastating thing on this list.',
+      ),
+      proseParagraph(
+        "All three shows are free. None of them will still be up by the time next month's issue comes out, which is, as it happens, the whole point of this column existing.",
       ),
     ],
   },
@@ -181,6 +217,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
       proseParagraph(
         'For four decades, every film that played at the old downtown cinema got a single typed page: title, date, a line or two of notes for whoever ran the projector next. Nobody thought to ask what would happen to them.',
       ),
+      proseParagraph(
+        "Frank Delury kept the pages anyway. When the cinema closed in 2003, he asked the owner if he could take the filing cabinet home rather than see it go to the dumpster behind the building; the owner, mid-argument with the landlord over a security deposit, said sure, take whatever you want. The cabinet has sat in the same corner of Delury's garage for twenty-one years.",
+      ),
+      proseParagraph(
+        '“Nobody writes down the failures,” said film archivist Teodora Vukić, who spent three weekends this spring cataloguing the collection. What makes it unusual, she said, is not the notes on the films everyone remembers — those exist in plenty of other archives — but the notes on the ones that flopped, ran two nights, and vanished from every other record. “He accidentally wrote down forty years of them.”',
+      ),
+      proseParagraph(
+        'The university library has offered to digitize and house the full collection, with Delury retaining the physical originals for his lifetime. He set one condition, which the library agreed to without much debate: the finding aid has to list every projectionist by name, not just every film.',
+      ),
     ],
   },
   {
@@ -193,6 +238,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
       proseParagraph(
         'Nobody planned this as a comeback story. Two of the three companies now selling out their runs were, eighteen months ago, one bad season away from returning their lease.',
       ),
+      proseParagraph(
+        "The turnaround has no single cause the three artistic directors agree on. The Riverside troupe points to a scheduling change — moving its main season to Thursday-through-Sunday runs instead of the traditional Friday-through-Monday, which cut against the industry's own conventional wisdom but happened to match when their actual audience, a lot of them shift workers, has evenings free.",
+      ),
+      proseParagraph(
+        '“We didn’t do anything,” said Loft Company artistic director Femi Adeyemi. “The internet did it, and then we had to actually be good enough that they’d come back.” A single clip from a preview performance, posted to a video app by a cast member, brought in an audience two decades younger than the Loft’s usual subscriber base — and, more surprisingly, most of them returned for a second show.',
+      ),
+      proseParagraph(
+        'The third company, Blackbox Collective, simply raised its ticket prices for the first time in six years, expecting to lose a chunk of its base. It did not. "People had been telling us for years the tickets were too cheap to be a real theatre," said managing director Wren Okafor. "We didn\'t believe them until we tested it."',
+      ),
     ],
   },
   {
@@ -203,7 +257,16 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
     section: 'Opinion',
     body: [
       proseParagraph(
-        'Everything here — the schema, the content, the skin — is a normal part of the site and is meant to be edited, renamed or deleted the moment the defaults stop fitting.',
+        'Every year around budget season, this paper runs at least one story about the transit line, the stadium proposal, or whichever fight is consuming the council chamber that month. Those stories get read, shared, and argued about in every local social media group. They are also, by a wide margin, not the stories that change how people actually feel about living here.',
+      ),
+      proseParagraph(
+        'The story that generated the most letters to this desk last year was not about the transit line. It was a four-hundred-word piece about a crossing guard who had worked the same corner for thirty-one years and was retiring without so much as a plaque from the school district. We ran it on page eleven. It should have run on page one.',
+      ),
+      proseParagraph(
+        'There is a reason small stories get buried, and it is not laziness — it is that a council vote has a hearing, a press release and a clear news hook, while a retiring crossing guard has none of those things until a reporter decides to notice. The bigger stories assign themselves. The small ones require someone to go looking.',
+      ),
+      proseParagraph(
+        'This is an argument for more of the second kind, not less of the first — a city’s big fights matter, and we will keep covering them. But a newsroom that measures its worth only by how many people it made angry about the stadium is missing most of what actually holds a place together, one corner at a time.',
       ),
     ],
   },
@@ -215,6 +278,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
     body: [
       proseParagraph(
         'Ask anyone here what they would fix first and most will say the commute. Ask them to actually time it for a week and the number is almost always smaller than the complaint.',
+      ),
+      proseParagraph(
+        'This is not a defense of the drive. It is an observation, made after asking eleven people to track their actual commute time for five consecutive days rather than estimate it from memory. The average estimate, before tracking, was forty-one minutes each way. The average measured time was twenty-six.',
+      ),
+      proseParagraph(
+        'What people are actually measuring when they say "the commute is terrible" is closer to friction than duration: the unpredictability of a light that is sometimes ninety seconds and sometimes four minutes, the one intersection with no protected turn lane, the two weeks a year when a parade or a marathon reroutes everything with too little warning. Fix those and the complaint might fall even if the average time barely moves.',
+      ),
+      proseParagraph(
+        'None of the eleven people in this informal experiment changed their opinion of their commute after seeing their own numbers. Two insisted the tracking app must have been wrong. That, more than the numbers themselves, might be the actual finding here.',
       ),
     ],
   },
@@ -228,6 +300,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
       proseParagraph(
         'Every storefront that goes dark gets the same eulogy: rising rents, a changing neighbourhood, the death of something irreplaceable. Sometimes that is true. Sometimes the owner simply retired and nobody wanted to say so.',
       ),
+      proseParagraph(
+        'The corner bakery on 9th closed in March, and the neighbourhood association’s newsletter ran a full page on "another casualty of the rent crisis." The bakery’s own owner, reached for this piece, laughed at the framing. She is sixty-eight, her children have no interest in the business, and she had been trying to sell it for three years before simply locking the door and walking away.',
+      ),
+      proseParagraph(
+        "This is not an argument that rising rents are a myth — ask any of the four businesses that actually did close over a lease renewal this year, all of whom agreed to be named, all of whom are furious, correctly. It is an argument that lumping every closure into the same narrative erases the difference between a landlord's greed and a person's plans, and makes it harder to see which businesses are actually in trouble.",
+      ),
+      proseParagraph(
+        'A neighbourhood that treats every empty storefront as evidence of decline will eventually stop noticing the ones that are real. That is the actual cost of the reflex, and it is a cost the neighbourhood association’s newsletter is paying without knowing it.',
+      ),
     ],
   },
   {
@@ -239,6 +320,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
     body: [
       proseParagraph(
         'The first offer came by letter. The second came with a lawyer attached. By the third, the owner had stopped opening the envelopes and started telling the story at the counter instead.',
+      ),
+      proseParagraph(
+        'The regional chain making the offers, Continental Baking Group, has bought out four independent bakeries in the metro area in the past two years, keeping the original name on each storefront while switching the supply chain to a central commissary within six months. Owner Delphine Okonkwo-Reyes learned about that pattern from a former competitor two towns over, not from the company itself.',
+      ),
+      proseParagraph(
+        'The final offer, according to two people with direct knowledge of the negotiation, was north of six hundred thousand dollars — more than four times what Okonkwo-Reyes paid for the building and the business combined when she took it over from her mother in 2009. She turned it down without countering. "They kept explaining the number to me like I hadn\'t heard it the first time," she said. "I heard it. I want my name on the door when I\'m seventy."',
+      ),
+      proseParagraph(
+        'Continental Baking Group did not respond to three requests for comment for this story. The block where the bakery sits has had three ownership changes among its other storefronts in the same period; the bakery is now the only business on the block that has not changed hands since before the pandemic.',
       ),
     ],
   },
@@ -252,6 +342,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
       proseParagraph(
         'Most of the coverage so far has focused on the fine print aimed at large portfolio owners. The rule that will actually change daily life for most landlords in this city is a much smaller one, buried in section 4.',
       ),
+      proseParagraph(
+        'Section 4 requires any landlord renting out more than one unit, regardless of portfolio size, to register each unit individually and pay a forty-dollar annual inspection fee — a rule aimed at absentee owners of large buildings that will, as written, also apply to the roughly 1,200 residents who rent out a basement suite or a converted garage in a home they otherwise live in.',
+      ),
+      proseParagraph(
+        'City council staff acknowledged the overlap in a memo obtained by this paper, calling it "an acceptable tradeoff for closing the registration gap," but stopped short of estimating how many small landlords would simply stop renting rather than register. Two housing advocates interviewed for this story gave sharply different numbers for what that could mean for the city’s already tight rental supply — one called the effect negligible, the other called it "a quiet way to shrink affordable housing that nobody will notice happened."',
+      ),
+      proseParagraph(
+        'The ordinance takes effect November 1. A city hotline set up to answer landlord questions has, according to a staffer who answers it, fielded more calls in its first two weeks about the forty-dollar fee than about any other provision in the sixty-page rule.',
+      ),
     ],
   },
   {
@@ -262,6 +361,15 @@ export const MAGAZINE_DEMO_ARTICLES: readonly MagazineDemoArticle[] = [
     body: [
       proseParagraph(
         'It started as a folding table of bulk grains once a month. Six years and two moves later, the waiting list for a membership is longer than the one for the parking lot it just bought next door.',
+      ),
+      proseParagraph(
+        'The co-op now has 640 member-households, up from the thirty founding members who put down seventy-five dollars each to buy the original folding table and a hand-cranked grain mill. Membership is currently capped, with a waiting list of just over two hundred households and no firm date for when it will reopen.',
+      ),
+      proseParagraph(
+        'The second move, in 2022, tripled the co-op’s floor space but came with a mortgage the founding members never anticipated carrying — a fact board chair Yusuf Bakhtiari says he is candid about at every annual meeting. "We are a grocery store with a nonprofit’s cash flow and a small business’s debt," he said. "It works because everyone who shops here also owns a piece of the debt, and most of them know it."',
+      ),
+      proseParagraph(
+        'The parking lot purchase, finalized last month, was funded entirely by a member bond drive that raised the full $310,000 asking price in eleven weeks — faster, Bakhtiari noted, than the co-op’s own initial capital campaign took to hit a tenth of that amount in 2018.',
       ),
     ],
   },
@@ -324,6 +432,15 @@ export const MAGAZINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
     name: 'quote-avatar',
     spec: avatarArt(magazinePalette(), 4),
     alt: 'Abstract avatar mark for a reader quote',
+  },
+  // L26 D3: the `about` page had no image at all — a masthead-style abstract
+  // composition rather than a bundled photo, since none of the twelve
+  // bundled photos (all tied to a specific article's own subject) fits a
+  // page about the publication itself.
+  {
+    name: 'about-cover',
+    spec: heroArt(magazinePalette(), 'bands', 7),
+    alt: 'Abstract masthead composition for the About page',
   },
   ...[1, 2, 3, 4, 5].map(
     (n): DemoMediaSpec => ({
@@ -498,6 +615,32 @@ export function buildMagazineDemoPages(
       title: 'About',
       slug: 'about',
       blocks: [
+        // L26 D3: the About page had no image at all — a masthead-style
+        // abstract composition (`about-cover`, `MAGAZINE_MEDIA_SPECS`),
+        // omitted entirely when `seedDemoContent` is called with `media: {}`
+        // (`mediaFigure.media` is required, same reasoning as `logoStrip`
+        // and the hero above).
+        ...(media['about-cover'] === undefined
+          ? []
+          : [
+              {
+                _key: 'demo-about-cover',
+                _type: 'mediaFigure',
+                _version: BLOCK_VERSION,
+                media: media['about-cover'],
+                caption:
+                  "The Ledger's newsroom occupies half a floor above a hardware store downtown — the same corner Rosa Delgado has run her shop from for eleven years.",
+                ratio: '16:9',
+                align: 'wide',
+              } as VocabularyBlock,
+            ]),
+        // L26 D1: rewritten from generic filler to name what the paper
+        // actually covers, in its own editorial voice — the demo disclosure
+        // that follows (a deliberate cross-blueprint convention, see
+        // `blog.ts`'s own About page) is kept, not removed.
+        proseParagraph(
+          'The Ledger covers one city, in four sections: News, Culture, Opinion and Business. It publishes weekday mornings, keeps its archive open without a paywall, and answers its letters — most of them, eventually, in print.',
+        ),
         proseParagraph(
           'This is a demo magazine, scaffolded by create-cogenta from the "magazine" blueprint. Its articles and this page were seeded by the installer so there is real content to look at from the first run.',
         ),

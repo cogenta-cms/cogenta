@@ -453,7 +453,7 @@ export function buildDocumentationDemoPages(
               _key: 'start-5',
               icon: 'image',
               title: 'Themes',
-              text: 'Nine built-in themes, switchable with no restart.',
+              text: 'Ten built-in themes, switchable with no restart.',
               link: { href: '/docs/themes' },
             },
             {

@@ -163,6 +163,12 @@ img {
 
 .cg-main {
   display: flow-root;
+  /* The hero's decorative halos (`::before`/`::after`, absolutely positioned,
+     deliberately wider than the page) bled past the viewport and gave the
+     whole page a horizontal scrollbar. `clip` — not `hidden` — cuts them at
+     the edge without turning `<main>` into a scroll container, so nothing
+     sticky inside it changes behaviour. */
+  overflow-x: clip;
 }
 
 .cg-block {

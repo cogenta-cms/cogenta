@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -37,6 +38,13 @@ import {
  * ships no such feature (`@cogenta/commerce` is a separate backend this
  * theme package does not integrate with), and a control that does nothing
  * when pressed is a worse storefront than one with no control at all.
+ *
+ * The manual light/dark toggle (L26) is unconditional, on every render,
+ * `theme@1.4` or not — deliberately outside the "byte-identical without the
+ * new fields" guarantee above, exactly like `@cogenta/theme-canonical`'s own
+ * `renderChrome`. It sits after the primary nav, inside the same header bar,
+ * so it survives the CSS-only mobile collapse without needing its own entry
+ * in `hasMenu`.
  */
 
 function renderNavLinks(links: readonly ChromeNavLink[], listClass: string): string {
@@ -97,6 +105,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   const nav = !hasMenu
     ? ''
     : `<nav class="ce-header__nav" id="ce-nav" aria-label="Primary">${headerNav}${headerAction}</nav>`
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const header =
     `<header class="ce-header">` +
@@ -104,6 +113,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<a class="ce-header__brand" href="${homeHref}">${mark}</a>` +
     `${toggle}` +
     `${nav}` +
+    `${themeToggle}` +
     `</div></header>`
 
   const tagline =

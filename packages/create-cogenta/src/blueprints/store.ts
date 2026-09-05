@@ -53,6 +53,20 @@ import { STARTING_SKINS } from './starting-skins.js'
 const CATEGORIES = ['Apparel', 'Home', 'Accessories', 'Outdoor'] as const
 type ProductCategory = (typeof CATEGORIES)[number]
 
+/**
+ * A real bundled product photo standing in for each category's own gallery
+ * tile on the home page (L26) — one photo per category, each an actual
+ * demo product that belongs to it, rather than the abstract procedural
+ * cover art `coverArt` renders. Falls back to that procedural art anyway
+ * (`STORE_MEDIA_SPECS` still sets `spec`) if a photo file is ever missing.
+ */
+const CATEGORY_PHOTOS: Readonly<Record<ProductCategory, string>> = {
+  Apparel: 'store/field-jacket.jpg',
+  Home: 'store/cast-iron-skillet.jpg',
+  Accessories: 'store/canvas-tote.jpg',
+  Outdoor: 'store/camp-blanket.jpg',
+}
+
 export const product = defineCollection({
   name: 'product',
   labels: { singular: 'Product', plural: 'Products' },
@@ -105,7 +119,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Field jacket',
     slug: 'field-jacket',
-    description: 'Waxed cotton, brass hardware, a fit that layers over anything.',
+    description:
+      'Ten-ounce waxed cotton with brass hardware and a two-way front zip. Layers over a sweater in October and a flannel by December — re-wax it once a season and it will outlast most of what you own.',
     price: 168,
     category: 'Apparel',
     inStock: true,
@@ -113,7 +128,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Everyday tee',
     slug: 'everyday-tee',
-    description: 'Heavyweight combed cotton, garment-dyed so the colour ages evenly.',
+    description:
+      'Heavyweight combed cotton, garment-dyed in small batches so no two runs match exactly, softening more with every wash. Boxy through the body, true to size through the shoulder.',
     price: 32,
     category: 'Apparel',
     inStock: true,
@@ -121,7 +137,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Wool overshirt',
     slug: 'wool-overshirt',
-    description: 'Brushed merino, a shirt-jacket cut for the coldest half of the year.',
+    description:
+      'Brushed merino in a shirt-jacket cut, heavy enough alone through the coldest months and roomy enough to layer over a sweater. Between batches right now — back once the next run of merino clears the mill.',
     price: 98,
     category: 'Apparel',
     inStock: false,
@@ -130,7 +147,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Ceramic pour-over set',
     slug: 'ceramic-pour-over-set',
-    description: 'A dripper, a server and two cups, thrown by the same hand.',
+    description:
+      'A dripper, a server and two cups, thrown and glazed by the same potter in a single afternoon, so the set you receive is one piece of work, not three. Dishwasher-safe, though the glaze keeps its shine longer if you hand-wash it.',
     price: 74,
     category: 'Home',
     inStock: true,
@@ -138,7 +156,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Linen table runner',
     slug: 'linen-table-runner',
-    description: 'Stonewashed linen, hemmed by hand, softer with every wash.',
+    description:
+      'Stonewashed European linen, hemmed by hand at both ends, softening and lightening with every wash until it drapes like cloth twice its age. Restocking once the current linen order clears customs.',
     price: 38,
     category: 'Home',
     inStock: false,
@@ -146,7 +165,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Cast-iron skillet',
     slug: 'cast-iron-skillet',
-    description: 'Pre-seasoned, ten inches, the one pan that outlasts the kitchen it started in.',
+    description:
+      'Pre-seasoned, ten inches across, cast in one pour so there is no weak seam to eventually crack. Season it twice before the first fried egg and it will outlast this kitchen, then the next one.',
     price: 56,
     category: 'Home',
     inStock: true,
@@ -155,7 +175,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Canvas tote',
     slug: 'canvas-tote',
-    description: 'Fourteen-ounce canvas, a base wide enough for a week of groceries.',
+    description:
+      'Fourteen-ounce cotton canvas with a base cut wide enough for a week of groceries, stitched twice at every stress point. Undyed, so it only gets more itself the longer you carry it.',
     price: 28,
     category: 'Accessories',
     inStock: true,
@@ -163,7 +184,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Leather card holder',
     slug: 'leather-card-holder',
-    description: 'Vegetable-tanned leather, four card slots, no stitching to fail.',
+    description:
+      'Vegetable-tanned leather folded and glued, not stitched, into four slots — nothing to catch on a pocket seam, nothing to fray. Arrives pale and darkens to honey wherever your thumb rests most.',
     price: 46,
     category: 'Accessories',
     inStock: true,
@@ -171,7 +193,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Wool beanie',
     slug: 'wool-beanie',
-    description: 'Ribbed merino, one size, blocked so it keeps its shape past the first wash.',
+    description:
+      'Ribbed merino, one size, blocked on a wooden form so it keeps its shape through the first dozen washes rather than stretching out by the second. Back in stock with the next merino delivery.',
     price: 24,
     category: 'Accessories',
     inStock: false,
@@ -180,7 +203,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Camp blanket',
     slug: 'camp-blanket',
-    description: 'A dense wool weave, wide enough for two, tight enough to block the wind.',
+    description:
+      'A dense double-wool weave, wide enough for two around a fire and tight enough to actually block the wind. Rolls small enough to strap under a pack, the only test that matters.',
     price: 64,
     category: 'Outdoor',
     inStock: true,
@@ -188,7 +212,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Enamel mug',
     slug: 'enamel-mug',
-    description: 'Chip-resistant steel core, the mug that survives the bottom of a pack.',
+    description:
+      'A chip-resistant steel core under two coats of enamel, holding heat longer than aluminium and surviving the bottom of a pack better than ceramic. The first chip in the rim only proves it has been used.',
     price: 18,
     category: 'Outdoor',
     inStock: true,
@@ -196,7 +221,8 @@ export const STORE_DEMO_PRODUCTS: readonly StoreDemoProduct[] = [
   {
     name: 'Trail tote',
     slug: 'trail-tote',
-    description: 'Ripstop nylon, a roll-top closure, light enough to forget you brought it.',
+    description:
+      'Ripstop nylon with a roll-top closure that keeps rain out without a single zipper to jam. Folds flat into its own pocket and weighs little enough to forget you packed it until you need it.',
     price: 42,
     category: 'Outdoor',
     inStock: true,
@@ -286,10 +312,10 @@ export function buildStoreDemoPages(
           _key: 'demo-home-hero',
           _type: 'hero',
           _version: BLOCK_VERSION,
-          eyebrow: 'Online store',
+          eyebrow: 'Atelier Goods',
           title: 'Made to be used, not shelved',
           subtitle:
-            'Scaffolded by create-cogenta from the "store" blueprint, with a real demo catalogue already in place.',
+            'Canvas, cast iron, waxed cotton and wool — small-batch goods built to be repaired for a decade rather than replaced after one season.',
           ...(media.hero === undefined ? {} : { media: media.hero }),
           actions: [{ label: 'Shop now', target: { href: '/shop' }, emphasis: 'primary' }],
         } as VocabularyBlock,
@@ -453,7 +479,7 @@ export function buildStoreDemoPages(
       blocks: [
         richProse(
           'demo-shop-prose',
-          'Every piece here, from a demo catalogue seeded by create-cogenta so there is a real shop to browse from the first run.',
+          'Every piece below is part of the same running catalogue, priced and photographed the way it ships — no placeholder pricing, no filler categories. Sort by newest for what just landed, or jump to a single category from the header if you already know what you are after.',
         ),
         {
           _key: 'demo-shop-products',
@@ -471,7 +497,10 @@ export function buildStoreDemoPages(
       title: 'New Arrivals',
       slug: 'new',
       blocks: [
-        richProse('demo-new-prose', 'The latest additions to the catalogue, newest first.'),
+        richProse(
+          'demo-new-prose',
+          'The latest additions to the catalogue, newest first — usually a small batch that ran out fast the first time and finally got another run, or a piece we finished testing long enough to be confident selling it.',
+        ),
         {
           _key: 'demo-new-products',
           _type: 'collectionList',
@@ -488,7 +517,10 @@ export function buildStoreDemoPages(
       title: 'Categories',
       slug: 'categories',
       blocks: [
-        richProse('demo-categories-prose', 'Browse the catalogue by category.'),
+        richProse(
+          'demo-categories-prose',
+          'Four ways into the same catalogue, grouped by what a piece is made for rather than when it was added. Apparel and Accessories are what you wear or carry every day; Home and Outdoor are what stays put or comes with you.',
+        ),
         ...CATEGORIES.map((category, index) => categoryGrid(`demo-categories-${index}`, category)),
       ],
     },
@@ -497,8 +529,16 @@ export function buildStoreDemoPages(
       slug: 'about',
       blocks: [
         richProse(
-          'demo-about-prose',
-          'This is a demo store, scaffolded by create-cogenta from the "store" blueprint. Its catalogue and this page were seeded by the installer so there is real content to look at from the first run — every word of it is normal, editable content.',
+          'demo-about-prose-1',
+          'Atelier Goods started in a two-car garage in 2016, the year the founder got tired of replacing a twenty-dollar tote every winter. The first run was three samples: one canvas bag, one cast-iron pan bought secondhand and re-seasoned, one wool blanket from a mill an hour away that was about to close its doors for lack of orders.',
+        ),
+        richProse(
+          'demo-about-prose-2',
+          "Ten years on, the workshop has moved twice and the catalogue has grown to a few dozen pieces, but the rule from that first year hasn't changed: nothing ships that the person making it wouldn't want to own for a decade. Canvas, cast iron, waxed cotton, vegetable-tanned leather, ribbed merino — materials chosen because they age instead of wearing out, and because every one of them can be mended rather than thrown away.",
+        ),
+        richProse(
+          'demo-about-prose-3',
+          "That's also why the repair program in the trust section above exists in the first place. A torn strap, a lost button, a seam that finally gives after five years of daily use — send it back and it comes home fixed, at cost, for as long as Atelier Goods sells the piece. Made to be used, not shelved, and the shop tries to mean that literally.",
         ),
         {
           _key: 'demo-about-testimonial',
@@ -506,9 +546,9 @@ export function buildStoreDemoPages(
           _version: BLOCK_VERSION,
           quote: richTextParagraph(
             'demo-about-testimonial-quote',
-            'A real person answered my email about a sizing question within the hour, on a Sunday.',
+            'I emailed on a Sunday about a sizing question, expecting a bot. A real person answered within the hour, from the workshop, mid-repair on someone else’s jacket.',
           ),
-          attribution: { name: 'Devon Marsh', role: 'Verified buyer' },
+          attribution: { name: 'Devon Marsh', role: 'Verified buyer, field jacket' },
         } as VocabularyBlock,
       ],
     },
@@ -518,7 +558,7 @@ export function buildStoreDemoPages(
       blocks: [
         richProse(
           'demo-help-prose',
-          'This is a demo store, scaffolded by create-cogenta from the "store" blueprint. Its catalogue and this page were seeded by the installer so there is real content to look at from the first run.',
+          'Shipping, returns and sizing, in one place — most questions about an order end up being one of these three. Anything not covered here goes straight to a real person, not a ticket queue: the same team that packs the order answers the inbox.',
         ),
         {
           _key: 'demo-help-faq',
@@ -560,7 +600,7 @@ export function buildStoreDemoPages(
       blocks: [
         richProse(
           'demo-legal-prose',
-          'This is a demo store, scaffolded by create-cogenta from the "store" blueprint — there is no real merchant, no real transaction, and no real terms of sale behind it. A real store publishes its own terms, privacy notice and returns policy here before taking a single order.',
+          '"Atelier Goods" is a demo storefront, scaffolded by create-cogenta from the "store" blueprint — there is no real merchant, no real transaction, and no real terms of sale behind any of it. A real shop replaces this page with its own terms of sale, privacy notice and returns policy before it takes a single order, since this text carries none of them.',
         ),
       ],
     },
@@ -588,13 +628,19 @@ function storePalette(): Palette {
 }
 
 /**
- * Procedural visuals this blueprint seeds (L25 task A0b, extended by the L25
- * "templates pro" passe pro): a flat hero backdrop, one cover image per
- * category (the gallery tiles' own caption is that category's picture's
- * `alt` text — `gallery`'s item has no caption field of its own), one
- * product photo per demo product, one avatar for the testimonial and five
- * neutral marks for the trust-badge strip — all from the same starting-skin
- * palette (`starting-skins.js`) this blueprint already ships, keyed so
+ * Visuals this blueprint seeds (L25 task A0b, extended by the L25
+ * "templates pro" passe pro and by L26): a real bundled photo for the hero,
+ * each of the twelve products, and — new in L26 — each of the four category
+ * tiles (`CATEGORY_PHOTOS`, one real product photo standing in for its whole
+ * category, rather than the abstract procedural art the home page's gallery
+ * previously showed there). The gallery tiles' own caption is that
+ * category's picture's `alt` text — `gallery`'s item has no caption field of
+ * its own. Only the testimonial avatar and the five trust-badge marks stay
+ * procedural: no bundled photo honestly stands in for an anonymous
+ * customer's face or a press/payment mark. Every `spec` here is the
+ * fallback `seedDemoMedia` uses if its matching `photo` file is ever
+ * missing, all from the same starting-skin palette (`starting-skins.js`)
+ * this blueprint already ships, keyed so
  * `seedStoreDemoContent`/`buildStoreDemoPages` can look each one up without
  * caring what id the media store assigned it.
  */
@@ -610,6 +656,7 @@ export const STORE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
       name: `category-${index}`,
       spec: coverArt(storePalette(), 50 + index),
       alt: category,
+      photo: CATEGORY_PHOTOS[category],
     }),
   ),
   ...STORE_DEMO_PRODUCTS.map(

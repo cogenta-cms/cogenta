@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -222,11 +223,43 @@ describe('renderChrome', () => {
     expect(without.footer).not.toContain('ce-footer__note')
   })
 
-  it('renders exactly as it would under theme@1.1 when none of the new fields are set', () => {
+  it('renders exactly as it would under theme@1.1 when none of the new fields are set, but for the theme toggle', () => {
     const { header, footer } = renderChrome(BASE)
     expect(header).not.toContain('ce-header__action')
     expect(footer).not.toContain('ce-footer__tagline')
     expect(footer).not.toContain('ce-footer__social-col')
     expect(footer).not.toContain('ce-footer__note')
+  })
+
+  // -------------------------------------------------------------------------
+  // L26 — manual light/dark/system toggle. Unconditional, on every render,
+  // deliberately outside the theme@1.4 "byte-identical without the new
+  // fields" guarantee above — same as `@cogenta/theme-canonical`'s own
+  // `renderChrome`. The expected markup is derived from `renderThemeToggle`
+  // itself rather than a hand-typed literal, so it cannot silently drift
+  // from the real thing the first time either changes.
+  // -------------------------------------------------------------------------
+
+  it('renders the theme toggle in the header, after the primary nav, on every render', () => {
+    const { header } = renderChrome(BASE)
+    const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+    expect(header).toContain(themeToggle)
+    expect(header.indexOf('id="ce-nav"')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+  })
+
+  it('renders the theme toggle even when there is no menu at all', () => {
+    const { header } = renderChrome({ ...BASE, headerNav: [], footerNav: BASE.footerNav })
+    expect(header).not.toContain('ce-nav-toggle')
+    expect(header).not.toContain('ce-header__nav')
+    expect(header).toContain('cg-theme-toggle')
+  })
+
+  it('localises the theme toggle labels from the chrome locale', () => {
+    const { header } = renderChrome({ ...BASE, locale: 'fr' })
+    const themeToggleFr = serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' }))
+    expect(header).toContain(themeToggleFr)
+    expect(header).not.toContain(
+      serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' })),
+    )
   })
 })

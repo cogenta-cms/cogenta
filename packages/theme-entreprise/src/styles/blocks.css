@@ -576,19 +576,29 @@
   color: var(--cg-accent);
 }
 
-/* A plus/minus mark drawn from two gradients standing in for strokes — no
-   icon font, no glyph a font might not ship. The vertical stroke rotates
-   away on open, leaving the horizontal one: a minus sign, the conventional
-   "collapse" affordance. */
+/* A plus mark clipped flat from a solid fill — no gradient, no icon font,
+   no glyph a font might not ship. */
 .cg-faq__question::before {
   content: "";
   flex: none;
   margin-inline-start: auto;
   inline-size: 0.9em;
   block-size: 0.9em;
-  background:
-    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+  background: currentColor;
+  clip-path: polygon(
+    43% 0%,
+    57% 0%,
+    57% 43%,
+    100% 43%,
+    100% 57%,
+    57% 57%,
+    57% 100%,
+    43% 100%,
+    43% 57%,
+    0% 57%,
+    0% 43%,
+    43% 43%
+  );
   transition: transform var(--cg-duration) var(--cg-ease);
 }
 

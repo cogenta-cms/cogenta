@@ -335,10 +335,11 @@ img {
   inset-block-start: 0;
   z-index: 5;
   padding: var(--cg-s4) var(--cg-gutter);
-  background: color-mix(in oklab, var(--cg-canvas) 82%, transparent);
+  /* Flat and fully opaque, not a frosted-glass blur: a sticky header reads
+     as a solid plane sitting above the page, with a hairline marking where
+     it ends. */
+  background: var(--cg-canvas);
   border-block-end: 1px solid var(--cg-line-soft);
-  /* Progressive: a browser without it simply gets the translucent ground. */
-  backdrop-filter: saturate(1.4) blur(12px);
 }
 
 .cg-site-header__inner,

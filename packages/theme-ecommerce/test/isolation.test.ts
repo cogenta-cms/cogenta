@@ -124,6 +124,48 @@ describe('theme isolation', () => {
       }
     }
   })
+
+  /**
+   * D5 (`docs/lots/L25-templates-pro.md`): a gradient reads as the generic
+   * "AI-generated" look. This theme is built entirely from flat colour
+   * fields, hairlines and shadows instead — locked in here so a later
+   * change cannot quietly reintroduce one, in a stylesheet or in an inline
+   * style string built by the renderer.
+   */
+  const RAW_STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(
+    ({ path, source }) => ({
+      path: path.replaceAll('\\', '/'),
+      source,
+    }),
+  )
+  const RENDER_SOURCES = FILES.filter(
+    ({ path }) => path.replaceAll('\\', '/').startsWith('render/') && path.endsWith('.ts'),
+  )
+
+  it('paints no gradient, in a stylesheet or an inline style', () => {
+    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES]
+      .filter(({ source }) => /gradient\(/.test(source))
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+
+  it('fakes no glow with a decorative blur filter', () => {
+    // A blur serving a real accessibility purpose would be exempt if the
+    // same line carried a `/* a11y */` comment; none of this theme's
+    // surfaces need one.
+    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES].flatMap(({ path, source }) =>
+      source
+        .split('\n')
+        .some(
+          (line) =>
+            /(?:filter|backdrop-filter)\s*:\s*[^;]*\bblur\(/.test(line) &&
+            !line.includes('/* a11y */'),
+        )
+        ? [path]
+        : [],
+    )
+    expect(offenders).toEqual([])
+  })
 })
 
 describe('the manifest', () => {

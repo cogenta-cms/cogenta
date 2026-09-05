@@ -9,16 +9,17 @@
 
 /* --- hero ----------------------------------------------------------------
    The page's first impression, so it is the one block that gets a decorative
-   element of its own: a soft wash of the skin's accent behind the media. It is
-   drawn on a pseudo-element and sized to stay inside the block's own box —
-   a decoration that widens the page produces a horizontal scrollbar, which is
+   element of its own: a flat solid disc of the skin's accent behind the
+   media — a geometric accent rather than a wash. It is drawn on a
+   pseudo-element and sized to stay inside the block's own box — a
+   decoration that widens the page produces a horizontal scrollbar, which is
    the classic way a hero breaks a phone.
    ------------------------------------------------------------------------- */
 
 .cg-hero {
   position: relative;
-  /* A stacking context of its own, so `z-index: -1` on the wash puts it behind
-     the hero's content and not behind the page background. */
+  /* A stacking context of its own, so `z-index: -1` on the disc puts it
+     behind the hero's content and not behind the page background. */
   isolation: isolate;
   display: grid;
   gap: var(--cg-gap-loose);
@@ -34,7 +35,8 @@
   inline-size: min(30rem, 70%);
   aspect-ratio: 1;
   z-index: -1;
-  background: radial-gradient(circle at 60% 40%, var(--cg-accent-soft), transparent 68%);
+  border-radius: 50%;
+  background: var(--cg-accent-soft);
   pointer-events: none;
 }
 
@@ -387,13 +389,16 @@
   text-align: center;
 }
 
-/* A single diagonal sheen of the accent. `overflow: hidden` on the panel keeps
-   it inside the radius, so it never leaks past a rounded corner. */
+/* A flat accent bar across the top of the panel — structure instead of a
+   sheen. `overflow: hidden` on the panel keeps it inside the radius, so it
+   never leaks past a rounded corner. */
 .cg-cta::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, var(--cg-accent-soft), transparent 55%);
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: var(--cg-s2);
+  background: var(--cg-accent-soft);
   pointer-events: none;
 }
 

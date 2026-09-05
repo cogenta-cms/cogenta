@@ -483,7 +483,13 @@ export function coverArt(palette: Palette, seed = 1): ArtSpec {
   const c = toRgb(palette)
   const tones = buildTones(c)
   const rng = mulberry32(seed)
-  const familyIndex = Math.floor(rng() * COVER_FAMILIES.length) % COVER_FAMILIES.length
+  // The family is picked by the seed itself, not by the first random draw:
+  // a blueprint seeds its covers with consecutive seeds (1, 2, 3…), and a
+  // random pick sent three of eight blog posts to the same "arch & sun"
+  // frame. Consecutive seeds now walk the families in order — eight
+  // covers, eight different layouts — while `rng` still varies each one.
+  const familyIndex =
+    ((Math.floor(seed) % COVER_FAMILIES.length) + COVER_FAMILIES.length) % COVER_FAMILIES.length
   const build = COVER_FAMILIES[familyIndex] as (typeof COVER_FAMILIES)[number]
   const layers = build(c, tones, rng)
   return { width: COVER_WIDTH, height: COVER_HEIGHT, seed, layers }

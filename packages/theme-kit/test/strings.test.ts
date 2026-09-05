@@ -35,6 +35,18 @@ describe('theme strings', () => {
     expect(createThemeTranslator('fr-BE')('entry.untitled')).toBe('Sans titre')
   })
 
+  it('names an embed provider by its human label, and "other" by a generic phrase', () => {
+    const t = createThemeTranslator('en')
+    expect(t('embed.open', { provider: 'youtube' })).toBe('Open on YouTube')
+    expect(t('embed.consentRequired', { provider: 'other' })).toBe(
+      'This external embed loads content from a third party.',
+    )
+    expect(t('embed.open', { provider: 'other' })).toBe('Open the original')
+    expect(createThemeTranslator('fr')('embed.open', { provider: 'other' })).toBe(
+      'Ouvrir l’original',
+    )
+  })
+
   it('returns the key for an unknown string, never an empty string', () => {
     expect(createThemeTranslator('en')('nope.missing')).toBe('nope.missing')
   })

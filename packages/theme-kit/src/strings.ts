@@ -22,6 +22,35 @@ export type ThemeStrings = Readonly<Record<string, string>>
 /** `{{name}}` placeholders, matching the admin's i18next convention so a reader of both sees one syntax. */
 const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g
 
+/**
+ * The human name of an `embed` provider (contract B's closed `provider`
+ * enum). Themes hand `ctx.t` the raw id (`youtube`, `other`) — and "This
+ * other embed loads content from a third party. Open on other" is what a
+ * restaurant's map placeholder printed before this table existed.
+ */
+const PROVIDER_LABELS: Readonly<Record<ThemeLocale, Readonly<Record<string, string>>>> = {
+  en: {
+    youtube: 'YouTube',
+    vimeo: 'Vimeo',
+    dailymotion: 'Dailymotion',
+    spotify: 'Spotify',
+    soundcloud: 'SoundCloud',
+    bluesky: 'Bluesky',
+    mastodon: 'Mastodon',
+    other: 'external',
+  },
+  fr: {
+    youtube: 'YouTube',
+    vimeo: 'Vimeo',
+    dailymotion: 'Dailymotion',
+    spotify: 'Spotify',
+    soundcloud: 'SoundCloud',
+    bluesky: 'Bluesky',
+    mastodon: 'Mastodon',
+    other: 'externe',
+  },
+}
+
 export const THEME_STRINGS: Readonly<Record<ThemeLocale, ThemeStrings>> = {
   en: {
     'a11y.skipToContent': 'Skip to content',
@@ -30,6 +59,7 @@ export const THEME_STRINGS: Readonly<Record<ThemeLocale, ThemeStrings>> = {
     'collection.featured': 'Featured',
     'embed.consentRequired': 'This {{provider}} embed loads content from a third party.',
     'embed.open': 'Open on {{provider}}',
+    'embed.openOther': 'Open the original',
     'embed.title': '{{provider}} embed',
     'embed.unsupported': 'This {{provider}} content cannot be embedded here.',
     'embed.label': 'Embedded content',
@@ -45,6 +75,7 @@ export const THEME_STRINGS: Readonly<Record<ThemeLocale, ThemeStrings>> = {
     'collection.featured': 'À la une',
     'embed.consentRequired': 'Ce contenu {{provider}} est chargé depuis un service tiers.',
     'embed.open': 'Ouvrir sur {{provider}}',
+    'embed.openOther': 'Ouvrir l’original',
     'embed.title': 'Contenu {{provider}} intégré',
     'embed.unsupported': 'Ce contenu {{provider}} ne peut pas être intégré ici.',
     'embed.label': 'Contenu intégré',
@@ -84,12 +115,20 @@ export function createThemeTranslator(
 ): (key: string, values?: Readonly<Record<string, string | number>>) => string {
   const themeLocale = themeLocaleFor(locale)
   return (key, values) => {
+    // A raw provider id becomes its human name; "Open on other" becomes
+    // "Open the original" — themes keep passing what the block stores.
+    const provider = values?.provider
+    const resolvedValues =
+      typeof provider === 'string' && PROVIDER_LABELS[themeLocale][provider] !== undefined
+        ? { ...values, provider: PROVIDER_LABELS[themeLocale][provider] as string }
+        : values
+    const resolvedKey = key === 'embed.open' && provider === 'other' ? 'embed.openOther' : key
     const template =
-      overrides[themeLocale]?.[key] ??
-      THEME_STRINGS[themeLocale][key] ??
-      overrides.en?.[key] ??
-      THEME_STRINGS.en[key] ??
+      overrides[themeLocale]?.[resolvedKey] ??
+      THEME_STRINGS[themeLocale][resolvedKey] ??
+      overrides.en?.[resolvedKey] ??
+      THEME_STRINGS.en[resolvedKey] ??
       key
-    return interpolate(template, values)
+    return interpolate(template, resolvedValues)
   }
 }

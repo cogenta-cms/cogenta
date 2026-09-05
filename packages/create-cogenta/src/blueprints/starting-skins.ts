@@ -103,31 +103,40 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   },
 
   /**
-   * An online store: a teal accent (trust, not urgency — the canonical
-   * blue's commerce-adjacent cousin), comfortably rounded corners that read
-   * as approachable product cards rather than an admin table.
+   * An online store (L25 "templates pro" — a passe pro on
+   * `@cogenta/theme-ecommerce`): a bold magenta accent against a warm
+   * off-white ground — the "shoppable card" language the theme's own
+   * `blocks.css` is built around — matching `@cogenta/theme-ecommerce`'s
+   * own default skin (`tokens.json`) exactly, the same way `blog` above
+   * matches `theme-blog`'s. The earlier placeholder here (a teal accent,
+   * system fonts) never matched what the theme actually ships, which is
+   * exactly the divergence this blueprint's own installer must not have:
+   * the first render of a scaffolded `store` site now carries the theme's
+   * real identity — Archivo for display type, Fraunces for the serif
+   * accents `quote`/`prose` reach for — rather than a colour swap away
+   * from it.
    */
   store: {
     color: {
-      bg: '#ffffff',
-      fg: '#14151a',
-      accent: '#0f766e',
+      bg: '#fcfaf8',
+      fg: '#171414',
+      accent: '#d6006d',
       accentFg: '#ffffff',
-      muted: '#f0fdfa',
-      mutedFg: '#134e4a',
-      border: '#ccfbf1',
+      muted: '#f3efec',
+      mutedFg: '#59524c',
+      border: '#e4ddd7',
     },
     font: {
-      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      sans: "'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      serif: "'Fraunces', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
       mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-      scale: 1.2,
+      scale: 1.25,
       baseSize: '1rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
     radius: { sm: '0.375rem', md: '0.75rem', lg: '1.25rem' },
-    motion: { duration: '180ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
-    shadow: { sm: '0 1px 3px rgba(15, 23, 22, 0.08)', md: '0 8px 24px rgba(15, 23, 22, 0.12)' },
+    motion: { duration: '160ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    shadow: { sm: '0 2px 6px rgba(23, 20, 20, 0.08)', md: '0 12px 32px rgba(23, 20, 20, 0.14)' },
   },
 
   /**

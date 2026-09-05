@@ -1,7 +1,7 @@
 # Cogenta theme starter
 
 A real, minimal Cogenta theme — copy this directory as the starting point for
-your own. It implements all twelve blocks of contract B (`docs/04-contrats.md`
+your own. It implements all seventeen blocks of contract B (`blocks@2.0`) (`docs/04-contrats.md`
 § "Contrat B — Vocabulaire de blocs") with plain, unstyled-but-usable markup,
 and its own test (`test/verify.test.ts`) runs the exact installation check
 `cogenta serve` runs on every theme, so this starter cannot silently rot the

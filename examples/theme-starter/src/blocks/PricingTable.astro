@@ -1,0 +1,31 @@
+---
+import type { PricingTableBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: PricingTableBlock; ctx: RenderContext }
+---
+
+<section class="pricing">
+  {block.title && <h2>{block.title}</h2>}
+  <ul class="pricing__tiers">
+    {block.tiers.map((tier) => (
+      // `highlighted` is data (contract B), the emphasis is this theme's own —
+      // a data attribute keeps the two apart, the stylesheet decides what it means.
+      <li class="pricing__tier" data-highlighted={tier.highlighted ? 'true' : 'false'}>
+        <h3 class="pricing__name">{tier.name}</h3>
+        <p class="pricing__price">
+          <strong>{tier.price}</strong>
+          {tier.interval && <span class="pricing__interval"> / {tier.interval}</span>}
+        </p>
+        {tier.features.length > 0 && (
+          <ul class="pricing__features">
+            {tier.features.map((feature) => <li>{feature}</li>)}
+          </ul>
+        )}
+        {tier.action && (
+          <a class="pricing__action" href={'href' in tier.action.target ? tier.action.target.href : ctx.link(tier.action.target)}>{tier.action.label}</a>
+        )}
+      </li>
+    ))}
+  </ul>
+</section>

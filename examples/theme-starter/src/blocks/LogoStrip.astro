@@ -1,0 +1,27 @@
+---
+import type { LogoStripBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: LogoStripBlock; ctx: RenderContext }
+---
+
+<section class="logo-strip">
+  <ul class="logo-strip__items">
+    {block.logos.map((logo) => {
+      const media = ctx.image(logo.media)
+      return (
+        <li class="logo-strip__item">
+          <img
+            class="logo-strip__image"
+            src={media.src}
+            srcset={media.srcset}
+            width={media.width}
+            height={media.height}
+            alt={media.alt}
+          />
+        </li>
+      )
+    })}
+  </ul>
+  {block.caption && <p class="logo-strip__caption">{block.caption}</p>}
+</section>

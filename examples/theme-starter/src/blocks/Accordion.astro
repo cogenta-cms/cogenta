@@ -1,0 +1,21 @@
+---
+import type { AccordionBlock } from '@cogenta/blocks'
+import { renderRichText } from '../render/prose.js'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block } = Astro.props as { block: AccordionBlock; ctx: RenderContext }
+---
+
+<section class="accordion">
+  {block.title && <h2>{block.title}</h2>}
+  <div class="accordion__items">
+    {block.items.map((item) => (
+      // Same native disclosure as `Faq.astro`: the browser owns expand/collapse,
+      // keyboard operation and the announced state — zero client JavaScript.
+      <details class="accordion__item">
+        <summary>{item.question}</summary>
+        <div class="accordion__panel"><Fragment set:html={renderRichText(item.answer)} /></div>
+      </details>
+    ))}
+  </div>
+</section>

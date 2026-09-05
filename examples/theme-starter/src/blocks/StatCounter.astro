@@ -1,0 +1,20 @@
+---
+import type { StatCounterBlock } from '@cogenta/blocks'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block } = Astro.props as { block: StatCounterBlock; ctx: RenderContext }
+---
+
+<section class="stat-counter">
+  {block.title && <h2>{block.title}</h2>}
+  <dl class="stat-counter__items">
+    {block.stats.map((stat) => (
+      // No count-up animation: that would need client JavaScript, and a number
+      // that is already there is what a visitor with reduced motion asked for.
+      <div class="stat-counter__item">
+        <dt class="stat-counter__value">{stat.value}</dt>
+        <dd class="stat-counter__label">{stat.label}</dd>
+      </div>
+    ))}
+  </dl>
+</section>

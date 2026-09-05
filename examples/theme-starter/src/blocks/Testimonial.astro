@@ -1,0 +1,21 @@
+---
+import type { TestimonialBlock } from '@cogenta/blocks'
+import { renderRichText } from '../render/prose.js'
+import type { RenderContext } from '../theme-contract.js'
+
+const { block, ctx } = Astro.props as { block: TestimonialBlock; ctx: RenderContext }
+const avatar = block.attribution.avatar ? ctx.image(block.attribution.avatar) : null
+---
+
+<figure class="testimonial">
+  <blockquote class="testimonial__quote"><Fragment set:html={renderRichText(block.quote)} /></blockquote>
+  <figcaption class="testimonial__attribution">
+    {avatar && avatar.kind === 'image' && (
+      <img class="testimonial__avatar" src={avatar.src} width={avatar.width} height={avatar.height} alt="" />
+    )}
+    <span>
+      <strong>{block.attribution.name}</strong>
+      {block.attribution.role && <span class="testimonial__role"> — {block.attribution.role}</span>}
+    </span>
+  </figcaption>
+</figure>

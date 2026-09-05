@@ -3,7 +3,7 @@ import { defineTheme } from './src/theme-contract.js'
 /**
  * Contract D — Thème, `theme@1.1`.
  *
- * `implements` must list all twelve blocks of contract B, in any order —
+ * `implements` must list all seventeen blocks of contract B (`blocks@2.0`), in any order —
  * this starter lists them in the contract's own order for readability. A
  * theme missing one fails installation: that's what guarantees a theme
  * switch never silently drops content a site already has.
@@ -18,7 +18,7 @@ export default defineTheme({
   name: 'theme-starter',
   version: '0.1.0',
   engine: '^1.0.0',
-  blocks: '^1.0.0',
+  blocks: '^2.0.0',
   implements: [
     'hero',
     'prose',
@@ -32,6 +32,11 @@ export default defineTheme({
     'logos',
     'collectionList',
     'embed',
+    'testimonial',
+    'pricingTable',
+    'accordion',
+    'statCounter',
+    'logoStrip',
   ],
   collections: '*',
   runtime: 'static',

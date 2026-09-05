@@ -15,7 +15,7 @@ import manifest from '../theme.config.js'
 const themeRoot = fileURLToPath(new URL('..', import.meta.url))
 
 describe('the theme starter', () => {
-  it('declares all twelve vocabulary blocks and passes the real installation check', async () => {
+  it('declares all seventeen vocabulary blocks and passes the real installation check', async () => {
     const inspection = await inspectTheme({ root: themeRoot, manifest })
 
     expect(inspection.missingBlocks).toEqual([])
@@ -23,6 +23,6 @@ describe('the theme starter', () => {
     expect(inspection.ok).toBe(true)
     // A sanity floor, not an exact count: catches "the scanner silently
     // walked past src/" without pinning this test to the file count.
-    expect(inspection.filesScanned).toBeGreaterThanOrEqual(14)
+    expect(inspection.filesScanned).toBeGreaterThanOrEqual(19)
   })
 })

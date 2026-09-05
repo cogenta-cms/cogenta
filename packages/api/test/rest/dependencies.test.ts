@@ -106,6 +106,39 @@ describe('what a response declares it was built from', () => {
     expect(dependenciesOf(response).media).toEqual(['media-hero', 'media-shot-1', 'media-shot-2'])
   })
 
+  it('declares the media a testimonial points at through its grouped attribution, not just "media"', async () => {
+    // `testimonial.attribution.avatar` (`blocks@2.0` RFC 0001) is the one
+    // vocabulary item shape that names its media reference `avatar` rather
+    // than `media` — a real gap found end to end (L25, `theme-association`'s
+    // demo testimonial): `addItemMedia` used to look for `media` only, so
+    // this avatar was silently never preloaded and every render of a page
+    // carrying it failed with `THEME_IMAGE_UNSUPPORTED`.
+    await harness.store(ARTICLE).create({
+      id: 'article-2',
+      status: 'published',
+      values: { title: 'A volunteer’s own words' },
+      blocks: {
+        zone: [
+          {
+            key: 'b-testimonial',
+            type: 'testimonial',
+            data: {
+              quote: [],
+              attribution: { name: 'M. Alaoui', avatar: 'media-avatar-1' },
+            },
+          },
+        ],
+      },
+    })
+
+    const response = await harness.router.handle(
+      request('GET', '/rest_article/article-2'),
+      asPublic,
+    )
+
+    expect(dependenciesOf(response).media).toContain('media-avatar-1')
+  })
+
   it('declares the collection of a list, so that a first entry still invalidates it', async () => {
     const response = await harness.router.handle(request('GET', '/rest_page'), asPublic)
 

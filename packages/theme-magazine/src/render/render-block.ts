@@ -6,6 +6,7 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
+  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -107,6 +108,15 @@ function renderKnownBlock(
  * it is what lets the L16 page builder map a clicked element on the real
  * rendered page back to the block that produced it). A page whose blocks
  * already carry a heading (a `hero`) gets no second `<h1>`.
+ *
+ * A page carrying `entry` (contract D `theme@1.4`) gets `renderEntryHeader`'s
+ * furniture — classification eyebrow (styled in this masthead's own
+ * journal-red accent, see `styles/base.css`'s `.cg-entry-header__terms`),
+ * title, excerpt, date/author/reading-time meta and cover — instead of the
+ * bare `<h1>` every other page falls back to; `renderEntryHeader` itself
+ * returns `null` for a `blocks`-only page (e.g. `about`, which carries no
+ * `entry`) or one that already draws its own heading, so the bare-title
+ * fallback still applies there, exactly as before.
  */
 export function renderPage(
   page: PageContent,
@@ -114,10 +124,12 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
+  const ownHeading = pageHasOwnHeading(page.blocks)
+  const entryHeader = ownHeading ? null : renderEntryHeader(page, ctx)
   return h(
     'main',
     { class: 'cg-main', id: 'cg-main' },
-    pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'cg-page__title' }, page.title),
+    ownHeading ? null : (entryHeader ?? h('h1', { class: 'cg-page__title' }, page.title)),
     page.blocks.map((block) =>
       withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
     ),

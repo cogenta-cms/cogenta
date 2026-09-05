@@ -193,54 +193,78 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number): str
 }
 
 /**
- * One or more `d` strings per platform. `fill-rule="evenodd"` is set once on
- * the `<svg>` root (inherited by every `<path>`, exactly like `fill`), which
- * is what turns two nested contours — instagram's frame and lens, YouTube's
- * frame around its play triangle, threads' loop — into a ring rather than a
- * solid blob, with no extra attribute anywhere else.
+ * One or more **groups** of `d` strings per platform, each group rendered as
+ * its own `<path>` element with `fill-rule="evenodd"` — every icon's own
+ * `<svg>` root also sets it, but that alone is not what makes a nested
+ * contour a ring rather than a solid blob: `evenodd` only cancels overlap
+ * *within a single path's own subpaths*, never across sibling `<path>`
+ * elements. Two contours meant to punch a hole in each other (instagram's
+ * frame and lens, YouTube's frame around its play triangle, threads' loop,
+ * the generic fallback's two chain-link rings) must be joined into **one**
+ * group's `d`; a shape meant to sit solid *beside* another (linkedin's dot,
+ * stem and bowl; github's head and body; instagram's own flash dot) stays
+ * its own group so it is never accidentally subtracted from a neighbour it
+ * happens to overlap.
  */
-const SOCIAL_ICON_PATHS: Readonly<Record<SocialIconKind, readonly string[]>> = {
-  x: ['M4 4l6.7 8.1L4.2 20H7l5-6.1L17 20h2.8l-6.9-8.3L20.5 4h-2.8l-4.6 5.6L8.8 4H4z'],
+const SOCIAL_ICON_PATHS: Readonly<Record<SocialIconKind, readonly (readonly string[])[]>> = {
+  x: [['M4 4l6.7 8.1L4.2 20H7l5-6.1L17 20h2.8l-6.9-8.3L20.5 4h-2.8l-4.6 5.6L8.8 4H4z']],
   facebook: [
-    'M14 4h-2.2A4.3 4.3 0 0 0 7.5 8.3V11H5v3h2.5v7h3.4v-7h2.6l.5-3h-3.1V8.6a1 1 0 0 1 1-1H14z',
+    ['M14 4h-2.2A4.3 4.3 0 0 0 7.5 8.3V11H5v3h2.5v7h3.4v-7h2.6l.5-3h-3.1V8.6a1 1 0 0 1 1-1H14z'],
   ],
   instagram: [
-    roundedRect(3, 3, 18, 18, 5),
-    roundedRect(6, 6, 12, 12, 3.5),
-    circlePath(12, 12, 4.2),
-    circlePath(12, 12, 2.6),
-    circlePath(17, 7, 1.3),
+    // The square frame: outer body minus a smaller, concentric inner
+    // rectangle, one path so `evenodd` actually punches the hole.
+    [roundedRect(3, 3, 18, 18, 5), roundedRect(6, 6, 12, 12, 3.5)],
+    // The lens: outer minus inner circle, same technique.
+    [circlePath(12, 12, 4.2), circlePath(12, 12, 2.6)],
+    // The flash dot — solid, and deliberately its own group: joining it into
+    // either ring above would let `evenodd` cancel wherever it overlaps one.
+    [circlePath(17, 7, 1.3)],
   ],
   linkedin: [
-    circlePath(6.5, 7, 1.6),
-    roundedRect(5.2, 10, 2.6, 10, 1),
-    'M10.5 20V10h3v1.5c1-1.3 2.3-2 4-2c2.8 0 4.5 1.9 4.5 5V20h-3v-5c0-1.6-.7-2.6-2.2-2.6c-1.4 0-2.3 1-2.3 2.6V20z',
+    [circlePath(6.5, 7, 1.6)],
+    [roundedRect(5.2, 10, 2.6, 10, 1)],
+    [
+      'M10.5 20V10h3v1.5c1-1.3 2.3-2 4-2c2.8 0 4.5 1.9 4.5 5V20h-3v-5c0-1.6-.7-2.6-2.2-2.6c-1.4 0-2.3 1-2.3 2.6V20z',
+    ],
   ],
-  youtube: [roundedRect(2, 5, 20, 14, 5), roundedRect(4, 7, 16, 10, 3.5), 'M10 9l6 3-6 3z'],
+  youtube: [
+    // The frame: outer minus inner rounded rect, same ring technique as
+    // instagram's own frame.
+    [roundedRect(2, 5, 20, 14, 5), roundedRect(4, 7, 16, 10, 3.5)],
+    // The play triangle — solid, its own group for the same reason as
+    // instagram's flash dot above.
+    ['M10 9l6 3-6 3z'],
+  ],
   github: [
-    circlePath(12, 11, 7),
-    'M8.3 20v-2.1c-2-.5-3-1.4-3-3.3c0-1 .3-1.7 1-2.4c-.1-.5-.4-1.7.1-2.8c0 0 .9-.3 2.8 1a10 10 0 0 1 5.1 0c1.9-1.3 2.8-1 2.8-1c.5 1.1.2 2.3.1 2.8c.7.7 1 1.4 1 2.4c0 1.9-1 2.8-3 3.3V20',
+    [circlePath(12, 11, 7)],
+    [
+      'M8.3 20v-2.1c-2-.5-3-1.4-3-3.3c0-1 .3-1.7 1-2.4c-.1-.5-.4-1.7.1-2.8c0 0 .9-.3 2.8 1a10 10 0 0 1 5.1 0c1.9-1.3 2.8-1 2.8-1c.5 1.1.2 2.3.1 2.8c.7.7 1 1.4 1 2.4c0 1.9-1 2.8-3 3.3V20',
+    ],
   ],
-  mastodon: ['M4 8a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4H10l-3 3v-3H8a4 4 0 0 1-4-4z'],
+  mastodon: [['M4 8a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4H10l-3 3v-3H8a4 4 0 0 1-4-4z']],
   bluesky: [
-    'M12 9c-1.6-3-4.7-5-7-4c-1 3 .5 6.5 3.4 8c-2.9 1.5-4.4 5-3.4 8c2.3 1 5.4-1 7-4c1.6 3 4.7 5 7 4c1-3-.5-6.5-3.4-8c2.9-1.5 4.4-5 3.4-8c-2.3-1-5.4 1-7 4z',
+    [
+      'M12 9c-1.6-3-4.7-5-7-4c-1 3 .5 6.5 3.4 8c-2.9 1.5-4.4 5-3.4 8c2.3 1 5.4-1 7-4c1.6 3 4.7 5 7 4c1-3-.5-6.5-3.4-8c2.9-1.5 4.4-5 3.4-8c-2.3-1-5.4 1-7 4z',
+    ],
   ],
   tiktok: [
-    circlePath(8, 17, 3),
-    roundedRect(9.4, 4, 2.4, 13, 1),
-    'M11.8 4c.3 3.2 2.7 5.4 5.7 5.6v3c-2.1-.1-4-.8-5.7-2.1',
+    [circlePath(8, 17, 3)],
+    [roundedRect(9.4, 4, 2.4, 13, 1)],
+    ['M11.8 4c.3 3.2 2.7 5.4 5.7 5.6v3c-2.1-.1-4-.8-5.7-2.1'],
   ],
-  threads: [circlePath(12, 12, 8), circlePath(13, 12, 4)],
-  pinterest: [roundedRect(10.4, 9, 2.4, 11, 1.2), circlePath(12.6, 10, 2.6)],
+  // The loop: two overlapping, off-centre circles resolved into a crescent
+  // ring by `evenodd` — the whole reason this icon needs the technique at
+  // all, per this constant's own doc comment.
+  threads: [[circlePath(12, 12, 8), circlePath(13, 12, 4)]],
+  pinterest: [[roundedRect(10.4, 9, 2.4, 11, 1.2)], [circlePath(12.6, 10, 2.6)]],
   // The generic fallback — two overlapping rounded-rectangle rings, the
-  // conventional "chain link" silhouette, each ring itself two nested
-  // contours (outer minus inner) resolved by the same `fill-rule="evenodd"`
-  // every other icon here relies on.
+  // conventional "chain link" silhouette, each ring its own group (outer
+  // minus inner, resolved by `evenodd` within that one path) rather than
+  // four separate solid rectangles.
   link: [
-    roundedRect(1, 8, 12, 8, 4),
-    roundedRect(3.5, 10.5, 7, 3, 1.5),
-    roundedRect(11, 8, 12, 8, 4),
-    roundedRect(13.5, 10.5, 7, 3, 1.5),
+    [roundedRect(1, 8, 12, 8, 4), roundedRect(3.5, 10.5, 7, 3, 1.5)],
+    [roundedRect(11, 8, 12, 8, 4), roundedRect(13.5, 10.5, 7, 3, 1.5)],
   ],
 }
 
@@ -285,7 +309,7 @@ function socialIcon(kind: SocialIconKind, className: string | undefined): HtmlEl
       'aria-hidden': 'true',
       focusable: 'false',
     },
-    SOCIAL_ICON_PATHS[kind].map((d) => h('path', { d })),
+    SOCIAL_ICON_PATHS[kind].map((group) => h('path', { d: group.join(' ') })),
   )
 }
 

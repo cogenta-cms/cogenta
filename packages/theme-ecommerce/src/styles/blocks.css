@@ -343,12 +343,20 @@
 }
 
 .ce-feature__icon {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   inline-size: var(--ce-s12);
   block-size: var(--ce-s12);
   border-radius: var(--ce-radius-lg);
   background: var(--ce-surface);
+  color: var(--ce-accent);
   box-shadow: var(--ce-ring-accent);
+}
+
+.ce-feature__icon svg {
+  inline-size: var(--ce-s6);
+  block-size: var(--ce-s6);
 }
 
 .ce-feature__body {
@@ -484,6 +492,7 @@
 }
 
 .ce-gallery__item {
+  position: relative;
   overflow: hidden;
   border-radius: var(--ce-radius-lg);
   box-shadow: var(--ce-ring);
@@ -493,6 +502,23 @@
   inline-size: 100%;
   block-size: 100%;
   transition: transform var(--ce-duration-slow) var(--ce-ease);
+}
+
+/* The category-tile label: a flat solid band anchored to the tile's own
+   foot, never a gradient scrim — the accent-tinted ink already meets AA
+   against the light band regardless of the skin swapped in, since both are
+   derived from the same token pair `design-system.test.ts` verifies. */
+.ce-gallery__caption {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  padding: var(--ce-s4) var(--ce-s5);
+  background: var(--ce-canvas);
+  color: var(--ce-ink);
+  font-size: var(--ce-text-sm);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
 }
 
 .ce-gallery__item:hover .ce-gallery__image {
@@ -801,7 +827,9 @@
 
 .ce-entry__card {
   position: relative;
-  padding: var(--ce-s6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--ce-surface-raised);
   border-radius: var(--ce-radius-lg);
   box-shadow: var(--ce-ring);
@@ -815,13 +843,46 @@
   transform: translateY(-3px);
 }
 
-.ce-entry__badge {
-  display: inline-block;
-  margin-block-end: var(--ce-s3);
+/* A square product photo — the shoppable-grid signature every card in this
+   theme leans on. */
+.ce-entry__media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--ce-surface-sunken);
+}
+
+.ce-entry__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/* A flat solid tag, never a gradient scrim — reuses the same ink/canvas
+   pair `ce-gallery__caption` does, already AA-checked against the body. */
+.ce-entry__stock {
+  position: absolute;
+  inset-block-start: var(--ce-s3);
+  inset-inline-start: var(--ce-s3);
   padding: var(--ce-s1) var(--ce-s3);
-  background: var(--ce-accent-soft);
-  color: var(--ce-accent-soft-fg);
+  background: var(--ce-ink);
+  color: var(--ce-canvas);
   border-radius: var(--ce-radius-pill);
+  font-size: var(--ce-text-xs);
+  font-weight: var(--ce-weight-bold);
+  letter-spacing: var(--ce-tracking-wide);
+  text-transform: uppercase;
+}
+
+.ce-entry__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: var(--ce-s2);
+  padding: var(--ce-s5) var(--ce-s6) var(--ce-s6);
+}
+
+.ce-entry__category {
+  color: var(--ce-accent);
   font-size: var(--ce-text-xs);
   font-weight: var(--ce-weight-bold);
   letter-spacing: var(--ce-tracking-wide);
@@ -853,8 +914,16 @@
   color: var(--ce-accent);
 }
 
+.ce-entry__price {
+  margin: 0;
+  color: var(--ce-ink);
+  font-size: var(--ce-text-lg);
+  font-weight: var(--ce-weight-black);
+  font-variant-numeric: tabular-nums;
+}
+
 .ce-entry__excerpt {
-  margin: var(--ce-s3) 0 0;
+  margin: 0;
   color: var(--ce-ink-muted);
   font-size: var(--ce-text-sm);
   line-height: var(--ce-leading-relaxed);

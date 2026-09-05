@@ -8,6 +8,7 @@ import {
   href,
   nestedHeadingTag,
   type RenderContext,
+  renderIcon,
 } from '@cogenta/theme-kit'
 
 /**
@@ -39,7 +40,11 @@ function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): Htm
       { class: 'ce-feature__frame' },
       item.icon === undefined
         ? null
-        : h('span', { class: 'ce-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' }),
+        : h(
+            'span',
+            { class: 'ce-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
+            renderIcon(item.icon),
+          ),
     ),
     h(
       'div',

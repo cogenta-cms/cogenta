@@ -81,6 +81,33 @@ describe('the identity a rendered page carries back to its blocks', () => {
     const html = serialize(renderPage({ title: 'Page', blocks: [BLOCKS.hero] }, ctx, {}))
     expect(html).toMatch(/^<main class="ce-main" id="cg-main">/)
   })
+
+  it('draws the entry header from page.entry for a routed collection with no blocks of its own (theme@1.4)', () => {
+    const html = serialize(
+      renderPage(
+        {
+          title: 'Field jacket',
+          blocks: [],
+          entry: {
+            collection: 'product',
+            excerpt: 'Waxed cotton, brass hardware, a fit that layers over anything.',
+          },
+        },
+        ctx,
+        {},
+      ),
+    )
+    expect(html).toContain('cg-entry-header')
+    expect(html).toContain('<h1 class="cg-entry-header__title">Field jacket</h1>')
+    expect(html).toContain('cg-entry-header__excerpt')
+    expect(html).not.toContain('ce-page__title')
+  })
+
+  it('falls back to the bare page title when there is no entry meta at all', () => {
+    const html = serialize(renderPage({ title: 'Shipping & returns', blocks: [] }, ctx, {}))
+    expect(html).toContain('<h1 class="ce-page__title">Shipping &amp; returns</h1>')
+    expect(html).not.toContain('cg-entry-header')
+  })
 })
 
 describe('renderBlock', () => {

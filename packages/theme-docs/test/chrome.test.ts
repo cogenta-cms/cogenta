@@ -1,4 +1,5 @@
 import type { ChromeInput } from '@cogenta/theme-kit'
+import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
@@ -8,6 +9,13 @@ import { renderChrome } from '../src/render/chrome.js'
  * mobile menu (a `<details>` disclosure, a second copy of the nav links
  * hidden by default and shown only at a narrow viewport — see `chrome.ts`'s
  * own comment for why two static copies, not a repositioned one).
+ *
+ * The manual light/dark toggle added afterwards is deliberately *not* part
+ * of the "byte-identical" guarantee below — it is unconditional, on every
+ * render, so the expectation is built from `renderThemeToggle` itself rather
+ * than a hand-copied literal that would silently drift from the real markup
+ * the first time either changes (same fix as `theme-canonical`'s own
+ * `chrome.test.ts`).
  */
 
 const MINIMAL: ChromeInput = {
@@ -30,9 +38,11 @@ const BASE: ChromeInput = {
 describe('renderChrome — no navigation, no 1.4 fields', () => {
   it('renders byte-identical header and footer with nothing to show', () => {
     const { header, footer } = renderChrome(MINIMAL)
+    const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
     expect(header).toBe(
       '<header class="cg-site-header"><div class="cg-site-header__inner">' +
         '<a class="cg-site-header__home" href="/">Reference Site</a>' +
+        `${themeToggle}` +
         '</div></header>',
     )
     expect(footer).toBe(

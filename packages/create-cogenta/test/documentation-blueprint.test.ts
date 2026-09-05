@@ -35,9 +35,13 @@ describe('the documentation content pack — declared shape', () => {
     expect(documentationContentPack.defaultTheme).toBe('@cogenta/theme-docs')
   })
 
-  it('seeds exactly one decorative hero image, via coverArt not heroArt', () => {
-    expect(DOCUMENTATION_MEDIA_SPECS).toHaveLength(1)
-    expect(DOCUMENTATION_MEDIA_SPECS[0]?.name).toBe('hero')
+  it('seeds a decorative hero image plus two doc-page illustrations, all via coverArt not heroArt (L26)', () => {
+    expect(DOCUMENTATION_MEDIA_SPECS).toHaveLength(3)
+    expect(DOCUMENTATION_MEDIA_SPECS.map((spec) => spec.name)).toEqual([
+      'hero',
+      'docsContentModel',
+      'docsThemes',
+    ])
   })
 
   it('seeds header, footer and a header-action menu', () => {
@@ -140,7 +144,7 @@ describe('scaffoldSite — documentation blueprint', () => {
       expect(result.blueprintId).toBe('documentation')
       expect(result.fellBackToBlank).toBe(false)
       expect(result.activeTheme).toBe('@cogenta/theme-docs')
-      expect(result.mediaSeeded).toBe(1)
+      expect(result.mediaSeeded).toBe(3)
       expect(result.menusSeeded).toBe(8)
       expect(result.siteSettingsSeeded).toBeGreaterThan(0)
 

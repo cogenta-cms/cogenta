@@ -653,6 +653,9 @@ importers:
       '@cogenta/cli':
         specifier: workspace:*
         version: link:../cli
+      '@cogenta/comments':
+        specifier: workspace:*
+        version: link:../comments
       '@cogenta/core':
         specifier: workspace:*
         version: link:../core

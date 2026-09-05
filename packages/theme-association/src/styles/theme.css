@@ -1,0 +1,31 @@
+/*
+ * `@cogenta/theme-association`'s stylesheet — the entry point, and nothing
+ * else.
+ *
+ * Three layers, in the only order that works:
+ *
+ *   tokens.css  the design system, derived entirely from the skin's
+ *               `--cogenta-*` custom properties (contract D)
+ *   base.css    document, accessibility floor, page frame, chrome, actions
+ *   blocks.css  the seventeen vocabulary blocks
+ *   archive.css the taxonomy-term archive
+ *
+ * Not one colour, font, radius, duration or shadow is written literally in
+ * any of the four: every value comes from a `--cogenta-<group>-<name>`
+ * property produced from the skin's tokens, or from a `--cg-*` property
+ * composed from those.
+ *
+ * The Google Fonts request for the two families `tokens.json` names —
+ * Nunito for headings (`tokens.json`'s `font.serif` slot, repurposed: it is
+ * a rounded humanist sans, not a literal serif, chosen for the warm,
+ * friendly display face the brief asks for) and Source Sans 3 for body copy
+ * (`font.sans`) — loaded here, once. Both fall back to a real system stack
+ * if Google Fonts is unreachable (`tokens.json`'s own fallback text).
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap");
+
+@import "./tokens.css";
+@import "./base.css";
+@import "./blocks.css";
+@import "./archive.css";

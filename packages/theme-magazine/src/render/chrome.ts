@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderSocialLinks,
+  renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
 
@@ -34,6 +35,14 @@ import {
  * be forced open by CSS alone, so the collapsed and expanded nav are two
  * separate `<nav>`s, never one pushed into a state it was never opened
  * into — see that theme's own `chrome.ts` for the verified detail).
+ *
+ * L26 D4 — the manual light/dark/system toggle (`renderThemeToggle`,
+ * `@cogenta/theme-kit`) sits in the top strip, next to today's date, not in
+ * the rubric row below: the top strip renders unconditionally on every
+ * page, while the rubric (`hasRubric`) only renders when there is a nav or
+ * a header action — a toggle placed there would vanish on a site with
+ * neither, which is exactly the "dark mode looks unsupported" bug this
+ * feature exists to fix.
  */
 
 function renderNavItems(links: readonly ChromeNavLink[], className: string): string {
@@ -83,6 +92,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   // wordmark on its own row. The colophon keeps the name in text, so the
   // site is still named in a page whose images never load.
   const nameplate = renderBrandMark(input.brand, { className: 'cg-masthead__logo' }) ?? siteNameText
+  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const hasRubric = navItems !== '' || headerAction !== ''
   // Two renderings of the same rubric row, never both visible at once (CSS,
@@ -102,6 +112,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<header class="cg-masthead">` +
     `<div class="cg-masthead__top">` +
     `<span class="cg-masthead__date">${escapeText(todaysDate(input.locale))}</span>` +
+    `${themeToggle}` +
     `</div>` +
     `<div class="cg-masthead__nameplate">` +
     `<a class="cg-masthead__wordmark" href="${homeHref}">${nameplate}</a>` +

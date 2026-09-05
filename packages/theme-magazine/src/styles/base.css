@@ -359,6 +359,7 @@ img {
 }
 
 .cg-masthead__top {
+  position: relative;
   padding-block: var(--cg-s2);
   text-align: center;
   border-block-end: 1px solid var(--cg-rule-soft);
@@ -371,6 +372,63 @@ img {
   letter-spacing: var(--cg-tracking-wider);
   text-transform: uppercase;
   color: var(--cg-ink-faint);
+}
+
+/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
+   theme-kit`) — a small outlined icon button pinned to the end of the top
+   strip, next to today's date, so it renders on every page regardless of
+   whether the rubric row below it has a nav or a header action (see
+   `chrome.ts`'s file-level comment). A plain outline, not `.cg-action`'s
+   underlined-link style, so it never reads as a navigation item. */
+.cg-theme-toggle {
+  position: absolute;
+  inset-inline-end: var(--cg-gutter);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: var(--cg-radius-sm);
+  border: 1px solid var(--cg-rule-soft);
+  background: transparent;
+  color: var(--cg-ink-faint);
+  cursor: pointer;
+}
+
+.cg-theme-toggle:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* Icon reflects the *current* effective appearance — sun while light, moon
+   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
+   `tokens.css` already keys the whole palette on. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
 }
 
 .cg-masthead__nameplate {

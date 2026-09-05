@@ -8,7 +8,12 @@ import { buildAssociationDemoPages } from '../src/blueprints/association.js'
 // none of which this test exercises.
 import { buildBlogDemoPages } from '../src/blueprints/blog.js'
 import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
-import { MAGAZINE_DEMO_PAGES } from '../src/blueprints/magazine.js'
+// `magazine`'s demo pages are now built from `SeedContext.media` too (L25
+// pro pass, same pattern as `blog`/`store`/`saas` above) —
+// `buildMagazineDemoPages({})` renders the same pages this test checked
+// before, minus the (now media-dependent) hero/cover/partner-logo images,
+// none of which this test exercises.
+import { buildMagazineDemoPages } from '../src/blueprints/magazine.js'
 import { PORTFOLIO_DEMO_PAGES } from '../src/blueprints/portfolio.js'
 import { buildRestaurantDemoPages } from '../src/blueprints/restaurant.js'
 // `saas`'s demo pages are now built from `SeedContext.media` and the real
@@ -30,6 +35,7 @@ const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
 const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
+const MAGAZINE_DEMO_PAGES = buildMagazineDemoPages({})
 
 /**
  * Every demo page a blueprint seeds, validated against the real contract-B

@@ -186,8 +186,13 @@ describe('the dark palette is designed, not inverted', () => {
     expect(lightness('--cg-line', 'light')).toBeLessThan(lightness('--cg-surface', 'light'))
   })
 
-  it('replaces shadow-as-depth with an accent-tinted glow in dark mode', () => {
-    expect(CG.get('--cg-elevation-2')).toContain('--cg-accent-glow')
+  it('keeps elevation a hard, zero-blur offset shadow in dark mode too (L25 D5: never a glow)', () => {
+    const dark = CG.get('--cg-elevation-2') as string
+    expect(dark).not.toContain('--cg-accent-glow')
+    expect(dark).not.toMatch(/\bblur\(/)
+    // Same offset geometry as light, recoloured in the brighter-than-surface
+    // line token dark mode already uses for depth — never a soft radius.
+    expect(dark).toContain('0.25rem 0.25rem 0 var(--cg-line-strong)')
   })
 
   it('keeps text off pure white, and the canvas off pure black', () => {

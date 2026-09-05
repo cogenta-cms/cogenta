@@ -27,11 +27,31 @@ describe('renderFeatureGrid', () => {
     expect(html).toContain('<h3 class="cg-feature__title">Product design</h3>')
   })
 
-  it('carries the icon name as a data attribute, never as markup', () => {
+  it('carries the icon name as a data attribute and renders it via the shared renderIcon helper', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
     expect(html).toContain('data-icon="shield"')
-    expect(html).not.toContain('<svg')
+    expect(html).toContain('class="cg-feature__icon"')
+    expect(html).toContain('<svg')
     expect(html).not.toContain('<i class="icon')
+  })
+
+  it('renders no icon svg for an item with no icon field', () => {
+    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
+    const items = html.split('<li class="cg-feature"')
+    // items[0] is the markup before the first item; items[2] is the second
+    // item's own fragment (Product design, no icon).
+    expect(items[2]).not.toContain('<svg')
+  })
+
+  it('renders no icon svg for an unrecognised icon name, never a broken glyph', () => {
+    const [firstItem] = BLOCKS.featureGrid.items
+    if (firstItem === undefined) throw new Error('fixture must have at least one item')
+    const withUnknownIcon = {
+      ...BLOCKS.featureGrid,
+      items: [{ ...firstItem, icon: 'not-a-real-icon' }],
+    }
+    const html = serialize(renderFeatureGrid(withUnknownIcon, ctx))
+    expect(html).not.toContain('<svg')
   })
 
   it('renders a decorative, hidden index marker for every item, never invented markup', () => {

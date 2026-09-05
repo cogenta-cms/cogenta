@@ -6,6 +6,7 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
+  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -34,7 +35,7 @@ import { renderTestimonial } from './blocks/testimonial.js'
  * surface names them, the same shape every theme package shares them under.
  */
 export type { FetchedEntries, PageContent }
-export { pageHasOwnHeading, withBlockKey }
+export { pageHasOwnHeading, renderEntryHeader, withBlockKey }
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -106,18 +107,49 @@ function renderKnownBlock(
   }
 }
 
+/**
+ * `renderEntryHeader` (`theme@1.4`) draws the eyebrow/title/excerpt/meta/
+ * cover furniture for a page backed by a real content entry — a project —
+ * and already returns `null` for a page with no `entry` meta *and* for one
+ * whose blocks draw their own heading (a `hero`), so the bare
+ * `<h1 class="cg-page__title">` fallback below is the right markup in both
+ * of those cases and only those — never a double heading, and never a page
+ * with none at all. A page rendered before `theme@1.4` (`page.entry`
+ * absent) gets exactly the pre-1.4 markup, byte for byte.
+ */
+/**
+ * `withBlockKey` stamps `data-block-key` (the L16 builder's own hook); this
+ * theme additionally stamps a real `id`, the block's own `_key`, on the same
+ * element — `_key` is already unique within a page (contract B), so it
+ * doubles as a genuine in-page anchor. The header/footer's own single-page
+ * links (the `portfolio` blueprint's "Work"/"Services" nav) resolve to a
+ * real target this way, rather than a `#fragment` nothing on the page
+ * answers to.
+ */
+function withBlockAnchor(element: HtmlElement | null, key: string): HtmlElement | null {
+  if (element === null) return null
+  return { ...element, attrs: { ...element.attrs, id: key } }
+}
+
 export function renderPage(
   page: PageContent,
   ctx: RenderContext,
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
+  const entryHeader = renderEntryHeader(page, ctx)
   return h(
     'main',
     { class: 'cg-main', id: 'cg-main' },
-    pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'cg-page__title' }, page.title),
+    entryHeader,
+    entryHeader === null && !pageHasOwnHeading(page.blocks)
+      ? h('h1', { class: 'cg-page__title' }, page.title)
+      : null,
     page.blocks.map((block) =>
-      withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
+      withBlockAnchor(
+        withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
+        block._key,
+      ),
     ),
   )
 }

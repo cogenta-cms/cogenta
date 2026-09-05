@@ -125,6 +125,13 @@ export const ENTRIES: readonly ContentEntry[] = [
     title: 'Two planes, one site',
     excerpt: 'Why the render process holds neither the secrets nor the database.',
     publishedAt: '2026-02-11T09:00:00.000Z',
+    // A `project`-shaped entry's own raw fields (`portfolio` blueprint):
+    // present here so a `collectionList` grid card and a project's own
+    // `renderEntryHeader` can both be exercised against a realistic entry
+    // without a second fixture array.
+    coverImage: 'media-hero',
+    role: 'Art direction',
+    year: '2025',
   },
   {
     id: '0192f0c2-0000-7000-8000-000000000002',

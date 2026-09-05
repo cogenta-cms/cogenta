@@ -152,6 +152,62 @@ describe('theme isolation', () => {
     )
     expect(offenders).toEqual([])
   })
+
+  /**
+   * A real regression, found by looking at an actual screenshot at 360px:
+   * the desktop `.cg-site-header__nav { display: flex }` rule and the
+   * mobile `@media (max-width: 56rem) { .cg-site-header__nav { display:
+   * none } }` override share the exact same specificity (0,1,0) — with no
+   * specificity difference, CSS falls back to source order, so whichever of
+   * the two is declared *later in the file* wins at every width, media
+   * query or not. Having the unconditional rule declared after the media
+   * query silently defeated "hidden below the breakpoint" everywhere: the
+   * mobile nav rendered permanently open, overlapping the hero. Locked in
+   * here so the fix cannot regress by simple reordering during a future
+   * edit.
+   */
+  /**
+   * A real regression, also found by looking at an actual screenshot: the
+   * `<ol class="cg-collection__items">` a `collectionList` renders never
+   * suppressed the browser's own decimal marker, so every entry showed the
+   * native "1." right beside this theme's own "01" index badge — on every
+   * layout, since this rule predates L25.
+   */
+  it('suppresses the native <ol> marker on collectionList items', () => {
+    const blocks = RAW_STYLESHEETS.find(({ path }) => path === 'styles/blocks.css')
+    expect(blocks, 'styles/blocks.css must exist').toBeDefined()
+    const source = blocks?.source ?? ''
+    const ruleStart = source.indexOf('.cg-collection__items {')
+    expect(ruleStart).toBeGreaterThan(-1)
+    const ruleEnd = source.indexOf('}', ruleStart)
+    const rule = source.slice(ruleStart, ruleEnd)
+    expect(rule).toContain('list-style: none')
+  })
+
+  /**
+   * A real regression, also found by looking at a real project page
+   * screenshot: the blueprint's own "Role / Year" panel is a `prose` block
+   * with `variant.background: "muted"`, and it inherited the editorial
+   * drop-cap `blocks.css` gives every `prose` block's first paragraph — its
+   * first word ("Role") rendered as a giant serif capital, not a spec-sheet
+   * label.
+   */
+  it('opts a background-variant prose block out of the editorial drop cap', () => {
+    const blocks = RAW_STYLESHEETS.find(({ path }) => path === 'styles/blocks.css')
+    const source = blocks?.source ?? ''
+    expect(source).toContain('.cg-prose[data-variant-background] > p:first-child::first-letter')
+  })
+
+  it('declares the header nav open by default before the mobile-menu media query, never after', () => {
+    const base = RAW_STYLESHEETS.find(({ path }) => path === 'styles/base.css')
+    expect(base, 'styles/base.css must exist').toBeDefined()
+    const source = base?.source ?? ''
+    const defaultRuleIndex = source.indexOf('.cg-site-header__nav {')
+    const mediaQueryIndex = source.indexOf('@media (max-width: 56rem)')
+    expect(defaultRuleIndex).toBeGreaterThan(-1)
+    expect(mediaQueryIndex).toBeGreaterThan(-1)
+    expect(defaultRuleIndex).toBeLessThan(mediaQueryIndex)
+  })
 })
 
 describe('the manifest', () => {

@@ -78,4 +78,47 @@ describe('renderCollectionList', () => {
   it('matches a stable snapshot', () => {
     expect(serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))).toMatchSnapshot()
   })
+
+  describe('grid layout — full-bleed project cards', () => {
+    const grid = { ...BLOCKS.collectionList, layout: 'grid' as const }
+
+    it('renders a cover image for an entry that has one', () => {
+      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
+      expect(html).toContain('class="cg-entry__cover"')
+      expect(html).toContain('alt="A workshop bench seen from above"')
+    })
+
+    it('renders an empty cover placeholder for an entry with no image field', () => {
+      const html = serialize(
+        renderCollectionList(grid, ctx, [ENTRIES[1] as (typeof ENTRIES)[number]]),
+      )
+      expect(html).toContain('class="cg-entry__cover-empty"')
+      expect(html).not.toContain('class="cg-entry__cover"')
+    })
+
+    it("shows the entry's own raw role/year fields as a meta line", () => {
+      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
+      expect(html).toContain('class="cg-collection__meta"')
+      expect(html).toContain('<span class="cg-collection__meta-role">Art direction</span>')
+      expect(html).toContain('<span class="cg-collection__meta-year">2025</span>')
+    })
+
+    it('renders no meta line for an entry with neither field', () => {
+      const html = serialize(
+        renderCollectionList(grid, ctx, [ENTRIES[1] as (typeof ENTRIES)[number]]),
+      )
+      expect(html).not.toContain('cg-collection__meta')
+    })
+
+    it('marks the card up with the shared card class, never the plain row class', () => {
+      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
+      expect(html).toContain('class="cg-entry cg-entry--card"')
+    })
+
+    it('still gives the card a real, followable link to the entry', () => {
+      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
+      const [firstEntry] = ENTRIES
+      expect(html).toContain(`href="/en/article/${firstEntry?.id}"`)
+    })
+  })
 })

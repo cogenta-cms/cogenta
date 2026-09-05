@@ -244,8 +244,9 @@ img {
   inset-block-start: 0;
   z-index: 10;
   border-block-start: 3px solid var(--ce-accent);
-  background: color-mix(in oklab, var(--ce-canvas) 88%, transparent);
-  backdrop-filter: saturate(1.5) blur(14px);
+  /* Flat and fully opaque, not a frosted-glass blur: a plane above the
+     page, marked off by a hairline rather than a haze. */
+  background: var(--ce-canvas);
   border-block-end: 1px solid var(--ce-line-soft);
 }
 

@@ -20,9 +20,10 @@
   margin-block-start: var(--ce-s10);
 }
 
-/* A field of accent-tinted dots behind the copy — texture, not a picture, so
-   it never competes with the product shot for attention. Purely decorative:
-   it implies nothing about a discount or a claim the block does not carry. */
+/* A flat solid disc of accent-tinted colour behind the copy — a geometric
+   accent, not a picture, so it never competes with the product shot for
+   attention. Purely decorative: it implies nothing about a discount or a
+   claim the block does not carry. */
 .ce-hero::before {
   content: "";
   position: absolute;
@@ -31,10 +32,8 @@
   inline-size: min(26rem, 60%);
   aspect-ratio: 1;
   z-index: -1;
-  background-image: radial-gradient(var(--ce-accent-soft) 1.5px, transparent 1.5px);
-  background-size: var(--ce-s6) var(--ce-s6);
-  -webkit-mask-image: radial-gradient(circle at 30% 30%, black, transparent 70%);
-  mask-image: radial-gradient(circle at 30% 30%, black, transparent 70%);
+  border-radius: 50%;
+  background: var(--ce-accent-soft);
   pointer-events: none;
 }
 
@@ -408,15 +407,17 @@
   text-align: center;
 }
 
+/* A flat triangular corner accent instead of a diagonal sheen — a crisp
+   geometric fold rather than a glow, at the same subtle tint. */
 .ce-cta__panel::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklab, var(--ce-accent-fg) 14%, transparent),
-    transparent 55%
-  );
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: min(14rem, 45%);
+  aspect-ratio: 1;
+  background: color-mix(in oklab, var(--ce-accent-fg) 14%, transparent);
+  clip-path: polygon(100% 0%, 100% 100%, 0% 0%);
   pointer-events: none;
 }
 

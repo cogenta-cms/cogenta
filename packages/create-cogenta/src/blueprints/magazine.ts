@@ -298,6 +298,27 @@ function magazinePalette(): Palette {
  * a reader avatar for the quote block, and five neutral wordmark stand-ins
  * for the "Partners" strip.
  */
+/**
+ * Bundled photography (`assets/photos/magazine/`), keyed by article slug —
+ * three distinct photos per section (`news`/`culture`/`opinion`/`business`),
+ * so three articles from the same section never share one image side by
+ * side in the "Top stories" grid.
+ */
+const MAGAZINE_ARTICLE_PHOTOS: Readonly<Record<string, string>> = {
+  'transit-line-approved-after-a-decade': 'magazine/news.jpg',
+  'census-numbers-who-is-leaving': 'magazine/news-2.jpg',
+  'new-season-new-lineup': 'magazine/news-3.jpg',
+  'three-exhibitions-worth-the-trip': 'magazine/culture.jpg',
+  'the-archive-nobody-asked-to-save': 'magazine/culture-2.jpg',
+  'local-theatre-best-year-in-a-decade': 'magazine/culture-3.jpg',
+  'why-the-small-stories-matter-most': 'magazine/opinion.jpg',
+  'the-commute-is-not-the-problem': 'magazine/opinion-2.jpg',
+  'stop-calling-every-closure-a-tragedy': 'magazine/opinion-3.jpg',
+  'bakery-turned-down-three-buyout-offers': 'magazine/business.jpg',
+  'new-licensing-rules-small-landlords': 'magazine/business-2.jpg',
+  'co-op-grocery-outgrew-its-building-twice': 'magazine/business-3.jpg',
+}
+
 export const MAGAZINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'quote-avatar',
@@ -311,13 +332,15 @@ export const MAGAZINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
       alt: `Neutral wordmark placeholder ${n}`,
     }),
   ),
-  ...MAGAZINE_DEMO_ARTICLES.map(
-    (demo, index): DemoMediaSpec => ({
+  ...MAGAZINE_DEMO_ARTICLES.map((demo, index): DemoMediaSpec => {
+    const photo = MAGAZINE_ARTICLE_PHOTOS[demo.slug]
+    return {
       name: `article-${demo.slug}`,
       spec: coverArt(magazinePalette(), index + 1),
       alt: `Cover art for "${demo.title}"`,
-    }),
-  ),
+      ...(photo === undefined ? {} : { photo }),
+    }
+  }),
 ]
 
 /**

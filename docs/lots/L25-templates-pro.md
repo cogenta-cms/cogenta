@@ -390,3 +390,33 @@ finale a été faite avec Playwright (Chromium embarqué), captures pleine page 
 les images paresseuses sous le pli y apparaissent vides, ce n'est pas un défaut de page.
 (5) Les captures de la vérification finale sont en schéma clair ; le schéma sombre de
 chaque thème est couvert par ses tests de contraste, pas par une capture.
+
+## D6 — Photographie réelle, générée une fois, jamais une dépendance (retour utilisateur du 2026-09-05)
+
+Après la passe D5, retour direct : « il manque des images, des du concret… les éléments
+qui sont sur les modèles des templates sont trop abstraits, il faut des images concrets ».
+L'utilisateur a fourni une clé API Replicate **temporaire**, à supprimer aussitôt après
+usage.
+
+**Décision** : la génération a eu lieu **une seule fois**, hors produit — 72 photographies
+(via `black-forest-labs/flux-schnell`, ~70 s au total) couvrant les créneaux à plus fort
+impact visuel de sept blueprints (plats du restaurant, produits de la boutique,
+événements de l'association, couvertures du blog et du portfolio, portraits de témoignage,
+photos de rubrique du magazine) — puis **téléchargées et commitées comme fichiers
+binaires ordinaires** dans `packages/create-cogenta/src/blueprints/assets/photos/`
+(11 Mo, 70 fichiers), exactement comme `docs/logo/*.png`. `seedDemoMedia` préfère un
+fichier photo bundlé à la composition procédurale correspondante quand il existe
+(`DemoMediaSpec.photo`, résolu par `photo-assets.ts`, jamais une exigence — une absence
+retombe sur `demo-art`). **Aucune dépendance à Replicate n'entre dans le produit** : R1/R2/
+R9 intacts, personne d'autre n'a jamais besoin d'une clé pour scaffolder un site avec ces
+visuels. `documentation` et les tuiles de catégories de `store` restent volontairement
+abstraites (rien à photographier de spécifique). Deux vrais bugs de test trouvés et
+corrigés au passage : quatre suites de scaffolding dépassaient leur délai par défaut
+(5-30 s) une fois le vrai traitement d'image (variantes WebP d'un JPG réel, plus lourd
+qu'un PNG procédural) dans la boucle — portées à 60 s, cohérent avec la convention déjà
+établie par `blog-blueprint.test.ts`.
+
+**Renoncement assumé** : les visages générés sont synthétiques (aucune personne réelle),
+utilisés uniquement comme portraits de témoignage fictifs — même registre que les
+services de « photos de stock IA » déjà commerciaux, jamais l'usurpation d'une personne
+identifiable réelle.

@@ -601,10 +601,9 @@ function storePalette(): Palette {
 export const STORE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
-    // A flat family (D5): geometric colour blocks, not a mesh/gradient
-    // backdrop — this storefront's own identity, kept flat.
     spec: heroArt(storePalette(), 'blocks', 11),
-    alt: 'Abstract geometric backdrop for the store hero',
+    alt: 'A flat lay of the collection',
+    photo: 'store/hero.jpg',
   },
   ...CATEGORIES.map(
     (category, index): DemoMediaSpec => ({
@@ -618,6 +617,7 @@ export const STORE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
       name: `product-${demo.slug}`,
       spec: productArt(storePalette(), index + 1),
       alt: `${demo.name} product photo`,
+      photo: `store/${demo.slug}.jpg`,
     }),
   ),
   {

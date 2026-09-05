@@ -501,18 +501,15 @@ function vitrinePalette(): Palette {
 export const VITRINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
-    // `blocks`/`grid`/`rings` all rendered too sparse at hero size to carry
-    // the frame on their own (checked by hand, all three families, several
-    // seeds) — `sun` is the one flat composition that fills the whole
-    // canvas with confident colour, reading as "new horizon" rather than
-    // "empty corner".
     spec: heroArt(vitrinePalette(), 'sun', 61),
-    alt: 'Abstract flat sunrise-over-horizon backdrop for the consultancy hero',
+    alt: 'A consulting team at work',
+    photo: 'vitrine/hero.jpg',
   },
   {
     name: 'shot',
     spec: coverArt(vitrinePalette(), 62),
-    alt: 'Abstract visual standing in for the engagement dashboard',
+    alt: 'The engagement dashboard',
+    photo: 'vitrine/dashboard.jpg',
   },
   ...[0, 1, 2, 3, 4].map(
     (index): DemoMediaSpec => ({
@@ -525,7 +522,8 @@ export const VITRINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
     (demo, index): DemoMediaSpec => ({
       name: `avatar-${index}`,
       spec: avatarArt(vitrinePalette(), 80 + index),
-      alt: `Abstract avatar mark for ${demo.authorName}`,
+      alt: `Portrait of ${demo.authorName}`,
+      photo: `vitrine/avatar-${index + 1}.jpg`,
     }),
   ),
   ...VITRINE_DEMO_SERVICES.map(

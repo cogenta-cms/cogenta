@@ -506,7 +506,8 @@ export const SAAS_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
     spec: heroArt(saasPalette(), 'mesh', 21),
-    alt: 'Abstract violet-blue mesh-gradient backdrop for the product hero',
+    alt: 'A software team at work',
+    photo: 'saas/hero.jpg',
   },
   {
     name: 'product',
@@ -516,7 +517,8 @@ export const SAAS_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'avatar',
     spec: avatarArt(saasPalette(), 23),
-    alt: 'Abstract avatar mark for the testimonial',
+    alt: 'Portrait of the testimonial’s author',
+    photo: 'saas/avatar-1.jpg',
   },
   ...[0, 1, 2, 3, 4, 5].map(
     (index): DemoMediaSpec => ({

@@ -111,5 +111,5 @@ describe('the blog blueprint’s seoTitle field reaches the real rendered page',
       controller.abort()
       await done
     }
-  }, 30000)
+  }, 60000)
 })

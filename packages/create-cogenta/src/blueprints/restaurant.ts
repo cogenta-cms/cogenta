@@ -382,19 +382,38 @@ function restaurantPalette(): Palette {
  * can look each one up without caring what id the media store assigned
  * it), six gallery images, and one avatar for the guestbook testimonial.
  */
+/** Bundled photography (`assets/photos/restaurant/`), keyed by the same slug `RESTAURANT_DEMO_MENU_ITEMS` uses — two slugs (`house-red-glass`/`house-white-glass`) shortened for the filename, the rest identical. */
+const RESTAURANT_DISH_PHOTOS: Readonly<Record<string, string>> = {
+  'roasted-beet-salad': 'restaurant/roasted-beet-salad.jpg',
+  'soup-of-the-day': 'restaurant/soup-of-the-day.jpg',
+  'charred-octopus': 'restaurant/charred-octopus.jpg',
+  'pan-seared-trout': 'restaurant/pan-seared-trout.jpg',
+  'wild-mushroom-risotto': 'restaurant/wild-mushroom-risotto.jpg',
+  'slow-roast-duck-leg': 'restaurant/slow-roast-duck-leg.jpg',
+  'chocolate-tart': 'restaurant/chocolate-tart.jpg',
+  'poached-pear': 'restaurant/poached-pear.jpg',
+  'creme-brulee': 'restaurant/creme-brulee.jpg',
+  'house-red-glass': 'restaurant/house-red.jpg',
+  'house-white-glass': 'restaurant/house-white.jpg',
+  'sparkling-water': 'restaurant/sparkling-water.jpg',
+}
+
 export const RESTAURANT_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
     spec: heroArt(restaurantPalette(), 'radial', 7),
-    alt: 'A warm, softly lit backdrop for the restaurant hero',
+    alt: 'The dining room, warm evening light',
+    photo: 'restaurant/hero.jpg',
   },
-  ...RESTAURANT_DEMO_MENU_ITEMS.map(
-    (demo, index): DemoMediaSpec => ({
+  ...RESTAURANT_DEMO_MENU_ITEMS.map((demo, index): DemoMediaSpec => {
+    const photo = RESTAURANT_DISH_PHOTOS[demo.slug]
+    return {
       name: `dish-${demo.slug}`,
       spec: coverArt(restaurantPalette(), 100 + index),
       alt: `${demo.name}, plated`,
-    }),
-  ),
+      ...(photo === undefined ? {} : { photo }),
+    }
+  }),
   ...[1, 2, 3, 4, 5, 6].map(
     (n): DemoMediaSpec => ({
       name: `gallery-${n}`,

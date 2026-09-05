@@ -643,19 +643,32 @@ function associationPalette(): Palette {
  * wash, and is used here exactly as the brief's own "if available else
  * mesh" fallback names.
  */
+/** Bundled photography (`assets/photos/association/`), keyed by the same slug `ASSOCIATION_DEMO_EVENTS` uses. */
+const ASSOCIATION_EVENT_PHOTOS: Readonly<Record<string, string>> = {
+  'volunteer-orientation-evening': 'association/volunteer-orientation.jpg',
+  'community-clean-up-day': 'association/community-cleanup.jpg',
+  'harvest-food-drive': 'association/harvest-food-drive.jpg',
+  'winter-coat-collection': 'association/winter-coat-collection.jpg',
+  'annual-fundraising-dinner': 'association/fundraising-dinner.jpg',
+  'neighbourhood-garden-planting-day': 'association/garden-planting.jpg',
+}
+
 export const ASSOCIATION_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
     spec: heroArt(associationPalette(), 'mesh', 21),
-    alt: 'Warm abstract backdrop for the community fund hero',
+    alt: 'Volunteers working together',
+    photo: 'association/hero.jpg',
   },
-  ...ASSOCIATION_DEMO_EVENTS.map(
-    (demo, index): DemoMediaSpec => ({
+  ...ASSOCIATION_DEMO_EVENTS.map((demo, index): DemoMediaSpec => {
+    const photo = ASSOCIATION_EVENT_PHOTOS[demo.slug]
+    return {
       name: `event-${demo.slug}`,
       spec: coverArt(associationPalette(), index + 1),
       alt: `Cover image for ${demo.title}`,
-    }),
-  ),
+      ...(photo === undefined ? {} : { photo }),
+    }
+  }),
   ...[1, 2, 3, 4, 5, 6].map(
     (n): DemoMediaSpec => ({
       name: `gallery-${n}`,

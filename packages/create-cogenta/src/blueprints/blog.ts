@@ -410,11 +410,24 @@ function blogPalette(): Palette {
  * avatar for the "reader's words" quote block, and five neutral wordmark
  * stand-ins for the "As featured in" strip.
  */
+/** Bundled photography (`assets/photos/blog/`), keyed by the same slug `BLOG_DEMO_POSTS` uses. */
+const BLOG_POST_PHOTOS: Readonly<Record<string, string>> = {
+  'plain-text-editor': 'blog/plain-text-editor.jpg',
+  'desk-setup-that-stuck': 'blog/desk-setup.jpg',
+  'ten-years-reading-nonfiction': 'blog/reading-nonfiction.jpg',
+  'tool-to-stop-losing-drafts': 'blog/small-tool.jpg',
+  'habit-that-fixed-my-schedule': 'blog/writing-schedule.jpg',
+  'notebooks-actually-finished': 'blog/notebooks.jpg',
+  'blog-that-runs-itself': 'blog/blog-runs-itself.jpg',
+  'editing-is-where-writing-happens': 'blog/editing.jpg',
+}
+
 export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
     spec: heroArt(blogPalette(), 'radial', 7),
-    alt: 'Abstract warm-toned backdrop for the featured post',
+    alt: 'A writer’s desk',
+    photo: 'blog/hero.jpg',
   },
   {
     name: 'quote-avatar',
@@ -428,13 +441,15 @@ export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
       alt: `Neutral wordmark placeholder ${n}`,
     }),
   ),
-  ...BLOG_DEMO_POSTS.map(
-    (demo, index): DemoMediaSpec => ({
+  ...BLOG_DEMO_POSTS.map((demo, index): DemoMediaSpec => {
+    const photo = BLOG_POST_PHOTOS[demo.slug]
+    return {
       name: `post-${demo.slug}`,
       spec: coverArt(blogPalette(), index + 1),
       alt: `Cover art for "${demo.title}"`,
-    }),
-  ),
+      ...(photo === undefined ? {} : { photo }),
+    }
+  }),
 ]
 
 /** Header/footer navigation and the header call-to-action button (L25 D4). */

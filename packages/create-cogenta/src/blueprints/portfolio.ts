@@ -503,19 +503,34 @@ function portfolioPalette(): Palette {
  * rather than one shared avatar, since a real site would rarely show the
  * same face twice on the same page.
  */
+/** Bundled photography (`assets/photos/portfolio/`), keyed by the same slug `PORTFOLIO_DEMO_PROJECTS` uses. */
+const PORTFOLIO_PROJECT_PHOTOS: Readonly<Record<string, string>> = {
+  'northwind-rebrand': 'portfolio/northwind-rebrand.jpg',
+  'contoso-mobile-app': 'portfolio/contoso-mobile-app.jpg',
+  'fabrikam-annual-report': 'portfolio/fabrikam-annual-report.jpg',
+  'litware-signage-system': 'portfolio/litware-signage.jpg',
+  'tailspin-streaming-identity': 'portfolio/tailspin-streaming.jpg',
+  'adatum-publishing-house': 'portfolio/adatum-publishing.jpg',
+  'wingtip-terminal-wayfinding': 'portfolio/wingtip-wayfinding.jpg',
+  'proseware-product-launch': 'portfolio/proseware-launch.jpg',
+}
+
 export const PORTFOLIO_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
     spec: heroArt(portfolioPalette(), 'ink', 4),
-    alt: 'An abstract editorial mark on a dark ground',
+    alt: 'A design studio workspace',
+    photo: 'portfolio/hero.jpg',
   },
-  ...PORTFOLIO_DEMO_PROJECTS.map(
-    (demo): DemoMediaSpec => ({
+  ...PORTFOLIO_DEMO_PROJECTS.map((demo): DemoMediaSpec => {
+    const photo = PORTFOLIO_PROJECT_PHOTOS[demo.slug]
+    return {
       name: `project-${demo.slug}`,
       spec: coverArt(portfolioPalette(), demo.coverSeed),
       alt: `${demo.title}, cover composition`,
-    }),
-  ),
+      ...(photo === undefined ? {} : { photo }),
+    }
+  }),
   ...[1, 2, 3, 4, 5].map(
     (n): DemoMediaSpec => ({
       name: `logo-${n}`,

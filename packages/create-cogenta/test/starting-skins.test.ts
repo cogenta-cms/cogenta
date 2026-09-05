@@ -117,6 +117,9 @@ describe('scaffoldSite — starting skin selection', () => {
   })
 
   it('an explicitly generated skin still wins over a blueprint’s starting skin', async () => {
+    // `portfolio` seeds real bundled photography now (L25) — resizing eight
+    // real JPGs through the image pipeline pushes this well past Vitest's
+    // 5s default.
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-skin-generated-'))
     dirs.push(targetDir)
 
@@ -140,5 +143,5 @@ describe('scaffoldSite — starting skin selection', () => {
     expect(result.skinSource).toBe('generated')
     const written = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
     expect(written.color.accent).toBe('#2563eb')
-  })
+  }, 60_000)
 })

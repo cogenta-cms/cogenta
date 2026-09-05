@@ -40,7 +40,12 @@ describe('scaffoldSite — magazine blueprint', () => {
   // These three scaffold a real site and seed twelve articles plus eighteen
   // procedural media assets through the real image pipeline (`seedDemoMedia`)
   // — genuinely more work than a lighter blueprint's default-timeout scaffold
-  // test, so each gets an explicit margin rather than the vitest default.
+  // test. 60s, not a smaller round number: measured live against this exact
+  // suite under `pnpm turbo run test --force` (every package's typecheck and
+  // test running at once, no concurrency cap) on a shared machine —
+  // `restaurant-blueprint.test.ts`'s own slowest case took 63.8s and
+  // `blog-blueprint.test.ts`'s took 36.8s with no override at all, so a
+  // smaller margin here would still be tight under the same conditions.
   it('writes a schema file loadCollections can load back, with article/page', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
     dirs.push(targetDir)
@@ -60,7 +65,7 @@ describe('scaffoldSite — magazine blueprint', () => {
 
     const collections = await loadCollections(targetDir)
     expect(collections.map((c) => c.name).sort()).toEqual(['article', 'page'])
-  }, 20000)
+  }, 60000)
 
   it('seeds real demo articles and pages into real SQLite', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
@@ -95,7 +100,7 @@ describe('scaffoldSite — magazine blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 20000)
+  }, 60000)
 
   it('resolves /articles/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(
@@ -183,7 +188,7 @@ describe('scaffoldSite — magazine blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 20000)
+  }, 60000)
 })
 
 function htmlOf(node: HtmlNode | null): string {

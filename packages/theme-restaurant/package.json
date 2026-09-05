@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-restaurant",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "An elegant, dark-forward Cogenta theme for restaurants: a full-bleed hero, a real priced menu grouped by category, and a genuine dark mode.",
   "license": "MPL-2.0",
   "type": "module",

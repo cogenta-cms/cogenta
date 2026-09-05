@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-entreprise",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A confident, premium B2B theme for Cogenta: structured typography, real KPI/impact sections, a genuine dark mode, and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

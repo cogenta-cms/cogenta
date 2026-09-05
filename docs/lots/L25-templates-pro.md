@@ -215,8 +215,9 @@ plat. C'est le prix de « zéro dépendance et zéro licence », payé en connai
 | Diagnostic et décisions | fait | 2026-09-05 |
 | Nettoyage disque (worktrees fusionnés) | fait | seuls les worktrees sans commit unique et propres |
 | Phase 0 — A0a (theme-kit / contrat D / serve) | fait | fusionné dans `main` (`2f0056d`) ; + correctif `THEME_STRINGS` (`6c97591`) : `t` était un bouchon `key => key` pré-existant |
-| Phase 0 — A0b (demo-art / ingestion / thème par défaut) | en cours | agent Sonnet, worktree, lancé 2026-09-05 00:46 |
-| Phase 1 vague 1 — blog, saas, restaurant, docs, association | à faire | |
+| Phase 0 — A0b (demo-art / ingestion / thème par défaut) | fait | fusionné (`636fbfb`) ; correctif forme `socialLinks` (`9a15376`) |
+| Phase 0 — A0c (qualité des visuels : mesh boueux, produit plat) | en cours | agent Sonnet, lancé 2026-09-05 ~03:10, en parallèle de la vague 1 |
+| Phase 1 vague 1 — blog, saas, restaurant, docs, association | en cours | 5 agents Sonnet, worktrees, lancés 2026-09-05 ~03:15 ; brief commun : scratchpad `wave1-template.md` (copie ci-dessous à reconstituer si perdu : voir Annexe) |
 | Phase 1 vague 2 — entreprise, magazine, portfolio, ecommerce (passes pro) | à faire | |
 | Phase 2 — intégration, vérification globale, push | à faire | |
 

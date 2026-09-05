@@ -20,11 +20,15 @@ cette étape n'est même pas posée : l'installation produit exactement le même
 site qu'avant, octet pour octet (R2). Le même flux existe après coup, depuis
 l'admin — voir « Créer un site à partir d'un document » plus bas.
 
-Des préréglages existent par **type de site** (portfolio, magazine, boutique
-en ligne, blog…) : un jeu de collections de départ réaliste, un skin
-cohérent, et des réglages de sécurité/cache déjà différenciés (le cache de
-page, notamment, n'a pas le même bon défaut pour une boutique que pour un
-blog statique).
+Des préréglages existent par **type de site** — vitrine, blog, magazine, portfolio,
+documentation, association, restaurant, SaaS, boutique en ligne : un jeu de collections
+de départ réaliste, **le thème dédié à ce type déjà actif**, une page d'accueil complète
+(huit à douze sections avec visuels), des entrées de démonstration publiées avec leurs
+images de couverture, les menus d'en-tête et de pied de page, l'accroche et les liens
+sociaux, un skin cohérent, et des réglages de sécurité/cache déjà différenciés (le cache
+de page, notamment, n'a pas le même bon défaut pour une boutique que pour un blog
+statique). Le préréglage `blank` reste vierge. Les pages de gabarit (accueil, à propos) ne
+portent pas de fil de commentaires ; les articles gardent le réglage du site.
 
 ## Se connecter la première fois
 

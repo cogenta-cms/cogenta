@@ -5,6 +5,39 @@ order: 3
 
 # Personnaliser l'apparence
 
+## Le thème : la mise en page du site public
+
+En haut de `/appearance`, **Thème du site** choisit le paquet qui dessine la mise en
+page publique — en-tête, pied de page, et l'aspect de chacun des dix-sept blocs. Le
+changement prend effet à la page suivante, sans redémarrage. Dix thèmes sont fournis,
+un par type de site, chacun avec sa propre identité (jamais un recolorage d'un autre) :
+
+| Thème | Pour | Signature |
+|---|---|---|
+| Canonical | tout site, le neutre de référence | sobre, accessible, sert de base à un thème personnalisé |
+| Blog | un blog personnel ou professionnel | article vedette plein cadre, grille de couvertures, colonne de lecture serif |
+| Magazine | un titre de presse en ligne | manchette, une « une » et une grille de secondaires, rubriques |
+| Portfolio | un créatif, une agence | grille de projets plein cadre, titrage display |
+| Entreprise | une vitrine d'entreprise, du B2B | hero texte/visuel, logos de confiance, chiffres clés, témoignages |
+| Storefront | une boutique | grille produits avec image et prix, tuiles de catégories, bande promo |
+| SaaS | un produit logiciel | hero à dégradé, grille de fonctionnalités, tableau de prix, FAQ |
+| Documentation | une documentation technique | barre latérale de navigation, blocs de code, fil d'Ariane |
+| Restaurant | un restaurant, un café | hero sombre, carte avec prix alignés, horaires, réservation |
+| Association | une association, une ONG | chiffres d'impact, événements datés, appel au don |
+
+`npm create cogenta` active d'office le thème du type de site choisi et sème une page
+d'accueil complète (huit à douze sections avec visuels), les menus, l'accroche et les
+liens sociaux — un site neuf ressemble à un site fini, pas à une page blanche.
+
+Trois réglages du site nourrissent directement l'en-tête et le pied de page de tous les
+thèmes : **Accroche**, **Liens sociaux** (une ligne `Libellé | https://…` par réseau, icône
+choisie automatiquement) et **Note de pied de page** (`/settings`, section Général). Un menu
+assigné à l'emplacement `header-action` devient le bouton d'appel à l'action de l'en-tête.
+
+Les visuels de démonstration semés à l'installation sont générés par Cogenta lui-même
+(compositions abstraites, en PNG), jamais des photos tierces : ils se remplacent en un
+clic depuis la médiathèque.
+
 ## Le skin : couleurs, typographie, densité, sans reconstruction
 
 `/appearance` change l'apparence visuelle du site en éditant un **skin** —

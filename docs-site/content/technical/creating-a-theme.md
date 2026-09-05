@@ -7,14 +7,14 @@ order: 4
 
 A Cogenta theme is an Astro package that receives content already resolved
 and authorized — never the database, never a secret. That's contract D
-(`docs/04-contrats.md` § "Contrat D — Thème"), frozen at `theme@1.1`: adding
+(`docs/04-contrats.md` § "Contrat D — Thème"), frozen at `theme@1.1` and since extended additively up to `theme@1.4`: adding
 an entry to what a theme receives is minor, changing one is major.
 
 ## Start here
 
 [Download the theme starter](../downloads/theme-starter.zip) —
 `examples/theme-starter/` in the repository: a real, minimal theme that
-already implements all twelve vocabulary blocks and passes the real
+already implements all seventeen vocabulary blocks (`blocks@2.0`) and passes the real
 installation check (its own test suite runs it against that exact check,
 not just against a human reading it). Copy the directory, rename it, and
 customize from there.
@@ -27,7 +27,7 @@ my-theme/
   tokens.json             # default skin
   src/
     layouts/Base.astro     # <html> shell, header, footer
-    blocks/                 # one file per vocabulary block — all twelve, mandatory
+    blocks/                 # one file per vocabulary block — all seventeen, mandatory
       Hero.astro
       Prose.astro
       …
@@ -50,7 +50,7 @@ export default defineTheme({
   version: '0.1.0',
   engine: '^1.0.0',       // theme contract version targeted
   blocks: '^1.0.0',       // block vocabulary version supported
-  implements: ['hero', 'prose', /* … all twelve */],
+  implements: ['hero', 'prose', /* … all seventeen */],
   collections: '*',        // or a precise list of expected collections
   runtime: 'static',       // 'static' | 'server' | 'edge'
   tokens: './tokens.json',
@@ -100,6 +100,34 @@ the theme. Changing skin rewrites that file; no rebuild is needed. A skin
 that fails AA contrast or omits a token is refused at save time, not merely
 flagged — the guarantee that makes AI-generated skin creation safe by
 construction.
+
+## What `theme@1.4` hands a theme (L25)
+
+Everything below lives in `@cogenta/theme-kit`, is optional for the host to fill and for
+the theme to use, and leaves a `theme@1.3` theme rendering byte-for-byte as before:
+
+- `ChromeInput.tagline`, `social` (`{ label, href }[]`), `footerNote`, `headerAction`
+  — fed by the site settings `general.tagline`, `general.socialLinks`, `general.footerNote`
+  and by a menu assigned to the `header-action` location. `renderSocialLinks()` renders the
+  list with an inline SVG icon picked from each link's host and a visually hidden label;
+  `renderBrandMark()` renders the logo/dark-logo pair.
+- `PageContent.entry` (`PageEntryMeta`: `publishedAt`, `updatedAt`, `image`, `excerpt`,
+  `author`, `terms`, `readingMinutes`) — the article furniture of a stored entry.
+  `renderEntryHeader(page, ctx)` draws it (terms as eyebrow links, title, excerpt, meta
+  line, cover) and returns `null` when the page's own blocks already carry a heading.
+- `entryImage(entry, ctx)` — the cover of a listed entry for `collectionList` cards
+  (`coverImage`, `cover`, `image`, `featuredImage`, `photo`, `thumbnail`, `seoImage`).
+- `renderIcon(name)` — ~50 outline icons for `featureGrid` items and chrome.
+- `createThemeTranslator(locale)` / `THEME_STRINGS` — the visitor-facing strings
+  `ctx.t` resolves (`collection.empty`, `entry.readingTime`, …), in English and French.
+
+Ten themes ship with Cogenta, one per site type (`packages/theme-*`); each is a complete,
+independent implementation of contract D, and `create-cogenta` activates the one matching
+the chosen blueprint. Two layout rules every one of them learned the hard way: give every
+block a page container by default (`:where(.cg-main > [data-block]) { max-inline-size:
+var(--cg-page); margin-inline: auto; padding-inline: var(--cg-gutter) }`), and render the
+desktop navigation as a real `<nav>` shown by media query — a closed `<details>` never lays
+out its content in Chrome, whatever `display` you set on it.
 
 ## Going further
 

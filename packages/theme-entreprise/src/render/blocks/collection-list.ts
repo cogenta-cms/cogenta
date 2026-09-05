@@ -6,6 +6,7 @@ import {
   entryDate,
   entryExcerpt,
   entryHref,
+  entryImage,
   entryTitle,
   type HeadingTag,
   type HtmlElement,
@@ -13,10 +14,11 @@ import {
   heading,
   nestedHeadingTag,
   type RenderContext,
+  renderImageSource,
 } from '@cogenta/theme-kit'
 
 /**
- * The only block of the twelve that reads data at render time — contract B
+ * The only block of the seventeen that reads data at render time — contract B
  * marks it `runtime: 'server'` for that reason. The read is *not* done
  * here: `query` builds the request from the block's own fields
  * (`@cogenta/theme-kit`'s `buildCollectionListQuery`, shared across every
@@ -27,27 +29,31 @@ import {
 export { buildCollectionListQuery as query }
 
 /**
- * A "latest insights" ledger row rather than a card-grid entry: a numbered
- * date badge on the left, title and excerpt stacked to its right, with a
- * thin top rule between rows in `list` layout — the reading list of a real
- * newsroom/resources page. `grid` and `carousel` reuse the same row markup
- * inside a differently laid-out container.
+ * A card in every layout: a 16:9 cover on top (`entryImage`, the same
+ * `coverImage`/`cover`/… convention every entry-carrying block on this site
+ * reads), then title and excerpt below it — the "services/insights card"
+ * register a B2B site's listing pages use, replacing the previous ledger
+ * row (a date rail beside plain text, no visual at all). An entry with no
+ * image still renders a complete card; the cover slot is simply absent
+ * rather than a placeholder box standing in for one.
  */
+function renderCover(entry: ContentEntry, ctx: RenderContext): HtmlElement | null {
+  const cover = entryImage(entry, ctx)
+  if (cover === undefined) return null
+  return h(
+    'span',
+    { class: 'cg-list__cover' },
+    renderImageSource(cover, { className: 'cg-list__cover-image', loading: 'lazy' }),
+  )
+}
+
 function renderEntry(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   const date = entryDate(entry)
   const excerpt = entryExcerpt(entry)
   return h(
     'li',
     { class: 'cg-list__row' },
-    date === undefined
-      ? null
-      : h(
-          'time',
-          { class: 'cg-list__date', datetime: date },
-          new Intl.DateTimeFormat(ctx.locale, { month: 'short', day: '2-digit' }).format(
-            new Date(date),
-          ),
-        ),
+    renderCover(entry, ctx),
     h(
       'div',
       { class: 'cg-list__body' },
@@ -57,6 +63,15 @@ function renderEntry(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): 
         h('a', { class: 'cg-list__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
       ),
       excerpt === undefined ? null : h('p', { class: 'cg-list__excerpt' }, excerpt),
+      date === undefined
+        ? null
+        : h(
+            'time',
+            { class: 'cg-list__date', datetime: date },
+            new Intl.DateTimeFormat(ctx.locale, { month: 'short', day: '2-digit' }).format(
+              new Date(date),
+            ),
+          ),
     ),
   )
 }

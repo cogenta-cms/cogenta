@@ -6,6 +6,7 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
+  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -29,6 +30,7 @@ import { renderStats } from './blocks/stats.js'
 import { renderTestimonial } from './blocks/testimonial.js'
 
 export type { FetchedEntries, PageContent }
+export { pageHasOwnHeading, renderEntryHeader, withBlockKey }
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -108,6 +110,14 @@ function renderKnownBlock(
  * `<main id="cg-main">` is mandatory: it is the skip-link's target, written
  * once by `@cogenta/cli`'s `theme-render.ts` outside any theme's control.
  *
+ * `renderEntryHeader` (`theme@1.4`) draws the eyebrow/title/excerpt/meta/
+ * cover furniture for a page backed by a real content entry — a service or
+ * a plain page — and already returns `null` for a page with no `entry`
+ * meta *and* for one whose blocks draw their own heading (a `hero`), so the
+ * bare `<h1 class="cg-page__title">` fallback below is the right markup in
+ * both of those cases and only those — never a double heading, and never a
+ * page with none at all.
+ *
  * `withBlockKey` stamps every rendered block with its contract-B `_key` —
  * required so the visual page builder (L16) can map a clicked element in
  * the rendered iframe back to the block that produced it, for this theme
@@ -119,10 +129,14 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
+  const entryHeader = renderEntryHeader(page, ctx)
   return h(
     'main',
     { class: 'cg-main', id: 'cg-main' },
-    pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'cg-page__title' }, page.title),
+    entryHeader,
+    entryHeader === null && !pageHasOwnHeading(page.blocks)
+      ? h('h1', { class: 'cg-page__title' }, page.title)
+      : null,
     page.blocks.map((block) =>
       withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
     ),

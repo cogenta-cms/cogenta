@@ -76,7 +76,7 @@ img {
   border-radius: var(--cg-radius-xs);
 }
 
-:where(.cg-action, .cg-faq__question, .cg-clients__link, .cg-nav__cta) {
+:where(.cg-action, .cg-faq__question, .cg-clients__link, .cg-nav-toggle-label) {
   min-block-size: 44px;
   min-inline-size: 44px;
 }
@@ -147,12 +147,29 @@ img {
 
 .cg-main {
   display: flow-root;
+  /* A hero's own decorative frame and any full-bleed band can end up a
+     fraction wider than the viewport on some zoom levels; `clip` — not
+     `hidden` — cuts that at the edge without turning `<main>` into a scroll
+     container, so a sticky header inside it keeps behaving normally. */
+  overflow-x: clip;
 }
 
 .cg-block {
   max-inline-size: var(--cg-page);
   margin-inline: auto;
   margin-block: var(--cg-section-y);
+  padding-inline: var(--cg-gutter);
+}
+
+/* Every block is a page-width, gutter-padded section by default — `:where()`
+   keeps this at zero specificity so a block that sets its own narrower
+   measure (`.cg-quote`, `.cg-faq`, `.cg-prose`…) still wins, while a block
+   that never set one (`.cg-hero`, `.cg-services`) no longer sits flush
+   against the viewport edge on a wide screen. `data-variant-width="full"`
+   below opts a block back out. */
+:where(.cg-main > [data-block]) {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
   padding-inline: var(--cg-gutter);
 }
 
@@ -269,7 +286,47 @@ img {
   object-fit: contain;
 }
 
-.cg-nav {
+/* The mobile-menu checkbox: visually hidden the accessible way (still in
+   the tab order, still Space-operable) rather than `display: none` (which
+   would remove it from the tab order entirely) or `left: -9999px` (which
+   some assistive technology and "find in page" treat as content, not
+   chrome). */
+.cg-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cg-nav-toggle-label {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.28rem;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0.5rem;
+  margin-inline-start: auto;
+  border-radius: var(--cg-radius-sm);
+  cursor: pointer;
+}
+
+.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cg-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 2px;
+  background: var(--cg-ink);
+  transition: transform var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-header__nav {
   display: flex;
   align-items: center;
   gap: var(--cg-s5);
@@ -297,35 +354,65 @@ img {
   color: var(--cg-ink);
 }
 
-/* The "primary action" link, separated from the rest of the site's own
-   navigation by a vertical rule — the one place this theme borrows the
-   button treatment `.cg-action[data-emphasis="primary"]` uses. */
-.cg-nav__divider {
-  inline-size: 1px;
-  block-size: var(--cg-s5);
-  background: var(--cg-line);
+.cg-site-header__action {
+  flex: none;
 }
 
-.cg-nav__cta {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--cg-s2) var(--cg-s5);
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  border-radius: var(--cg-radius-sm);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  text-decoration: none;
-  transition: background-color var(--cg-duration) var(--cg-ease);
-}
+/* Below the breakpoint: the toggle button appears, and the nav becomes a
+   panel anchored under the header, shown only while the checkbox is
+   checked — the whole mechanism is this one selector, no JavaScript. */
+@media (max-width: 56rem) {
+  .cg-site-header__inner {
+    position: relative;
+  }
 
-.cg-nav__cta:hover {
-  background: var(--cg-accent-hover);
-  color: var(--cg-accent-fg);
+  .cg-nav-toggle-label {
+    display: flex;
+  }
+
+  .cg-site-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--cg-s5);
+    padding: var(--cg-s6) var(--cg-gutter);
+    background: var(--cg-canvas);
+    border-block-end: 1px solid var(--cg-line-soft);
+    box-shadow: var(--cogenta-shadow-md);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
+    display: flex;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
+    transform: translateY(0.42rem) rotate(45deg);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
+    opacity: 0;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(3) {
+    transform: translateY(-0.42rem) rotate(-45deg);
+  }
+
+  .cg-site-header__nav .cg-nav__items {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--cg-s4);
+  }
+
+  .cg-site-header__action {
+    align-self: flex-start;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Chrome — footer, a real multi-column layout
+   Chrome — footer, a real four-column layout
    -------------------------------------------------------------------------- */
 
 .cg-site-footer {
@@ -346,9 +433,9 @@ img {
   border-block-end: 1px solid var(--cg-line-soft);
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 56rem) {
   .cg-site-footer__grid {
-    grid-template-columns: 1.1fr 1.4fr 1fr;
+    grid-template-columns: 1.3fr 1fr 0.8fr 1fr;
     align-items: start;
   }
 }
@@ -361,21 +448,69 @@ img {
   text-decoration: none;
 }
 
+.cg-site-footer__tagline {
+  margin: var(--cg-s3) 0 0;
+  max-inline-size: 24ch;
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-relaxed);
+}
+
 .cg-site-footer__nav .cg-nav__items {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--cg-s3);
 }
 
+.cg-site-footer__social {
+  display: flex;
+  gap: var(--cg-s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-sm);
+  color: var(--cg-ink-muted);
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-footer__social-item a:hover {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+
+.cg-social__icon {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+
+.cg-site-footer__note {
+  margin: 0 0 var(--cg-s4);
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-normal);
+}
+
+.cg-site-footer__meta,
 .cg-site-footer__branding {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
 }
 
-@media (min-width: 48rem) {
-  .cg-site-footer__branding {
-    justify-content: flex-end;
+@media (min-width: 56rem) {
+  .cg-site-footer__meta {
+    align-items: flex-end;
+    text-align: end;
   }
 }
 

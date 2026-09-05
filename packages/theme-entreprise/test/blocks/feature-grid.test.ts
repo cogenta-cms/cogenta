@@ -6,15 +6,9 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('featureGrid → services', () => {
-  it('renders as an ordered list of numbered rows', () => {
+  it('renders as an unordered list of capability cards', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<ol class="cg-services__items">')
-  })
-
-  it('writes a real, server-computed index number ahead of each item', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<span class="cg-service__index" aria-hidden="true">01</span>')
-    expect(html).toContain('<span class="cg-service__index" aria-hidden="true">02</span>')
+    expect(html).toContain('<ul class="cg-services__items">')
   })
 
   it("makes the item's title the accessible name of its link, not a generic label", () => {
@@ -28,16 +22,18 @@ describe('featureGrid → services', () => {
     expect(html).toContain('>Fixed-scope milestones</h3>')
   })
 
-  it('renders the icon as an aria-hidden data attribute, never as inline markup', () => {
+  it('renders the icon as a real inline glyph inside an aria-hidden chip, never a bare data attribute', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
     expect(html).toContain('data-icon="shield"')
-    expect(html).toContain('aria-hidden="true"')
+    expect(html).toMatch(
+      /<span class="cg-service__icon" data-icon="shield" aria-hidden="true"><svg/,
+    )
   })
 
   it('omits the icon chip entirely for an item that names none', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    const secondItemStart = html.indexOf('cg-service__index" aria-hidden="true">02')
-    expect(html.slice(secondItemStart)).not.toContain('cg-service__icon')
+    const secondItemStart = html.indexOf('Fixed-scope milestones')
+    expect(html.slice(0, secondItemStart).split('cg-service__icon').length).toBe(2)
   })
 
   it('starts items at h3 when the block renders its own h2 title', () => {

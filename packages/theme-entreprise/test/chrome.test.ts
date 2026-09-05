@@ -25,35 +25,44 @@ describe('renderChrome', () => {
     expect(header).toContain('Cogenta Advisory')
   })
 
-  it('renders every header link but the last as an ordinary nav item', () => {
+  it('renders every header link as an ordinary nav item', () => {
     const { header } = renderChrome(BASE)
     expect(header).toContain('href="/services"')
     expect(header).toContain('>Services<')
     expect(header).toContain('href="/insights"')
+    expect(header).toContain('href="/contact"')
+    expect(header).toContain('>Contact<')
   })
 
-  it('sets the last header link apart as the primary call to action', () => {
+  it('ships a CSS-only mobile menu toggle ahead of the nav it controls', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('cg-nav__divider')
-    expect(header).toMatch(/<a class="cg-nav__cta" href="\/contact">Contact<\/a>/)
-    // The CTA link itself must not also appear inside the ordinary nav list.
-    const navItemsEnd = header.indexOf('</ul>')
-    expect(header.slice(0, navItemsEnd)).not.toContain('/contact')
+    const toggleIndex = header.indexOf('id="cg-nav-toggle"')
+    const navIndex = header.indexOf('id="cg-nav"')
+    expect(toggleIndex).toBeGreaterThan(-1)
+    expect(navIndex).toBeGreaterThan(toggleIndex)
+    expect(header).toContain('<input type="checkbox"')
+    expect(header).toContain('<label for="cg-nav-toggle"')
   })
 
-  it('renders no divider or CTA treatment when there are fewer than two links', () => {
-    const single: ChromeInput['headerNav'] = [
-      { label: 'Services', href: '/services', openInNewTab: false, kind: 'internal', title: null },
-    ]
-    const { header } = renderChrome({ ...BASE, headerNav: single })
-    expect(header).not.toContain('cg-nav__divider')
-    expect(header).not.toContain('cg-nav__cta')
-    expect(header).toContain('>Services<')
+  it('gives the mobile toggle an accessible name of its own', () => {
+    const { header } = renderChrome(BASE)
+    expect(header).toMatch(/<input type="checkbox" id="cg-nav-toggle"[^>]*aria-label="Menu"/)
   })
 
-  it('renders no nav element at all when there are no header links', () => {
-    const { header } = renderChrome({ ...BASE, headerNav: [] })
-    expect(header).not.toContain('<nav')
+  it('renders headerAction as a filled primary button inside the nav', () => {
+    const { header } = renderChrome({
+      ...BASE,
+      headerAction: { label: 'Get a quote', href: '/contact' },
+    })
+    expect(header).toMatch(
+      /<a class="cg-action cg-site-header__action" data-emphasis="primary" href="\/contact">Get a quote<\/a>/,
+    )
+    expect(header.indexOf('id="cg-nav"')).toBeLessThan(header.indexOf('Get a quote'))
+  })
+
+  it('renders nothing extra for headerAction when the site set none', () => {
+    const { header } = renderChrome(BASE)
+    expect(header).not.toContain('cg-site-header__action')
   })
 
   it('renders every footer link', () => {
@@ -67,12 +76,60 @@ describe('renderChrome', () => {
     expect(footer).toContain('<a href="https://cogenta.dev">Made with Cogenta</a>')
   })
 
-  it('renders the footer as a real multi-column grid: brand, nav, branding', () => {
-    const { footer } = renderChrome(BASE)
+  it('renders the footer as a real four-column grid: brand, nav, social, meta', () => {
+    const { footer } = renderChrome({
+      ...BASE,
+      tagline: 'Structured advice for growing companies.',
+      social: [{ label: 'LinkedIn', href: 'https://linkedin.com/company/example' }],
+      footerNote: '1 Market Street, Suite 400, San Francisco, CA',
+    })
     expect(footer).toContain('class="cg-site-footer__grid"')
     expect(footer).toContain('class="cg-site-footer__brand"')
     expect(footer).toContain('class="cg-site-footer__nav"')
+    expect(footer).toContain('class="cg-site-footer__social-col"')
+    expect(footer).toContain('class="cg-site-footer__meta"')
     expect(footer).toContain('class="cg-site-footer__branding"')
+  })
+
+  it('renders the tagline under the brand name when set, and omits it when absent', () => {
+    const withTagline = renderChrome({
+      ...BASE,
+      tagline: 'Structured advice for growing companies.',
+    })
+    expect(withTagline.footer).toContain('cg-site-footer__tagline')
+    expect(withTagline.footer).toContain('Structured advice for growing companies.')
+    const without = renderChrome(BASE)
+    expect(without.footer).not.toContain('cg-site-footer__tagline')
+  })
+
+  it('renders social links via the shared icon-carrying helper, and omits the column when absent', () => {
+    const withSocial = renderChrome({
+      ...BASE,
+      social: [{ label: 'LinkedIn', href: 'https://linkedin.com/company/example' }],
+    })
+    expect(withSocial.footer).toContain('cg-site-footer__social')
+    expect(withSocial.footer).toContain('https://linkedin.com/company/example')
+    const without = renderChrome(BASE)
+    expect(without.footer).not.toContain('cg-site-footer__social-col')
+  })
+
+  it('renders the footer note, and omits it when absent', () => {
+    const withNote = renderChrome({
+      ...BASE,
+      footerNote: '1 Market Street, Suite 400, San Francisco, CA',
+    })
+    expect(withNote.footer).toContain('cg-site-footer__note')
+    expect(withNote.footer).toContain('1 Market Street, Suite 400, San Francisco, CA')
+    const without = renderChrome(BASE)
+    expect(without.footer).not.toContain('cg-site-footer__note')
+  })
+
+  it('renders exactly as it would under theme@1.3 when none of the new fields are set', () => {
+    const { header, footer } = renderChrome(BASE)
+    expect(header).not.toContain('cg-site-header__action')
+    expect(footer).not.toContain('cg-site-footer__tagline')
+    expect(footer).not.toContain('cg-site-footer__social-col')
+    expect(footer).not.toContain('cg-site-footer__note')
   })
 
   it('escapes a site name that contains markup-significant characters', () => {

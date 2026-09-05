@@ -9,9 +9,14 @@
 
 /* --- hero ------------------------------------------------------------- */
 
+/* A single column below the breakpoint — `auto 1fr` (the desktop two-column
+   shape, introduced at `60rem` below) squeezed `.cg-hero__frame` to nothing
+   on a narrow screen: the intro's own max-content width claimed the whole
+   `auto` track, leaving the media frame with no room at all. Found by
+   looking at a real 360px screenshot, not by reading the rule. */
 .cg-hero {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 1fr;
   gap: var(--cg-s6);
   margin-block-start: var(--cg-s12);
 }
@@ -97,11 +102,105 @@
   border: 1px solid var(--cg-line);
   border-radius: var(--cg-radius-lg);
   background: var(--cg-surface-sunken);
+  /* A flat frame, one soft shadow for lift — never a gradient wash behind
+     the media. */
+  box-shadow: var(--cogenta-shadow-md);
 }
 
 .cg-hero__media {
   inline-size: 100%;
   border-radius: var(--cg-radius-md);
+}
+
+/* --- entry header (`renderEntryHeader`, `@cogenta/theme-kit`) ------------- */
+
+/* Drawn for a `service` (or any routed entry) that has no `hero` of its
+   own — the eyebrow/title/excerpt/meta/cover furniture `theme@1.4` hands
+   every theme, in this theme's own structured register: a taxonomy eyebrow
+   in the same uppercase mono-caps language `hero`'s own eyebrow uses, a
+   bold display title, and a hairline-divided meta row rather than a
+   floating byline. */
+.cg-entry-header {
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
+  margin-block: var(--cg-section-y) var(--cg-s10);
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-entry-header__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s3);
+  margin: 0 0 var(--cg-s4);
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-wide);
+  text-transform: uppercase;
+}
+
+.cg-entry-header__terms a {
+  color: var(--cg-accent);
+  text-decoration: none;
+}
+
+.cg-entry-header__terms a:hover {
+  text-decoration: underline;
+}
+
+.cg-entry-header__title {
+  margin: 0;
+  font-size: var(--cg-text-3xl);
+  line-height: var(--cg-leading-tight);
+  letter-spacing: var(--cg-tracking-tight);
+  font-weight: var(--cg-weight-bold);
+  text-wrap: balance;
+}
+
+.cg-entry-header__excerpt {
+  margin: var(--cg-s5) 0 0;
+  max-inline-size: var(--cg-measure-narrow);
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-relaxed);
+  color: var(--cg-ink-muted);
+  text-wrap: pretty;
+}
+
+.cg-entry-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s4);
+  margin: var(--cg-s6) 0 0;
+  padding-block-start: var(--cg-s4);
+  border-block-start: 1px solid var(--cg-line-soft);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-ink-muted);
+}
+
+.cg-entry-header__author {
+  font-weight: var(--cg-weight-semibold);
+  color: var(--cg-ink);
+}
+
+.cg-entry-header__reading-time::before {
+  content: "·";
+  margin-inline-end: var(--cg-s4);
+  color: var(--cg-ink-subtle);
+}
+
+.cg-entry-header__cover {
+  margin: var(--cg-s8) 0 0;
+  overflow: hidden;
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-md);
+}
+
+.cg-entry-header__cover img,
+.cg-entry-header__cover video {
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
 }
 
 /* --- prose --------------------------------------------------------------- */
@@ -298,46 +397,56 @@
 /* --- featureGrid → "our services" ------------------------------------ */
 
 .cg-services__items {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: var(--cg-gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Capped at three columns: with `auto-fit` alone a six-service grid became
+   four columns plus two orphans on a wide screen — a 3×2 grid is the shape
+   a services page is designed as. */
+@media (min-width: 64rem) {
+  .cg-services__items {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .cg-service {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--cg-s6);
-  align-items: start;
-  padding-block: var(--cg-s8);
-  border-block-start: 1px solid var(--cg-line-soft);
-  transition: background-color var(--cg-duration) var(--cg-ease);
-}
-
-.cg-service:last-child {
-  border-block-end: 1px solid var(--cg-line-soft);
+  padding: var(--cg-s8);
+  border: 1px solid var(--cg-line);
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-surface);
+  transition:
+    border-color var(--cg-duration) var(--cg-ease),
+    box-shadow var(--cg-duration) var(--cg-ease);
 }
 
 .cg-service:hover {
-  background: var(--cg-surface-tinted);
+  border-color: color-mix(in oklab, var(--cg-accent) 45%, var(--cg-line));
+  box-shadow: var(--cogenta-shadow-sm);
 }
 
-.cg-service__index {
-  font-family: var(--cogenta-font-serif);
-  font-size: var(--cg-text-2xl);
-  font-weight: var(--cg-weight-regular);
-  font-style: italic;
-  color: var(--cg-ink-subtle);
-  line-height: 1;
-  min-inline-size: 2.4ch;
-}
-
+/* A flat, accent-tinted square rather than a shadowed disc: the same
+   restrained "hairline and fill" language `stats`/`pricingTable` use — a
+   real icon, never a decorative gradient chip. */
 .cg-service__icon {
-  display: inline-block;
-  inline-size: var(--cg-s8);
-  block-size: var(--cg-s8);
-  margin-block-end: var(--cg-s4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--cg-s10);
+  block-size: var(--cg-s10);
+  margin-block-end: var(--cg-s5);
   background: var(--cg-accent-soft);
+  color: var(--cg-accent);
   border-radius: var(--cg-radius-sm);
-  box-shadow: var(--cg-ring-accent);
+}
+
+.cg-service__icon svg {
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
 }
 
 .cg-service__title {
@@ -359,42 +468,33 @@
 
 .cg-service__text {
   margin: 0;
-  max-inline-size: var(--cg-measure-narrow);
   color: var(--cg-ink-muted);
   line-height: var(--cg-leading-relaxed);
   text-wrap: pretty;
 }
 
-@media (min-width: 48rem) {
-  .cg-service {
-    grid-template-columns: 4rem 1fr;
-  }
-
-  .cg-service__body {
-    display: grid;
-    grid-template-columns: minmax(0, 22rem) 1fr;
-    gap: var(--cg-s10);
-    align-items: baseline;
-  }
-
-  .cg-service__icon {
-    grid-column: 1 / -1;
-  }
-}
-
 /* --- cta → premium banner ---------------------------------------------- */
 
+/* A full-width flat band, not a card sitting in the page column — same
+   discipline as `.cg-metrics`, this block's other "confident, edge to
+   edge" moment. `.cg-banner__inner` re-centres the ask/action pair to the
+   page's own measure. */
 .cg-banner {
+  max-inline-size: none;
+  padding: var(--cg-s12) var(--cg-gutter);
+  background: var(--cg-surface-tinted);
+  border-block: 1px solid var(--cg-line);
+}
+
+.cg-banner__inner {
   display: grid;
   gap: var(--cg-s8);
-  padding: var(--cg-s12) var(--cg-s8);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-lg);
-  background: var(--cg-surface-tinted);
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
 }
 
 @media (min-width: 52rem) {
-  .cg-banner {
+  .cg-banner__inner {
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: var(--cg-s12);
@@ -620,37 +720,51 @@
   margin-block-end: 0;
 }
 
-/* --- stats → KPI strip --------------------------------------------------- */
+/* --- stats → full-width KPI band ------------------------------------------
+   A confident, edge-to-edge accent band rather than a bordered strip inside
+   the page column — the "real KPI section" read the aesthetic direction
+   asks for. `data-variant-width` is unaffected: this block opts itself into
+   full width by its own rule rather than requiring an author to set one. */
+
+.cg-metrics {
+  /* A genuine full-width band, not a card sitting in the page column —
+     the one block on this theme's page that reads as edge to edge by
+     default, overriding the `:where()` container rule (`base.css`) that
+     every other block relies on. `.cg-metrics__items` below re-centres the
+     actual figures to the page's own measure so only the accent fill goes
+     edge to edge. */
+  max-inline-size: none;
+  padding: var(--cg-s12) var(--cg-gutter);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}
+
+.cg-metrics__title {
+  color: var(--cg-accent-fg);
+}
 
 .cg-metrics__items {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--cg-s8);
   margin: 0;
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-md);
-  overflow: hidden;
+  max-inline-size: var(--cg-page);
+  margin-inline: auto;
 }
 
 .cg-metric {
   display: flex;
   flex-direction: column;
   gap: var(--cg-s2);
-  padding: var(--cg-s8) var(--cg-s6);
-  border-inline-start: 1px solid var(--cg-line);
-}
-
-.cg-metric:first-child {
-  border-inline-start: 0;
 }
 
 .cg-metric__label {
   order: 1;
-  color: var(--cg-ink-muted);
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-semibold);
   letter-spacing: var(--cg-tracking-wide);
   text-transform: uppercase;
+  opacity: 0.82;
 }
 
 .cg-metric__value {
@@ -659,7 +773,6 @@
   align-items: baseline;
   gap: var(--cg-s1);
   margin: 0;
-  color: var(--cg-accent);
   font-size: var(--cg-text-3xl);
   font-weight: var(--cg-weight-bold);
   line-height: var(--cg-leading-tight);
@@ -667,10 +780,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+@media (min-width: 60rem) {
+  .cg-metric__value {
+    font-size: calc(var(--cg-text-3xl) * 1.15);
+  }
+}
+
 .cg-metric__unit {
   font-size: var(--cg-text-lg);
   font-weight: var(--cg-weight-medium);
-  color: var(--cg-ink-muted);
+  opacity: 0.82;
 }
 
 /* --- logos → "trusted by" strip ------------------------------------------ */
@@ -718,19 +837,19 @@
   opacity: 1;
 }
 
-/* --- collectionList → insights ledger ------------------------------------ */
+/* --- collectionList → services/insights cards ---------------------------- */
 
 .cg-list__items {
   display: grid;
 }
 
 .cg-list[data-layout="list"] .cg-list__items {
-  gap: 0;
+  gap: var(--cg-s6);
 }
 
 .cg-list[data-layout="list"] .cg-list__row {
-  display: grid;
-  grid-template-columns: 5.5rem 1fr;
+  display: flex;
+  align-items: flex-start;
   gap: var(--cg-s6);
   padding-block: var(--cg-s6);
   border-block-start: 1px solid var(--cg-line-soft);
@@ -738,6 +857,29 @@
 
 .cg-list[data-layout="list"] .cg-list__row:last-child {
   border-block-end: 1px solid var(--cg-line-soft);
+}
+
+/* The 16:9 cover — `entryImage`'s resolved picture, when the entry has one.
+   `object-fit: cover` (inherited from `img` in `base.css`) crops rather than
+   letterboxes, and the picture is loaded lazily (a listed entry, never the
+   hero) with a real intrinsic aspect ratio so nothing shifts once it loads.
+   Declared here, ahead of the `[data-layout="list"]` override just below,
+   so the cascade reads in ascending specificity order. */
+.cg-list__cover {
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--cg-radius-sm);
+}
+
+.cg-list__cover-image {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.cg-list[data-layout="list"] .cg-list__cover {
+  flex: none;
+  inline-size: 9rem;
 }
 
 .cg-list[data-layout="grid"] .cg-list__items,
@@ -759,10 +901,11 @@
 .cg-list[data-layout="carousel"] .cg-list__row {
   display: flex;
   flex-direction: column;
-  gap: var(--cg-s3);
+  gap: var(--cg-s4);
   padding: var(--cg-s6);
   border: 1px solid var(--cg-line);
   border-radius: var(--cg-radius-md);
+  background: var(--cg-surface);
   transition: border-color var(--cg-duration) var(--cg-ease);
 }
 
@@ -1232,13 +1375,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* --- logoStrip → press row (blocks@2.0, RFC 0001) ------------------------- */
+/* --- logoStrip → trust band (blocks@2.0, RFC 0001) ------------------------ */
 
 /* Denser and full-colour, unlike `logos`'s held-back grayscale client
-   cards: a press/"as seen in" strip reads as a fact, not an invitation to
-   click, so nothing here dims until interaction. */
+   cards: a press/"trusted by" strip reads as a fact, not an invitation to
+   click, so nothing here dims until interaction. A tinted, full-width band
+   (the same flat surface `[data-variant-background="muted"]` composes
+   elsewhere) is what turns this into a "trust band" placed right under the
+   hero rather than a bare row of marks floating on the page canvas. */
 .cg-logo-band {
+  max-inline-size: none;
   margin: 0;
+  padding: var(--cg-s8) var(--cg-gutter);
+  background: var(--cg-surface-sunken);
+  border-block: 1px solid var(--cg-line-soft);
 }
 
 .cg-logo-band__items {
@@ -1247,8 +1397,9 @@
   align-items: center;
   justify-content: center;
   gap: 0;
-  margin: 0;
+  margin-inline: auto;
   padding: 0;
+  max-inline-size: var(--cg-page);
   list-style: none;
 }
 

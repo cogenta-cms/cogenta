@@ -5,26 +5,32 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderSocialLinks,
+  serialize,
 } from '@cogenta/theme-kit'
 
 /**
- * This theme's own header and footer — a structurally different chrome from
- * the canonical theme's, not a recolour of it.
+ * This theme's own header and footer (`theme@1.4`) — a structurally
+ * different chrome from the canonical theme's, not a recolour of it.
  *
- * Header: wordmark on the left, a horizontal nav, and — when the site's own
- * navigation carries two or more links — the *last* one is set apart with a
- * vertical rule and rendered as a filled button, the "Contact"/"Book a
- * call" treatment the aesthetic direction asks for. This is a structural
- * convention (last item = primary action), not invented data: with zero or
- * one link there is nothing to separate, and every link the site actually
- * configured still renders, in order.
+ * Header: a sticky bar with the corporate wordmark/logo on the left, a real
+ * desktop `<nav>`, `headerAction` (`theme@1.4`) rendered as a filled button
+ * — the one place this hairline-first chrome spends a solid accent surface
+ * — and, below the breakpoint the stylesheet sets, a CSS-only mobile menu:
+ * a checkbox (`#cg-nav-toggle`, visually hidden but still focusable and
+ * Space-operable) paired with a `<label>` styled as a three-bar button. No
+ * `<script>` anywhere: the sibling combinator in `base.css` is what shows
+ * the nav panel when the box is checked. This replaces the previous
+ * "the last header link doubles as the call to action" convention — with a
+ * real `headerAction` field, inventing a role for a plain nav link is no
+ * longer the honest reading of the data.
  *
- * Footer: a real multi-column layout — a brand column (the site's own name,
- * standing in for "Company"), a navigation column built from the same
- * `footerNav` the contract hands every theme, and Cogenta's own credit (or
- * its white-label replacement) in its own column — followed by a full-width
- * rule and a legal-style bottom row. `brandingHtml` is placed exactly once,
- * inside the footer, exactly as received: never altered, never dropped.
+ * Footer: a real four-column layout — a brand column (site name + `tagline`,
+ * `theme@1.4`), the site's own footer navigation, `social` (`theme@1.4`, via
+ * `renderSocialLinks`), and a fourth column carrying `footerNote`
+ * (`theme@1.4`) above Cogenta's own credit (or its white-label replacement).
+ * `brandingHtml` is placed exactly once, inside the footer, exactly as
+ * received: never altered, never dropped.
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -41,47 +47,70 @@ function navItems(links: readonly ChromeNavLink[]): string {
     .join('')
 }
 
-function renderHeaderNav(links: readonly ChromeNavLink[]): string {
-  if (links.length === 0) return ''
-  const primary = links.length >= 2 ? links[links.length - 1] : undefined
-  const rest = primary === undefined ? links : links.slice(0, -1)
-  const items = navItems(rest)
-  const nav = items === '' ? '' : `<ul class="cg-nav__items">${items}</ul>`
-  if (primary === undefined || primary.href === null) return nav
-  const href = escapeAttribute(primary.href)
-  const label = escapeText(primary.label)
-  const target = primary.openInNewTab ? ' target="_blank" rel="noopener"' : ''
+function renderNavList(links: readonly ChromeNavLink[]): string {
+  const items = navItems(links)
+  return items === '' ? '' : `<ul class="cg-nav__items">${items}</ul>`
+}
+
+/** The header's own call-to-action link (`theme@1.4`) — a filled button, distinct from the ordinary nav list. */
+function renderHeaderAction(action: ChromeInput['headerAction']): string {
+  if (action === undefined) return ''
   return (
-    `${nav}<span class="cg-nav__divider" aria-hidden="true"></span>` +
-    `<a class="cg-nav__cta" href="${href}"${target}>${label}</a>`
+    `<a class="cg-action cg-site-header__action" data-emphasis="primary" ` +
+    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
   )
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {
-  const siteName = escapeAttribute(input.site.name)
   const siteNameText = escapeText(input.site.name)
-  const headerNav = renderHeaderNav(input.headerNav)
-  const footerItems = navItems(input.footerNav)
+  const headerNavList = renderNavList(input.headerNav)
+  const headerAction = renderHeaderAction(input.headerAction)
+  const footerNavList = renderNavList(input.footerNav)
   // A B2B header is a corporate identity slot before it is a wordmark slot.
-  // The footer's brand column and legal bottom row keep the company name in
-  // text, which is where a visitor looks for it anyway.
-  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteName
+  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
-    `${headerNav === '' ? '' : `<nav class="cg-nav" aria-label="Primary">${headerNav}</nav>`}` +
+    `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
+    `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
+    `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+    `</label>` +
+    `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
+    `${headerNavList}${headerAction}` +
+    `</nav>` +
     `</div></header>`
+
+  const tagline =
+    input.tagline === undefined
+      ? ''
+      : `<p class="cg-site-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
+  const social =
+    input.social === undefined
+      ? ''
+      : serialize(
+          renderSocialLinks(input.social, {
+            className: 'cg-site-footer__social',
+            itemClassName: 'cg-site-footer__social-item',
+          }) ?? { kind: 'text', value: '' },
+        )
+  const footerNote =
+    input.footerNote === undefined
+      ? ''
+      : `<p class="cg-site-footer__note">${escapeText(input.footerNote)}</p>`
 
   const footer =
     `<footer class="cg-site-footer"><div class="cg-site-footer__grid">` +
-    `<div class="cg-site-footer__brand"><a href="${escapeAttribute(input.homeHref)}">${siteNameText}</a></div>` +
+    `<div class="cg-site-footer__brand">` +
+    `<a href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>${tagline}` +
+    `</div>` +
     `${
-      footerItems === ''
+      footerNavList === ''
         ? ''
-        : `<nav class="cg-site-footer__nav" aria-label="Footer"><ul class="cg-nav__items">${footerItems}</ul></nav>`
+        : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNavList}</nav>`
     }` +
-    `<div class="cg-site-footer__branding">${input.brandingHtml}</div>` +
+    `${social === '' ? '' : `<div class="cg-site-footer__social-col">${social}</div>`}` +
+    `<div class="cg-site-footer__meta">${footerNote}<div class="cg-site-footer__branding">${input.brandingHtml}</div></div>` +
     `</div><div class="cg-site-footer__bottom"><span>${siteNameText}</span></div></footer>`
 
   return { header, footer }

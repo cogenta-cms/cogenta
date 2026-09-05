@@ -29,6 +29,34 @@
   margin-block: var(--cg-s4) var(--cg-s8);
 }
 
+/* `TermArchiveEntry` carries no image (`@cogenta/theme-kit`'s `archive.ts`),
+   so an archive row can never be the cover card `collectionList` renders
+   for a real content entry — this is the honest, text-only equivalent: the
+   same hairline-divided rows, the same typography and colour, so an archive
+   still reads as part of this theme rather than as a second, unstyled
+   list. */
+.cg-archive .cg-list__items {
+  display: grid;
+  gap: 0;
+}
+
+.cg-archive .cg-list__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s6);
+  padding-block: var(--cg-s6);
+  border-block-start: 1px solid var(--cg-line-soft);
+}
+
+.cg-archive .cg-list__row:last-child {
+  border-block-end: 1px solid var(--cg-line-soft);
+}
+
+.cg-archive .cg-list__date {
+  flex: none;
+  inline-size: 5.5rem;
+}
+
 .cg-archive__pager {
   display: flex;
   justify-content: space-between;

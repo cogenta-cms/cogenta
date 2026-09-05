@@ -36,6 +36,7 @@ describe('per-blueprint starting skins', () => {
       'restaurant',
       'saas',
       'store',
+      'vitrine',
     ])
   })
 
@@ -61,6 +62,7 @@ describe('scaffoldSite — starting skin selection', () => {
     'documentation',
     'restaurant',
     'association',
+    'vitrine',
   ] as const)(
     'writes the %s blueprint’s own starting skin, not the theme’s generic default',
     async (blueprintId) => {
@@ -89,8 +91,15 @@ describe('scaffoldSite — starting skin selection', () => {
     120_000,
   )
 
-  it('keeps using the theme’s generic default for a blueprint with no starting skin of its own', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-skin-vitrine-'))
+  // Every blueprint with a real content pack now has its own starting skin
+  // (`vitrine` was the last one without, until this pass — L25) — `blank`
+  // is genuinely the only remaining case: it has no `BlueprintContentPack`
+  // at all (`content-packs.ts`), so `scaffoldSite` never writes a
+  // `theme.tokens.json` for it in the first place, not merely a "default"
+  // one. That absence, not a `skinSource: 'default'`, is what "no starting
+  // skin of its own" looks like for the one blueprint left without one.
+  it('writes no theme.tokens.json at all for the blank blueprint, which has no content pack or starting skin', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-skin-blank-'))
     dirs.push(targetDir)
 
     const result = await scaffoldSite({
@@ -100,10 +109,11 @@ describe('scaffoldSite — starting skin selection', () => {
       defaultLocale: 'en',
       databaseDriver: 'sqlite',
       adminEmail: 'admin@example.com',
-      blueprintId: 'vitrine',
+      blueprintId: 'blank',
     })
 
-    expect(result.skinSource).toBe('default')
+    expect(result.skinSource).toBeUndefined()
+    await expect(readFile(join(targetDir, 'theme.tokens.json'), 'utf8')).rejects.toThrow()
   })
 
   it('an explicitly generated skin still wins over a blueprint’s starting skin', async () => {

@@ -8,32 +8,26 @@ import {
   href,
   nestedHeadingTag,
   type RenderContext,
+  renderIcon,
 } from '@cogenta/theme-kit'
 
 /**
- * This theme's showcase block — "our services" / "why us". The aesthetic
- * direction asks for numbered, breathing-room rows rather than a cramped
- * three-column grid, so each item is a full-width ledger row: a large index
- * numeral, an optional icon chip, and the copy — never an overlay card.
+ * This theme's "our services" section — a card grid, each card led by a
+ * real inline glyph (`renderIcon`) inside a flat, accent-tinted square, the
+ * B2B "capability card" register a consultancy or software vendor's
+ * services page uses, replacing the numbered ledger rows this block used to
+ * render (a plain list read as a table of contents, not as a services
+ * pitch a visitor scans in one pass).
  *
- * The index numeral is server-computed text (`01`, `02`, …), not a CSS
- * counter: a counter is generated content that some assistive technology
- * exposes and others do not, which makes the number's presence in the
- * accessible name unpredictable. Writing it as real, `aria-hidden` text
- * keeps the behaviour identical everywhere — the item's title, not its
- * position, is what a screen reader announces.
+ * Capped at three columns on a wide screen — a six-item grid staying 3×2
+ * rather than drifting to four columns plus two orphans, the same
+ * discipline `theme-saas`'s own `featureGrid` holds.
  *
- * As in the canonical theme, the item's title carries the link so the link's
+ * As in every other theme, the item's title carries the link so the link's
  * accessible name is the feature's own name (WCAG 2.4.4) — the block has no
  * separate label field to write a "learn more" with anyway.
  */
-function renderItem(
-  item: FeatureItem,
-  ctx: RenderContext,
-  index: number,
-  tag: HeadingTag,
-): HtmlElement {
-  const number = String(index + 1).padStart(2, '0')
+function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   const title =
     item.link === undefined
       ? heading(tag, { class: 'cg-service__title' }, item.title)
@@ -45,20 +39,15 @@ function renderItem(
   return h(
     'li',
     { class: 'cg-service' },
-    h('span', { class: 'cg-service__index', 'aria-hidden': 'true' }, number),
-    h(
-      'div',
-      { class: 'cg-service__body' },
-      item.icon === undefined
-        ? null
-        : h('span', {
-            class: 'cg-service__icon',
-            'data-icon': item.icon,
-            'aria-hidden': 'true',
-          }),
-      title,
-      item.text === undefined ? null : h('p', { class: 'cg-service__text' }, item.text),
-    ),
+    item.icon === undefined
+      ? null
+      : h(
+          'span',
+          { class: 'cg-service__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
+          renderIcon(item.icon),
+        ),
+    title,
+    item.text === undefined ? null : h('p', { class: 'cg-service__text' }, item.text),
   )
 }
 
@@ -76,9 +65,9 @@ export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): 
         )
       : null,
     h(
-      'ol',
+      'ul',
       { class: 'cg-services__items' },
-      block.items.map((item, index) => renderItem(item, ctx, index, itemTag)),
+      block.items.map((item) => renderItem(item, ctx, itemTag)),
     ),
   )
 }

@@ -67,7 +67,6 @@ const MENU_GLYPH =
   '</svg>'
 
 export function renderChrome(input: ChromeInput): ChromeResult {
-  const siteName = escapeAttribute(input.site.name)
   const siteNameText = escapeText(input.site.name)
   const headerNavDesktop = renderNav(input.headerNav, 'cg-nav cg-nav--desktop', 'Primary')
   const headerNavMobile = navItems(input.headerNav)

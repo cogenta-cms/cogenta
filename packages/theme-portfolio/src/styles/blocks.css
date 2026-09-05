@@ -617,17 +617,29 @@
   color: var(--cg-accent);
 }
 
-/* The plus/cross itself, drawn on the trailing pseudo-element's own box via
-   a two-line gradient rather than borders, so it stays perfectly centred at
-   any font size. */
+/* The plus/cross itself, clipped flat from a solid fill on the trailing
+   pseudo-element's own box rather than drawn from borders or a gradient, so
+   it stays perfectly centred at any font size. */
 .cg-faq__question::after {
   content: "";
   flex: none;
   inline-size: 0.9em;
   block-size: 0.9em;
-  background:
-    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+  background: currentColor;
+  clip-path: polygon(
+    43% 0%,
+    57% 0%,
+    57% 43%,
+    100% 43%,
+    100% 57%,
+    57% 57%,
+    57% 100%,
+    43% 100%,
+    43% 57%,
+    0% 57%,
+    0% 43%,
+    43% 43%
+  );
   transition: transform var(--cg-duration) var(--cg-ease);
 }
 

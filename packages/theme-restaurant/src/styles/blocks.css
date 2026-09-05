@@ -4,7 +4,7 @@
  */
 
 /* --------------------------------------------------------------------------
-   hero — full-bleed, centred, a gradient scrim over any photograph
+   hero — full-bleed, centred, a flat scrim over any photograph
    -------------------------------------------------------------------------- */
 
 .cg-hero {
@@ -43,15 +43,13 @@
   object-fit: cover;
 }
 
+/* A flat, uniform veil rather than a gradient fade: `.cg-hero`'s content is
+   centred over the whole image (not pinned to the bottom), so contrast
+   needs to hold anywhere in the frame, not just near the caption. */
 .cg-hero__scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to top,
-    var(--cg-scrim) 0%,
-    var(--cg-scrim-soft) 55%,
-    transparent 100%
-  );
+  background: var(--cg-scrim);
 }
 
 .cg-hero__body {

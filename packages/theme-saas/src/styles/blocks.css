@@ -1,20 +1,21 @@
 /*
  * The seventeen vocabulary blocks (`blocks@2.0`, RFC 0001) — this theme's
- * own layouts, in the Linear/Stripe/Vercel register: mesh-gradient glow
- * behind the hero, 10px-radius filled buttons, cards with a faint gradient
- * border (`--cg-glow-border`, applied by selector below rather than a
- * mixin — plain CSS has none), and mono-caps section eyebrows.
+ * own layouts, in the Linear/Stripe/Vercel register: a flat geometric
+ * accent behind the hero, 10px-radius filled buttons, cards with a crisp
+ * flat hairline border (`--cg-glow-border`, applied by selector below
+ * rather than a mixin — plain CSS has none), and mono-caps section
+ * eyebrows. D5: no gradient anywhere — structure and flat colour fields
+ * carry the design instead of a wash or a sheen.
  *
  * Nothing here declares a colour, a size, a radius or a duration of its
  * own: a block composes the design system from `tokens.css` and nothing
  * else, which is what keeps a skin swap a whole-theme change.
  */
 
-/* A shared "faint gradient border" — a transparent border painted by a
-   second, border-box background layered under the surface's own
-   padding-box fill. Every card in this theme that should read as
-   "glowing at the edge" lists itself in this selector rather than
-   repeating the three declarations. */
+/* A shared flat hairline border, tinted toward the accent — a single flat
+   colour, not a gradient, so the edge still reads as "part of the brand"
+   without a wash. Every card in this theme that should read this way lists
+   itself in this selector rather than repeating the two declarations. */
 .cg-pricing__tier,
 .cg-testimonial,
 .cg-quote,
@@ -22,15 +23,8 @@
 .cg-panels__item,
 .cg-list[data-layout="grid"] .cg-list__row,
 .cg-list[data-layout="carousel"] .cg-list__row {
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--cg-surface), var(--cg-surface)) padding-box,
-    linear-gradient(
-      160deg,
-      color-mix(in oklab, var(--cg-accent) 45%, transparent),
-      color-mix(in oklab, var(--cg-line-strong) 55%, transparent) 75%
-    )
-    border-box;
+  border: 1px solid color-mix(in oklab, var(--cg-accent) 30%, var(--cg-line-strong) 70%);
+  background: var(--cg-surface);
 }
 
 /* --- hero --------------------------------------------------------------- */
@@ -44,34 +38,38 @@
   isolation: isolate;
 }
 
-/* The mesh-gradient halos: two soft, blurred discs behind the whole
-   section, entirely CSS — so a hero with no `media` set still glows.
-   `isolation: isolate` on `.cg-hero` keeps these from blending into a
-   sibling section; `z-index: -1` keeps them behind the copy and frame. */
+/* Two flat geometric accents behind the whole section, entirely CSS — so a
+   hero with no `media` set still gets its Stripe/Linear-style backdrop,
+   without a blurred mesh-gradient glow standing in for it. A crisp
+   quarter-circle sits behind the copy; a crisp offset panel sits behind the
+   frame, echoing the "layered card" look of a flat dashboard mock rather
+   than a soft wash. `isolation: isolate` on `.cg-hero` keeps them from
+   blending into a sibling section; `z-index: -1` keeps them behind the
+   copy and frame. */
 .cg-hero::before,
 .cg-hero::after {
   content: "";
   position: absolute;
   z-index: -1;
-  border-radius: 50%;
-  filter: blur(70px);
   pointer-events: none;
 }
 
 .cg-hero::before {
-  inline-size: 34rem;
-  block-size: 34rem;
-  inset-block-start: -14rem;
-  inset-inline-start: -10rem;
-  background: color-mix(in oklab, var(--cg-accent) 45%, transparent);
+  inline-size: 22rem;
+  block-size: 22rem;
+  inset-block-start: -8rem;
+  inset-inline-start: -8rem;
+  border-radius: 50%;
+  background: var(--cg-accent-soft);
 }
 
 .cg-hero::after {
-  inline-size: 28rem;
-  block-size: 28rem;
-  inset-block-start: 2rem;
-  inset-inline-end: -10rem;
-  background: color-mix(in oklab, var(--cg-accent-hover) 38%, transparent);
+  inline-size: 16rem;
+  block-size: 12rem;
+  inset-block-start: 3rem;
+  inset-inline-end: -4rem;
+  border-radius: var(--cg-radius-lg);
+  background: color-mix(in oklab, var(--cg-accent-hover) 20%, var(--cg-surface-sunken));
 }
 
 @media (min-width: 60rem) {
@@ -130,16 +128,9 @@
 .cg-hero__frame {
   position: relative;
   padding: var(--cg-s2);
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in oklab, var(--cg-accent) 40%, var(--cg-line-strong) 60%);
   border-radius: var(--cg-radius-lg);
-  background:
-    linear-gradient(var(--cg-surface-sunken), var(--cg-surface-sunken)) padding-box,
-    linear-gradient(
-      160deg,
-      color-mix(in oklab, var(--cg-accent) 55%, transparent),
-      color-mix(in oklab, var(--cg-line-strong) 55%, transparent) 75%
-    )
-    border-box;
+  background: var(--cg-surface-sunken);
   box-shadow: var(--cogenta-shadow-md);
 }
 
@@ -614,15 +605,29 @@
   color: var(--cg-accent);
 }
 
+/* A plus mark clipped flat from a solid fill — no gradient, no icon font,
+   no glyph a font might not ship. */
 .cg-faq__question::before {
   content: "";
   flex: none;
   margin-inline-start: auto;
   inline-size: 0.9em;
   block-size: 0.9em;
-  background:
-    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+  background: currentColor;
+  clip-path: polygon(
+    43% 0%,
+    57% 0%,
+    57% 43%,
+    100% 43%,
+    100% 57%,
+    57% 57%,
+    57% 100%,
+    43% 100%,
+    43% 57%,
+    0% 57%,
+    0% 43%,
+    43% 43%
+  );
   transition: transform var(--cg-duration) var(--cg-ease);
 }
 
@@ -1054,20 +1059,13 @@
 }
 
 /* The highlighted tier reads as if it were floating above the rest — a
-   real shadow lift and a stronger glow on the same shared gradient
-   border, never a solid accent fill (that is `statCounter`'s own
-   register). */
+   real shadow lift and a thicker, fully solid accent border, never a
+   solid accent fill (that is `statCounter`'s own register). */
 .cg-pricing__tier[data-highlighted="true"] {
   transform: translateY(-0.5rem);
+  border: 2px solid var(--cg-accent);
   box-shadow: var(--cogenta-shadow-md);
-  background:
-    linear-gradient(var(--cg-surface), var(--cg-surface)) padding-box,
-    linear-gradient(
-      160deg,
-      var(--cg-accent),
-      color-mix(in oklab, var(--cg-accent) 30%, transparent) 80%
-    )
-    border-box;
+  background: var(--cg-surface);
 }
 
 @media (min-width: 48rem) {
@@ -1225,17 +1223,12 @@
   margin-block-end: 0;
 }
 
-/* --- statCounter → gradient impact band ----------------------------------- */
+/* --- statCounter → flat impact band ---------------------------------------- */
 
 .cg-kpis {
   padding: var(--cg-s10) var(--cg-s8);
   border-radius: var(--cg-radius-lg);
-  background: linear-gradient(
-      145deg,
-      var(--cg-accent),
-      color-mix(in oklab, var(--cg-accent) 75%, var(--cg-ink))
-    )
-    padding-box;
+  background: var(--cg-accent);
   color: var(--cg-accent-fg);
 }
 

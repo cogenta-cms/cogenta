@@ -96,6 +96,33 @@ describe('the appearance screen', () => {
     expect(screen.queryByRole('button', { name: 'Enregistrer' })).toBeNull()
   })
 
+  it('offers the AI workshop door on the landing gallery itself, not only after clicking into a theme', async () => {
+    signedIn(['admin'], { aiAvailable: true })
+    render(<App />)
+    await goToAppearance()
+
+    // No click into "Personnaliser" first — this is the screen an admin
+    // lands on, and the door to the workshop must already be there.
+    fireEvent.click(screen.getByRole('link', { name: "Générer un thème avec l'IA" }))
+
+    expect(
+      await screen.findByRole('heading', { name: "Générer un thème avec l'IA", level: 1 }),
+    ).toBeDefined()
+    expect(window.location.pathname).toBe('/theme-generator')
+  })
+
+  it('explains the missing provider on the landing gallery too, without requiring a click into a theme first', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+
+    expect(
+      await screen.findByText(/Générer ou personnaliser un thème avec l'IA nécessite/),
+    ).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Configurer un fournisseur' })).toBeDefined()
+    expect(screen.queryByRole('link', { name: "Générer un thème avec l'IA" })).toBeNull()
+  })
+
   it('shows the file tokens and says every value comes from the file before any change', async () => {
     signedIn(['admin'])
     render(<App />)

@@ -695,6 +695,44 @@ export function AppearanceRoute(): JSX.Element {
             </Card>
           )}
 
+          {view === 'gallery' &&
+            (theme.aiAvailable ? (
+              <Card aria-labelledby="appearance-ai-gallery-heading">
+                <CardHeader>
+                  <CardTitle>
+                    <h2 id="appearance-ai-gallery-heading">{t('appearance.aiHeading')}</h2>
+                  </CardTitle>
+                  <CardDescription>{t('appearance.aiIntro')}</CardDescription>
+                </CardHeader>
+                <CardBody>
+                  {/*
+                   * The same entry the customize view's own AI card offers
+                   * (see below) — surfaced here too, unconditionally of which
+                   * theme is active, so the workshop is reachable straight
+                   * from the screen an admin lands on first, not only after
+                   * clicking into a specific theme's "Personnaliser".
+                   */}
+                  <Link to="/theme-generator" className={buttonVariants({ variant: 'primary' })}>
+                    {t('appearance.aiOpenWorkshopAction')}
+                  </Link>
+                </CardBody>
+              </Card>
+            ) : (
+              <Notice
+                tone="info"
+                actions={
+                  <Link
+                    to="/providers"
+                    className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                  >
+                    {t('appearance.aiNoProviderAction')}
+                  </Link>
+                }
+              >
+                <p>{t('appearance.aiNoProviderNotice')}</p>
+              </Notice>
+            ))}
+
           {view === 'customize' && (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">

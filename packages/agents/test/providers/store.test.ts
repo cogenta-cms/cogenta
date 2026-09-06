@@ -262,6 +262,54 @@ describe('createFileProviderConfigStore', () => {
       const config = await resolveProviderRegistryConfig(store)
       expect(config.deepseek).toMatchObject({ maxOutputTokens: 12000 })
     })
+
+    // fiche feedback: a saved provider's row had no way to change its own
+    // tuning (or model/baseUrl) without re-pasting the API key — this is
+    // the fix, `updateSettings` never touches the saved key.
+    it('updateSettings changes tuning without touching the saved key', async () => {
+      await store.upsert({ provider: 'anthropic', apiKey: 'sk-1', model: 'claude' })
+      const updated = await store.updateSettings('anthropic', {
+        maxOutputTokens: 20000,
+        requestTimeoutMs: 300_000,
+        maxCorrectionAttempts: 4,
+      })
+      expect(updated).toMatchObject({
+        maxOutputTokens: 20000,
+        requestTimeoutMs: 300_000,
+        maxCorrectionAttempts: 4,
+      })
+      expect(await store.decryptKey('anthropic')).toBe('sk-1')
+    })
+
+    it('updateSettings with null clears a tuning field back to "use the built-in default"', async () => {
+      await store.upsert({
+        provider: 'anthropic',
+        apiKey: 'sk-1',
+        model: 'claude',
+        maxOutputTokens: 20000,
+      })
+      const cleared = await store.updateSettings('anthropic', { maxOutputTokens: null })
+      expect(cleared.maxOutputTokens).toBeUndefined()
+    })
+
+    it('updateSettings with undefined leaves a tuning field exactly as saved', async () => {
+      await store.upsert({
+        provider: 'anthropic',
+        apiKey: 'sk-1',
+        model: 'claude',
+        maxOutputTokens: 20000,
+      })
+      const updated = await store.updateSettings('anthropic', { model: 'claude-new' })
+      expect(updated.maxOutputTokens).toBe(20000)
+      expect(updated.model).toBe('claude-new')
+    })
+
+    it('updateSettings rejects an out-of-bounds tuning value the same way upsert does', async () => {
+      await store.upsert({ provider: 'anthropic', apiKey: 'sk-1', model: 'claude' })
+      await expect(
+        store.updateSettings('anthropic', { maxCorrectionAttempts: 0 }),
+      ).rejects.toMatchObject({ code: 'PROVIDER_TUNING_INVALID' })
+    })
   })
 })
 

@@ -142,10 +142,25 @@ export interface ProviderConfigStore {
   /** Encrypts and persists `apiKey`; creates or overwrites this provider's one record. */
   upsert(input: ProviderConfigInput): Promise<StoredProviderConfig>
   setEnabled(provider: ProviderName, enabled: boolean): Promise<StoredProviderConfig>
-  /** Changes `model`/`baseUrl` without touching the saved key — so the admin can rename a default model without being made to re-paste the API key. Throws `PROVIDER_NOT_CONFIGURED` if this provider has no saved key yet. */
+  /**
+   * Changes `model`/`baseUrl`/tuning without touching the saved key — so an
+   * admin can adjust any of these, including *after* the first save,
+   * without being made to re-paste an API key they may no longer have
+   * handy. `undefined` on a tuning field leaves it as saved; `null`
+   * explicitly clears it back to "use the built-in default" (the one thing
+   * a plain optional field can't express — leaving it out of the patch and
+   * clearing it back to unset need distinct wire shapes). Throws
+   * `PROVIDER_NOT_CONFIGURED` if this provider has no saved key yet.
+   */
   updateSettings(
     provider: ProviderName,
-    patch: { readonly model?: string; readonly baseUrl?: string },
+    patch: {
+      readonly model?: string
+      readonly baseUrl?: string
+      readonly maxOutputTokens?: number | null
+      readonly requestTimeoutMs?: number | null
+      readonly maxCorrectionAttempts?: number | null
+    },
   ): Promise<StoredProviderConfig>
   remove(provider: ProviderName): Promise<void>
   /** The one place the real key is ever decrypted — never exposed on `StoredProviderConfig` itself. Throws `PROVIDER_NOT_CONFIGURED` if this provider has no saved key. */
@@ -351,11 +366,51 @@ export function createFileProviderConfigStore(
             ? undefined
             : existing.baseUrl
       assertResolvable(provider, nextBaseUrl)
+      assertValidTuning({
+        ...(patch.maxOutputTokens === undefined || patch.maxOutputTokens === null
+          ? {}
+          : { maxOutputTokens: patch.maxOutputTokens }),
+        ...(patch.requestTimeoutMs === undefined || patch.requestTimeoutMs === null
+          ? {}
+          : { requestTimeoutMs: patch.requestTimeoutMs }),
+        ...(patch.maxCorrectionAttempts === undefined || patch.maxCorrectionAttempts === null
+          ? {}
+          : { maxCorrectionAttempts: patch.maxCorrectionAttempts }),
+      })
+      // `null` clears a tuning field back to "use the built-in default";
+      // `undefined` leaves it exactly as saved — the reason this can't just
+      // be `patch.x ?? existing.x` the way `model` above is. Starting from
+      // `existing` stripped of all three (rather than the full record) and
+      // re-adding only what survives is what lets a `null` actually delete
+      // the key instead of merely being overwritten back to its old value.
+      const {
+        maxOutputTokens: _existingMaxOutputTokens,
+        requestTimeoutMs: _existingRequestTimeoutMs,
+        maxCorrectionAttempts: _existingMaxCorrectionAttempts,
+        ...existingWithoutTuning
+      } = existing
+      const nextMaxOutputTokens =
+        patch.maxOutputTokens === undefined
+          ? existing.maxOutputTokens
+          : (patch.maxOutputTokens ?? undefined)
+      const nextRequestTimeoutMs =
+        patch.requestTimeoutMs === undefined
+          ? existing.requestTimeoutMs
+          : (patch.requestTimeoutMs ?? undefined)
+      const nextMaxCorrectionAttempts =
+        patch.maxCorrectionAttempts === undefined
+          ? existing.maxCorrectionAttempts
+          : (patch.maxCorrectionAttempts ?? undefined)
       const updated: EncryptedRecord = {
-        ...existing,
+        ...existingWithoutTuning,
         model: patch.model ?? existing.model,
         ...(nextBaseUrl === undefined ? {} : { baseUrl: nextBaseUrl }),
         updatedAt: now().toISOString(),
+        ...(nextMaxOutputTokens === undefined ? {} : { maxOutputTokens: nextMaxOutputTokens }),
+        ...(nextRequestTimeoutMs === undefined ? {} : { requestTimeoutMs: nextRequestTimeoutMs }),
+        ...(nextMaxCorrectionAttempts === undefined
+          ? {}
+          : { maxCorrectionAttempts: nextMaxCorrectionAttempts }),
       }
       await writeFile(fileFor(provider), JSON.stringify(updated, null, 2), 'utf8')
       return toSummary(updated)

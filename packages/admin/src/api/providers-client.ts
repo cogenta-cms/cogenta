@@ -84,15 +84,30 @@ export function setProviderEnabled(
   })
 }
 
-export function updateProviderModel(
+/**
+ * Changes model/baseUrl/tuning on an already-saved provider — never the
+ * key, which is why this exists separately from `saveProvider`: the top
+ * form's own POST always needs a fresh `apiKey`, so it was the only way to
+ * change anything about a provider already on the table, including a
+ * tuning value nobody but the admin who owns the key could otherwise touch
+ * again. `null` on a tuning field clears it back to "use the built-in
+ * default"; a field left out of `patch` entirely is left exactly as saved.
+ */
+export function updateProviderSettings(
   token: string,
   provider: string,
-  model: string,
+  patch: {
+    readonly model?: string
+    readonly baseUrl?: string
+    readonly maxOutputTokens?: number | null
+    readonly requestTimeoutMs?: number | null
+    readonly maxCorrectionAttempts?: number | null
+  },
 ): Promise<ProviderSummary> {
   return request(`/api/providers/${encodeURIComponent(provider)}`, {
     method: 'PATCH',
     headers: authHeader(token),
-    body: JSON.stringify({ model }),
+    body: JSON.stringify(patch),
   })
 }
 

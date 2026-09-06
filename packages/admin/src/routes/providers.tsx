@@ -9,6 +9,7 @@ import {
   removeProvider,
   saveProvider,
   setProviderEnabled,
+  updateProviderSettings,
 } from '../api/providers-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
@@ -19,6 +20,7 @@ import {
   CardTitle,
   Field,
   Input,
+  Modal,
   Notice,
   Table,
   TableBody,
@@ -81,6 +83,18 @@ export function ProvidersRoute(): JSX.Element {
   const [formMaxOutputTokens, setFormMaxOutputTokens] = useState('')
   const [formTimeoutSeconds, setFormTimeoutSeconds] = useState('')
   const [formMaxCorrectionAttempts, setFormMaxCorrectionAttempts] = useState('')
+
+  // Fiche feedback: a saved provider's row had no way to change its own
+  // model/baseUrl/tuning without re-pasting the API key (the top form's own
+  // POST always needs one) — this edit dialog goes through PATCH instead,
+  // which never touches the saved key.
+  const [editing, setEditing] = useState<ProviderSummary | null>(null)
+  const [editModel, setEditModel] = useState('')
+  const [editBaseUrl, setEditBaseUrl] = useState('')
+  const [editMaxOutputTokens, setEditMaxOutputTokens] = useState('')
+  const [editTimeoutSeconds, setEditTimeoutSeconds] = useState('')
+  const [editMaxCorrectionAttempts, setEditMaxCorrectionAttempts] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -164,6 +178,52 @@ export function ProvidersRoute(): JSX.Element {
       setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
     } finally {
       setBusy(null)
+    }
+  }
+
+  function startEdit(provider: ProviderSummary): void {
+    setEditing(provider)
+    setEditModel(provider.model)
+    setEditBaseUrl(provider.baseUrl ?? '')
+    setEditMaxOutputTokens(
+      provider.maxOutputTokens === undefined ? '' : String(provider.maxOutputTokens),
+    )
+    setEditTimeoutSeconds(
+      provider.requestTimeoutMs === undefined
+        ? ''
+        : String(Math.round(provider.requestTimeoutMs / 1000)),
+    )
+    setEditMaxCorrectionAttempts(
+      provider.maxCorrectionAttempts === undefined ? '' : String(provider.maxCorrectionAttempts),
+    )
+    setError(null)
+  }
+
+  async function submitEdit(): Promise<void> {
+    if (token === null || editing === null || editModel.trim().length === 0) return
+    setEditBusy(true)
+    setError(null)
+    try {
+      const maxOutputTokens = parsePositiveInt(editMaxOutputTokens)
+      const timeoutSeconds = parsePositiveInt(editTimeoutSeconds)
+      const maxCorrectionAttempts = parsePositiveInt(editMaxCorrectionAttempts)
+      await updateProviderSettings(token, editing.provider, {
+        model: editModel.trim(),
+        ...(editBaseUrl.trim().length > 0 ? { baseUrl: editBaseUrl.trim() } : {}),
+        // A field left blank in this dialog means "clear it back to the
+        // built-in default" — `null` — never "leave it as saved", since the
+        // dialog always shows the current value already: blank is a
+        // deliberate change, not an omission.
+        maxOutputTokens: maxOutputTokens ?? null,
+        requestTimeoutMs: timeoutSeconds === undefined ? null : timeoutSeconds * 1000,
+        maxCorrectionAttempts: maxCorrectionAttempts ?? null,
+      })
+      setEditing(null)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
+    } finally {
+      setEditBusy(false)
     }
   }
 
@@ -429,6 +489,9 @@ export function ProvidersRoute(): JSX.Element {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => startEdit(provider)}>
+                        {t('providers.edit')}
+                      </Button>
                       <Button
                         size="sm"
                         variant={provider.enabled ? 'destructive' : 'secondary'}
@@ -455,6 +518,96 @@ export function ProvidersRoute(): JSX.Element {
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {editing !== null && (
+        <Modal
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditing(null)
+          }}
+          title={t('providers.editHeading', { provider: editing.provider })}
+          closeLabel={t('providers.editClose')}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setEditing(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                disabled={editBusy || editModel.trim().length === 0}
+                onClick={() => void submitEdit()}
+              >
+                {t('common.save')}
+              </Button>
+            </>
+          }
+        >
+          <p className="m-0 text-sm text-muted-foreground">{t('providers.editIntro')}</p>
+          <Field label={t('providers.model')}>
+            {(control) => (
+              <Input
+                {...control}
+                value={editModel}
+                onChange={(event) => setEditModel(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('providers.baseUrl')}>
+            {(control) => (
+              <Input
+                {...control}
+                value={editBaseUrl}
+                onChange={(event) => setEditBaseUrl(event.target.value)}
+                placeholder={t('providers.baseUrlPlaceholder')}
+              />
+            )}
+          </Field>
+          <Field
+            label={t('providers.maxOutputTokens')}
+            description={t('providers.maxOutputTokensHint')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={1}
+                value={editMaxOutputTokens}
+                onChange={(event) => setEditMaxOutputTokens(event.target.value)}
+                placeholder={t('providers.tuningDefaultPlaceholder')}
+              />
+            )}
+          </Field>
+          <Field
+            label={t('providers.requestTimeoutSeconds')}
+            description={t('providers.requestTimeoutSecondsHint')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={1}
+                value={editTimeoutSeconds}
+                onChange={(event) => setEditTimeoutSeconds(event.target.value)}
+                placeholder={t('providers.tuningDefaultPlaceholder')}
+              />
+            )}
+          </Field>
+          <Field
+            label={t('providers.maxCorrectionAttempts')}
+            description={t('providers.maxCorrectionAttemptsHint')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={1}
+                value={editMaxCorrectionAttempts}
+                onChange={(event) => setEditMaxCorrectionAttempts(event.target.value)}
+                placeholder={t('providers.tuningDefaultPlaceholder')}
+              />
+            )}
+          </Field>
+        </Modal>
       )}
     </section>
   )

@@ -62,7 +62,39 @@ function fakeRegistry(): ProviderRegistryLike & { records: Map<string, ProviderS
     async updateSettings(provider, patch) {
       const existing = records.get(provider)
       if (existing === undefined) throw new Error('not configured')
-      const updated = { ...existing, ...patch }
+      // Mirrors the real store's tri-state: `undefined` (key not in patch)
+      // keeps the saved value, `null` clears it, a number sets it.
+      function resolved(
+        patched: number | null | undefined,
+        current: number | undefined,
+      ): number | undefined {
+        if (patched === undefined) return current
+        return patched === null ? undefined : patched
+      }
+      const {
+        maxOutputTokens: _mot,
+        requestTimeoutMs: _rtm,
+        maxCorrectionAttempts: _mca,
+        ...rest
+      } = existing
+      const maxOutputTokens = resolved(patch.maxOutputTokens, existing.maxOutputTokens)
+      const requestTimeoutMs = resolved(patch.requestTimeoutMs, existing.requestTimeoutMs)
+      const maxCorrectionAttempts = resolved(
+        patch.maxCorrectionAttempts,
+        existing.maxCorrectionAttempts,
+      )
+      const updated: ProviderSummary = {
+        ...rest,
+        model: patch.model ?? existing.model,
+        ...(patch.baseUrl === undefined
+          ? existing.baseUrl === undefined
+            ? {}
+            : { baseUrl: existing.baseUrl }
+          : { baseUrl: patch.baseUrl }),
+        ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+        ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }),
+        ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
+      }
       records.set(provider, updated)
       return updated
     },
@@ -272,6 +304,91 @@ describe('POST /api/providers', () => {
     )
     expect(response.status).toBe(200)
     expect((response.body as { data: ProviderSummary }).data.enabled).toBe(false)
+  })
+
+  // fiche feedback: a saved provider's row had no way to change its own
+  // tuning without re-pasting the API key — PATCH is the fix.
+  it('PATCH changes maxOutputTokens/requestTimeoutMs/maxCorrectionAttempts without needing the key again', async () => {
+    const registry = fakeRegistry()
+    const router = createProvidersRouter({ providers: registry })
+    await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: { provider: 'deepseek', apiKey: 'sk-1', model: 'deepseek-v4-flash' },
+      },
+      ADMIN,
+    )
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: '/api/providers/deepseek',
+        query: {},
+        body: { maxOutputTokens: 20000, requestTimeoutMs: 300_000, maxCorrectionAttempts: 4 },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: ProviderSummary }).data).toMatchObject({
+      maxOutputTokens: 20000,
+      requestTimeoutMs: 300_000,
+      maxCorrectionAttempts: 4,
+    })
+  })
+
+  it('PATCH with an empty maxOutputTokens clears it back to "use the built-in default"', async () => {
+    const registry = fakeRegistry()
+    const router = createProvidersRouter({ providers: registry })
+    await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: {
+          provider: 'deepseek',
+          apiKey: 'sk-1',
+          model: 'deepseek-v4-flash',
+          maxOutputTokens: 20000,
+        },
+      },
+      ADMIN,
+    )
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: '/api/providers/deepseek',
+        query: {},
+        body: { maxOutputTokens: '' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: ProviderSummary }).data.maxOutputTokens).toBeUndefined()
+  })
+
+  it('PATCH refuses anyone below admin', async () => {
+    const registry = fakeRegistry()
+    const router = createProvidersRouter({ providers: registry })
+    await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: { provider: 'anthropic', apiKey: 'sk-1', model: 'claude' },
+      },
+      ADMIN,
+    )
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: '/api/providers/anthropic',
+        query: {},
+        body: { maxOutputTokens: 20000 },
+      },
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
   })
 
   it('DELETE removes a provider', async () => {

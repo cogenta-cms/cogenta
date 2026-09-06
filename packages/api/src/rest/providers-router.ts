@@ -56,9 +56,16 @@ export interface ProviderRegistryLike {
     readonly maxCorrectionAttempts?: number
   }): Promise<ProviderSummary>
   setEnabled(provider: string, enabled: boolean): Promise<ProviderSummary>
+  /** `null` on a tuning field clears it back to "use the built-in default"; `undefined` (the field simply absent from the patch) leaves it as saved. */
   updateSettings(
     provider: string,
-    patch: { readonly model?: string; readonly baseUrl?: string },
+    patch: {
+      readonly model?: string
+      readonly baseUrl?: string
+      readonly maxOutputTokens?: number | null
+      readonly requestTimeoutMs?: number | null
+      readonly maxCorrectionAttempts?: number | null
+    },
   ): Promise<ProviderSummary>
   remove(provider: string): Promise<void>
 }
@@ -128,6 +135,27 @@ function noRoute(): CogentaError {
 function optionalNumber(body: Record<string, unknown>, field: string): number | undefined {
   const value = body[field]
   if (value === undefined || value === null || value === '') return undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  throw new CogentaError({
+    code: 'PROVIDER_TUNING_INVALID',
+    message: `"${field}" must be a number.`,
+    hint: 'Leave it empty to use the built-in default for this field.',
+  })
+}
+
+/**
+ * The tri-state `updateSettings` needs and `optionalNumber` above cannot
+ * express: `undefined` when `field` is not a key of `body` at all (a PATCH
+ * that never mentions it — leave it exactly as saved); `null` when present
+ * but empty/null (the admin cleared the field — reset to the built-in
+ * default); the number otherwise. Distinguishing "absent" from "present but
+ * empty" is exactly why `'field' in body` is checked before looking at the
+ * value.
+ */
+function tuningField(body: Record<string, unknown>, field: string): number | null | undefined {
+  if (!(field in body)) return undefined
+  const value = body[field]
+  if (value === undefined || value === null || value === '') return null
   if (typeof value === 'number' && Number.isFinite(value)) return value
   throw new CogentaError({
     code: 'PROVIDER_TUNING_INVALID',
@@ -239,23 +267,33 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
           const enabled = body['enabled']
           const model = body['model']
           const baseUrl = body['baseUrl']
+          const maxOutputTokens = tuningField(body, 'maxOutputTokens')
+          const requestTimeoutMs = tuningField(body, 'requestTimeoutMs')
+          const maxCorrectionAttempts = tuningField(body, 'maxCorrectionAttempts')
           let result: ProviderSummary | undefined
           if (typeof enabled === 'boolean') {
             result = await options.providers.setEnabled(provider, enabled)
           }
           if (
             (typeof model === 'string' && model.length > 0) ||
-            (typeof baseUrl === 'string' && baseUrl.length > 0)
+            (typeof baseUrl === 'string' && baseUrl.length > 0) ||
+            maxOutputTokens !== undefined ||
+            requestTimeoutMs !== undefined ||
+            maxCorrectionAttempts !== undefined
           ) {
             result = await options.providers.updateSettings(provider, {
               ...(typeof model === 'string' && model.length > 0 ? { model } : {}),
               ...(typeof baseUrl === 'string' && baseUrl.length > 0 ? { baseUrl } : {}),
+              ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+              ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }),
+              ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
             })
           }
           if (result === undefined) {
             throw new CogentaError({
               code: 'PROVIDER_UNKNOWN',
-              message: 'Nothing to update — send "enabled", "model" and/or "baseUrl".',
+              message:
+                'Nothing to update — send "enabled", "model", "baseUrl", "maxOutputTokens", "requestTimeoutMs" and/or "maxCorrectionAttempts".',
               hint: 'Send at least one of these fields.',
             })
           }

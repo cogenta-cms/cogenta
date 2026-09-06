@@ -4981,10 +4981,28 @@ export function installMockFetch(
         const providerIndex = mockProviders.findIndex((p) => p.provider === providerName)
         if (method === 'PATCH' && providerIndex >= 0) {
           const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
-          mockProviders[providerIndex] = {
-            ...(mockProviders[providerIndex] as (typeof mockProviders)[number]),
-            ...body,
+          const existing = mockProviders[providerIndex] as Record<string, unknown>
+          // Mirrors the real store's tri-state: a key absent from `body`
+          // leaves the saved value, `null`/empty-string clears it, a number
+          // sets it — never leaves a literal `null` sitting on the record
+          // the way a naive `{ ...existing, ...body }` merge would.
+          const next: Record<string, unknown> = { ...existing }
+          if (typeof body.enabled === 'boolean') next.enabled = body.enabled
+          for (const key of ['model', 'baseUrl'] as const) {
+            if (typeof body[key] === 'string' && (body[key] as string).length > 0)
+              next[key] = body[key]
           }
+          for (const key of [
+            'maxOutputTokens',
+            'requestTimeoutMs',
+            'maxCorrectionAttempts',
+          ] as const) {
+            if (!(key in body)) continue
+            const value = body[key]
+            if (value === null || value === '' || value === undefined) delete next[key]
+            else next[key] = value
+          }
+          mockProviders[providerIndex] = next as (typeof mockProviders)[number]
           return json(200, { data: mockProviders[providerIndex] })
         }
         if (method === 'DELETE' && providerIndex >= 0) {

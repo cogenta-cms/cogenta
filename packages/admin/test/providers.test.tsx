@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -124,6 +124,58 @@ describe('providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('Par défaut')).toBeDefined()
+  })
+
+  // fiche feedback: a saved provider's row had no way to change its own
+  // model/baseUrl/tuning without re-pasting the API key — "Modifier" opens
+  // a dialog that goes through PATCH instead, never re-asking for the key.
+  it('edits an existing provider’s tuning without re-entering the API key', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-ant-secret-value' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'claude-sonnet' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await screen.findByText('••••alue')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    const dialog = await screen.findByRole('dialog', { name: /Modifier —/ })
+    // The dialog never asks for the API key at all.
+    expect(
+      within(dialog).queryByPlaceholderText('Plus jamais affichée une fois enregistrée'),
+    ).toBeNull()
+
+    fireEvent.change(within(dialog).getByLabelText('Tokens de sortie max'), {
+      target: { value: '20000' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('20000 tokens')).toBeDefined()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('refuses to edit a provider’s settings for a role below admin', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['editor'] })
+    window.history.pushState(null, '', '/providers')
+
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      expect.stringContaining('admin'),
+    )
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull()
   })
 
   it('a custom provider (fiche 56) requires a baseUrl and saves under its own id', async () => {

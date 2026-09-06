@@ -8,6 +8,7 @@ import {
   createFileAgentDeclarationStore,
   createFilePromptTemplateStore,
   createFileProviderConfigStore,
+  createProgressJobStore,
   ensureBuiltinPromptTemplates,
   type PromptTemplateStore,
   type ProviderClient,
@@ -2701,6 +2702,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             audit: auth.audit,
             runner: agentsRuntime.agentRunner,
             conversations: agentsRuntime.conversations,
+            // Fiche feedback — "je ne sais pas si le traitement est en
+            // cours ou pas". One store per `assembleSite` call, same
+            // lifetime as every other per-request-runtime singleton here
+            // (`mcpConnections`, `agentsRuntime` itself) — in-memory,
+            // per-process, watched by whichever browser tab started a job.
+            progressJobs: createProgressJobStore(),
           }),
           providersRouter: createProvidersRouter({ providers: agentsRuntime.providerRegistry }),
           agentSkillsRouter: createAgentSkillsRouter({ skills: agentsRuntime.skillRegistry }),

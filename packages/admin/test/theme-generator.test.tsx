@@ -153,7 +153,11 @@ describe('the theme generator workshop', () => {
     fireEvent.change(description, { target: { value: 'warm, editorial, paper-like' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
-    await screen.findByText('Warm editorial')
+    // A longer timeout than the default 1s: this round-trips through the
+    // job's own poll interval (`JOB_POLL_INTERVAL_MS` in
+    // `theme-generator.tsx`), which real timers can push past 1s under a
+    // fully parallel `pnpm test` run.
+    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
     expect(screen.getByText('Warm, paper-like, generous whitespace.')).toBeDefined()
 
     // Not activated yet — the mock's own `themeOverrides.activeTheme` (read
@@ -176,7 +180,9 @@ describe('the theme generator workshop', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
-    expect(await screen.findByText('An attached image could not be analyzed.')).toBeDefined()
+    expect(
+      await screen.findByText('An attached image could not be analyzed.', {}, { timeout: 3000 }),
+    ).toBeDefined()
   })
 
   it('says so when no usable candidate came back', async () => {
@@ -190,8 +196,43 @@ describe('the theme generator workshop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
     expect(
-      await screen.findByText(/Aucun candidat utilisable n'est revenu de cette description/),
+      await screen.findByText(
+        /Aucun candidat utilisable n'est revenu de cette description/,
+        {},
+        { timeout: 3000 },
+      ),
     ).toBeDefined()
+  })
+
+  // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+  // The mock keeps the job `'running'` for one poll before settling
+  // (`mock-fetch.ts`'s own `mockThemeGenerateJobs`), so this actually
+  // exercises the live progress list rendered while waiting, not just the
+  // eventual candidates.
+  it('shows live progress while candidates are being generated', async () => {
+    signedIn(['admin'], {
+      aiAvailable: true,
+      generateCandidates: [
+        {
+          id: 'warm-editorial',
+          label: 'Warm editorial',
+          rationale: 'Warm, paper-like.',
+          tokens: WARM_TOKENS,
+        },
+      ],
+    })
+    await goToWorkshop()
+    await waitForAiReady()
+
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'warm, editorial' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
+
+    const progress = await screen.findByTestId('theme-generator-progress', {}, { timeout: 3000 })
+    expect(progress.textContent).toBe('Mock progress.')
+    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+    expect(screen.queryByTestId('theme-generator-progress')).toBeNull()
   })
 
   it('activates a candidate by saving its tokens wholesale, and confirms it', async () => {
@@ -213,7 +254,7 @@ describe('the theme generator workshop', () => {
       target: { value: 'warm, editorial' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Warm editorial')
+    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
 
     fireEvent.click(screen.getByRole('button', { name: 'Activer' }))
 
@@ -255,7 +296,7 @@ describe('the theme generator workshop', () => {
       target: { value: 'a warm portfolio' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Portfolio, warm')
+    await screen.findByText('Portfolio, warm', {}, { timeout: 3000 })
 
     // The candidate targets Portfolio while Canonical is active — proof the
     // live preview actually carried the candidate's own tokens to the

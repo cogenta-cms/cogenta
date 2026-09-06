@@ -184,6 +184,10 @@ export { assertProviderAllowed } from './privacy/assert-provider-allowed.js'
 export { redactFields } from './privacy/redact-fields.js'
 export { redactText } from './privacy/redact-text.js'
 export type { NoDataLeavesPolicy, PiiKind, PiiMatch, RedactionResult } from './privacy/types.js'
+export type { JobRecord, JobStatus, ProgressJobStore } from './progress/job-store.js'
+export { createProgressJobStore } from './progress/job-store.js'
+export type { ProgressEvent, ProgressReporter } from './progress/types.js'
+export { NOOP_PROGRESS } from './progress/types.js'
 export type { ResolveInstructionOptions } from './prompts/render.js'
 export {
   renderPromptTemplate,

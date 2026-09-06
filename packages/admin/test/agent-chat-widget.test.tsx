@@ -41,7 +41,36 @@ describe('the floating agent chat widget', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
 
     expect(await within(dialog).findByText('Bonjour')).toBeDefined()
-    expect(await within(dialog).findByText('Mock reply to: Bonjour')).toBeDefined()
+    // A longer timeout than the default 1s: this round-trips through the
+    // job's own poll interval (`JOB_POLL_INTERVAL_MS` in
+    // `use-agent-conversation.ts`), which real timers can push past 1s under
+    // a fully parallel `pnpm test` run.
+    expect(
+      await within(dialog).findByText('Mock reply to: Bonjour', {}, { timeout: 3000 }),
+    ).toBeDefined()
+  })
+
+  // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+  // The mock keeps the job `'running'` for one poll before settling
+  // (`mock-fetch.ts`'s own `mockAgentMessageJobs`), so this actually
+  // exercises the live progress line the feed renders while waiting, not
+  // just the eventual reply.
+  it('shows live progress while a message is in flight, before the reply lands', async () => {
+    signIn()
+    render(<App />)
+    const dialog = await openWidget()
+
+    fireEvent.change(within(dialog).getByLabelText('Message'), {
+      target: { value: 'Bonjour' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
+
+    const progress = await within(dialog).findByTestId('agent-chat-progress', {}, { timeout: 3000 })
+    expect(progress.textContent).toBe('Mock progress.')
+    expect(
+      await within(dialog).findByText('Mock reply to: Bonjour', {}, { timeout: 3000 }),
+    ).toBeDefined()
+    expect(within(dialog).queryByTestId('agent-chat-progress')).toBeNull()
   })
 
   it('reloads the real thread from the server on reopen, not a stale local copy', async () => {
@@ -53,7 +82,7 @@ describe('the floating agent chat widget', () => {
       target: { value: 'First message' },
     })
     fireEvent.click(within(first).getByRole('button', { name: 'Envoyer' }))
-    await within(first).findByText('Mock reply to: First message')
+    await within(first).findByText('Mock reply to: First message', {}, { timeout: 3000 })
 
     // Close, then reopen — a fresh mount of the panel, same as the user's
     // report ("j'ai bien choisi l'agent mais ça ne charge pas la
@@ -63,7 +92,9 @@ describe('the floating agent chat widget', () => {
     const reopened = await openWidget()
 
     expect(await within(reopened).findByText('First message')).toBeDefined()
-    expect(await within(reopened).findByText('Mock reply to: First message')).toBeDefined()
+    expect(
+      await within(reopened).findByText('Mock reply to: First message', {}, { timeout: 3000 }),
+    ).toBeDefined()
   })
 
   it('loads a different thread when a different agent is selected', async () => {
@@ -88,7 +119,7 @@ describe('the floating agent chat widget', () => {
       target: { value: 'For security' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
-    await within(dialog).findByText('Mock reply to: For security')
+    await within(dialog).findByText('Mock reply to: For security', {}, { timeout: 3000 })
 
     fireEvent.change(picker, { target: { value: 'watcher' } })
     expect((picker as HTMLSelectElement).value).toBe('watcher')

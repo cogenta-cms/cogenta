@@ -153,6 +153,49 @@ export function generateSkinCandidates(
   })
 }
 
+/** One reported line — see `@cogenta/agents`' own `ProgressEvent`. */
+export interface ThemeGenerateProgressEvent {
+  readonly at: number
+  readonly message: string
+}
+
+/**
+ * Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+ * A watchable twin of `generateSkinCandidates` above: start one of these,
+ * then poll `getThemeGenerateJob` until `status` leaves `'running'`,
+ * rendering `events` as they grow.
+ */
+export interface ThemeGenerateJob {
+  readonly status: 'running' | 'done' | 'failed'
+  readonly events: readonly ThemeGenerateProgressEvent[]
+  readonly result?: {
+    readonly candidates: readonly SkinCandidate[]
+    readonly warnings?: readonly string[]
+  }
+  readonly error?: { readonly message: string }
+}
+
+export function startThemeGenerateJob(
+  token: string,
+  input: {
+    readonly description: string
+    readonly attachments?: readonly GenerateThemeAttachment[]
+    readonly baseline?: GenerateThemeBaseline
+  },
+): Promise<{ readonly jobId: string }> {
+  return request<{ readonly jobId: string }>('/api/theme/generate/jobs', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export function getThemeGenerateJob(token: string, jobId: string): Promise<ThemeGenerateJob> {
+  return request<ThemeGenerateJob>(`/api/theme/generate/jobs/${encodeURIComponent(jobId)}`, {
+    headers: authHeader(token),
+  })
+}
+
 /** Reads a file the browser handed us into the base64 envelope `generateSkinCandidates` takes — same chunked-encoding technique as `toUploadedDocument` (`site-plan-client.ts`), plus the file's own MIME type. */
 export async function toGenerateThemeAttachment(file: File): Promise<GenerateThemeAttachment> {
   const buffer = await file.arrayBuffer()

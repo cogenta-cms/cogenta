@@ -508,6 +508,11 @@ export const ERROR_CODES = [
   'THEME_NO_PROVIDER',
   'THEME_EXPORT_NOT_ALLOWED',
 
+  // Fiche feedback — the same polled-progress-job shape as
+  // `AGENT_RUN_JOB_UNKNOWN`, for a `POST /api/theme/generate` run watched
+  // live from the "Générer un thème" screen.
+  'THEME_GENERATE_JOB_UNKNOWN',
+
   // Comments — contract F, visitor comments (fiche 15, ADR-0025)
   'COMMENT_NOT_FOUND',
   'COMMENT_BODY_INVALID',
@@ -579,6 +584,13 @@ export const ERROR_CODES = [
   // `max_steps` check has a chance to fire first — a bug in the graph's
   // wiring, never a normal way for a run to end.
   'AGENT_LOOP_RECURSION_LIMIT',
+
+  // Fiche feedback — polled progress jobs for a chat turn or a "Run now"
+  // trigger, so a client watching one live sees each step as it happens
+  // rather than nothing until the whole run finishes. Same "not found"
+  // shape as `SCHEDULER_QUEUE_JOB_NOT_FOUND`: an id that was never issued,
+  // or one already swept a few minutes after finishing.
+  'AGENT_RUN_JOB_UNKNOWN',
 
   // Channels — inbound chat bridge and `cogenta channels` process (L22 task 2)
   'CHANNEL_PROVIDER_NOT_CONFIGURED',

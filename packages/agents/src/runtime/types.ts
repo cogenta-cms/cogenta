@@ -1,5 +1,6 @@
 import type { BudgetExceededReason, BudgetTracker, KillSwitch } from '../budget/types.js'
 import type { NoDataLeavesPolicy } from '../privacy/types.js'
+import type { ProgressReporter } from '../progress/types.js'
 import type {
   ChatMessage,
   ProviderClient,
@@ -77,9 +78,9 @@ export interface RunAgentLoopInput {
   readonly temperature?: number
   /** Hard ceiling on model-call turns — the "infinite loop" backstop (default 25). */
   readonly maxSteps?: number
-  /** Per model call, including retries. Absent falls back to `client.maxCorrectionAttempts`, then a built-in default (3). */
+  /** Per model call, including retries. Absent falls back to `client.maxCorrectionAttempts` — always a concrete number, see `ProviderClient`'s own doc comment. */
   readonly maxAttempts?: number
-  /** Per model call attempt. Absent falls back to `client.requestTimeoutMs`, then a built-in default (60_000ms). */
+  /** Per model call attempt. Absent falls back to `client.requestTimeoutMs` — always a concrete number, see `ProviderClient`'s own doc comment. */
   readonly timeoutMs?: number
   /** How many times an identical tool call (name + input) may repeat before the run stops (default 2). */
   readonly maxRepeats?: number
@@ -96,4 +97,13 @@ export interface RunAgentLoopInput {
   readonly now?: () => number
   /** "Mode « rien ne sort »" (task 21) — checked before every model call; an out-of-allowlist provider throws instead of returning a stop reason, since a privacy leak is a configuration error, not a run outcome to record. */
   readonly privacyPolicy?: NoDataLeavesPolicy
+  /**
+   * Fiche feedback — a real user report that a chat turn or an agent run
+   * gave no sign of life while it worked. Called at each meaningful step
+   * (a model call starting, a tool being dispatched, a retry after an
+   * error) — a pure side effect, never something the loop's own control
+   * flow reads back, so a caller with nothing to show progress to (most
+   * tests, `runSubagent`'s inner call) can simply omit it.
+   */
+  readonly onProgress?: ProgressReporter
 }

@@ -5,6 +5,7 @@ import {
   createAnthropicClient,
   createGoogleClient,
   createOpenAiClient,
+  createProgressJobStore,
   createProviderRegistry,
   type ProviderClient,
   type ProviderConfigStore,
@@ -225,15 +226,18 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
       : {
           generator: {
             isAvailable: async () => (await resolveThemeProvider(options)) !== undefined,
-            generate: async (input: {
-              readonly description: string
-              readonly attachments?: readonly {
-                readonly filename: string
-                readonly mimeType: string
-                readonly data: Uint8Array
-              }[]
-              readonly baseline?: { readonly themeName: string }
-            }) => {
+            generate: async (
+              input: {
+                readonly description: string
+                readonly attachments?: readonly {
+                  readonly filename: string
+                  readonly mimeType: string
+                  readonly data: Uint8Array
+                }[]
+                readonly baseline?: { readonly themeName: string }
+              },
+              onProgress?: { report(message: string): void },
+            ) => {
               const resolved = await resolveThemeProvider(options)
               if (resolved === undefined) {
                 return { ok: false as const, reason: 'No LLM provider is configured.' }
@@ -255,6 +259,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                 ...(input.baseline === undefined || baselineTokens === null
                   ? {}
                   : { baseline: { themeName: input.baseline.themeName, tokens: baselineTokens } }),
+                ...(onProgress === undefined ? {} : { onProgress }),
               })
               return result.ok
                 ? {
@@ -274,6 +279,10 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                 : { ok: false as const, reason: result.reason }
             },
           },
+          // Fiche feedback — "je ne sais pas si le traitement est en cours
+          // ou pas". Own store per `createThemeWiring` call (one per
+          // `cogenta serve` boot), same lifetime as `generator` itself.
+          progressJobs: createProgressJobStore(),
         }),
     ...(options.development && !options.readOnly
       ? {

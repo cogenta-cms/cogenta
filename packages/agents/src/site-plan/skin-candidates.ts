@@ -1,4 +1,5 @@
-import type { ProviderClient } from '../providers/types.js'
+import { NOOP_PROGRESS, type ProgressReporter } from '../progress/types.js'
+import type { ChatImagePart, ProviderClient } from '../providers/types.js'
 import { generateSkin } from '../skin/generate.js'
 import {
   type ExistingSiteSnapshot,
@@ -88,6 +89,10 @@ export interface GenerateSkinCandidatesOptions {
    * escaped data (R8), never folded into `description`.
    */
   readonly existingSite?: ExistingSiteSnapshot
+  /** Fiche feedback — threaded to every direction's own `generateSkin` call, so a reference screenshot informs colour/typography, not only the base-theme choice (`theme-creator/propose-theme.ts`). */
+  readonly images?: readonly ChatImagePart[]
+  /** Fiche feedback — "je ne sais pas si le traitement est en cours ou pas". Reports which of the (up to five, run in parallel) design directions is starting or has settled, since nothing else distinguishes "still working" from "stuck" for the seconds this call takes. */
+  readonly onProgress?: ProgressReporter
 }
 
 export interface SkinCandidateFailure {
@@ -126,11 +131,14 @@ export async function generateSkinCandidates(
       ? [{ source: 'current site', content: renderExistingSiteForPrompt(options.existingSite) }]
       : undefined
 
+  const progress = options.onProgress ?? NOOP_PROGRESS
+
   // Run in parallel: the installer's whole promise is measured in seconds,
   // and five sequential three-attempt loops is a minute of staring at a
   // spinner. Each call is independent — no candidate reads another's result.
   const settled = await Promise.all(
     directions.map(async (direction) => {
+      progress.report(`Generating "${direction.label}"…`)
       const result = await generateSkin({
         client: options.client,
         model: options.model,
@@ -140,7 +148,15 @@ export async function generateSkinCandidates(
           ? {}
           : { maxAttempts: options.maxAttemptsPerCandidate }),
         ...(context === undefined ? {} : { context }),
+        ...(options.images === undefined || options.images.length === 0
+          ? {}
+          : { images: options.images }),
       })
+      progress.report(
+        result.ok
+          ? `"${direction.label}" done (${result.attempts} attempt${result.attempts === 1 ? '' : 's'}).`
+          : `"${direction.label}" failed: ${result.reason}`,
+      )
       return { direction, result }
     }),
   )

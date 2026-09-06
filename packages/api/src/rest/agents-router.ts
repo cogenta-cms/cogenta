@@ -114,6 +114,11 @@ export interface AgentConversationMessage {
   readonly content: string
 }
 
+/** The one method a caller watching a run live actually needs — structural, matching `@cogenta/agents`' `ProgressReporter` without depending on that package at runtime (this file's own rule, see its module comment). */
+export interface AgentRunProgressReporter {
+  report(message: string): void
+}
+
 /** Backs `POST /api/agents/:name/run` — absent means the site has no live runner wired (`AGENT_RUNTIME_UNAVAILABLE`), never a 500. */
 export interface AgentRunnerLike {
   run(
@@ -121,7 +126,37 @@ export interface AgentRunnerLike {
     instruction: string,
     trigger?: string,
     history?: readonly AgentConversationMessage[],
+    onProgress?: AgentRunProgressReporter,
   ): Promise<AgentRunSummary>
+}
+
+/** One reported line — structural, matching `@cogenta/agents`' `ProgressEvent`. */
+export interface AgentRunProgressEvent {
+  readonly at: number
+  readonly message: string
+}
+
+/**
+ * Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+ * `POST .../conversation/messages` and `POST .../run` stay exactly what
+ * they always were (a plain value in, a plain value out — this file's own
+ * "never `@cogenta/agents`-typed" rule extends to never streaming either,
+ * matching `http.ts`'s own `RestResponse` shape). A caller that wants to
+ * watch a run live instead starts one of these as a job (`…/jobs`, POST)
+ * and polls `…/jobs/:jobId` (GET) for the growing event log until
+ * `status` leaves `'running'` — structural, matching
+ * `@cogenta/agents`' `JobRecord`/`ProgressJobStore`.
+ */
+export interface AgentRunJob {
+  readonly status: 'running' | 'done' | 'failed'
+  readonly events: readonly AgentRunProgressEvent[]
+  readonly result?: unknown
+  readonly error?: { readonly message: string }
+}
+
+export interface AgentRunJobStoreLike {
+  start(run: (reporter: AgentRunProgressReporter) => Promise<unknown>): string
+  get(id: string): AgentRunJob | undefined
 }
 
 export interface AgentConversationTurn {
@@ -176,6 +211,8 @@ export interface AgentsRouterOptions {
   readonly runner?: AgentRunnerLike
   /** Omitted when this site has no conversation store — the `/conversation` routes then answer `AGENT_RUNTIME_UNAVAILABLE`, same as `runner` (a conversation route also needs one to run the agent). */
   readonly conversations?: AgentConversationStoreLike
+  /** Fiche feedback — backs the `…/conversation/messages/jobs` and `…/run/jobs` routes. Omitted means those two specific job routes answer `AGENT_RUNTIME_UNAVAILABLE`; the synchronous `…/conversation/messages` and `…/run` routes are unaffected either way. */
+  readonly progressJobs?: AgentRunJobStoreLike
   /** Mount point. `/api/agents` by default. */
   readonly basePath?: string
 }
@@ -237,7 +274,15 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Agent routes are /api/agents, /api/agents/:name, /:name/enable, /disable, /run, /traces, /history, /conversation and /conversation/messages.',
+    hint: 'Agent routes are /api/agents, /api/agents/:name, /:name/enable, /disable, /run, /run/jobs, /traces, /history, /conversation, /conversation/messages and /conversation/jobs.',
+  })
+}
+
+function jobUnknown(): CogentaError {
+  return new CogentaError({
+    code: 'AGENT_RUN_JOB_UNKNOWN',
+    message: 'No job with this id is known.',
+    hint: 'Jobs are kept for a few minutes after they finish — start a new one if this one is gone.',
   })
 }
 
@@ -391,7 +436,7 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
         const segments = segmentsOf(request.path, basePath)
         if (segments === null) throw noRoute()
         const method = request.method.toUpperCase()
-        const [name, action, extra] = segments
+        const [name, action, extra, jobId] = segments
 
         // GET|POST /api/agents
         if (name === undefined) {
@@ -435,13 +480,63 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
 
         // GET|DELETE /api/agents/:name/conversation, POST …/conversation/messages
         // — the actor's own standing thread with this agent. Checked before
-        // the generic `extra` guard below since `…/messages` is the one
-        // three-segment path this router serves.
+        // the generic `extra` guard below since `…/messages`/`…/jobs` are
+        // the three- and four-segment paths this router serves.
         if (action === 'conversation') {
-          if (extra !== undefined && extra !== 'messages') throw noRoute()
+          if (extra !== undefined && extra !== 'messages' && extra !== 'jobs') throw noRoute()
+          if (extra !== 'jobs' && jobId !== undefined) throw noRoute()
           requireAgent(options, name)
           if (options.conversations === undefined) throw runtimeUnavailable()
           const actorId = requireActorId(actor)
+
+          // Fiche feedback — the same call `…/messages` makes below, but
+          // started as a job and polled for progress instead of awaited in
+          // one request: "je ne sais pas si le traitement est en cours ou
+          // pas". `…/messages` itself is untouched, for any caller with no
+          // reason to watch a run live (a script, a test).
+          if (extra === 'jobs') {
+            if (jobId === undefined) {
+              if (method !== 'POST') return methodNotAllowed(['POST'])
+              if (options.runner === undefined) throw runtimeUnavailable()
+              if (options.progressJobs === undefined) throw runtimeUnavailable()
+              const body = asRecord(request.body)
+              const message = body['message']
+              if (typeof message !== 'string' || message.trim().length === 0) {
+                throw new CogentaError({
+                  code: 'AGENT_DEFINITION_INVALID',
+                  message: 'A message needs a non-empty "message".',
+                  hint: 'Send { "message": "…" }.',
+                })
+              }
+              const trimmed = message.trim()
+              const priorTurns = await options.conversations.get(name, actorId)
+              const history = priorTurns.map((turn) => ({ role: turn.role, content: turn.content }))
+              const runner = options.runner
+              const conversations = options.conversations
+              const id = options.progressJobs.start(async (reporter) => {
+                const run = await runner.run(name, trimmed, 'chat', history, reporter)
+                const createdAt = new Date().toISOString()
+                const turns = await conversations.append(name, actorId, [
+                  { role: 'user', content: trimmed, createdAt },
+                  {
+                    role: 'assistant',
+                    content: run.finalText ?? '',
+                    createdAt,
+                    ...(run.toolCalls === undefined || run.toolCalls.length === 0
+                      ? {}
+                      : { toolCalls: run.toolCalls }),
+                  },
+                ])
+                return { turns, run }
+              })
+              return jsonResponse(202, { data: { jobId: id } })
+            }
+            if (method !== 'GET') return methodNotAllowed(['GET'])
+            if (options.progressJobs === undefined) throw runtimeUnavailable()
+            const job = options.progressJobs.get(jobId)
+            if (job === undefined) throw jobUnknown()
+            return jsonResponse(200, { data: job })
+          }
 
           if (extra === 'messages') {
             if (method !== 'POST') return methodNotAllowed(['POST'])
@@ -484,7 +579,7 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
           return methodNotAllowed(['GET', 'DELETE'])
         }
 
-        if (extra !== undefined) throw noRoute()
+        if (extra !== undefined && !(action === 'run' && extra === 'jobs')) throw noRoute()
 
         // POST /api/agents/:name/enable | /disable
         if (action === 'enable' || action === 'disable') {
@@ -497,10 +592,40 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
 
         // POST /api/agents/:name/run — "Run now" from the admin, or any
         // future caller that wants to invoke this agent on demand rather
-        // than waiting for a trigger.
+        // than waiting for a trigger. POST …/run/jobs / GET …/run/jobs/:jobId
+        // is the same call started as a watchable job instead — see the
+        // `conversation`/`jobs` branch above for the full reasoning.
         if (action === 'run') {
-          if (method !== 'POST') return methodNotAllowed(['POST'])
           requireAgent(options, name)
+
+          if (extra === 'jobs') {
+            if (jobId === undefined) {
+              if (method !== 'POST') return methodNotAllowed(['POST'])
+              if (options.runner === undefined) throw runtimeUnavailable()
+              if (options.progressJobs === undefined) throw runtimeUnavailable()
+              const body = asRecord(request.body)
+              const instruction = body['instruction']
+              if (typeof instruction !== 'string' || instruction.trim().length === 0) {
+                throw new CogentaError({
+                  code: 'AGENT_DEFINITION_INVALID',
+                  message: 'A run needs a non-empty "instruction".',
+                  hint: 'Send { "instruction": "…" }.',
+                })
+              }
+              const runner = options.runner
+              const id = options.progressJobs.start((reporter) =>
+                runner.run(name, instruction, 'manual', undefined, reporter),
+              )
+              return jsonResponse(202, { data: { jobId: id } })
+            }
+            if (method !== 'GET') return methodNotAllowed(['GET'])
+            if (options.progressJobs === undefined) throw runtimeUnavailable()
+            const job = options.progressJobs.get(jobId)
+            if (job === undefined) throw jobUnknown()
+            return jsonResponse(200, { data: job })
+          }
+
+          if (method !== 'POST') return methodNotAllowed(['POST'])
           if (options.runner === undefined) throw runtimeUnavailable()
           const body = asRecord(request.body)
           const instruction = body['instruction']

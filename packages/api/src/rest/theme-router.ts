@@ -120,13 +120,17 @@ export interface SkinGeneratorLike {
    * `config.llm`); this is the live answer to "is one actually configured".
    */
   isAvailable(): Promise<boolean>
-  generate(input: {
-    readonly description: string
-    /** Absent for every caller that predates L26 task 5 — behaviour then is byte-identical to before. */
-    readonly attachments?: readonly ThemeGenerateAttachmentLike[]
-    /** Present for "adjust the current theme" rather than "design a new one". */
-    readonly baseline?: { readonly themeName: string }
-  }): Promise<
+  generate(
+    input: {
+      readonly description: string
+      /** Absent for every caller that predates L26 task 5 — behaviour then is byte-identical to before. */
+      readonly attachments?: readonly ThemeGenerateAttachmentLike[]
+      /** Present for "adjust the current theme" rather than "design a new one". */
+      readonly baseline?: { readonly themeName: string }
+    },
+    /** Fiche feedback — present only when the job-based `…/generate/jobs` route calls this; the synchronous `POST …/generate` above omits it, so behaviour there is unchanged. */
+    onProgress?: ThemeGenerateProgressReporter,
+  ): Promise<
     | {
         readonly ok: true
         readonly candidates: readonly SkinCandidateLike[]
@@ -134,6 +138,36 @@ export interface SkinGeneratorLike {
       }
     | { readonly ok: false; readonly reason: string }
   >
+}
+
+/** Structural, matching `@cogenta/agents`' `ProgressReporter` — see `agents-router.ts`'s own `AgentRunProgressReporter` for the identical reasoning. */
+export interface ThemeGenerateProgressReporter {
+  report(message: string): void
+}
+
+export interface ThemeGenerateProgressEvent {
+  readonly at: number
+  readonly message: string
+}
+
+/**
+ * Fiche feedback — "je ne sais pas si le traitement est en cours ou pas",
+ * for the theme generator screen specifically: several design directions
+ * run in parallel, each with its own retry loop, and `POST …/generate`
+ * gave no sign of any of that until the whole call finished. Same
+ * "plain value in, plain value out stays untouched, a job is additive"
+ * shape as `agents-router.ts`'s own job routes.
+ */
+export interface ThemeGenerateJob {
+  readonly status: 'running' | 'done' | 'failed'
+  readonly events: readonly ThemeGenerateProgressEvent[]
+  readonly result?: unknown
+  readonly error?: { readonly message: string }
+}
+
+export interface ThemeGenerateJobStoreLike {
+  start(run: (reporter: ThemeGenerateProgressReporter) => Promise<unknown>): string
+  get(id: string): ThemeGenerateJob | undefined
 }
 
 export interface ThemeRouterOptions {
@@ -169,6 +203,8 @@ export interface ThemeRouterOptions {
    * /api/theme/overrides` refuses an `activeTheme` that is not one of them.
    */
   readonly availableThemes: readonly AvailableThemeLike[]
+  /** Fiche feedback — backs `POST/GET …/generate/jobs`. Omitted means those two routes answer `THEME_NO_PROVIDER`-shaped unavailability like `generate` itself does when there's no generator; the synchronous `POST …/generate` route is unaffected either way. */
+  readonly progressJobs?: ThemeGenerateJobStoreLike
   readonly basePath?: string
 }
 
@@ -321,11 +357,45 @@ function requireBaseline(value: unknown): { readonly themeName: string } | undef
   return { themeName: baseline.themeName }
 }
 
+/** Shared between `POST /api/theme/generate` and its job-based twin — one parse, so the two can never validate a request body differently. */
+function parseGenerateBody(body: unknown): {
+  readonly description: string
+  readonly attachments?: readonly ThemeGenerateAttachmentLike[]
+  readonly baseline?: { readonly themeName: string }
+} {
+  const parsed = body as
+    | { description?: unknown; attachments?: unknown; baseline?: unknown }
+    | undefined
+  const description = parsed?.description
+  if (typeof description !== 'string' || description.trim() === '') {
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: 'A description is required to generate a skin.',
+      hint: 'Send { "description": "warm, editorial, paper-like" }.',
+    })
+  }
+  const attachments = requireAttachments(parsed?.attachments)
+  const baseline = requireBaseline(parsed?.baseline)
+  return {
+    description,
+    ...(attachments === undefined ? {} : { attachments }),
+    ...(baseline === undefined ? {} : { baseline }),
+  }
+}
+
 function noGenerator(): CogentaError {
   return new CogentaError({
     code: 'THEME_NO_PROVIDER',
     message: 'No LLM provider is configured, so a skin cannot be generated here.',
     hint: 'Configure a provider from Réglages → Fournisseurs (or add an `llm` section to cogenta.config.mjs and restart). Everything else in this screen works without one (R2).',
+  })
+}
+
+function jobUnknown(): CogentaError {
+  return new CogentaError({
+    code: 'THEME_GENERATE_JOB_UNKNOWN',
+    message: 'No job with this id is known.',
+    hint: 'Jobs are kept for a few minutes after they finish — start a new one if this one is gone.',
   })
 }
 
@@ -492,28 +562,8 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
           if (method !== 'POST') return methodNotAllowed(['POST'])
           if (options.generator === undefined) throw noGenerator()
           if (!(await options.generator.isAvailable())) throw noGenerator()
-          const body = request.body as
-            | {
-                description?: unknown
-                attachments?: unknown
-                baseline?: unknown
-              }
-            | undefined
-          const description = body?.description
-          if (typeof description !== 'string' || description.trim() === '') {
-            throw new CogentaError({
-              code: 'CONTENT_INVALID',
-              message: 'A description is required to generate a skin.',
-              hint: 'Send { "description": "warm, editorial, paper-like" }.',
-            })
-          }
-          const attachments = requireAttachments(body?.attachments)
-          const baseline = requireBaseline(body?.baseline)
-          const result = await options.generator.generate({
-            description,
-            ...(attachments === undefined ? {} : { attachments }),
-            ...(baseline === undefined ? {} : { baseline }),
-          })
+          const generateInput = parseGenerateBody(request.body)
+          const result = await options.generator.generate(generateInput)
           if (!result.ok) {
             throw new CogentaError({
               code: 'THEME_OVERRIDE_INVALID',
@@ -531,6 +581,43 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
                 : { warnings: result.warnings }),
             },
           })
+        }
+
+        // POST /api/theme/generate/jobs / GET …/generate/jobs/:jobId — fiche
+        // feedback: the same call above, started as a watchable job instead
+        // of awaited in one request ("je ne sais pas si le traitement est
+        // en cours ou pas"). `POST …/generate` itself is untouched.
+        if (first === 'generate' && second === 'jobs') {
+          if (third === undefined) {
+            if (method !== 'POST') return methodNotAllowed(['POST'])
+            if (options.generator === undefined) throw noGenerator()
+            if (!(await options.generator.isAvailable())) throw noGenerator()
+            if (options.progressJobs === undefined) throw noGenerator()
+            const generateInput = parseGenerateBody(request.body)
+            const generator = options.generator
+            const id = options.progressJobs.start(async (reporter) => {
+              const result = await generator.generate(generateInput, reporter)
+              if (!result.ok) {
+                throw new CogentaError({
+                  code: 'THEME_OVERRIDE_INVALID',
+                  message: `No usable skin could be generated: ${result.reason}`,
+                  hint: 'Try a different description, or apply a skin from the gallery instead.',
+                })
+              }
+              return {
+                candidates: result.candidates,
+                ...(result.warnings === undefined || result.warnings.length === 0
+                  ? {}
+                  : { warnings: result.warnings }),
+              }
+            })
+            return jsonResponse(202, { data: { jobId: id } })
+          }
+          if (method !== 'GET') return methodNotAllowed(['GET'])
+          if (options.progressJobs === undefined) throw noGenerator()
+          const job = options.progressJobs.get(third)
+          if (job === undefined) throw jobUnknown()
+          return jsonResponse(200, { data: job })
         }
 
         // POST /api/theme/export — freezes the current effective tokens into theme.tokens.json. Development only.
@@ -553,7 +640,7 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
         throw new CogentaError({
           code: 'CONTENT_NOT_FOUND',
           message: 'No route matches this path.',
-          hint: 'Theme routes are /api/theme, /api/theme/overrides, /api/theme/skins, /api/theme/generate and /api/theme/export.',
+          hint: 'Theme routes are /api/theme, /api/theme/overrides, /api/theme/skins, /api/theme/generate, /api/theme/generate/jobs and /api/theme/export.',
         })
       } catch (error) {
         return errorResponse(error)

@@ -318,6 +318,79 @@ describe('cogenta serve — /api/agents runs a real tool-calling loop once a pro
     // The disallowed call never reached the tool — no audit entry for it exists.
     expect(historyBody.data.some((entry) => entry.action === 'agent.tool.media.read')).toBe(false)
   })
+
+  // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+  // The same run as the first test in this file, over the same real vendor
+  // double, started as a job and polled instead of awaited in one request —
+  // proving `cogenta serve` really wires `progressJobs` into the router,
+  // not just that the router itself (already covered in
+  // `agents-router.test.ts`) knows how to run one.
+  it('runs the same tool-calling loop as a watchable job, reporting progress along the way', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const fake = await startFakeAnthropic([
+      {
+        content: [{ type: 'tool_use', id: 'call-1', name: 'site.config_read', input: {} }],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      {
+        content: [{ type: 'text', text: 'This site is called Test site.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ])
+    fakeProviders.push(fake)
+
+    await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        provider: 'anthropic',
+        apiKey: 'sk-ant-test-key-3',
+        model: 'claude-test',
+        baseUrl: fake.url,
+      }),
+    })
+
+    const started = await fetch(
+      `${server.base}/api/agents/${encodeURIComponent('Cogenta Agent')}/run/jobs`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ instruction: 'What is this site called?' }),
+      },
+    )
+    expect(started.status).toBe(202)
+    const jobId = ((await started.json()) as { data: { jobId: string } }).data.jobId
+    expect(jobId).toBeTruthy()
+
+    let job:
+      | { status: string; events: { message: string }[]; result?: { finalText: string | null } }
+      | undefined
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const polled = await fetch(
+        `${server.base}/api/agents/${encodeURIComponent('Cogenta Agent')}/run/jobs/${jobId}`,
+        { headers: { authorization: `Bearer ${token}` } },
+      )
+      job = ((await polled.json()) as { data: typeof job }).data
+      if (job?.status !== 'running') break
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+
+    expect(job?.status).toBe('done')
+    expect(job?.result?.finalText).toBe('This site is called Test site.')
+    expect(job?.events.some((e) => e.message.includes('Calling tool "site.config_read"'))).toBe(
+      true,
+    )
+  })
 })
 
 /**

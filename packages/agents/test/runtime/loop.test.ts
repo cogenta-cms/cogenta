@@ -126,6 +126,66 @@ describe('runAgentLoop', () => {
     })
   })
 
+  it('reports progress at each model call and each tool dispatch, for a caller watching a run in progress', async () => {
+    const client = fakeClient([
+      toolCallResponse('content.publish', { id: 'e1' }),
+      textResponse('Published.'),
+    ])
+    const publish: ExecutableTool = {
+      spec: { name: 'content.publish', description: 'Publish.', inputSchema: {} },
+      execute: async (input) => ({ url: `/entries/${input.id as string}` }),
+    }
+    const messages: string[] = []
+
+    await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'publish e1' }],
+      tools: [publish],
+      maxTokens: 100,
+      onProgress: { report: (message) => messages.push(message) },
+    })
+
+    expect(messages).toEqual([
+      'Thinking…',
+      'Calling tool "content.publish"…',
+      'Tool "content.publish" finished.',
+      'Thinking… (step 2)',
+    ])
+  })
+
+  it('reports a retry attempt via onProgress before backing off, once per retryable failure', async () => {
+    let attempts = 0
+    const client: ProviderClient = {
+      name: 'fake',
+      model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 3,
+      async chat() {
+        attempts += 1
+        if (attempts < 3) {
+          throw new CogentaError({ code: 'PROVIDER_RATE_LIMITED', message: `busy ${attempts}` })
+        }
+        return textResponse('Done.')
+      },
+    }
+    const messages: string[] = []
+
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 100,
+      onProgress: { report: (message) => messages.push(message) },
+    })
+
+    expect(result.finalText).toBe('Done.')
+    expect(messages).toEqual([
+      'Thinking…',
+      'Retrying after a provider error (attempt 1/3): busy 1',
+      'Retrying after a provider error (attempt 2/3): busy 2',
+    ])
+  })
+
   it('reports an unknown tool as a failed outcome instead of throwing', async () => {
     const client = fakeClient([toolCallResponse('nonexistent.tool', {}), textResponse('ok')])
 

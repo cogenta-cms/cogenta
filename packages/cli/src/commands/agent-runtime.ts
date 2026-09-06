@@ -726,11 +726,12 @@ export async function buildAgentRuntime(
   })
 
   const agentRunner: AgentRunnerLike = {
-    async run(name, instruction, trigger, history) {
+    async run(name, instruction, trigger, history, onProgress) {
       return runner.run(name, {
         instruction,
         ...(trigger === undefined ? {} : { trigger }),
         ...(history === undefined ? {} : { history }),
+        ...(onProgress === undefined ? {} : { onProgress }),
       })
     },
   }

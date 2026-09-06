@@ -223,6 +223,72 @@ export async function getAgentConversation(
   return turns
 }
 
+/** One reported line — see `@cogenta/agents`' own `ProgressEvent`. */
+export interface AgentRunProgressEvent {
+  readonly at: number
+  readonly message: string
+}
+
+/**
+ * Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+ * A watchable twin of `sendAgentMessage`/`runAgent` below: start one of
+ * these, then poll `getAgentMessageJob`/`getAgentRunJob` until `status`
+ * leaves `'running'`, rendering `events` as they grow.
+ */
+export interface AgentRunJob<TResult> {
+  readonly status: 'running' | 'done' | 'failed'
+  readonly events: readonly AgentRunProgressEvent[]
+  readonly result?: TResult
+  readonly error?: { readonly message: string }
+}
+
+export function startAgentMessageJob(
+  token: string,
+  name: string,
+  message: string,
+): Promise<{ readonly jobId: string }> {
+  return request(`/api/agents/${encodeURIComponent(name)}/conversation/jobs`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ message }),
+  })
+}
+
+export function getAgentMessageJob(
+  token: string,
+  name: string,
+  jobId: string,
+): Promise<
+  AgentRunJob<{ readonly turns: readonly AgentConversationTurn[]; readonly run: AgentRunSummary }>
+> {
+  return request(
+    `/api/agents/${encodeURIComponent(name)}/conversation/jobs/${encodeURIComponent(jobId)}`,
+    { headers: authHeader(token) },
+  )
+}
+
+export function startAgentRunJob(
+  token: string,
+  name: string,
+  instruction: string,
+): Promise<{ readonly jobId: string }> {
+  return request(`/api/agents/${encodeURIComponent(name)}/run/jobs`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ instruction }),
+  })
+}
+
+export function getAgentRunJob(
+  token: string,
+  name: string,
+  jobId: string,
+): Promise<AgentRunJob<AgentRunSummary>> {
+  return request(`/api/agents/${encodeURIComponent(name)}/run/jobs/${encodeURIComponent(jobId)}`, {
+    headers: authHeader(token),
+  })
+}
+
 export async function sendAgentMessage(
   token: string,
   name: string,

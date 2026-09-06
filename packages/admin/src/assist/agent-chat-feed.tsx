@@ -25,13 +25,21 @@ export function AgentChatFeed({
   disabledHint,
 }: AgentChatFeedProps): JSX.Element {
   const { t } = useTranslation()
-  const { turns, loading, sending, error, send, clear, dismissError } = conversation
+  const { turns, loading, sending, progress, error, send, clear, dismissError } = conversation
   const [draft, setDraft] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (logRef.current !== null) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [])
+
+  // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+  // Keeps the feed pinned to the bottom as `progress` grows, the same way a
+  // new turn already does — otherwise a long tool-calling run silently
+  // scrolls the latest status line out of view.
+  useEffect(() => {
+    if (progress.length > 0) logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight })
+  }, [progress])
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -79,7 +87,15 @@ export function AgentChatFeed({
         {turns.map((turn, index) => (
           <ChatBubble key={`${turn.createdAt}-${index}`} turn={turn} dense={dense} />
         ))}
-        {sending && <p className="m-0 text-sm text-muted-foreground">{t('agentChat.thinking')}</p>}
+        {sending && (
+          <p
+            className="m-0 text-sm text-muted-foreground italic"
+            aria-live="polite"
+            data-testid="agent-chat-progress"
+          >
+            {progress.at(-1) ?? t('agentChat.thinking')}
+          </p>
+        )}
       </div>
 
       {error !== null && (

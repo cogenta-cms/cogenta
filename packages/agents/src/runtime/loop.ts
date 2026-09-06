@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { Annotation, END, GraphRecursionError, START, StateGraph } from '@langchain/langgraph'
 import { assertProviderAllowed } from '../privacy/assert-provider-allowed.js'
+import { NOOP_PROGRESS } from '../progress/types.js'
 import type { ChatMessage, ProviderToolCall, TokenUsage } from '../providers/types.js'
 import { RepetitionGuard } from './repetition.js'
 import { retryModelCall, withTimeout } from './retry.js'
@@ -112,6 +113,7 @@ function buildAgentGraph(input: RunAgentLoopInput) {
   const toolSpecs = tools.length === 0 ? undefined : tools.map((tool) => tool.spec)
   const repetitionGuard = new RepetitionGuard(input.maxRepeats ?? DEFAULT_MAX_REPEATS)
   const runStartedAt = now()
+  const progress = input.onProgress ?? NOOP_PROGRESS
 
   async function agentNode(state: GraphState): Promise<GraphUpdate> {
     if (input.privacyPolicy !== undefined) {
@@ -131,6 +133,7 @@ function buildAgentGraph(input: RunAgentLoopInput) {
       }
     }
 
+    progress.report(state.stepIndex === 0 ? 'Thinking…' : `Thinking… (step ${state.stepIndex + 1})`)
     const response = await retryModelCall(
       () =>
         withTimeout(
@@ -149,7 +152,15 @@ function buildAgentGraph(input: RunAgentLoopInput) {
           timeoutMs,
           input.signal,
         ),
-      { maxAttempts },
+      {
+        maxAttempts,
+        onRetry: (attempt, error) =>
+          progress.report(
+            `Retrying after a provider error (attempt ${attempt}/${maxAttempts}): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ),
+      },
     )
 
     const usage = addUsage(state.usage, response.usage)
@@ -209,10 +220,16 @@ function buildAgentGraph(input: RunAgentLoopInput) {
     const toolOutcomes: ToolCallOutcome[] = []
     let messages = state.messages
     for (const call of state.pendingToolCalls) {
+      progress.report(`Calling tool "${call.name}"…`)
       const outcome = await runTool(
         toolIndex.get(call.name),
         call,
         input.signal ?? new AbortController().signal,
+      )
+      progress.report(
+        outcome.ok
+          ? `Tool "${call.name}" finished.`
+          : `Tool "${call.name}" failed: ${outcome.error ?? 'unknown error'}`,
       )
       toolOutcomes.push(outcome)
       messages = [

@@ -4,9 +4,13 @@ import {
   type AgentRunSummary,
   clearAgentConversation,
   getAgentConversation,
-  sendAgentMessage,
+  getAgentMessageJob,
+  startAgentMessageJob,
 } from '../api/agents-client.js'
 import { ApiError } from '../api/client.js'
+
+/** How often the conversation job is polled while a turn is in flight — frequent enough to feel live, far below anything that would look like hammering the server. */
+const JOB_POLL_INTERVAL_MS = 500
 
 /**
  * The one place that reads and writes an actor's standing thread with an
@@ -23,6 +27,12 @@ export interface UseAgentConversation {
   readonly turns: readonly AgentConversationTurn[]
   readonly loading: boolean
   readonly sending: boolean
+  /**
+   * Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+   * The growing log of what the agent is doing right now (thinking, calling
+   * a tool, retrying) while `sending` is `true` — `[]` the rest of the time.
+   */
+  readonly progress: readonly string[]
   readonly error: string | null
   send(message: string): Promise<AgentRunSummary | null>
   clear(): Promise<void>
@@ -37,6 +47,7 @@ export function useAgentConversation(
   const [turns, setTurns] = useState<readonly AgentConversationTurn[]>([])
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [progress, setProgress] = useState<readonly string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -68,15 +79,30 @@ export function useAgentConversation(
       if (token === null || agentName === '' || message.trim() === '') return null
       setSending(true)
       setError(null)
+      setProgress([])
       try {
-        const result = await sendAgentMessage(token, agentName, message.trim())
-        setTurns(result.turns)
-        return result.run
+        const { jobId } = await startAgentMessageJob(token, agentName, message.trim())
+        for (;;) {
+          const job = await getAgentMessageJob(token, agentName, jobId)
+          setProgress(job.events.map((event) => event.message))
+          if (job.status === 'running') {
+            await new Promise((resolve) => setTimeout(resolve, JOB_POLL_INTERVAL_MS))
+            continue
+          }
+          if (job.status === 'failed') {
+            setError(job.error?.message ?? errorFallback)
+            return null
+          }
+          if (job.result === undefined) return null
+          setTurns(job.result.turns)
+          return job.result.run
+        }
       } catch (caught) {
         setError(caught instanceof ApiError ? caught.message : errorFallback)
         return null
       } finally {
         setSending(false)
+        setProgress([])
       }
     },
     [token, agentName, errorFallback],
@@ -93,5 +119,14 @@ export function useAgentConversation(
     }
   }, [token, agentName, errorFallback])
 
-  return { turns, loading, sending, error, send, clear, dismissError: () => setError(null) }
+  return {
+    turns,
+    loading,
+    sending,
+    progress,
+    error,
+    send,
+    clear,
+    dismissError: () => setError(null),
+  }
 }

@@ -246,6 +246,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // fault (400); a path that names nothing to remove is a plain 404.
   AGENT_SKILL_RESOURCE_INVALID: 400,
   AGENT_SKILL_RESOURCE_UNKNOWN: 404,
+  // Fiche feedback — a polled progress job id that was never issued, or one
+  // already swept a few minutes after finishing. Same shape as
+  // `SCHEDULER_QUEUE_JOB_NOT_FOUND`.
+  AGENT_RUN_JOB_UNKNOWN: 404,
   // MCP external connection registry (fiche 58 tasks 2/3) —
   // `mcp-connections-router.ts`. `MCP_CONNECTION_CONFIRMATION_REQUIRED` and
   // `MCP_CONNECTION_TOOL_NOT_DISCOVERED` are 400s, not 403s: the caller
@@ -414,6 +418,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // one an admin is otherwise permitted to make — ADR-0010's rule, applied
   // to the theme file rather than the schema file.
   THEME_EXPORT_NOT_ALLOWED: 409,
+  // Fiche feedback — a polled progress job id that was never issued, or one
+  // already swept a few minutes after finishing. Same shape as
+  // `SCHEDULER_QUEUE_JOB_NOT_FOUND`.
+  THEME_GENERATE_JOB_UNKNOWN: 404,
 
   // Import (fiche 25): preview/apply/undo, CSV, RSS/Atom.
   IMPORT_RUN_NOT_FOUND: 404,

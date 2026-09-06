@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { extractDocumentText } from '../documents/extract-text.js'
 import { assembleContext, type DataItem } from '../identity/context.js'
+import { NOOP_PROGRESS, type ProgressReporter } from '../progress/types.js'
 import type { ChatContentPart, ChatImagePart, ProviderClient } from '../providers/types.js'
 import { extractJsonObject } from '../site-plan/json.js'
 import { generateSkinCandidates } from '../site-plan/skin-candidates.js'
@@ -15,12 +16,15 @@ import { generateSkinCandidates } from '../site-plan/skin-candidates.js'
  *
  * Two calls happen here, never one: a small classification call picks the
  * base theme (and, optionally, a tagline/footer note) from the site's own
- * installed theme packages, and `generateSkinCandidates` — unchanged, the
- * same generate/validate/correct loop the installer and the site-plan
- * screen already use — fills contract D's token schema. Splitting them
- * keeps this module's own job small (theme choice, attachment handling) and
- * leaves the one thing that must never drift (contract D validation) to the
- * function that already owns it.
+ * installed theme packages, and `generateSkinCandidates` fills contract D's
+ * token schema. Splitting them keeps this module's own job small (theme
+ * choice, attachment handling) and leaves the one thing that must never
+ * drift (contract D validation) to the function that already owns it. A
+ * reference image is handed to **both** calls — fiche feedback: it used to
+ * reach only the theme-choice call, so a screenshot could steer which base
+ * theme got picked but never the colours/fonts filled on top of it, which
+ * is what the visible result of "personnalise ce thème comme cette capture"
+ * actually is.
  *
  * R8 is structural, not a prompt request: an attachment's extracted text
  * never enters the system prompt as an instruction. It travels through
@@ -58,6 +62,8 @@ export interface ProposeThemeCandidatesInput {
   readonly baseline?: { readonly themeName: string; readonly tokens: Record<string, unknown> }
   /** Clamped to 2..5 by `generateSkinCandidates`. Defaults to 3. */
   readonly maxCandidates?: number
+  /** Fiche feedback — "je ne sais pas si le traitement est en cours ou pas". Reports the theme choice and each design direction as they happen. */
+  readonly onProgress?: ProgressReporter
 }
 
 export interface ThemeCreatorChromeInput {
@@ -313,12 +319,15 @@ export async function proposeThemeCandidates(
   if (input.availableThemes.length === 0) {
     return { ok: false, reason: 'no theme package is installed on this instance to choose from' }
   }
+  const progress = input.onProgress ?? NOOP_PROGRESS
 
   const { documentData, imageParts, warnings, contributedFilenames } = processAttachments(
     input.attachments ?? [],
     input.client,
   )
+  for (const warning of warnings) progress.report(warning)
 
+  progress.report('Choosing a base theme…')
   const themeChoice = await chooseTheme(
     input,
     documentData,
@@ -327,6 +336,7 @@ export async function proposeThemeCandidates(
   )
   if (!themeChoice.ok) return { ok: false, reason: themeChoice.reason }
   const { choice } = themeChoice
+  progress.report(`Base theme chosen: ${choice.themeName} (${choice.rationale})`)
 
   const attachmentNote =
     contributedFilenames.length === 0
@@ -343,6 +353,8 @@ export async function proposeThemeCandidates(
     description: `${baseDescription}${attachmentNote}`,
     blueprintLabel: input.siteName,
     ...(input.maxCandidates === undefined ? {} : { count: input.maxCandidates }),
+    ...(imageParts.length === 0 ? {} : { images: imageParts }),
+    onProgress: progress,
   })
 
   if (!skinResult.ok) return { ok: false, reason: skinResult.reason }

@@ -1,6 +1,7 @@
 import {
   createAgentRegistry,
   createMemoryTraceStore,
+  createProgressJobStore,
   defineAgent,
   type TraceStore,
 } from '@cogenta/agents'
@@ -669,5 +670,177 @@ describe('GET/DELETE /api/agents/:name/conversation, POST …/conversation/messa
       EDITOR,
     )
     expect(response.status).toBe(403)
+  })
+})
+
+// Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+// These prove the polled-job pair actually runs the same operation as its
+// synchronous sibling and reports progress along the way, using the real
+// `createProgressJobStore` from `@cogenta/agents` (a devDependency here,
+// same as `assistant-router.test.ts` already does) rather than a hand-rolled
+// fake — a mismatch between this router's structural types and the real
+// store's shape would fail to compile, not just fail a test.
+describe('POST /api/agents/:name/run/jobs, GET …/run/jobs/:jobId', () => {
+  it('answers AGENT_RUNTIME_UNAVAILABLE when no progress job store is wired', async () => {
+    const runner = {
+      run: async () => ({ agent: 'x', stopReason: 'end_turn', finalText: null, steps: 0 }),
+    }
+    const withRunner = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+    })
+    const response = await withRunner.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/run/jobs',
+        query: {},
+        body: { instruction: 'scan now' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(503)
+  })
+
+  it('starts a job, reports progress, and finishes with the run summary as its result', async () => {
+    const runner = {
+      run: async (
+        name: string,
+        instruction: string,
+        _trigger?: string,
+        _history?: unknown,
+        onProgress?: { report(message: string): void },
+      ) => {
+        onProgress?.report('scanning…')
+        return {
+          agent: name,
+          stopReason: 'end_turn' as const,
+          finalText: `did: ${instruction}`,
+          steps: 1,
+        }
+      },
+    }
+    const withJobs = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      progressJobs: createProgressJobStore(),
+    })
+
+    const started = await withJobs.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/run/jobs',
+        query: {},
+        body: { instruction: 'scan now' },
+      },
+      ADMIN,
+    )
+    expect(started.status).toBe(202)
+    const jobId = (started.body as { data: { jobId: string } }).data.jobId
+    expect(jobId).toBeTruthy()
+
+    // The job runs asynchronously — poll until it settles, exactly like a
+    // real client would (bounded so a real regression fails the test rather
+    // than hanging it).
+    let job: { status: string; events: { message: string }[]; result?: unknown } | undefined
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const polled = await withJobs.handle(
+        {
+          method: 'GET',
+          path: `/api/agents/security/run/jobs/${jobId}`,
+          query: {},
+          body: undefined,
+        },
+        ADMIN,
+      )
+      job = (polled.body as { data: typeof job }).data
+      if (job?.status !== 'running') break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(job?.status).toBe('done')
+    expect(job?.events.map((e) => e.message)).toContain('scanning…')
+    expect((job?.result as { finalText: string } | undefined)?.finalText).toBe('did: scan now')
+  })
+
+  it('answers AGENT_RUN_JOB_UNKNOWN for an id nobody issued', async () => {
+    const withJobs = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner: {
+        run: async () => ({ agent: 'x', stopReason: 'end_turn', finalText: null, steps: 0 }),
+      },
+      progressJobs: createProgressJobStore(),
+    })
+    const response = await withJobs.handle(
+      { method: 'GET', path: '/api/agents/security/run/jobs/nope', query: {}, body: undefined },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
+    expect((response.body as { error: { code: string } }).error.code).toBe('AGENT_RUN_JOB_UNKNOWN')
+  })
+})
+
+describe('POST /api/agents/:name/conversation/jobs, GET …/conversation/jobs/:jobId', () => {
+  it('starts a job that also appends the exchange to the conversation thread once it finishes', async () => {
+    const runner = {
+      run: async (
+        name: string,
+        instruction: string,
+        _trigger?: string,
+        _history?: unknown,
+        onProgress?: { report(message: string): void },
+      ) => {
+        onProgress?.report('thinking…')
+        return {
+          agent: name,
+          stopReason: 'end_turn' as const,
+          finalText: `reply: ${instruction}`,
+          steps: 1,
+        }
+      },
+    }
+    const conversations = memoryConversations()
+    const withJobs = createAgentsRouter({
+      agents: createAgentRegistry([securityAgent()]),
+      runner,
+      conversations,
+      progressJobs: createProgressJobStore(),
+    })
+
+    const started = await withJobs.handle(
+      {
+        method: 'POST',
+        path: '/api/agents/security/conversation/jobs',
+        query: {},
+        body: { message: 'hello' },
+      },
+      ADMIN,
+    )
+    expect(started.status).toBe(202)
+    const jobId = (started.body as { data: { jobId: string } }).data.jobId
+
+    let job:
+      | { status: string; events: { message: string }[]; result?: { turns: unknown[] } }
+      | undefined
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const polled = await withJobs.handle(
+        {
+          method: 'GET',
+          path: `/api/agents/security/conversation/jobs/${jobId}`,
+          query: {},
+          body: undefined,
+        },
+        ADMIN,
+      )
+      job = (polled.body as { data: typeof job }).data
+      if (job?.status !== 'running') break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(job?.status).toBe('done')
+    expect(job?.events.map((e) => e.message)).toContain('thinking…')
+    expect(job?.result?.turns).toHaveLength(2)
+
+    const persisted = await conversations.get('security', ADMIN.id)
+    expect(persisted).toHaveLength(2)
   })
 })

@@ -1130,6 +1130,21 @@ export function installMockFetch(
     toolCalls?: { name: string; input: Record<string, unknown> }[]
   }
   const mockAgentConversations: Record<string, MockConversationTurn[]> = {}
+  /**
+   * Fiche feedback — the pending "started, not yet polled done" state for
+   * `POST …/conversation/jobs`, keyed by the mock's own generated job id.
+   * `polls` lets a test see a real `'running'` reply (with a progress
+   * event) before the job settles on the next poll — the first poll would
+   * otherwise always already be `'done'`, which proves the wiring but never
+   * exercises the live progress line a component actually renders while
+   * waiting.
+   */
+  const mockAgentMessageJobs: Record<
+    string,
+    { readonly name: string; readonly message: string; polls: number }
+  > = {}
+  /** Same pending-job bookkeeping as `mockAgentMessageJobs` above, for `POST /api/theme/generate/jobs`. */
+  const mockThemeGenerateJobs: Record<string, { polls: number }> = {}
   // Kept in sync with `mockAgents.security.enabled` for the pre-existing
   // enable/disable tests, which read `securityAgentEnabled` directly.
   const syncSecurityEnabled = (): void => {
@@ -4593,7 +4608,7 @@ export function installMockFetch(
         }
         syncSecurityEnabled()
         const agentMatch =
-          /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history|identity|run|conversation))?(?:\/(messages))?/u.exec(
+          /\/api\/agents\/([^/?]+)(?:\/(enable|disable|traces|history|identity|run|conversation))?(?:\/(messages|jobs))?(?:\/([^/?]+))?/u.exec(
             url,
           )
         if (agentMatch === null) {
@@ -4634,7 +4649,7 @@ export function installMockFetch(
             })
           }
         }
-        const [, name, action, subAction] = agentMatch ?? []
+        const [, name, action, subAction, jobId] = agentMatch ?? []
         if (name !== undefined && mockAgents[name] === undefined && action !== undefined) {
           return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No such agent.' } })
         }
@@ -4693,7 +4708,12 @@ export function installMockFetch(
           const identity = mockAgentIdentities[name] ?? { role: '', objectives: [] }
           return json(200, { data: identity })
         }
-        if (action === 'run' && method === 'POST' && name !== undefined) {
+        if (
+          action === 'run' &&
+          subAction === undefined &&
+          method === 'POST' &&
+          name !== undefined
+        ) {
           const body = JSON.parse(String(init?.body ?? '{}')) as { instruction?: string }
           return json(200, {
             data: {
@@ -4702,6 +4722,28 @@ export function installMockFetch(
               finalText: `Mock result for: ${body.instruction ?? ''}`,
               steps: 1,
               usage: { inputTokens: 10, outputTokens: 5 },
+            },
+          })
+        }
+        if (action === 'run' && subAction === 'jobs' && method === 'POST' && name !== undefined) {
+          // Fiche feedback — the polled twin of `POST …/run` above. This
+          // mock never actually runs in the background, so the very first
+          // poll already finds the job `'done'` — enough to exercise a
+          // component's start-then-poll flow without a real async job.
+          return json(202, { data: { jobId: `run-job-${name}-${Date.now()}` } })
+        }
+        if (action === 'run' && subAction === 'jobs' && method === 'GET' && name !== undefined) {
+          return json(200, {
+            data: {
+              status: 'done',
+              events: [{ at: Date.now(), message: 'Mock progress.' }],
+              result: {
+                agent: name,
+                stopReason: 'end_turn',
+                finalText: 'Mock run result.',
+                steps: 1,
+                usage: { inputTokens: 10, outputTokens: 5 },
+              },
             },
           })
         }
@@ -4728,6 +4770,66 @@ export function installMockFetch(
                   finalText: assistantTurn.content,
                   steps: 1,
                   usage: { inputTokens: 10, outputTokens: 5 },
+                },
+              },
+            })
+          }
+          // Fiche feedback — the polled twin of `…/messages` above. Keyed
+          // by the message itself (never actually persisted server-side in
+          // this mock) so `GET …/jobs/:jobId` can still tell one in-flight
+          // send from another without a real background job to poll.
+          if (subAction === 'jobs' && jobId === undefined && method === 'POST') {
+            const body = JSON.parse(String(init?.body ?? '{}')) as { message?: string }
+            const message = body.message ?? ''
+            const id = `msg-job-${name}-${Date.now()}`
+            mockAgentMessageJobs[id] = { name, message, polls: 0 }
+            return json(202, { data: { jobId: id } })
+          }
+          if (subAction === 'jobs' && jobId !== undefined && method === 'GET') {
+            const job = mockAgentMessageJobs[jobId]
+            if (job === undefined) {
+              return json(404, {
+                error: { code: 'AGENT_RUN_JOB_UNKNOWN', message: 'No such job.' },
+              })
+            }
+            // Still "running" on the first poll, so a test can observe the
+            // live progress line before the reply lands — see this map's
+            // own doc comment.
+            if (job.polls === 0) {
+              job.polls += 1
+              return json(200, {
+                data: {
+                  status: 'running',
+                  events: [{ at: Date.now(), message: 'Mock progress.' }],
+                },
+              })
+            }
+            const createdAt = new Date().toISOString()
+            const userTurn: MockConversationTurn = {
+              role: 'user',
+              content: job.message,
+              createdAt,
+            }
+            const assistantTurn: MockConversationTurn = {
+              role: 'assistant',
+              content: `Mock reply to: ${job.message}`,
+              createdAt,
+            }
+            turns.push(userTurn, assistantTurn)
+            delete mockAgentMessageJobs[jobId]
+            return json(200, {
+              data: {
+                status: 'done',
+                events: [{ at: Date.now(), message: 'Mock progress.' }],
+                result: {
+                  turns,
+                  run: {
+                    agent: name,
+                    stopReason: 'end_turn',
+                    finalText: assistantTurn.content,
+                    steps: 1,
+                    usage: { inputTokens: 10, outputTokens: 5 },
+                  },
                 },
               },
             })
@@ -8577,7 +8679,11 @@ export function installMockFetch(
           })
         }
 
-        if (url.includes('/api/theme/generate') && method === 'POST') {
+        if (
+          url.includes('/api/theme/generate') &&
+          !url.includes('/api/theme/generate/jobs') &&
+          method === 'POST'
+        ) {
           if (options.theme?.aiAvailable !== true) {
             return json(501, {
               error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
@@ -8589,6 +8695,51 @@ export function installMockFetch(
               ...(options.theme.generateWarnings === undefined
                 ? {}
                 : { warnings: options.theme.generateWarnings }),
+            },
+          })
+        }
+
+        // Fiche feedback — the polled twin of `POST /api/theme/generate`
+        // above, same `options.theme` configuration. The mock keeps the job
+        // `'running'` for one poll before settling, the same
+        // "exercise the live progress line, not just the eventual result"
+        // reasoning as `mockAgentMessageJobs`.
+        if (url.includes('/api/theme/generate/jobs') && method === 'POST') {
+          if (options.theme?.aiAvailable !== true) {
+            return json(501, {
+              error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
+            })
+          }
+          const id = `theme-job-${Date.now()}`
+          mockThemeGenerateJobs[id] = { polls: 0 }
+          return json(202, { data: { jobId: id } })
+        }
+        const themeJobPollMatch = /\/api\/theme\/generate\/jobs\/([^/?]+)/u.exec(url)
+        if (themeJobPollMatch !== null && method === 'GET') {
+          const jobId = themeJobPollMatch[1] as string
+          const job = mockThemeGenerateJobs[jobId]
+          if (job === undefined) {
+            return json(404, {
+              error: { code: 'THEME_GENERATE_JOB_UNKNOWN', message: 'No such job.' },
+            })
+          }
+          if (job.polls === 0) {
+            job.polls += 1
+            return json(200, {
+              data: { status: 'running', events: [{ at: Date.now(), message: 'Mock progress.' }] },
+            })
+          }
+          delete mockThemeGenerateJobs[jobId]
+          return json(200, {
+            data: {
+              status: 'done',
+              events: [{ at: Date.now(), message: 'Mock progress.' }],
+              result: {
+                candidates: options.theme?.generateCandidates ?? [],
+                ...(options.theme?.generateWarnings === undefined
+                  ? {}
+                  : { warnings: options.theme.generateWarnings }),
+              },
             },
           })
         }

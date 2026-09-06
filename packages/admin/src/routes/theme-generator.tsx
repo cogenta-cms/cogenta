@@ -4,10 +4,11 @@ import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   type AvailableTheme,
-  generateSkinCandidates,
   getTheme,
+  getThemeGenerateJob,
   type SkinCandidate,
   saveThemeOverrides,
+  startThemeGenerateJob,
   type ThemeState,
   toGenerateThemeAttachment,
 } from '../api/theme-client.js'
@@ -43,6 +44,9 @@ import { ThemeCandidatePreview } from './theme-generator-preview.js'
  * same reason `appearance.tsx` itself moved its gallery/customize split onto
  * `?view=`.
  */
+
+/** How often the generation job is polled while it runs — see `use-agent-conversation.ts`'s identical constant for the same reasoning. */
+const JOB_POLL_INTERVAL_MS = 500
 
 type ErrorState = { readonly message: string; readonly hint?: string }
 
@@ -105,6 +109,8 @@ export function ThemeGeneratorRoute(): JSX.Element {
   const [candidates, setCandidates] = useState<readonly SkinCandidate[] | null>(null)
   const [warnings, setWarnings] = useState<readonly string[]>([])
   const [generating, setGenerating] = useState(false)
+  /** Fiche feedback — "je ne sais pas si le traitement est en cours ou pas": the growing log of what the generator is doing right now (choosing a base theme, filling each design direction), rendered while `generating` is `true`. */
+  const [progress, setProgress] = useState<readonly string[]>([])
   const [generateError, setGenerateError] = useState<ErrorState | null>(null)
 
   const [activatingId, setActivatingId] = useState<string | null>(null)
@@ -127,21 +133,38 @@ export function ThemeGeneratorRoute(): JSX.Element {
     setCandidates(null)
     setWarnings([])
     setActivatedId(null)
+    setProgress([])
     try {
       const attachments = await Promise.all(attachedFiles.map(toGenerateThemeAttachment))
-      const result = await generateSkinCandidates(token, {
+      const { jobId } = await startThemeGenerateJob(token, {
         description,
         ...(attachments.length === 0 ? {} : { attachments }),
         ...(mode === 'customize' && baselineThemeName !== null
           ? { baseline: { themeName: baselineThemeName } }
           : {}),
       })
-      setCandidates(result.candidates)
-      setWarnings(result.warnings ?? [])
+      for (;;) {
+        const job = await getThemeGenerateJob(token, jobId)
+        setProgress(job.events.map((event) => event.message))
+        if (job.status === 'running') {
+          await new Promise((resolve) => setTimeout(resolve, JOB_POLL_INTERVAL_MS))
+          continue
+        }
+        if (job.status === 'failed') {
+          setGenerateError({ message: job.error?.message ?? t('themeGenerator.generateError') })
+          break
+        }
+        if (job.result !== undefined) {
+          setCandidates(job.result.candidates)
+          setWarnings(job.result.warnings ?? [])
+        }
+        break
+      }
     } catch (caught) {
       setGenerateError(toErrorState(caught, t('themeGenerator.generateError')))
     } finally {
       setGenerating(false)
+      setProgress([])
     }
   }
 
@@ -315,6 +338,24 @@ export function ThemeGeneratorRoute(): JSX.Element {
                   {generating ? t('themeGenerator.generating') : t('themeGenerator.generateAction')}
                 </Button>
               </div>
+
+              {generating && (
+                <ul
+                  className="m-0 flex list-none flex-col gap-1 p-0 text-xs text-muted-foreground"
+                  aria-live="polite"
+                  data-testid="theme-generator-progress"
+                >
+                  {progress.length === 0 ? (
+                    <li className="italic">{t('themeGenerator.generating')}</li>
+                  ) : (
+                    progress.map((message, index) => (
+                      <li key={`${index}-${message}`} className="italic">
+                        {message}
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
 
               {generateError !== null && (
                 <Notice tone="danger" live="assertive">

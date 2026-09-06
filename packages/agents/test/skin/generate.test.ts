@@ -77,6 +77,42 @@ describe('generateSkin', () => {
     expect(client.calls).toBe(1)
   })
 
+  it('sends an attached reference image alongside the prompt text, as a multimodal message', async () => {
+    let sentRequest: ChatRequest | undefined
+    const client: ProviderClient & { calls: number } = {
+      name: 'fake',
+      model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 3,
+      supportsVision: true,
+      calls: 0,
+      async chat(request: ChatRequest): Promise<ChatResponse> {
+        this.calls += 1
+        sentRequest = request
+        return {
+          content: JSON.stringify(VALID_TOKENS),
+          toolCalls: [],
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+    }
+
+    const result = await generateSkin({
+      ...BASE_OPTIONS,
+      client,
+      images: [{ type: 'image', mediaType: 'image/png', data: 'aGVsbG8=' }],
+    })
+
+    expect(result.ok).toBe(true)
+    const content = sentRequest?.messages.at(-1)?.content
+    expect(Array.isArray(content)).toBe(true)
+    const parts = content as readonly { type: string }[]
+    expect(parts[0]?.type).toBe('text')
+    expect(parts[1]).toEqual({ type: 'image', mediaType: 'image/png', data: 'aGVsbG8=' })
+  })
+
   it('corrects a failing attempt using the validator hint and succeeds on the second try', async () => {
     const client = fakeClient([JSON.stringify(LOW_CONTRAST_TOKENS), JSON.stringify(VALID_TOKENS)])
 

@@ -6,6 +6,7 @@ import { withAutonomyForManifest } from '../autonomy/with-autonomy.js'
 import { createBudgetTracker } from '../budget/tracker.js'
 import type { BudgetTracker, KillSwitch } from '../budget/types.js'
 import { assembleContext, type SiteContext } from '../identity/context.js'
+import type { ProgressReporter } from '../progress/types.js'
 import type { ChatMessage, ProviderClient } from '../providers/types.js'
 import { runAgentLoop } from '../runtime/loop.js'
 import type { ExecutableTool, RunResult, RunStopReason } from '../runtime/types.js'
@@ -72,6 +73,8 @@ export interface RunAgentOptions {
   readonly trigger?: string
   readonly signal?: AbortSignal
   readonly maxTokens?: number
+  /** Fiche feedback — a caller watching this run live (a polled job, e.g. `agents-router.ts`'s conversation-message job) gets each step as it happens, instead of nothing until the whole run finishes. Threaded straight through to `runAgentLoop`. */
+  readonly onProgress?: ProgressReporter
 }
 
 /** One tool call the run made, folded down for a caller that only wants "what did it touch", not the full `StepRecord` shape. */
@@ -364,6 +367,7 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
           budget: budgetTrackerFor(agent),
           killSwitch: options.killSwitchFor(agent.name),
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+          ...(runOptions.onProgress === undefined ? {} : { onProgress: runOptions.onProgress }),
         })
       } catch (error) {
         await recordRun(options.auditLog, agent.name, runOptions.trigger, {

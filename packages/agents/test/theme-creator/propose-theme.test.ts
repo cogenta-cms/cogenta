@@ -204,6 +204,40 @@ describe('proposeThemeCandidates', () => {
     expect(imagePart?.data).toBe(imageBytes.toString('base64'))
   })
 
+  // Fiche feedback: this used to reach only `chooseRequests` (which base
+  // theme to use) and never the skin-candidate calls that actually fill
+  // contract D's colour/font tokens — a reference screenshot could steer
+  // the theme *package* but never the visible colours/typography, which is
+  // what "personnalise ce thème comme cette capture" is actually asking for.
+  it('also attaches the same image to the skin-candidate calls, not only the theme choice', async () => {
+    const client = fakeClient(
+      [choiceReply({ themeName: '@cogenta/theme-canonical', rationale: 'Matches the mockup.' })],
+      { supportsVision: true },
+    )
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 13, 10, 26, 10, 1, 2, 3])
+
+    const result = await proposeThemeCandidates({
+      ...BASE_INPUT,
+      client,
+      attachments: [{ filename: 'mockup.png', mimeType: 'image/png', data: imageBytes }],
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const skinRequests = client.requests.filter(
+      (request) => !client.chooseRequests.includes(request),
+    )
+    expect(skinRequests.length).toBeGreaterThan(0)
+    for (const request of skinRequests) {
+      const content = request.messages.at(-1)?.content
+      expect(Array.isArray(content)).toBe(true)
+      const parts = content as readonly { readonly type: string; readonly data?: string }[]
+      expect(
+        parts.some((part) => part.type === 'image' && part.data === imageBytes.toString('base64')),
+      ).toBe(true)
+    }
+  })
+
   it('drops an image and warns, never claiming to have seen it, when the provider has no vision', async () => {
     const client = fakeClient([choiceReply({ themeName: '@cogenta/theme-canonical' })])
     const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 13, 10, 26, 10, 1, 2, 3])

@@ -1,3 +1,4 @@
+import { createProgressJobStore } from '@cogenta/agents'
 import { CogentaError } from '@cogenta/core'
 import { mergeSkinTokens, validateSkin } from '@cogenta/render'
 import { describe, expect, it } from 'vitest'
@@ -117,6 +118,7 @@ function router(overrides: {
   readonly skinGallery?: SkinGalleryLike
   readonly generator?: Parameters<typeof createThemeRouter>[0]['generator']
   readonly fileExporter?: Parameters<typeof createThemeRouter>[0]['fileExporter']
+  readonly progressJobs?: Parameters<typeof createThemeRouter>[0]['progressJobs']
 }) {
   return createThemeRouter({
     store: overrides.store ?? memoryStore(),
@@ -128,6 +130,7 @@ function router(overrides: {
     ...(overrides.skinGallery === undefined ? {} : { skinGallery: overrides.skinGallery }),
     ...(overrides.generator === undefined ? {} : { generator: overrides.generator }),
     ...(overrides.fileExporter === undefined ? {} : { fileExporter: overrides.fileExporter }),
+    ...(overrides.progressJobs === undefined ? {} : { progressJobs: overrides.progressJobs }),
   })
 }
 
@@ -629,6 +632,98 @@ describe('createThemeRouter — unknown routes', () => {
   it('surfaces a CogentaError raised anywhere as a real error response', () => {
     expect(new CogentaError({ code: 'THEME_NO_PROVIDER', message: 'x' }).code).toBe(
       'THEME_NO_PROVIDER',
+    )
+  })
+})
+
+// Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
+// Uses the real `createProgressJobStore` from `@cogenta/agents` (a
+// devDependency here, same as elsewhere in this package's tests), so a
+// mismatch between this router's structural types and the real store's
+// shape fails to compile rather than only failing a test.
+describe('POST /api/theme/generate/jobs, GET …/generate/jobs/:jobId', () => {
+  it('answers THEME_NO_PROVIDER when no progress job store is wired, even with a generator', async () => {
+    const r = router({
+      generator: {
+        async isAvailable() {
+          return true
+        },
+        async generate() {
+          return { ok: true, candidates: [] }
+        },
+      },
+    })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/generate/jobs',
+        query: {},
+        body: { description: 'warm, editorial' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(501)
+  })
+
+  it('starts a job, reports progress, and finishes with the candidates as its result', async () => {
+    const r = router({
+      generator: {
+        async isAvailable() {
+          return true
+        },
+        async generate(_input, onProgress) {
+          onProgress?.report('Generating "Warm editorial"…')
+          return {
+            ok: true,
+            candidates: [
+              { id: 'editorial', label: 'Warm editorial', rationale: 'warm', tokens: FILE_TOKENS },
+            ],
+          }
+        },
+      },
+      progressJobs: createProgressJobStore(),
+    })
+
+    const started = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/generate/jobs',
+        query: {},
+        body: { description: 'warm, editorial' },
+      },
+      ADMIN,
+    )
+    expect(started.status).toBe(202)
+    const jobId = (started.body as { data: { jobId: string } }).data.jobId
+    expect(jobId).toBeTruthy()
+
+    let job:
+      | { status: string; events: { message: string }[]; result?: { candidates: unknown[] } }
+      | undefined
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const polled = await r.handle(
+        { method: 'GET', path: `/api/theme/generate/jobs/${jobId}`, query: {} },
+        ADMIN,
+      )
+      job = (polled.body as { data: typeof job }).data
+      if (job?.status !== 'running') break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(job?.status).toBe('done')
+    expect(job?.events.map((e) => e.message)).toContain('Generating "Warm editorial"…')
+    expect(job?.result?.candidates).toHaveLength(1)
+  })
+
+  it('answers THEME_GENERATE_JOB_UNKNOWN for an id nobody issued', async () => {
+    const r = router({ progressJobs: createProgressJobStore() })
+    const response = await r.handle(
+      { method: 'GET', path: '/api/theme/generate/jobs/nope', query: {} },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'THEME_GENERATE_JOB_UNKNOWN',
     )
   })
 })

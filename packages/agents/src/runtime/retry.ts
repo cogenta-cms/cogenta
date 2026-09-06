@@ -11,6 +11,8 @@ export interface RetryOptions {
   /** Exponential backoff, 250ms base — injectable so tests never actually sleep. */
   readonly delayMs?: (attempt: number) => number
   readonly sleep?: (ms: number) => Promise<void>
+  /** Called right before backing off for another attempt — never on the final, unretried failure. A pure observer (progress reporting); it cannot influence whether the retry happens. */
+  readonly onRetry?: (attempt: number, error: unknown) => void
 }
 
 const DEFAULT_DELAY = (attempt: number): number => 250 * 2 ** attempt
@@ -35,6 +37,7 @@ export async function retryModelCall<T>(fn: () => Promise<T>, options: RetryOpti
       lastError = error
       const retryable = error instanceof CogentaError && RETRYABLE_CODES.has(error.code)
       if (!retryable || attempt === options.maxAttempts - 1) throw error
+      options.onRetry?.(attempt + 1, error)
       await sleep(delayMs(attempt))
     }
   }

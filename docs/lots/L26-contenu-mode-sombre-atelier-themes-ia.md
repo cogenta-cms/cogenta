@@ -79,3 +79,38 @@
   supprimé.
 - Ne pas dupliquer le script : un thème n'écrit jamais lui-même `<script>` — c'est
   `cogenta serve` qui le fait, dans `<head>`, avant la feuille de style.
+
+## Rapport de clôture
+
+**Terminé.** Les trois vagues ont fusionné sur `main`, vérifiées indépendamment à chaque
+fusion (jamais en aveugle) : mode sombre manuel (fondation, faite directement), neuf
+paires thème/blueprint (contenu, images, défauts de design, câblage du bascule),
+support multimodal des fournisseurs, agent Theme Creator + outil + API, atelier admin.
+
+**Deux vraies coupures gérées sans perte** : plusieurs agents tués par des limites de
+débit serveur (429, pas la limite d'usage de l'utilisateur) en cours de vague, et un
+redémarrage de session complet en plein milieu de la vague 2. Aucun travail perdu — les
+worktrees git persistent sur disque indépendamment du processus qui les a créés. Reprise
+par message quand l'erreur était une vérification git transitoire, sinon par un agent
+neuf explicitement pointé sur le worktree existant (jamais une nouvelle isolation :
+resterait un doublon, et une reprise par message après un vrai 429 échoue de façon
+caractéristique).
+
+**Un vrai gap trouvé pendant la vérification, comblé avant de considérer le travail
+fini** : l'agent frontend a documenté honnêtement, dans son propre code, l'absence d'une
+route combinant un thème arbitraire et des jetons arbitraires pour l'aperçu d'un
+candidat — plutôt que de le passer sous silence. Comblé côté serveur
+(`computeCandidateGalleryStyles`, `POST /api/theme/gallery-preview` élargi) puis côté
+admin (le composant de prévisualisation simplifié, un test de bout en bout ajouté qui
+prouve que la couleur du candidat atteint réellement le rendu, pas seulement le bon nom
+de thème).
+
+**Vérifié en direct** : site scaffoldé réel (`blog`), serveur relancé avec le nouveau
+build, message R2 affiché exactement comme demandé sans fournisseur LLM configuré,
+lien « Configurer un fournisseur » fonctionnel. `pnpm turbo run build/typecheck --force`
+vert sur tout l'espace de travail après chaque fusion.
+
+**Reste ouvert, hors de portée de cette session** : générer un thème pour de vrai avec un
+vrai fournisseur LLM — exige une clé API humaine, jamais fournie ni demandée pour ce lot.
+Le câblage complet (agent, outil, route, écran) est vérifié de bout en bout contre un
+`ProviderClient` scripté côté tests, jamais contre un vrai modèle.

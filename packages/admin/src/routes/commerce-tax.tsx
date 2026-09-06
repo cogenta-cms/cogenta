@@ -7,6 +7,7 @@ import {
   simulateTax,
   type TaxOutcome,
   type TaxRule,
+  updateTaxRule,
 } from '../api/commerce-client.js'
 import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -58,6 +59,15 @@ export function CommerceTaxRoute(): JSX.Element {
   const [ratePercent, setRatePercent] = useState('')
   const [includedInPrice, setIncludedInPrice] = useState(true)
   const [priority, setPriority] = useState('0')
+
+  const [editing, setEditing] = useState<TaxRule | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editCountry, setEditCountry] = useState('')
+  const [editRegion, setEditRegion] = useState('')
+  const [editTaxCategory, setEditTaxCategory] = useState('standard')
+  const [editRatePercent, setEditRatePercent] = useState('')
+  const [editIncludedInPrice, setEditIncludedInPrice] = useState(true)
+  const [editPriority, setEditPriority] = useState('0')
 
   const [simCountry, setSimCountry] = useState('')
   const [simRegion, setSimRegion] = useState('')
@@ -115,6 +125,43 @@ export function CommerceTaxRoute(): JSX.Element {
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('commerceTax.createError'))
+    }
+  }
+
+  function startEdit(rule: TaxRule): void {
+    setEditing(rule)
+    setEditName(rule.name)
+    setEditCountry(rule.country ?? '')
+    setEditRegion(rule.region ?? '')
+    setEditTaxCategory(rule.taxCategory)
+    setEditRatePercent((rule.rateBp / 100).toString())
+    setEditIncludedInPrice(rule.includedInPrice)
+    setEditPriority(rule.priority.toString())
+  }
+
+  async function submitEdit(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (token === null || editing === null) return
+    setActionError(null)
+    const percent = Number.parseFloat(editRatePercent)
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      setActionError(t('commerceTax.rateInvalid'))
+      return
+    }
+    try {
+      await updateTaxRule(token, editing.id, {
+        name: editName,
+        rateBp: Math.round(percent * 100),
+        taxCategory: editTaxCategory,
+        includedInPrice: editIncludedInPrice,
+        priority: Number.parseInt(editPriority, 10) || 0,
+        country: editCountry.trim() === '' ? null : editCountry.trim().toUpperCase(),
+        region: editRegion.trim() === '' ? null : editRegion.trim(),
+      })
+      setEditing(null)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('commerceTax.editError'))
     }
   }
 
@@ -221,9 +268,14 @@ export function CommerceTaxRoute(): JSX.Element {
                   </TableCell>
                   <TableCell>{rule.priority}</TableCell>
                   <TableCell>
-                    <Button variant="destructive" size="sm" onClick={() => void remove(rule)}>
-                      {t('commerceTax.delete')}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => startEdit(rule)}>
+                        {t('commerceTax.edit')}
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => void remove(rule)}>
+                        {t('commerceTax.delete')}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -312,6 +364,101 @@ export function CommerceTaxRoute(): JSX.Element {
           )}
         </CardBody>
       </Card>
+
+      <Modal
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null)
+        }}
+        title={t('commerceTax.editHeading', { name: editing?.name ?? '' })}
+        closeLabel={t('commerceTax.close')}
+      >
+        <form onSubmit={submitEdit} className="flex flex-col gap-4">
+          <Field label={t('commerceTax.nameColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={t('commerceTax.simCountry')} description={t('commerceTax.countryHint')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  maxLength={2}
+                  placeholder="FR"
+                  value={editCountry}
+                  onChange={(event) => setEditCountry(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={t('commerceTax.simRegion')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  value={editRegion}
+                  onChange={(event) => setEditRegion(event.target.value)}
+                />
+              )}
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={t('commerceTax.simCategory')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  required
+                  value={editTaxCategory}
+                  onChange={(event) => setEditTaxCategory(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={t('commerceTax.ratePercent')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="text"
+                  inputMode="decimal"
+                  required
+                  value={editRatePercent}
+                  onChange={(event) => setEditRatePercent(event.target.value)}
+                />
+              )}
+            </Field>
+          </div>
+          <Field
+            label={t('commerceTax.priorityColumn')}
+            description={t('commerceTax.priorityHint')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                value={editPriority}
+                onChange={(event) => setEditPriority(event.target.value)}
+              />
+            )}
+          </Field>
+          <label className="flex items-center gap-2 font-sans text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={editIncludedInPrice}
+              onChange={(event) => setEditIncludedInPrice(event.target.checked)}
+            />
+            {t('commerceTax.includedInPrice')}
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit">{t('common.save')}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         open={creating}

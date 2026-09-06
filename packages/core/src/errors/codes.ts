@@ -412,6 +412,9 @@ export const ERROR_CODES = [
 
   // Commerce — tax and shipping (L15 task 6)
   'COMMERCE_TAX_RULE_INVALID',
+  // Fiche feedback: editing a rule in place (PATCH), distinct from the
+  // "invalid input" code above.
+  'COMMERCE_TAX_RULE_UNKNOWN',
   'COMMERCE_SHIPPING_METHOD_UNKNOWN',
   'COMMERCE_SHIPPING_UNAVAILABLE',
 

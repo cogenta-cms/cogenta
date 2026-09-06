@@ -54,8 +54,29 @@ export interface TaxOutcome {
   readonly ruleName: string | null
 }
 
+/**
+ * Fiche feedback: a rule had no edit path — only create and delete existed,
+ * so fixing a typo'd rate meant deleting and recreating it (losing its
+ * `createdAt`, and the priority ordering an operator may have built around
+ * that timestamp). Every field absent from the patch is left exactly as
+ * saved; `country`/`region` are tri-state — `null` clears them back to
+ * "anywhere"/"no region", matching what `undefined` already means at
+ * `createRule()` time.
+ */
+export interface UpdateTaxRuleInput {
+  readonly country?: string | null
+  readonly region?: string | null
+  readonly taxCategory?: string
+  readonly name?: string
+  readonly rateBp?: number
+  readonly includedInPrice?: boolean
+  readonly priority?: number
+  readonly active?: boolean
+}
+
 export interface TaxStore {
   createRule(input: CreateTaxRuleInput): Promise<TaxRule>
+  updateRule(id: string, patch: UpdateTaxRuleInput): Promise<TaxRule>
   deleteRule(id: string): Promise<void>
   listRules(): Promise<readonly TaxRule[]>
   /** The one rule that applies, or null when nothing does. */
@@ -112,19 +133,31 @@ function specificity(rule: TaxRule, zone: TaxZone | null): number | null {
   return rule.country === null ? 0 : 1
 }
 
+function assertRateBp(rateBp: number): void {
+  if (!Number.isInteger(rateBp) || rateBp < 0 || rateBp > 100_000) {
+    throw new CogentaError({
+      code: 'COMMERCE_TAX_RULE_INVALID',
+      message: `A tax rate must be a whole number of basis points between 0 and 100000, got ${String(rateBp)}.`,
+      hint: '20 % is 2000 basis points. 5.5 % is 550.',
+    })
+  }
+}
+
+function taxRuleNotFound(id: string): CogentaError {
+  return new CogentaError({
+    code: 'COMMERCE_TAX_RULE_UNKNOWN',
+    message: `No tax rule with id "${id}".`,
+    hint: 'Check the id against the admin\'s "Taxes" screen.',
+  })
+}
+
 export function createTaxStore(db: DatabaseHandle, now: () => number = Date.now): TaxStore {
   const d = db.dialect
   const table = identifier(TABLES.taxRules, d)
 
   return {
     createRule: async (input) => {
-      if (!Number.isInteger(input.rateBp) || input.rateBp < 0 || input.rateBp > 100_000) {
-        throw new CogentaError({
-          code: 'COMMERCE_TAX_RULE_INVALID',
-          message: `A tax rate must be a whole number of basis points between 0 and 100000, got ${String(input.rateBp)}.`,
-          hint: '20 % is 2000 basis points. 5.5 % is 550.',
-        })
-      }
+      assertRateBp(input.rateBp)
 
       const id = newId(now)
       await db.query(sql`
@@ -144,6 +177,44 @@ export function createTaxStore(db: DatabaseHandle, now: () => number = Date.now)
         })
       }
       return decode(row)
+    },
+
+    updateRule: async (id, patch) => {
+      const existing = await db.query<TaxRuleRow>(sql`select * from ${table} where id = ${id}`)
+      const row = existing.rows[0]
+      if (row === undefined) throw taxRuleNotFound(id)
+      const current = decode(row)
+
+      if (patch.rateBp !== undefined) assertRateBp(patch.rateBp)
+
+      const country =
+        patch.country === undefined ? current.country : (patch.country?.toUpperCase() ?? null)
+      const region = patch.region === undefined ? current.region : (patch.region ?? null)
+      const taxCategory = patch.taxCategory ?? current.taxCategory
+      const name = patch.name ?? current.name
+      const rateBp = patch.rateBp ?? current.rateBp
+      const includedInPrice = patch.includedInPrice ?? current.includedInPrice
+      const priority = patch.priority ?? current.priority
+      const active = patch.active ?? current.active
+
+      await db.query(sql`
+        update ${table}
+        set country = ${country}, region = ${region}, tax_category = ${taxCategory},
+            name = ${name}, rate_bp = ${rateBp}, included_in_price = ${fromBool(includedInPrice, d)},
+            priority = ${priority}, active = ${fromBool(active, d)}
+        where id = ${id}`)
+
+      return {
+        ...current,
+        country,
+        region,
+        taxCategory,
+        name,
+        rateBp,
+        includedInPrice,
+        priority,
+        active,
+      }
     },
 
     deleteRule: async (id) => {

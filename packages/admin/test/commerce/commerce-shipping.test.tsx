@@ -69,6 +69,51 @@ describe('the commerce shipping screen', () => {
     })
   })
 
+  // fiche feedback: a method had no edit path — only create and delete
+  // existed, so fixing a typo'd label or rate meant deleting and recreating
+  // it, losing its position among the other methods.
+  it('edits a method in place, keeping fields the form does not touch', async () => {
+    signedInAs(['admin'], {
+      commerceShippingMethods: [
+        {
+          id: 'ship-standard',
+          label: 'Standard',
+          country: 'FR',
+          region: null,
+          kind: 'flat',
+          currency: 'EUR',
+          amountMinor: 500,
+          perKgMinor: 0,
+          freeOverMinor: null,
+          carrier: null,
+          position: 0,
+          active: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+    render(<App />)
+    await goToShipping()
+    await screen.findByText('Standard')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Modifier Standard' })
+    fireEvent.change(within(dialog).getByLabelText('Libellé'), {
+      target: { value: 'Standard corrected' },
+    })
+    fireEvent.change(within(dialog).getByLabelText('Montant'), { target: { value: '7.50' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Standard corrected')).toBeDefined()
+    })
+    const row = screen.getByText('Standard corrected').closest('tr') as HTMLElement
+    // Untouched fields (zone) survive the edit.
+    expect(within(row).getByText('FR')).toBeDefined()
+    expect(within(row).getByText(/7[.,]50/u)).toBeDefined()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('shows the carrier fallback wording on a method that names a carrier, in the list and in the simulator', async () => {
     signedInAs(['admin'], {
       commerceShippingMethods: [

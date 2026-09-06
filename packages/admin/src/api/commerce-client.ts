@@ -1009,6 +1009,32 @@ export function createTaxRule(
   })
 }
 
+/**
+ * Fiche feedback: a rule had no edit path — only create and delete existed.
+ * Tri-state patch: a field absent from `patch` is left exactly as saved;
+ * `country`/`region: null` clears them back to "anywhere"/"no region".
+ */
+export function updateTaxRule(
+  token: string,
+  id: string,
+  patch: {
+    readonly name?: string
+    readonly rateBp?: number
+    readonly country?: string | null
+    readonly region?: string | null
+    readonly taxCategory?: string
+    readonly includedInPrice?: boolean
+    readonly priority?: number
+    readonly active?: boolean
+  },
+): Promise<TaxRule> {
+  return requestBody(`/api/commerce/tax/rules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
+  })
+}
+
 export async function deleteTaxRule(token: string, id: string): Promise<void> {
   await requestBody(`/api/commerce/tax/rules/${encodeURIComponent(id)}`, {
     method: 'DELETE',
@@ -1085,6 +1111,35 @@ export function createShippingMethod(
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(input),
+  })
+}
+
+/**
+ * Fiche feedback: a method had no edit path — only create and delete
+ * existed. Tri-state patch: a field absent from `patch` is left exactly as
+ * saved; `country`/`region`/`freeOverMinor`/`carrier: null` clear them.
+ */
+export function updateShippingMethod(
+  token: string,
+  id: string,
+  patch: {
+    readonly label?: string
+    readonly currency?: string
+    readonly kind?: ShippingKind
+    readonly country?: string | null
+    readonly region?: string | null
+    readonly amountMinor?: number
+    readonly perKgMinor?: number
+    readonly freeOverMinor?: number | null
+    readonly carrier?: string | null
+    readonly position?: number
+    readonly active?: boolean
+  },
+): Promise<ShippingMethod> {
+  return requestBody(`/api/commerce/shipping/methods/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
   })
 }
 

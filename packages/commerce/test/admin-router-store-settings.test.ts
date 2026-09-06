@@ -130,6 +130,62 @@ describe('tax rules and the simulator', () => {
     expect(response.status).toBe(204)
     expect(await shop.tax.listRules()).toHaveLength(0)
   })
+
+  // fiche feedback: a rule had no edit path — only create and delete
+  // existed, so fixing a typo'd rate meant deleting and recreating it.
+  it('edits a rule in place, through the router, without changing its id', async () => {
+    const created = await shop.tax.createRule({ name: 'X', country: 'FR', rateBp: 100 })
+
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/tax/rules/${created.id}`,
+        body: { name: 'X corrected', rateBp: 2000 },
+      },
+      ADMIN,
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({ id: created.id, name: 'X corrected', rateBp: 2000 })
+    // Untouched fields survive the edit.
+    expect((response.body as { country: string | null }).country).toBe('FR')
+  })
+
+  it('clears country back to "anywhere" with an explicit null', async () => {
+    const created = await shop.tax.createRule({ name: 'X', country: 'FR', rateBp: 100 })
+
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/tax/rules/${created.id}`,
+        body: { country: null },
+      },
+      ADMIN,
+    )
+
+    expect((response.body as { country: string | null }).country).toBeNull()
+  })
+
+  it('refuses a non-write role editing a rule', async () => {
+    const created = await shop.tax.createRule({ name: 'X', rateBp: 100 })
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/tax/rules/${created.id}`,
+        body: { name: 'Y' },
+      },
+      VIEWER,
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('404s editing an id that was never a rule', async () => {
+    const response = await router.handle(
+      { method: 'PATCH', path: '/api/commerce/tax/rules/does-not-exist', body: { name: 'Y' } },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
+  })
 })
 
 describe('shipping methods and the simulator', () => {
@@ -221,6 +277,92 @@ describe('shipping methods and the simulator', () => {
     )
     expect(response.status).toBe(204)
     expect(await shop.shipping.listMethods()).toHaveLength(0)
+  })
+
+  // fiche feedback: a method had no edit path — only create and delete
+  // existed, so fixing a typo'd label or rate meant deleting and recreating
+  // it, losing its position among the other methods.
+  it('edits a method in place, through the router, without changing its id', async () => {
+    const created = await shop.shipping.createMethod({
+      label: 'Standard',
+      currency: 'EUR',
+      amountMinor: 500,
+    })
+
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/shipping/methods/${created.id}`,
+        body: { label: 'Standard shipping', amountMinor: 750 },
+      },
+      ADMIN,
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({
+      id: created.id,
+      label: 'Standard shipping',
+      amountMinor: 750,
+    })
+    // Untouched fields survive the edit.
+    expect((response.body as { currency: string }).currency).toBe('EUR')
+  })
+
+  it('clears freeOverMinor with an explicit null', async () => {
+    const created = await shop.shipping.createMethod({
+      label: 'Standard',
+      currency: 'EUR',
+      freeOverMinor: 5000,
+    })
+
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/shipping/methods/${created.id}`,
+        body: { freeOverMinor: null },
+      },
+      ADMIN,
+    )
+
+    expect((response.body as { freeOverMinor: number | null }).freeOverMinor).toBeNull()
+  })
+
+  it('refuses an unknown shipping kind on edit, same as on create', async () => {
+    const created = await shop.shipping.createMethod({ label: 'X', currency: 'EUR' })
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/shipping/methods/${created.id}`,
+        body: { kind: 'teleport' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
+  })
+
+  it('refuses a non-write role editing a method', async () => {
+    const created = await shop.shipping.createMethod({ label: 'X', currency: 'EUR' })
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/commerce/shipping/methods/${created.id}`,
+        body: { label: 'Y' },
+      },
+      VIEWER,
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('404s editing an id that was never a method', async () => {
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: '/api/commerce/shipping/methods/does-not-exist',
+        body: { label: 'Y' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(404)
   })
 
   it('offers local pickup in the simulator at zero cost (fiche 54 task 1)', async () => {

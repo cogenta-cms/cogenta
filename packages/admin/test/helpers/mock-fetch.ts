@@ -6830,6 +6830,29 @@ export function installMockFetch(
           }
         }
         if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 3) {
+          if (method === 'PATCH') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const rule = mockTaxRules.find((entry) => entry.id === segments[2])
+            if (rule === undefined) {
+              return json(404, {
+                error: { code: 'COMMERCE_TAX_RULE_UNKNOWN', message: 'No such tax rule.' },
+              })
+            }
+            if (typeof body.name === 'string') rule.name = body.name
+            if (body.country === null) rule.country = null
+            else if (typeof body.country === 'string') rule.country = body.country
+            if (body.region === null) rule.region = null
+            else if (typeof body.region === 'string') rule.region = body.region
+            if (typeof body.taxCategory === 'string') rule.taxCategory = body.taxCategory
+            if (typeof body.rateBp === 'number') rule.rateBp = body.rateBp
+            if (typeof body.includedInPrice === 'boolean') {
+              rule.includedInPrice = body.includedInPrice
+            }
+            if (typeof body.priority === 'number') rule.priority = body.priority
+            if (typeof body.active === 'boolean') rule.active = body.active
+            return json(200, rule)
+          }
           if (method === 'DELETE') {
             const refused = commerceRefused('commerce.catalog.write')
             if (refused !== null) return refused
@@ -6912,6 +6935,39 @@ export function installMockFetch(
           }
         }
         if (segments[0] === 'shipping' && segments[1] === 'methods' && segments.length === 3) {
+          if (method === 'PATCH') {
+            const refused = commerceRefused('commerce.catalog.write')
+            if (refused !== null) return refused
+            const entry = mockShippingMethods.find((candidate) => candidate.id === segments[2])
+            if (entry === undefined) {
+              return json(404, {
+                error: {
+                  code: 'COMMERCE_SHIPPING_METHOD_UNKNOWN',
+                  message: 'No such shipping method.',
+                },
+              })
+            }
+            if (typeof body.label === 'string') entry.label = body.label
+            if (body.country === null) entry.country = null
+            else if (typeof body.country === 'string') entry.country = body.country
+            if (body.region === null) entry.region = null
+            else if (typeof body.region === 'string') entry.region = body.region
+            if (typeof body.kind === 'string') {
+              entry.kind = body.kind as 'flat' | 'by_weight' | 'free'
+            }
+            if (typeof body.currency === 'string') entry.currency = body.currency
+            if (typeof body.amountMinor === 'number') entry.amountMinor = body.amountMinor
+            if (typeof body.perKgMinor === 'number') entry.perKgMinor = body.perKgMinor
+            if (body.freeOverMinor === null) entry.freeOverMinor = null
+            else if (typeof body.freeOverMinor === 'number') {
+              entry.freeOverMinor = body.freeOverMinor
+            }
+            if (body.carrier === null) entry.carrier = null
+            else if (typeof body.carrier === 'string') entry.carrier = body.carrier
+            if (typeof body.position === 'number') entry.position = body.position
+            if (typeof body.active === 'boolean') entry.active = body.active
+            return json(200, entry)
+          }
           if (method === 'DELETE') {
             const refused = commerceRefused('commerce.catalog.write')
             if (refused !== null) return refused
@@ -6961,7 +7017,10 @@ export function installMockFetch(
           segments.length === 4
         ) {
           if (method === 'POST') {
-            const refused = commerceRefused('commerce.read')
+            // fiche feedback: mirrors the real router — probing a live
+            // payment driver needs commerce.payment.settle, not merely
+            // commerce.read (a viewer could otherwise trigger a real probe).
+            const refused = commerceRefused('commerce.payment.settle')
             if (refused !== null) return refused
             const name = segments[2] ?? ''
             const known = mockPaymentDrivers.some((driver) => driver.name === name)

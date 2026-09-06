@@ -83,8 +83,31 @@ export interface CarrierRateProvider {
   rate(method: ShippingMethod, basis: ShipmentBasis, zone: TaxZone | null): Promise<number | null>
 }
 
+/**
+ * Fiche feedback: a method had no edit path — only create and delete
+ * existed, so fixing a typo'd label or rate meant deleting and recreating
+ * it, losing its `createdAt` and its `position` among the other methods.
+ * Every field absent from the patch is left exactly as saved; `country`/
+ * `region`/`freeOverMinor`/`carrier` are tri-state — `null` clears them
+ * back to what an absent field already means at `createMethod()` time.
+ */
+export interface UpdateShippingMethodInput {
+  readonly label?: string
+  readonly country?: string | null
+  readonly region?: string | null
+  readonly kind?: ShippingKind
+  readonly currency?: string
+  readonly amountMinor?: number
+  readonly perKgMinor?: number
+  readonly freeOverMinor?: number | null
+  readonly carrier?: string | null
+  readonly position?: number
+  readonly active?: boolean
+}
+
 export interface ShippingStore {
   createMethod(input: CreateShippingMethodInput): Promise<ShippingMethod>
+  updateMethod(id: string, patch: UpdateShippingMethodInput): Promise<ShippingMethod>
   deleteMethod(id: string): Promise<void>
   listMethods(): Promise<readonly ShippingMethod[]>
   /** The methods that serve this zone, cheapest first. */
@@ -125,6 +148,14 @@ function decode(row: MethodRow): ShippingMethod {
     active: toBool(row.active),
     createdAt: toText(row.created_at, 'shipping_method.created_at'),
   }
+}
+
+function shippingMethodNotFound(id: string): CogentaError {
+  return new CogentaError({
+    code: 'COMMERCE_SHIPPING_METHOD_UNKNOWN',
+    message: `No shipping method with id "${id}".`,
+    hint: 'Check the id against the admin\'s "Livraison" screen.',
+  })
 }
 
 function serves(method: ShippingMethod, zone: TaxZone | null): boolean {
@@ -220,6 +251,65 @@ export function createShippingStore(
         })
       }
       return decode(row)
+    },
+
+    updateMethod: async (id, patch) => {
+      const result = await db.query<MethodRow>(sql`select * from ${table} where id = ${id}`)
+      const row = result.rows[0]
+      if (row === undefined) throw shippingMethodNotFound(id)
+      const current = decode(row)
+
+      if (patch.kind !== undefined && !(SHIPPING_KINDS as readonly string[]).includes(patch.kind)) {
+        throw new CogentaError({
+          code: 'COMMERCE_SHIPPING_METHOD_UNKNOWN',
+          message: `"${patch.kind}" is not a shipping kind.`,
+          hint: `Use one of: ${SHIPPING_KINDS.join(', ')}.`,
+        })
+      }
+
+      const label = patch.label ?? current.label
+      const country =
+        patch.country === undefined ? current.country : (patch.country?.toUpperCase() ?? null)
+      const region = patch.region === undefined ? current.region : (patch.region ?? null)
+      const kind = patch.kind ?? current.kind
+      const currency =
+        patch.currency === undefined ? current.currency : assertCurrency(patch.currency)
+      const amountMinor =
+        patch.amountMinor === undefined
+          ? current.amountMinor
+          : assertMinor(patch.amountMinor, 'A shipping amount')
+      const perKgMinor =
+        patch.perKgMinor === undefined
+          ? current.perKgMinor
+          : assertMinor(patch.perKgMinor, 'A per-kilogram shipping amount')
+      const freeOverMinor =
+        patch.freeOverMinor === undefined ? current.freeOverMinor : (patch.freeOverMinor ?? null)
+      const carrier = patch.carrier === undefined ? current.carrier : (patch.carrier ?? null)
+      const position = patch.position ?? current.position
+      const active = patch.active ?? current.active
+
+      await db.query(sql`
+        update ${table}
+        set label = ${label}, country = ${country}, region = ${region}, kind = ${kind},
+            currency = ${currency}, amount_minor = ${amountMinor}, per_kg_minor = ${perKgMinor},
+            free_over_minor = ${freeOverMinor}, carrier = ${carrier}, position = ${position},
+            active = ${fromBool(active, d)}
+        where id = ${id}`)
+
+      return {
+        ...current,
+        label,
+        country,
+        region,
+        kind,
+        currency,
+        amountMinor,
+        perKgMinor,
+        freeOverMinor,
+        carrier,
+        position,
+        active,
+      }
     },
 
     deleteMethod: async (id) => {

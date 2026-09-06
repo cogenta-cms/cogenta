@@ -8,6 +8,7 @@ import {
   type ShippingMethod,
   type ShippingQuote,
   simulateShipping,
+  updateShippingMethod,
 } from '../api/commerce-client.js'
 import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -64,6 +65,17 @@ export function CommerceShippingRoute(): JSX.Element {
   const [perKg, setPerKg] = useState('')
   const [freeOver, setFreeOver] = useState('')
   const [carrier, setCarrier] = useState('')
+
+  const [editing, setEditing] = useState<ShippingMethod | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editCountry, setEditCountry] = useState('')
+  const [editRegion, setEditRegion] = useState('')
+  const [editKind, setEditKind] = useState<ShippingKind>('flat')
+  const [editCurrency, setEditCurrency] = useState('EUR')
+  const [editAmount, setEditAmount] = useState('')
+  const [editPerKg, setEditPerKg] = useState('')
+  const [editFreeOver, setEditFreeOver] = useState('')
+  const [editCarrier, setEditCarrier] = useState('')
 
   const [simCountry, setSimCountry] = useState('')
   const [simRegion, setSimRegion] = useState('')
@@ -130,6 +142,60 @@ export function CommerceShippingRoute(): JSX.Element {
       setActionError(
         caught instanceof ApiError ? caught.message : t('commerceShipping.createError'),
       )
+    }
+  }
+
+  function startEdit(method: ShippingMethod): void {
+    setEditing(method)
+    setEditLabel(method.label)
+    setEditCountry(method.country ?? '')
+    setEditRegion(method.region ?? '')
+    setEditKind(method.kind)
+    setEditCurrency(method.currency)
+    setEditAmount(
+      method.kind === 'free' || method.kind === 'pickup'
+        ? ''
+        : minorToMajorText(method.amountMinor, method.currency),
+    )
+    setEditPerKg(
+      method.perKgMinor === 0 ? '' : minorToMajorText(method.perKgMinor, method.currency),
+    )
+    setEditFreeOver(
+      method.freeOverMinor === null ? '' : minorToMajorText(method.freeOverMinor, method.currency),
+    )
+    setEditCarrier(method.carrier ?? '')
+  }
+
+  async function submitEdit(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (token === null || editing === null) return
+    setActionError(null)
+    const amountMinor =
+      editKind === 'free' || editKind === 'pickup' ? 0 : majorTextToMinor(editAmount, editCurrency)
+    if (amountMinor === null) {
+      setActionError(t('commerceShipping.amountInvalid'))
+      return
+    }
+    const perKgMinor =
+      editPerKg.trim() === '' ? 0 : (majorTextToMinor(editPerKg, editCurrency) ?? 0)
+    const freeOverMinor =
+      editFreeOver.trim() === '' ? null : majorTextToMinor(editFreeOver, editCurrency)
+    try {
+      await updateShippingMethod(token, editing.id, {
+        label: editLabel,
+        currency: editCurrency,
+        kind: editKind,
+        amountMinor,
+        perKgMinor,
+        freeOverMinor,
+        country: editCountry.trim() === '' ? null : editCountry.trim().toUpperCase(),
+        region: editRegion.trim() === '' ? null : editRegion.trim(),
+        carrier: editCarrier.trim() === '' ? null : editCarrier.trim(),
+      })
+      setEditing(null)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('commerceShipping.editError'))
     }
   }
 
@@ -245,9 +311,14 @@ export function CommerceShippingRoute(): JSX.Element {
                       : t('commerceShipping.carrierWithFallback', { carrier: method.carrier })}
                   </TableCell>
                   <TableCell>
-                    <Button variant="destructive" size="sm" onClick={() => void remove(method)}>
-                      {t('commerceShipping.delete')}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => startEdit(method)}>
+                        {t('commerceShipping.edit')}
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => void remove(method)}>
+                        {t('commerceShipping.delete')}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -346,6 +417,137 @@ export function CommerceShippingRoute(): JSX.Element {
           )}
         </CardBody>
       </Card>
+
+      <Modal
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null)
+        }}
+        title={t('commerceShipping.editHeading', { label: editing?.label ?? '' })}
+        closeLabel={t('commerceShipping.close')}
+      >
+        <form onSubmit={submitEdit} className="flex flex-col gap-4">
+          <Field label={t('commerceShipping.labelColumn')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={editLabel}
+                onChange={(event) => setEditLabel(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={t('commerceTax.simCountry')} description={t('commerceTax.countryHint')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  maxLength={2}
+                  placeholder="FR"
+                  value={editCountry}
+                  onChange={(event) => setEditCountry(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={t('commerceTax.simRegion')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  value={editRegion}
+                  onChange={(event) => setEditRegion(event.target.value)}
+                />
+              )}
+            </Field>
+          </div>
+          <Field label={t('commerceShipping.kindColumn')}>
+            {(control) => (
+              <Select
+                {...control}
+                value={editKind}
+                onChange={(event) => setEditKind(event.target.value as ShippingKind)}
+              >
+                {SHIPPING_KINDS.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`commerceShipping.kind.${option}`)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={t('commerceProducts.currencyColumn')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  required
+                  maxLength={3}
+                  value={editCurrency}
+                  onChange={(event) => setEditCurrency(event.target.value.toUpperCase())}
+                />
+              )}
+            </Field>
+            {editKind !== 'free' && editKind !== 'pickup' && (
+              <Field label={t('commerceShipping.amountColumn')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="text"
+                    inputMode="decimal"
+                    required
+                    value={editAmount}
+                    onChange={(event) => setEditAmount(event.target.value)}
+                  />
+                )}
+              </Field>
+            )}
+          </div>
+          {editKind === 'by_weight' && (
+            <Field label={t('commerceShipping.perKgColumn')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="text"
+                  inputMode="decimal"
+                  value={editPerKg}
+                  onChange={(event) => setEditPerKg(event.target.value)}
+                />
+              )}
+            </Field>
+          )}
+          <Field
+            label={t('commerceShipping.freeOverColumn')}
+            description={t('commerceShipping.freeOverHint')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="text"
+                inputMode="decimal"
+                value={editFreeOver}
+                onChange={(event) => setEditFreeOver(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field
+            label={t('commerceShipping.carrierColumn')}
+            description={t('commerceShipping.carrierHint')}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                value={editCarrier}
+                onChange={(event) => setEditCarrier(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit">{t('common.save')}</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         open={creating}

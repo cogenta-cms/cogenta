@@ -69,6 +69,46 @@ describe('the commerce tax screen', () => {
     })
   })
 
+  // fiche feedback: a rule had no edit path — only create and delete
+  // existed, so fixing a typo'd rate meant deleting and recreating it.
+  it('edits a rule in place, keeping fields the form does not touch', async () => {
+    signedInAs(['admin'], {
+      commerceTaxRules: [
+        {
+          id: 'tax-fr',
+          country: 'FR',
+          region: null,
+          taxCategory: 'standard',
+          name: 'Standard FR',
+          rateBp: 2000,
+          includedInPrice: true,
+          priority: 0,
+          active: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+    render(<App />)
+    await goToTax()
+    await screen.findByText('Standard FR')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Modifier Standard FR' })
+    fireEvent.change(within(dialog).getByLabelText('Nom'), {
+      target: { value: 'Standard FR corrected' },
+    })
+    fireEvent.change(within(dialog).getByLabelText('Taux (%)'), { target: { value: '21' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Standard FR corrected')).toBeDefined()
+    })
+    // Untouched fields (zone) survive the edit.
+    const row = screen.getByText('Standard FR corrected').closest('tr') as HTMLElement
+    expect(within(row).getByText('FR — standard')).toBeDefined()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('runs the simulator against the exact same resolver checkout uses', async () => {
     signedInAs(['admin'], {
       commerceTaxRules: [

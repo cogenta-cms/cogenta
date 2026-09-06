@@ -117,6 +117,7 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_INVOICE_NOT_FOUND: 404,
   COMMERCE_SUBSCRIPTION_NOT_FOUND: 404,
   COMMERCE_SHIPPING_METHOD_UNKNOWN: 404,
+  COMMERCE_TAX_RULE_UNKNOWN: 404,
   COMMERCE_CUSTOMER_NOT_FOUND: 404,
   COMMERCE_CREDIT_NOTE_NOT_FOUND: 404,
   COMMERCE_PRODUCT_INVALID: 400,
@@ -1279,6 +1280,45 @@ export function createCommerceAdminRouter(
         }
 
         if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 3) {
+          if (method === 'PATCH') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const country = readOptionalString(body, 'country')
+            const region = readOptionalString(body, 'region')
+            const taxCategory = readOptionalString(body, 'taxCategory')
+            const name = readOptionalString(body, 'name')
+            const rateBp = readOptionalInt(body, 'rateBp')
+            const includedInPrice = readOptionalBool(body, 'includedInPrice')
+            const priority = readOptionalInt(body, 'priority')
+            const active = readOptionalBool(body, 'active')
+            return {
+              status: 200,
+              body: await options.tax.updateRule(segments[2] ?? '', {
+                // `readOptionalString`/`readOptionalBool`/`readOptionalInt`
+                // return `undefined` for an absent key, matching this
+                // patch's own "leave unchanged" — an explicit `null` in the
+                // request body (to clear country/region) is read directly
+                // below rather than through those helpers, which cannot
+                // tell "absent" and "null" apart.
+                ...(country === undefined
+                  ? body.country === null
+                    ? { country: null }
+                    : {}
+                  : { country }),
+                ...(region === undefined
+                  ? body.region === null
+                    ? { region: null }
+                    : {}
+                  : { region }),
+                ...(taxCategory === undefined ? {} : { taxCategory }),
+                ...(name === undefined ? {} : { name }),
+                ...(rateBp === undefined ? {} : { rateBp }),
+                ...(includedInPrice === undefined ? {} : { includedInPrice }),
+                ...(priority === undefined ? {} : { priority }),
+                ...(active === undefined ? {} : { active }),
+              }),
+            }
+          }
           if (method === 'DELETE') {
             permissions.assert('commerce.catalog.write', actor)
             await options.tax.deleteRule(segments[2] ?? '')
@@ -1349,6 +1389,60 @@ export function createCommerceAdminRouter(
         }
 
         if (segments[0] === 'shipping' && segments[1] === 'methods' && segments.length === 3) {
+          if (method === 'PATCH') {
+            permissions.assert('commerce.catalog.write', actor)
+            const body = readObject(request.body)
+            const label = readOptionalString(body, 'label')
+            const country = readOptionalString(body, 'country')
+            const region = readOptionalString(body, 'region')
+            const kind = readOptionalString(body, 'kind')
+            if (kind !== undefined && !(SHIPPING_KINDS as readonly string[]).includes(kind)) {
+              throw new CogentaError({
+                code: 'COMMERCE_SHIPPING_METHOD_UNKNOWN',
+                message: `"${kind}" is not a shipping kind.`,
+                hint: `Use one of: ${SHIPPING_KINDS.join(', ')}.`,
+              })
+            }
+            const currency = readOptionalString(body, 'currency')
+            const amountMinor = readOptionalInt(body, 'amountMinor')
+            const perKgMinor = readOptionalInt(body, 'perKgMinor')
+            const freeOverMinor = readOptionalInt(body, 'freeOverMinor')
+            const carrier = readOptionalString(body, 'carrier')
+            const position = readOptionalInt(body, 'position')
+            const active = readOptionalBool(body, 'active')
+            return {
+              status: 200,
+              body: await options.shipping.updateMethod(segments[2] ?? '', {
+                ...(label === undefined ? {} : { label }),
+                ...(country === undefined
+                  ? body.country === null
+                    ? { country: null }
+                    : {}
+                  : { country }),
+                ...(region === undefined
+                  ? body.region === null
+                    ? { region: null }
+                    : {}
+                  : { region }),
+                ...(kind === undefined ? {} : { kind: kind as ShippingKind }),
+                ...(currency === undefined ? {} : { currency }),
+                ...(amountMinor === undefined ? {} : { amountMinor }),
+                ...(perKgMinor === undefined ? {} : { perKgMinor }),
+                ...(freeOverMinor === undefined
+                  ? body.freeOverMinor === null
+                    ? { freeOverMinor: null }
+                    : {}
+                  : { freeOverMinor }),
+                ...(carrier === undefined
+                  ? body.carrier === null
+                    ? { carrier: null }
+                    : {}
+                  : { carrier }),
+                ...(position === undefined ? {} : { position }),
+                ...(active === undefined ? {} : { active }),
+              }),
+            }
+          }
           if (method === 'DELETE') {
             permissions.assert('commerce.catalog.write', actor)
             await options.shipping.deleteMethod(segments[2] ?? '')

@@ -85,13 +85,43 @@ export interface SkinCandidateLike {
   readonly label: string
   readonly rationale: string
   readonly tokens: Record<string, unknown>
+  /**
+   * The base theme package this candidate is paired with (L26 task 5,
+   * Theme Creator) — absent for a plain skin-only candidate, exactly what
+   * every caller before this lot produced. Present whenever `generate()`
+   * was asked to choose a theme as well as a palette.
+   */
+  readonly themeName?: string
+  readonly chromeInput?: { readonly tagline?: string; readonly footerNote?: string }
+}
+
+/**
+ * One file the client attached to a `generate()` request — never applied on
+ * its own, only read for context (L26 task 5). `data` is already decoded:
+ * the wire body carries base64 (`contentBase64`, the same convention every
+ * upload route in this package uses), and this router decodes it once,
+ * right here, the same place `assistant-router.ts` decodes its own
+ * reference-document upload — `options.generator` never sees base64.
+ */
+export interface ThemeGenerateAttachmentLike {
+  readonly filename: string
+  readonly mimeType: string
+  readonly data: Uint8Array
 }
 
 export interface SkinGeneratorLike {
   generate(input: {
     readonly description: string
+    /** Absent for every caller that predates L26 task 5 — behaviour then is byte-identical to before. */
+    readonly attachments?: readonly ThemeGenerateAttachmentLike[]
+    /** Present for "adjust the current theme" rather than "design a new one". */
+    readonly baseline?: { readonly themeName: string }
   }): Promise<
-    | { readonly ok: true; readonly candidates: readonly SkinCandidateLike[] }
+    | {
+        readonly ok: true
+        readonly candidates: readonly SkinCandidateLike[]
+        readonly warnings?: readonly string[]
+      }
     | { readonly ok: false; readonly reason: string }
   >
 }
@@ -138,6 +168,10 @@ export interface ThemeRouter {
 
 const DEFAULT_BASE_PATH = '/api/theme'
 const MAX_ADDITIONAL_CSS_LENGTH = 100_000
+/** Base64 grows bytes by roughly a third — checked on the encoded string, before anything decodes it, same guard `assistant-router.ts`/`site-plan-router.ts` use for the same reason. */
+const MAX_BASE64_PER_ATTACHMENT = 28 * 1024 * 1024
+const MAX_BASE64_TOTAL = 60 * 1024 * 1024
+const MAX_ATTACHMENTS = 5
 
 function requireAdmin(actor: Actor): void {
   if (actor.roles.includes('admin')) return
@@ -189,6 +223,92 @@ function checkAdditionalCss(value: string | null | undefined): void {
   if (value.length > MAX_ADDITIONAL_CSS_LENGTH) {
     throw invalidCss(`must be at most ${MAX_ADDITIONAL_CSS_LENGTH} characters`)
   }
+}
+
+/**
+ * L26 task 5 — Theme Creator's attachments. Absent (`undefined` in the
+ * body) is the byte-identical path every caller before this lot took: no
+ * key, no validation, no change to `options.generator.generate()`'s call.
+ * Present, each entry is decoded here — `Buffer.from(contentBase64,
+ * 'base64')` then `new Uint8Array(...)` — the same place
+ * `assistant-router.ts` decodes its own upload, so `options.generator`
+ * never has to know what base64 is.
+ */
+function requireAttachments(value: unknown): readonly ThemeGenerateAttachmentLike[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) {
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: 'attachments must be an array.',
+      hint: 'Send { "attachments": [{ "filename": "brief.pdf", "mimeType": "application/pdf", "contentBase64": "…" }] }.',
+    })
+  }
+  if (value.length > MAX_ATTACHMENTS) {
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: `This request carries ${value.length} attachments, over the limit of ${MAX_ATTACHMENTS}.`,
+      hint: `Attach at most ${MAX_ATTACHMENTS} files at a time.`,
+    })
+  }
+  let total = 0
+  return value.map((entry, index) => {
+    const attachment = entry as { filename?: unknown; mimeType?: unknown; contentBase64?: unknown }
+    if (typeof attachment.filename !== 'string' || attachment.filename === '') {
+      throw new CogentaError({
+        code: 'CONTENT_INVALID',
+        message: `Attachment ${index} has no filename.`,
+        hint: 'Every attachment needs a filename.',
+      })
+    }
+    if (typeof attachment.mimeType !== 'string' || attachment.mimeType === '') {
+      throw new CogentaError({
+        code: 'CONTENT_INVALID',
+        message: `Attachment "${attachment.filename}" has no mimeType.`,
+        hint: 'Send the browser-reported MIME type, e.g. "application/pdf" or "image/png".',
+      })
+    }
+    if (typeof attachment.contentBase64 !== 'string' || attachment.contentBase64 === '') {
+      throw new CogentaError({
+        code: 'CONTENT_INVALID',
+        message: `Attachment "${attachment.filename}" carries no content.`,
+        hint: 'Send the file base64-encoded in `contentBase64`.',
+      })
+    }
+    if (attachment.contentBase64.length > MAX_BASE64_PER_ATTACHMENT) {
+      throw new CogentaError({
+        code: 'DOCUMENT_TOO_LARGE',
+        message: `"${attachment.filename}" is larger than this route accepts.`,
+        hint: 'Attach a file of 20 MB or less.',
+        details: { filename: attachment.filename },
+      })
+    }
+    total += attachment.contentBase64.length
+    if (total > MAX_BASE64_TOTAL) {
+      throw new CogentaError({
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'These attachments are larger, together, than this route accepts.',
+        hint: 'Attach fewer files, or smaller ones.',
+      })
+    }
+    return {
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      data: new Uint8Array(Buffer.from(attachment.contentBase64, 'base64')),
+    }
+  })
+}
+
+function requireBaseline(value: unknown): { readonly themeName: string } | undefined {
+  if (value === undefined) return undefined
+  const baseline = value as { themeName?: unknown }
+  if (typeof baseline.themeName !== 'string' || baseline.themeName === '') {
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: 'baseline.themeName is required when baseline is sent.',
+      hint: 'Send { "baseline": { "themeName": "@cogenta/theme-canonical" } }, or omit `baseline` entirely to design a new theme rather than adjust the current one.',
+    })
+  }
+  return { themeName: baseline.themeName }
 }
 
 function noGenerator(): CogentaError {
@@ -356,11 +476,18 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
           return jsonResponse(200, { data: overridesPayload(written) })
         }
 
-        // POST /api/theme/generate — AI candidates (R2/R6/R8, fiche 14 task 3 / L19).
+        // POST /api/theme/generate — AI candidates (R2/R6/R8, fiche 14 task 3 / L19 / L26 task 5).
         if (first === 'generate' && second === undefined) {
           if (method !== 'POST') return methodNotAllowed(['POST'])
           if (options.generator === undefined) throw noGenerator()
-          const description = (request.body as { description?: unknown } | undefined)?.description
+          const body = request.body as
+            | {
+                description?: unknown
+                attachments?: unknown
+                baseline?: unknown
+              }
+            | undefined
+          const description = body?.description
           if (typeof description !== 'string' || description.trim() === '') {
             throw new CogentaError({
               code: 'CONTENT_INVALID',
@@ -368,7 +495,13 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
               hint: 'Send { "description": "warm, editorial, paper-like" }.',
             })
           }
-          const result = await options.generator.generate({ description })
+          const attachments = requireAttachments(body?.attachments)
+          const baseline = requireBaseline(body?.baseline)
+          const result = await options.generator.generate({
+            description,
+            ...(attachments === undefined ? {} : { attachments }),
+            ...(baseline === undefined ? {} : { baseline }),
+          })
           if (!result.ok) {
             throw new CogentaError({
               code: 'THEME_OVERRIDE_INVALID',
@@ -378,7 +511,14 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
           }
           // R6: candidates are returned, never applied. The client calls
           // PUT /api/theme/overrides with the chosen one's tokens.
-          return jsonResponse(200, { data: { candidates: result.candidates } })
+          return jsonResponse(200, {
+            data: {
+              candidates: result.candidates,
+              ...(result.warnings === undefined || result.warnings.length === 0
+                ? {}
+                : { warnings: result.warnings }),
+            },
+          })
         }
 
         // POST /api/theme/export — freezes the current effective tokens into theme.tokens.json. Development only.

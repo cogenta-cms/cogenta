@@ -4,8 +4,9 @@ import {
   createAnthropicClient,
   createGoogleClient,
   createOpenAiClient,
-  generateSkinCandidates,
   type ProviderClient,
+  proposeThemeCandidates,
+  type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
 import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle } from '@cogenta/core'
@@ -69,16 +70,45 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
       ? undefined
       : providerClient(llm, apiKey)
 
+  const themeStore = createThemeStore({ db: options.db })
+  const loadFileTokens = async (): Promise<Record<string, unknown> | null> => {
+    try {
+      return JSON.parse(await readFile(tokensPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * L26 task 5 — "the server resolves the baseline's actual tokens itself
+   * from `loadFileTokens()`/current overrides, the client only signals
+   * intent". Same merge-and-fall-back-to-file logic
+   * `computeEffectiveStyles` below already applies for rendering a page's
+   * stylesheet, reused here so a baseline candidate is generated against
+   * exactly what the site currently serves, never a stale or invalid
+   * overlay.
+   */
+  async function resolveBaselineTokens(): Promise<Record<string, unknown> | null> {
+    const file = await loadFileTokens()
+    if (file === null) return null
+    const overrides = await themeStore.get()
+    if (overrides.tokenOverrides === null) return file
+    try {
+      const merged = mergeSkinTokens(
+        file as never,
+        overrides.tokenOverrides as never,
+      ) as unknown as Record<string, unknown>
+      validateSkin(merged)
+      return merged
+    } catch {
+      return file
+    }
+  }
+
   return {
-    store: createThemeStore({ db: options.db }),
+    store: themeStore,
     availableThemes: await availableThemes(),
-    loadFileTokens: async () => {
-      try {
-        return JSON.parse(await readFile(tokensPath, 'utf8')) as Record<string, unknown>
-      } catch {
-        return null
-      }
-    },
+    loadFileTokens,
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, overrides) =>
       mergeSkinTokens(base as never, overrides as never) as unknown as Record<string, unknown>,
@@ -87,12 +117,31 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
       ? {}
       : {
           generator: {
-            generate: async (input: { readonly description: string }) => {
-              const result = await generateSkinCandidates({
+            generate: async (input: {
+              readonly description: string
+              readonly attachments?: readonly {
+                readonly filename: string
+                readonly mimeType: string
+                readonly data: Uint8Array
+              }[]
+              readonly baseline?: { readonly themeName: string }
+            }) => {
+              const baselineTokens =
+                input.baseline === undefined ? null : await resolveBaselineTokens()
+              const result = await proposeThemeCandidates({
                 client,
                 model: llm.model,
                 description: input.description,
-                blueprintLabel: options.config.site.name,
+                siteName: options.config.site.name,
+                availableThemes: (await availableThemes()).map(
+                  (theme): ThemeCreatorTargetTheme => ({ name: theme.name, label: theme.label }),
+                ),
+                ...(input.attachments === undefined || input.attachments.length === 0
+                  ? {}
+                  : { attachments: input.attachments }),
+                ...(input.baseline === undefined || baselineTokens === null
+                  ? {}
+                  : { baseline: { themeName: input.baseline.themeName, tokens: baselineTokens } }),
               })
               return result.ok
                 ? {
@@ -101,8 +150,13 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                       id: candidate.id,
                       label: candidate.label,
                       rationale: candidate.rationale,
-                      tokens: candidate.tokens as unknown as Record<string, unknown>,
+                      tokens: candidate.tokens,
+                      themeName: candidate.themeName,
+                      ...(candidate.chromeInput === undefined
+                        ? {}
+                        : { chromeInput: { ...candidate.chromeInput } }),
                     })),
+                    warnings: [...result.warnings],
                   }
                 : { ok: false as const, reason: result.reason }
             },
@@ -115,6 +169,40 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
           },
         }
       : {}),
+  }
+}
+
+/**
+ * The ingredients `theme.propose_theme` (`@cogenta/agents-builtin`) needs at
+ * wiring time — `client`/`model`/`availableThemes`, the same shape
+ * `createThemeWiring`'s own `generator` above resolves, exposed separately
+ * so `agent-runtime.ts` can register the tool without rebuilding a second
+ * `ProviderClient` from `options.config.llm` on its own. `undefined` when no
+ * LLM provider is configured (R2) — the tool is then simply not registered,
+ * exactly like `createThemeWiring`'s own `generator` field.
+ */
+export async function createThemeCreatorToolWiring(options: ThemeWiringOptions): Promise<
+  | {
+      readonly client: ProviderClient
+      readonly model: string
+      readonly availableThemes: readonly ThemeCreatorTargetTheme[]
+    }
+  | undefined
+> {
+  const llm = options.config.llm
+  const apiKey = llm?.apiKey
+  const client =
+    llm === undefined || apiKey === undefined || apiKey === ''
+      ? undefined
+      : providerClient(llm, apiKey)
+  if (client === undefined || llm === undefined) return undefined
+
+  return {
+    client,
+    model: llm.model,
+    availableThemes: (await availableThemes()).map(
+      (theme): ThemeCreatorTargetTheme => ({ name: theme.name, label: theme.label }),
+    ),
   }
 }
 

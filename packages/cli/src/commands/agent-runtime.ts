@@ -42,12 +42,15 @@ import {
   type MutableKillSwitch,
   type NotFoundLogReader,
   type PromptTemplateStore,
+  type ProviderClient,
   type ProviderConfigStore,
   type RedirectWriter,
   resolveProviderRegistryConfig,
+  type ThemeCreatorTargetTheme,
   type ToolDefinition,
   type ToolRegistry,
 } from '@cogenta/agents'
+import { createProposeThemeTool } from '@cogenta/agents-builtin'
 import type {
   AgentConversationStoreLike,
   AgentRegistryLike,
@@ -136,6 +139,22 @@ export interface BuildAgentRuntimeOptions {
    * wired in, exactly as if no connection existed.
    */
   readonly mcpConnections?: McpConnectionStore
+  /**
+   * L26 task 5 — the "Cogenta Theme Creator" agent's own tool,
+   * `theme.propose_theme`. Absent whenever no LLM provider is configured
+   * (R2): the tool is then simply not registered, the same posture every
+   * other AI-backed piece of this runtime already takes (`createThemeWiring
+   * `'s own `generator` field, `AssistToolset`'s empty toolset). Built by
+   * `@cogenta/cli`'s `createThemeCreatorToolWiring` (`theme-wiring.ts`),
+   * which resolves the same `ProviderClient` and reads the same
+   * `availableThemes()` the appearance screen's own AI section already
+   * uses — never a second, independently-resolved client.
+   */
+  readonly themeCreator?: {
+    readonly client: ProviderClient
+    readonly model: string
+    readonly availableThemes: readonly ThemeCreatorTargetTheme[]
+  }
 }
 
 export interface AgentRuntimeAssembly {
@@ -374,6 +393,12 @@ function buildToolRegistry(options: {
   readonly redirects: RedirectWriter
   /** Fiche 58 task 4 — every checked remote tool of every enabled MCP connection, already wrapped as a Contract C `ToolDefinition` by `buildMcpToolDefinitions`. Merged in exactly like every core tool above: an agent grants itself one by naming it in its own `tools` list, same as `content.read`. */
   readonly mcpDefinitions: readonly ToolDefinition[]
+  /** L26 task 5 — see `BuildAgentRuntimeOptions.themeCreator`. Absent means `theme.propose_theme` is not registered at all (R2). */
+  readonly themeCreator?: {
+    readonly client: ProviderClient
+    readonly model: string
+    readonly availableThemes: readonly ThemeCreatorTargetTheme[]
+  }
 }) {
   const contentServiceLike: ContentServiceLike = contentServiceLikeOf(options.contentService)
   const contentBrowseServiceLike = contentBrowseServiceLikeOf(
@@ -403,6 +428,9 @@ function buildToolRegistry(options: {
     createContentSchemaTool(contentSchemaServiceLike),
     createRedirectCreateTool(options.redirects),
     ...options.mcpDefinitions,
+    // L26 task 5 — "Cogenta Theme Creator"'s only tool. `sideEffects: false`,
+    // no write path at any autonomy level (see the tool's own doc comment).
+    ...(options.themeCreator === undefined ? [] : [createProposeThemeTool(options.themeCreator)]),
   ]
   return createToolRegistry(definitions)
 }
@@ -612,6 +640,7 @@ export async function buildAgentRuntime(
     collections: options.collections,
     notFoundLog: options.notFoundLog,
     redirects: options.redirects,
+    ...(options.themeCreator === undefined ? {} : { themeCreator: options.themeCreator }),
   }
 
   // Fiche 58 task 4 — built once, here, before the tool registry: every

@@ -53,6 +53,37 @@ export interface SkinCandidate {
   readonly label: string
   readonly rationale: string
   readonly tokens: Record<string, unknown>
+  /** Which installed theme *package* this candidate targets — absent means the currently active theme. */
+  readonly themeName?: string
+  /**
+   * `general.tagline`/`general.footerNote` (contract D `theme@1.4`) the
+   * candidate proposes — informational only. Activating a candidate never
+   * writes these: they live in site settings, not in the theme-overrides row
+   * `PUT /api/theme/overrides` writes, and inventing a second write path for
+   * them here would be scope this screen was not asked to cover.
+   */
+  readonly chromeInput?: {
+    readonly tagline?: string
+    readonly footerNote?: string
+  }
+}
+
+/**
+ * A file read into the base64 envelope `POST /api/theme/generate` takes for
+ * an attachment (a screenshot, a mockup) — the same shape
+ * `toUploadedDocument` (`site-plan-client.ts`) reads for a brief's documents,
+ * plus the browser's own `File.type`, which an image attachment actually
+ * needs to be told apart from a document and a text brief does not.
+ */
+export interface GenerateThemeAttachment {
+  readonly filename: string
+  readonly mimeType: string
+  readonly contentBase64: string
+}
+
+/** Present only for "customize the current theme" — the server resolves the real current tokens itself from this name, so this carries only the intent. */
+export interface GenerateThemeBaseline {
+  readonly themeName: string
 }
 
 export function getTheme(token: string): Promise<ThemeState> {
@@ -92,15 +123,46 @@ export function applyGallerySkin(token: string, id: string): Promise<ThemeOverri
   })
 }
 
+/**
+ * `POST /api/theme/generate` — widened (fiche "Cogenta Theme Creator") to
+ * take optional attachments and an optional "customize this theme rather
+ * than starting over" baseline, on top of the description this already
+ * took. The response also gains `warnings` (e.g. "an attachment could not be
+ * analyzed") — always present as an array in the type, so a caller filters
+ * an absent-vs-empty response with the same `?? []` either way, but genuinely
+ * optional on the wire since an older server never sent the field at all.
+ */
 export function generateSkinCandidates(
   token: string,
-  description: string,
-): Promise<{ readonly candidates: readonly SkinCandidate[] }> {
-  return request<{ readonly candidates: readonly SkinCandidate[] }>('/api/theme/generate', {
+  input: {
+    readonly description: string
+    readonly attachments?: readonly GenerateThemeAttachment[]
+    readonly baseline?: GenerateThemeBaseline
+  },
+): Promise<{
+  readonly candidates: readonly SkinCandidate[]
+  readonly warnings?: readonly string[]
+}> {
+  return request<{
+    readonly candidates: readonly SkinCandidate[]
+    readonly warnings?: readonly string[]
+  }>('/api/theme/generate', {
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
-    body: JSON.stringify({ description }),
+    body: JSON.stringify(input),
   })
+}
+
+/** Reads a file the browser handed us into the base64 envelope `generateSkinCandidates` takes — same chunked-encoding technique as `toUploadedDocument` (`site-plan-client.ts`), plus the file's own MIME type. */
+export async function toGenerateThemeAttachment(file: File): Promise<GenerateThemeAttachment> {
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let at = 0; at < bytes.length; at += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + CHUNK))
+  }
+  return { filename: file.name, mimeType: file.type, contentBase64: btoa(binary) }
 }
 
 export function exportThemeToFile(token: string): Promise<{ readonly exported: boolean }> {
@@ -132,14 +194,21 @@ export function previewTheme(
  * own real home page, in the currently active theme). Every card in the
  * gallery calls this once, by name, so switching which theme is shown never
  * touches `PUT /api/theme/overrides`.
+ *
+ * `tokens` (L26 task 5) previews a Theme Creator candidate's *own* skin
+ * against a theme package this site is not currently running — the
+ * combination `previewTheme` above cannot express, since it only ever
+ * renders the active theme. Omitted, this renders exactly as before: the
+ * named theme's own on-disk default skin.
  */
 export function previewThemeGallery(
   token: string,
   theme: string,
+  tokens?: Record<string, unknown>,
 ): Promise<{ readonly html: string }> {
   return request<{ readonly html: string }>('/api/theme/gallery-preview', {
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
-    body: JSON.stringify({ theme }),
+    body: JSON.stringify({ theme, ...(tokens === undefined ? {} : { tokens }) }),
   })
 }

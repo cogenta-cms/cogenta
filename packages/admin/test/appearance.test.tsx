@@ -110,42 +110,54 @@ describe('the appearance screen', () => {
     expect(screen.getByDisplayValue('#1d4ed8')).toBeDefined()
   })
 
-  it('says the AI section is unavailable without a provider, and hides it entirely', async () => {
+  it('says AI theme generation is unavailable without a provider, and links to configure one', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
     await personalize()
 
-    expect(screen.queryByText('Générer un thème')).toBeNull()
+    // No form, no workshop button — the whole AI section is a single
+    // explanatory notice, per R2: nothing IA-related is even reachable.
+    expect(screen.queryByRole('link', { name: "Générer un thème avec l'IA" })).toBeNull()
+    expect(
+      await screen.findByText(/Générer ou personnaliser un thème avec l'IA nécessite/),
+    ).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Configurer un fournisseur' })).toBeDefined()
   })
 
-  it('shows the AI section, generates candidates, and applies none of them automatically (R6)', async () => {
-    signedIn(['admin'], {
-      aiAvailable: true,
-      generateCandidates: [
-        {
-          id: 'editorial',
-          label: 'Warm editorial',
-          rationale: 'warm, paper-like',
-          tokens: { ...CLINICAL_TOKENS, color: { ...CLINICAL_TOKENS.color, accent: '#c2410c' } },
-        },
-      ],
-    })
+  it('shows the AI card and sends an admin to the full workshop, applying nothing here (R6)', async () => {
+    signedIn(['admin'], { aiAvailable: true })
     render(<App />)
     await goToAppearance()
     await personalize()
 
-    const description = await screen.findByPlaceholderText('Sobre, chaleureux, plutôt papier')
-    fireEvent.change(description, { target: { value: 'warm, editorial, paper-like' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
+    // The workshop lives on its own page (`theme-generator.tsx`), never
+    // crammed into this card — this screen offers only the door to it.
+    fireEvent.click(screen.getByRole('link', { name: "Générer un thème avec l'IA" }))
 
-    await screen.findByText('Warm editorial')
-    // Not applied yet — the file's original accent is still what is shown.
-    expect(screen.getByDisplayValue('#1d4ed8')).toBeDefined()
+    expect(
+      await screen.findByRole('heading', { name: "Générer un thème avec l'IA", level: 1 }),
+    ).toBeDefined()
+    expect(window.location.pathname).toBe('/theme-generator')
+    // "Generate new" by default — no baseline preset from this entry point.
+    expect(window.location.search).not.toContain('baseline')
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choisir' }))
-    await waitFor(() => expect(screen.getByDisplayValue('#c2410c')).toBeDefined())
-    // Still not saved — the "Enregistrer" click below is still required.
+  it('offers a second, theme-specific AI entry on the active gallery card, presetting the baseline', async () => {
+    signedIn(['admin'], { aiAvailable: true })
+    render(<App />)
+    await goToAppearance()
+
+    const canonicalCard = (await screen.findByText('Canonical')).closest('li') as HTMLElement
+    fireEvent.click(
+      within(canonicalCard).getByRole('link', { name: "Personnaliser ce thème avec l'IA" }),
+    )
+
+    await screen.findByRole('heading', { name: "Générer un thème avec l'IA", level: 1 })
+    expect(window.location.search).toContain('baseline=%40cogenta%2Ftheme-canonical')
+    expect(
+      await screen.findByText(/L'IA ajuste Canonical — le thème actuellement en service/),
+    ).toBeDefined()
   })
 
   it('saves a token change and reflects the "overridden" provenance afterwards', async () => {

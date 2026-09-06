@@ -12,7 +12,7 @@ import {
 } from '@cogenta/render'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import {
@@ -20,10 +20,8 @@ import {
   clearThemeOverrides,
   exportThemeToFile,
   type GallerySkin,
-  generateSkinCandidates,
   getTheme,
   previewTheme,
-  type SkinCandidate,
   saveThemeOverrides,
   type ThemeState,
 } from '../api/theme-client.js'
@@ -34,8 +32,10 @@ import { SiteSettingsField } from '../settings/site-settings-field.js'
 import { useSectionAutosave } from '../settings/site-settings-section.js'
 import {
   Button,
+  buttonVariants,
   Card,
   CardBody,
+  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -367,10 +367,6 @@ export function AppearanceRoute(): JSX.Element {
   const [autosaveEnabled] = useAutosaveEnabled()
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
-  const [description, setDescription] = useState('')
-  const [candidates, setCandidates] = useState<readonly SkinCandidate[] | null>(null)
-  const [generating, setGenerating] = useState(false)
-  const [generateError, setGenerateError] = useState<string | null>(null)
   const [switchingTheme, setSwitchingTheme] = useState<string | null>(null)
   const [switchThemeError, setSwitchThemeError] = useState<string | null>(null)
 
@@ -490,28 +486,6 @@ export function AppearanceRoute(): JSX.Element {
     } finally {
       setSwitchingTheme(null)
     }
-  }
-
-  async function generate(): Promise<void> {
-    if (token === null || description.trim() === '') return
-    setGenerating(true)
-    setGenerateError(null)
-    try {
-      const result = await generateSkinCandidates(token, description)
-      setCandidates(result.candidates)
-    } catch (caught) {
-      setGenerateError(caught instanceof ApiError ? caught.message : t('appearance.generateError'))
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  function applyCandidate(candidate: SkinCandidate): void {
-    // R6: nothing is applied automatically. Choosing a candidate loads it
-    // into the draft the "Save" button above still has to be pressed for.
-    setOverrideDraft(candidate.tokens as TokenOverrides)
-    setCandidates(null)
-    savedIndicator.hide()
   }
 
   async function exportToFile(): Promise<void> {
@@ -696,6 +670,21 @@ export function AppearanceRoute(): JSX.Element {
                             >
                               {t('appearance.themePersonalizeAction')}
                             </Button>
+                          )}
+                          {active && theme.aiAvailable && (
+                            // The "customize the current theme" entry into
+                            // the AI workshop (as opposed to the plain
+                            // "generate new" card inside the customize view
+                            // below) — presets `?baseline=` to this theme's
+                            // own name, so the workshop opens already in
+                            // "adjust what's running" mode rather than
+                            // "start over".
+                            <Link
+                              to={`/theme-generator?baseline=${encodeURIComponent(candidate.name)}`}
+                              className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                            >
+                              {t('appearance.themePersonalizeAiAction')}
+                            </Link>
                           )}
                         </div>
                       </li>
@@ -950,68 +939,46 @@ export function AppearanceRoute(): JSX.Element {
                     </CardBody>
                   </Card>
 
-                  {theme.aiAvailable && (
+                  {theme.aiAvailable ? (
                     <Card aria-labelledby="appearance-ai-heading">
                       <CardHeader>
                         <CardTitle>
                           <h2 id="appearance-ai-heading">{t('appearance.aiHeading')}</h2>
                         </CardTitle>
+                        <CardDescription>{t('appearance.aiIntro')}</CardDescription>
                       </CardHeader>
-                      <CardBody className="flex flex-col gap-2">
-                        <Field label={t('appearance.aiDescriptionLabel')}>
-                          {(control) => (
-                            <Input
-                              {...control}
-                              type="text"
-                              value={description}
-                              onChange={(event) => setDescription(event.target.value)}
-                              placeholder={t('appearance.aiDescriptionPlaceholder')}
-                            />
-                          )}
-                        </Field>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={generating || description.trim() === ''}
-                          onClick={() => void generate()}
+                      <CardBody>
+                        {/*
+                         * The full workshop (describe, attach files, preview
+                         * several candidates, activate one) lives on its own
+                         * page — `theme-generator.tsx` — rather than crammed
+                         * into this card. This button always opens it in
+                         * "generate new" mode; the gallery card's own
+                         * "Personnaliser ce thème avec l'IA" button above is
+                         * the "adjust what's running" entry.
+                         */}
+                        <Link
+                          to="/theme-generator"
+                          className={buttonVariants({ variant: 'secondary' })}
                         >
-                          {generating
-                            ? t('appearance.aiGenerating')
-                            : t('appearance.aiGenerateAction')}
-                        </Button>
-                        {generateError !== null && (
-                          <Notice tone="danger" live="assertive">
-                            <p>{generateError}</p>
-                          </Notice>
-                        )}
-                        {candidates !== null && (
-                          <ul className="m-0 flex flex-col gap-2 p-0">
-                            {candidates.map((candidate) => (
-                              <li
-                                key={candidate.id}
-                                className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
-                              >
-                                <span>
-                                  <strong>{candidate.label}</strong>
-                                  <br />
-                                  <span className="text-xs text-muted-foreground">
-                                    {candidate.rationale}
-                                  </span>
-                                </span>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => applyCandidate(candidate)}
-                                >
-                                  {t('appearance.chooseAction')}
-                                </Button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                          {t('appearance.aiOpenWorkshopAction')}
+                        </Link>
                       </CardBody>
                     </Card>
+                  ) : (
+                    <Notice
+                      tone="info"
+                      actions={
+                        <Link
+                          to="/providers"
+                          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                        >
+                          {t('appearance.aiNoProviderAction')}
+                        </Link>
+                      }
+                    >
+                      <p>{t('appearance.aiNoProviderNotice')}</p>
+                    </Notice>
                   )}
 
                   <div className="flex flex-wrap items-center gap-2">

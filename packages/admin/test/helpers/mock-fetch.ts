@@ -675,7 +675,11 @@ export function installMockFetch(
         readonly label: string
         readonly rationale: string
         readonly tokens: Record<string, unknown>
+        readonly themeName?: string
+        readonly chromeInput?: { readonly tagline?: string; readonly footerNote?: string }
       }[]
+      /** What `POST /api/theme/generate` answers with alongside `candidates` — e.g. "an attachment could not be analyzed". Absent by default, the same "server never sent the field" shape a caller has to tolerate. */
+      readonly generateWarnings?: readonly string[]
       /** The active theme *package* name (fiche L23), `null` for the built-in default. */
       readonly activeTheme?: string | null
       /** The theme packages this mocked instance can offer — the canonical default alone unless a test overrides it. */
@@ -8407,10 +8411,19 @@ export function installMockFetch(
         // names the requested theme, so a test can assert the iframe
         // actually receives a different document per card.
         if (url.includes('/api/theme/gallery-preview') && method === 'POST') {
-          const requestedTheme = (body as { theme?: string } | undefined)?.theme ?? ''
+          const galleryBody = body as
+            | { theme?: string; tokens?: { color?: { accent?: string } } }
+            | undefined
+          const requestedTheme = galleryBody?.theme ?? ''
+          // Echoes the candidate's own accent colour when `tokens` travelled
+          // (L26 task 5) — the same "some real HTML that names the request"
+          // discipline the theme name already gets above, so a test can
+          // assert a candidate's tokens actually reached this route rather
+          // than the theme's own on-disk default.
+          const accent = galleryBody?.tokens?.color?.accent
           return json(200, {
             data: {
-              html: `<!doctype html><html><head><style>/* ${requestedTheme} */</style></head><body>gallery preview of ${requestedTheme}</body></html>`,
+              html: `<!doctype html><html><head><style>/* ${requestedTheme}${accent === undefined ? '' : ` accent:${accent}`} */</style></head><body>gallery preview of ${requestedTheme}</body></html>`,
             },
           })
         }
@@ -8421,7 +8434,14 @@ export function installMockFetch(
               error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
             })
           }
-          return json(200, { data: { candidates: options.theme.generateCandidates ?? [] } })
+          return json(200, {
+            data: {
+              candidates: options.theme.generateCandidates ?? [],
+              ...(options.theme.generateWarnings === undefined
+                ? {}
+                : { warnings: options.theme.generateWarnings }),
+            },
+          })
         }
 
         if (url.includes('/api/theme/export') && method === 'POST') {

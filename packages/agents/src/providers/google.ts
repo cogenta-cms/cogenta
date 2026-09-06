@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { textOnlyContent } from './content-parts.js'
-import { requestSignalWithTimeout } from './request-signal.js'
+import { FALLBACK_MAX_OUTPUT_TOKENS } from './defaults.js'
+import { DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS, requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
@@ -121,8 +122,15 @@ function toGoogleContent(message: ChatMessage): GoogleContent {
   return { role, parts }
 }
 
-/** Pure — no network. */
-export function buildGoogleRequest(request: ChatRequest): GoogleRequestBody {
+/**
+ * Pure — no network. `fallbackMaxTokens` is the client's own resolved
+ * `maxOutputTokens` (the admin's per-provider value, or the built-in floor)
+ * — applied only when `request.maxTokens` itself is absent.
+ */
+export function buildGoogleRequest(
+  request: ChatRequest,
+  fallbackMaxTokens: number = FALLBACK_MAX_OUTPUT_TOKENS,
+): GoogleRequestBody {
   return {
     contents: request.messages.map(toGoogleContent),
     ...(request.system === undefined
@@ -142,7 +150,7 @@ export function buildGoogleRequest(request: ChatRequest): GoogleRequestBody {
           ],
         }),
     generationConfig: {
-      maxOutputTokens: request.maxTokens,
+      maxOutputTokens: request.maxTokens ?? fallbackMaxTokens,
       ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
     },
   }
@@ -193,6 +201,10 @@ export interface GoogleClientConfig {
   readonly model: string
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
+  /** See `ProviderClient.maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts`. */
+  readonly maxOutputTokens?: number
+  readonly requestTimeoutMs?: number
+  readonly maxCorrectionAttempts?: number
 }
 
 /** API key injected at the runtime boundary — never in a prompt or tool input (rule R7). */
@@ -200,17 +212,24 @@ export function createGoogleClient(config: GoogleClientConfig): ProviderClient {
   const doFetch = config.fetchImpl ?? fetch
   const base = config.baseUrl ?? DEFAULT_BASE_URL
   const url = `${base}/${config.model}:generateContent?key=${config.apiKey}`
+  const maxOutputTokens = config.maxOutputTokens ?? FALLBACK_MAX_OUTPUT_TOKENS
+  const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS
 
   return {
     name: 'google',
     model: config.model,
     supportsVision: true,
+    maxOutputTokens,
+    requestTimeoutMs,
+    ...(config.maxCorrectionAttempts === undefined
+      ? {}
+      : { maxCorrectionAttempts: config.maxCorrectionAttempts }),
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
-      const signal = requestSignalWithTimeout(options?.signal)
+      const signal = requestSignalWithTimeout(options?.signal, requestTimeoutMs)
       const response = await doFetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(buildGoogleRequest(request)),
+        body: JSON.stringify(buildGoogleRequest(request, maxOutputTokens)),
         signal,
       }).catch((cause: unknown) => {
         if (signal.aborted && options?.signal?.aborted !== true) {

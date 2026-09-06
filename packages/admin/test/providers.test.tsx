@@ -77,6 +77,55 @@ describe('providers', () => {
     )
   })
 
+  it('saves per-provider model tuning (max output tokens, timeout, correction attempts) and shows it back in the table', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-deepseek-secret' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'deepseek-v4-flash' },
+    })
+    fireEvent.change(screen.getByLabelText('Tokens de sortie max'), {
+      target: { value: '12000' },
+    })
+    fireEvent.change(screen.getByLabelText("Délai d'attente (secondes)"), {
+      target: { value: '240' },
+    })
+    fireEvent.change(screen.getByLabelText('Tentatives de correction max'), {
+      target: { value: '5' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('12000 tokens · 240s · 5 essais')).toBeDefined()
+  })
+
+  it('leaves model tuning unset when the fields are left blank — shows "Par défaut"', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-ant-secret-value' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'claude-sonnet' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('Par défaut')).toBeDefined()
+  })
+
   it('a custom provider (fiche 56) requires a baseUrl and saves under its own id', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)

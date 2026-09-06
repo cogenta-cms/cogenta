@@ -4935,6 +4935,9 @@ export function installMockFetch(
               apiKey?: string
               model?: string
               baseUrl?: string
+              maxOutputTokens?: number
+              requestTimeoutMs?: number
+              maxCorrectionAttempts?: number
             }
             const providerId = body.provider ?? 'anthropic'
             const isCatalogId = MOCK_PROVIDER_CATALOG.some((entry) => entry.id === providerId)
@@ -4958,6 +4961,15 @@ export function installMockFetch(
                 : {}),
               maskedKey: `••••${(body.apiKey ?? '').slice(-4)}`,
               updatedAt: '2026-03-01T00:00:00.000Z',
+              ...(typeof body.maxOutputTokens === 'number'
+                ? { maxOutputTokens: body.maxOutputTokens }
+                : {}),
+              ...(typeof body.requestTimeoutMs === 'number'
+                ? { requestTimeoutMs: body.requestTimeoutMs }
+                : {}),
+              ...(typeof body.maxCorrectionAttempts === 'number'
+                ? { maxCorrectionAttempts: body.maxCorrectionAttempts }
+                : {}),
             }
             const existingIndex = mockProviders.findIndex((p) => p.provider === created.provider)
             if (existingIndex >= 0) mockProviders[existingIndex] = created

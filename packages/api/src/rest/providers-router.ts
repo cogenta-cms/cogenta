@@ -25,6 +25,10 @@ export interface ProviderSummary {
   readonly baseUrl?: string
   readonly maskedKey: string
   readonly updatedAt: string
+  /** See `@cogenta/agents`' `StoredProviderConfig` — absent means "use the built-in default". */
+  readonly maxOutputTokens?: number
+  readonly requestTimeoutMs?: number
+  readonly maxCorrectionAttempts?: number
 }
 
 /** Plain data — deliberately not importing `@cogenta/agents`' own `ProviderCatalogEntry` type, so this package's production code never depends on a package it only lists as a devDependency (see `packages/cli/src/commands/agent-runtime.ts`'s `providerCatalogSummary`, which is the one place a real catalog is supplied). */
@@ -47,6 +51,9 @@ export interface ProviderRegistryLike {
     readonly model: string
     readonly baseUrl?: string
     readonly enabled?: boolean
+    readonly maxOutputTokens?: number
+    readonly requestTimeoutMs?: number
+    readonly maxCorrectionAttempts?: number
   }): Promise<ProviderSummary>
   setEnabled(provider: string, enabled: boolean): Promise<ProviderSummary>
   updateSettings(
@@ -117,6 +124,18 @@ function noRoute(): CogentaError {
   })
 }
 
+/** `undefined` when the field is absent (the caller left it unset — "use the built-in default"); a `CogentaError` when present but not a number, so a typo surfaces as a clean 4xx rather than a silent `NaN` reaching the store. Bounds themselves are `store.ts`'s `assertValidTuning`'s job, not this router's — one place to keep them in sync. */
+function optionalNumber(body: Record<string, unknown>, field: string): number | undefined {
+  const value = body[field]
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  throw new CogentaError({
+    code: 'PROVIDER_TUNING_INVALID',
+    message: `"${field}" must be a number.`,
+    hint: 'Leave it empty to use the built-in default for this field.',
+  })
+}
+
 function asRecord(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new CogentaError({
@@ -181,12 +200,18 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
               })
             }
             const enabled = body['enabled']
+            const maxOutputTokens = optionalNumber(body, 'maxOutputTokens')
+            const requestTimeoutMs = optionalNumber(body, 'requestTimeoutMs')
+            const maxCorrectionAttempts = optionalNumber(body, 'maxCorrectionAttempts')
             const saved = await options.providers.upsert({
               provider: name,
               apiKey,
               model,
               ...(hasBaseUrl ? { baseUrl: baseUrl as string } : {}),
               ...(typeof enabled === 'boolean' ? { enabled } : {}),
+              ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+              ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }),
+              ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
             })
             return jsonResponse(201, { data: saved })
           }

@@ -41,6 +41,13 @@ function fakeRegistry(): ProviderRegistryLike & { records: Map<string, ProviderS
         ...(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }),
         maskedKey: `••••${input.apiKey.slice(-4)}`,
         updatedAt: '2026-01-01T00:00:00.000Z',
+        ...(input.maxOutputTokens === undefined ? {} : { maxOutputTokens: input.maxOutputTokens }),
+        ...(input.requestTimeoutMs === undefined
+          ? {}
+          : { requestTimeoutMs: input.requestTimeoutMs }),
+        ...(input.maxCorrectionAttempts === undefined
+          ? {}
+          : { maxCorrectionAttempts: input.maxCorrectionAttempts }),
       }
       records.set(input.provider, summary)
       return summary
@@ -98,6 +105,71 @@ describe('POST /api/providers', () => {
     expect(response.status).toBe(201)
     expect(JSON.stringify(response.body)).not.toContain('secret-value')
     expect(JSON.stringify(response.body)).toContain('maskedKey')
+  })
+
+  // Every one of these three used to be a number hardcoded per call site,
+  // with no admin surface — this is the write boundary that makes them a
+  // real, saved property of the provider instead.
+  it('saves maxOutputTokens/requestTimeoutMs/maxCorrectionAttempts and reflects them back', async () => {
+    const router = createProvidersRouter({ providers: fakeRegistry() })
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: {
+          provider: 'deepseek',
+          apiKey: 'sk-1',
+          model: 'deepseek-v4-flash',
+          maxOutputTokens: 12000,
+          requestTimeoutMs: 240_000,
+          maxCorrectionAttempts: 5,
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(201)
+    expect(response.body).toMatchObject({
+      data: { maxOutputTokens: 12000, requestTimeoutMs: 240_000, maxCorrectionAttempts: 5 },
+    })
+  })
+
+  it('leaves the tuning fields unset when the caller sends none of them', async () => {
+    const router = createProvidersRouter({ providers: fakeRegistry() })
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: { provider: 'anthropic', apiKey: 'sk-1', model: 'claude-sonnet' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(201)
+    const data = (response.body as { data: Record<string, unknown> }).data
+    expect(data.maxOutputTokens).toBeUndefined()
+  })
+
+  it('rejects a non-numeric maxOutputTokens with PROVIDER_TUNING_INVALID', async () => {
+    const router = createProvidersRouter({ providers: fakeRegistry() })
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/providers',
+        query: {},
+        body: {
+          provider: 'anthropic',
+          apiKey: 'sk-1',
+          model: 'claude-sonnet',
+          maxOutputTokens: 'a lot',
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+    expect((response.body as { error: { code: string } }).error.code).toBe(
+      'PROVIDER_TUNING_INVALID',
+    )
   })
 
   it('refuses a name outside the catalog with no baseUrl (fiche 56)', async () => {

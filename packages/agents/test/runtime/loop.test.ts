@@ -1,3 +1,4 @@
+import { CogentaError } from '@cogenta/core'
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryApprovalQueue } from '../../src/autonomy/approval-queue.js'
 import { withAutonomy } from '../../src/autonomy/with-autonomy.js'
@@ -54,6 +55,41 @@ describe('runAgentLoop', () => {
     expect(result.finalText).toBe('Done.')
     expect(result.usage).toEqual(USAGE)
     expect(client.calls).toHaveLength(1)
+  })
+
+  // Per-provider model tuning: with no `input.maxTokens` of its own, the
+  // loop must not fall back to a local literal — it leaves the field unset
+  // so the resolved `ProviderClient` (an admin-set property of the chosen
+  // model) applies its own configured budget, exactly as every provider
+  // adapter's own `chat()` already does.
+  it('sends no maxTokens of its own when the caller sets none, deferring to the client', async () => {
+    const client = fakeClient([textResponse('Done.')])
+
+    await runAgentLoop({ client, messages: [{ role: 'user', content: 'hi' }] })
+
+    expect(client.calls[0]?.maxTokens).toBeUndefined()
+  })
+
+  it("retries up to the resolved client's own maxCorrectionAttempts (2), not the local default (3)", async () => {
+    let attempts = 0
+    const failing: ProviderClient = {
+      name: 'fake',
+      model: 'fake-model',
+      maxCorrectionAttempts: 2,
+      async chat() {
+        attempts += 1
+        throw new CogentaError({ code: 'PROVIDER_RATE_LIMITED', message: 'rate limited' })
+      },
+    }
+
+    await expect(
+      runAgentLoop({
+        client: failing,
+        messages: [{ role: 'user', content: 'hi' }],
+        maxTokens: 100,
+      }),
+    ).rejects.toThrow()
+    expect(attempts).toBe(2)
   })
 
   it('dispatches a tool call, feeds the result back, and finishes on the next end_turn', async () => {

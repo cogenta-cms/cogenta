@@ -412,8 +412,8 @@ export type ProposeContentModelResult =
     }
   | { readonly ok: false; readonly attempts: number; readonly reason: string }
 
+/** Fallback only — `options.client.maxCorrectionAttempts` (an admin-set property of the chosen model, `/admin/providers`) wins when present. */
 const DEFAULT_MAX_ATTEMPTS = 3
-const MAX_TOKENS = 4000
 
 function correctionFor(error: CogentaError): string {
   return error.hint === undefined ? error.message : `${error.message} ${error.hint}`
@@ -422,7 +422,8 @@ function correctionFor(error: CogentaError): string {
 export async function proposeContentModel(
   options: ProposeContentModelOptions,
 ): Promise<ProposeContentModelResult> {
-  const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+  const maxAttempts =
+    options.maxAttempts ?? options.client.maxCorrectionAttempts ?? DEFAULT_MAX_ATTEMPTS
   let correction: string | undefined
   let lastReason = 'no attempt was made'
 
@@ -468,7 +469,6 @@ export async function proposeContentModel(
           ...context.dataMessages,
           { role: 'user', content: buildPrompt(correction, options.existingSite) },
         ],
-        maxTokens: MAX_TOKENS,
       })
       content = response.content
     } catch (error) {

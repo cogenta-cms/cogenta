@@ -32,6 +32,16 @@ export interface ProviderSummary {
   /** Never the real key — the last 4 characters only, e.g. "••••cdef". */
   readonly maskedKey: string
   readonly updatedAt: string
+  /**
+   * How this model behaves is this model's own property, not a number this
+   * admin screen should have to guess for it — a reasoning-tier model can
+   * spend thousands of tokens "thinking" before writing a visible answer,
+   * and needs proportionally more of all three of these than a plain
+   * instruct model does. Absent means "use the built-in default".
+   */
+  readonly maxOutputTokens?: number
+  readonly requestTimeoutMs?: number
+  readonly maxCorrectionAttempts?: number
 }
 
 export function getProviderCatalog(token: string): Promise<readonly ProviderCatalogEntry[]> {
@@ -50,6 +60,9 @@ export function saveProvider(
     readonly model: string
     readonly baseUrl?: string
     readonly enabled?: boolean
+    readonly maxOutputTokens?: number
+    readonly requestTimeoutMs?: number
+    readonly maxCorrectionAttempts?: number
   },
 ): Promise<ProviderSummary> {
   return request('/api/providers', {

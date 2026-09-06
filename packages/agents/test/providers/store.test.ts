@@ -179,6 +179,90 @@ describe('createFileProviderConfigStore', () => {
     // was caught and replaced with a misleading `INTERNAL` error.
     await expect(store.get(TRAVERSAL_ID)).rejects.not.toMatchObject({ code: 'INTERNAL' })
   })
+
+  // Every one of these was, before this fiche, a number hardcoded per call
+  // site with no admin surface at all — this is the write boundary that
+  // makes them a real, saved property of the provider instead.
+  describe('per-provider model tuning', () => {
+    it('round-trips maxOutputTokens/requestTimeoutMs/maxCorrectionAttempts through upsert/get/list', async () => {
+      const saved = await store.upsert({
+        provider: 'deepseek',
+        apiKey: 'sk-1',
+        model: 'deepseek-v4-flash',
+        baseUrl: 'https://api.deepseek.com/chat/completions',
+        maxOutputTokens: 12000,
+        requestTimeoutMs: 240_000,
+        maxCorrectionAttempts: 5,
+      })
+      expect(saved).toMatchObject({
+        maxOutputTokens: 12000,
+        requestTimeoutMs: 240_000,
+        maxCorrectionAttempts: 5,
+      })
+
+      const fetched = await store.get('deepseek')
+      expect(fetched).toMatchObject({
+        maxOutputTokens: 12000,
+        requestTimeoutMs: 240_000,
+        maxCorrectionAttempts: 5,
+      })
+
+      const listed = await store.list()
+      expect(listed[0]).toMatchObject({ maxOutputTokens: 12000 })
+    })
+
+    it('leaves the tuning fields absent when never set — "use the built-in default"', async () => {
+      const saved = await store.upsert({ provider: 'anthropic', apiKey: 'sk-1', model: 'claude' })
+      expect(saved.maxOutputTokens).toBeUndefined()
+      expect(saved.requestTimeoutMs).toBeUndefined()
+      expect(saved.maxCorrectionAttempts).toBeUndefined()
+    })
+
+    it('rejects a non-integer maxOutputTokens', async () => {
+      await expect(
+        store.upsert({
+          provider: 'anthropic',
+          apiKey: 'sk-1',
+          model: 'claude',
+          maxOutputTokens: 12.5,
+        }),
+      ).rejects.toMatchObject({ code: 'PROVIDER_TUNING_INVALID' })
+    })
+
+    it('rejects a maxOutputTokens above the sane upper bound', async () => {
+      await expect(
+        store.upsert({
+          provider: 'anthropic',
+          apiKey: 'sk-1',
+          model: 'claude',
+          maxOutputTokens: 999_999,
+        }),
+      ).rejects.toMatchObject({ code: 'PROVIDER_TUNING_INVALID' })
+    })
+
+    it('rejects a zero or negative maxCorrectionAttempts', async () => {
+      await expect(
+        store.upsert({
+          provider: 'anthropic',
+          apiKey: 'sk-1',
+          model: 'claude',
+          maxCorrectionAttempts: 0,
+        }),
+      ).rejects.toMatchObject({ code: 'PROVIDER_TUNING_INVALID' })
+    })
+
+    it('resolveProviderRegistryConfig carries the saved tuning through to the registry entry', async () => {
+      await store.upsert({
+        provider: 'deepseek',
+        apiKey: 'sk-1',
+        model: 'deepseek-v4-flash',
+        baseUrl: 'https://api.deepseek.com/chat/completions',
+        maxOutputTokens: 12000,
+      })
+      const config = await resolveProviderRegistryConfig(store)
+      expect(config.deepseek).toMatchObject({ maxOutputTokens: 12000 })
+    })
+  })
 })
 
 describe('resolveProviderRegistryConfig', () => {

@@ -72,13 +72,14 @@ export interface RunAgentLoopInput {
   readonly messages: readonly ChatMessage[]
   readonly system?: string
   readonly tools?: readonly ExecutableTool[]
-  readonly maxTokens: number
+  /** Absent lets each call fall back to `client.maxOutputTokens` — see `ProviderClient`'s own doc comment. */
+  readonly maxTokens?: number
   readonly temperature?: number
   /** Hard ceiling on model-call turns — the "infinite loop" backstop (default 25). */
   readonly maxSteps?: number
-  /** Per model call, including retries (default 3). */
+  /** Per model call, including retries. Absent falls back to `client.maxCorrectionAttempts`, then a built-in default (3). */
   readonly maxAttempts?: number
-  /** Per model call attempt (default 60_000ms). */
+  /** Per model call attempt. Absent falls back to `client.requestTimeoutMs`, then a built-in default (60_000ms). */
   readonly timeoutMs?: number
   /** How many times an identical tool call (name + input) may repeat before the run stops (default 2). */
   readonly maxRepeats?: number

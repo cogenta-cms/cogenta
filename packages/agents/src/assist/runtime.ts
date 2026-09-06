@@ -53,15 +53,12 @@ export interface AssistRuntime {
 export interface AssistRuntimeOptions {
   readonly provider: ProviderClient
   readonly site: SiteContext
-  readonly defaultMaxTokens?: number
   /** Fiche 30 task 3: reports every completion's real token usage, attributed to `request.tool` when the caller named one. Never blocks or throws on its own — a usage tracker records, it does not decide. */
   readonly onUsage?: (info: {
     readonly tool: string | undefined
     readonly usage: TokenUsage
   }) => void
 }
-
-const DEFAULT_MAX_TOKENS = 1200
 
 function responseInvalid(reason: string, hint: string): CogentaError {
   return new CogentaError({
@@ -125,7 +122,7 @@ export function createAssistRuntime(options: AssistRuntimeOptions): AssistRuntim
           ...dataMessages,
           { role: 'user', content: `Carry out the TASK described in your system context.` },
         ],
-        maxTokens: request.maxTokens ?? options.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
+        ...(request.maxTokens === undefined ? {} : { maxTokens: request.maxTokens }),
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
       },
       request.signal === undefined ? undefined : { signal: request.signal },

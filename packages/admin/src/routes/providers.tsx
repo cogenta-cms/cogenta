@@ -50,6 +50,14 @@ const CUSTOM_PROVIDER = '__custom__'
 /** Sentinel model-select value meaning "leave the free-text model field alone". */
 const CUSTOM_MODEL = ''
 
+/** `undefined` for a blank field ("use the built-in default") or anything that is not a positive whole number — the server's own bounds check (`PROVIDER_TUNING_INVALID`) is the source of truth on the upper end, this just keeps an obviously-wrong value from ever being sent. */
+function parsePositiveInt(text: string): number | undefined {
+  const trimmed = text.trim()
+  if (trimmed === '') return undefined
+  const value = Number(trimmed)
+  return Number.isInteger(value) && value > 0 ? value : undefined
+}
+
 export function ProvidersRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -69,6 +77,10 @@ export function ProvidersRoute(): JSX.Element {
   const [formModel, setFormModel] = useState('')
   const [formModelChoice, setFormModelChoice] = useState<string>(CUSTOM_MODEL)
   const [formBaseUrl, setFormBaseUrl] = useState('')
+  /** Empty means "unset — use the built-in default"; kept as text so a partially-typed number never gets silently coerced to 0. */
+  const [formMaxOutputTokens, setFormMaxOutputTokens] = useState('')
+  const [formTimeoutSeconds, setFormTimeoutSeconds] = useState('')
+  const [formMaxCorrectionAttempts, setFormMaxCorrectionAttempts] = useState('')
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -127,17 +139,26 @@ export function ProvidersRoute(): JSX.Element {
     setBusy('save')
     setError(null)
     try {
+      const maxOutputTokens = parsePositiveInt(formMaxOutputTokens)
+      const timeoutSeconds = parsePositiveInt(formTimeoutSeconds)
+      const maxCorrectionAttempts = parsePositiveInt(formMaxCorrectionAttempts)
       await saveProvider(token, {
         provider: effectiveProviderId,
         apiKey: formKey.trim(),
         model: formModel.trim(),
         ...(formBaseUrl.trim().length > 0 ? { baseUrl: formBaseUrl.trim() } : {}),
+        ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+        ...(timeoutSeconds === undefined ? {} : { requestTimeoutMs: timeoutSeconds * 1000 }),
+        ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
       })
       setFormKey('')
       setFormModel('')
       setFormModelChoice(CUSTOM_MODEL)
       setFormBaseUrl('')
       setFormCustomProviderId('')
+      setFormMaxOutputTokens('')
+      setFormTimeoutSeconds('')
+      setFormMaxCorrectionAttempts('')
       await load()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
@@ -291,6 +312,54 @@ export function ProvidersRoute(): JSX.Element {
                 />
               )}
             </Field>
+            <Field
+              label={t('providers.maxOutputTokens')}
+              className="min-w-[140px]"
+              description={t('providers.maxOutputTokensHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  type="number"
+                  min={1}
+                  value={formMaxOutputTokens}
+                  onChange={(event) => setFormMaxOutputTokens(event.target.value)}
+                  placeholder={t('providers.tuningDefaultPlaceholder')}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('providers.requestTimeoutSeconds')}
+              className="min-w-[140px]"
+              description={t('providers.requestTimeoutSecondsHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  type="number"
+                  min={1}
+                  value={formTimeoutSeconds}
+                  onChange={(event) => setFormTimeoutSeconds(event.target.value)}
+                  placeholder={t('providers.tuningDefaultPlaceholder')}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('providers.maxCorrectionAttempts')}
+              className="min-w-[140px]"
+              description={t('providers.maxCorrectionAttemptsHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  type="number"
+                  min={1}
+                  value={formMaxCorrectionAttempts}
+                  onChange={(event) => setFormMaxCorrectionAttempts(event.target.value)}
+                  placeholder={t('providers.tuningDefaultPlaceholder')}
+                />
+              )}
+            </Field>
             <Button
               disabled={
                 busy === 'save' ||
@@ -317,6 +386,7 @@ export function ProvidersRoute(): JSX.Element {
                 <TableHeader>{t('providers.provider')}</TableHeader>
                 <TableHeader>{t('providers.model')}</TableHeader>
                 <TableHeader>{t('providers.apiKey')}</TableHeader>
+                <TableHeader>{t('providers.tuningColumn')}</TableHeader>
                 <TableHeader>{t('providers.state')}</TableHeader>
                 <TableHeader>{t('agents.actions')}</TableHeader>
               </TableRow>
@@ -327,6 +397,33 @@ export function ProvidersRoute(): JSX.Element {
                   <TableCell>{provider.provider}</TableCell>
                   <TableCell>{provider.model}</TableCell>
                   <TableCell>{provider.maskedKey}</TableCell>
+                  <TableCell>
+                    {provider.maxOutputTokens === undefined &&
+                    provider.requestTimeoutMs === undefined &&
+                    provider.maxCorrectionAttempts === undefined ? (
+                      <span className="text-muted-foreground">{t('providers.tuningDefault')}</span>
+                    ) : (
+                      <span className="text-sm">
+                        {[
+                          provider.maxOutputTokens === undefined
+                            ? undefined
+                            : t('providers.tuningTokens', { count: provider.maxOutputTokens }),
+                          provider.requestTimeoutMs === undefined
+                            ? undefined
+                            : t('providers.tuningTimeout', {
+                                seconds: Math.round(provider.requestTimeoutMs / 1000),
+                              }),
+                          provider.maxCorrectionAttempts === undefined
+                            ? undefined
+                            : t('providers.tuningAttempts', {
+                                count: provider.maxCorrectionAttempts,
+                              }),
+                        ]
+                          .filter((part) => part !== undefined)
+                          .join(' · ')}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {provider.enabled ? t('providers.enabled') : t('providers.disabled')}
                   </TableCell>
@@ -353,7 +450,7 @@ export function ProvidersRoute(): JSX.Element {
                 </TableRow>
               ))}
               {providers.length === 0 && (
-                <TableEmpty colSpan={5}>{t('providers.noProviders')}</TableEmpty>
+                <TableEmpty colSpan={6}>{t('providers.noProviders')}</TableEmpty>
               )}
             </TableBody>
           </Table>

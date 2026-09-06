@@ -589,6 +589,11 @@ export const ERROR_CODES = [
   'PROVIDER_ID_INVALID',
   'PROVIDER_CUSTOM_BASE_URL_REQUIRED',
 
+  // Per-provider model tuning (maxOutputTokens/requestTimeoutMs/
+  // maxCorrectionAttempts) — an admin-set value outside sane bounds, or not
+  // a whole number.
+  'PROVIDER_TUNING_INVALID',
+
   // Role permission overrides in the database (fiche 63, ADR-0028): a
   // production-applicable surcharge over `cogenta.schema.*`'s `permissions`
   // block, `PermissionLayer` checked before falling back to the file.

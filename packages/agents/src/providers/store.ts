@@ -80,6 +80,20 @@ export interface StoredProviderConfig {
   /** Last 4 characters of the real key, for the admin to confirm which key is saved without ever re-displaying it in full. */
   readonly maskedKey: string
   readonly updatedAt: string
+  /**
+   * The completion budget (`ProviderClient.maxOutputTokens`), request retry
+   * count (`maxCorrectionAttempts`) and HTTP/agent-loop timeout
+   * (`requestTimeoutMs`, milliseconds) this provider's client resolves to.
+   * Absent means "use the built-in fallback" (`resolve.ts`) — every one of
+   * these was, before this admin surface existed, a number hardcoded per
+   * call site with no way for an admin to say "this particular model needs
+   * more room to think" (the exact bug a real reasoning-model run
+   * reproduced: DeepSeek's `deepseek-v4-flash` silently truncated to an
+   * empty response at a too-low hardcoded ceiling).
+   */
+  readonly maxOutputTokens?: number
+  readonly requestTimeoutMs?: number
+  readonly maxCorrectionAttempts?: number
 }
 
 export interface ProviderConfigInput {
@@ -88,6 +102,38 @@ export interface ProviderConfigInput {
   readonly model: string
   readonly baseUrl?: string
   readonly enabled?: boolean
+  readonly maxOutputTokens?: number
+  readonly requestTimeoutMs?: number
+  readonly maxCorrectionAttempts?: number
+}
+
+/** Bounds wide enough for any real model/deployment, narrow enough to catch a typo (a negative, a zero, or a value nobody would deliberately set) before it reaches an HTTP request. */
+const TUNING_BOUNDS = {
+  maxOutputTokens: { min: 1, max: 200_000 },
+  requestTimeoutMs: { min: 1000, max: 600_000 },
+  maxCorrectionAttempts: { min: 1, max: 10 },
+} as const
+
+function assertValidTuning(
+  input: Pick<
+    ProviderConfigInput,
+    'maxOutputTokens' | 'requestTimeoutMs' | 'maxCorrectionAttempts'
+  >,
+): void {
+  for (const [field, bounds] of Object.entries(TUNING_BOUNDS) as [
+    keyof typeof TUNING_BOUNDS,
+    (typeof TUNING_BOUNDS)[keyof typeof TUNING_BOUNDS],
+  ][]) {
+    const value = input[field]
+    if (value === undefined) continue
+    if (!Number.isInteger(value) || value < bounds.min || value > bounds.max) {
+      throw new CogentaError({
+        code: 'PROVIDER_TUNING_INVALID',
+        message: `"${field}" must be a whole number between ${bounds.min} and ${bounds.max}.`,
+        hint: 'Leave it empty to use the built-in default for this field.',
+      })
+    }
+  }
 }
 
 export interface ProviderConfigStore {
@@ -116,6 +162,9 @@ interface EncryptedRecord {
   readonly authTag: string
   readonly ciphertext: string
   readonly updatedAt: string
+  readonly maxOutputTokens?: number
+  readonly requestTimeoutMs?: number
+  readonly maxCorrectionAttempts?: number
 }
 
 const KEY_DERIVATION_SALT = 'cogenta-provider-secrets-v1'
@@ -146,6 +195,11 @@ function toSummary(record: EncryptedRecord): StoredProviderConfig {
     ...(record.baseUrl === undefined ? {} : { baseUrl: record.baseUrl }),
     maskedKey: record.maskedKey,
     updatedAt: record.updatedAt,
+    ...(record.maxOutputTokens === undefined ? {} : { maxOutputTokens: record.maxOutputTokens }),
+    ...(record.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: record.requestTimeoutMs }),
+    ...(record.maxCorrectionAttempts === undefined
+      ? {}
+      : { maxCorrectionAttempts: record.maxCorrectionAttempts }),
   }
 }
 
@@ -248,6 +302,7 @@ export function createFileProviderConfigStore(
       await ready
       assertValidProviderId(input.provider)
       assertResolvable(input.provider, input.baseUrl)
+      assertValidTuning(input)
       const { iv, authTag, ciphertext } = encrypt(input.apiKey)
       const record: EncryptedRecord = {
         provider: input.provider,
@@ -259,6 +314,13 @@ export function createFileProviderConfigStore(
         authTag,
         ciphertext,
         updatedAt: now().toISOString(),
+        ...(input.maxOutputTokens === undefined ? {} : { maxOutputTokens: input.maxOutputTokens }),
+        ...(input.requestTimeoutMs === undefined
+          ? {}
+          : { requestTimeoutMs: input.requestTimeoutMs }),
+        ...(input.maxCorrectionAttempts === undefined
+          ? {}
+          : { maxCorrectionAttempts: input.maxCorrectionAttempts }),
       }
       await writeFile(fileFor(input.provider), JSON.stringify(record, null, 2), 'utf8')
       return toSummary(record)

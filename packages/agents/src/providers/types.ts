@@ -66,7 +66,14 @@ export interface ChatRequest {
   readonly system?: string
   readonly messages: readonly ChatMessage[]
   readonly tools?: readonly ProviderToolSpec[]
-  readonly maxTokens: number
+  /**
+   * Absent lets the client fall back to its own configured
+   * `maxOutputTokens` (an admin-set property of the provider/model, not a
+   * literal a caller should be picking) — see `ProviderClient.maxOutputTokens`.
+   * A caller only sets this for a genuine, call-specific reason to differ
+   * from that default.
+   */
+  readonly maxTokens?: number
   readonly temperature?: number
 }
 
@@ -101,5 +108,43 @@ export interface ProviderClient {
    * (text-only, with an explicit note) when it is not `true`.
    */
   readonly supportsVision?: boolean
+  /**
+   * The completion budget every call through this client defaults to when
+   * a request does not set its own `maxTokens` — a property of *which
+   * model this is*, not of any one call site. A reasoning-tier model can
+   * spend thousands of tokens "thinking" before it ever writes a visible
+   * answer, and that reasoning counts against this same budget; a plain
+   * instruct model needs far less. This is why it lives on the provider
+   * (admin-configurable from `/admin/providers`, `resolve.ts` resolves it
+   * from `ProviderConfigStore`), not as a constant scattered across every
+   * caller — a real, reproduced bug (`docs`/changeset history: DeepSeek's
+   * `deepseek-v4-flash` hitting `finish_reason: "length"` with empty
+   * content at a too-low hardcoded ceiling) is exactly what a per-call
+   * hardcoded number cannot adapt to. Resolved adapters
+   * (`createAnthropicClient`/`createOpenAiClient`/`createGoogleClient`)
+   * always set this to a concrete number — the admin's value, or a built-in
+   * fallback when unset — so a caller never needs its own `?? literal`.
+   */
+  readonly maxOutputTokens?: number
+  /**
+   * How many times a generate-validate-correct loop (skin generation, brief
+   * analysis, content-model/demo-content proposals, the base-theme choice)
+   * retries this client before giving up. Same reasoning as
+   * `maxOutputTokens`: a model that needs more coaxing to produce valid
+   * structured output benefits from more attempts, and that is a fact about
+   * the model, set by the admin who chose it — not a number a given call
+   * site should be guessing at.
+   */
+  readonly maxCorrectionAttempts?: number
+  /**
+   * How long a single HTTP call to this provider is allowed to run before
+   * being aborted — both the raw request timeout each adapter applies via
+   * `requestSignalWithTimeout`, and the per-model-call timeout the LangGraph
+   * agent loop (`runtime/loop.ts`) enforces around `chat()`. A slower
+   * (often reasoning-tier) model genuinely needs more wall-clock time, not
+   * just more tokens; a fixed timeout picked without knowing which model an
+   * admin configured is the same class of mistake as a fixed token budget.
+   */
+  readonly requestTimeoutMs?: number
   chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse>
 }

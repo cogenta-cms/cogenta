@@ -122,6 +122,19 @@ describe('generateSkin', () => {
     expect(client.calls).toBe(3)
   })
 
+  it("follows the resolved client's own maxCorrectionAttempts (an admin-set property of the chosen model) instead of the local default of 3", async () => {
+    const client = fakeClient([
+      JSON.stringify(LOW_CONTRAST_TOKENS),
+      JSON.stringify(VALID_TOKENS), // would have succeeded on attempt 2 — never reached
+    ])
+    ;(client as { maxCorrectionAttempts?: number }).maxCorrectionAttempts = 1
+
+    const result = await generateSkin({ ...BASE_OPTIONS, client })
+
+    expect(result.ok).toBe(false)
+    expect(client.calls).toBe(1)
+  })
+
   it('never writes an invalid token set as its success result, under any model behaviour', async () => {
     const scenarios = [
       ['garbage', 'more garbage', 'still garbage'],

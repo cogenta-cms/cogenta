@@ -14,7 +14,17 @@ export async function resolveProviderRegistryConfig(
   store: ProviderConfigStore,
 ): Promise<ProviderRegistryConfig> {
   const configs = await store.list()
-  const config: Record<string, { apiKey: string; model: string; baseUrl?: string }> = {}
+  const config: Record<
+    string,
+    {
+      apiKey: string
+      model: string
+      baseUrl?: string
+      maxOutputTokens?: number
+      requestTimeoutMs?: number
+      maxCorrectionAttempts?: number
+    }
+  > = {}
   for (const entry of configs) {
     if (!entry.enabled) continue
     const apiKey = await store.decryptKey(entry.provider)
@@ -22,6 +32,11 @@ export async function resolveProviderRegistryConfig(
       apiKey,
       model: entry.model,
       ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
+      ...(entry.maxOutputTokens === undefined ? {} : { maxOutputTokens: entry.maxOutputTokens }),
+      ...(entry.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: entry.requestTimeoutMs }),
+      ...(entry.maxCorrectionAttempts === undefined
+        ? {}
+        : { maxCorrectionAttempts: entry.maxCorrectionAttempts }),
     }
   }
   return config as ProviderRegistryConfig

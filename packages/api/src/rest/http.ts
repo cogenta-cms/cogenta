@@ -324,6 +324,9 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // server fault.
   PROVIDER_ID_INVALID: 400,
   PROVIDER_CUSTOM_BASE_URL_REQUIRED: 400,
+  // A saved maxOutputTokens/requestTimeoutMs/maxCorrectionAttempts outside
+  // sane bounds, or not a whole number — the caller's malformed write.
+  PROVIDER_TUNING_INVALID: 400,
 
   // A verified-broken chain is a server-side integrity failure, not
   // something the caller's request could have avoided — the default 500

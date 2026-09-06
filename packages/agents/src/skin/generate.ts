@@ -97,20 +97,15 @@ export type GenerateSkinResult =
   | { readonly ok: true; readonly tokens: SkinTokens; readonly attempts: number }
   | { readonly ok: false; readonly attempts: number; readonly reason: string }
 
-const DEFAULT_MAX_ATTEMPTS = 3
 /**
- * The visible JSON answer itself is small (well under 1000 tokens), but a
- * reasoning-tier model (confirmed live against DeepSeek's `deepseek-v4-flash`,
- * which spent ~3500-4300 tokens "thinking" before ever writing the JSON)
- * counts that hidden reasoning against the same completion budget. At 2000
- * this reliably hit `finish_reason: "length"` with an **empty** `content`
- * before the model ever got to the answer — `extractJson` then reports "no
- * JSON object was found", which reads exactly like the model refused, when
- * it was actually cut off mid-thought. Raised with real headroom rather than
- * tuned to the observed minimum, since a harder brief or a chattier model
- * needs more of it, not less.
+ * Fallback only, used when neither the caller nor the resolved
+ * `ProviderClient` (`client.maxCorrectionAttempts` — an admin-set property
+ * of *which model this is*, from `/admin/providers`) says otherwise. A
+ * model that needs more coaxing to produce a valid contract D token set
+ * benefits from more attempts, which is a fact about the model, not a
+ * number this call site should be guessing at.
  */
-const MAX_TOKENS = 8000
+const DEFAULT_MAX_ATTEMPTS = 3
 
 function buildPrompt(options: GenerateSkinOptions, correction: string | undefined): string {
   const lines = [
@@ -193,7 +188,8 @@ function buildRequest(
 }
 
 export async function generateSkin(options: GenerateSkinOptions): Promise<GenerateSkinResult> {
-  const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+  const maxAttempts =
+    options.maxAttempts ?? options.client.maxCorrectionAttempts ?? DEFAULT_MAX_ATTEMPTS
   let correction: string | undefined
   let lastReason = 'no attempt was made'
 
@@ -205,7 +201,6 @@ export async function generateSkin(options: GenerateSkinOptions): Promise<Genera
         model: options.model,
         ...(request.system === undefined ? {} : { system: request.system }),
         messages: request.messages,
-        maxTokens: MAX_TOKENS,
       })
       content = response.content
     } catch (error) {

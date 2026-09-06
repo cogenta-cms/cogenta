@@ -12,7 +12,8 @@ export interface AgentDelegateToolOptions {
   /** The sub-agent's own manifest — built (elsewhere) from its own `tools`, already checked to be a subset of the parent's via `validateSubagentTools`. */
   readonly tools: readonly ExecutableTool[]
   readonly system?: string
-  readonly maxTokens: number
+  /** Absent lets `runSubagent`/`runAgentLoop` fall back to `client.maxOutputTokens`. */
+  readonly maxTokens?: number
   readonly maxSteps?: number
 }
 
@@ -62,7 +63,7 @@ export function createAgentDelegateTool(
         client: options.client,
         messages: [{ role: 'user', content: input.task }],
         tools: options.tools,
-        maxTokens: options.maxTokens,
+        ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
         ...(options.system === undefined ? {} : { system: options.system }),
         ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }),
       })

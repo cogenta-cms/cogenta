@@ -28,6 +28,12 @@ export interface ProviderEntryConfig {
    * `buildClient` below).
    */
   readonly baseUrl?: string
+  /** See `ProviderClient.maxOutputTokens` — the admin's value for this provider, or absent for the built-in fallback. */
+  readonly maxOutputTokens?: number
+  /** See `ProviderClient.requestTimeoutMs`. */
+  readonly requestTimeoutMs?: number
+  /** See `ProviderClient.maxCorrectionAttempts`. */
+  readonly maxCorrectionAttempts?: number
 }
 
 export type ProviderRegistryConfig = Readonly<Record<string, ProviderEntryConfig>>
@@ -41,12 +47,20 @@ export type ProviderRegistryConfig = Readonly<Record<string, ProviderEntryConfig
  */
 function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
   const catalogEntry = findProviderCatalogEntry(name)
+  const tuning = {
+    ...(entry.maxOutputTokens === undefined ? {} : { maxOutputTokens: entry.maxOutputTokens }),
+    ...(entry.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: entry.requestTimeoutMs }),
+    ...(entry.maxCorrectionAttempts === undefined
+      ? {}
+      : { maxCorrectionAttempts: entry.maxCorrectionAttempts }),
+  }
 
   if (catalogEntry?.wireFormat === 'anthropic') {
     return createAnthropicClient({
       apiKey: entry.apiKey,
       model: entry.model,
       ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
+      ...tuning,
     })
   }
   if (catalogEntry?.wireFormat === 'google') {
@@ -54,6 +68,7 @@ function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
       apiKey: entry.apiKey,
       model: entry.model,
       ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
+      ...tuning,
     })
   }
 
@@ -68,7 +83,7 @@ function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
       hint: 'Set a baseUrl for a custom OpenAI-compatible endpoint, or use a catalog provider id.',
     })
   }
-  return createOpenAiClient({ apiKey: entry.apiKey, model: entry.model, baseUrl, name })
+  return createOpenAiClient({ apiKey: entry.apiKey, model: entry.model, baseUrl, name, ...tuning })
 }
 
 /**

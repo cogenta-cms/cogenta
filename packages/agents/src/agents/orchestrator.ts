@@ -101,7 +101,6 @@ export interface AgentRunnerOptions {
   readonly site: RunnerSite
   readonly killSwitchFor: (name: string) => KillSwitch
   readonly now?: () => number
-  readonly defaultMaxTokens?: number
   /** Injectable for tests — defaults to a real `Date.now`-bucketed tracker per agent, cached for the runner's lifetime. */
   readonly budgetTrackerFor?: (agent: StoredAgent) => BudgetTracker
 }
@@ -111,20 +110,20 @@ export interface AgentRunner {
 }
 
 /**
- * Per model call, not a cumulative run budget (`RunAgentLoopInput.maxTokens`
- * — the same ceiling on every step). Raised from 2000 after a reproduced,
- * live failure: the superagent, asked to draft a real content template
- * (rich-text `body`, several fields), made seven legitimate tool calls —
- * `content.schema` among them, doing exactly what it should — and its
- * final answer was cut off mid-generation (`stopReason: 'max_tokens'`,
- * DeepSeek's `finish_reason: 'length'`) before it ever produced visible
- * text, leaving the chat turn blank. A real content draft in JSON form is
- * verbose; 2000 was tuned for a short conversational reply, not a
- * generation task this runtime now actively encourages.
+ * `runOptions.maxTokens` is a genuine per-call override, kept for a caller
+ * with a real reason to differ from a run's own default; when absent (every
+ * real caller today), `runAgentLoop` no longer needs a value from here at
+ * all — it falls back to `client.maxOutputTokens`, the admin-configured
+ * property of *which model this run resolved to*
+ * (`/admin/providers`). That per-provider value already fixed a reproduced,
+ * live failure this constant used to paper over with a single guess: the
+ * superagent, asked to draft a real content template, made seven legitimate
+ * tool calls and had its final answer cut off mid-generation
+ * (`stopReason: 'max_tokens'`, DeepSeek's `finish_reason: 'length'`) at a
+ * budget sized for a short conversational reply, not a generation task this
+ * runtime actively encourages — a number no single call site can size
+ * correctly for every model an admin might configure.
  */
-const DEFAULT_MAX_TOKENS = 8000
-/** One hop only — a sub-agent's own `subagents` are not wired recursively (see the module comment on why this is a deliberate, bounded choice, not an oversight). */
-const SUBAGENT_MAX_TOKENS = 6000
 
 function toolSiteOf(site: RunnerSite): ToolContext['site'] {
   return {
@@ -296,7 +295,6 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
         client: subClient,
         tools: subTools,
         system,
-        maxTokens: SUBAGENT_MAX_TOKENS,
       })
       // `createAgentDelegateTool` returns a contract-C `ToolDefinition`, the
       // same shape every other core tool does — `buildManifest` is the one
@@ -362,7 +360,7 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
             { role: 'user', content: 'Carry out the TASK described in your system context.' },
           ],
           tools,
-          maxTokens: runOptions.maxTokens ?? options.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
+          ...(runOptions.maxTokens === undefined ? {} : { maxTokens: runOptions.maxTokens }),
           budget: budgetTrackerFor(agent),
           killSwitch: options.killSwitchFor(agent.name),
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),

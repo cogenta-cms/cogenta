@@ -3108,6 +3108,26 @@ export function installMockFetch(
           return new Response(null, { status: 204 })
         }
 
+        // fiche feedback: a key's name/scope/quota had no edit path — only
+        // rotate() existed, which reissues the secret under the same
+        // name/scope. Mirrors the tri-state PATCH the real router now does.
+        if (rawId !== undefined && actionSuffix === undefined && method === 'PATCH') {
+          if (!isAdmin) return forbidden
+          const found = apiKeys.find((candidate) => candidate.id === rawId)
+          if (found === undefined) {
+            return json(404, {
+              error: { code: 'API_KEY_NOT_FOUND', message: 'No API key with that id.' },
+            })
+          }
+          if (typeof body.name === 'string') found.name = body.name
+          if (Array.isArray(body.scope)) found.scope = body.scope as readonly string[]
+          if (body.rateLimitPerMinute === null) found.rateLimitPerMinute = 600
+          else if (typeof body.rateLimitPerMinute === 'number') {
+            found.rateLimitPerMinute = body.rateLimitPerMinute
+          }
+          return json(200, { data: { ...found, usage: { last7Days: 0, last30Days: 3 } } })
+        }
+
         // Fiche 62 task 2 — a real delete, mirroring
         // `ApiKeyStore.purge`'s two refusals (never revoked; revoked too
         // recently).

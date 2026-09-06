@@ -143,17 +143,23 @@ function resolveExpiry(body: Record<string, unknown>, now: () => number): string
   return new Date(now() + DEFAULT_EXPIRY_MS).toISOString()
 }
 
-function rateLimitPerMinuteField(body: Record<string, unknown>): number | undefined {
-  const value = body['rateLimitPerMinute']
-  if (value === undefined) return undefined
+/** A `rateLimitPerMinute` value already known to be present (not `undefined`/`null`) — used by both `create` (via `rateLimitPerMinuteField`) and PATCH's edit path, which tells "absent" and "null" apart before reaching here. */
+function positiveRateLimit(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     throw new CogentaError({
       code: 'QUERY_INVALID',
-      message: '"rateLimitPerMinute" must be a positive integer, or omitted for the default quota.',
+      message:
+        '"rateLimitPerMinute" must be a positive integer, or omitted/null for the default quota.',
       hint: 'Requests per minute this key may make — a generous but real number, not "unlimited".',
     })
   }
   return value
+}
+
+function rateLimitPerMinuteField(body: Record<string, unknown>): number | undefined {
+  const value = body['rateLimitPerMinute']
+  if (value === undefined) return undefined
+  return positiveRateLimit(value)
 }
 
 function graceHoursField(body: Record<string, unknown>): number {
@@ -301,7 +307,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
 
         if (segments.length === 0) return await collectionRoute(request, actor, method)
         if (segments.length === 1) {
-          return await keyRoute(actor, segments[0] as string, method)
+          return await keyRoute(request, actor, segments[0] as string, method)
         }
         if (segments.length === 2 && segments[1] === 'rotate') {
           return await rotateRoute(request, actor, segments[0] as string, method)
@@ -371,15 +377,63 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     return methodNotAllowed(['GET', 'POST'])
   }
 
-  async function keyRoute(actor: Actor, id: string, method: string): Promise<RestResponse> {
-    if (method !== 'DELETE') return methodNotAllowed(['DELETE'])
-    requireAdmin(actor, 'revoke an API key')
+  async function keyRoute(
+    request: RestRequest,
+    actor: Actor,
+    id: string,
+    method: string,
+  ): Promise<RestResponse> {
+    if (method === 'DELETE') {
+      requireAdmin(actor, 'revoke an API key')
 
-    const existing = await auth.apiKeys.getById(id)
-    if (existing === null) throw keyNotFound()
+      const existing = await auth.apiKeys.getById(id)
+      if (existing === null) throw keyNotFound()
 
-    await auth.apiKeys.revoke(id)
-    return { status: 204, body: null, headers: {} }
+      await auth.apiKeys.revoke(id)
+      return { status: 204, body: null, headers: {} }
+    }
+
+    // fiche feedback: name/scope/quota had no edit path — only rotate()
+    // existed, which reissues the secret under the same name/scope. This
+    // never touches the key's secret, prefix, or lifecycle fields (rotate
+    // it to change the secret, revoke it to end it).
+    if (method === 'PATCH') {
+      requireAdmin(actor, 'edit an API key')
+
+      const existing = await auth.apiKeys.getById(id)
+      if (existing === null) throw keyNotFound()
+
+      const body = asRecord(request.body)
+      const name = body['name']
+      const scope = body['scope']
+      const rateLimitRaw = body['rateLimitPerMinute']
+
+      if (typeof name !== 'string' && scope === undefined && rateLimitRaw === undefined) {
+        throw new CogentaError({
+          code: 'QUERY_INVALID',
+          message: 'Nothing to update — send "name", "scope" and/or "rateLimitPerMinute".',
+          hint: 'Send at least one of these fields.',
+        })
+      }
+
+      const patch: {
+        name?: string
+        scope?: readonly string[]
+        rateLimitPerMinute?: number | null
+      } = {}
+      if (typeof name === 'string') patch.name = stringField({ name }, 'name')
+      if (scope !== undefined) patch.scope = scopeField({ scope })
+      if (rateLimitRaw === null) patch.rateLimitPerMinute = null
+      else if (rateLimitRaw !== undefined)
+        patch.rateLimitPerMinute = positiveRateLimit(rateLimitRaw)
+
+      const updated = await auth.apiKeys.update(id, patch)
+      return jsonResponse(200, {
+        data: { ...publicKey(updated), usage: publicUsage(await auth.apiKeys.usage(id)) },
+      })
+    }
+
+    return methodNotAllowed(['PATCH', 'DELETE'])
   }
 
   /**

@@ -94,6 +94,31 @@ export function createApiKey(token: string, input: CreateApiKeyInput): Promise<C
   })
 }
 
+/**
+ * Fiche feedback: a key's name/scope/quota had no edit path at all — only
+ * `rotate()` existed, and it reissues the secret under the *same*
+ * name/scope. This never touches the key's secret, prefix, or lifecycle
+ * fields. Every field absent from `patch` is left exactly as saved;
+ * `rateLimitPerMinute: null` clears an explicit quota back to the default.
+ */
+export interface UpdateApiKeyInput {
+  readonly name?: string
+  readonly scope?: readonly string[]
+  readonly rateLimitPerMinute?: number | null
+}
+
+export function updateApiKey(
+  token: string,
+  id: string,
+  patch: UpdateApiKeyInput,
+): Promise<AdminApiKey> {
+  return request(`/api/api-keys/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
+  })
+}
+
 export async function revokeApiKey(token: string, id: string): Promise<void> {
   await request(`/api/api-keys/${encodeURIComponent(id)}`, {
     method: 'DELETE',

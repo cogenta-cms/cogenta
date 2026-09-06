@@ -152,9 +152,25 @@ export interface ListApiKeysOptions {
   readonly offset?: number
 }
 
+/**
+ * Fiche feedback: a key's name/scope/quota had no edit path at all after
+ * creation — only `rotate()` existed, and it reissues the secret under the
+ * *same* name/scope, never a changed one. Every field absent from the patch
+ * is left exactly as saved; `rateLimitPerMinute: null` clears an explicit
+ * quota back to `DEFAULT_RATE_LIMIT_PER_MINUTE`, matching how omitting it at
+ * `create()` time already behaves.
+ */
+export interface UpdateApiKeyInput {
+  readonly name?: string
+  readonly scope?: readonly string[]
+  readonly rateLimitPerMinute?: number | null
+}
+
 export interface ApiKeyStore {
   /** Mints a key and returns the raw secret once. It is never stored or returned again. */
   create(input: CreateApiKeyInput): Promise<IssuedApiKey>
+  /** Tri-state patch — see `UpdateApiKeyInput`. Never touches the key's secret, prefix, or lifecycle fields. */
+  update(id: string, patch: UpdateApiKeyInput): Promise<ApiKey>
   /** Never the raw key or its hash — a prefix is all a list ever shows. Newest first; `limit`/`offset` page it (fiche 67 task 5), both absent means "every key". */
   list(options?: ListApiKeysOptions): Promise<readonly ApiKey[]>
   getById(id: string): Promise<ApiKey | null>
@@ -275,6 +291,32 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
       const result = await db.query<ApiKeyRow>(sql`select * from ${table} where id = ${id}`)
       const row = result.rows[0]
       return row === undefined ? null : fromRow(row)
+    },
+
+    update: async (id, patch) => {
+      const result = await db.query<ApiKeyRow>(sql`select * from ${table} where id = ${id}`)
+      const row = result.rows[0]
+      if (row === undefined) throw keyNotFound()
+      if (patch.scope !== undefined) assertScope(patch.scope)
+
+      const name = patch.name ?? row.name
+      const scopeJson = patch.scope === undefined ? row.scope : JSON.stringify(patch.scope)
+      const rateLimitPerMinute =
+        patch.rateLimitPerMinute === undefined
+          ? row.rate_limit_per_minute
+          : patch.rateLimitPerMinute
+
+      await db.query(sql`
+        update ${table}
+        set name = ${name}, scope = ${scopeJson}, rate_limit_per_minute = ${rateLimitPerMinute}
+        where id = ${id}`)
+
+      return fromRow({
+        ...row,
+        name,
+        scope: scopeJson,
+        rate_limit_per_minute: rateLimitPerMinute,
+      })
     },
 
     revoke: async (id) => {

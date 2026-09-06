@@ -136,6 +136,40 @@ describe('creating an API key', () => {
   })
 })
 
+// fiche feedback: a key's name/scope/quota had no edit path — only rotate()
+// existed, which reissues the secret under the same name/scope.
+describe('editing an API key', () => {
+  it('changes the name and scope without reissuing the secret', async () => {
+    render(<App />)
+    await goToApiKeys()
+
+    fireEvent.click(within(rowFor('CI pipeline')).getByRole('button', { name: /^Modifier/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Modifier CI pipeline' })
+
+    fireEvent.change(within(dialog).getByLabelText('Nom'), {
+      target: { value: 'CI deploy pipeline' },
+    })
+    fireEvent.change(within(dialog).getByLabelText('Portée'), { target: { value: 'editor' } })
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+
+    await waitFor(() => {
+      expect(within(table()).getByText('CI deploy pipeline')).toBeDefined()
+    })
+    expect(within(rowFor('CI deploy pipeline')).getByText('editor')).toBeDefined()
+    // Never reissues the secret — no "raw key" notice appears from an edit.
+    expect(screen.queryByText(/^cogenta_sk_mock/u)).toBeNull()
+  })
+
+  it('does not offer editing a revoked key', async () => {
+    render(<App />)
+    await goToApiKeys()
+
+    expect(
+      within(rowFor('Old integration')).getByRole('button', { name: /^Modifier/ }),
+    ).toHaveProperty('disabled', true)
+  })
+})
+
 describe('revoking an API key', () => {
   it('marks it revoked after confirmation, through the design system modal rather than confirm()', async () => {
     render(<App />)

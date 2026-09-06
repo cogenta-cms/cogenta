@@ -500,6 +500,119 @@ describe('rotation (fiche 20 task 2)', () => {
   })
 })
 
+// fiche feedback: name/scope/quota had no edit path — only rotate() existed,
+// which reissues the secret under the same name/scope, never a changed one.
+describe('PATCH — editing a key without reissuing its secret', () => {
+  it('changes name and scope, never the key material', async () => {
+    const created = dataOf<{ id: string; key: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'CI script', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${created.id}`, {
+        name: 'CI deploy script',
+        scope: ['editor'],
+      }),
+      admin,
+    )
+
+    expect(patched.status).toBe(200)
+    const data = dataOf<{ name: string; scope: readonly string[] }>(patched)
+    expect(data.name).toBe('CI deploy script')
+    expect(data.scope).toEqual(['editor'])
+    expect(data).not.toHaveProperty('key')
+
+    const resolved = await auth.apiKeys.verify(created.key)
+    expect(resolved?.id).toBe(created.id)
+  })
+
+  it('leaves the rate limit untouched when the patch omits it', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', {
+          name: 'x',
+          scope: ['viewer'],
+          rateLimitPerMinute: 120,
+        }),
+        admin,
+      ),
+    )
+
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${created.id}`, { name: 'y' }),
+      admin,
+    )
+
+    expect(dataOf<{ rateLimitPerMinute: number }>(patched).rateLimitPerMinute).toBe(120)
+  })
+
+  it('clears an explicit rate limit back to the default with null', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', {
+          name: 'x',
+          scope: ['viewer'],
+          rateLimitPerMinute: 120,
+        }),
+        admin,
+      ),
+    )
+
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${created.id}`, { rateLimitPerMinute: null }),
+      admin,
+    )
+
+    expect(dataOf<{ rateLimitPerMinute: number }>(patched).rateLimitPerMinute).toBe(
+      DEFAULT_RATE_LIMIT_PER_MINUTE,
+    )
+  })
+
+  it('refuses an empty body as nothing to update', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+
+    const response = await router().handle(
+      request('PATCH', `/api/api-keys/${created.id}`, {}),
+      admin,
+    )
+
+    expect(response.status).toBe(400)
+  })
+
+  it('refuses a non-admin editing a key', async () => {
+    const created = dataOf<{ id: string }>(
+      await router().handle(
+        request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+        admin,
+      ),
+    )
+
+    const response = await router().handle(
+      request('PATCH', `/api/api-keys/${created.id}`, { name: 'y' }),
+      actorFor('e-1', ['editor']),
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('reports a 404 for an id that was never a key', async () => {
+    const response = await router().handle(
+      request('PATCH', '/api/api-keys/does-not-exist', { name: 'y' }),
+      admin,
+    )
+
+    expect(response.status).toBe(404)
+  })
+})
+
 describe('purge (fiche 62 task 2)', () => {
   async function createAndRevoke(): Promise<string> {
     const created = dataOf<{ id: string }>(

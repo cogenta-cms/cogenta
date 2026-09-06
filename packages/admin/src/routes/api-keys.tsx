@@ -10,6 +10,7 @@ import {
   recoverApiKey,
   revokeApiKey,
   rotateApiKey,
+  updateApiKey,
 } from '../api/api-keys-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -70,6 +71,8 @@ const PAGE_SIZE = 25
  */
 const MIN_PURGE_AFTER_REVOKED_DAYS = 30
 const RECOVERY_WINDOW_HOURS = 24
+/** Mirrors `DEFAULT_RATE_LIMIT_PER_MINUTE` in `@cogenta/auth`'s `api-keys.ts`, by hand, same reasoning as the two constants above — only used to pre-fill the edit form's rate limit field as blank ("use the default") rather than showing a number the admin never actually set. */
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 600
 
 function expiryFieldsFor(choice: ExpiryChoice): { expiresAt?: string; neverExpires?: boolean } {
   if (choice === 'never') return { neverExpires: true }
@@ -153,6 +156,11 @@ export function ApiKeysRoute(): JSX.Element {
   const [recovering, setRecovering] = useState<AdminApiKey | null>(null)
   const [recovered, setRecovered] = useState<CreatedApiKey | null>(null)
 
+  const [editing, setEditing] = useState<AdminApiKey | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editScope, setEditScope] = useState('')
+  const [editRateLimit, setEditRateLimit] = useState('')
+
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
     setLoading(true)
@@ -215,6 +223,36 @@ export function ApiKeysRoute(): JSX.Element {
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.createError'))
+    }
+  }
+
+  function startEdit(key: AdminApiKey): void {
+    setEditing(key)
+    setEditName(key.name)
+    setEditScope(key.scope.join(', '))
+    setEditRateLimit(
+      key.rateLimitPerMinute === DEFAULT_RATE_LIMIT_PER_MINUTE
+        ? ''
+        : String(key.rateLimitPerMinute),
+    )
+  }
+
+  async function submitEdit(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (token === null || editing === null) return
+    setActionError(null)
+    try {
+      const rateLimitPerMinute =
+        editRateLimit.trim() === '' ? null : Number.parseInt(editRateLimit, 10)
+      await updateApiKey(token, editing.id, {
+        name: editName,
+        scope: parseScope(editScope),
+        rateLimitPerMinute,
+      })
+      setEditing(null)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.editError'))
     }
   }
 
@@ -442,6 +480,14 @@ export function ApiKeysRoute(): JSX.Element {
                           variant="secondary"
                           size="sm"
                           disabled={!canManage}
+                          onClick={() => startEdit(key)}
+                        >
+                          {t('apiKeys.editKey', { name: key.name })}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={!canManage}
                           onClick={() => setRotating(key)}
                         >
                           {t('apiKeys.rotateKey', { name: key.name })}
@@ -555,6 +601,57 @@ export function ApiKeysRoute(): JSX.Element {
               {t('common.cancel')}
             </Button>
             <Button type="submit">{t('apiKeys.createButton')}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null)
+        }}
+        title={t('apiKeys.editHeading', { name: editing?.name ?? '' })}
+        description={t('apiKeys.editDescription')}
+        closeLabel={t('apiKeys.close')}
+      >
+        <form onSubmit={submitEdit} className="flex flex-col gap-4">
+          <Field label={t('apiKeys.nameLabel')} description={t('apiKeys.nameHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('apiKeys.scopeLabel')} description={t('apiKeys.scopeHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={editScope}
+                onChange={(event) => setEditScope(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('apiKeys.rateLimitLabel')} description={t('apiKeys.rateLimitHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={1}
+                placeholder={t('apiKeys.rateLimitPlaceholder')}
+                value={editRateLimit}
+                onChange={(event) => setEditRateLimit(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit">{t('common.save')}</Button>
           </div>
         </form>
       </Modal>

@@ -2,6 +2,7 @@ import { sql } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import {
   createApiKeyStore,
+  DEFAULT_RATE_LIMIT_PER_MINUTE,
   looksLikeApiKey,
   MIN_PURGE_AFTER_REVOKED_DAYS,
   RECOVERY_WINDOW_MS,
@@ -312,6 +313,70 @@ describe('ApiKeyStore.recover (fiche 62 task 3, decision b)', () => {
     const db = await testDb()
     const keys = createApiKeyStore(db)
     await expect(keys.recover('nope')).rejects.toMatchObject({ code: 'API_KEY_NOT_FOUND' })
+  })
+})
+
+// fiche feedback: a key's name/scope/quota had no edit path — rotate() only
+// reissues the secret, always under the same name/scope.
+describe('ApiKeyStore.update', () => {
+  it('changes name and scope without touching the key itself', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'CI script', scope: ['viewer'], createdBy: null })
+
+    const updated = await keys.update(issued.id, { name: 'CI deploy script', scope: ['editor'] })
+
+    expect(updated.name).toBe('CI deploy script')
+    expect(updated.scope).toEqual(['editor'])
+    expect(updated.prefix).toBe(issued.prefix)
+    const resolved = await keys.verify(issued.key)
+    expect(resolved?.id).toBe(issued.id)
+  })
+
+  it('leaves fields absent from the patch exactly as saved', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({
+      name: 'CI script',
+      scope: ['viewer'],
+      createdBy: null,
+      rateLimitPerMinute: 120,
+    })
+
+    const updated = await keys.update(issued.id, { name: 'CI deploy script' })
+
+    expect(updated.scope).toEqual(['viewer'])
+    expect(updated.rateLimitPerMinute).toBe(120)
+  })
+
+  it('sets an explicit rate limit, then clears it back to the default with null', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'CI script', scope: ['viewer'], createdBy: null })
+
+    const limited = await keys.update(issued.id, { rateLimitPerMinute: 50 })
+    expect(limited.rateLimitPerMinute).toBe(50)
+
+    const cleared = await keys.update(issued.id, { rateLimitPerMinute: null })
+    expect(cleared.rateLimitPerMinute).toBe(DEFAULT_RATE_LIMIT_PER_MINUTE)
+  })
+
+  it('refuses an empty scope, same as create()', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'x', scope: ['viewer'], createdBy: null })
+
+    await expect(keys.update(issued.id, { scope: [] })).rejects.toMatchObject({
+      code: 'QUERY_INVALID',
+    })
+  })
+
+  it('throws API_KEY_NOT_FOUND for an id that was never a key', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    await expect(keys.update('nope', { name: 'x' })).rejects.toMatchObject({
+      code: 'API_KEY_NOT_FOUND',
+    })
   })
 })
 

@@ -3143,7 +3143,7 @@
   "commerceTax": {
     "heading": "Taxes",
     "description": "Zones et taux, résolus par spécificité — la règle la plus précise l'emporte toujours, quel que soit l'ordre de création.",
-    "adminOnly": "Seul un administrateur peut configurer les taxes.",
+    "signedInOnly": "Connectez-vous pour voir les taxes.",
     "newButton": "Nouvelle règle",
     "newHeading": "Nouvelle règle de taxe",
     "close": "Fermer",
@@ -3188,7 +3188,7 @@
   "commerceShipping": {
     "heading": "Livraison",
     "description": "Zones et méthodes. Une méthode nommant un transporteur retombe toujours sur son tarif stocké si l'API du courrier ne répond pas.",
-    "adminOnly": "Seul un administrateur peut configurer la livraison.",
+    "signedInOnly": "Connectez-vous pour voir la livraison.",
     "newButton": "Nouvelle méthode",
     "newHeading": "Nouvelle méthode de livraison",
     "close": "Fermer",

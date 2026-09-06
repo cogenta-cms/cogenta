@@ -48,7 +48,12 @@ export function CommerceShippingRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
-  const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
+  const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
+  // fiche feedback: same fix as commerce-tax.tsx — the server only ever
+  // asserted `commerce.catalog.write` (also held by `editor`/`shopkeeper`,
+  // whose doc comment explicitly names "tax and shipping rules"), so this
+  // screen now matches every other commerce screen's "signedInOnly" pattern.
+  const canRead = roles.length > 0
 
   const [methods, setMethods] = useState<readonly ShippingMethod[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +91,7 @@ export function CommerceShippingRoute(): JSX.Element {
   const [simError, setSimError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (token === null || !isAdmin) return
+    if (token === null || !canRead) return
     setLoading(true)
     setError(null)
     try {
@@ -97,7 +102,7 @@ export function CommerceShippingRoute(): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [token, isAdmin, t])
+  }, [token, canRead, t])
 
   useEffect(() => {
     void load()
@@ -241,11 +246,11 @@ export function CommerceShippingRoute(): JSX.Element {
     return method.region === null ? method.country : `${method.country} / ${method.region}`
   }
 
-  if (!isAdmin) {
+  if (!canRead) {
     return (
       <section aria-labelledby="commerce-shipping-heading">
         <h1 id="commerce-shipping-heading">{t('commerceShipping.heading')}</h1>
-        <p role="alert">{t('commerceShipping.adminOnly')}</p>
+        <p role="alert">{t('commerceShipping.signedInOnly')}</p>
       </section>
     )
   }

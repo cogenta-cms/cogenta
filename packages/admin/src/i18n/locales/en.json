@@ -3143,7 +3143,7 @@
   "commerceTax": {
     "heading": "Tax",
     "description": "Zones and rates, resolved by specificity — the most precise rule always wins, whatever order it was created in.",
-    "adminOnly": "Only an administrator can configure taxes.",
+    "signedInOnly": "Sign in to view tax settings.",
     "newButton": "New rule",
     "newHeading": "New tax rule",
     "close": "Close",
@@ -3188,7 +3188,7 @@
   "commerceShipping": {
     "heading": "Shipping",
     "description": "Zones and methods. A method naming a carrier always falls back to its stored rate if the courier's API does not answer.",
-    "adminOnly": "Only an administrator can configure shipping.",
+    "signedInOnly": "Sign in to view shipping settings.",
     "newButton": "New method",
     "newHeading": "New shipping method",
     "close": "Close",

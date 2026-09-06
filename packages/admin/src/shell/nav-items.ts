@@ -226,26 +226,35 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'commerce',
     visibleWhen: { kind: 'commerceActiveOrAdmin' },
   },
-  // Store settings (fiche 34) — financial and legal configuration, `admin`
-  // only regardless of whether the shop is active yet: setting up tax and
-  // payment is what an admin does *before* the first sale, not after.
+  // Store settings (fiche 34) — general settings and payment stay `admin`
+  // only regardless of whether the shop is active yet: general settings'
+  // `writeRoles` are genuinely `ADMIN_ONLY` server-side, and payment touches
+  // live gateway credentials with no config endpoint at all for anyone.
   {
     to: '/commerce/settings',
     labelKey: 'nav.commerceSettings',
     group: 'commerce',
     visibleWhen: { kind: 'role', role: 'admin' },
   },
+  // fiche feedback: tax and shipping used to be admin-only here too, but the
+  // server only ever asserted `commerce.catalog.write` — also held by
+  // `editor`/`shopkeeper`, whose own doc comment names "tax and shipping
+  // rules" as part of what it covers (`packages/commerce/src/admin/
+  // permissions.ts`). Matches every other catalogue-shaped commerce entry
+  // below (products/orders/customers/coupons): an admin always sees it
+  // (to set up before the first sale), any other commerce role sees it once
+  // the shop is active.
   {
     to: '/commerce/tax',
     labelKey: 'nav.commerceTax',
     group: 'commerce',
-    visibleWhen: { kind: 'role', role: 'admin' },
+    visibleWhen: { kind: 'commerceActiveOrAdmin' },
   },
   {
     to: '/commerce/shipping',
     labelKey: 'nav.commerceShipping',
     group: 'commerce',
-    visibleWhen: { kind: 'role', role: 'admin' },
+    visibleWhen: { kind: 'commerceActiveOrAdmin' },
   },
   {
     to: '/commerce/payment',

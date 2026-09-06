@@ -159,18 +159,29 @@ describe('the commerce tax screen', () => {
     await screen.findByText('20%')
   })
 
-  it('refuses the screen to a non-admin', async () => {
+  // fiche feedback: this screen used to be admin-only in the client even
+  // though the server only ever required `commerce.catalog.write` — a
+  // permission `editor` and `shopkeeper` also hold, and whose own doc
+  // comment names "tax and shipping rules" as part of what it covers.
+  it('lets an editor — not just admin — view and manage tax rules, matching what the server allows', async () => {
     signedInAs(['editor'])
-    // The "Taxes" nav link is itself gated to admin and never renders for
-    // this role -- go straight to the route, the same way a bookmarked
-    // URL would, and assert the screen's own refusal.
+    // The "Taxes" nav link only shows once the shop has sold something (or
+    // for `admin`, always) — same as every other catalogue nav entry
+    // (`commerceActiveOrAdmin`). Go straight to the route, the same way a
+    // bookmarked URL would, to exercise the screen's own access check.
     window.history.pushState(null, '', '/commerce/tax')
     render(<App />)
+    await screen.findByRole('heading', { name: 'Taxes' })
 
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'Seul un administrateur peut configurer les taxes.',
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle règle' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Nouvelle règle de taxe' })
+    fireEvent.change(within(dialog).getByLabelText('Nom'), { target: { value: 'Editor rule' } })
+    fireEvent.change(within(dialog).getByLabelText('Taux (%)'), { target: { value: '10' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Créer la règle' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Editor rule')).toBeDefined()
+    })
   })
 
   it('has no serious accessibility violation', async () => {

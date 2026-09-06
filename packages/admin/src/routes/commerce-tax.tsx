@@ -44,7 +44,18 @@ export function CommerceTaxRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
-  const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
+  const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
+  // fiche feedback: this screen used to be gated admin-only in the client,
+  // but the server only ever asserted `commerce.catalog.write`
+  // (`packages/commerce/src/admin/router.ts`), a permission `editor` and
+  // `shopkeeper` also hold (`DEFAULT_COMMERCE_ROLES`) — its own doc comment
+  // explicitly lists "tax and shipping rules" as part of what it covers.
+  // Matches every other commerce screen's own "signedInOnly" pattern
+  // (`commerce-products.tsx`, `commerce-orders.tsx`): any signed-in commerce
+  // role can view and use this screen, the server enforces catalog.write on
+  // the actual mutation (already tested: `packages/commerce/test/
+  // admin-router-store-settings.test.ts`'s "refuses a non-write role").
+  const canRead = roles.length > 0
 
   const [rules, setRules] = useState<readonly TaxRule[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,7 +91,7 @@ export function CommerceTaxRoute(): JSX.Element {
   const [simError, setSimError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (token === null || !isAdmin) return
+    if (token === null || !canRead) return
     setLoading(true)
     setError(null)
     try {
@@ -91,7 +102,7 @@ export function CommerceTaxRoute(): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [token, isAdmin, t])
+  }, [token, canRead, t])
 
   useEffect(() => {
     void load()
@@ -209,11 +220,11 @@ export function CommerceTaxRoute(): JSX.Element {
     return `${zone} — ${rule.taxCategory}`
   }
 
-  if (!isAdmin) {
+  if (!canRead) {
     return (
       <section aria-labelledby="commerce-tax-heading">
         <h1 id="commerce-tax-heading">{t('commerceTax.heading')}</h1>
-        <p role="alert">{t('commerceTax.adminOnly')}</p>
+        <p role="alert">{t('commerceTax.signedInOnly')}</p>
       </section>
     )
   }

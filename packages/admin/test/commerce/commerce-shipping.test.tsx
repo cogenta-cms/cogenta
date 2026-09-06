@@ -161,15 +161,31 @@ describe('the commerce shipping screen', () => {
     })
   })
 
-  it('refuses the screen to a non-admin', async () => {
+  // fiche feedback: this screen used to be admin-only in the client even
+  // though the server only ever required `commerce.catalog.write` — a
+  // permission `editor` and `shopkeeper` also hold, and whose own doc
+  // comment names "tax and shipping rules" as part of what it covers.
+  it('lets an editor — not just admin — view and manage shipping methods, matching what the server allows', async () => {
     signedInAs(['editor'])
+    // The "Livraison" nav link only shows once the shop has sold something
+    // (or for `admin`, always) — same as every other catalogue nav entry
+    // (`commerceActiveOrAdmin`). Go straight to the route, the same way a
+    // bookmarked URL would, to exercise the screen's own access check.
     window.history.pushState(null, '', '/commerce/shipping')
     render(<App />)
+    await screen.findByRole('heading', { name: 'Livraison' })
 
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'Seul un administrateur peut configurer la livraison.',
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle méthode' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Nouvelle méthode de livraison' })
+    fireEvent.change(within(dialog).getByLabelText('Libellé'), {
+      target: { value: 'Editor method' },
+    })
+    fireEvent.change(within(dialog).getByLabelText('Montant'), { target: { value: '5' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Créer la méthode' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Editor method')).toBeDefined()
+    })
   })
 
   it('has no serious accessibility violation', async () => {

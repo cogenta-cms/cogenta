@@ -224,3 +224,29 @@ pnpm changeset                # décrit un changement publiable
 - **Un `TODO` sans issue GitHub associée est interdit.**
 - Commits en Conventional Commits, avec `Signed-off-by`. Code, commentaires, commits
   et issues **en anglais** ; les documents de conception sont en français.
+- **Un changeset écrit n'est pas un changeset terminé.** Écrire le fichier
+  `.changeset/*.md` ne suffit jamais : sans consommation (`pnpm changeset version`,
+  qui exige `GITHUB_TOKEN=$(gh auth token)` en local pour générer le changelog), il
+  reste accumulé indéfiniment — 37 changesets sont restés non consommés du
+  2026-08-20 au 2026-09-06 avant d'être découverts, malgré des rappels répétés de
+  l'utilisateur.
+- **Consommer les changesets et pousser sur `main` déclenche une PUBLICATION NPM
+  RÉELLE ET IMMÉDIATE, sans aucune barrière CI** (le pipeline publie dès qu'un push
+  sur `main` ne laisse plus aucun changeset en attente — confirmé le 2026-09-06 :
+  un push a bien lancé le job de publication en quelques secondes, arrêté de justesse
+  avant que l'étape npm ne s'exécute). C'est donc une action irréversible vers
+  l'extérieur au même titre que `pnpm release` — **ne jamais consommer les
+  changesets ni pousser un commit qui les consomme sans confirmation explicite de
+  l'utilisateur**, même en mode autonomie complète, même si la Définition de terminé
+  exige un changeset écrit pour chaque paquet touché. Idée retenue par l'utilisateur
+  pour plus tard, non actée : ajouter un environnement GitHub protégé (reviewer
+  requis) sur l'étape de publication pour rendre cette confirmation structurelle
+  plutôt que dépendante de la mémoire d'une session.
+- **Trusted Publisher OIDC n'est pas configuré pour tous les paquets** — une
+  tentative de publication échoue en 404 (pas 401/403, piège documenté dans
+  `release.yml`) pour tout paquet dont ce lien n'a jamais été fait à la main sur
+  npmjs.com par l'humain, publié ou non : au 2026-09-06, `analytics`, `comments`,
+  `commerce`, `export`, `forms`, `observability`, `theme-association`, `theme-blog`,
+  `theme-docs`, `theme-ecommerce`, `theme-entreprise`, `theme-kit`, `theme-magazine`,
+  `theme-portfolio`, `theme-restaurant`, `theme-saas` en ont besoin — aucun
+  contournement possible sans cet accès humain.

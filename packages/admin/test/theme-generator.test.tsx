@@ -257,6 +257,15 @@ describe('the theme generator workshop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
     await screen.findByText('Portfolio, warm')
 
+    // The candidate targets Portfolio while Canonical is active — proof the
+    // live preview actually carried the candidate's own tokens to the
+    // foreign theme's gallery-preview render, not that theme's own default
+    // skin (L26 task 5's gallery-preview widening).
+    await waitFor(() => {
+      const frame = document.querySelector('iframe') as HTMLIFrameElement | null
+      expect(frame?.srcdoc ?? '').toContain(`accent:${WARM_TOKENS.color.accent}`)
+    })
+
     fireEvent.click(screen.getByRole('button', { name: 'Activer' }))
     await waitFor(() => expect(screen.getByText('Activé.')).toBeDefined())
 

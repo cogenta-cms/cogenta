@@ -194,14 +194,21 @@ export function previewTheme(
  * own real home page, in the currently active theme). Every card in the
  * gallery calls this once, by name, so switching which theme is shown never
  * touches `PUT /api/theme/overrides`.
+ *
+ * `tokens` (L26 task 5) previews a Theme Creator candidate's *own* skin
+ * against a theme package this site is not currently running — the
+ * combination `previewTheme` above cannot express, since it only ever
+ * renders the active theme. Omitted, this renders exactly as before: the
+ * named theme's own on-disk default skin.
  */
 export function previewThemeGallery(
   token: string,
   theme: string,
+  tokens?: Record<string, unknown>,
 ): Promise<{ readonly html: string }> {
   return request<{ readonly html: string }>('/api/theme/gallery-preview', {
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
-    body: JSON.stringify({ theme }),
+    body: JSON.stringify({ theme, ...(tokens === undefined ? {} : { tokens }) }),
   })
 }

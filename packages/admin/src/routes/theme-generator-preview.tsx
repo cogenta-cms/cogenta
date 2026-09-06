@@ -12,27 +12,18 @@ import { previewTheme, previewThemeGallery, type SkinCandidate } from '../api/th
  * before it: an iframe on a real render, never a screenshot and never a
  * React reimplementation of the twelve blocks.
  *
- * There is no single existing endpoint that renders an arbitrary theme
- * *package* with an arbitrary token *candidate* at once — the two endpoints
- * this admin already has each cover one half:
+ * Two real pages a candidate can end up rendered on, chosen by which theme
+ * it targets:
  *
- * - `previewTheme` (`POST /api/theme/preview`) renders the site's own real
- *   home page with a candidate token/CSS overlay, but always through
- *   whichever theme package is *currently active* — it has no notion of
- *   "preview a different theme".
- * - `previewThemeGallery` (`POST /api/theme/gallery-preview`) renders a
- *   fixed demo page through an arbitrary theme package *by name*, but
- *   always with that theme's own file tokens — it has no notion of "with
- *   these candidate tokens".
- *
- * So: when a candidate targets the currently active theme (or names no
- * theme at all — the common case, since most candidates adjust the theme
- * already running), `previewTheme` is exact — real page, real tokens. When
- * a candidate targets a *different* installed theme package, this falls
- * back to `previewThemeGallery` — the right layout, but the demo page and
- * that theme's own tokens rather than the candidate's. That gap is real and
- * stays open until a combined endpoint exists; it is called out in this
- * feature's own delivery report rather than silently smoothed over.
+ * - Targets the theme already active (or names none at all — the common
+ *   case, since most candidates adjust the theme already running):
+ *   `previewTheme` (`POST /api/theme/preview`) — the site's own real home
+ *   page, with the candidate's tokens overlaid.
+ * - Targets a *different* installed theme package: `previewThemeGallery`
+ *   (`POST /api/theme/gallery-preview`, widened in L26 task 5 to take an
+ *   optional `tokens` field) — the gallery's fixed demo page, rendered
+ *   through that theme with the candidate's own tokens, not the theme's own
+ *   on-disk default.
  */
 const CANDIDATE_PREVIEW_VIEWPORT_WIDTH = 1280
 const DEFAULT_UNSCALED_HEIGHT = 800
@@ -63,7 +54,9 @@ export function ThemeCandidatePreview({
     setError(null)
     const load = targetsActiveTheme
       ? previewTheme(token, { tokens: candidate.tokens }).then((result) => result.html)
-      : previewThemeGallery(token, candidate.themeName as string).then((result) => result.html)
+      : previewThemeGallery(token, candidate.themeName as string, candidate.tokens).then(
+          (result) => result.html,
+        )
     load
       .then((resolvedHtml) => {
         if (!cancelled) setHtml(resolvedHtml)

@@ -8411,10 +8411,19 @@ export function installMockFetch(
         // names the requested theme, so a test can assert the iframe
         // actually receives a different document per card.
         if (url.includes('/api/theme/gallery-preview') && method === 'POST') {
-          const requestedTheme = (body as { theme?: string } | undefined)?.theme ?? ''
+          const galleryBody = body as
+            | { theme?: string; tokens?: { color?: { accent?: string } } }
+            | undefined
+          const requestedTheme = galleryBody?.theme ?? ''
+          // Echoes the candidate's own accent colour when `tokens` travelled
+          // (L26 task 5) — the same "some real HTML that names the request"
+          // discipline the theme name already gets above, so a test can
+          // assert a candidate's tokens actually reached this route rather
+          // than the theme's own on-disk default.
+          const accent = galleryBody?.tokens?.color?.accent
           return json(200, {
             data: {
-              html: `<!doctype html><html><head><style>/* ${requestedTheme} */</style></head><body>gallery preview of ${requestedTheme}</body></html>`,
+              html: `<!doctype html><html><head><style>/* ${requestedTheme}${accent === undefined ? '' : ` accent:${accent}`} */</style></head><body>gallery preview of ${requestedTheme}</body></html>`,
             },
           })
         }

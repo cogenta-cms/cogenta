@@ -380,6 +380,7 @@ import {
   STYLESHEET_PATH,
 } from './theme-render.js'
 import {
+  computeCandidateGalleryStyles,
   computeEffectiveStyles,
   computePreviewStyles,
   createThemeCreatorToolWiring,
@@ -888,8 +889,19 @@ interface Site {
    * switching to it". Absent under the same condition every other theme
    * field here is (`options.theme` absent — a test harness with no theme
    * wiring).
+   *
+   * `tokens` (L26 task 5, the Theme Creator workshop) lets a caller preview
+   * an unsaved candidate skin against a theme *other than* the active one —
+   * exactly the combination `previewStyles`/`themeGalleryStyles` previously
+   * had no way to express together: the former knows tokens but not a
+   * foreign theme's CSS, the latter knows a foreign theme's CSS but only its
+   * own on-disk default tokens. Absent means the previous behaviour
+   * (`themeName`'s own default skin), unchanged.
    */
-  readonly themeGalleryStyles?: (themeName: string) => Promise<string | null>
+  readonly themeGalleryStyles?: (
+    themeName: string,
+    tokens?: Record<string, unknown>,
+  ) => Promise<string | null>
   /**
    * The active theme *package* name (fiche L23) — `null` for the built-in
    * default. Read live off the same theme-overrides row `resolveStyles`
@@ -2751,13 +2763,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.theme === undefined
       ? {}
       : {
-          themeGalleryStyles: async (themeName: string) =>
-            computeEffectiveStyles(
-              options.theme as ThemeRouterOptions,
+          themeGalleryStyles: async (themeName: string, tokens?: Record<string, unknown>) => {
+            const themeCss =
               options.themeCssFor === undefined
                 ? (options.themeCss ?? null)
-                : await options.themeCssFor(themeName),
-            ),
+                : await options.themeCssFor(themeName)
+            return tokens === undefined
+              ? computeEffectiveStyles(options.theme as ThemeRouterOptions, themeCss)
+              : computeCandidateGalleryStyles(options.theme as ThemeRouterOptions, themeCss, tokens)
+          },
         }),
     ...(options.theme === undefined
       ? {}
@@ -4970,6 +4984,12 @@ export function createRequestListener(
       // `renderThemeGalleryPreview`'s own comment for why fixed content, the
       // same across every card, is the fairer comparison. `site.gateway` is
       // never touched, so this cannot leak a draft or private entry.
+      //
+      // `tokens` (L26 task 5) previews an unsaved candidate skin — from the
+      // Theme Creator workshop — against a theme this site is not currently
+      // running, the one combination `/api/theme/preview` above cannot
+      // express (it only ever renders the active theme). Omitted, this
+      // route behaves exactly as before: the named theme's own default skin.
       if (url.pathname === '/api/theme/gallery-preview') {
         if (req.method !== 'POST') {
           res.writeHead(405, { allow: 'POST' }).end()
@@ -4983,7 +5003,7 @@ export function createRequestListener(
           jsonError(res, 404, 'CONTENT_NOT_FOUND', 'This instance has no theme gallery preview.')
           return
         }
-        const body = (await readBody(req)) as { theme?: unknown } | undefined
+        const body = (await readBody(req)) as { theme?: unknown; tokens?: unknown } | undefined
         const themeName = typeof body?.theme === 'string' ? body.theme : ''
         if (!(await availableThemes()).some((candidate) => candidate.name === themeName)) {
           jsonError(
@@ -4994,7 +5014,17 @@ export function createRequestListener(
           )
           return
         }
-        const styles = await site.themeGalleryStyles(themeName)
+        const previewTokens =
+          typeof body?.tokens === 'object' && body.tokens !== null
+            ? (body.tokens as Record<string, unknown>)
+            : undefined
+        let styles: string | null
+        try {
+          styles = await site.themeGalleryStyles(themeName, previewTokens)
+        } catch (error) {
+          writeRestResponse(res, errorResponse(error))
+          return
+        }
         const html = await renderThemeGalleryPreview(themeName, {
           site: site.site,
           styles,

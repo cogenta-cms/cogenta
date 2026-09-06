@@ -285,3 +285,23 @@ export async function computePreviewStyles(
       : `${skinCss}\n${candidate.additionalCss}`
   return joinStyles(combined, themeCss)
 }
+
+/**
+ * The theme gallery's preview of a Theme Creator candidate (L26 task 5) —
+ * deliberately **not** `computePreviewStyles` above, despite the similar
+ * shape: that function previews an *edit relative to the site's own saved
+ * file*, and short-circuits to the file-free default the moment no file
+ * exists yet, which is exactly wrong here — a candidate from
+ * `theme.propose_theme` is always a complete, self-sufficient skin (the
+ * same guarantee `generateSkinCandidates` already gives every caller), with
+ * no file to merge onto and no site-specific baseline to fall back to. It is
+ * validated and rendered on its own, the same way a *saved* skin already is.
+ */
+export function computeCandidateGalleryStyles(
+  wiring: Pick<ThemeRouterOptions, 'validateTokens'>,
+  themeCss: string | null,
+  tokens: Record<string, unknown>,
+): string | null {
+  const validated = wiring.validateTokens(tokens)
+  return joinStyles(renderSkin(validated as never).css, themeCss)
+}

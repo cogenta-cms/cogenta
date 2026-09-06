@@ -49,6 +49,7 @@ async function galleryPreview(
   token: string | null,
   theme: string,
   method = 'POST',
+  tokens?: Record<string, unknown>,
 ): Promise<{ status: number; html: string | null }> {
   const response = await fetch(`${base}/api/theme/gallery-preview`, {
     method,
@@ -56,11 +57,37 @@ async function galleryPreview(
       'content-type': 'application/json',
       ...(token === null ? {} : { authorization: `Bearer ${token}` }),
     },
-    ...(method === 'GET' ? {} : { body: JSON.stringify({ theme }) }),
+    ...(method === 'GET'
+      ? {}
+      : { body: JSON.stringify({ theme, ...(tokens === undefined ? {} : { tokens }) }) }),
   })
   if (!response.ok) return { status: response.status, html: null }
   const parsed = (await response.json()) as { data: { html: string } }
   return { status: response.status, html: parsed.data.html }
+}
+
+/** A complete, contract-D-valid skin, distinct from every built-in theme's own default. */
+const CANDIDATE_TOKENS = {
+  color: {
+    bg: '#0b0f19',
+    fg: '#f5f7fb',
+    accent: '#f97316',
+    accentFg: '#0b0f19',
+    muted: '#161d2e',
+    mutedFg: '#aab4c8',
+    border: '#232c42',
+  },
+  font: {
+    sans: 'ui-sans-serif, system-ui, sans-serif',
+    serif: 'ui-serif, Georgia, serif',
+    mono: 'ui-monospace, monospace',
+    scale: 1.25,
+    baseSize: '1rem',
+  },
+  space: { unit: '0.25rem', density: 'comfortable' },
+  radius: { sm: '0.25rem', md: '0.5rem', lg: '1rem' },
+  motion: { duration: '180ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+  shadow: { sm: '0 1px 2px rgba(0, 0, 0, 0.3)', md: '0 6px 24px rgba(0, 0, 0, 0.4)' },
 }
 
 describe('the appearance screen theme gallery renders a real preview per theme (L24 task 5)', () => {
@@ -159,6 +186,62 @@ describe('the appearance screen theme gallery renders a real preview per theme (
 
       const preview = await galleryPreview(server.base, token, '@cogenta/theme-nonexistent')
       expect(preview.status).toBe(404)
+    } finally {
+      await server.stop()
+    }
+  }, 30_000)
+
+  it("renders a Theme Creator candidate's own tokens against a theme this site is not currently running (L26 task 5)", async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+
+      const withDefault = await galleryPreview(server.base, token, '@cogenta/theme-portfolio')
+      const withCandidate = await galleryPreview(
+        server.base,
+        token,
+        '@cogenta/theme-portfolio',
+        'POST',
+        CANDIDATE_TOKENS,
+      )
+
+      expect(withDefault.status).toBe(200)
+      expect(withCandidate.status).toBe(200)
+      // Same theme's markup/layout, but the candidate's own colour actually
+      // reached the stylesheet — not the theme's on-disk default.
+      expect(withCandidate.html).toContain(CANDIDATE_TOKENS.color.accent)
+      expect(withDefault.html).not.toContain(CANDIDATE_TOKENS.color.accent)
+    } finally {
+      await server.stop()
+    }
+  }, 30_000)
+
+  it('refuses a candidate that fails contract D even for a foreign theme', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+
+      const invalid = { ...CANDIDATE_TOKENS, color: { ...CANDIDATE_TOKENS.color, fg: '#0c0f19' } }
+      const preview = await galleryPreview(
+        server.base,
+        token,
+        '@cogenta/theme-portfolio',
+        'POST',
+        invalid,
+      )
+      expect(preview.status).toBe(422)
     } finally {
       await server.stop()
     }

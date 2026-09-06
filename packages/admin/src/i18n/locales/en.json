@@ -1806,6 +1806,11 @@
     "heading": "Providers",
     "adminOnly": "Restricted to the \"admin\" role: this manages every LLM provider's API key.",
     "intro": "Which LLM providers this site can use, and their default model. Every agent's model preference names one of these.",
+    "defaultsHeading": "Default settings",
+    "defaultsIntro": "The floor every provider below follows when a setting is not overridden specifically for it.",
+    "defaultsLoadError": "Could not load the default settings.",
+    "defaultsSaveAction": "Save default settings",
+    "defaultsSaved": "Saved.",
     "addHeading": "Add or update a provider",
     "provider": "Provider",
     "customProviderOption": "Custom provider…",
@@ -1823,11 +1828,11 @@
     "baseUrlRequiredForCustom": "Required for a custom provider — the full OpenAI-compatible chat completions endpoint URL.",
     "catalogLoadError": "Could not load the provider catalog.",
     "maxOutputTokens": "Max output tokens",
-    "maxOutputTokensHint": "A model that \"thinks\" before answering (DeepSeek, o1…) needs far more than the visible answer alone — leave empty for the default (8000).",
+    "maxOutputTokensHint": "A model that \"thinks\" before answering (DeepSeek, o1…) needs far more than the visible answer alone — leave empty to follow the site's default setting, above.",
     "requestTimeoutSeconds": "Request timeout (seconds)",
-    "requestTimeoutSecondsHint": "A slower model needs more time, not just more tokens — leave empty for the default (180s).",
+    "requestTimeoutSecondsHint": "A slower model needs more time, not just more tokens — leave empty to follow the site's default setting, above.",
     "maxCorrectionAttempts": "Max correction attempts",
-    "maxCorrectionAttemptsHint": "How many times to retry this model when it does not produce a usable answer on the first try — leave empty for the default (3).",
+    "maxCorrectionAttemptsHint": "How many times to retry this model when it does not produce a usable answer on the first try — leave empty to follow the site's default setting, above.",
     "tuningDefaultPlaceholder": "Default",
     "tuningColumn": "Model tuning",
     "tuningDefault": "Default",
@@ -1846,7 +1851,23 @@
     "remove": "Remove",
     "noProviders": "No provider configured yet — agents cannot run until one is added.",
     "loadError": "Could not load the provider list.",
-    "saveError": "Could not save this provider."
+    "saveError": "Could not save this provider.",
+    "field": {
+      "assistant": {
+        "defaultMaxOutputTokens": {
+          "label": "Max output tokens — site default",
+          "help": "The floor any provider with no \"Max output tokens\" of its own follows."
+        },
+        "defaultRequestTimeoutSeconds": {
+          "label": "Request timeout — site default (seconds)",
+          "help": "The floor any provider with no \"Request timeout\" of its own follows."
+        },
+        "defaultMaxCorrectionAttempts": {
+          "label": "Max correction attempts — site default",
+          "help": "The floor any provider with no \"Max correction attempts\" of its own follows."
+        }
+      }
+    }
   },
   "agentSkills": {
     "heading": "Skills",

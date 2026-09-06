@@ -37,6 +37,9 @@ function provider(reply: string): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-1',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     chat: async (_request: ChatRequest): Promise<ChatResponse> => ({
       content: reply,
       toolCalls: [],
@@ -161,6 +164,9 @@ describe('POST /api/assistant/run', () => {
     const counting: ProviderClient = {
       name: 'counting',
       model: 'm',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 3,
       chat: async () => {
         called += 1
         return {
@@ -292,6 +298,9 @@ describe('assistant usage and budget (fiche 30 task 3)', () => {
         provider: {
           name: 'fake',
           model: 'fake-1',
+          maxOutputTokens: 8000,
+          requestTimeoutMs: 180_000,
+          maxCorrectionAttempts: 3,
           chat: async (): Promise<ChatResponse> => {
             providerCalls += 1
             return {

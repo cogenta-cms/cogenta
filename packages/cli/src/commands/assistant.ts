@@ -19,6 +19,7 @@ import {
   REFERENCE_DOCUMENT_COLLECTION,
   type ReferenceDocumentRecord,
   removeReferenceDocumentVectors,
+  resolveProviderTuningDefaults,
   type SemanticSearch,
   type VectorRecord,
   type VectorStore,
@@ -159,7 +160,7 @@ export async function isAssistantCollectionEnabled(
  * operator who mistyped a provider name should get a site that works with
  * the assistant off, plus a log line saying exactly that.
  */
-function textProvider(options: BuildAssistantOptions): ProviderClient | undefined {
+async function textProvider(options: BuildAssistantOptions): Promise<ProviderClient | undefined> {
   const llm = options.config.llm
   if (llm === undefined) return undefined
 
@@ -175,13 +176,17 @@ function textProvider(options: BuildAssistantOptions): ProviderClient | undefine
   }
 
   try {
-    const registry = createProviderRegistry({
-      [llm.provider]: {
-        apiKey: llm.apiKey,
-        model: llm.model,
-        ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
+    const defaults = await resolveProviderTuningDefaults(options.settings)
+    const registry = createProviderRegistry(
+      {
+        [llm.provider]: {
+          apiKey: llm.apiKey,
+          model: llm.model,
+          ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
+        },
       },
-    })
+      defaults,
+    )
     return registry.get(llm.provider)
   } catch (error) {
     options.logger.warn('LLM provider could not be resolved, the writing assistant stays off', {
@@ -236,7 +241,7 @@ function embeddingProvider(options: BuildAssistantOptions): EmbeddingProvider | 
 
 export async function buildAssistant(options: BuildAssistantOptions): Promise<AssistantAssembly> {
   const { config, logger } = options
-  const provider = textProvider(options)
+  const provider = await textProvider(options)
   const images = imageProvider(options)
   const embeddings = embeddingProvider(options)
 

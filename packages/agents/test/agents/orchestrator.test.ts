@@ -26,6 +26,9 @@ function scriptedClient(name: string, responses: readonly ChatResponse[]): Provi
   const client = {
     name,
     model: `${name}-model`,
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat(request: ChatRequest) {
       calls.push(request)
       const response = responses[index]

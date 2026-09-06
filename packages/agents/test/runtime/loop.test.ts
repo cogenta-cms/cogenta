@@ -16,6 +16,9 @@ function fakeClient(
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     calls,
     async chat(request) {
       calls.push(request)
@@ -70,11 +73,13 @@ describe('runAgentLoop', () => {
     expect(client.calls[0]?.maxTokens).toBeUndefined()
   })
 
-  it("retries up to the resolved client's own maxCorrectionAttempts (2), not the local default (3)", async () => {
+  it("retries up to the resolved client's own maxCorrectionAttempts (2)", async () => {
     let attempts = 0
     const failing: ProviderClient = {
       name: 'fake',
       model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
       maxCorrectionAttempts: 2,
       async chat() {
         attempts += 1

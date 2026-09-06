@@ -22,6 +22,9 @@ describe('agentDelegateToolName', () => {
       client: {
         name: 'fake',
         model: 'fake',
+        maxOutputTokens: 8000,
+        requestTimeoutMs: 180_000,
+        maxCorrectionAttempts: 3,
         async chat() {
           return {
             content: 'ok',
@@ -53,6 +56,9 @@ function fakeClient(responses: readonly ChatResponse[]): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat() {
       const response = responses[index]
       index += 1
@@ -83,6 +89,9 @@ describe('agent.delegate', () => {
     const client: ProviderClient = {
       name: 'fake',
       model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 3,
       async chat() {
         throw new Error('provider is down')
       },
@@ -104,6 +113,9 @@ describe('agent.delegate', () => {
     const client: ProviderClient = {
       name: 'fake',
       model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 3,
       async chat(request) {
         seenToolNames = (request.tools ?? []).map((t) => t.name)
         return { content: 'ok', toolCalls: [], stopReason: 'end_turn', usage: USAGE }

@@ -1333,3 +1333,43 @@ Contrat A/B/C/D **non modifiés** par cette fiche (voir le changeset —
 `packages/agents/src/tools/core/media.ts` retire délibérément `folderId` de
 la sortie de `media.read`/`media.write` pour ne *pas* toucher au contrat C
 déjà figé plutôt que de le faire grandir sans gouvernance).
+
+## 25. Réglages de réglage LLM par défaut (`assistant.*`) : le rafraîchissement en direct est partiel
+
+Retour utilisateur explicite et répété (« rien ne doit être hardcodé, absolument
+rien, je dit bien aucune exception ») : `FALLBACK_MAX_OUTPUT_TOKENS`,
+`DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS` et `FALLBACK_MAX_CORRECTION_ATTEMPTS`,
+des constantes TypeScript dans `@cogenta/agents` qu'aucune interface
+n'exposait, sont devenus trois vrais réglages de site persistés
+(`assistant.defaultMaxOutputTokens`/`assistant.defaultRequestTimeoutSeconds`/
+`assistant.defaultMaxCorrectionAttempts`, `SITE_SETTINGS_REGISTRY`), éditables
+depuis `/admin/providers` (« Réglages par défaut »).
+
+**Le rafraîchissement en direct n'est que partiel, honnêtement.**
+`createLiveProviderRegistry` (`packages/cli/src/commands/agent-runtime.ts`)
+relit les trois réglages `assistant.*` **en même temps que** la configuration
+des fournisseurs, à chaque `refresh()` — donc dès qu'un admin enregistre,
+active/désactive ou retire un fournisseur depuis `/admin/providers`, le
+nouveau plancher est repris sans redémarrage. Mais **rien ne déclenche ce
+`refresh()` quand seul un réglage `assistant.*` change, sans qu'aucun
+fournisseur ne soit lui-même touché** — `createSiteSettingsRouter` ne porte
+aucun crochet `onMutated` comparable à celui de
+`createProviderRegistryAdapter`. Un admin qui modifie uniquement le plancher
+par défaut (sans toucher un fournisseur dans la foulée) doit redémarrer
+`cogenta serve` pour que le changement atteigne un agent en cours d'exécution
+— la valeur est bien enregistrée immédiatement, seule sa prise en compte par
+le registre de fournisseurs en mémoire attend soit ce redémarrage, soit la
+prochaine mutation d'un fournisseur.
+
+Corriger proprement demanderait le même crochet `onMutated` que
+`/api/providers` (`createLiveProviderRegistry.refresh` rappelé après chaque
+écriture), câblé cette fois sur `POST/PUT /api/settings` pour les trois clés
+`assistant.*` précisément — non fait ici faute de budget dans cette fiche,
+puisque le sujet initial (éliminer le codage en dur) n'exige pas la latence
+zéro, seulement que le réglage soit réel, persisté et éditable, ce qu'il est
+déjà. `cogenta skin generate` et l'étape de validation de clé de
+`npm create cogenta` (`packages/create-cogenta/src/llm-setup.ts`) n'ont eux
+aucun accès à une base de site — ils utilisent
+`staticProviderTuningDefaults()` (le `defaultValue` déclaré dans le registre,
+jamais une constante dupliquée), ce qui est correct et volontaire, pas une
+limite à lever.

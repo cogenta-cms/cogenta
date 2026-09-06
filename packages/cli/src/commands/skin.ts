@@ -7,6 +7,7 @@ import {
   createOpenAiClient,
   generateSkin,
   type ProviderClient,
+  staticProviderTuningDefaults,
 } from '@cogenta/agents'
 import { CogentaError, isCogentaError, type Logger, loadConfig } from '@cogenta/core'
 import { type SkinTokens, TOKEN_GROUPS, validateSkin } from '@cogenta/render'
@@ -162,7 +163,12 @@ function clientFor(
   model: string,
   fetchImpl: typeof fetch | undefined,
 ): ProviderClient {
-  const config = { apiKey, model, ...(fetchImpl === undefined ? {} : { fetchImpl }) }
+  const config = {
+    apiKey,
+    model,
+    ...(fetchImpl === undefined ? {} : { fetchImpl }),
+    defaults: staticProviderTuningDefaults(),
+  }
   if (provider === 'anthropic') return createAnthropicClient(config)
   if (provider === 'openai') return createOpenAiClient(config)
   if (provider === 'google') return createGoogleClient(config)

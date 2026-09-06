@@ -3,6 +3,7 @@ import { createAnthropicClient } from '../../src/providers/anthropic.js'
 import { createGoogleClient } from '../../src/providers/google.js'
 import { createOpenAiClient } from '../../src/providers/openai.js'
 import type { ChatRequest } from '../../src/providers/types.js'
+import { TEST_TUNING_DEFAULTS } from './test-tuning-defaults.js'
 
 const REQUEST: ChatRequest = {
   model: 'x',
@@ -26,7 +27,12 @@ describe('createAnthropicClient', () => {
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
     )
-    const client = createAnthropicClient({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl })
+    const client = createAnthropicClient({
+      apiKey: 'k',
+      model: 'claude-sonnet-5',
+      fetchImpl,
+      defaults: TEST_TUNING_DEFAULTS,
+    })
 
     const result = await client.chat(REQUEST)
 
@@ -40,6 +46,7 @@ describe('createAnthropicClient', () => {
       apiKey: 'k',
       model: 'claude-sonnet-5',
       fetchImpl: async () => jsonResponse(429, {}),
+      defaults: TEST_TUNING_DEFAULTS,
     })
 
     await expect(client.chat(REQUEST)).rejects.toThrowError(/rate-limited/)
@@ -50,6 +57,7 @@ describe('createAnthropicClient', () => {
       apiKey: 'k',
       model: 'claude-sonnet-5',
       fetchImpl: async () => jsonResponse(500, {}),
+      defaults: TEST_TUNING_DEFAULTS,
     })
 
     await expect(client.chat(REQUEST)).rejects.toThrowError(/status 500/)
@@ -62,6 +70,7 @@ describe('createAnthropicClient', () => {
       fetchImpl: async () => {
         throw new Error('ECONNRESET')
       },
+      defaults: TEST_TUNING_DEFAULTS,
     })
 
     await expect(client.chat(REQUEST)).rejects.toThrowError(/could not be sent/)
@@ -76,7 +85,12 @@ describe('createAnthropicClient', () => {
         usage: { input_tokens: 1, output_tokens: 1 },
       })
     })
-    const client = createAnthropicClient({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl })
+    const client = createAnthropicClient({
+      apiKey: 'k',
+      model: 'claude-sonnet-5',
+      fetchImpl,
+      defaults: TEST_TUNING_DEFAULTS,
+    })
     await client.chat(REQUEST)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
@@ -93,6 +107,7 @@ describe('createAnthropicClient', () => {
       fetchImpl: async () => {
         throw new DOMException('The operation was aborted.', 'AbortError')
       },
+      defaults: TEST_TUNING_DEFAULTS,
     })
 
     await expect(client.chat(REQUEST, { signal: caller.signal })).rejects.toThrowError(
@@ -119,6 +134,7 @@ describe('createAnthropicClient', () => {
       maxOutputTokens: 12000,
       requestTimeoutMs: 240_000,
       maxCorrectionAttempts: 5,
+      defaults: TEST_TUNING_DEFAULTS,
     })
 
     expect(client.maxOutputTokens).toBe(12000)
@@ -131,11 +147,15 @@ describe('createAnthropicClient', () => {
     expect(sentBody.max_tokens).toBe(12000)
   })
 
-  it('resolves to the built-in defaults when the admin never set a tuning value', () => {
-    const client = createAnthropicClient({ apiKey: 'k', model: 'claude-sonnet-5' })
-    expect(client.maxOutputTokens).toBe(8000)
-    expect(client.requestTimeoutMs).toBe(180_000)
-    expect(client.maxCorrectionAttempts).toBeUndefined()
+  it('falls back to the site-wide defaults when the admin never set a per-provider override', () => {
+    const client = createAnthropicClient({
+      apiKey: 'k',
+      model: 'claude-sonnet-5',
+      defaults: TEST_TUNING_DEFAULTS,
+    })
+    expect(client.maxOutputTokens).toBe(TEST_TUNING_DEFAULTS.maxOutputTokens)
+    expect(client.requestTimeoutMs).toBe(TEST_TUNING_DEFAULTS.requestTimeoutMs)
+    expect(client.maxCorrectionAttempts).toBe(TEST_TUNING_DEFAULTS.maxCorrectionAttempts)
   })
 
   it('an explicit request.maxTokens still wins over the client-level default', async () => {
@@ -151,6 +171,7 @@ describe('createAnthropicClient', () => {
       model: 'claude-sonnet-5',
       fetchImpl,
       maxOutputTokens: 12000,
+      defaults: TEST_TUNING_DEFAULTS,
     })
     await client.chat({ ...REQUEST, maxTokens: 42 })
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
@@ -167,7 +188,12 @@ describe('createOpenAiClient', () => {
         usage: { prompt_tokens: 1, completion_tokens: 1 },
       }),
     )
-    const client = createOpenAiClient({ apiKey: 'k', model: 'gpt-5', fetchImpl })
+    const client = createOpenAiClient({
+      apiKey: 'k',
+      model: 'gpt-5',
+      fetchImpl,
+      defaults: TEST_TUNING_DEFAULTS,
+    })
 
     const result = await client.chat(REQUEST)
 
@@ -190,6 +216,7 @@ describe('createOpenAiClient', () => {
       name: 'deepseek',
       fetchImpl,
       maxOutputTokens: 12000,
+      defaults: TEST_TUNING_DEFAULTS,
     })
     expect(client.maxOutputTokens).toBe(12000)
     await client.chat({ model: 'x', messages: [{ role: 'user', content: 'hi' }] })
@@ -207,7 +234,12 @@ describe('createGoogleClient', () => {
         usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
       }),
     )
-    const client = createGoogleClient({ apiKey: 'k', model: 'gemini-3-pro', fetchImpl })
+    const client = createGoogleClient({
+      apiKey: 'k',
+      model: 'gemini-3-pro',
+      fetchImpl,
+      defaults: TEST_TUNING_DEFAULTS,
+    })
 
     const result = await client.chat(REQUEST)
 
@@ -230,6 +262,7 @@ describe('createGoogleClient', () => {
       model: 'gemini-3-pro',
       fetchImpl,
       maxOutputTokens: 12000,
+      defaults: TEST_TUNING_DEFAULTS,
     })
     await client.chat({ model: 'x', messages: [{ role: 'user', content: 'hi' }] })
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]

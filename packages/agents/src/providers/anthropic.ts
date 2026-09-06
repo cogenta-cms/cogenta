@@ -1,7 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { textOnlyContent } from './content-parts.js'
-import { FALLBACK_MAX_OUTPUT_TOKENS } from './defaults.js'
-import { DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS, requestSignalWithTimeout } from './request-signal.js'
+import type { ProviderTuningDefaults } from './defaults.js'
+import { requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
@@ -122,13 +122,15 @@ function toAnthropicMessage(message: ChatMessage): AnthropicMessage {
  * Pure — no network. The whole reason this is separate from
  * `createAnthropicClient` is to unit-test the mapping without a live call.
  * `fallbackMaxTokens` is the client's own resolved `maxOutputTokens` (the
- * admin's per-provider value, or the built-in floor) — applied only when
+ * admin's per-provider value, or the site-wide default) — applied only when
  * `request.maxTokens` itself is absent, never overriding an explicit
- * per-call value.
+ * per-call value. Required, not defaulted: the one caller that matters
+ * (`createAnthropicClient`'s own `chat()`) always has a concrete number by
+ * the time it calls this; a test wanting a specific budget passes its own.
  */
 export function buildAnthropicRequest(
   request: ChatRequest,
-  fallbackMaxTokens: number = FALLBACK_MAX_OUTPUT_TOKENS,
+  fallbackMaxTokens: number,
 ): AnthropicRequestBody {
   return {
     model: request.model,
@@ -179,10 +181,12 @@ export interface AnthropicClientConfig {
   /** Overridable for tests — never for anything else. */
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
-  /** See `ProviderClient.maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts`. */
+  /** See `ProviderClient.maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts` — the admin's per-provider override, absent meaning "use `defaults`". */
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  /** The site-wide floor (`resolveProviderTuningDefaults`, `assistant.*` site settings) — always required, never a built-in constant. */
+  readonly defaults: ProviderTuningDefaults
 }
 
 /**
@@ -193,8 +197,10 @@ export interface AnthropicClientConfig {
 export function createAnthropicClient(config: AnthropicClientConfig): ProviderClient {
   const doFetch = config.fetchImpl ?? fetch
   const url = config.baseUrl ?? DEFAULT_BASE_URL
-  const maxOutputTokens = config.maxOutputTokens ?? FALLBACK_MAX_OUTPUT_TOKENS
-  const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS
+  const maxOutputTokens = config.maxOutputTokens ?? config.defaults.maxOutputTokens
+  const requestTimeoutMs = config.requestTimeoutMs ?? config.defaults.requestTimeoutMs
+  const maxCorrectionAttempts =
+    config.maxCorrectionAttempts ?? config.defaults.maxCorrectionAttempts
 
   return {
     name: 'anthropic',
@@ -202,9 +208,7 @@ export function createAnthropicClient(config: AnthropicClientConfig): ProviderCl
     supportsVision: true,
     maxOutputTokens,
     requestTimeoutMs,
-    ...(config.maxCorrectionAttempts === undefined
-      ? {}
-      : { maxCorrectionAttempts: config.maxCorrectionAttempts }),
+    maxCorrectionAttempts,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const signal = requestSignalWithTimeout(options?.signal, requestTimeoutMs)
       const response = await doFetch(url, {

@@ -6,6 +6,7 @@ import {
 } from '../../src/providers/anthropic.js'
 import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
+import { TEST_TUNING_DEFAULTS } from './test-tuning-defaults.js'
 
 describe('buildAnthropicRequest', () => {
   it('maps a plain text turn to a string content message', () => {
@@ -16,7 +17,7 @@ describe('buildAnthropicRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildAnthropicRequest(request)).toEqual({
+    expect(buildAnthropicRequest(request, 8000)).toEqual({
       model: 'claude-sonnet-5',
       max_tokens: 100,
       system: 'Be concise.',
@@ -43,7 +44,7 @@ describe('buildAnthropicRequest', () => {
       maxTokens: 100,
     }
 
-    const built = buildAnthropicRequest(request)
+    const built = buildAnthropicRequest(request, 8000)
     expect(built.tools).toEqual([
       {
         name: 'content__publish',
@@ -68,7 +69,7 @@ describe('buildAnthropicRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildAnthropicRequest(request).messages).toEqual([
+    expect(buildAnthropicRequest(request, 8000).messages).toEqual([
       {
         role: 'user',
         content: [{ type: 'tool_result', tool_use_id: 'call-1', content: '{"ok":true}' }],
@@ -83,7 +84,7 @@ describe('buildAnthropicRequest', () => {
       maxTokens: 100,
     }
 
-    expect(() => buildAnthropicRequest(request)).toThrowError(/toolCallId/)
+    expect(() => buildAnthropicRequest(request, 8000)).toThrowError(/toolCallId/)
   })
 
   it('maps a text-only content-part array to the exact same string content a plain string would produce', () => {
@@ -98,7 +99,9 @@ describe('buildAnthropicRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildAnthropicRequest(partsRequest)).toEqual(buildAnthropicRequest(stringRequest))
+    expect(buildAnthropicRequest(partsRequest, 8000)).toEqual(
+      buildAnthropicRequest(stringRequest, 8000),
+    )
   })
 
   it('maps an image content part to an Anthropic base64 image block alongside text', () => {
@@ -116,7 +119,7 @@ describe('buildAnthropicRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildAnthropicRequest(request).messages).toEqual([
+    expect(buildAnthropicRequest(request, 8000).messages).toEqual([
       {
         role: 'user',
         content: [
@@ -133,7 +136,11 @@ describe('buildAnthropicRequest', () => {
 
 describe('createAnthropicClient', () => {
   it('reports supportsVision: true', () => {
-    const client = createAnthropicClient({ apiKey: 'k', model: 'claude-sonnet-5' })
+    const client = createAnthropicClient({
+      apiKey: 'k',
+      model: 'claude-sonnet-5',
+      defaults: TEST_TUNING_DEFAULTS,
+    })
     expect(client.supportsVision).toBe(true)
   })
 })

@@ -25,6 +25,9 @@ export function createFakeProvider(
   return {
     name: 'fake',
     model: 'fake-model-1',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     calls,
     lastWireText: () => JSON.stringify(calls.at(-1) ?? {}),
     async chat(request: ChatRequest): Promise<ChatResponse> {

@@ -212,6 +212,11 @@ export type {
   ProviderWireFormat,
 } from './providers/catalog.js'
 export { findProviderCatalogEntry, KNOWN_PROVIDER_CATALOG } from './providers/catalog.js'
+export type { ProviderTuningDefaults } from './providers/defaults.js'
+export {
+  resolveProviderTuningDefaults,
+  staticProviderTuningDefaults,
+} from './providers/defaults.js'
 export type { GoogleClientConfig, GoogleRequestBody } from './providers/google.js'
 export { buildGoogleRequest, createGoogleClient, parseGoogleResponse } from './providers/google.js'
 export type { OpenAiImageClientConfig, OpenAiImageRequestBody } from './providers/image/openai.js'

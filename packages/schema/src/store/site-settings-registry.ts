@@ -1112,6 +1112,46 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     defaultValue: {},
     writeRoles: ADMIN_ONLY,
   },
+  // Fiche feedback: these three used to be TypeScript constants
+  // (`FALLBACK_MAX_OUTPUT_TOKENS`/`DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS`/
+  // `FALLBACK_MAX_CORRECTION_ATTEMPTS` in `@cogenta/agents`) — invisible and
+  // unreachable from the admin, only ever mentioned as static hint text on
+  // `/admin/providers`. They are the site-wide floor every provider's own
+  // per-model tuning (`ProviderConfigStore`) falls back to when unset — a
+  // genuine site-wide default, exactly the kind of value this registry
+  // exists for. Bounds match `TUNING_BOUNDS` in `@cogenta/agents`'
+  // `providers/store.ts` (the per-provider override's own validation), so
+  // the two can never silently disagree on what a valid value is.
+  {
+    key: 'assistant.defaultMaxOutputTokens',
+    group: 'assistant',
+    order: 1,
+    uiType: 'number',
+    scope: 'site',
+    schema: z.number().int().min(1).max(200_000),
+    defaultValue: 8000,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'assistant.defaultRequestTimeoutSeconds',
+    group: 'assistant',
+    order: 2,
+    uiType: 'number',
+    scope: 'site',
+    schema: z.number().int().min(1).max(600),
+    defaultValue: 180,
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'assistant.defaultMaxCorrectionAttempts',
+    group: 'assistant',
+    order: 3,
+    uiType: 'number',
+    scope: 'site',
+    schema: z.number().int().min(1).max(10),
+    defaultValue: 3,
+    writeRoles: ADMIN_ONLY,
+  },
   // Update system (L22 task 9) — auto-update policy. A closed choice, never
   // free text: the scheduled task that reads this only ever compares it
   // against `UpdateBump` (`@cogenta/cli`'s `policyAllows`), so a typo here

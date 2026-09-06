@@ -1457,6 +1457,30 @@ export function installMockFetch(
       scope: 'site',
       value: '',
     },
+    // The site-wide LLM tuning floor (fiche feedback) — mirrors
+    // packages/schema/src/store/site-settings-registry.ts's `assistant`
+    // group entries added after `assistant.indexedCollections` (order 0).
+    'assistant.defaultMaxOutputTokens': {
+      group: 'assistant',
+      order: 1,
+      uiType: 'number',
+      scope: 'site',
+      value: 8000,
+    },
+    'assistant.defaultRequestTimeoutSeconds': {
+      group: 'assistant',
+      order: 2,
+      uiType: 'number',
+      scope: 'site',
+      value: 180,
+    },
+    'assistant.defaultMaxCorrectionAttempts': {
+      group: 'assistant',
+      order: 3,
+      uiType: 'number',
+      scope: 'site',
+      value: 3,
+    },
     // SEO (fiche 21 task 3) -- mirrors
     // packages/schema/src/store/site-settings-registry.ts's `seo` group.
     'seo.titleTemplate': {

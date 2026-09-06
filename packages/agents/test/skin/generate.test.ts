@@ -39,6 +39,9 @@ function fakeClient(responses: readonly (string | null)[]): ProviderClient & { c
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     calls: 0,
     async chat(_request: ChatRequest): Promise<ChatResponse> {
       this.calls += 1
@@ -122,7 +125,7 @@ describe('generateSkin', () => {
     expect(client.calls).toBe(3)
   })
 
-  it("follows the resolved client's own maxCorrectionAttempts (an admin-set property of the chosen model) instead of the local default of 3", async () => {
+  it("follows the resolved client's own maxCorrectionAttempts (an admin-set property of the chosen model)", async () => {
     const client = fakeClient([
       JSON.stringify(LOW_CONTRAST_TOKENS),
       JSON.stringify(VALID_TOKENS), // would have succeeded on attempt 2 — never reached

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createProviderRegistry } from '../../src/providers/registry.js'
 import type { ChatRequest } from '../../src/providers/types.js'
+import { TEST_TUNING_DEFAULTS } from './test-tuning-defaults.js'
 
 describe('createProviderRegistry', () => {
   it('has() reflects only what was configured, so R2 (no provider means no agents, not a crash) holds by construction', () => {
-    const registry = createProviderRegistry({})
+    const registry = createProviderRegistry({}, TEST_TUNING_DEFAULTS)
 
     expect(registry.has('anthropic')).toBe(false)
     expect(registry.has('openai')).toBe(false)
@@ -12,9 +13,10 @@ describe('createProviderRegistry', () => {
   })
 
   it('get() returns a client for a configured provider, named after it', () => {
-    const registry = createProviderRegistry({
-      anthropic: { apiKey: 'test-key', model: 'claude-sonnet-5' },
-    })
+    const registry = createProviderRegistry(
+      { anthropic: { apiKey: 'test-key', model: 'claude-sonnet-5' } },
+      TEST_TUNING_DEFAULTS,
+    )
 
     expect(registry.has('anthropic')).toBe(true)
     expect(registry.get('anthropic').name).toBe('anthropic')
@@ -22,7 +24,7 @@ describe('createProviderRegistry', () => {
   })
 
   it('get() throws PROVIDER_UNKNOWN for a provider that was not configured', () => {
-    const registry = createProviderRegistry({})
+    const registry = createProviderRegistry({}, TEST_TUNING_DEFAULTS)
 
     expect(() => registry.get('openai')).toThrowError(/No provider named "openai"/)
   })
@@ -30,9 +32,10 @@ describe('createProviderRegistry', () => {
   // Fiche 56: OpenRouter/DeepSeek/Qwen/GLM reuse `createOpenAiClient` at
   // their own catalog `defaultBaseUrl` — zero new network code.
   it('resolves a catalog id whose wireFormat is openai-compatible without an explicit baseUrl', () => {
-    const registry = createProviderRegistry({
-      openrouter: { apiKey: 'or-key', model: 'openai/gpt-5.2-chat-latest' },
-    })
+    const registry = createProviderRegistry(
+      { openrouter: { apiKey: 'or-key', model: 'openai/gpt-5.2-chat-latest' } },
+      TEST_TUNING_DEFAULTS,
+    )
 
     expect(registry.has('openrouter')).toBe(true)
     const client = registry.get('openrouter')
@@ -45,13 +48,16 @@ describe('createProviderRegistry', () => {
   })
 
   it('a name outside the catalog resolves when it carries its own baseUrl (a custom OpenAI-compatible endpoint)', () => {
-    const registry = createProviderRegistry({
-      'my-vllm-server': {
-        apiKey: 'sk-local',
-        model: 'llama-3',
-        baseUrl: 'https://vllm.internal/v1/chat/completions',
+    const registry = createProviderRegistry(
+      {
+        'my-vllm-server': {
+          apiKey: 'sk-local',
+          model: 'llama-3',
+          baseUrl: 'https://vllm.internal/v1/chat/completions',
+        },
       },
-    })
+      TEST_TUNING_DEFAULTS,
+    )
 
     const client = registry.get('my-vllm-server')
     expect(client.name).toBe('my-vllm-server')
@@ -60,7 +66,10 @@ describe('createProviderRegistry', () => {
 
   it('throws PROVIDER_CUSTOM_BASE_URL_REQUIRED, at construction, for a name outside the catalog with no baseUrl', () => {
     expect(() =>
-      createProviderRegistry({ 'not-a-real-provider': { apiKey: 'x', model: 'x' } }),
+      createProviderRegistry(
+        { 'not-a-real-provider': { apiKey: 'x', model: 'x' } },
+        TEST_TUNING_DEFAULTS,
+      ),
     ).toThrowError(/is not a built-in provider/)
   })
 
@@ -95,16 +104,18 @@ describe('createProviderRegistry', () => {
 
       const openAiCalls: { url: string; body: unknown }[] = []
       vi.stubGlobal('fetch', capture(openAiCalls))
-      const openAiClient = createProviderRegistry({
-        openai: { apiKey: 'k', model: 'gpt-5' },
-      }).get('openai')
+      const openAiClient = createProviderRegistry(
+        { openai: { apiKey: 'k', model: 'gpt-5' } },
+        TEST_TUNING_DEFAULTS,
+      ).get('openai')
       await openAiClient.chat(requestFor(openAiClient.model))
 
       const openRouterCalls: { url: string; body: unknown }[] = []
       vi.stubGlobal('fetch', capture(openRouterCalls))
-      const openRouterClient = createProviderRegistry({
-        openrouter: { apiKey: 'k', model: 'anthropic/claude-sonnet-5' },
-      }).get('openrouter')
+      const openRouterClient = createProviderRegistry(
+        { openrouter: { apiKey: 'k', model: 'anthropic/claude-sonnet-5' } },
+        TEST_TUNING_DEFAULTS,
+      ).get('openrouter')
       await openRouterClient.chat(requestFor(openRouterClient.model))
 
       expect(openAiCalls[0]?.url).toBe('https://api.openai.com/v1/chat/completions')

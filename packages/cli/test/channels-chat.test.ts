@@ -20,6 +20,8 @@ import {
   createNotFoundLogStore,
   createRedirectStore,
   createSchemaTables,
+  createSiteSettingsStore,
+  ensureSiteSettingsTables,
 } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildAgentRuntime } from '../src/commands/agent-runtime.js'
@@ -207,11 +209,14 @@ async function buildTestRuntime(root: string) {
   await notFoundLog.ensureTable()
   const redirects = createRedirectStore({ db })
   await redirects.ensureTable()
+  await ensureSiteSettingsTables(db)
+  const siteSettingsStore = createSiteSettingsStore({ db })
 
   const agentsRuntime = await buildAgentRuntime({
     dataDir: join(root, '.cogenta', 'agents-runtime'),
     projectRoot: root,
     signingKey: loaded.config.auth.signingKey as string,
+    siteSettings: siteSettingsStore,
     site: {
       name: loaded.config.site.name,
       url: loaded.config.site.url,

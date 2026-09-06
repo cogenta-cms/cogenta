@@ -23,6 +23,9 @@ export function scriptedClient(replies: readonly ScriptedReply[]): FakeProvider 
   const client: ProviderClient = {
     name: 'scripted',
     model: 'scripted-1',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat(request): Promise<ChatResponse> {
       requests.push(request)
       const reply = replies[Math.min(index, replies.length - 1)]
@@ -45,6 +48,9 @@ export function failingClient(message: string): ProviderClient {
   return {
     name: 'failing',
     model: 'failing-1',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     chat(): Promise<ChatResponse> {
       return Promise.reject(new Error(message))
     },

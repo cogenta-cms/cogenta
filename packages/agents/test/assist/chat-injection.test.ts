@@ -218,7 +218,12 @@ describe('chat over the site content, with a real injection sitting in the index
     const { store } = await indexed()
     const tool = createContentChatTool({
       runtime: createAssistRuntime({
-        provider: createOpenAiClient({ apiKey: sentinel, model: 'gpt-test', fetchImpl }),
+        provider: createOpenAiClient({
+          apiKey: sentinel,
+          model: 'gpt-test',
+          fetchImpl,
+          defaults: { maxOutputTokens: 8000, requestTimeoutMs: 180_000, maxCorrectionAttempts: 3 },
+        }),
         site: TEST_SITE,
       }),
       search: createSemanticSearch({ store, embeddings }),

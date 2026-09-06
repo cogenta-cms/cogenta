@@ -9,6 +9,9 @@ function fakeClient(responses: readonly ChatResponse[]): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat(_request: ChatRequest) {
       const response = responses[index]
       index += 1
@@ -22,6 +25,9 @@ function failingClient(): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat() {
       throw new Error('provider is down')
     },

@@ -120,22 +120,28 @@ export interface ProviderClient {
    * caller — a real, reproduced bug (`docs`/changeset history: DeepSeek's
    * `deepseek-v4-flash` hitting `finish_reason: "length"` with empty
    * content at a too-low hardcoded ceiling) is exactly what a per-call
-   * hardcoded number cannot adapt to. Resolved adapters
+   * hardcoded number cannot adapt to.
+   *
+   * **Always a concrete number, never `undefined`** — fiche feedback: this
+   * used to be optional, with the site-wide floor a resolved adapter falls
+   * back to (when an admin never set a per-provider override) living as a
+   * TypeScript constant (`FALLBACK_MAX_OUTPUT_TOKENS`), invisible and
+   * unreachable from the admin. That floor is now itself a real site
+   * setting (`assistant.defaultMaxOutputTokens`, `SITE_SETTINGS_REGISTRY`
+   * in `@cogenta/schema`) a resolved adapter
    * (`createAnthropicClient`/`createOpenAiClient`/`createGoogleClient`)
-   * always set this to a concrete number — the admin's value, or a built-in
-   * fallback when unset — so a caller never needs its own `?? literal`.
+   * always merges in before ever returning a client — so a caller never
+   * needs its own `?? literal`, and the type now says so.
    */
-  readonly maxOutputTokens?: number
+  readonly maxOutputTokens: number
   /**
    * How many times a generate-validate-correct loop (skin generation, brief
    * analysis, content-model/demo-content proposals, the base-theme choice)
    * retries this client before giving up. Same reasoning as
-   * `maxOutputTokens`: a model that needs more coaxing to produce valid
-   * structured output benefits from more attempts, and that is a fact about
-   * the model, set by the admin who chose it — not a number a given call
-   * site should be guessing at.
+   * `maxOutputTokens`, site-wide floor included:
+   * `assistant.defaultMaxCorrectionAttempts` — always a concrete number.
    */
-  readonly maxCorrectionAttempts?: number
+  readonly maxCorrectionAttempts: number
   /**
    * How long a single HTTP call to this provider is allowed to run before
    * being aborted — both the raw request timeout each adapter applies via
@@ -144,7 +150,10 @@ export interface ProviderClient {
    * (often reasoning-tier) model genuinely needs more wall-clock time, not
    * just more tokens; a fixed timeout picked without knowing which model an
    * admin configured is the same class of mistake as a fixed token budget.
+   * Site-wide floor: `assistant.defaultRequestTimeoutSeconds` — always a
+   * concrete number, in milliseconds here (the setting itself is seconds,
+   * matching what the admin form shows).
    */
-  readonly requestTimeoutMs?: number
+  readonly requestTimeoutMs: number
   chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse>
 }

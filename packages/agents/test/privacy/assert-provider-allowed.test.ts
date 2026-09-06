@@ -6,6 +6,9 @@ function clientNamed(name: string): ProviderClient {
   return {
     name,
     model: 'test-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     chat: async () => ({
       content: null,
       toolCalls: [],

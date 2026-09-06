@@ -6,6 +6,7 @@ import {
 } from '../../src/providers/google.js'
 import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
+import { TEST_TUNING_DEFAULTS } from './test-tuning-defaults.js'
 
 describe('buildGoogleRequest', () => {
   it('maps system to systemInstruction and assistant to role: model', () => {
@@ -19,7 +20,7 @@ describe('buildGoogleRequest', () => {
       maxTokens: 100,
     }
 
-    const built = buildGoogleRequest(request)
+    const built = buildGoogleRequest(request, 8000)
     expect(built.systemInstruction).toEqual({ parts: [{ text: 'Be concise.' }] })
     expect(built.contents).toEqual([
       { role: 'user', parts: [{ text: 'Hello' }] },
@@ -47,7 +48,7 @@ describe('buildGoogleRequest', () => {
       maxTokens: 100,
     }
 
-    const built = buildGoogleRequest(request)
+    const built = buildGoogleRequest(request, 8000)
     expect(built.tools).toEqual([
       {
         functionDeclarations: [
@@ -74,7 +75,7 @@ describe('buildGoogleRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildGoogleRequest(request).contents).toEqual([
+    expect(buildGoogleRequest(request, 8000).contents).toEqual([
       {
         role: 'user',
         parts: [
@@ -91,7 +92,7 @@ describe('buildGoogleRequest', () => {
       maxTokens: 100,
     }
 
-    expect(() => buildGoogleRequest(request)).toThrowError(/toolName/)
+    expect(() => buildGoogleRequest(request, 8000)).toThrowError(/toolName/)
   })
 
   it('maps a text-only content-part array to the exact same parts a plain string would produce', () => {
@@ -106,7 +107,7 @@ describe('buildGoogleRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildGoogleRequest(partsRequest)).toEqual(buildGoogleRequest(stringRequest))
+    expect(buildGoogleRequest(partsRequest, 8000)).toEqual(buildGoogleRequest(stringRequest, 8000))
   })
 
   it('maps an image content part to a Gemini inlineData part alongside text', () => {
@@ -124,7 +125,7 @@ describe('buildGoogleRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildGoogleRequest(request).contents).toEqual([
+    expect(buildGoogleRequest(request, 8000).contents).toEqual([
       {
         role: 'user',
         parts: [
@@ -138,7 +139,11 @@ describe('buildGoogleRequest', () => {
 
 describe('createGoogleClient', () => {
   it('reports supportsVision: true', () => {
-    const client = createGoogleClient({ apiKey: 'k', model: 'gemini-3-pro' })
+    const client = createGoogleClient({
+      apiKey: 'k',
+      model: 'gemini-3-pro',
+      defaults: TEST_TUNING_DEFAULTS,
+    })
     expect(client.supportsVision).toBe(true)
   })
 })

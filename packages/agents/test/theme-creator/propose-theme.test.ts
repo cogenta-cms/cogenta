@@ -57,6 +57,9 @@ function fakeClient(
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     ...(options?.supportsVision === undefined ? {} : { supportsVision: options.supportsVision }),
     requests,
     chooseRequests,

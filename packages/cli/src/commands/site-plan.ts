@@ -11,8 +11,10 @@ import {
   type ExistingSiteSnapshot,
   extractDocumentText,
   type ProviderClient,
+  type ProviderTuningDefaults,
   proposeSitePlan,
   resolveApprovedPlan,
+  resolveProviderTuningDefaults,
   type SitePlanDraft,
   summarisePlan,
 } from '@cogenta/agents'
@@ -27,8 +29,10 @@ import {
   type CollectionDefinition,
   createContentStore,
   createSchemaTables,
+  createSiteSettingsStore,
   createTaxonomyStore,
   createThemeStore,
+  ensureSiteSettingsTables,
   ensureThemeTable,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
@@ -60,11 +64,13 @@ const PLAN_DIRECTORY = join('.cogenta', 'site-plans')
 function providerClient(
   llm: NonNullable<CogentaConfig['llm']>,
   apiKey: string,
+  defaults: ProviderTuningDefaults,
 ): ProviderClient | undefined {
   const config = {
     apiKey,
     model: llm.model,
     ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
+    defaults,
   }
   if (llm.provider === 'anthropic') return createAnthropicClient(config)
   if (llm.provider === 'openai') return createOpenAiClient(config)
@@ -380,10 +386,14 @@ export async function createSitePlanning(
   const llm = options.config.llm
   const apiKey = llm?.apiKey
 
-  const client =
-    llm === undefined || apiKey === undefined || apiKey === ''
-      ? undefined
-      : providerClient(llm, apiKey)
+  let client: ProviderClient | undefined
+  if (llm !== undefined && apiKey !== undefined && apiKey !== '') {
+    await ensureSiteSettingsTables(options.db)
+    const defaults = await resolveProviderTuningDefaults(
+      createSiteSettingsStore({ db: options.db }),
+    )
+    client = providerClient(llm, apiKey, defaults)
+  }
 
   if (client !== undefined && llm !== undefined && llm.model === '') {
     throw new CogentaError({

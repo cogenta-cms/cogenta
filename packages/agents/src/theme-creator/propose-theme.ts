@@ -82,9 +82,6 @@ export type ProposeThemeCandidatesResult =
     }
   | { readonly ok: false; readonly reason: string }
 
-/** Fallback only — `input.client.maxCorrectionAttempts` (an admin-set property of the chosen model, `/admin/providers`) wins when present. */
-const DEFAULT_MAX_ATTEMPTS = 3
-
 const ThemeChoiceSchema = z.object({
   themeName: z.string().min(1),
   rationale: z.string().min(1),
@@ -326,7 +323,7 @@ export async function proposeThemeCandidates(
     input,
     documentData,
     imageParts,
-    input.client.maxCorrectionAttempts ?? DEFAULT_MAX_ATTEMPTS,
+    input.client.maxCorrectionAttempts,
   )
   if (!themeChoice.ok) return { ok: false, reason: themeChoice.reason }
   const { choice } = themeChoice

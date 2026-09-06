@@ -46,6 +46,7 @@ import {
   type ProviderConfigStore,
   type RedirectWriter,
   resolveProviderRegistryConfig,
+  resolveProviderTuningDefaults,
   type ThemeCreatorTargetTheme,
   type ToolDefinition,
   type ToolRegistry,
@@ -63,7 +64,7 @@ import type {
 import type { AuditLog } from '@cogenta/auth'
 import type { Logger, MediaStore } from '@cogenta/core'
 import { buildMcpToolDefinitions, type McpConnectionStore } from '@cogenta/mcp'
-import { buildPath, type CollectionDefinition } from '@cogenta/schema'
+import { buildPath, type CollectionDefinition, type SiteSettingsStore } from '@cogenta/schema'
 
 /**
  * L22 tasks 1/1bis — where the runtime `@cogenta/agents` provides finally
@@ -130,6 +131,15 @@ export interface BuildAgentRuntimeOptions {
   readonly mediaStore: MediaStore
   readonly auditLog: AuditLog
   readonly logger: Logger
+  /**
+   * The `assistant.defaultMaxOutputTokens`/`assistant.defaultRequestTimeoutSeconds`/
+   * `assistant.defaultMaxCorrectionAttempts` site settings live here
+   * (`SITE_SETTINGS_REGISTRY` in `@cogenta/schema`) — `createLiveProviderRegistry`
+   * below re-reads them (`resolveProviderTuningDefaults`) on every `refresh()`,
+   * the same "no restart needed" guarantee an edit to a per-provider override
+   * already gets.
+   */
+  readonly siteSettings: SiteSettingsStore
   /** The site's schema — for `content.collections`/`content.list` (L22 task 3) to know which collections have a public route, and to compute one. */
   readonly collections: readonly CollectionDefinition[]
   /** For `logs.read_not_found` (L22 task 3, the Site Monitor's own tool). */
@@ -389,13 +399,23 @@ function contentSchemaServiceLikeOf(
  * already answer correctly for every key it was actually built with; no
  * second allowlist to keep in sync here.
  */
-function createLiveProviderRegistry(store: ProviderConfigStore): AgentProviderRegistryLike & {
+function createLiveProviderRegistry(
+  store: ProviderConfigStore,
+  siteSettings: SiteSettingsStore,
+): AgentProviderRegistryLike & {
   refresh(): Promise<void>
 } {
-  let registry = createProviderRegistry({})
+  let registry = createProviderRegistry(
+    {},
+    { maxOutputTokens: 1, requestTimeoutMs: 1, maxCorrectionAttempts: 1 },
+  )
   return {
     async refresh() {
-      registry = createProviderRegistry(await resolveProviderRegistryConfig(store))
+      const [config, defaults] = await Promise.all([
+        resolveProviderRegistryConfig(store),
+        resolveProviderTuningDefaults(siteSettings),
+      ])
+      registry = createProviderRegistry(config, defaults)
     },
     has: (name) => registry.has(name),
     get: (name) => registry.get(name),
@@ -649,7 +669,7 @@ export async function buildAgentRuntime(
   } = createRegistryAdapter(agentStore)
   await refreshAgentRegistry()
 
-  const liveProviders = createLiveProviderRegistry(providerStore)
+  const liveProviders = createLiveProviderRegistry(providerStore, options.siteSettings)
   await liveProviders.refresh()
 
   const coreToolOptions = {

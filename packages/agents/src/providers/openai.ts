@@ -1,7 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { textOnlyContent } from './content-parts.js'
-import { FALLBACK_MAX_OUTPUT_TOKENS } from './defaults.js'
-import { DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS, requestSignalWithTimeout } from './request-signal.js'
+import type { ProviderTuningDefaults } from './defaults.js'
+import { requestSignalWithTimeout } from './request-signal.js'
 import { createToolNameDecoder, encodeToolName } from './tool-names.js'
 import type {
   ChatMessage,
@@ -121,12 +121,13 @@ function toOpenAiMessage(message: ChatMessage): OpenAiMessage {
 
 /**
  * Pure — no network. `fallbackMaxTokens` is the client's own resolved
- * `maxOutputTokens` (the admin's per-provider value, or the built-in floor)
- * — applied only when `request.maxTokens` itself is absent.
+ * `maxOutputTokens` (the admin's per-provider value, or the site-wide
+ * default) — applied only when `request.maxTokens` itself is absent.
+ * Required, not defaulted — see `buildAnthropicRequest`'s own doc comment.
  */
 export function buildOpenAiRequest(
   request: ChatRequest,
-  fallbackMaxTokens: number = FALLBACK_MAX_OUTPUT_TOKENS,
+  fallbackMaxTokens: number,
 ): OpenAiRequestBody {
   const messages: OpenAiMessage[] = []
   if (request.system !== undefined) {
@@ -250,6 +251,8 @@ export interface OpenAiClientConfig {
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  /** The site-wide floor (`resolveProviderTuningDefaults`, `assistant.*` site settings) — always required, never a built-in constant. */
+  readonly defaults: ProviderTuningDefaults
 }
 
 /** API key injected at the runtime boundary — never in a prompt or tool input (rule R7). */
@@ -257,8 +260,10 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
   const doFetch = config.fetchImpl ?? fetch
   const url = config.baseUrl ?? DEFAULT_BASE_URL
   const name = config.name ?? 'openai'
-  const maxOutputTokens = config.maxOutputTokens ?? FALLBACK_MAX_OUTPUT_TOKENS
-  const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS
+  const maxOutputTokens = config.maxOutputTokens ?? config.defaults.maxOutputTokens
+  const requestTimeoutMs = config.requestTimeoutMs ?? config.defaults.requestTimeoutMs
+  const maxCorrectionAttempts =
+    config.maxCorrectionAttempts ?? config.defaults.maxCorrectionAttempts
 
   return {
     name,
@@ -266,9 +271,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
     supportsVision: true,
     maxOutputTokens,
     requestTimeoutMs,
-    ...(config.maxCorrectionAttempts === undefined
-      ? {}
-      : { maxCorrectionAttempts: config.maxCorrectionAttempts }),
+    maxCorrectionAttempts,
     async chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse> {
       const signal = requestSignalWithTimeout(options?.signal, requestTimeoutMs)
       const response = await doFetch(url, {

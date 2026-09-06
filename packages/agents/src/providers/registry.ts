@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { createAnthropicClient } from './anthropic.js'
 import { findProviderCatalogEntry } from './catalog.js'
+import type { ProviderTuningDefaults } from './defaults.js'
 import { createGoogleClient } from './google.js'
 import { createOpenAiClient } from './openai.js'
 import type { ProviderClient } from './types.js'
@@ -28,7 +29,7 @@ export interface ProviderEntryConfig {
    * `buildClient` below).
    */
   readonly baseUrl?: string
-  /** See `ProviderClient.maxOutputTokens` — the admin's value for this provider, or absent for the built-in fallback. */
+  /** See `ProviderClient.maxOutputTokens` — the admin's value for this provider, or absent to fall back to the registry's own `defaults`. */
   readonly maxOutputTokens?: number
   /** See `ProviderClient.requestTimeoutMs`. */
   readonly requestTimeoutMs?: number
@@ -45,7 +46,11 @@ export type ProviderRegistryConfig = Readonly<Record<string, ProviderEntryConfig
  * endpoint" means structurally, not a separate `custom: true` flag to keep
  * in sync with this lookup.
  */
-function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
+function buildClient(
+  name: string,
+  entry: ProviderEntryConfig,
+  defaults: ProviderTuningDefaults,
+): ProviderClient {
   const catalogEntry = findProviderCatalogEntry(name)
   const tuning = {
     ...(entry.maxOutputTokens === undefined ? {} : { maxOutputTokens: entry.maxOutputTokens }),
@@ -61,6 +66,7 @@ function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
       model: entry.model,
       ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
       ...tuning,
+      defaults,
     })
   }
   if (catalogEntry?.wireFormat === 'google') {
@@ -69,6 +75,7 @@ function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
       model: entry.model,
       ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
       ...tuning,
+      defaults,
     })
   }
 
@@ -83,7 +90,14 @@ function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
       hint: 'Set a baseUrl for a custom OpenAI-compatible endpoint, or use a catalog provider id.',
     })
   }
-  return createOpenAiClient({ apiKey: entry.apiKey, model: entry.model, baseUrl, name, ...tuning })
+  return createOpenAiClient({
+    apiKey: entry.apiKey,
+    model: entry.model,
+    baseUrl,
+    name,
+    ...tuning,
+    defaults,
+  })
 }
 
 /**
@@ -91,14 +105,22 @@ function buildClient(name: string, entry: ProviderEntryConfig): ProviderClient {
  * simply has an empty registry, which is exactly what rule R2 requires ("le
  * CMS fonctionne sans IA"): nothing here fails to construct, `get()` is what
  * refuses, and only once an agent actually tries to run.
+ *
+ * `defaults` is the site-wide tuning floor (`resolveProviderTuningDefaults`,
+ * `assistant.*` site settings) every entry's own per-provider override falls
+ * back to — required, so no adapter this registry builds can ever fall back
+ * to a hardcoded constant instead.
  */
-export function createProviderRegistry(config: ProviderRegistryConfig): {
+export function createProviderRegistry(
+  config: ProviderRegistryConfig,
+  defaults: ProviderTuningDefaults,
+): {
   readonly get: (name: string) => ProviderClient
   readonly has: (name: string) => boolean
 } {
   const clients = new Map<string, ProviderClient>()
   for (const [name, entry] of Object.entries(config)) {
-    clients.set(name, buildClient(name, entry))
+    clients.set(name, buildClient(name, entry, defaults))
   }
 
   return {

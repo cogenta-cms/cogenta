@@ -8,8 +8,10 @@ import {
   createProviderRegistry,
   type ProviderClient,
   type ProviderConfigStore,
+  type ProviderTuningDefaults,
   proposeThemeCandidates,
   resolveProviderRegistryConfig,
+  resolveProviderTuningDefaults,
   THEME_CREATOR_AGENT_NAME,
   type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
@@ -17,7 +19,12 @@ import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
 import { mergeSkinTokens, renderSkin, validateSkin } from '@cogenta/render'
-import { createThemeStore, ensureThemeTable } from '@cogenta/schema'
+import {
+  createSiteSettingsStore,
+  createThemeStore,
+  ensureSiteSettingsTables,
+  ensureThemeTable,
+} from '@cogenta/schema'
 import { availableThemes } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
 
@@ -79,11 +86,13 @@ export interface ThemeWiringOptions {
 function providerClient(
   llm: NonNullable<CogentaConfig['llm']>,
   apiKey: string,
+  defaults: ProviderTuningDefaults,
 ): ProviderClient | undefined {
   const config = {
     apiKey,
     model: llm.model,
     ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
+    defaults,
   }
   if (llm.provider === 'anthropic') return createAnthropicClient(config)
   if (llm.provider === 'openai') return createOpenAiClient(config)
@@ -128,9 +137,16 @@ function hasThemeProviderAvenue(options: ThemeWiringOptions): boolean {
 async function resolveThemeProvider(
   options: ThemeWiringOptions,
 ): Promise<{ readonly client: ProviderClient; readonly model: string } | undefined> {
+  // Same `assistant.default*` site settings every other resolved client
+  // falls back to (`resolveProviderTuningDefaults`) — read fresh on every
+  // call, matching this function's own "no restart needed" reasoning for
+  // `providerStore`/`agentStore` above.
+  const defaults = await resolveProviderTuningDefaults(createSiteSettingsStore({ db: options.db }))
+
   if (options.providerStore !== undefined) {
     const registry = createProviderRegistry(
       await resolveProviderRegistryConfig(options.providerStore),
+      defaults,
     )
     const declared = await options.agentStore?.get(THEME_CREATOR_AGENT_NAME)
     const preference = declared?.model ?? THEME_PROVIDER_PREFERENCE
@@ -151,13 +167,14 @@ async function resolveThemeProvider(
   const llm = options.config.llm
   const apiKey = llm?.apiKey
   if (llm === undefined || apiKey === undefined || apiKey === '') return undefined
-  const client = providerClient(llm, apiKey)
+  const client = providerClient(llm, apiKey, defaults)
   return client === undefined ? undefined : { client, model: llm.model }
 }
 
 export async function createThemeWiring(options: ThemeWiringOptions): Promise<ThemeRouterOptions> {
   await ensureThemeTable(options.db)
   await ensureRegistryTables(options.db)
+  await ensureSiteSettingsTables(options.db)
 
   const tokensPath = join(options.projectRoot, TOKENS_FILE)
   const themeStore = createThemeStore({ db: options.db })
@@ -290,6 +307,7 @@ export async function createThemeCreatorToolWiring(options: ThemeWiringOptions):
   | undefined
 > {
   if (!hasThemeProviderAvenue(options)) return undefined
+  await ensureSiteSettingsTables(options.db)
 
   return {
     resolveProvider: () => resolveThemeProvider(options),

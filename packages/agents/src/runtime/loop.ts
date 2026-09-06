@@ -16,9 +16,6 @@ import type {
 /** Tool-call step budget and repetition guard — orchestration policy, not a property of any one model, so these stay fixed defaults rather than admin-configurable per provider. */
 const DEFAULT_MAX_STEPS = 25
 const DEFAULT_MAX_REPEATS = 2
-/** Fallback only — `client.maxCorrectionAttempts`/`client.requestTimeoutMs` (an admin-set property of the chosen model, `/admin/providers`) win when present. */
-const DEFAULT_MAX_ATTEMPTS = 3
-const DEFAULT_TIMEOUT_MS = 60_000
 const ZERO_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0 }
 
 function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
@@ -107,9 +104,8 @@ type GraphUpdate = typeof AgentGraphState.Update
  */
 function buildAgentGraph(input: RunAgentLoopInput) {
   const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS
-  const maxAttempts =
-    input.maxAttempts ?? input.client.maxCorrectionAttempts ?? DEFAULT_MAX_ATTEMPTS
-  const timeoutMs = input.timeoutMs ?? input.client.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS
+  const maxAttempts = input.maxAttempts ?? input.client.maxCorrectionAttempts
+  const timeoutMs = input.timeoutMs ?? input.client.requestTimeoutMs
   const now = input.now ?? Date.now
   const tools = input.tools ?? []
   const toolIndex = toolByName(tools)

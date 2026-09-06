@@ -33,6 +33,9 @@ import {
   createRolePermissionOverlay,
   createRolePermissionStore,
   createSchemaTables,
+  createSiteSettingsStore,
+  ensureSiteSettingsTables,
+  type SiteSettingsStore,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
@@ -316,11 +319,18 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
     await notFoundLog.ensureTable()
     const redirects = createRedirectStore({ db })
     await redirects.ensureTable()
+    // Same `assistant.default*` tuning settings `cogenta serve` reads for
+    // this runtime's own live-refreshing provider registry — a second,
+    // independent process onto the same table (`createSiteSettingsStore` is
+    // stateless), never a second copy of the setting itself.
+    await ensureSiteSettingsTables(db)
+    const siteSettingsStore: SiteSettingsStore = createSiteSettingsStore({ db })
 
     const agentsRuntime = await buildAgentRuntime({
       dataDir: join(projectRoot, '.cogenta', 'agents-runtime'),
       projectRoot,
       signingKey: loaded.config.auth.signingKey,
+      siteSettings: siteSettingsStore,
       site: {
         name: loaded.config.site.name,
         ...(loaded.config.site.url === undefined ? {} : { url: loaded.config.site.url }),

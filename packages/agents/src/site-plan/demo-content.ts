@@ -51,9 +51,6 @@ export type ProposeDemoContentResult =
     }
   | { readonly ok: false; readonly attempts: number; readonly reason: string }
 
-/** Fallback only — `options.client.maxCorrectionAttempts` (an admin-set property of the chosen model, `/admin/providers`) wins when present. */
-const DEFAULT_MAX_ATTEMPTS = 2
-
 function describeCollections(contentModel: ContentModelProposal): string {
   return contentModel.collections
     .map((collection) => {
@@ -111,8 +108,7 @@ export async function proposeDemoContent(
     return { ok: true, entries: [], rejected: [], attempts: 0 }
   }
 
-  const maxAttempts =
-    options.maxAttempts ?? options.client.maxCorrectionAttempts ?? DEFAULT_MAX_ATTEMPTS
+  const maxAttempts = options.maxAttempts ?? options.client.maxCorrectionAttempts
   const schemas = new Map(
     options.contentModel.collections.map((collection) => [
       collection.definition.name,

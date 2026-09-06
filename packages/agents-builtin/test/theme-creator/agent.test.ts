@@ -57,6 +57,9 @@ function fakeClient(): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat(request: ChatRequest): Promise<ChatResponse> {
       const askText =
         typeof request.messages.at(-1)?.content === 'string'

@@ -97,16 +97,6 @@ export type GenerateSkinResult =
   | { readonly ok: true; readonly tokens: SkinTokens; readonly attempts: number }
   | { readonly ok: false; readonly attempts: number; readonly reason: string }
 
-/**
- * Fallback only, used when neither the caller nor the resolved
- * `ProviderClient` (`client.maxCorrectionAttempts` — an admin-set property
- * of *which model this is*, from `/admin/providers`) says otherwise. A
- * model that needs more coaxing to produce a valid contract D token set
- * benefits from more attempts, which is a fact about the model, not a
- * number this call site should be guessing at.
- */
-const DEFAULT_MAX_ATTEMPTS = 3
-
 function buildPrompt(options: GenerateSkinOptions, correction: string | undefined): string {
   const lines = [
     'You are configuring the visual design tokens of a Cogenta CMS site.',
@@ -188,8 +178,7 @@ function buildRequest(
 }
 
 export async function generateSkin(options: GenerateSkinOptions): Promise<GenerateSkinResult> {
-  const maxAttempts =
-    options.maxAttempts ?? options.client.maxCorrectionAttempts ?? DEFAULT_MAX_ATTEMPTS
+  const maxAttempts = options.maxAttempts ?? options.client.maxCorrectionAttempts
   let correction: string | undefined
   let lastReason = 'no attempt was made'
 

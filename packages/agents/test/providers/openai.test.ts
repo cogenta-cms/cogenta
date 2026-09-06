@@ -6,6 +6,7 @@ import {
 } from '../../src/providers/openai.js'
 import { createToolNameDecoder } from '../../src/providers/tool-names.js'
 import type { ChatRequest } from '../../src/providers/types.js'
+import { TEST_TUNING_DEFAULTS } from './test-tuning-defaults.js'
 
 describe('buildOpenAiRequest', () => {
   it('prepends a system message when request.system is set', () => {
@@ -16,7 +17,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildOpenAiRequest(request).messages).toEqual([
+    expect(buildOpenAiRequest(request, 8000).messages).toEqual([
       { role: 'system', content: 'Be concise.' },
       { role: 'user', content: 'Hello' },
     ])
@@ -41,7 +42,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    const built = buildOpenAiRequest(request)
+    const built = buildOpenAiRequest(request, 8000)
     expect(built.tools).toEqual([
       {
         type: 'function',
@@ -74,7 +75,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildOpenAiRequest(request).messages).toEqual([
+    expect(buildOpenAiRequest(request, 8000).messages).toEqual([
       { role: 'tool', content: '{"ok":true}', tool_call_id: 'call-1' },
     ])
   })
@@ -86,7 +87,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    expect(() => buildOpenAiRequest(request)).toThrowError(/toolCallId/)
+    expect(() => buildOpenAiRequest(request, 8000)).toThrowError(/toolCallId/)
   })
 
   it('leaves a plain string message untouched — the byte-for-byte-identical path this adapter had before images', () => {
@@ -96,7 +97,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildOpenAiRequest(request).messages).toEqual([
+    expect(buildOpenAiRequest(request, 8000).messages).toEqual([
       { role: 'user', content: 'Describe this image.' },
     ])
   })
@@ -108,7 +109,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildOpenAiRequest(request).messages).toEqual([
+    expect(buildOpenAiRequest(request, 8000).messages).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'Describe this image.' }] },
     ])
   })
@@ -128,7 +129,7 @@ describe('buildOpenAiRequest', () => {
       maxTokens: 100,
     }
 
-    expect(buildOpenAiRequest(request).messages).toEqual([
+    expect(buildOpenAiRequest(request, 8000).messages).toEqual([
       {
         role: 'user',
         content: [
@@ -142,7 +143,11 @@ describe('buildOpenAiRequest', () => {
 
 describe('createOpenAiClient', () => {
   it('reports supportsVision: true', () => {
-    const client = createOpenAiClient({ apiKey: 'k', model: 'gpt-5' })
+    const client = createOpenAiClient({
+      apiKey: 'k',
+      model: 'gpt-5',
+      defaults: TEST_TUNING_DEFAULTS,
+    })
     expect(client.supportsVision).toBe(true)
   })
 })

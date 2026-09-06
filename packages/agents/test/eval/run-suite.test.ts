@@ -10,6 +10,9 @@ function fakeClient(responses: readonly ChatResponse[]): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat() {
       const response = responses[index]
       index += 1

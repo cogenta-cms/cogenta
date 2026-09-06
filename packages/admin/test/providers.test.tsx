@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -208,5 +208,55 @@ describe('providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('my-vllm-server')).toBeDefined()
+  })
+})
+
+// fiche feedback: the site-wide LLM tuning floor (`assistant.default*`) used
+// to be invisible TypeScript constants, only ever mentioned as static hint
+// text naming a literal number. It is now a real site setting, rendered
+// generically (`SiteSettingsField`) in its own card above the provider list.
+describe('providers — "Réglages par défaut" card', () => {
+  it('shows the site-wide tuning floor, pre-filled from the real registry default', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+
+    const card = await screen.findByRole('region', { name: 'Réglages par défaut' })
+    expect(within(card).getByLabelText('Tokens de sortie max — défaut du site')).toHaveProperty(
+      'value',
+      '8000',
+    )
+    expect(
+      within(card).getByLabelText("Délai d'attente — défaut du site (secondes)"),
+    ).toHaveProperty('value', '180')
+    expect(
+      within(card).getByLabelText('Tentatives de correction max — défaut du site'),
+    ).toHaveProperty('value', '3')
+  })
+
+  it('writes a changed default on blur, distinct from any one provider’s own override', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+
+    const card = await screen.findByRole('region', { name: 'Réglages par défaut' })
+    const field = within(card).getByLabelText('Tokens de sortie max — défaut du site')
+    fireEvent.change(field, { target: { value: '12000' } })
+    fireEvent.blur(field)
+
+    // Two "Enregistré." indicators legitimately coexist in this card once
+    // committed — the field's own inline status and the card-level one in
+    // its footer — so this waits on the write itself rather than picking
+    // between them.
+    await waitFor(() => {
+      expect(within(card).getAllByText('Enregistré.').length).toBeGreaterThan(0)
+    })
+    expect(field).toHaveProperty('value', '12000')
   })
 })

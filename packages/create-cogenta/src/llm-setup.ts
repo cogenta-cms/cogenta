@@ -3,6 +3,7 @@ import {
   createGoogleClient,
   createOpenAiClient,
   type ProviderClient,
+  staticProviderTuningDefaults,
 } from '@cogenta/agents'
 
 export type LlmProviderId = 'none' | 'anthropic' | 'openai' | 'google'
@@ -44,12 +45,22 @@ export interface CreateProviderClientOptions {
   readonly fetchImpl?: typeof fetch
 }
 
-/** The same adapter construction `validateApiKey` uses, exported so a later real call (skin generation, L9 task 7) does not duplicate it. */
+/**
+ * The same adapter construction `validateApiKey` uses, exported so a later
+ * real call (skin generation, L9 task 7) does not duplicate it.
+ *
+ * `staticProviderTuningDefaults()` — never a live `assistant.*` site
+ * setting — because no site exists yet at this point in the wizard: there is
+ * no database to read an admin override from, only the registry's own
+ * declared default (the same one a fresh site's first boot would see before
+ * anyone ever touches the "Réglages" screen).
+ */
 export function createProviderClient(options: CreateProviderClientOptions): ProviderClient {
   const config = {
     apiKey: options.apiKey,
     model: options.model,
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    defaults: staticProviderTuningDefaults(),
   }
   if (options.provider === 'anthropic') return createAnthropicClient(config)
   if (options.provider === 'openai') return createOpenAiClient(config)

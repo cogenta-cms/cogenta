@@ -1806,6 +1806,11 @@
     "heading": "Fournisseurs",
     "adminOnly": "Réservé au rôle « admin » : cette page gère la clé API de chaque fournisseur LLM.",
     "intro": "Quels fournisseurs LLM ce site peut utiliser, et leur modèle par défaut. La préférence de modèle de chaque agent nomme l'un d'entre eux.",
+    "defaultsHeading": "Réglages par défaut",
+    "defaultsIntro": "Le plancher que suit chaque fournisseur ci-dessous quand un réglage n'est pas surchargé pour lui spécifiquement.",
+    "defaultsLoadError": "Impossible de charger les réglages par défaut.",
+    "defaultsSaveAction": "Enregistrer les réglages par défaut",
+    "defaultsSaved": "Enregistré.",
     "addHeading": "Ajouter ou mettre à jour un fournisseur",
     "provider": "Fournisseur",
     "customProviderOption": "Fournisseur personnalisé…",
@@ -1823,11 +1828,11 @@
     "baseUrlRequiredForCustom": "Requise pour un fournisseur personnalisé — l'URL complète du point de terminaison de complétion de discussion, compatible OpenAI.",
     "catalogLoadError": "Impossible de charger le catalogue de fournisseurs.",
     "maxOutputTokens": "Tokens de sortie max",
-    "maxOutputTokensHint": "Un modèle qui « réfléchit » avant de répondre (DeepSeek, o1…) a besoin de bien plus que la réponse visible seule — laissez vide pour le défaut (8000).",
+    "maxOutputTokensHint": "Un modèle qui « réfléchit » avant de répondre (DeepSeek, o1…) a besoin de bien plus que la réponse visible seule — laissez vide pour suivre le réglage par défaut du site, ci-dessus.",
     "requestTimeoutSeconds": "Délai d'attente (secondes)",
-    "requestTimeoutSecondsHint": "Un modèle plus lent a besoin de plus de temps, pas seulement de plus de tokens — laissez vide pour le défaut (180s).",
+    "requestTimeoutSecondsHint": "Un modèle plus lent a besoin de plus de temps, pas seulement de plus de tokens — laissez vide pour suivre le réglage par défaut du site, ci-dessus.",
     "maxCorrectionAttempts": "Tentatives de correction max",
-    "maxCorrectionAttemptsHint": "Combien de fois relancer ce modèle s'il ne produit pas une réponse exploitable du premier coup — laissez vide pour le défaut (3).",
+    "maxCorrectionAttemptsHint": "Combien de fois relancer ce modèle s'il ne produit pas une réponse exploitable du premier coup — laissez vide pour suivre le réglage par défaut du site, ci-dessus.",
     "tuningDefaultPlaceholder": "Par défaut",
     "tuningColumn": "Réglages du modèle",
     "tuningDefault": "Par défaut",
@@ -1846,7 +1851,23 @@
     "remove": "Retirer",
     "noProviders": "Aucun fournisseur configuré — les agents ne peuvent pas s'exécuter tant qu'aucun n'est ajouté.",
     "loadError": "Impossible de charger la liste des fournisseurs.",
-    "saveError": "Impossible d'enregistrer ce fournisseur."
+    "saveError": "Impossible d'enregistrer ce fournisseur.",
+    "field": {
+      "assistant": {
+        "defaultMaxOutputTokens": {
+          "label": "Tokens de sortie max — défaut du site",
+          "help": "Le plancher que suit tout fournisseur sans réglage « Tokens de sortie max » qui lui soit propre."
+        },
+        "defaultRequestTimeoutSeconds": {
+          "label": "Délai d'attente — défaut du site (secondes)",
+          "help": "Le plancher que suit tout fournisseur sans réglage « Délai d'attente » qui lui soit propre."
+        },
+        "defaultMaxCorrectionAttempts": {
+          "label": "Tentatives de correction max — défaut du site",
+          "help": "Le plancher que suit tout fournisseur sans réglage « Tentatives de correction max » qui lui soit propre."
+        }
+      }
+    }
   },
   "agentSkills": {
     "heading": "Compétences",

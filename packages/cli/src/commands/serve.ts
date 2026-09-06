@@ -1788,6 +1788,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensureMcpConnectionTables(db)
   const mcpConnections = createMcpConnectionStore(db, { signingKey: options.signingKey })
 
+  // Editorial site settings (fiche 23, ADR-0025): not schema-declared either
+  // — a rédacteur's tagline or homepage choice is not part of the content
+  // model — so this gets the same one-fixed-table treatment as menus.
+  // Built here, ahead of its original spot further down, so
+  // `buildAgentRuntime` below can read the `assistant.default*` tuning
+  // settings from the exact same store the "Réglages" admin screen writes
+  // through (`SITE_SETTINGS_REGISTRY` in `@cogenta/schema`) — never a second,
+  // independently-scoped instance.
+  await ensureSiteSettingsTables(db)
+  const siteSettingsStore: SiteSettingsStore = createSiteSettingsStore({ db })
+
   // L22 task 1/1bis: the real agent runtime, built here — the one place
   // `service` (this site's real `ContentService`) and `mediaStore` are both
   // already in scope, exactly the way `content.*`/`media.*` contract-C
@@ -1818,6 +1829,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           mediaStore,
           auditLog: auth.audit,
           logger,
+          siteSettings: siteSettingsStore,
           // L22 task 3: the Site Monitor's own tools — the same `redirects`/
           // `notFoundLog` stores and `collections` this function already
           // built above, never a second instance.
@@ -1929,12 +1941,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     db,
     signingKey: options.signingKey,
   })
-
-  // Editorial site settings (fiche 23, ADR-0025): not schema-declared either
-  // — a rédacteur's tagline or homepage choice is not part of the content
-  // model — so this gets the same one-fixed-table treatment as menus.
-  await ensureSiteSettingsTables(db)
-  const siteSettingsStore: SiteSettingsStore = createSiteSettingsStore({ db })
 
   // The admin's own runtime theme (L21 task 2) — same one-fixed-table
   // treatment, admin-role-only to write, public to read (the login screen
@@ -6045,7 +6051,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // (`createSiteSettingsStore` is stateless — every call hits the same table,
   // there is nothing to share): `buildAssistant` runs before `assembleSite`
   // does, and the `assistant.indexedCollections` toggle (L22 task 4) has to
-  // be readable from the moment the first store wrap is built.
+  // be readable from the moment the first store wrap is built. Ensured here,
+  // not left to `assembleSite`'s own later call, because `buildAssistant`'s
+  // `textProvider` now reads `assistant.default*` (the site-wide LLM tuning
+  // floor, fiche feedback) synchronously during its own construction, ahead
+  // of `assembleSite`.
+  await ensureSiteSettingsTables(selection.instance)
   const assistantSettings = createSiteSettingsStore({ db: selection.instance })
   // Fiche 45 — built here (before `buildAgentRuntime`, inside `assembleSite`
   // below, opens its own instance over the same directory) so the writing

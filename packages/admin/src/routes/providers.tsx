@@ -11,17 +11,23 @@ import {
   setProviderEnabled,
   updateProviderSettings,
 } from '../api/providers-client.js'
+import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
+import { SiteSettingsField } from '../settings/site-settings-field.js'
+import { useSectionAutosave } from '../settings/site-settings-section.js'
 import {
   Button,
   Card,
   CardBody,
+  CardFooter,
   CardHeader,
   CardTitle,
   Field,
   Input,
   Modal,
   Notice,
+  SavedIndicator,
   Table,
   TableBody,
   TableCell,
@@ -30,6 +36,7 @@ import {
   TableHeader,
   TableRoot,
   TableRow,
+  useSavedIndicator,
 } from '../ui/index.js'
 
 /**
@@ -60,12 +67,116 @@ function parsePositiveInt(text: string): number | undefined {
   return Number.isInteger(value) && value > 0 ? value : undefined
 }
 
+/**
+ * The site-wide floor every resolved provider client's own
+ * `maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts` falls back to
+ * when a per-provider override above is left blank — fiche feedback:
+ * these three numbers used to be TypeScript constants
+ * (`FALLBACK_MAX_OUTPUT_TOKENS`/`DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS`/
+ * `FALLBACK_MAX_CORRECTION_ATTEMPTS` in `@cogenta/agents`), invisible and
+ * unreachable from this screen — only ever mentioned as static hint text
+ * naming a literal "(8000)"/"(180s)"/"(3)". They are now real, persisted
+ * `assistant.*` site settings (`SITE_SETTINGS_REGISTRY` in `@cogenta/schema`),
+ * rendered here the same generic way `appearance.tsx`'s "Marque" card
+ * renders `branding.*` — its own `listSettings`/`writeSetting` round trip,
+ * filtered to `DEFAULT_TUNING_KEYS` below (not the whole `assistant` group —
+ * see that constant's own comment for why).
+ */
+const DEFAULT_TUNING_KEYS: ReadonlySet<string> = new Set([
+  'assistant.defaultMaxOutputTokens',
+  'assistant.defaultRequestTimeoutSeconds',
+  'assistant.defaultMaxCorrectionAttempts',
+])
+function DefaultTuningCard({
+  token,
+  autosaveEnabled,
+}: {
+  readonly token: string
+  readonly autosaveEnabled: boolean
+}): JSX.Element {
+  const { t } = useTranslation()
+  const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const indicator = useSavedIndicator()
+
+  const load = useCallback(async () => {
+    try {
+      const data = await listSettings()
+      // Not every `group: 'assistant'` entry belongs here — `assistant
+      // .indexedCollections` (L22 task 4) is a per-collection map, not a
+      // scalar this generic card can render (its own doc comment in
+      // `site-settings-registry.ts` says so explicitly), and already has a
+      // dedicated screen (`assistant-index.tsx`). Filtering by key, not by
+      // group, is what keeps that setting out of this card without this
+      // card needing to know its shape.
+      setSettings(data.filter((setting) => DEFAULT_TUNING_KEYS.has(setting.key)))
+      setLoadError(null)
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : t('providers.defaultsLoadError'))
+    }
+  }, [t])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function save(key: string, value: unknown): Promise<void> {
+    await writeSetting(token, key, value)
+    await load()
+    indicator.show()
+  }
+
+  const section = useSectionAutosave(autosaveEnabled, (key, value) => save(key, value))
+
+  return (
+    <Card aria-labelledby="providers-defaults-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="providers-defaults-heading">{t('providers.defaultsHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <p className="m-0 text-sm opacity-80">{t('providers.defaultsIntro')}</p>
+        {loadError !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{loadError}</p>
+          </Notice>
+        )}
+        {(settings ?? []).map((setting) => (
+          <SiteSettingsField
+            key={setting.key}
+            setting={setting}
+            canEdit
+            translationNamespace="providers"
+            onSave={(value) => save(setting.key, value)}
+            {...section.fieldFor(setting.key, null)}
+          />
+        ))}
+      </CardBody>
+      <CardFooter>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          loading={section.saving}
+          disabled={!section.hasPending}
+          onClick={() => void section.flush()}
+        >
+          {t('providers.defaultsSaveAction')}
+        </Button>
+        <SavedIndicator visible={indicator.visible} label={t('providers.defaultsSaved')} />
+      </CardFooter>
+    </Card>
+  )
+}
+
 export function ProvidersRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
+  const [autosaveEnabled] = useAutosaveEnabled()
 
   const [providers, setProviders] = useState<readonly ProviderSummary[]>([])
   const [catalog, setCatalog] = useState<readonly ProviderCatalogEntry[]>([])
@@ -270,6 +381,8 @@ export function ProvidersRoute(): JSX.Element {
         {t('providers.heading')}
       </h1>
       <p className="m-0 text-sm opacity-80">{t('providers.intro')}</p>
+
+      {token !== null && <DefaultTuningCard token={token} autosaveEnabled={autosaveEnabled} />}
 
       {error !== null && (
         <Notice tone="danger" live="assertive">

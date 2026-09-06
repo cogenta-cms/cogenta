@@ -46,6 +46,9 @@ function perDirectionClient(): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat(request: ChatRequest): Promise<ChatResponse> {
       const rawContent = request.messages[0]?.content
       const prompt = typeof rawContent === 'string' ? rawContent : ''
@@ -66,6 +69,9 @@ function constantClient(content: string): ProviderClient {
   return {
     name: 'fake',
     model: 'fake-model',
+    maxOutputTokens: 8000,
+    requestTimeoutMs: 180_000,
+    maxCorrectionAttempts: 3,
     async chat(): Promise<ChatResponse> {
       return {
         content,

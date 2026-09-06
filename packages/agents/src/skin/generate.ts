@@ -98,7 +98,19 @@ export type GenerateSkinResult =
   | { readonly ok: false; readonly attempts: number; readonly reason: string }
 
 const DEFAULT_MAX_ATTEMPTS = 3
-const MAX_TOKENS = 2000
+/**
+ * The visible JSON answer itself is small (well under 1000 tokens), but a
+ * reasoning-tier model (confirmed live against DeepSeek's `deepseek-v4-flash`,
+ * which spent ~3500-4300 tokens "thinking" before ever writing the JSON)
+ * counts that hidden reasoning against the same completion budget. At 2000
+ * this reliably hit `finish_reason: "length"` with an **empty** `content`
+ * before the model ever got to the answer — `extractJson` then reports "no
+ * JSON object was found", which reads exactly like the model refused, when
+ * it was actually cut off mid-thought. Raised with real headroom rather than
+ * tuned to the observed minimum, since a harder brief or a chattier model
+ * needs more of it, not less.
+ */
+const MAX_TOKENS = 8000
 
 function buildPrompt(options: GenerateSkinOptions, correction: string | undefined): string {
   const lines = [

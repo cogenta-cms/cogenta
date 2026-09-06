@@ -431,6 +431,19 @@ describe('payment drivers status', () => {
     expect(response.body).toMatchObject({ ok: true })
   })
 
+  // fiche feedback: this endpoint used to gate on `commerce.read`, so any
+  // signed-in viewer could trigger a real probe against live payment
+  // credentials. It now requires `commerce.payment.settle`, same as any
+  // other money-touching action.
+  it('refuses a viewer permission to probe a live payment driver', async () => {
+    router = routerWithPayment({})
+    const response = await router.handle(
+      { method: 'POST', path: '/api/commerce/payment/drivers/manual/test-connection' },
+      VIEWER,
+    )
+    expect(response.status).toBe(403)
+  })
+
   it('reports an unreachable Stripe as not ok, never as a 500', async () => {
     router = routerWithPayment({ driver: 'stripe', secretKey: 'sk_test_not_real' })
     const response = await router.handle(

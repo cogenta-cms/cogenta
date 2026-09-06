@@ -1416,6 +1416,15 @@ export function createCommerceAdminRouter(
 
         // "Bouton tester la connexion" — actually calls the driver, and
         // returns whatever it says, error included, rather than a boolean.
+        // fiche feedback: this used to gate on `commerce.read` — meaning any
+        // signed-in `viewer` could trigger a real `driver.init()`/`health()`
+        // probe against the site's live payment credentials. No key value
+        // ever leaks (the response is only `ok`/`message`), but *probing* a
+        // payment gateway on demand is a money-adjacent action, not a read;
+        // `commerce.payment.settle` is the closest of the six permissions
+        // (deliberately coarse, see permissions.ts) that already gates
+        // money-touching operations, so it's reused here rather than adding
+        // a seventh permission for one button.
         if (
           segments[0] === 'payment' &&
           segments[1] === 'drivers' &&
@@ -1423,7 +1432,7 @@ export function createCommerceAdminRouter(
           segments.length === 4
         ) {
           if (method === 'POST') {
-            permissions.assert('commerce.read', actor)
+            permissions.assert('commerce.payment.settle', actor)
             if (options.payment === undefined) {
               throw new CogentaError({
                 code: 'COMMERCE_PAYMENT_UNSUPPORTED',

@@ -675,7 +675,11 @@ export function installMockFetch(
         readonly label: string
         readonly rationale: string
         readonly tokens: Record<string, unknown>
+        readonly themeName?: string
+        readonly chromeInput?: { readonly tagline?: string; readonly footerNote?: string }
       }[]
+      /** What `POST /api/theme/generate` answers with alongside `candidates` — e.g. "an attachment could not be analyzed". Absent by default, the same "server never sent the field" shape a caller has to tolerate. */
+      readonly generateWarnings?: readonly string[]
       /** The active theme *package* name (fiche L23), `null` for the built-in default. */
       readonly activeTheme?: string | null
       /** The theme packages this mocked instance can offer — the canonical default alone unless a test overrides it. */
@@ -8421,7 +8425,14 @@ export function installMockFetch(
               error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
             })
           }
-          return json(200, { data: { candidates: options.theme.generateCandidates ?? [] } })
+          return json(200, {
+            data: {
+              candidates: options.theme.generateCandidates ?? [],
+              ...(options.theme.generateWarnings === undefined
+                ? {}
+                : { warnings: options.theme.generateWarnings }),
+            },
+          })
         }
 
         if (url.includes('/api/theme/export') && method === 'POST') {

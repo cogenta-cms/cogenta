@@ -219,4 +219,89 @@ describe('createMcpConnectionStore', () => {
       code: 'MCP_CONNECTION_NOT_FOUND',
     })
   })
+
+  // fiche feedback: a saved connection had no way to change its own
+  // command/args/env/auth/secret without deleting and recreating it.
+  describe('update()', () => {
+    it('changes command/args/env without touching name, secret, or enabled state', async () => {
+      const created = await store.create({
+        name: 'files',
+        transport: 'stdio',
+        command: '/usr/bin/mcp-files',
+        args: ['--root', '/data'],
+        env: { LOG_LEVEL: 'info' },
+        authKind: 'api_key',
+        secret: 'sk-original-secret',
+        confirmUnsandboxed: true,
+      })
+
+      const updated = await store.update(created.id, {
+        command: '/usr/local/bin/mcp-files',
+        args: ['--root', '/srv/data'],
+        env: { LOG_LEVEL: 'debug' },
+      })
+
+      expect(updated.name).toBe('files')
+      expect(updated.command).toBe('/usr/local/bin/mcp-files')
+      expect(updated.args).toEqual(['--root', '/srv/data'])
+      expect(updated.env).toEqual({ LOG_LEVEL: 'debug' })
+      expect(updated.hasSecret).toBe(true)
+      expect(updated.enabled).toBe(true)
+    })
+
+    it('leaves fields absent from the patch exactly as saved', async () => {
+      const created = await store.create({
+        name: 'files',
+        transport: 'stdio',
+        command: '/usr/bin/mcp-files',
+        args: ['--root', '/data'],
+        confirmUnsandboxed: true,
+      })
+
+      const updated = await store.update(created.id, { command: '/usr/local/bin/mcp-files' })
+
+      expect(updated.args).toEqual(['--root', '/data'])
+      expect(updated.name).toBe('files')
+    })
+
+    it('re-encrypts the secret only when a new one is given, never touching it otherwise', async () => {
+      const created = await store.create({
+        name: 'files',
+        transport: 'stdio',
+        command: '/usr/bin/mcp-files',
+        authKind: 'api_key',
+        secret: 'sk-original-secret',
+        confirmUnsandboxed: true,
+      })
+
+      const unchanged = await store.update(created.id, { command: '/usr/local/bin/mcp-files' })
+      expect(unchanged.hasSecret).toBe(true)
+      expect(await store.decryptSecret(created.id)).toBe('sk-original-secret')
+
+      const rotated = await store.update(created.id, { secret: 'sk-new-secret' })
+      expect(rotated.hasSecret).toBe(true)
+      expect(await store.decryptSecret(created.id)).toBe('sk-new-secret')
+    })
+
+    it('clears the saved secret when authKind is set back to "none"', async () => {
+      const created = await store.create({
+        name: 'files',
+        transport: 'stdio',
+        command: '/usr/bin/mcp-files',
+        authKind: 'api_key',
+        secret: 'sk-original-secret',
+        confirmUnsandboxed: true,
+      })
+
+      const cleared = await store.update(created.id, { authKind: 'none' })
+      expect(cleared.hasSecret).toBe(false)
+      expect(cleared.authKind).toBe('none')
+    })
+
+    it('throws MCP_CONNECTION_NOT_FOUND for an unknown id', async () => {
+      await expect(store.update('unknown-id', { command: '/bin/true' })).rejects.toMatchObject({
+        code: 'MCP_CONNECTION_NOT_FOUND',
+      })
+    })
+  })
 })

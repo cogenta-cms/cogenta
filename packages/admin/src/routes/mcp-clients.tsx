@@ -5,12 +5,14 @@ import {
   createMcpConnection,
   type ExposedToolInput,
   listMcpConnections,
+  type McpAuthKind,
   type McpConnectionSummary,
   type McpToolCost,
   removeMcpConnection,
   setMcpConnectionEnabled,
   setMcpConnectionExposedTools,
   testMcpConnection,
+  updateMcpConnection,
 } from '../api/mcp-connections-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
@@ -120,6 +122,16 @@ export function McpClientsRoute(): JSX.Element {
   const [managing, setManaging] = useState<McpConnectionSummary | null>(null)
   const [drafts, setDrafts] = useState<Record<string, ToolDraft>>({})
 
+  const [editing, setEditing] = useState<McpConnectionSummary | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editCommand, setEditCommand] = useState('')
+  const [editArgs, setEditArgs] = useState('')
+  const [editEnv, setEditEnv] = useState('')
+  const [editAuthKind, setEditAuthKind] = useState<McpAuthKind>('none')
+  const [editSecret, setEditSecret] = useState('')
+  const [editSecretEnvVar, setEditSecretEnvVar] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
     setLoading(true)
@@ -189,6 +201,48 @@ export function McpClientsRoute(): JSX.Element {
       await load()
     } catch (caught) {
       setActionError(caught instanceof ApiError ? caught.message : t('mcpClients.toggleError'))
+    }
+  }
+
+  function startEdit(connection: McpConnectionSummary): void {
+    setEditing(connection)
+    setEditName(connection.name)
+    setEditCommand(connection.command ?? '')
+    setEditArgs(connection.args.join(' '))
+    setEditEnv(
+      Object.entries(connection.env)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n'),
+    )
+    setEditAuthKind(connection.authKind)
+    setEditSecret('')
+    setEditSecretEnvVar(connection.secretEnvVar ?? '')
+  }
+
+  async function submitEdit(): Promise<void> {
+    if (token === null || editing === null) return
+    setActionError(null)
+    setEditBusy(true)
+    try {
+      await updateMcpConnection(token, editing.id, {
+        name: editName,
+        command: editCommand,
+        args: parseArgs(editArgs),
+        env: parseEnvLines(editEnv),
+        authKind: editAuthKind,
+        ...(editAuthKind === 'none'
+          ? {}
+          : {
+              secretEnvVar: editSecretEnvVar,
+              ...(editSecret.length > 0 ? { secret: editSecret } : {}),
+            }),
+      })
+      setEditing(null)
+      await load()
+    } catch (caught) {
+      setActionError(caught instanceof ApiError ? caught.message : t('mcpClients.editError'))
+    } finally {
+      setEditBusy(false)
     }
   }
 
@@ -308,6 +362,13 @@ export function McpClientsRoute(): JSX.Element {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => startEdit(connection)}
+                          >
+                            {t('mcpClients.editButton')}
+                          </Button>
                           <Button
                             variant="secondary"
                             size="sm"
@@ -469,6 +530,122 @@ export function McpClientsRoute(): JSX.Element {
               {t('mcpClients.createButton')}
             </Button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null)
+        }}
+        title={t('mcpClients.editHeading', { name: editing?.name ?? '' })}
+        description={t('mcpClients.editDescription')}
+        closeLabel={t('mcpClients.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button disabled={editBusy} onClick={() => void submitEdit()}>
+              {t('mcpClients.saveButton')}
+            </Button>
+          </>
+        }
+      >
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void submitEdit()
+          }}
+        >
+          <Field label={t('mcpClients.nameLabel')} description={t('mcpClients.nameHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('mcpClients.commandLabel')} description={t('mcpClients.commandHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                required
+                value={editCommand}
+                onChange={(event) => setEditCommand(event.target.value)}
+                placeholder="/usr/bin/mcp-server"
+              />
+            )}
+          </Field>
+          <Field label={t('mcpClients.argsLabel')} description={t('mcpClients.argsHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                value={editArgs}
+                onChange={(event) => setEditArgs(event.target.value)}
+                placeholder="--root /data"
+              />
+            )}
+          </Field>
+          <Field label={t('mcpClients.envLabel')} description={t('mcpClients.envHint')}>
+            {(control) => (
+              <textarea
+                {...control}
+                className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm"
+                rows={3}
+                value={editEnv}
+                onChange={(event) => setEditEnv(event.target.value)}
+                placeholder={'FOO=bar\nBAZ=qux'}
+              />
+            )}
+          </Field>
+          <Field label={t('mcpClients.authKindLabel')} description={t('mcpClients.authKindHint')}>
+            {(control) => (
+              <Select
+                {...control}
+                value={editAuthKind}
+                onChange={(event) => setEditAuthKind(event.target.value as McpAuthKind)}
+              >
+                <option value="none">{t('mcpClients.authKindNone')}</option>
+                <option value="api_key">{t('mcpClients.authKindApiKey')}</option>
+                <option value="oauth">{t('mcpClients.authKindOauth')}</option>
+              </Select>
+            )}
+          </Field>
+          {editAuthKind !== 'none' && (
+            <>
+              <Field
+                label={t('mcpClients.secretLabel')}
+                description={t('mcpClients.editSecretHint')}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="password"
+                    value={editSecret}
+                    onChange={(event) => setEditSecret(event.target.value)}
+                    placeholder={t('mcpClients.editSecretPlaceholder')}
+                  />
+                )}
+              </Field>
+              <Field
+                label={t('mcpClients.secretEnvVarLabel')}
+                description={t('mcpClients.secretEnvVarHint')}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={editSecretEnvVar}
+                    onChange={(event) => setEditSecretEnvVar(event.target.value)}
+                    placeholder="API_KEY"
+                  />
+                )}
+              </Field>
+            </>
+          )}
         </form>
       </Modal>
 

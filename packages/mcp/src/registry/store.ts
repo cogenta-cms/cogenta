@@ -87,6 +87,27 @@ export interface McpConnectionCreateInput {
   readonly confirmUnsandboxed?: boolean
 }
 
+/**
+ * Fiche feedback: a saved connection had no way to change its own
+ * command/args/env/auth/secret without deleting and recreating it (losing
+ * its already-validated `exposedTools`) — same trap as
+ * `ProviderConfigStore.updateSettings` fixed for Providers. Every field is
+ * optional and means "leave exactly as saved" when absent; `transport` is
+ * deliberately not here (changing it is a different connection, not an
+ * edit — delete and recreate, same as a provider's id).
+ */
+export interface McpConnectionUpdateInput {
+  readonly name?: string
+  readonly command?: string
+  readonly args?: readonly string[]
+  readonly url?: string
+  readonly env?: Readonly<Record<string, string>>
+  readonly authKind?: McpAuthKind
+  /** Re-encrypts and replaces the saved secret. Ignored (never touches the saved secret) unless given — there is no way to read it back to resend unchanged. */
+  readonly secret?: string
+  readonly secretEnvVar?: string
+}
+
 export interface McpDiscoveryResult {
   readonly status: 'ok'
   readonly tools: readonly McpDiscoveredTool[]
@@ -102,6 +123,8 @@ export interface McpConnectionStore {
   create(input: McpConnectionCreateInput): Promise<McpConnectionSummary>
   remove(id: string): Promise<void>
   setEnabled(id: string, enabled: boolean): Promise<McpConnectionSummary>
+  /** Tri-state patch (fields absent from `patch` are left exactly as saved) for everything but `transport` and `enabled` — see `McpConnectionUpdateInput`. */
+  update(id: string, patch: McpConnectionUpdateInput): Promise<McpConnectionSummary>
   /** Persists the result of a real `initialize()`+`tools/list()` probe (`../discovery.js`) — never invented here. A failed discovery does not clear previously exposed tools; a connection that briefly can't be reached does not silently lose its admin's prior decisions. */
   recordDiscovery(
     id: string,
@@ -337,6 +360,60 @@ export function createMcpConnectionStore(
         sql`update ${table} set enabled = ${enabled}, updated_at = ${updatedAt} where id = ${id}`,
       )
       return toSummary({ ...row, enabled, updated_at: updatedAt })
+    },
+
+    async update(id, patch) {
+      const row = await findRow(id)
+      if (row === undefined) throw connectionNotFound(id)
+
+      const name = patch.name ?? row.name
+      const command = patch.command === undefined ? row.command : patch.command
+      const args_json = patch.args === undefined ? row.args_json : JSON.stringify(patch.args)
+      const url = patch.url === undefined ? row.url : patch.url
+      const env_json = patch.env === undefined ? row.env_json : JSON.stringify(patch.env)
+      const authKind = patch.authKind ?? (row.auth_kind as McpAuthKind)
+      const secretEnvVar =
+        patch.secretEnvVar === undefined ? row.secret_env_var : patch.secretEnvVar
+
+      let secretFields: Pick<ConnectionRow, 'secret_iv' | 'secret_auth_tag' | 'secret_ciphertext'>
+      if (authKind === 'none') {
+        secretFields = { secret_iv: null, secret_auth_tag: null, secret_ciphertext: null }
+      } else if (patch.secret !== undefined) {
+        const encrypted = encrypt(patch.secret)
+        secretFields = {
+          secret_iv: encrypted.iv,
+          secret_auth_tag: encrypted.authTag,
+          secret_ciphertext: encrypted.ciphertext,
+        }
+      } else {
+        secretFields = {
+          secret_iv: row.secret_iv,
+          secret_auth_tag: row.secret_auth_tag,
+          secret_ciphertext: row.secret_ciphertext,
+        }
+      }
+
+      const updatedAt = new Date(now()).toISOString()
+      await db.query(sql`
+        update ${table}
+        set name = ${name}, command = ${command}, args_json = ${args_json}, url = ${url},
+            env_json = ${env_json}, auth_kind = ${authKind}, secret_env_var = ${secretEnvVar},
+            secret_iv = ${secretFields.secret_iv}, secret_auth_tag = ${secretFields.secret_auth_tag},
+            secret_ciphertext = ${secretFields.secret_ciphertext}, updated_at = ${updatedAt}
+        where id = ${id}`)
+
+      return toSummary({
+        ...row,
+        name,
+        command,
+        args_json,
+        url,
+        env_json,
+        auth_kind: authKind,
+        secret_env_var: secretEnvVar,
+        ...secretFields,
+        updated_at: updatedAt,
+      })
     },
 
     async recordDiscovery(id, result) {

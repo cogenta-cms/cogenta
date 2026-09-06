@@ -3260,6 +3260,22 @@ export function installMockFetch(
         if (rawId !== undefined && action === undefined && method === 'PATCH') {
           if (found === undefined) throw new Error('unreachable')
           if (typeof body.enabled === 'boolean') found.enabled = body.enabled
+          if (typeof body.name === 'string') found.name = body.name
+          if (typeof body.command === 'string') found.command = body.command
+          if (typeof body.url === 'string') found.url = body.url
+          if (Array.isArray(body.args)) found.args = body.args as readonly string[]
+          if (typeof body.env === 'object' && body.env !== null) {
+            found.env = body.env as Record<string, string>
+          }
+          if (typeof body.authKind === 'string') {
+            found.authKind = body.authKind as 'none' | 'api_key' | 'oauth'
+            if (found.authKind === 'none') {
+              found.hasSecret = false
+              delete found.secretEnvVar
+            }
+          }
+          if (typeof body.secret === 'string' && body.secret.length > 0) found.hasSecret = true
+          if (typeof body.secretEnvVar === 'string') found.secretEnvVar = body.secretEnvVar
           found.updatedAt = '2026-03-08T00:05:00.000Z'
           return json(200, { data: found })
         }

@@ -96,6 +96,36 @@ export function setMcpConnectionEnabled(
   })
 }
 
+/**
+ * Fiche feedback: a saved connection had no way to change its own
+ * command/args/env/auth/secret without deleting and recreating it (losing
+ * its already-validated `exposedTools`) — same PATCH-tri-state pattern as
+ * `updateProviderSettings`. Every field absent from `patch` is left exactly
+ * as saved; `transport` is not here (changing it is a different connection).
+ */
+export interface UpdateMcpConnectionInput {
+  readonly name?: string
+  readonly command?: string
+  readonly args?: readonly string[]
+  readonly url?: string
+  readonly env?: Readonly<Record<string, string>>
+  readonly authKind?: McpAuthKind
+  readonly secret?: string
+  readonly secretEnvVar?: string
+}
+
+export function updateMcpConnection(
+  token: string,
+  id: string,
+  patch: UpdateMcpConnectionInput,
+): Promise<McpConnectionSummary> {
+  return request(`/api/mcp-connections/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
+  })
+}
+
 export async function removeMcpConnection(token: string, id: string): Promise<void> {
   await request(`/api/mcp-connections/${encodeURIComponent(id)}`, {
     method: 'DELETE',

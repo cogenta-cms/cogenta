@@ -120,4 +120,64 @@ describe('MCP Clients', () => {
 
     expect(await screen.findByText(/Aucune connexion MCP/)).toBeDefined()
   })
+
+  // fiche feedback: a saved connection had no way to change its own
+  // command/args/env/auth/secret without deleting and recreating it — same
+  // trap as Providers, same tri-state PATCH fix.
+  it('edits an existing connection’s command without touching its saved secret', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToMcpClients()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle connexion' }))
+    const createDialog = await screen.findByRole('dialog')
+    fireEvent.change(within(createDialog).getByLabelText('Nom'), { target: { value: 'fake' } })
+    fireEvent.change(within(createDialog).getByLabelText('Commande'), {
+      target: { value: '/usr/bin/mcp-fake' },
+    })
+    fireEvent.change(within(createDialog).getByLabelText('Authentification'), {
+      target: { value: 'api_key' },
+    })
+    fireEvent.change(within(createDialog).getByLabelText('Secret'), {
+      target: { value: 'sk-original-secret' },
+    })
+    fireEvent.click(
+      within(createDialog).getByRole('checkbox', {
+        name: /je comprends que ceci exécute un exécutable non sandboxé/i,
+      }),
+    )
+    fireEvent.click(within(createDialog).getByRole('button', { name: 'Créer la connexion' }))
+    await screen.findByText('fake')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    const editDialog = await screen.findByRole('dialog', { name: /Modifier fake/ })
+    // The dialog never pre-fills a secret — there is none to show back.
+    expect(within(editDialog).getByLabelText('Secret')).toHaveProperty('value', '')
+
+    fireEvent.change(within(editDialog).getByLabelText('Commande'), {
+      target: { value: '/usr/local/bin/mcp-fake' },
+    })
+    fireEvent.click(within(editDialog).getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('fake')).toBeDefined()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('refuses to edit a connection’s settings for a role below admin', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['editor'] })
+    window.history.pushState(null, '', '/mcp-clients')
+
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      expect.stringContaining('admin'),
+    )
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull()
+  })
 })

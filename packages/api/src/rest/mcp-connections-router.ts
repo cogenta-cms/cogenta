@@ -285,13 +285,53 @@ export function createMcpConnectionsRouter(
           if (method === 'PATCH') {
             const body = asRecord(request.body)
             const enabled = body.enabled
-            if (typeof enabled !== 'boolean') {
+            const name = body.name
+            const command = body.command
+            const url = body.url
+            const authKindRaw = body.authKind
+            const secret = body.secret
+            const secretEnvVar = body.secretEnvVar
+            const args = stringArrayOrUndefined(body.args, 'args')
+            const env = stringRecordOrUndefined(body.env, 'env')
+            if (authKindRaw !== undefined && !AUTH_KINDS.includes(authKindRaw as McpAuthKind)) {
               throw invalid(
-                'Nothing to update — send { "enabled": true|false }.',
-                'Send a boolean "enabled".',
+                `"authKind" must be one of ${AUTH_KINDS.join(', ')}.`,
+                'Fix "authKind" and retry.',
               )
             }
-            const updated = await options.connections.setEnabled(id, enabled)
+            const authKind = authKindRaw === undefined ? undefined : (authKindRaw as McpAuthKind)
+
+            let updated: McpConnectionSummary | undefined
+            if (typeof enabled === 'boolean') {
+              updated = await options.connections.setEnabled(id, enabled)
+            }
+            if (
+              typeof name === 'string' ||
+              typeof command === 'string' ||
+              typeof url === 'string' ||
+              args !== undefined ||
+              env !== undefined ||
+              authKind !== undefined ||
+              typeof secret === 'string' ||
+              typeof secretEnvVar === 'string'
+            ) {
+              updated = await options.connections.update(id, {
+                ...(typeof name === 'string' ? { name } : {}),
+                ...(typeof command === 'string' ? { command } : {}),
+                ...(typeof url === 'string' ? { url } : {}),
+                ...(args === undefined ? {} : { args }),
+                ...(env === undefined ? {} : { env }),
+                ...(authKind === undefined ? {} : { authKind }),
+                ...(typeof secret === 'string' ? { secret } : {}),
+                ...(typeof secretEnvVar === 'string' ? { secretEnvVar } : {}),
+              })
+            }
+            if (updated === undefined) {
+              throw invalid(
+                'Nothing to update — send "enabled", "name", "command", "args", "url", "env", "authKind", "secret" and/or "secretEnvVar".',
+                'Send at least one of these fields.',
+              )
+            }
             await notifyMutated()
             return jsonResponse(200, { data: updated })
           }

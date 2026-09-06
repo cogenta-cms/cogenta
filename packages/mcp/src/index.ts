@@ -35,6 +35,7 @@ export type {
   McpConnectionStatus,
   McpConnectionStore,
   McpConnectionSummary,
+  McpConnectionUpdateInput,
   McpDiscoveredTool,
   McpDiscoveryFailure,
   McpDiscoveryResult,

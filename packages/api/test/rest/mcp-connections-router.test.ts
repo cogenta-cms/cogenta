@@ -292,6 +292,80 @@ describe('mcp-connections-router', () => {
     expect(await connections.get(created.id)).toBeUndefined()
   })
 
+  // fiche feedback: a saved connection had no way to change its own
+  // command/args/env/auth/secret without deleting and recreating it.
+  it('PATCH changes command/args/env without touching the saved secret', async () => {
+    const connections = await testStore()
+    const created = await connections.create({
+      name: 'files',
+      transport: 'stdio',
+      command: '/usr/bin/mcp-files',
+      authKind: 'api_key',
+      secret: 'sk-original-secret',
+      confirmUnsandboxed: true,
+    })
+    const router = createMcpConnectionsRouter({ connections })
+
+    const patched = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/mcp-connections/${created.id}`,
+        query: {},
+        body: { command: '/usr/local/bin/mcp-files', args: ['--root', '/srv/data'] },
+      },
+      ADMIN,
+    )
+
+    expect(patched.status).toBe(200)
+    const data = (patched.body as { data: { command: string; args: string[]; hasSecret: boolean } })
+      .data
+    expect(data.command).toBe('/usr/local/bin/mcp-files')
+    expect(data.args).toEqual(['--root', '/srv/data'])
+    expect(data.hasSecret).toBe(true)
+    expect(await connections.decryptSecret(created.id)).toBe('sk-original-secret')
+  })
+
+  it('PATCH refuses anyone below admin', async () => {
+    const connections = await testStore()
+    const created = await connections.create({
+      name: 'files',
+      transport: 'stdio',
+      command: '/usr/bin/mcp-files',
+      confirmUnsandboxed: true,
+    })
+    const router = createMcpConnectionsRouter({ connections })
+
+    const response = await router.handle(
+      {
+        method: 'PATCH',
+        path: `/api/mcp-connections/${created.id}`,
+        query: {},
+        body: { command: '/usr/local/bin/mcp-files' },
+      },
+      EDITOR,
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('PATCH with an empty body is rejected as nothing to update', async () => {
+    const connections = await testStore()
+    const created = await connections.create({
+      name: 'files',
+      transport: 'stdio',
+      command: '/usr/bin/mcp-files',
+      confirmUnsandboxed: true,
+    })
+    const router = createMcpConnectionsRouter({ connections })
+
+    const response = await router.handle(
+      { method: 'PATCH', path: `/api/mcp-connections/${created.id}`, query: {}, body: {} },
+      ADMIN,
+    )
+
+    expect(response.status).toBe(400)
+  })
+
   it('404s a route naming an unknown connection id', async () => {
     const router = createMcpConnectionsRouter({ connections: await testStore() })
     const response = await router.handle(

@@ -1,5 +1,23 @@
 # @cogenta/commerce
 
+## 0.4.0
+
+### Minor Changes
+
+- [`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A tax rule or shipping method could previously only be created or deleted — fixing a typo'd rate, label, or zone meant deleting and recreating it, losing its `createdAt` and (for a shipping method) its `position` among the other methods.
+  
+  - `TaxStore.updateRule()` and `ShippingStore.updateMethod()` (`@cogenta/commerce`) accept a tri-state patch: a field absent from the patch is left exactly as saved, and for the nullable fields (`country`/`region`/`freeOverMinor`/`carrier`) an explicit `null` clears them back to what an absent field already means at creation time.
+  - `PATCH /api/commerce/tax/rules/:id` and `PATCH /api/commerce/shipping/methods/:id` carry the same semantics — still gated on `commerce.catalog.write`, unchanged authorization.
+  - `@cogenta/core` gains the `COMMERCE_TAX_RULE_UNKNOWN` error code for an edit naming an id that was never a rule (shipping reuses the existing `COMMERCE_SHIPPING_METHOD_UNKNOWN`).
+  - Admin: an "Edit" action on each tax rule and shipping method row opens a dialog — pre-filled from the row — that saves through this PATCH path.
+
+### Patch Changes
+
+- [`73827ec`](https://github.com/cogenta-cms/cogenta/commit/73827ec14ed11b7b34e2cfa2138f795790e889e4) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `POST /api/commerce/payment/drivers/:name/test-connection` — the back office's "test connection" probe against a live payment driver — required only `commerce.read`, meaning any signed-in `viewer` could trigger a real `driver.init()`/`health()` call against the site's configured payment credentials on demand. No secret value ever leaked (the response is only `ok`/`message`), but probing a payment gateway live is a money-adjacent action, not a read. It now requires `commerce.payment.settle`, the same permission already gating other money-touching operations — reused rather than adding a seventh permission for one button, matching this package's deliberately coarse six-permission model. `GET .../drivers` (listing configured/testMode status, no probe) is unchanged and still only needs `commerce.read`.
+- Updated dependencies [[`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b)]:
+  - @cogenta/core@0.6.0
+  - @cogenta/channels@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes

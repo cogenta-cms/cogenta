@@ -1,5 +1,18 @@
 # @cogenta/theme-entreprise
 
+## 1.1.0
+
+### Minor Changes
+
+- [`c87bdf8`](https://github.com/cogenta-cms/cogenta/commit/c87bdf8b0f54b945c1c79ea5a18d58b54cb9aab5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/theme-kit`) into the header, styled as `.cg-theme-toggle` in this theme's own forest-green, KPI-section register.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 1.0.0
 
 ### Major Changes

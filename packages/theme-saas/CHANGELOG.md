@@ -1,5 +1,18 @@
 # @cogenta/theme-saas
 
+## 0.3.0
+
+### Minor Changes
+
+- [`98f54ab`](https://github.com/cogenta-cms/cogenta/commit/98f54ab9883d492890251ef7fc3310c83e8fac8b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the new `renderThemeToggle` into the header, styled as `.cg-theme-toggle` in this theme's own pill/border register. Every page now offers a manual light/dark/system control; the CSS to support it already existed.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,18 @@
 # @cogenta/theme-docs
 
+## 0.3.0
+
+### Minor Changes
+
+- [`80ae76d`](https://github.com/cogenta-cms/cogenta/commit/80ae76db6578f34d3292a088b857dcf14c8acf31) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/theme-kit`) into the header, styled to this theme's own icon-button register. Fix a real mobile bug found while verifying it: the header's desktop call-to-action button stayed visible below the 56rem breakpoint because the shared `.cg-action { display: inline-flex }` rule was declared later in the stylesheet than the mobile "hide" rule for `.cg-site-header__action`, winning the cascade tie — this squeezed the site name into wrapping onto a second line that visually overlapped the page content beneath the sticky header. The hide rule now chains the parent class to outrank `.cg-action` regardless of source order, and the site name gets `white-space: nowrap`/`flex-shrink: 0` as a second line of defence.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

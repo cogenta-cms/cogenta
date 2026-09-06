@@ -1,5 +1,50 @@
 # @cogenta/agents
 
+## 0.4.0
+
+### Minor Changes
+
+- [`9da8702`](https://github.com/cogenta-cms/cogenta/commit/9da8702147864416ea2c27f47dd534444999d9da) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `ChatMessage.content` accepts an array of `ChatContentPart` (text/image) in addition to a plain `string` — additive, every existing caller passing a `string` keeps compiling and behaving byte-for-byte identically. `ProviderClient` gains an optional `supportsVision` flag. Implemented in the three real HTTP adapters (`anthropic.ts`, `openai.ts`, `google.ts`, each reporting `supportsVision: true`), which now translate an image part into that vendor's own multimodal wire shape (Anthropic base64 image block, OpenAI `image_url` data URL, Gemini `inlineData`). This is the foundation the upcoming Cogenta Theme Creator agent (L26) uses to hand a model screenshots/mockups a user uploaded alongside text, rather than just filenames.
+
+- [`0c42a6e`](https://github.com/cogenta-cms/cogenta/commit/0c42a6e1459d03f16c281befb36889c3ecac8e7c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A saved provider's model, base URL, and tuning (max output tokens / request timeout / correction attempts) can now be edited from `/admin/providers` without re-entering its API key. Previously the only write path was the top form's full upsert, which requires `apiKey` — since a saved key is never redisplayed, an admin who wanted to raise `maxOutputTokens` on an already-configured provider had no way to do it short of generating a brand-new key and re-pasting it.
+  
+  - `ProviderConfigStore.updateSettings()` (`@cogenta/agents`) now accepts the three tuning fields as a tri-state patch: a key absent from the patch leaves the saved value untouched, an explicit `null` clears it back to the built-in default, and a number sets it. The existing `apiKey`-bearing `upsert()` is unchanged.
+  - `PATCH /api/providers/:provider` (`@cogenta/api`) carries the same tri-state semantics for `maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts` (a present-but-empty field clears to default, matching how `model`/`baseUrl` already behaved) — still admin-only, unchanged authorization.
+  - Admin: a "Modifier" action on each provider row opens a dialog — pre-filled from the row, no API key field anywhere in it — that saves through this PATCH path.
+
+- [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Every hardcoded value that controlled an LLM call's behaviour (output token budget, retry/correction attempts, request timeout) is now a real, admin-configurable property of the provider, editable from `/admin/providers` — never a number guessed in code and shared across every model an operator might configure.
+  
+  An audit of the whole `@cogenta/agents` call surface found the same class of bug independently reproduced and patched in more than one place with a different hardcoded constant each time (theme/skin generation, the generic agent runtime, the delegated-subagent budget, the `assist.*` toolset, the LangGraph loop's per-call timeout) — always the same root cause: a reasoning-tier model (confirmed live against DeepSeek) spends thousands of tokens "thinking" before writing a visible answer, and a fixed ceiling sized for a plain instruct model truncates it to an empty response.
+  
+  - `ProviderClient` gains `maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts` — resolved once per client from the admin's saved provider config (`StoredProviderConfig`, `ProviderConfigInput`), falling back to a built-in default only when unset. `ChatRequest.maxTokens` is now optional; when a caller omits it, the resolved client's own budget applies.
+  - `createAnthropicClient`/`createOpenAiClient`/`createGoogleClient` accept these three as config and apply them to every request and to the per-call HTTP timeout (`requestSignalWithTimeout`).
+  - Every call site that used to hardcode its own `MAX_TOKENS`/`DEFAULT_MAX_ATTEMPTS` (skin generation, the base-theme choice, brief analysis, content-model/demo-content proposals, the generic agent loop, the delegated-subagent tool, the `assist.*` toolset) now defers to the resolved client instead — removing eight separately-guessed numbers, not just the one already fixed for skin generation.
+  - New error code `PROVIDER_TUNING_INVALID` — a saved value outside sane bounds (1-200000 tokens, 1-600000ms, 1-10 attempts) or not a whole number.
+  - Deliberately left as fixed policy, not exposed per provider: the LangGraph loop's tool-call step ceiling (`maxSteps`) and repetition guard (`maxRepeats`), and the theme generator's candidate-count bounds/image-generation dimensions — these are product/orchestration decisions, not a fact about which model an admin chose.
+
+- [`06c6177`](https://github.com/cogenta-cms/cogenta/commit/06c61776844c6d2e2bf5bfca7a1425e32c7d2ed6) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix theme/skin generation failing with "No usable skin could be generated" (or "no candidate passed contract D validation") against a reasoning-tier model.
+  
+  `generateSkin`'s completion budget (`MAX_TOKENS`) was 2000 — enough for the visible JSON answer alone, but a reasoning model (confirmed live against DeepSeek's `deepseek-v4-flash`) spends several thousand tokens "thinking" before ever writing it, and that hidden reasoning counts against the same budget. The call hit `finish_reason: "length"` with an **empty** response before reaching the answer, which `extractJson` reported as "the model did not return a JSON object" — indistinguishable from a real refusal. Raised to 8000, with real headroom rather than the observed minimum. Verified end-to-end against a live DeepSeek key: the exact request that previously produced zero usable candidates now reliably produces two to three.
+
+- [`e421dde`](https://github.com/cogenta-cms/cogenta/commit/e421dde6162a8a8e81f5c4b95ef99efd6af69128) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Seed "Cogenta Theme Creator" as a fifth built-in agent (`ensureBuiltinAgents`), enabled by default. It was built with a full identity and a registered tool (`theme.propose_theme`) but was never actually seeded into `AgentDeclarationStore` — the admin's Agents screen reads from that store, not from `@cogenta/agents-builtin`'s exports directly, so the agent was invisible there regardless of whether an LLM provider was configured. `sideEffects: false` on its only tool means enabling it by default can never do anything unprompted.
+
+- [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `proposeThemeCandidates` (`src/theme-creator/`) — the Theme Creator agent's core logic: pick exactly one installed theme package from a free-text description and optional attachments (documents via `extractDocumentText`, images via a multimodal content block when the provider supports vision), then reuse `generateSkinCandidates` unchanged to fill contract D's skin tokens. Never applies anything. Attachment text travels through `assembleContext`'s `data` channel (R8); an image dropped for lack of vision support is never sent to the model and only ever produces a warning.
+
+- [`df06c56`](https://github.com/cogenta-cms/cogenta/commit/df06c56cf17b17fe7a636e03e712698d895e5db4) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix the Appearance screen (and `theme.propose_theme`) reporting "no LLM provider configured" even after one is set up — two compounding bugs, both real:
+  
+  1. `theme-wiring.ts` resolved a provider **once**, at `cogenta serve` boot, and captured it — a provider registered afterwards through `/admin/providers` never took effect for the rest of that process's life, unlike every other agent's client (which is refreshed live). `resolveThemeProvider` is now called fresh on every request; `SkinGeneratorLike` gains `isAvailable()` so `GET /api/theme`'s `aiAvailable` reflects the live state instead of a snapshot.
+  2. Provider *choice* was a hardcoded `{preferred: 'anthropic', fallback: 'openai'}` guess, duplicating — and never actually reading — the "Cogenta Theme Creator" agent's own admin-configurable `model.preferred`/`model.fallback`. An admin who repointed that agent at a different provider from its own settings screen saw the theme generator keep ignoring the choice. The theme generator and `theme.propose_theme` now both read that agent's live declaration (`THEME_CREATOR_AGENT_NAME`, newly exported from `@cogenta/agents`), falling back to the old hardcoded pair only when no agent record exists (a bare `Site` built by hand, tests included).
+  
+  `ProposeThemeToolOptions.resolveProvider` replaces the old fixed `client`/`model` fields for the same reason — resolved on every `execute()`, not once at tool-registration time.
+
+### Patch Changes
+
+- Updated dependencies [[`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b)]:
+  - @cogenta/core@0.6.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+  - @cogenta/schema@0.4.1
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,60 @@
 # @cogenta/api
 
+## 2.1.0
+
+### Minor Changes
+
+- [`74e07e9`](https://github.com/cogenta-cms/cogenta/commit/74e07e92fda41c0d0d573a59e8bfafdecd48fbfc) Thanks [@georgesmomo](https://github.com/georgesmomo)! - An API key's name, scope, and rate limit can now be changed from `/admin/api-keys` without reissuing its secret. Previously the only write path after creation was "rotate", which mints a fresh secret under the *same* name/scope — there was no way to fix a typo'd name, widen or narrow a key's role scope, or adjust its request quota without rotating (a new secret an integration would need to be given again) or revoking and recreating (losing usage history and continuity).
+  
+  - `ApiKeyStore.update()` (`@cogenta/auth`) accepts a tri-state patch: a field absent from the patch is left exactly as saved, `rateLimitPerMinute: null` clears an explicit quota back to the default, and a value sets it. Never touches the key's secret, prefix, or lifecycle fields (`expiresAt`/`revokedAt`/`supersededBy`) — rotate to change the secret, revoke to end the key.
+  - `PATCH /api/api-keys/:id` (`@cogenta/api`) carries the same tri-state semantics for `name`/`scope`/`rateLimitPerMinute` — still admin-only, unchanged authorization.
+  - Admin: an "Edit" action on each active key's row (disabled once revoked or superseded, same as rotate) opens a dialog — pre-filled from the row — that saves through this PATCH path, never showing or asking for the secret.
+
+- [`cdd004d`](https://github.com/cogenta-cms/cogenta/commit/cdd004d863e6c26f1646fb18081d6a459cbfa3f4) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A saved MCP client connection's command, arguments, environment, URL, auth kind, and secret can now be edited from `/admin/mcp-clients` without deleting and recreating it. Previously the only write paths were `PATCH .../{id}` for `enabled` and `PUT .../{id}/exposed-tools` — changing anything else (a wrong command path, a new environment variable, a rotated secret) meant deleting the connection and losing its already-validated exposed-tool selection.
+  
+  - `McpConnectionStore.update()` (`@cogenta/mcp`) accepts a tri-state patch: a field absent from the patch is left exactly as saved, a given value replaces it. Setting `authKind` back to `"none"` clears the saved secret; a new `secret` re-encrypts and replaces it, otherwise the saved secret is never touched (there is no way to read it back to resend unchanged).
+  - `PATCH /api/mcp-connections/:id` (`@cogenta/api`) now carries `name`/`command`/`args`/`url`/`env`/`authKind`/`secret`/`secretEnvVar` alongside the existing `enabled` — still admin-only, unchanged authorization.
+  - Admin: a "Modifier" action on each connection row opens a dialog — pre-filled from the row, with the secret field always blank (never re-shown) — that saves through this PATCH path.
+
+- [`0c42a6e`](https://github.com/cogenta-cms/cogenta/commit/0c42a6e1459d03f16c281befb36889c3ecac8e7c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A saved provider's model, base URL, and tuning (max output tokens / request timeout / correction attempts) can now be edited from `/admin/providers` without re-entering its API key. Previously the only write path was the top form's full upsert, which requires `apiKey` — since a saved key is never redisplayed, an admin who wanted to raise `maxOutputTokens` on an already-configured provider had no way to do it short of generating a brand-new key and re-pasting it.
+  
+  - `ProviderConfigStore.updateSettings()` (`@cogenta/agents`) now accepts the three tuning fields as a tri-state patch: a key absent from the patch leaves the saved value untouched, an explicit `null` clears it back to the built-in default, and a number sets it. The existing `apiKey`-bearing `upsert()` is unchanged.
+  - `PATCH /api/providers/:provider` (`@cogenta/api`) carries the same tri-state semantics for `maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts` (a present-but-empty field clears to default, matching how `model`/`baseUrl` already behaved) — still admin-only, unchanged authorization.
+  - Admin: a "Modifier" action on each provider row opens a dialog — pre-filled from the row, no API key field anywhere in it — that saves through this PATCH path.
+
+- [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Every hardcoded value that controlled an LLM call's behaviour (output token budget, retry/correction attempts, request timeout) is now a real, admin-configurable property of the provider, editable from `/admin/providers` — never a number guessed in code and shared across every model an operator might configure.
+  
+  An audit of the whole `@cogenta/agents` call surface found the same class of bug independently reproduced and patched in more than one place with a different hardcoded constant each time (theme/skin generation, the generic agent runtime, the delegated-subagent budget, the `assist.*` toolset, the LangGraph loop's per-call timeout) — always the same root cause: a reasoning-tier model (confirmed live against DeepSeek) spends thousands of tokens "thinking" before writing a visible answer, and a fixed ceiling sized for a plain instruct model truncates it to an empty response.
+  
+  - `ProviderClient` gains `maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts` — resolved once per client from the admin's saved provider config (`StoredProviderConfig`, `ProviderConfigInput`), falling back to a built-in default only when unset. `ChatRequest.maxTokens` is now optional; when a caller omits it, the resolved client's own budget applies.
+  - `createAnthropicClient`/`createOpenAiClient`/`createGoogleClient` accept these three as config and apply them to every request and to the per-call HTTP timeout (`requestSignalWithTimeout`).
+  - Every call site that used to hardcode its own `MAX_TOKENS`/`DEFAULT_MAX_ATTEMPTS` (skin generation, the base-theme choice, brief analysis, content-model/demo-content proposals, the generic agent loop, the delegated-subagent tool, the `assist.*` toolset) now defers to the resolved client instead — removing eight separately-guessed numbers, not just the one already fixed for skin generation.
+  - New error code `PROVIDER_TUNING_INVALID` — a saved value outside sane bounds (1-200000 tokens, 1-600000ms, 1-10 attempts) or not a whole number.
+  - Deliberately left as fixed policy, not exposed per provider: the LangGraph loop's tool-call step ceiling (`maxSteps`) and repetition guard (`maxRepeats`), and the theme generator's candidate-count bounds/image-generation dimensions — these are product/orchestration decisions, not a fact about which model an admin chose.
+
+- [`df06c56`](https://github.com/cogenta-cms/cogenta/commit/df06c56cf17b17fe7a636e03e712698d895e5db4) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix the Appearance screen (and `theme.propose_theme`) reporting "no LLM provider configured" even after one is set up — two compounding bugs, both real:
+  
+  1. `theme-wiring.ts` resolved a provider **once**, at `cogenta serve` boot, and captured it — a provider registered afterwards through `/admin/providers` never took effect for the rest of that process's life, unlike every other agent's client (which is refreshed live). `resolveThemeProvider` is now called fresh on every request; `SkinGeneratorLike` gains `isAvailable()` so `GET /api/theme`'s `aiAvailable` reflects the live state instead of a snapshot.
+  2. Provider *choice* was a hardcoded `{preferred: 'anthropic', fallback: 'openai'}` guess, duplicating — and never actually reading — the "Cogenta Theme Creator" agent's own admin-configurable `model.preferred`/`model.fallback`. An admin who repointed that agent at a different provider from its own settings screen saw the theme generator keep ignoring the choice. The theme generator and `theme.propose_theme` now both read that agent's live declaration (`THEME_CREATOR_AGENT_NAME`, newly exported from `@cogenta/agents`), falling back to the old hardcoded pair only when no agent record exists (a bare `Site` built by hand, tests included).
+  
+  `ProposeThemeToolOptions.resolveProvider` replaces the old fixed `client`/`model` fields for the same reason — resolved on every `execute()`, not once at tool-registration time.
+
+- [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Widen `POST /api/theme/generate` (theme-router.ts) for the Theme Creator (L26 task 5): the request body may now carry optional `attachments` (`{filename, mimeType, contentBase64}`, decoded to bytes here, the same place `assistant-router.ts` decodes its own uploads) and `baseline` (`{themeName}`, the server resolves the actual tokens itself), and each returned candidate may carry `themeName`/`chromeInput`, plus a top-level `warnings` array. Purely additive — a `{description}`-only body behaves byte-for-byte as before. `SkinGeneratorLike.generate`'s input/output widened to match.
+
+### Patch Changes
+
+- Updated dependencies [[`74e07e9`](https://github.com/cogenta-cms/cogenta/commit/74e07e92fda41c0d0d573a59e8bfafdecd48fbfc), [`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`cdd004d`](https://github.com/cogenta-cms/cogenta/commit/cdd004d863e6c26f1646fb18081d6a459cbfa3f4), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b)]:
+  - @cogenta/auth@0.5.0
+  - @cogenta/core@0.6.0
+  - @cogenta/mcp@0.3.0
+  - @cogenta/export@0.2.1
+  - @cogenta/analytics@0.3.1
+  - @cogenta/blocks@1.0.1
+  - @cogenta/channels@0.3.1
+  - @cogenta/forms@0.2.1
+  - @cogenta/schema@0.4.1
+  - @cogenta/seo@0.3.1
+
 ## 2.0.0
 
 ### Major Changes

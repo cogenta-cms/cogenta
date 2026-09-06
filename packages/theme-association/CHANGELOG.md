@@ -1,5 +1,18 @@
 # @cogenta/theme-association
 
+## 0.3.0
+
+### Minor Changes
+
+- [`87ae89a`](https://github.com/cogenta-cms/cogenta/commit/87ae89ab5e3fdb5197da821ffedc53a2471349db) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/theme-kit`) into the header. Fix a real layout bug found while verifying it: `.cg-impact__items`'s fixed `repeat(4, 1fr)` desktop column count, reused by an event's own "When / Where" panel (only two items), left two ghost columns of empty space — switched to `repeat(auto-fit, minmax(9rem, 1fr))` so two items stretch to fill the row exactly as four items already did.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,55 @@
 # @cogenta/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- [`87f6e5d`](https://github.com/cogenta-cms/cogenta/commit/87f6e5dc6fb250067d1c8bc3bec7c4a10da93639) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `POST /api/theme/gallery-preview` accepts an optional `tokens` field: preview a Theme Creator candidate's own skin against a theme this site is not currently running — the one combination `/api/theme/preview` (locked to the active theme) and the gallery's own default-skin render (locked to each theme's on-disk default) previously had no way to express together. Omitting `tokens` keeps the exact previous behaviour.
+
+- [`df06c56`](https://github.com/cogenta-cms/cogenta/commit/df06c56cf17b17fe7a636e03e712698d895e5db4) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix the Appearance screen (and `theme.propose_theme`) reporting "no LLM provider configured" even after one is set up — two compounding bugs, both real:
+  
+  1. `theme-wiring.ts` resolved a provider **once**, at `cogenta serve` boot, and captured it — a provider registered afterwards through `/admin/providers` never took effect for the rest of that process's life, unlike every other agent's client (which is refreshed live). `resolveThemeProvider` is now called fresh on every request; `SkinGeneratorLike` gains `isAvailable()` so `GET /api/theme`'s `aiAvailable` reflects the live state instead of a snapshot.
+  2. Provider *choice* was a hardcoded `{preferred: 'anthropic', fallback: 'openai'}` guess, duplicating — and never actually reading — the "Cogenta Theme Creator" agent's own admin-configurable `model.preferred`/`model.fallback`. An admin who repointed that agent at a different provider from its own settings screen saw the theme generator keep ignoring the choice. The theme generator and `theme.propose_theme` now both read that agent's live declaration (`THEME_CREATOR_AGENT_NAME`, newly exported from `@cogenta/agents`), falling back to the old hardcoded pair only when no agent record exists (a bare `Site` built by hand, tests included).
+  
+  `ProposeThemeToolOptions.resolveProvider` replaces the old fixed `client`/`model` fields for the same reason — resolved on every `execute()`, not once at tool-registration time.
+
+### Patch Changes
+
+- [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` now emits the shared theme-toggle script once in `<head>`, right after the `color-scheme` meta tag, on every page shell (entry pages, generic pages, the theme gallery preview) — the host's job per contract D, not a theme's.
+
+- [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` swaps `POST /api/theme/generate`'s implementation to call `@cogenta/agents`' `proposeThemeCandidates` (theme choice + skin tokens) instead of `generateSkinCandidates` directly, threading through the new `attachments`/`baseline` fields. Registers the Theme Creator's `theme.propose_theme` tool (`@cogenta/agents-builtin`, new dependency) into the live agent tool registry whenever an LLM provider is configured — absent otherwise (R2).
+- Updated dependencies [[`74e07e9`](https://github.com/cogenta-cms/cogenta/commit/74e07e92fda41c0d0d573a59e8bfafdecd48fbfc), [`73827ec`](https://github.com/cogenta-cms/cogenta/commit/73827ec14ed11b7b34e2cfa2138f795790e889e4), [`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`cdd004d`](https://github.com/cogenta-cms/cogenta/commit/cdd004d863e6c26f1646fb18081d6a459cbfa3f4), [`9da8702`](https://github.com/cogenta-cms/cogenta/commit/9da8702147864416ea2c27f47dd534444999d9da), [`0c42a6e`](https://github.com/cogenta-cms/cogenta/commit/0c42a6e1459d03f16c281befb36889c3ecac8e7c), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b), [`06c6177`](https://github.com/cogenta-cms/cogenta/commit/06c61776844c6d2e2bf5bfca7a1425e32c7d2ed6), [`87ae89a`](https://github.com/cogenta-cms/cogenta/commit/87ae89ab5e3fdb5197da821ffedc53a2471349db), [`74b05dc`](https://github.com/cogenta-cms/cogenta/commit/74b05dc34d5dcaac3c87c92a7735246e3c68aaa2), [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61), [`e421dde`](https://github.com/cogenta-cms/cogenta/commit/e421dde6162a8a8e81f5c4b95ef99efd6af69128), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768), [`80ae76d`](https://github.com/cogenta-cms/cogenta/commit/80ae76db6578f34d3292a088b857dcf14c8acf31), [`ccd5dd3`](https://github.com/cogenta-cms/cogenta/commit/ccd5dd3e7bc148ddbfd0c6ade2c9d09df5e82b10), [`c87bdf8`](https://github.com/cogenta-cms/cogenta/commit/c87bdf8b0f54b945c1c79ea5a18d58b54cb9aab5), [`bb04899`](https://github.com/cogenta-cms/cogenta/commit/bb04899e5f4d041efcf9c6a4ceaf3033fe897415), [`2b1c836`](https://github.com/cogenta-cms/cogenta/commit/2b1c8363fbc399be24f8c2eddec3be115d1a5c1a), [`df06c56`](https://github.com/cogenta-cms/cogenta/commit/df06c56cf17b17fe7a636e03e712698d895e5db4), [`41336c2`](https://github.com/cogenta-cms/cogenta/commit/41336c23787a1d07f1bca14d760c684878157c8e), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768), [`98f54ab`](https://github.com/cogenta-cms/cogenta/commit/98f54ab9883d492890251ef7fc3310c83e8fac8b), [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/auth@0.5.0
+  - @cogenta/api@2.1.0
+  - @cogenta/commerce@0.4.0
+  - @cogenta/core@0.6.0
+  - @cogenta/mcp@0.3.0
+  - @cogenta/agents@0.4.0
+  - @cogenta/theme-association@0.3.0
+  - @cogenta/theme-blog@0.3.0
+  - @cogenta/theme-canonical@1.1.0
+  - @cogenta/agents-builtin@0.3.0
+  - @cogenta/theme-docs@0.3.0
+  - @cogenta/theme-ecommerce@1.1.0
+  - @cogenta/theme-entreprise@1.1.0
+  - @cogenta/theme-magazine@1.1.0
+  - @cogenta/theme-portfolio@1.1.0
+  - @cogenta/theme-restaurant@0.3.0
+  - @cogenta/theme-saas@0.3.0
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/export@0.2.1
+  - @cogenta/import@0.2.1
+  - @cogenta/analytics@0.3.1
+  - @cogenta/blocks@1.0.1
+  - @cogenta/channels@0.3.1
+  - @cogenta/comments@0.2.1
+  - @cogenta/forms@0.2.1
+  - @cogenta/observability@0.2.1
+  - @cogenta/plugins@0.3.1
+  - @cogenta/render@0.2.1
+  - @cogenta/schema@0.4.1
+  - @cogenta/seo@0.3.1
+
 ## 0.5.0
 
 ### Minor Changes

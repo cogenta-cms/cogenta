@@ -1,5 +1,18 @@
 # @cogenta/theme-magazine
 
+## 1.1.0
+
+### Minor Changes
+
+- [`bb04899`](https://github.com/cogenta-cms/cogenta/commit/bb04899e5f4d041efcf9c6a4ceaf3033fe897415) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/theme-kit`) into the masthead's top strip, next to today's date — the one row that renders on every page regardless of whether the rubric row below it carries a nav or a header action. Styled as `.cg-theme-toggle` in this theme's own warm-paper register (outlined icon button, not the underlined `.cg-action` link style).
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 1.0.0
 
 ### Major Changes

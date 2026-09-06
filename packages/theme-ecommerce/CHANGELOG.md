@@ -1,5 +1,18 @@
 # @cogenta/theme-ecommerce
 
+## 1.1.0
+
+### Minor Changes
+
+- [`ccd5dd3`](https://github.com/cogenta-cms/cogenta/commit/ccd5dd3e7bc148ddbfd0c6ade2c9d09df5e82b10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/theme-kit`) into the header, after the primary nav, inside the same header bar — it survives the CSS-only mobile collapse without needing an entry in `hasMenu`. Styled as `.cg-theme-toggle` in this theme's own magenta-accented register.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 1.0.0
 
 ### Major Changes

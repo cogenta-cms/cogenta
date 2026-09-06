@@ -1,5 +1,50 @@
 # create-cogenta
 
+## 0.4.0
+
+### Minor Changes
+
+- [`c68c2c1`](https://github.com/cogenta-cms/cogenta/commit/c68c2c1ffa77cebda7c552a76a4df8df6c108a82) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Seven of the ten blueprints now seed real, concrete photography for their most visually
+  important slots — restaurant dishes, store products, association events, blog and
+  portfolio covers, testimonial portraits, magazine section imagery — instead of only the
+  abstract flat compositions `demo-art` renders. `DemoMediaSpec.photo` names a bundled JPG
+  under `assets/photos/`, preferred over the procedural `spec` when present; `demo-art`
+  remains the fallback (and stays the only source for `documentation` and `store`'s category
+  tiles, which have nothing specific to photograph). The photographs were generated once,
+  offline, with a user-supplied Replicate API key that no longer exists — this package has
+  no runtime dependency on Replicate or any other image API, R1/R2/R9 unaffected.
+
+- [`80ae76d`](https://github.com/cogenta-cms/cogenta/commit/80ae76db6578f34d3292a088b857dcf14c8acf31) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `documentation` blueprint's ten seeded doc pages read like an actual reference site now — substantially longer, specific prose (real requirements, a fuller config example, health checks, permission gates, plugin isolation, more CLI commands and flags) instead of the two-paragraph placeholders every page carried before. Two of the ten pages ("Content model", "Themes") gain a decorative illustration via the existing zero-dependency `demo-art` generator (`DemoMediaSpec`/`seedDemoMedia`, no new photography and no external API — this blueprint has neither) — `DOCUMENTATION_MEDIA_SPECS` grows from one entry to three, so `scaffoldSite`'s `mediaSeeded` count for this blueprint changes from 1 to 3.
+
+- [`98f54ab`](https://github.com/cogenta-cms/cogenta/commit/98f54ab9883d492890251ef7fc3310c83e8fac8b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `saas` blueprint's feature, "about" and pricing copy reads like a real product marketing site now — substantial, specific prose instead of one-sentence placeholders. `proseParagraph` gains support for multi-paragraph prose (an array of strings, one `richTextParagraph` per entry), used by the richer "about" page.
+
+### Patch Changes
+
+- [`87ae89a`](https://github.com/cogenta-cms/cogenta/commit/87ae89ab5e3fdb5197da821ffedc53a2471349db) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `association` blueprint's program/event narratives and about copy read like Bright Futures' own reports now — substantial, specific prose instead of generic placeholders. No slug, entry count, or field name changed.
+
+- [`74b05dc`](https://github.com/cogenta-cms/cogenta/commit/74b05dc34d5dcaac3c87c92a7735246e3c68aaa2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `blog` blueprint's tag labels are title-cased (`Process`, not `process`), matching the category labels beside them on an archive page, and the About page gains a decorative avatar image via the existing procedural generator — it previously had two paragraphs of text and nothing else.
+
+- [`bb04899`](https://github.com/cogenta-cms/cogenta/commit/bb04899e5f4d041efcf9c6a4ceaf3033fe897415) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Rewrite the `magazine` blueprint's demo content: every one of the twelve seeded articles is now a substantial, multi-paragraph piece in a consistent editorial voice (three articles that previously carried meta placeholder text about the CMS itself now cover their actual subject), and the `about` page gains a masthead-style image plus a paragraph naming what the fictional paper actually covers. No slug, entry count, or field name changed.
+
+- [`2b1c836`](https://github.com/cogenta-cms/cogenta/commit/2b1c8363fbc399be24f8c2eddec3be115d1a5c1a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `portfolio` blueprint's seeded project narratives and about copy read like Studio Marlow's own case studies now — substantial, specific prose instead of one-line placeholders. No slug, entry count, or field name changed.
+
+- [`41336c2`](https://github.com/cogenta-cms/cogenta/commit/41336c23787a1d07f1bca14d760c684878157c8e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `restaurant` blueprint's twelve dish descriptions read like a real menu now — specific, sensory prose instead of a five-word ingredient list. No slug, entry count, or field name changed.
+
+- [`ccd5dd3`](https://github.com/cogenta-cms/cogenta/commit/ccd5dd3e7bc148ddbfd0c6ade2c9d09df5e82b10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `store` blueprint's twelve seeded product descriptions read like real product copy now — specific, sensory prose instead of a short generic sentence. No slug, entry count, or field name changed.
+
+- [`c87bdf8`](https://github.com/cogenta-cms/cogenta/commit/c87bdf8b0f54b945c1c79ea5a18d58b54cb9aab5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Rewrites Northfield Consulting's B2B copy across the vitrine blueprint — the hero headline, service descriptions and case-study-style body text read as substantial, specific prose instead of generic placeholders. No slug, entry count, or field name changed.
+- Updated dependencies [[`74e07e9`](https://github.com/cogenta-cms/cogenta/commit/74e07e92fda41c0d0d573a59e8bfafdecd48fbfc), [`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`87f6e5d`](https://github.com/cogenta-cms/cogenta/commit/87f6e5dc6fb250067d1c8bc3bec7c4a10da93639), [`cdd004d`](https://github.com/cogenta-cms/cogenta/commit/cdd004d863e6c26f1646fb18081d6a459cbfa3f4), [`9da8702`](https://github.com/cogenta-cms/cogenta/commit/9da8702147864416ea2c27f47dd534444999d9da), [`0c42a6e`](https://github.com/cogenta-cms/cogenta/commit/0c42a6e1459d03f16c281befb36889c3ecac8e7c), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b), [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61), [`06c6177`](https://github.com/cogenta-cms/cogenta/commit/06c61776844c6d2e2bf5bfca7a1425e32c7d2ed6), [`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61), [`e421dde`](https://github.com/cogenta-cms/cogenta/commit/e421dde6162a8a8e81f5c4b95ef99efd6af69128), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768), [`df06c56`](https://github.com/cogenta-cms/cogenta/commit/df06c56cf17b17fe7a636e03e712698d895e5db4), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768)]:
+  - @cogenta/auth@0.5.0
+  - @cogenta/api@2.1.0
+  - @cogenta/core@0.6.0
+  - @cogenta/cli@0.6.0
+  - @cogenta/agents@0.4.0
+  - @cogenta/theme-canonical@1.1.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/comments@0.2.1
+  - @cogenta/render@0.2.1
+  - @cogenta/schema@0.4.1
+
 ## 0.3.0
 
 ### Minor Changes

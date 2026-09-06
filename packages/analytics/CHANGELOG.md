@@ -1,5 +1,12 @@
 # @cogenta/analytics
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b)]:
+  - @cogenta/core@0.6.0
+
 ## 0.3.0
 
 ### Minor Changes

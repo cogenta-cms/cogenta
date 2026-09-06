@@ -1,5 +1,18 @@
 # @cogenta/theme-blog
 
+## 0.3.0
+
+### Minor Changes
+
+- [`74b05dc`](https://github.com/cogenta-cms/cogenta/commit/74b05dc34d5dcaac3c87c92a7735246e3c68aaa2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/theme-kit`) into the header, after both the desktop and mobile nav. Fix a real layout bug found while verifying it: `.cg-prose` (the reading column every article and static page uses) never cleared a preceding floated `mediaFigure` (e.g. an "About" page's aligned author photo), so the auto-centered column could wrap unpredictably beside the float instead of starting clear below it.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,14 @@
 # @cogenta/plugins
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`9da8702`](https://github.com/cogenta-cms/cogenta/commit/9da8702147864416ea2c27f47dd534444999d9da), [`0c42a6e`](https://github.com/cogenta-cms/cogenta/commit/0c42a6e1459d03f16c281befb36889c3ecac8e7c), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b), [`06c6177`](https://github.com/cogenta-cms/cogenta/commit/06c61776844c6d2e2bf5bfca7a1425e32c7d2ed6), [`e421dde`](https://github.com/cogenta-cms/cogenta/commit/e421dde6162a8a8e81f5c4b95ef99efd6af69128), [`76c000f`](https://github.com/cogenta-cms/cogenta/commit/76c000f12a5200d0664cc904bf52b90343da0768), [`df06c56`](https://github.com/cogenta-cms/cogenta/commit/df06c56cf17b17fe7a636e03e712698d895e5db4)]:
+  - @cogenta/core@0.6.0
+  - @cogenta/agents@0.4.0
+  - @cogenta/render@0.2.1
+
 ## 0.3.0
 
 ### Minor Changes

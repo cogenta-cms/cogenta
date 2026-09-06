@@ -1,5 +1,21 @@
 # @cogenta/auth
 
+## 0.5.0
+
+### Minor Changes
+
+- [`74e07e9`](https://github.com/cogenta-cms/cogenta/commit/74e07e92fda41c0d0d573a59e8bfafdecd48fbfc) Thanks [@georgesmomo](https://github.com/georgesmomo)! - An API key's name, scope, and rate limit can now be changed from `/admin/api-keys` without reissuing its secret. Previously the only write path after creation was "rotate", which mints a fresh secret under the *same* name/scope — there was no way to fix a typo'd name, widen or narrow a key's role scope, or adjust its request quota without rotating (a new secret an integration would need to be given again) or revoking and recreating (losing usage history and continuity).
+  
+  - `ApiKeyStore.update()` (`@cogenta/auth`) accepts a tri-state patch: a field absent from the patch is left exactly as saved, `rateLimitPerMinute: null` clears an explicit quota back to the default, and a value sets it. Never touches the key's secret, prefix, or lifecycle fields (`expiresAt`/`revokedAt`/`supersededBy`) — rotate to change the secret, revoke to end the key.
+  - `PATCH /api/api-keys/:id` (`@cogenta/api`) carries the same tri-state semantics for `name`/`scope`/`rateLimitPerMinute` — still admin-only, unchanged authorization.
+  - Admin: an "Edit" action on each active key's row (disabled once revoked or superseded, same as rotate) opens a dialog — pre-filled from the row — that saves through this PATCH path, never showing or asking for the secret.
+
+### Patch Changes
+
+- Updated dependencies [[`b85ce4e`](https://github.com/cogenta-cms/cogenta/commit/b85ce4edad72ff065cd63c852a9f42aeefc5ab9a), [`bde02b5`](https://github.com/cogenta-cms/cogenta/commit/bde02b518f98a8d4cbc58544ea809c658b8dee7b)]:
+  - @cogenta/core@0.6.0
+  - @cogenta/schema@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes

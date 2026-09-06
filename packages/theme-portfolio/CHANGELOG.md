@@ -1,5 +1,18 @@
 # @cogenta/theme-portfolio
 
+## 1.1.0
+
+### Minor Changes
+
+- [`2b1c836`](https://github.com/cogenta-cms/cogenta/commit/2b1c8363fbc399be24f8c2eddec3be115d1a5c1a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Wire the shared `renderThemeToggle` (`@cogenta/theme-kit`) into the header, after the nav/mobile-menu pair, styled as `.cg-theme-toggle` in this theme's own hairline-bordered, sharp-cornered register (not canonical's pill button). Every page now offers a manual light/dark/system control; the tri-state CSS to support it already existed in `tokens.css`.
+
+### Patch Changes
+
+- Updated dependencies [[`e6e0c55`](https://github.com/cogenta-cms/cogenta/commit/e6e0c55fcd5750d9b537825b454653a96cafcb61)]:
+  - @cogenta/theme-kit@0.3.0
+  - @cogenta/blocks@1.0.1
+  - @cogenta/render@0.2.1
+
 ## 1.0.0
 
 ### Major Changes

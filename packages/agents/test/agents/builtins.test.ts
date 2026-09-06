@@ -8,6 +8,7 @@ import {
   SECURITY_AGENT_NAME,
   SITE_MONITOR_AGENT_NAME,
   SUPERAGENT_NAME,
+  THEME_CREATOR_AGENT_NAME,
 } from '../../src/agents/builtins.js'
 import type { AgentDeclarationStore } from '../../src/agents/store.js'
 import { createFileAgentDeclarationStore } from '../../src/agents/store.js'
@@ -25,7 +26,7 @@ afterEach(async () => {
 })
 
 describe('ensureBuiltinAgents', () => {
-  it('seeds the superagent enabled, and the three examples disabled', async () => {
+  it('seeds the superagent and the theme creator enabled, and the three examples disabled', async () => {
     await ensureBuiltinAgents(store)
     const byName = new Map((await store.list()).map((agent) => [agent.name, agent]))
 
@@ -43,6 +44,9 @@ describe('ensureBuiltinAgents', () => {
       'content.list',
       'redirects.create',
     ])
+    expect(byName.get(THEME_CREATOR_AGENT_NAME)?.enabled).toBe(true)
+    expect(byName.get(THEME_CREATOR_AGENT_NAME)?.builtin).toBe(true)
+    expect(byName.get(THEME_CREATOR_AGENT_NAME)?.tools).toEqual(['theme.propose_theme'])
   })
 
   it('is idempotent — does not duplicate or reset an already-seeded, edited agent', async () => {
@@ -85,8 +89,8 @@ describe('ensureBuiltinAgents', () => {
     expect(all.find((agent) => agent.name === SECURITY_AGENT_NAME)?.tools).toEqual(['deps.scan'])
   })
 
-  it('only ever seeds exactly four agents', async () => {
+  it('only ever seeds exactly five agents', async () => {
     await ensureBuiltinAgents(store)
-    expect(await store.list()).toHaveLength(4)
+    expect(await store.list()).toHaveLength(5)
   })
 })

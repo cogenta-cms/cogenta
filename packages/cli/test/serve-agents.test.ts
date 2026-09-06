@@ -118,7 +118,7 @@ afterEach(async () => {
 })
 
 describe('cogenta serve — /api/agents with no LLM provider configured (R2)', () => {
-  it('lists the four seeded built-ins, the superagent enabled, the three examples disabled', async () => {
+  it('lists the five seeded built-ins, the superagent and theme creator enabled, the three examples disabled', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
@@ -136,13 +136,17 @@ describe('cogenta serve — /api/agents with no LLM provider configured (R2)', (
       data: readonly { name: string; enabled: boolean; builtin: boolean }[]
     }
     // L22 task 3 adds a fourth built-in, "Site Monitor" — disabled by
-    // default, same as the other two examples.
-    expect(body.data).toHaveLength(4)
+    // default, same as the other two examples. L26 task 5 adds a fifth,
+    // "Cogenta Theme Creator" — enabled by default like the superagent,
+    // since sideEffects: false on its only tool means it can never do
+    // anything unprompted or destructive even when idle.
+    expect(body.data).toHaveLength(5)
     const byName = new Map(body.data.map((a) => [a.name, a]))
     expect(byName.get('Cogenta Agent')).toMatchObject({ enabled: true, builtin: true })
     expect(byName.get('Security Scanner')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Content Watch')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Site Monitor')).toMatchObject({ enabled: false, builtin: true })
+    expect(byName.get('Cogenta Theme Creator')).toMatchObject({ enabled: true, builtin: true })
   })
 
   it('refuses to run — with a code the admin can explain — before any network call is possible', async () => {

@@ -37,6 +37,7 @@ export const SUPERAGENT_NAME = 'Cogenta Agent'
 export const SECURITY_AGENT_NAME = 'Security Scanner'
 export const CONTENT_WATCH_AGENT_NAME = 'Content Watch'
 export const SITE_MONITOR_AGENT_NAME = 'Site Monitor'
+export const THEME_CREATOR_AGENT_NAME = 'Cogenta Theme Creator'
 
 /** Passed to `AgentDeclarationInput.model` — every seed prefers the same provider/model names an operator is most likely to configure first; `agents/orchestrator.ts` never fails to resolve a provider just because the *name* differs from what the site has enabled, it only needs `providers/store.ts` to have configured at least one. */
 const DEFAULT_MODEL = { preferred: 'anthropic', fallback: 'openai' } as const
@@ -134,6 +135,24 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
       budget: { tokensPerDay: 50_000, callsPerHour: 10 },
       triggers: [{ on: 'schedule', cron: '0 7 * * *' }],
       enabled: false,
+    },
+    {
+      name: THEME_CREATOR_AGENT_NAME,
+      identity: {
+        role: 'Designs and adjusts this site’s visual theme from a description and, optionally, attached files (documents, screenshots) — the Appearance screen’s theme generator workshop talks to this agent, not the other way around.',
+        objectives: [
+          'Read the brief and any attachments, then call theme.propose_theme with them.',
+          'Pick the base theme from the packages this instance actually ships — never invent one.',
+          'Produce contract D skin tokens only, never raw HTML or CSS.',
+          'Propose 1-3 candidates and stop — this tool never applies anything itself (sideEffects: false); an admin activates a candidate from the workshop.',
+        ],
+        style: 'Concrete design rationale, one sentence per candidate, no filler.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['theme.propose_theme'],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 100_000, callsPerHour: 20 },
+      enabled: true,
     },
   ]
 }

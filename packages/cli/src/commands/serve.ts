@@ -8,6 +8,8 @@ import {
   createFilePromptTemplateStore,
   ensureBuiltinPromptTemplates,
   type PromptTemplateStore,
+  type ProviderClient,
+  type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
 import {
   type AnalyticsStore,
@@ -377,7 +379,12 @@ import {
   type SiteIdentityMedia,
   STYLESHEET_PATH,
 } from './theme-render.js'
-import { computeEffectiveStyles, computePreviewStyles, createThemeWiring } from './theme-wiring.js'
+import {
+  computeEffectiveStyles,
+  computePreviewStyles,
+  createThemeCreatorToolWiring,
+  createThemeWiring,
+} from './theme-wiring.js'
 import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
@@ -1083,6 +1090,20 @@ interface AssembleSiteOptions {
   /** Fiche 14. Absent only in a test that does not care about appearance. */
   readonly theme?: ThemeRouterOptions
   /**
+   * L26 task 5 — the ingredients `theme.propose_theme`
+   * (`@cogenta/agents-builtin`) needs at wiring time, built by
+   * `createThemeCreatorToolWiring` (`theme-wiring.ts`) from the exact same
+   * `config.llm`/`availableThemes()` `theme` above already resolved its own
+   * `generator` from. Absent whenever no LLM provider is configured (R2) —
+   * the tool is then simply not registered in `buildAgentRuntime`'s tool
+   * registry.
+   */
+  readonly themeCreatorTools?: {
+    readonly client: ProviderClient
+    readonly model: string
+    readonly availableThemes: readonly ThemeCreatorTargetTheme[]
+  }
+  /**
    * Resizes and re-encodes images at upload (L10 task 5).
    *
    * `null` when no image driver loads on this host: uploads still work and
@@ -1783,6 +1804,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           collections,
           notFoundLog,
           redirects,
+          // L26 task 5 — "Cogenta Theme Creator"'s tool. Absent, exactly
+          // like `options.theme?.generator`, whenever no LLM provider is
+          // configured.
+          ...(options.themeCreatorTools === undefined
+            ? {}
+            : { themeCreator: options.themeCreatorTools }),
         })
   if (agentsRuntime !== undefined) logger.info(agentsRuntime.summary)
 
@@ -6104,6 +6131,19 @@ export async function runServe(options: ServeOptions): Promise<number> {
     },
   })
 
+  // L26 task 5 — shared ingredients for `theme`'s own AI `generator` and for
+  // `theme.propose_theme`'s registration below, resolved once from the same
+  // `config.llm`/`availableThemes()` (never a second, independently-built
+  // provider).
+  const themeWiringOptions = {
+    projectRoot,
+    db: selection.instance,
+    config: loaded.config,
+    development: options.development ?? false,
+    readOnly: options.readOnly ?? false,
+  }
+  const themeCreatorTools = await createThemeCreatorToolWiring(themeWiringOptions)
+
   const site = await assembleSite({
     db: selection.instance,
     assistant,
@@ -6123,13 +6163,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     themeCss,
     themeCssFor,
-    theme: await createThemeWiring({
-      projectRoot,
-      db: selection.instance,
-      config: loaded.config,
-      development: options.development ?? false,
-      readOnly: options.readOnly ?? false,
-    }),
+    theme: await createThemeWiring(themeWiringOptions),
+    // L26 task 5 — "Cogenta Theme Creator"'s tool, resolved from the exact
+    // same `config.llm`/`availableThemes()` `theme` above already used for
+    // its own `generator`. Absent (no LLM provider) means `undefined`, and
+    // `theme.propose_theme` is then simply not registered (R2).
+    ...(themeCreatorTools === undefined ? {} : { themeCreatorTools }),
     images: images?.processor ?? null,
     security: loaded.config.security,
     notFoundLog: loaded.config.notFoundLog,

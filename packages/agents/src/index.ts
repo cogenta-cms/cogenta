@@ -483,6 +483,15 @@ export { runSubagent } from './subagents/run-subagent.js'
 export type { AgentToolsDeclaration } from './subagents/types.js'
 export { validateSubagentTools } from './subagents/validate.js'
 export type {
+  ProposeThemeCandidatesInput,
+  ProposeThemeCandidatesResult,
+  ThemeCreatorAttachment,
+  ThemeCreatorCandidate,
+  ThemeCreatorChromeInput,
+  ThemeCreatorTargetTheme,
+} from './theme-creator/propose-theme.js'
+export { proposeThemeCandidates } from './theme-creator/propose-theme.js'
+export type {
   AgentDelegateInput,
   AgentDelegateOutput,
   AgentDelegateToolOptions,

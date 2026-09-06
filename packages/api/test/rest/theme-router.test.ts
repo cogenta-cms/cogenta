@@ -423,6 +423,155 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
     expect(response.status).toBe(400)
     expect(called).toBe(false)
   })
+
+  it('stays byte-for-byte identical for a {description}-only body (L26 task 5, additive)', async () => {
+    let receivedInput: unknown
+    const r = router({
+      generator: {
+        async generate(input) {
+          receivedInput = input
+          return {
+            ok: true,
+            candidates: [
+              { id: 'editorial', label: 'Warm editorial', rationale: 'warm', tokens: FILE_TOKENS },
+            ],
+          }
+        },
+      },
+    })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/generate',
+        query: {},
+        body: { description: 'sober, warm, paper-like' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    // The generator saw exactly what it always saw — no attachments/baseline key at all.
+    expect(receivedInput).toEqual({ description: 'sober, warm, paper-like' })
+    const body = response.body as { data: { candidates: readonly unknown[]; warnings?: unknown } }
+    expect(body.data.candidates).toHaveLength(1)
+    expect(body.data.warnings).toBeUndefined()
+  })
+
+  it('decodes attachments to bytes before they reach the generator, and threads a baseline through', async () => {
+    let receivedInput:
+      | {
+          readonly description: string
+          readonly attachments?: readonly {
+            readonly filename: string
+            readonly mimeType: string
+            readonly data: Uint8Array
+          }[]
+          readonly baseline?: { readonly themeName: string }
+        }
+      | undefined
+    const r = router({
+      generator: {
+        async generate(input) {
+          receivedInput = input as never
+          return {
+            ok: true,
+            candidates: [
+              {
+                id: 'editorial',
+                label: 'Warm editorial',
+                rationale: 'warm',
+                tokens: FILE_TOKENS,
+                themeName: '@cogenta/theme-restaurant',
+                chromeInput: { tagline: 'Fresh every morning' },
+              },
+            ],
+            warnings: [
+              'mockup.png: could not be analyzed — the configured provider does not support image input',
+            ],
+          }
+        },
+      },
+    })
+    const fileContent = Buffer.from('Warm colours, wood textures.', 'utf8').toString('base64')
+
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/generate',
+        query: {},
+        body: {
+          description: 'A cosy bakery',
+          attachments: [
+            { filename: 'brief.txt', mimeType: 'text/plain', contentBase64: fileContent },
+          ],
+          baseline: { themeName: '@cogenta/theme-canonical' },
+        },
+      },
+      ADMIN,
+    )
+
+    expect(response.status).toBe(200)
+    expect(receivedInput?.attachments).toHaveLength(1)
+    expect(receivedInput?.attachments?.[0]?.filename).toBe('brief.txt')
+    expect(
+      Buffer.from(receivedInput?.attachments?.[0]?.data ?? new Uint8Array()).toString('utf8'),
+    ).toBe('Warm colours, wood textures.')
+    expect(receivedInput?.baseline).toEqual({ themeName: '@cogenta/theme-canonical' })
+
+    const body = response.body as {
+      data: {
+        candidates: readonly { themeName?: string; chromeInput?: { tagline?: string } }[]
+        warnings?: readonly string[]
+      }
+    }
+    expect(body.data.candidates[0]?.themeName).toBe('@cogenta/theme-restaurant')
+    expect(body.data.candidates[0]?.chromeInput).toEqual({ tagline: 'Fresh every morning' })
+    expect(body.data.warnings).toEqual([
+      'mockup.png: could not be analyzed — the configured provider does not support image input',
+    ])
+  })
+
+  it('refuses an attachment with no content', async () => {
+    const r = router({
+      generator: {
+        async generate() {
+          return { ok: true, candidates: [] }
+        },
+      },
+    })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/generate',
+        query: {},
+        body: {
+          description: 'A cosy bakery',
+          attachments: [{ filename: 'brief.txt', mimeType: 'text/plain', contentBase64: '' }],
+        },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('refuses a baseline with no themeName', async () => {
+    const r = router({
+      generator: {
+        async generate() {
+          return { ok: true, candidates: [] }
+        },
+      },
+    })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/generate',
+        query: {},
+        body: { description: 'A cosy bakery', baseline: {} },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
 })
 
 describe('createThemeRouter — export (development only)', () => {

@@ -90,3 +90,10 @@ export type {
   SeoIssueSeverity,
   SeoPageInput,
 } from './seo/types.js'
+export { themeCreatorAgent } from './theme-creator/agent.js'
+export type {
+  ProposeThemeInput,
+  ProposeThemeOutput,
+  ProposeThemeToolOptions,
+} from './theme-creator/propose-theme-tool.js'
+export { createProposeThemeTool } from './theme-creator/propose-theme-tool.js'

@@ -81,9 +81,26 @@ import { buildPath, type CollectionDefinition } from '@cogenta/schema'
  * `agents/orchestrator.ts`'s own `AGENT_NO_PROVIDER` guarantee.
  */
 
-const AGENTS_SUBDIR = 'agents'
+/**
+ * Exported for the same reason `PROVIDERS_SUBDIR` below is — `theme-wiring
+ * .ts` reads the "Cogenta Theme Creator" agent's own admin-configured
+ * `model.preferred`/`model.fallback` from a second `AgentDeclarationStore`
+ * instance pointed at this same directory, rather than duplicating a
+ * hardcoded guess at that agent's provider preference.
+ */
+export const AGENTS_SUBDIR = 'agents'
 const SKILLS_SUBDIR = 'skills'
-const PROVIDERS_SUBDIR = 'providers'
+/**
+ * Exported so `theme-wiring.ts` can point its own `ProviderConfigStore` at
+ * the exact same directory `buildAgentRuntime` uses — two independent,
+ * file-backed store instances reading the same encrypted files, the same
+ * consistency model every other per-request store in this app already
+ * relies on. A second, differently-scoped constant here would have let the
+ * two silently drift apart, which is exactly the bug this constant's reuse
+ * closes (L26 task 5's theme generator answering "no provider" from a
+ * config file no admin who configured one through the UI ever touched).
+ */
+export const PROVIDERS_SUBDIR = 'providers'
 /**
  * Fiche 45 — under the same `dataDir` (`.cogenta/agents-runtime`)
  * `runServe` also points its own, separately-constructed
@@ -151,8 +168,9 @@ export interface BuildAgentRuntimeOptions {
    * uses — never a second, independently-resolved client.
    */
   readonly themeCreator?: {
-    readonly client: ProviderClient
-    readonly model: string
+    readonly resolveProvider: () => Promise<
+      { readonly client: ProviderClient; readonly model: string } | undefined
+    >
     readonly availableThemes: readonly ThemeCreatorTargetTheme[]
   }
 }
@@ -395,8 +413,9 @@ function buildToolRegistry(options: {
   readonly mcpDefinitions: readonly ToolDefinition[]
   /** L26 task 5 — see `BuildAgentRuntimeOptions.themeCreator`. Absent means `theme.propose_theme` is not registered at all (R2). */
   readonly themeCreator?: {
-    readonly client: ProviderClient
-    readonly model: string
+    readonly resolveProvider: () => Promise<
+      { readonly client: ProviderClient; readonly model: string } | undefined
+    >
     readonly availableThemes: readonly ThemeCreatorTargetTheme[]
   }
 }) {

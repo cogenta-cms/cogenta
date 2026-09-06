@@ -133,6 +133,41 @@ describe('GET /api/theme', () => {
     await server.stop()
   }, 60_000)
 
+  it('reports the AI section available once a provider is registered through /admin/providers (L26 task 5 regression)', async () => {
+    // The bug this guards: aiAvailable used to be computed from
+    // cogenta.config.mjs's static `llm` block only — an admin who
+    // configured a provider through the UI (the dynamic, encrypted
+    // ProviderConfigStore every other agent already reads from) saw this
+    // screen still claim no provider was configured.
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+
+    const before = (await (
+      await fetch(`${server.base}/api/theme`, { headers: auth(token) })
+    ).json()) as { data: { aiAvailable: boolean } }
+    expect(before.data.aiAvailable).toBe(false)
+
+    const configured = await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({
+        provider: 'anthropic',
+        apiKey: 'sk-ant-test-key',
+        model: 'claude-test',
+        baseUrl: 'http://127.0.0.1:1',
+      }),
+    })
+    expect(configured.status).toBe(201)
+
+    const after = (await (
+      await fetch(`${server.base}/api/theme`, { headers: auth(token) })
+    ).json()) as { data: { aiAvailable: boolean } }
+    expect(after.data.aiAvailable).toBe(true)
+
+    await server.stop()
+  }, 60_000)
+
   it('refuses a non-admin', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

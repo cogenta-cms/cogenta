@@ -1,11 +1,16 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  type AgentDeclarationStore,
   createAnthropicClient,
   createGoogleClient,
   createOpenAiClient,
+  createProviderRegistry,
   type ProviderClient,
+  type ProviderConfigStore,
   proposeThemeCandidates,
+  resolveProviderRegistryConfig,
+  THEME_CREATOR_AGENT_NAME,
   type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
 import type { ThemeRouterOptions } from '@cogenta/api'
@@ -41,6 +46,34 @@ export interface ThemeWiringOptions {
   readonly config: CogentaConfig
   readonly development: boolean
   readonly readOnly: boolean
+  /**
+   * The same dynamic, admin-configurable provider store every other agent's
+   * client is resolved from (`/admin/providers` → `ProviderConfigStore`,
+   * encrypted at rest, refreshed live on every save — see
+   * `agent-runtime.ts`'s `createLiveProviderRegistry`). Preferred over
+   * `config.llm` below whenever present: a site whose admin configured a
+   * provider through the UI, rather than by hand-editing
+   * `cogenta.config.mjs`, must see the same "AI available" answer here as
+   * everywhere else in the app. Absent only when `runServe` was given no
+   * `agentsRuntimeConfig` at all (a bare `Site` built by hand, tests
+   * included) — `config.llm` is the sole fallback then, same as before this
+   * field existed.
+   */
+  readonly providerStore?: ProviderConfigStore
+  /**
+   * The same `AgentDeclarationStore` `buildAgentRuntime` reads the "Cogenta
+   * Theme Creator" agent's declaration from (a second, independent instance
+   * pointed at the same directory — the same "two readers of the same
+   * files" pattern `providerStore` above already uses). Read *fresh on every
+   * call* (see `resolveThemeProvider`) so an admin editing that agent's
+   * "Modèle" field — "Préféré : google — repli : openai", say — from
+   * `/admin/agents/Cogenta Theme Creator` takes effect on the theme
+   * generator's very next request, exactly like a provider key saved from
+   * `/admin/providers` already does. Absent only alongside `providerStore`
+   * (a bare `Site` built by hand, tests included) — `THEME_PROVIDER_PREFERENCE`
+   * is the sole fallback then.
+   */
+  readonly agentStore?: AgentDeclarationStore
 }
 
 function providerClient(
@@ -58,18 +91,75 @@ function providerClient(
   return undefined
 }
 
+/**
+ * The seed default from `THEME_CREATOR_AGENT_NAME`'s own builtin declaration
+ * (`packages/agents/src/agents/builtins.ts`'s `DEFAULT_MODEL`) — used only
+ * when `agentStore` is absent, or the agent's own record can't be read for
+ * some reason. Whenever the agent's declaration *is* readable,
+ * `resolveThemeProvider` reads its live `model.preferred`/`model.fallback`
+ * instead: an admin who repoints that agent at a different provider from its
+ * own settings screen must see the theme generator follow, not silently
+ * ignore that choice and keep trying this hardcoded pair forever.
+ */
+const THEME_PROVIDER_PREFERENCE: {
+  readonly preferred: string
+  readonly fallback?: string
+  readonly model?: string
+} = {
+  preferred: 'anthropic',
+  fallback: 'openai',
+}
+
+/**
+ * The one place either theme-AI entry point (the plain skin generator and
+ * `theme.propose_theme`) resolves a `ProviderClient` from — tries the live,
+ * admin-configurable store first (same "preferred, then fallback" policy
+ * `agents/orchestrator.ts`'s own `resolveProvider` uses for every other
+ * agent), falls back to `config.llm` only when that store was never given
+ * at all. Never throws: `undefined` is the R2 "no provider" answer both
+ * `createThemeWiring`'s `generator` and `createThemeCreatorToolWiring`
+ * already turn into "this feature simply isn't offered".
+ */
+/** Whether this instance has *any* avenue to a provider at all — see `resolveThemeProvider`'s own comment on the distinction from "one is currently resolvable". */
+function hasThemeProviderAvenue(options: ThemeWiringOptions): boolean {
+  return options.providerStore !== undefined || options.config.llm !== undefined
+}
+
+async function resolveThemeProvider(
+  options: ThemeWiringOptions,
+): Promise<{ readonly client: ProviderClient; readonly model: string } | undefined> {
+  if (options.providerStore !== undefined) {
+    const registry = createProviderRegistry(
+      await resolveProviderRegistryConfig(options.providerStore),
+    )
+    const declared = await options.agentStore?.get(THEME_CREATOR_AGENT_NAME)
+    const preference = declared?.model ?? THEME_PROVIDER_PREFERENCE
+    const name = registry.has(preference.preferred)
+      ? preference.preferred
+      : preference.fallback !== undefined && registry.has(preference.fallback)
+        ? preference.fallback
+        : undefined
+    if (name !== undefined) {
+      const client = registry.get(name)
+      const modelOverride = preference.model?.trim()
+      return {
+        client,
+        model: modelOverride === undefined || modelOverride === '' ? client.model : modelOverride,
+      }
+    }
+  }
+  const llm = options.config.llm
+  const apiKey = llm?.apiKey
+  if (llm === undefined || apiKey === undefined || apiKey === '') return undefined
+  const client = providerClient(llm, apiKey)
+  return client === undefined ? undefined : { client, model: llm.model }
+}
+
 export async function createThemeWiring(options: ThemeWiringOptions): Promise<ThemeRouterOptions> {
   await ensureThemeTable(options.db)
   await ensureRegistryTables(options.db)
 
   const tokensPath = join(options.projectRoot, TOKENS_FILE)
-  const llm = options.config.llm
-  const apiKey = llm?.apiKey
-  const client =
-    llm === undefined || apiKey === undefined || apiKey === ''
-      ? undefined
-      : providerClient(llm, apiKey)
-
   const themeStore = createThemeStore({ db: options.db })
   const loadFileTokens = async (): Promise<Record<string, unknown> | null> => {
     try {
@@ -113,10 +203,11 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
     mergeTokens: (base, overrides) =>
       mergeSkinTokens(base as never, overrides as never) as unknown as Record<string, unknown>,
     skinGallery: createSkinGallery(options.db),
-    ...(client === undefined || llm === undefined
+    ...(!hasThemeProviderAvenue(options)
       ? {}
       : {
           generator: {
+            isAvailable: async () => (await resolveThemeProvider(options)) !== undefined,
             generate: async (input: {
               readonly description: string
               readonly attachments?: readonly {
@@ -126,11 +217,16 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
               }[]
               readonly baseline?: { readonly themeName: string }
             }) => {
+              const resolved = await resolveThemeProvider(options)
+              if (resolved === undefined) {
+                return { ok: false as const, reason: 'No LLM provider is configured.' }
+              }
+              const { client, model } = resolved
               const baselineTokens =
                 input.baseline === undefined ? null : await resolveBaselineTokens()
               const result = await proposeThemeCandidates({
                 client,
-                model: llm.model,
+                model,
                 description: input.description,
                 siteName: options.config.site.name,
                 availableThemes: (await availableThemes()).map(
@@ -174,32 +270,29 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
 
 /**
  * The ingredients `theme.propose_theme` (`@cogenta/agents-builtin`) needs at
- * wiring time — `client`/`model`/`availableThemes`, the same shape
- * `createThemeWiring`'s own `generator` above resolves, exposed separately
- * so `agent-runtime.ts` can register the tool without rebuilding a second
- * `ProviderClient` from `options.config.llm` on its own. `undefined` when no
- * LLM provider is configured (R2) — the tool is then simply not registered,
- * exactly like `createThemeWiring`'s own `generator` field.
+ * wiring time — a live `resolveProvider()` (never a `client`/`model`
+ * resolved once and captured, the exact bug this was rewritten to fix: a
+ * provider saved through `/admin/providers` after `cogenta serve` boot used
+ * to stay invisible to this tool for the rest of the process's life) plus
+ * `availableThemes`. `undefined` only when this instance has no avenue to a
+ * provider at all (R2) — the tool is then simply not registered, exactly
+ * like `createThemeWiring`'s own `generator` field; once registered, a call
+ * with no provider *currently* configured resolves to `{ ok: false }`
+ * rather than the tool vanishing again.
  */
 export async function createThemeCreatorToolWiring(options: ThemeWiringOptions): Promise<
   | {
-      readonly client: ProviderClient
-      readonly model: string
+      readonly resolveProvider: () => Promise<
+        { readonly client: ProviderClient; readonly model: string } | undefined
+      >
       readonly availableThemes: readonly ThemeCreatorTargetTheme[]
     }
   | undefined
 > {
-  const llm = options.config.llm
-  const apiKey = llm?.apiKey
-  const client =
-    llm === undefined || apiKey === undefined || apiKey === ''
-      ? undefined
-      : providerClient(llm, apiKey)
-  if (client === undefined || llm === undefined) return undefined
+  if (!hasThemeProviderAvenue(options)) return undefined
 
   return {
-    client,
-    model: llm.model,
+    resolveProvider: () => resolveThemeProvider(options),
     availableThemes: (await availableThemes()).map(
       (theme): ThemeCreatorTargetTheme => ({ name: theme.name, label: theme.label }),
     ),

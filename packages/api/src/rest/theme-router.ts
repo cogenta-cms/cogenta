@@ -110,6 +110,16 @@ export interface ThemeGenerateAttachmentLike {
 }
 
 export interface SkinGeneratorLike {
+  /**
+   * Whether a provider is actually resolvable *right now* — checked fresh on
+   * every call, never cached, because the admin-configurable provider store
+   * this wraps (`theme-wiring.ts`'s `resolveThemeProvider`) can gain a
+   * provider well after this router was built at `cogenta serve` boot.
+   * `generator`'s mere presence on `ThemeRouterOptions` only means this
+   * instance has *an avenue* to a provider (a `providerStore` or a static
+   * `config.llm`); this is the live answer to "is one actually configured".
+   */
+  isAvailable(): Promise<boolean>
   generate(input: {
     readonly description: string
     /** Absent for every caller that predates L26 task 5 — behaviour then is byte-identical to before. */
@@ -315,7 +325,7 @@ function noGenerator(): CogentaError {
   return new CogentaError({
     code: 'THEME_NO_PROVIDER',
     message: 'No LLM provider is configured, so a skin cannot be generated here.',
-    hint: 'Add an `llm` section to cogenta.config.mjs with a provider and a key, then restart. Everything else in this screen works without one (R2).',
+    hint: 'Configure a provider from Réglages → Fournisseurs (or add an `llm` section to cogenta.config.mjs and restart). Everything else in this screen works without one (R2).',
   })
 }
 
@@ -398,7 +408,8 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
                 submittedAt: entry.submittedAt,
                 tokens: entry.tokens,
               })),
-              aiAvailable: options.generator !== undefined,
+              aiAvailable:
+                options.generator === undefined ? false : await options.generator.isAvailable(),
               exportAvailable: options.fileExporter !== undefined,
               availableThemes: options.availableThemes,
             },
@@ -480,6 +491,7 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
         if (first === 'generate' && second === undefined) {
           if (method !== 'POST') return methodNotAllowed(['POST'])
           if (options.generator === undefined) throw noGenerator()
+          if (!(await options.generator.isAvailable())) throw noGenerator()
           const body = request.body as
             | {
                 description?: unknown

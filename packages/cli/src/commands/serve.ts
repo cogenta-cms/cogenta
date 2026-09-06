@@ -5,7 +5,9 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
+  createFileAgentDeclarationStore,
   createFilePromptTemplateStore,
+  createFileProviderConfigStore,
   ensureBuiltinPromptTemplates,
   type PromptTemplateStore,
   type ProviderClient,
@@ -339,7 +341,12 @@ import {
 } from '../update/index.js'
 import { getCliVersion } from '../version.js'
 import { serveAdminAsset } from './admin-assets.js'
-import { type AgentRuntimeAssembly, buildAgentRuntime } from './agent-runtime.js'
+import {
+  AGENTS_SUBDIR,
+  type AgentRuntimeAssembly,
+  buildAgentRuntime,
+  PROVIDERS_SUBDIR,
+} from './agent-runtime.js'
 import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
@@ -1111,8 +1118,9 @@ interface AssembleSiteOptions {
    * registry.
    */
   readonly themeCreatorTools?: {
-    readonly client: ProviderClient
-    readonly model: string
+    readonly resolveProvider: () => Promise<
+      { readonly client: ProviderClient; readonly model: string } | undefined
+    >
     readonly availableThemes: readonly ThemeCreatorTargetTheme[]
   }
   /**
@@ -6161,16 +6169,36 @@ export async function runServe(options: ServeOptions): Promise<number> {
     },
   })
 
+  // The same directory `agentsRuntimeConfig` below points `buildAgentRuntime`
+  // at — computed once, here, so the two can never drift apart.
+  const agentsRuntimeDataDir = join(projectRoot, '.cogenta', 'agents-runtime')
+
   // L26 task 5 — shared ingredients for `theme`'s own AI `generator` and for
   // `theme.propose_theme`'s registration below, resolved once from the same
-  // `config.llm`/`availableThemes()` (never a second, independently-built
-  // provider).
+  // provider store/`availableThemes()` (never a second, independently-built
+  // provider). `providerStore` points at the exact same encrypted files
+  // `buildAgentRuntime` reads for every other agent's client — an admin who
+  // configures a provider from `/admin/providers` must see this feature
+  // answer "available" too, not only `config.llm` (a config-file provider
+  // this store's own `resolveThemeProvider` still falls back to, for a site
+  // that never uses the admin UI for this at all).
   const themeWiringOptions = {
     projectRoot,
     db: selection.instance,
     config: loaded.config,
     development: options.development ?? false,
     readOnly: options.readOnly ?? false,
+    providerStore: createFileProviderConfigStore({
+      dir: join(agentsRuntimeDataDir, PROVIDERS_SUBDIR),
+      signingKey: loaded.config.auth.signingKey,
+    }),
+    // So the theme generator follows the "Cogenta Theme Creator" agent's own
+    // admin-configured model preference instead of a hardcoded guess at it —
+    // a second reader of the exact same files `buildAgentRuntime` reads for
+    // that agent's declaration, same pattern as `providerStore` above.
+    agentStore: createFileAgentDeclarationStore({
+      dir: join(agentsRuntimeDataDir, AGENTS_SUBDIR),
+    }),
   }
   const themeCreatorTools = await createThemeCreatorToolWiring(themeWiringOptions)
 
@@ -6210,7 +6238,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // first boot (R2: nothing here attempts a network call without a
     // configured provider, only `POST .../run` can, and it refuses first).
     agentsRuntimeConfig: {
-      dataDir: join(projectRoot, '.cogenta', 'agents-runtime'),
+      dataDir: agentsRuntimeDataDir,
       projectRoot,
     },
     emailTransport,

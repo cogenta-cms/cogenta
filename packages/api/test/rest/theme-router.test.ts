@@ -379,6 +379,9 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
     const r = router({
       store,
       generator: {
+        async isAvailable() {
+          return true
+        },
         async generate() {
           return {
             ok: true,
@@ -410,6 +413,9 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
     let called = false
     const r = router({
       generator: {
+        async isAvailable() {
+          return true
+        },
         async generate() {
           called = true
           return { ok: true, candidates: [] }
@@ -428,6 +434,9 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
     let receivedInput: unknown
     const r = router({
       generator: {
+        async isAvailable() {
+          return true
+        },
         async generate(input) {
           receivedInput = input
           return {
@@ -470,6 +479,9 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
       | undefined
     const r = router({
       generator: {
+        async isAvailable() {
+          return true
+        },
         async generate(input) {
           receivedInput = input as never
           return {
@@ -533,6 +545,9 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
   it('refuses an attachment with no content', async () => {
     const r = router({
       generator: {
+        async isAvailable() {
+          return true
+        },
         async generate() {
           return { ok: true, candidates: [] }
         },
@@ -556,6 +571,9 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
   it('refuses a baseline with no themeName', async () => {
     const r = router({
       generator: {
+        async isAvailable() {
+          return true
+        },
         async generate() {
           return { ok: true, candidates: [] }
         },

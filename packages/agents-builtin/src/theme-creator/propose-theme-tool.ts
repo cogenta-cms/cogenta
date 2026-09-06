@@ -18,21 +18,26 @@ import { z } from 'zod'
  * Activating a candidate stays the human action it already was for a skin
  * gallery entry: `PUT /api/theme/overrides`.
  *
- * `client`/`model`/`availableThemes` are factory options, not part of the
+ * `resolveProvider`/`availableThemes` are factory options, not part of the
  * Zod input schema a model fills in — the same shape every other AI-backed
  * tool in this codebase uses (`AssistToolset`'s `runtime`, `deps-patch-tool
  * .ts`'s `PrClient`): Contract C's frozen `ToolContext` carries no
- * `ProviderClient` slot, and a tool whose own job *is* to call a model
- * resolves that client once, at wiring time, from the site's configured
- * provider — never per call, and never from anything a model could name.
- * `availableThemes` is threaded the same way for the same reason: it is
- * `@cogenta/cli`'s `availableThemes()`, which this package cannot import
+ * `ProviderClient` slot, and a tool whose own job *is* to call a model gets
+ * one from the site's configured provider — never from anything a model
+ * could name. `resolveProvider` is called **fresh on every `execute()`**,
+ * never resolved once and captured: the provider store it wraps
+ * (`@cogenta/cli`'s `resolveThemeProvider`) is admin-configurable at
+ * runtime, and a client resolved once at wiring time would go stale the
+ * moment an admin saved a new key — the exact bug this shape was written to
+ * avoid. `availableThemes` is threaded the same way for the same reason: it
+ * is `@cogenta/cli`'s `availableThemes()`, which this package cannot import
  * without inverting the dependency arrow.
  */
 
 export interface ProposeThemeToolOptions {
-  readonly client: ProviderClient
-  readonly model: string
+  readonly resolveProvider: () => Promise<
+    { readonly client: ProviderClient; readonly model: string } | undefined
+  >
   readonly availableThemes: readonly ThemeCreatorTargetTheme[]
 }
 
@@ -97,6 +102,11 @@ export function createProposeThemeTool(
     reversible: false,
     cost: 'medium',
     async execute(input) {
+      const resolved = await options.resolveProvider()
+      if (resolved === undefined) {
+        return { ok: false, reason: 'No LLM provider is configured.' }
+      }
+
       const attachments = (input.attachments ?? []).map((attachment) => ({
         filename: attachment.filename,
         mimeType: attachment.mimeType,
@@ -104,8 +114,8 @@ export function createProposeThemeTool(
       }))
 
       const result = await proposeThemeCandidates({
-        client: options.client,
-        model: options.model,
+        client: resolved.client,
+        model: resolved.model,
         description: input.description,
         siteName: input.siteName,
         availableThemes: options.availableThemes,

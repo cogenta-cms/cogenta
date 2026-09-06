@@ -125,8 +125,7 @@ const outOfScopeTool = defineTool({
 describe('themeCreatorAgent — runtime enforcement', () => {
   it('never builds an ExecutableTool for a tool outside its declared list', () => {
     const tool = createProposeThemeTool({
-      client: fakeClient(),
-      model: 'fake-model',
+      resolveProvider: async () => ({ client: fakeClient(), model: 'fake-model' }),
       availableThemes: AVAILABLE_THEMES,
     })
     const registry = createToolRegistry([tool, outOfScopeTool])
@@ -139,8 +138,7 @@ describe('themeCreatorAgent — runtime enforcement', () => {
 
   it('runs immediately under withAutonomy — sideEffects: false leaves nothing to gate', async () => {
     const tool = createProposeThemeTool({
-      client: fakeClient(),
-      model: 'fake-model',
+      resolveProvider: async () => ({ client: fakeClient(), model: 'fake-model' }),
       availableThemes: AVAILABLE_THEMES,
     })
     const registry = createToolRegistry([tool])
@@ -166,8 +164,7 @@ describe('themeCreatorAgent — runtime enforcement', () => {
 
   it('decodes base64 attachments before they reach proposeThemeCandidates', async () => {
     const tool = createProposeThemeTool({
-      client: fakeClient(),
-      model: 'fake-model',
+      resolveProvider: async () => ({ client: fakeClient(), model: 'fake-model' }),
       availableThemes: AVAILABLE_THEMES,
     })
     const controller = new AbortController()

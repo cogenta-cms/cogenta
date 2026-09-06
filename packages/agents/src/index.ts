@@ -5,6 +5,7 @@ export {
   SECURITY_AGENT_NAME,
   SITE_MONITOR_AGENT_NAME,
   SUPERAGENT_NAME,
+  THEME_CREATOR_AGENT_NAME,
 } from './agents/builtins.js'
 export { defineAgent } from './agents/define.js'
 export type {
